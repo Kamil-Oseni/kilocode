@@ -16856,6 +16856,462 @@
         ]
       }
     },
+    "/kilocode/browser/{requestID}/dispatch": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.dispatch",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/BrowserRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "granted": {
+                      "type": "boolean"
+                    },
+                    "dispatch": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "identity": {
+                          "type": "string"
+                        },
+                        "invocation": {
+                          "type": "string"
+                        },
+                        "requestID": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["version", "identity", "invocation", "requestID", "at"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["granted", "dispatch"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Claim one browser dispatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserDispatchInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.dispatch({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/browser/{requestID}/confirm": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.confirm",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/BrowserRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "BrowserConfirmationCompletion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserConfirmationCompletion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Retain browser execution confirmation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "proof": {
+                    "$ref": "#/components/schemas/BrowserConfirmationProof"
+                  },
+                  "completion": {
+                    "$ref": "#/components/schemas/BrowserConfirmationCompletion"
+                  }
+                },
+                "required": ["proof", "completion"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.confirm({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/browser/{requestID}/confirmation": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.confirmation",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/BrowserRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "proof": {
+                      "$ref": "#/components/schemas/BrowserConfirmationProof"
+                    },
+                    "granted": {
+                      "type": "boolean",
+                      "enum": [false]
+                    },
+                    "pending": {
+                      "type": "boolean"
+                    },
+                    "dispatch": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "identity": {
+                          "type": "string"
+                        },
+                        "invocation": {
+                          "type": "string"
+                        },
+                        "requestID": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["version", "identity", "invocation", "requestID", "at"],
+                      "additionalProperties": false
+                    },
+                    "completion": {
+                      "$ref": "#/components/schemas/BrowserConfirmationCompletion"
+                    },
+                    "acknowledgement": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "identity": {
+                          "type": "string"
+                        },
+                        "ack": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["version", "identity", "ack"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["version", "proof", "granted", "pending"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read browser confirmation metadata",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "proof": {
+                    "$ref": "#/components/schemas/BrowserConfirmationProof"
+                  }
+                },
+                "required": ["proof"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.confirmation({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/browser/{requestID}/acknowledge": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.browser.acknowledge",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/BrowserRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "identity": {
+                      "type": "string"
+                    },
+                    "ack": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["version", "identity", "ack"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Acknowledge browser confirmation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "proof": {
+                    "$ref": "#/components/schemas/BrowserConfirmationProof"
+                  },
+                  "ack": {
+                    "type": "string"
+                  }
+                },
+                "required": ["proof", "ack"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.browser.acknowledge({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/desktop": {
       "get": {
         "tags": ["kilocode"],
@@ -69747,6 +70203,9 @@
             "$ref": "#/components/schemas/EventSessionQueueChanged"
           },
           {
+            "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionNetworkAsked"
           },
           {
@@ -69778,9 +70237,6 @@
           },
           {
             "$ref": "#/components/schemas/EventLspClientDiagnostics"
-          },
-          {
-            "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
           },
           {
             "$ref": "#/components/schemas/EventSuggestionShown"
@@ -70919,6 +71375,31 @@
       "BrowserRequestID": {
         "type": "string"
       },
+      "BrowserConfirmationProof": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "identity": {
+            "type": "string"
+          },
+          "slot": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "scope": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          }
+        },
+        "required": ["version", "identity", "slot", "scope", "digest"],
+        "additionalProperties": false
+      },
       "ComputerUseGrantID": {
         "type": "string",
         "minLength": 1,
@@ -71136,6 +71617,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["profile"]
@@ -71163,6 +71647,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "operation": {
                 "type": "string",
@@ -71196,6 +71683,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["auth"]
@@ -71223,6 +71713,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "operation": {
                 "type": "string",
@@ -71257,6 +71750,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "tabID": {
                 "type": "string",
@@ -71405,6 +71901,9 @@
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["upload"]
@@ -71429,6 +71928,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "operation": {
                 "type": "string",
@@ -71459,6 +71961,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "tabID": {
                 "type": "string",
@@ -71578,6 +72083,9 @@
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["download"]
@@ -71606,6 +72114,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "operation": {
                 "type": "string",
@@ -71639,6 +72150,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -71675,6 +72189,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -71716,6 +72233,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -71752,6 +72272,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -71782,6 +72305,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -71819,6 +72345,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -71850,6 +72379,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -71877,6 +72409,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "tabID": {
                 "type": "string",
@@ -71908,6 +72443,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "tabID": {
                 "type": "string",
@@ -71954,6 +72492,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -71992,6 +72533,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -72027,6 +72571,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -72141,6 +72688,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -72262,6 +72812,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -72385,6 +72938,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -72536,6 +73092,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -72575,6 +73134,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -72606,6 +73168,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["auth_capture"]
@@ -72634,6 +73199,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -77722,6 +78290,9 @@
                 "$ref": "#/components/schemas/EventSessionQueueChanged"
               },
               {
+                "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
+              },
+              {
                 "$ref": "#/components/schemas/EventSessionNetworkAsked"
               },
               {
@@ -77753,9 +78324,6 @@
               },
               {
                 "$ref": "#/components/schemas/EventLspClientDiagnostics"
-              },
-              {
-                "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
               },
               {
                 "$ref": "#/components/schemas/EventSuggestionShown"
@@ -88516,6 +89084,10 @@
                 "type": "string",
                 "enum": ["allow", "ask", "deny"]
               },
+              "confirmationVersion": {
+                "type": "number",
+                "enum": [1]
+              },
               "reason": {
                 "type": "string",
                 "minLength": 1,
@@ -89872,6 +90444,91 @@
           }
         },
         "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "BrowserDispatchInput": {
+        "type": "object",
+        "properties": {
+          "proof": {
+            "$ref": "#/components/schemas/BrowserConfirmationProof"
+          },
+          "invocation": {
+            "type": "string"
+          }
+        },
+        "required": ["proof", "invocation"],
+        "additionalProperties": false
+      },
+      "BrowserConfirmationCompletion": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "identity": {
+            "type": "string"
+          },
+          "invocation": {
+            "type": "string"
+          },
+          "ack": {
+            "type": "string"
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "auth",
+              "auth_capture",
+              "upload",
+              "download",
+              "dialog",
+              "tabs",
+              "frames",
+              "navigate",
+              "snapshot",
+              "click",
+              "type",
+              "select",
+              "scroll",
+              "screenshot",
+              "evaluate",
+              "smoke"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": ["confirmed", "refused", "cancelled", "unknown"]
+          },
+          "resultDigest": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "finishedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "version",
+          "identity",
+          "invocation",
+          "ack",
+          "requestID",
+          "operation",
+          "outcome",
+          "startedAt",
+          "finishedAt"
+        ],
         "additionalProperties": false
       },
       "DesktopResult": {
@@ -94228,6 +94885,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["profile"]
@@ -94255,6 +94915,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "operation": {
                 "type": "string",
@@ -94288,6 +94951,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["auth"]
@@ -94315,6 +94981,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "operation": {
                 "type": "string",
@@ -94349,6 +95018,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "tabID": {
                 "type": "string",
@@ -94497,6 +95169,9 @@
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["upload"]
@@ -94521,6 +95196,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "operation": {
                 "type": "string",
@@ -94551,6 +95229,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "tabID": {
                 "type": "string",
@@ -94670,6 +95351,9 @@
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["download"]
@@ -94698,6 +95382,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "operation": {
                 "type": "string",
@@ -94731,6 +95418,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -94767,6 +95457,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -94808,6 +95501,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -94844,6 +95540,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -94874,6 +95573,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -94911,6 +95613,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -94942,6 +95647,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -94969,6 +95677,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "tabID": {
                 "type": "string",
@@ -95000,6 +95711,9 @@
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "tabID": {
                 "type": "string",
@@ -95046,6 +95760,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -95084,6 +95801,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -95119,6 +95839,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -95233,6 +95956,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -95354,6 +96080,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -95477,6 +96206,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -95620,6 +96352,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -95659,6 +96394,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
               },
@@ -95690,6 +96428,9 @@
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
               },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
+              },
               "operation": {
                 "type": "string",
                 "enum": ["auth_capture"]
@@ -95718,6 +96459,9 @@
                 "minLength": 1,
                 "maxLength": 100,
                 "description": "Opaque observed browser tab identity; never infer from a tab index or URL."
+              },
+              "confirmation": {
+                "$ref": "#/components/schemas/BrowserConfirmationProof"
               },
               "authorization": {
                 "$ref": "#/components/schemas/BrowserAuthorizationEvidence"
@@ -96450,6 +97194,45 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventRayaRoutineExecutionIdle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.routine.execution.idle"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [1]
+              },
+              "runID": {
+                "type": "string"
+              },
+              "agentID": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "execution": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": ["version", "runID", "agentID", "sessionID", "execution"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventSessionNetworkAsked": {
         "type": "object",
         "properties": {
@@ -96763,45 +97546,6 @@
               }
             },
             "required": ["serverID", "path"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventRayaRoutineExecutionIdle": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["raya.routine.execution.idle"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "number",
-                "enum": [1]
-              },
-              "runID": {
-                "type": "string"
-              },
-              "agentID": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "execution": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              }
-            },
-            "required": ["version", "runID", "agentID", "sessionID", "execution"],
             "additionalProperties": false
           }
         },

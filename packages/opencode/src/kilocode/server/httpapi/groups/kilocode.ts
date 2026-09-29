@@ -1,5 +1,12 @@
 import { Schema } from "effect"
 import { UploadChunk } from "@/kilocode/browser/upload-schema"
+import {
+  Proof as BrowserProof,
+  DispatchInput as BrowserDispatchInput,
+  Dispatch as BrowserDispatch,
+  Completion as BrowserCompletion,
+  Acknowledgement as BrowserAcknowledgement,
+} from "@/kilocode/browser/confirmation"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "@/server/routes/instance/httpapi/middleware/authorization"
 import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/middleware/instance-context"
@@ -196,6 +203,28 @@ export const SelfHealUpdatePayload = RayaSelfHeal.Update // raya_change
 export const SelfHealVerificationPublishPayload = RayaSelfHeal.VerificationPublish // raya_change
 export const BrowserReplyPayload = Schema.Struct({ result: BrowserResult }) // raya_change - Milestone F
 export const BrowserRejectPayload = Schema.Struct({ error: BrowserFailure }) // raya_change - Milestone F
+export const BrowserDispatchPayload = BrowserDispatchInput.annotate({ parseOptions: { onExcessProperty: "error" } })
+export const BrowserConfirmPayload = Schema.Struct({ proof: BrowserProof, completion: BrowserCompletion }).annotate({
+  parseOptions: { onExcessProperty: "error" },
+})
+export const BrowserConfirmationPayload = Schema.Struct({ proof: BrowserProof }).annotate({
+  parseOptions: { onExcessProperty: "error" },
+})
+export const BrowserAcknowledgePayload = Schema.Struct({
+  proof: BrowserProof,
+  ack: BrowserAcknowledgement.fields.ack,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+})
+const BrowserConfirmationStatus = Schema.Struct({
+  version: Schema.Literal(1),
+  proof: BrowserProof,
+  granted: Schema.Literal(false),
+  pending: Schema.Boolean,
+  dispatch: Schema.optional(BrowserDispatch),
+  completion: Schema.optional(BrowserCompletion),
+  acknowledgement: Schema.optional(BrowserAcknowledgement),
+})
 export const DesktopReplyPayload = Schema.Struct({ result: DesktopResult })
 export const DesktopRejectPayload = Schema.Struct({ error: DesktopFailure })
 export const CanvasReplyPayload = Schema.Struct({ result: CanvasResult }) // raya_change - Milestone E
@@ -245,6 +274,10 @@ export const KilocodePaths = {
   browserUploadRelease: `${root}/browser/uploads/:uploadID/files/:fileID/release`,
   browserReply: `${root}/browser/:requestID/reply`, // raya_change - Milestone F browser host API
   browserReject: `${root}/browser/:requestID/reject`, // raya_change - Milestone F browser host API
+  browserDispatch: `${root}/browser/:requestID/dispatch`,
+  browserConfirm: `${root}/browser/:requestID/confirm`,
+  browserConfirmation: `${root}/browser/:requestID/confirmation`,
+  browserAcknowledge: `${root}/browser/:requestID/acknowledge`,
   desktopList: `${root}/desktop`,
   desktopReply: `${root}/desktop/:requestID/reply`,
   desktopReject: `${root}/desktop/:requestID/reject`,
@@ -474,6 +507,51 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.browser.reject",
             summary: "Reject a browser request",
             description: "Complete a pending shared-browser request with a structured host error.",
+          }),
+        ),
+        HttpApiEndpoint.post("browserDispatch", KilocodePaths.browserDispatch, {
+          params: { requestID: BrowserRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: BrowserDispatchPayload,
+          success: Schema.Struct({ granted: Schema.Boolean, dispatch: BrowserDispatch }),
+          error: HttpApiError.Conflict,
+        }).annotateMerge(
+          OpenApi.annotations({ identifier: "kilocode.browser.dispatch", summary: "Claim one browser dispatch" }),
+        ),
+        HttpApiEndpoint.post("browserConfirm", KilocodePaths.browserConfirm, {
+          params: { requestID: BrowserRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: BrowserConfirmPayload,
+          success: BrowserCompletion,
+          error: HttpApiError.Conflict,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.browser.confirm",
+            summary: "Retain browser execution confirmation",
+          }),
+        ),
+        HttpApiEndpoint.post("browserConfirmation", KilocodePaths.browserConfirmation, {
+          params: { requestID: BrowserRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: BrowserConfirmationPayload,
+          success: BrowserConfirmationStatus,
+          error: HttpApiError.Conflict,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.browser.confirmation",
+            summary: "Read browser confirmation metadata",
+          }),
+        ),
+        HttpApiEndpoint.post("browserAcknowledge", KilocodePaths.browserAcknowledge, {
+          params: { requestID: BrowserRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: BrowserAcknowledgePayload,
+          success: BrowserAcknowledgement,
+          error: HttpApiError.Conflict,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.browser.acknowledge",
+            summary: "Acknowledge browser confirmation",
           }),
         ),
         // raya_change end

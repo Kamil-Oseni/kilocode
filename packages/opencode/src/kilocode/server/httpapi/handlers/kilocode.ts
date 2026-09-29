@@ -86,6 +86,10 @@ import {
   SelfHealUpdatePayload, // raya_change
   BrowserReplyPayload, // raya_change - Milestone F browser API
   BrowserRejectPayload, // raya_change - Milestone F browser API
+  BrowserDispatchPayload,
+  BrowserConfirmPayload,
+  BrowserConfirmationPayload,
+  BrowserAcknowledgePayload,
   DesktopReplyPayload,
   DesktopRejectPayload,
   CanvasReplyPayload, // raya_change - Milestone E canvas API
@@ -317,6 +321,38 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .reject({ requestID: ctx.params.requestID, error: ctx.payload.error })
         .pipe(Effect.catchTag("Browser.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
       return true
+    })
+    const browserDispatch = Effect.fn("KilocodeHttpApi.browserDispatch")(function* (ctx: {
+      params: { requestID: BrowserRequestID }
+      payload: typeof BrowserDispatchPayload.Type
+    }) {
+      return yield* browser
+        .dispatch({ requestID: ctx.params.requestID, ...ctx.payload })
+        .pipe(Effect.catchTag("BrowserConfirmation.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))))
+    })
+    const browserConfirm = Effect.fn("KilocodeHttpApi.browserConfirm")(function* (ctx: {
+      params: { requestID: BrowserRequestID }
+      payload: typeof BrowserConfirmPayload.Type
+    }) {
+      return yield* browser
+        .confirm({ requestID: ctx.params.requestID, ...ctx.payload })
+        .pipe(Effect.catchTag("BrowserConfirmation.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))))
+    })
+    const browserConfirmation = Effect.fn("KilocodeHttpApi.browserConfirmation")(function* (ctx: {
+      params: { requestID: BrowserRequestID }
+      payload: typeof BrowserConfirmationPayload.Type
+    }) {
+      return yield* browser
+        .confirmation({ requestID: ctx.params.requestID, ...ctx.payload })
+        .pipe(Effect.catchTag("BrowserConfirmation.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))))
+    })
+    const browserAcknowledge = Effect.fn("KilocodeHttpApi.browserAcknowledge")(function* (ctx: {
+      params: { requestID: BrowserRequestID }
+      payload: typeof BrowserAcknowledgePayload.Type
+    }) {
+      return yield* browser
+        .acknowledge({ requestID: ctx.params.requestID, ...ctx.payload })
+        .pipe(Effect.catchTag("BrowserConfirmation.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))))
     })
     // raya_change end
     const desktopList = Effect.fn("KilocodeHttpApi.desktopList")(function* () {
@@ -1149,6 +1185,10 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("browserUploadRelease", browserUploadRelease)
         .handle("browserReply", browserReply)
         .handle("browserReject", browserReject)
+        .handle("browserDispatch", browserDispatch)
+        .handle("browserConfirm", browserConfirm)
+        .handle("browserConfirmation", browserConfirmation)
+        .handle("browserAcknowledge", browserAcknowledge)
         .handle("desktopList", desktopList)
         .handle("desktopReply", desktopReply)
         .handle("desktopReject", desktopReject)

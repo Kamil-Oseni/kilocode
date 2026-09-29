@@ -31,13 +31,18 @@ import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { InstanceState } from "@/effect/instance-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import path from "node:path"
-import { Effect, Layer, Schema } from "effect"
+import { Cause, Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 
 const calls: Browser.Input[] = []
 function result(input: Browser.Input): Result {
   if (input.operation === "authorize")
-    return { operation: "authorize", decision: "ask", reason: "No active Computer Use grant" }
+    return {
+      operation: "authorize",
+      decision: "ask",
+      reason: "No active Computer Use grant",
+      confirmationVersion: 1,
+    }
   const profile = {
     profileID: "a".repeat(64),
     directory: "workspace",
@@ -136,6 +141,10 @@ const host: Browser.Interface = {
   cancelSession: () => Effect.void,
   reply: () => Effect.void,
   reject: () => Effect.void,
+  dispatch: () => Effect.die(new Error("Unexpected browser dispatch in tool rendering test")),
+  confirm: () => Effect.die(new Error("Unexpected browser confirmation in tool rendering test")),
+  confirmation: () => Effect.die(new Error("Unexpected browser confirmation read in tool rendering test")),
+  acknowledge: () => Effect.die(new Error("Unexpected browser acknowledgement in tool rendering test")),
 }
 const it = testEffect(
   Layer.mergeAll(
@@ -149,6 +158,7 @@ function context(asks: Parameters<Tool.Context["ask"]>[0][]): Tool.Context {
   return {
     sessionID: SessionID.make("ses_browser_tools"),
     messageID: MessageID.make("msg_browser_tools"),
+    callID: "call_browser_tools",
     agent: "build",
     abort: new AbortController().signal,
     messages: [],
@@ -547,6 +557,51 @@ describe("browser host tools", () => {
   )
 
   it.instance(
+    "refuses an old browser host before publishing native work",
+    () =>
+      Effect.gen(function* () {
+        const inputs: Browser.Input[] = []
+        const legacy: Browser.Interface = {
+          ...host,
+          request: (input) =>
+            Effect.sync(() => {
+              inputs.push(input)
+              if (input.operation === "authorize")
+                return {
+                  operation: "authorize" as const,
+                  decision: "ask" as const,
+                  reason: "Legacy host",
+                }
+              return result(input)
+            }),
+        }
+        const tool = yield* BrowserClickTool.pipe(
+          Effect.provideService(Browser.Service, legacy),
+          Effect.flatMap(Tool.init),
+        )
+        const failed = yield* tool
+          .execute(
+            {
+              tab_id: "tab_test",
+              observation_id: ObservationID.make("obs_legacy"),
+              selector: "#send",
+              sensitive_category: "ordinary",
+            },
+            context([]),
+          )
+          .pipe(Effect.exit)
+        expect(failed._tag).toBe("Failure")
+        if (failed._tag !== "Failure") throw new Error("Legacy browser host unexpectedly completed native work")
+        expect(String(Cause.squash(failed.cause))).toContain(
+          "Browser host does not support durable confirmation; update the host before controlling the browser",
+        )
+        expect(inputs).toHaveLength(1)
+        expect(inputs[0]).toMatchObject({ operation: "authorize" })
+      }),
+    60_000,
+  )
+
+  it.instance(
     "skips the legacy prompt when the shared host grant authorizes browser control",
     () =>
       Effect.gen(function* () {
@@ -563,6 +618,7 @@ describe("browser host tools", () => {
                   decision: "allow" as const,
                   grantID: GrantID.make("grant_test"),
                   reason: "Authorized by shared grant",
+                  confirmationVersion: 1 as const,
                 }
               return result(input)
             }),

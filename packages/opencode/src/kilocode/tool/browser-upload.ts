@@ -7,7 +7,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "@/tool/external-directory"
 import { KiloReadObject } from "./read-object"
 import { KiloReference } from "@/kilocode/reference/contains"
-import { Browser } from "@/kilocode/browser/service"
+import { Browser, HostError, type Input } from "@/kilocode/browser/service"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { FrameID, Selector, TabID, type AuthorizationEvidence } from "@/kilocode/browser/protocol"
 import { ObservationID } from "@/kilocode/computer-use/protocol"
@@ -32,6 +32,27 @@ const Params = Schema.Union([
   Schema.Struct({ action: Schema.Literals(["inspect", "cancel"]), upload_id: Schema.String.check(Schema.isUUID()) }),
 ])
 
+function abort(signal: AbortSignal) {
+  return Effect.callback<never, HostError>((resume) => {
+    const err = () => new HostError({ code: "cancelled", detail: "The browser tool call was cancelled" })
+    if (signal.aborted) return resume(Effect.fail(err()))
+    const handler = () => resume(Effect.fail(err()))
+    signal.addEventListener("abort", handler, { once: true })
+    return Effect.sync(() => signal.removeEventListener("abort", handler))
+  })
+}
+
+function run(browser: Browser.Interface, input: Input, ctx: Tool.Context) {
+  return browser
+    .request(input, {
+      messageID: ctx.messageID,
+      ...(ctx.callID ? { callID: ctx.callID } : {}),
+      tool: "browser_upload",
+      supported: 1,
+    })
+    .pipe(Effect.raceFirst(abort(ctx.abort)), Effect.orDie)
+}
+
 export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service | FSUtil.Service, "browser_upload">(
   "browser_upload",
   Effect.gen(function* () {
@@ -48,16 +69,26 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
           const pattern =
             params.action === "start" ? params.destination : params.action === "list" ? "list" : params.upload_id
           const sensitive: false | "disclosure" = params.action === "start" ? "disclosure" : false
-          const authorization = yield* browser.request({
-            operation: "authorize",
-            sessionID: ctx.sessionID,
-            surface: "browser",
-            action: "files",
-            sensitive,
-            ...(params.action === "start" ? { windowID: params.tab_id } : {}),
-          })
+          const authorization = yield* run(
+            browser,
+            {
+              operation: "authorize",
+              sessionID: ctx.sessionID,
+              surface: "browser",
+              action: "files",
+              sensitive,
+              ...(params.action === "start" ? { windowID: params.tab_id } : {}),
+            },
+            ctx,
+          )
           if (authorization.operation !== "authorize")
             return yield* Effect.die(new Error("Browser host returned the wrong result"))
+          if (authorization.confirmationVersion !== 1)
+            return yield* Effect.die(
+              new Error(
+                "Browser host does not support durable confirmation; update the host before controlling the browser",
+              ),
+            )
           if (authorization.decision === "deny")
             return yield* Effect.die(new Error(`Browser control denied: ${authorization.reason}`))
           const base = {
@@ -77,7 +108,8 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
             yield* ctx.ask({ permission: "browser_upload", patterns: [pattern], always: [pattern], metadata: {} })
           }
           if (params.action !== "start") {
-            const result = yield* browser.request(
+            const result = yield* run(
+              browser,
               params.action === "list"
                 ? { operation: "upload", action: "list", sessionID: ctx.sessionID, authorization: proof }
                 : {
@@ -87,6 +119,7 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
                     sessionID: ctx.sessionID,
                     authorization: proof,
                   },
+              ctx,
             )
             return { title: "Browser uploads", output: JSON.stringify(result, null, 2), metadata: {} }
           }
@@ -137,19 +170,23 @@ export const BrowserUploadTool = Tool.define<typeof Params, {}, Browser.Service 
               ),
             ),
           )
-          const result = yield* browser.request({
-            operation: "upload",
-            action: "start",
-            sessionID: ctx.sessionID,
-            authorization: proof,
-            uploadID: owner.uploadID,
-            tabID: params.tab_id,
-            frameID: params.frame_id,
-            observationID: params.observation_id,
-            selector: params.selector,
-            destination: params.destination,
-            files,
-          })
+          const result = yield* run(
+            browser,
+            {
+              operation: "upload",
+              action: "start",
+              sessionID: ctx.sessionID,
+              authorization: proof,
+              uploadID: owner.uploadID,
+              tabID: params.tab_id,
+              frameID: params.frame_id,
+              observationID: params.observation_id,
+              selector: params.selector,
+              destination: params.destination,
+              files,
+            },
+            ctx,
+          )
           return { title: "Browser upload selection", output: JSON.stringify(result, null, 2), metadata: {} }
         }).pipe(Effect.orDie),
     }

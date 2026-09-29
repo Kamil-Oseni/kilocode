@@ -1,28 +1,55 @@
 import { expect } from "bun:test"
+import { randomUUID } from "node:crypto"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Fiber, Layer, Queue } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { MessageTable, PartTable } from "@opencode-ai/core/session/sql"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Bus } from "@/bus"
 import { Git } from "@/git"
-import { Browser } from "@/kilocode/browser/service"
-import { Event, type Request } from "@/kilocode/browser/protocol"
+import { Browser, digest } from "@/kilocode/browser/service"
+import { Event, type Request, type Result } from "@/kilocode/browser/protocol"
 import { RayaContactOutbox } from "@/kilocode/contact/outbox"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskDelegation, type Artifact as Handoff } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
-import { SessionID } from "@/session/schema"
+import { Session } from "@/session/session"
+import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
-import { TestInstance } from "../../fixture/fixture"
+import { TestInstance, seedProject } from "../../fixture/fixture"
 import { testEffect } from "../../lib/effect"
+
+type JourneyRequest = Extract<Request, { operation: "navigate" | "snapshot" }>
+type JourneyResult = Extract<Result, { operation: "navigate" | "snapshot" }>
 
 const it = testEffect(
   Layer.mergeAll(
-    Browser.layer("2 seconds").pipe(Layer.provideMerge(Bus.layer)),
+    Browser.layer("2 seconds").pipe(
+      Layer.provideMerge(
+        LayerNode.compile(
+          LayerNode.group([
+            Bus.node,
+            Storage.node,
+            Database.node,
+            SessionProjector.node,
+            EffectFlock.node,
+            Global.node,
+            Session.node,
+          ]),
+        ),
+      ),
+    ),
     AppNodeBuilder.build(FSUtil.node),
     AppNodeBuilder.build(Git.node),
   ),
@@ -51,6 +78,51 @@ it.instance(
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => source.stop(true)))
       const prospect = source.url.toString()
+      yield* seedProject
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ title: "Company browser source" })
+      const { db } = yield* Database.Service
+      const message = MessageID.ascending()
+      const parts = [
+        { id: PartID.ascending(), callID: "company-navigate", tool: "browser_navigate" },
+        { id: PartID.ascending(), callID: "company-snapshot", tool: "browser_snapshot" },
+      ]
+      const info: Omit<SessionV1.Assistant, "id" | "sessionID"> = {
+        role: "assistant",
+        time: { created: 1 },
+        parentID: MessageID.ascending(),
+        modelID: ModelV2.ID.make("test"),
+        providerID: ProviderV2.ID.make("test"),
+        mode: "build",
+        agent: "build",
+        path: { cwd: session.directory, root: session.directory },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      }
+      yield* db
+        .insert(MessageTable)
+        .values({
+          id: message,
+          session_id: session.id,
+          data: info,
+        })
+        .pipe(Effect.orDie)
+      yield* Effect.forEach(
+        parts,
+        (part) => {
+          const data: Omit<SessionV1.ToolPart, "id" | "sessionID" | "messageID"> = {
+            type: "tool",
+            callID: part.callID,
+            tool: part.tool,
+            state: { status: "pending", input: {}, raw: "" },
+          }
+          return db
+            .insert(PartTable)
+            .values({ id: part.id, session_id: session.id, message_id: message, data })
+            .pipe(Effect.orDie)
+        },
+        { discard: true },
+      )
       const browser = yield* Browser.Service
       const bus = yield* Bus.Service
       const requests = yield* Queue.unbounded<Request>()
@@ -59,57 +131,122 @@ it.instance(
       )
       yield* Effect.addFinalizer(() => Effect.sync(off))
 
-      const navigate = yield* browser
-        .request({
-          operation: "navigate",
-          sessionID: SessionID.make("ses_company_browser_source"),
-          url: prospect,
-          authorization: {
-            version: 1,
-            sessionID: SessionID.make("ses_company_browser_source"),
-            action: "browser",
-            sensitive: false,
-            source: "legacy_prompt",
-          },
+      const finish = (request: JourneyRequest, result: JourneyResult, invocation: string) =>
+        Effect.gen(function* () {
+          if (!request.confirmation || !result.receipt) throw new Error("Browser confirmation metadata is missing")
+          const receipt = result.receipt
+          const completion = yield* browser.confirm({
+            requestID: request.id,
+            proof: request.confirmation,
+            completion: {
+              version: 1,
+              identity: request.confirmation.identity,
+              invocation,
+              ack: randomUUID(),
+              requestID: request.id,
+              operation: result.operation,
+              outcome: "confirmed",
+              startedAt: receipt.startedAt,
+              finishedAt: receipt.finishedAt,
+              resultDigest: digest(result),
+            },
+          })
+          yield* browser.reply({ requestID: request.id, result })
+          yield* browser.acknowledge({ requestID: request.id, proof: request.confirmation, ack: completion.ack })
         })
+
+      const navigate = yield* browser
+        .request(
+          {
+            operation: "navigate",
+            sessionID: session.id,
+            url: prospect,
+            authorization: {
+              version: 1,
+              sessionID: session.id,
+              action: "browser",
+              sensitive: false,
+              source: "legacy_prompt",
+            },
+          },
+          { messageID: message, callID: parts[0]!.callID, tool: parts[0]!.tool, supported: 1 },
+        )
         .pipe(Effect.forkChild)
       const opening = yield* Queue.take(requests)
-      const page = yield* Effect.promise(() => fetch(opening.operation === "navigate" ? opening.url : prospect))
-      const observed = yield* Effect.promise(() => page.text())
-      yield* browser.reply({
+      if (opening.operation !== "navigate") throw new Error("Browser returned the wrong navigation request")
+      if (!opening.confirmation) throw new Error("Browser navigation confirmation proof is missing")
+      const navigation = randomUUID()
+      const navigationDispatch = yield* browser.dispatch({
         requestID: opening.id,
-        result: { operation: "navigate", tabID: "tab_company_source", url: prospect, title: "Northstar Bakery" },
+        proof: opening.confirmation,
+        invocation: navigation,
       })
+      if (!navigationDispatch.granted) throw new Error("Browser navigation dispatch was not granted")
+      const page = yield* Effect.promise(() => fetch(opening.url))
+      const observed = yield* Effect.promise(() => page.text())
+      const navigated = {
+        operation: "navigate" as const,
+        tabID: "tab_company_source",
+        url: prospect,
+        title: "Northstar Bakery",
+        receipt: {
+          version: 1 as const,
+          requestID: opening.id,
+          startedAt: navigationDispatch.dispatch.at,
+          finishedAt: Math.max(Date.now(), navigationDispatch.dispatch.at),
+          effect: "navigate" as const,
+          outcome: "confirmed" as const,
+        },
+      }
+      yield* finish(opening, navigated, navigation)
       const opened = yield* Fiber.join(navigate)
       if (opened.operation !== "navigate") throw new Error("Browser returned the wrong result.")
       expect(opened.title).toBe("Northstar Bakery")
 
       const snapshot = yield* browser
-        .request({
-          operation: "snapshot",
-          sessionID: SessionID.make("ses_company_browser_source"),
-          tabID: "tab_company_source",
-          authorization: {
-            version: 1,
-            sessionID: SessionID.make("ses_company_browser_source"),
-            action: "observe",
-            windowID: "tab_company_source",
-            sensitive: false,
-            source: "legacy_prompt",
+        .request(
+          {
+            operation: "snapshot",
+            sessionID: session.id,
+            tabID: "tab_company_source",
+            authorization: {
+              version: 1,
+              sessionID: session.id,
+              action: "observe",
+              windowID: "tab_company_source",
+              sensitive: false,
+              source: "legacy_prompt",
+            },
           },
-        })
+          { messageID: message, callID: parts[1]!.callID, tool: parts[1]!.tool, supported: 1 },
+        )
         .pipe(Effect.forkChild)
       const capture = yield* Queue.take(requests)
-      yield* browser.reply({
+      if (capture.operation !== "snapshot") throw new Error("Browser returned the wrong snapshot request")
+      if (!capture.confirmation) throw new Error("Browser snapshot confirmation proof is missing")
+      const observation = randomUUID()
+      const observationDispatch = yield* browser.dispatch({
         requestID: capture.id,
-        result: {
-          operation: "snapshot",
-          tabID: "tab_company_source",
-          url: prospect,
-          title: "Northstar Bakery",
-          snapshot: observed,
-        },
+        proof: capture.confirmation,
+        invocation: observation,
       })
+      if (!observationDispatch.granted) throw new Error("Browser snapshot dispatch was not granted")
+      const captured = {
+        operation: "snapshot" as const,
+        tabID: "tab_company_source",
+        url: prospect,
+        title: "Northstar Bakery",
+        snapshot: observed,
+        receipt: {
+          version: 1 as const,
+          requestID: capture.id,
+          startedAt: observationDispatch.dispatch.at,
+          finishedAt: Math.max(Date.now(), observationDispatch.dispatch.at),
+          effect: "observe" as const,
+          outcome: "confirmed" as const,
+        },
+      }
+      yield* finish(capture, captured, observation)
       const seen = yield* Fiber.join(snapshot)
       if (seen.operation !== "snapshot") throw new Error("Browser returned the wrong snapshot.")
       expect(seen.snapshot).toContain("Online ordering is unavailable")

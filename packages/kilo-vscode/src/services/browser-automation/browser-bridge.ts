@@ -1,6 +1,8 @@
 // raya_change - Milestone F testable CLI-to-Playwright browser bridge
 import { DialogPendingError } from "./browser-dialog"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
+import path from "node:path"
+import { isDeepStrictEqual } from "node:util"
 import type {
   BrowserFailure,
   BrowserRequest,
@@ -30,7 +32,7 @@ export interface BrowserHost {
 
 type ActionRequest = Exclude<BrowserRequest, { operation: "authorize" }>
 
-function action(request: ActionRequest): BrowserAction {
+function action({ confirmation: _, ...request }: ActionRequest): BrowserAction {
   if (request.operation === "scroll") {
     const x = Number(request.deltaX)
     const y = Number(request.deltaY)
@@ -75,7 +77,29 @@ function action(request: ActionRequest): BrowserAction {
   return request
 }
 
-type Receipt = { fingerprint: string; result?: HostBrowserResult; failure?: BrowserFailure; delivered?: boolean }
+type Seal = NonNullable<Extract<BrowserRequest, { operation: "click" }>["confirmation"]>
+type Completion = {
+  version: 1
+  identity: string
+  invocation: string
+  ack: string
+  requestID: string
+  operation: ActionRequest["operation"]
+  outcome: "confirmed" | "refused" | "cancelled" | "unknown"
+  startedAt: number
+  finishedAt: number
+  resultDigest?: string
+}
+type Receipt = {
+  fingerprint: string
+  result?: HostBrowserResult
+  failure?: BrowserFailure
+  delivered?: boolean
+  proof?: Seal
+  invocation?: string
+  dispatched?: boolean
+  completion?: Completion
+}
 type AuthorizeRequest = Extract<BrowserRequest, { operation: "authorize" }>
 type AuthorizeResult = Extract<HostBrowserResult, { operation: "authorize" }>
 type Active = {
@@ -126,18 +150,36 @@ function scope(directory: string) {
   return createHash("sha256").update(directory).digest("hex")
 }
 
-function fingerprint(request: BrowserRequest, directory: string) {
+function digest(value: unknown, legacy = false) {
   return createHash("sha256")
     .update(
-      JSON.stringify([directory, request], (_key, value: unknown) => {
+      JSON.stringify(value, (_key, value: unknown) => {
         if (!value || typeof value !== "object" || Array.isArray(value)) return value
-        return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)))
+        return Object.fromEntries(
+          Object.entries(value).sort(([left], [right]) =>
+            legacy ? left.localeCompare(right) : left < right ? -1 : left > right ? 1 : 0,
+          ),
+        )
       }),
     )
     .digest("hex")
 }
 
-function effect(request: BrowserRequest) {
+function fingerprint(request: BrowserRequest, directory: string) {
+  return digest([directory, request], true)
+}
+
+function bound(request: ActionRequest, directory: string) {
+  const { id: _, confirmation: __, ...input } = request
+  const root = path.resolve(directory)
+  const scoped = process.platform === "win32" ? root.toLowerCase() : root
+  return {
+    scope: createHash("sha256").update(scoped).digest("hex"),
+    digest: digest(input),
+  }
+}
+
+function effect(request: Pick<BrowserRequest, "operation">) {
   if (["snapshot", "screenshot", "frames"].includes(request.operation)) return "observe" as const
   if (request.operation === "navigate") return "navigate" as const
   if (["click", "type", "select", "scroll", "evaluate"].includes(request.operation)) return "interact" as const
@@ -358,6 +400,9 @@ export class BrowserBridge {
     }
     const receipt: Receipt = {
       fingerprint: hash,
+      ...("confirmation" in request && request.confirmation
+        ? { proof: request.confirmation, invocation: randomUUID() }
+        : {}),
       failure: {
         code: "cancelled",
         message:
@@ -375,6 +420,7 @@ export class BrowserBridge {
     }
     return {
       settle: (async () => {
+        if (receipt.proof && (await this.reconcile(request.id, directory, receipt))) return
         if (persistable(receipt.failure)) await this.pause(directory, receipt.failure.message)
         await this.deliver(request.id, directory, receipt)
       })(),
@@ -430,6 +476,60 @@ export class BrowserBridge {
     if (decision?.decision === "deny") throw new Error(`Browser control is no longer authorized: ${decision.reason}`)
   }
 
+  private async dispatch(request: ActionRequest, directory: string, receipt: Receipt, controller: AbortController) {
+    if (!receipt.proof)
+      throw new Error("Browser request lacks durable confirmation; update the backend before controlling the browser")
+    const binding = bound(request, directory)
+    if (receipt.proof.scope !== binding.scope || receipt.proof.digest !== binding.digest)
+      throw new Error("Browser request changed after admission; no action was dispatched")
+    this.check(request)
+    await this.show(request, directory)
+    if (controller.signal.aborted) return false
+    this.check(request)
+    const response = await this.connection.getClient().kilocode.browser.dispatch({
+      requestID: request.id,
+      directory,
+      browserDispatchInput: { proof: receipt.proof, invocation: receipt.invocation! },
+    })
+    if (response.error || !response.data?.granted) {
+      if (await this.reconcile(request.id, directory, receipt)) return false
+      throw new BrowserOutcomeError(
+        request.operation,
+        "Browser dispatch ownership was not confirmed; no automatic retry is allowed",
+      )
+    }
+    receipt.dispatched = true
+    if (controller.signal.aborted) return false
+    this.check(request)
+    return true
+  }
+
+  private complete(request: ActionRequest, receipt: Receipt, result: HostBrowserResult, startedAt: number): void {
+    if (receipt.proof)
+      receipt.completion = {
+        version: 1,
+        identity: receipt.proof.identity,
+        invocation: receipt.invocation!,
+        ack: randomUUID(),
+        requestID: request.id,
+        operation: request.operation,
+        outcome: "confirmed",
+        startedAt,
+        finishedAt: "receipt" in result && result.receipt ? result.receipt.finishedAt : Date.now(),
+        resultDigest: digest(result),
+      }
+    if (Buffer.byteLength(JSON.stringify(result), "utf8") <= 64_000) {
+      receipt.result = result
+      receipt.failure = undefined
+      return
+    }
+    receipt.failure = {
+      code: "invalid_request",
+      message:
+        "This browser request completed, but its result exceeds the retained receipt limit. It will not execute again. Inspect the destination for the result.",
+    }
+  }
+
   private async run(request: BrowserRequest, directory: string, recovered = false): Promise<void> {
     if (this.disposed) return
     if (request.operation === "authorize") {
@@ -449,35 +549,38 @@ export class BrowserBridge {
     this.active.set(request.id, { controller, request, directory, startedAt, receipt })
     const state = { completed: false }
     try {
-      this.check(request)
-      await this.show(request, directory)
-      if (controller.signal.aborted) return
-      this.check(request)
+      if (!(await this.dispatch(request, directory, receipt, controller))) return
       const value = await this.host.execute({
         ...action(request),
         origin: { requestID: request.id, sessionID: request.sessionID, directory },
         uploader: this.uploader(request, directory),
-        guard: () => this.check(request),
+        guard: () => {
+          if (controller.signal.aborted) throw new Error("Browser request was cancelled before native dispatch")
+          this.check(request)
+        },
       })
       const result = Object.assign(value, {
         receipt: evidence(request, startedAt, "confirmed", value),
       }) as HostBrowserResult
       state.completed = true
       if (controller.signal.aborted) return
-      if (Buffer.byteLength(JSON.stringify(result), "utf8") <= 64_000) {
-        receipt.result = result
-        receipt.failure = undefined
-      } else {
-        receipt.failure = {
-          code: "invalid_request",
-          message:
-            "This browser request completed, but its result exceeds the retained receipt limit. It will not execute again. Inspect the destination for the result.",
-        }
-      }
+      this.complete(request, receipt, result, startedAt)
       await this.deliver(request.id, directory, { fingerprint: hash, result }, receipt)
     } catch (error) {
       if (controller.signal.aborted) return
       receipt.failure = this.failed(request, startedAt, state.completed, error)
+      if (receipt.proof && !receipt.completion)
+        receipt.completion = {
+          version: 1,
+          identity: receipt.proof.identity,
+          invocation: receipt.invocation!,
+          ack: randomUUID(),
+          requestID: request.id,
+          operation: request.operation,
+          outcome: receipt.failure.receipt?.outcome === "unknown" ? "unknown" : "refused",
+          startedAt,
+          finishedAt: Date.now(),
+        }
       if (receipt.failure.receipt) await this.pause(directory, receipt.failure.message)
       await this.deliver(request.id, directory, receipt)
     } finally {
@@ -491,27 +594,104 @@ export class BrowserBridge {
       ({ operation: "authorize", decision: "ask", reason: "No active autonomous grant" } as const)
     const response = await this.connection
       .getClient()
-      .kilocode.browser.reply({ requestID: request.id, directory, result })
+      .kilocode.browser.reply({ requestID: request.id, directory, result: { ...result, confirmationVersion: 1 } })
     if (response.error) console.error("[Raya] Browser authorization delivery failed:", response.error)
   }
 
   private async deliver(requestID: string, directory: string, receipt: Receipt, owner = receipt): Promise<void> {
     try {
       const client = this.connection.getClient().kilocode.browser
+      if (!(await this.confirm(requestID, directory, owner, receipt))) return
       const response = receipt.result
         ? await client.reply({ requestID, directory, result: receipt.result })
         : await client.reject({ requestID, directory, error: receipt.failure! })
       if (response.error) {
+        if (owner.proof && (await this.reconcile(requestID, directory, owner, receipt))) return
         console.error("[Raya] Browser result delivery failed; retained receipt prevents replay:", response.error)
         return
       }
       if (this.receipts.get(requestID) !== owner) return
+      if (owner.proof && owner.dispatched && owner.completion) {
+        const response = await client.acknowledge({
+          requestID,
+          directory,
+          proof: owner.proof,
+          ack: owner.completion.ack,
+        })
+        if (response.error || !response.data) return
+      }
       owner.delivered = true
       await this.retain().catch((error) =>
         console.error("[Raya] Browser receipt acknowledgement persistence failed; stale receipt remains safe", error),
       )
     } catch (error) {
+      if (owner.proof && (await this.reconcile(requestID, directory, owner, receipt))) return
       console.error("[Raya] Browser result delivery failed; retained receipt prevents replay:", error)
+    }
+  }
+
+  private async confirm(requestID: string, directory: string, owner: Receipt, receipt: Receipt): Promise<boolean> {
+    if (!owner.proof || !owner.dispatched || !owner.completion) return true
+    const response = await this.connection.getClient().kilocode.browser.confirm({
+      requestID,
+      directory,
+      proof: owner.proof,
+      completion: owner.completion,
+    })
+    if (!response.error && response.data) return true
+    await this.reconcile(requestID, directory, owner, receipt)
+    return false
+  }
+
+  private async reconcile(requestID: string, directory: string, receipt: Receipt, payload = receipt): Promise<boolean> {
+    if (!receipt.proof) return false
+    try {
+      const client = this.connection.getClient().kilocode.browser
+      const response = await client.confirmation({ requestID, directory, proof: receipt.proof })
+      const completion = response.data?.completion
+      if (response.error || !completion) return false
+      if (receipt.completion && !isDeepStrictEqual(completion, receipt.completion)) return false
+      // Historical native confirmation does not reconstruct a missing page payload or reopen model work.
+      receipt.completion = completion
+      if (completion.outcome === "unknown") {
+        receipt.result = undefined
+        receipt.failure = {
+          code: "invalid_request",
+          message: "A retained browser action has an unknown outcome. Inspect the destination before resuming control.",
+          receipt: {
+            version: 1,
+            requestID,
+            startedAt: completion.startedAt,
+            finishedAt: completion.finishedAt,
+            effect: effect({ operation: completion.operation }),
+            outcome: "unknown",
+          },
+        }
+        await this.pause(directory, receipt.failure.message)
+      }
+      if (response.data?.pending) {
+        const result = payload.result ?? receipt.result
+        const reply =
+          result && completion.outcome === "confirmed" && digest(result) === completion.resultDigest
+            ? await client.reply({ requestID, directory, result })
+            : await client.reject({
+                requestID,
+                directory,
+                error: receipt.failure ?? {
+                  code: "invalid_request",
+                  message:
+                    "The browser action has a retained completion receipt, but the original result payload is unavailable. Do not repeat the action. Use a fresh authorized observation to inspect the destination.",
+                },
+              })
+        if (reply.error) return false
+      }
+      const ack = await client.acknowledge({ requestID, directory, proof: receipt.proof, ack: completion.ack })
+      if (ack.error || !ack.data) return false
+      receipt.delivered = true
+      await this.retain()
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -568,7 +748,14 @@ export class BrowserBridge {
       return Promise.reject(new Error("Browser safety journal is quarantined; saved evidence was preserved"))
     const items = [...this.receipts.entries()]
       .filter((entry) => !entry[1].delivered && persistable(entry[1].failure))
-      .map(([id, value]) => ({ id, fingerprint: value.fingerprint, failure: value.failure }))
+      .map(([id, value]) => ({
+        id,
+        fingerprint: value.fingerprint,
+        failure: {
+          ...value.failure,
+          message: "A browser action has an unknown outcome. Inspect the destination before resuming control.",
+        },
+      }))
     const blocked = [...this.blocked]
     if (items.length > 256 || blocked.length > 64) {
       this.fault = true

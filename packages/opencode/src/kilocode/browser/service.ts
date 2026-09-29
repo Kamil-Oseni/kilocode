@@ -10,10 +10,55 @@ import * as Log from "@opencode-ai/core/util/log"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ErrorCode, Event, type Failure, type Request, RequestID, type Result } from "./protocol"
 import { UploadStage } from "./upload-stage"
+import {
+  confirmations,
+  type Proof as ProofSchema,
+  type Completion as CompletionSchema,
+  type Admission as AdmissionSchema,
+  type Dispatch as DispatchSchema,
+  type Acknowledgement as AcknowledgementSchema,
+  Conflict,
+} from "./confirmation"
+import { check } from "./origin"
+import { Storage } from "@/storage/storage"
+import { Database } from "@opencode-ai/core/database/database"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { Global } from "@opencode-ai/core/global"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import path from "node:path"
+import { createHash, randomUUID } from "node:crypto"
 
 const log = Log.create({ service: "browser-host" })
-type WithoutID<T> = T extends unknown ? Omit<T, "id"> : never
+type WithoutID<T> = T extends unknown ? Omit<T, "id" | "confirmation"> : never
 export type Input = WithoutID<Request>
+/** Version 1 binds semantic JSON content, independent of schema/object property order. */
+export function digest(value: unknown) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(value, (_key, item: unknown) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return item
+        return Object.fromEntries(
+          Object.entries(item).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+        )
+      }),
+    )
+    .digest("hex")
+}
+export type Origin = { messageID: string; callID?: string; tool: string; supported?: 1 }
+type Proof = typeof ProofSchema.Type
+type Completion = typeof CompletionSchema.Type
+type Admission = typeof AdmissionSchema.Type
+type Dispatch = typeof DispatchSchema.Type
+type Acknowledgement = typeof AcknowledgementSchema.Type
+export type Confirmation = {
+  version: 1
+  proof: Proof
+  granted: false
+  pending: boolean
+  dispatch?: Dispatch
+  completion?: Completion
+  acknowledgement?: Acknowledgement
+}
 
 export class HostError extends Schema.TaggedErrorClass<HostError>()("BrowserHostError", {
   code: ErrorCode,
@@ -53,7 +98,7 @@ const context = Effect.gen(function* () {
 })
 
 export interface Interface {
-  readonly request: (input: Input) => Effect.Effect<Result, HostError>
+  readonly request: (input: Input, origin?: Origin) => Effect.Effect<Result, HostError>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
   readonly cancelSession: (sessionID: Request["sessionID"]) => Effect.Effect<void>
   readonly reply: (input: {
@@ -61,6 +106,22 @@ export interface Interface {
     result: Result
   }) => Effect.Effect<void, NotFoundError | InvalidReplyError>
   readonly reject: (input: { requestID: RequestID; error: Failure }) => Effect.Effect<void, NotFoundError>
+  readonly dispatch: (input: {
+    requestID: RequestID
+    proof: Proof
+    invocation: string
+  }) => Effect.Effect<{ granted: boolean; dispatch: Dispatch }, Conflict>
+  readonly confirm: (input: {
+    requestID: RequestID
+    proof: Proof
+    completion: Completion
+  }) => Effect.Effect<Completion, Conflict>
+  readonly confirmation: (input: { requestID: RequestID; proof: Proof }) => Effect.Effect<Confirmation, Conflict>
+  readonly acknowledge: (input: {
+    requestID: RequestID
+    proof: Proof
+    ack: string
+  }) => Effect.Effect<Acknowledgement, Conflict>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@kilocode/Browser") {}
@@ -70,6 +131,24 @@ export function layer(timeout: Duration.Input = "2 minutes") {
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const storage = yield* Storage.Service
+      const flock = yield* EffectFlock.Service
+      const database = yield* Database.Service
+      const global = yield* Global.Service
+      const ledger = confirmations(storage, { flock, directory: path.join(global.data, "browser-confirmation-locks") })
+      const origin = (admission: Admission, directory: string, live: boolean) =>
+        check(admission, directory, live).pipe(Effect.provideService(Database.Service, database))
+      const hash = (value: string) => createHash("sha256").update(value).digest("hex")
+      const scope = (directory: string) =>
+        hash(process.platform === "win32" ? path.resolve(directory).toLowerCase() : path.resolve(directory))
+      const eligible = (admission: Admission) =>
+        Effect.gen(function* () {
+          if ([...states.values()].some((state) => state.pending.has(admission.requestID as RequestID))) return false
+          const ctx = yield* context
+          if (admission.proof.scope !== scope(ctx.directory)) return false
+          const part = yield* origin(admission, ctx.directory, false)
+          return Boolean(part) && !(yield* origin(admission, ctx.directory, true))
+        })
       const stop = new UploadStage().watch()
       yield* Effect.addFinalizer(() => Effect.sync(stop))
       const states = new Map<string, State>()
@@ -144,11 +223,58 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         )
       })
 
-      const request = Effect.fn("Browser.request")(function* (input: Input) {
+      const request = Effect.fn("Browser.request")(function* (input: Input, owner?: Origin) {
         const pending = (yield* StateService).pending
         const id = RequestID.make(Identifier.create("brr", "ascending"))
         const deferred = yield* Deferred.make<Result, HostError>()
-        const info = { ...input, id } as Request
+        const ctx = yield* context
+        const admission =
+          input.operation === "authorize"
+            ? undefined
+            : yield* Effect.gen(function* () {
+                if (!owner?.callID || owner.supported !== 1)
+                  return yield* new HostError({
+                    code: "invalid_request",
+                    detail: "Browser request is missing canonical tool identity or durable host support",
+                  })
+                const part = yield* check(
+                  { ...owner, callID: owner.callID, sessionID: input.sessionID },
+                  ctx.directory,
+                  true,
+                ).pipe(Effect.provideService(Database.Service, database))
+                if (!part)
+                  return yield* new HostError({
+                    code: "invalid_request",
+                    detail: "Browser request does not match a live canonical tool",
+                  })
+                return yield* ledger
+                  .reserve(
+                    {
+                      version: 1,
+                      requestID: id,
+                      scope: scope(ctx.directory),
+                      digest: digest(input),
+                      sessionID: input.sessionID,
+                      messageID: owner.messageID,
+                      callID: owner.callID,
+                      partID: part,
+                      tool: owner.tool,
+                      operation: input.operation,
+                      at: Date.now(),
+                    },
+                    eligible,
+                  )
+                  .pipe(
+                    Effect.mapError(
+                      () =>
+                        new HostError({
+                          code: "invalid_request",
+                          detail: "Browser safety admission could not be retained; no request was dispatched",
+                        }),
+                    ),
+                  )
+              })
+        const info = { ...input, id, ...(admission ? { confirmation: admission.proof } : {}) } as Request
         pending.set(id, { info, deferred })
         return yield* Effect.gen(function* () {
           yield* bus.publish(Event.Requested, info)
@@ -182,6 +308,22 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         }
         if (entry.info.operation !== input.result.operation)
           return yield* new InvalidReplyError({ requestID: input.requestID })
+        if ("confirmation" in entry.info && entry.info.confirmation) {
+          const value = yield* ledger
+            .read(entry.info.confirmation)
+            .pipe(Effect.mapError(() => new InvalidReplyError({ requestID: input.requestID })))
+          const completion = value.completion
+          const evidence = "receipt" in input.result ? input.result.receipt : undefined
+          if (
+            !completion ||
+            completion.outcome !== "confirmed" ||
+            completion.resultDigest !== digest(input.result) ||
+            completion.startedAt !== evidence?.startedAt ||
+            completion.finishedAt !== evidence?.finishedAt
+          )
+            return yield* new InvalidReplyError({ requestID: input.requestID })
+          if (pending.get(input.requestID) !== entry) return yield* new NotFoundError({ requestID: input.requestID })
+        }
         pending.delete(input.requestID)
         yield* Deferred.succeed(entry.deferred, input.result)
       })
@@ -200,17 +342,97 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         )
       })
 
+      const retained = Effect.fn("Browser.retained")(function* (input: { requestID: RequestID; proof: Proof }) {
+        const ctx = yield* context
+        if (input.proof.scope !== scope(ctx.directory))
+          return yield* new Conflict({ message: "Browser confirmation scope changed" })
+        const value = yield* ledger.read(input.proof)
+        if (value.admission.requestID !== input.requestID || !(yield* origin(value.admission, ctx.directory, false)))
+          return yield* new Conflict({ message: "Browser confirmation canonical identity changed" })
+        return value
+      })
+      const dispatch = Effect.fn("Browser.dispatch")(function* (input: Parameters<Interface["dispatch"]>[0]) {
+        const pending = (yield* StateService).pending
+        const entry = pending.get(input.requestID)
+        const value = yield* retained(input)
+        const ctx = yield* context
+        if (!entry || !(yield* origin(value.admission, ctx.directory, true)) || pending.get(input.requestID) !== entry)
+          return yield* new Conflict({ message: "Browser dispatch has no live canonical request" })
+        const result = yield* ledger.dispatch(input.proof, input.invocation)
+        if (pending.get(input.requestID) !== entry || !(yield* origin(value.admission, ctx.directory, true))) {
+          if (result.granted) {
+            const at = Math.max(Date.now(), value.admission.at)
+            const completion = yield* ledger.confirm(input.proof, {
+              version: 1,
+              identity: input.proof.identity,
+              invocation: input.invocation,
+              ack: randomUUID(),
+              requestID: input.requestID,
+              operation: value.admission.operation,
+              outcome: "cancelled",
+              startedAt: at,
+              finishedAt: at,
+            })
+            yield* ledger.acknowledge(input.proof, { ack: completion.ack })
+          }
+          return yield* new Conflict({
+            message: "Browser request was cancelled before dispatch ownership was returned",
+          })
+        }
+        return result
+      })
+      const confirm = Effect.fn("Browser.confirm")(function* (input: Parameters<Interface["confirm"]>[0]) {
+        yield* retained(input)
+        return yield* ledger.confirm(input.proof, input.completion)
+      })
+      const confirmation = Effect.fn("Browser.confirmation")(function* (
+        input: Parameters<Interface["confirmation"]>[0],
+      ) {
+        const value = yield* retained(input)
+        return {
+          version: 1 as const,
+          proof: value.admission.proof,
+          granted: false as const,
+          pending: [...states.values()].some((state) => state.pending.has(input.requestID)),
+          ...(value.dispatch ? { dispatch: value.dispatch } : {}),
+          ...(value.completion ? { completion: value.completion } : {}),
+          ...(value.acknowledgement ? { acknowledgement: value.acknowledgement } : {}),
+        }
+      })
+      const acknowledge = Effect.fn("Browser.acknowledge")(function* (input: Parameters<Interface["acknowledge"]>[0]) {
+        yield* retained(input)
+        return yield* ledger.acknowledge(input.proof, { ack: input.ack })
+      })
+
       return Service.of({
-        request: (input) => use(request(input)),
+        request: (input, origin) => use(request(input, origin)),
         list: () => use(list()),
         cancelSession: (sessionID) => use(cancelSession(sessionID)),
         reply: (input) => use(reply(input)),
         reject: (input) => use(reject(input)),
+        dispatch: (input) => use(dispatch(input)),
+        confirm: (input) => use(confirm(input)),
+        confirmation: (input) => use(confirmation(input)),
+        acknowledge: (input) => use(acknowledge(input)),
       })
     }),
   )
 }
 
-export const defaultLayer = layer().pipe(Layer.provide(Bus.layer))
-export const node = LayerNode.make({ service: Service, layer: layer(), deps: [Bus.node] })
+export const defaultLayer = layer().pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      Bus.layer,
+      AppNodeBuilder.build(Storage.node),
+      AppNodeBuilder.build(Database.node),
+      AppNodeBuilder.build(EffectFlock.node),
+      AppNodeBuilder.build(Global.node),
+    ),
+  ),
+)
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer(),
+  deps: [Bus.node, Storage.node, Database.node, EffectFlock.node, Global.node],
+})
 export * as Browser from "./service"

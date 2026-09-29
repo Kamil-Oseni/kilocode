@@ -1,6 +1,8 @@
 // raya_change - Milestone F drive-and-watch bridge regression
 import { describe, expect, it } from "bun:test"
-import type { BrowserRequest, KiloClient } from "@kilocode/sdk/v2/client"
+import { createHash, randomUUID } from "node:crypto"
+import path from "node:path"
+import type { BrowserConfirmationCompletion, BrowserRequest, KiloClient } from "@kilocode/sdk/v2/client"
 import type { SSEPayload } from "../../src/services/cli-backend/sdk-sse-adapter"
 import type {
   BrowserConnection,
@@ -12,6 +14,238 @@ import { BrowserBridge } from "../../src/services/browser-automation/browser-bri
 import { BrowserOutcomeError } from "../../src/services/browser-automation/browser-session"
 
 describe("Raya browser bridge", () => {
+  it.each([true, false])("executes proof-backed work only with a first dispatch grant (%s)", async (granted) => {
+    const done = Promise.withResolvers<void>()
+    const calls = { execute: 0, dispatch: 0, reply: 0, reject: 0, ack: 0 }
+    const request = sealed()
+    const saved = { completion: undefined as BrowserConfirmationCompletion | undefined }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          dispatch: async (value: {
+            browserDispatchInput: { proof: unknown; invocation: string }
+            requestID: string
+            directory: string
+          }) => {
+            calls.dispatch++
+            expect(value.browserDispatchInput.proof).toEqual(request.confirmation)
+            expect(value.directory).toBe("C:\\workspace")
+            if (!granted)
+              saved.completion = {
+                version: 1,
+                identity: request.confirmation.identity,
+                invocation: value.browserDispatchInput.invocation,
+                ack: "00000000-0000-4000-8000-000000000099",
+                requestID: request.id,
+                operation: "click",
+                outcome: "confirmed",
+                startedAt: 1,
+                finishedAt: 2,
+                resultDigest: "c".repeat(64),
+              }
+            return { data: { granted } }
+          },
+          confirm: async (value: { completion: BrowserConfirmationCompletion }) => {
+            saved.completion = value.completion
+            return { data: value.completion }
+          },
+          confirmation: async () => ({ data: { completion: saved.completion, pending: false } }),
+          reply: async () => {
+            calls.reply++
+            return { data: true }
+          },
+          reject: async () => {
+            calls.reject++
+            return { data: true }
+          },
+          acknowledge: async () => {
+            calls.ack++
+            done.resolve()
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async (action) => {
+        calls.execute++
+        expect("confirmation" in action).toBe(false)
+        return { operation: "click", url: "https://example.test", title: "Confirmed" }
+      },
+    })
+    try {
+      connection.event({ type: "kilocode.browser.requested", properties: request })
+      await bounded(done.promise)
+      expect(calls).toEqual({ execute: granted ? 1 : 0, dispatch: 1, reply: granted ? 1 : 0, reject: 0, ack: 1 })
+    } finally {
+      bridge.dispose()
+    }
+  })
+
+  it.each(["confirm", "reply", "changed"] as const)(
+    "reconciles a lost proof-backed %s response without repeating native work",
+    async (mode) => {
+      const done = Promise.withResolvers<void>()
+      const seen = Promise.withResolvers<void>()
+      const calls = { execute: 0, dispatch: 0, confirm: 0, read: 0, reply: 0, reject: 0, ack: 0 }
+      const saved = { completion: undefined as BrowserConfirmationCompletion | undefined, pending: true }
+      const replies: unknown[] = []
+      const request = sealed()
+      const client = {
+        kilocode: {
+          browser: {
+            list: async () => ({ data: [] }),
+            dispatch: async () => {
+              calls.dispatch++
+              return { data: { granted: true } }
+            },
+            confirm: async (value: { completion: BrowserConfirmationCompletion }) => {
+              calls.confirm++
+              saved.completion = structuredClone(value.completion)
+              if (mode !== "reply") throw new Error("Synthetic dropped confirmation response")
+              return { data: value.completion }
+            },
+            confirmation: async () => {
+              calls.read++
+              if (!saved.completion) throw new Error("Expected immutable native completion")
+              if (mode === "changed" && calls.read === 1) seen.resolve()
+              if (mode === "changed" && calls.read === 2) done.resolve()
+              return {
+                data: {
+                  completion:
+                    mode === "changed" ? { ...saved.completion, resultDigest: "d".repeat(64) } : saved.completion,
+                  pending: saved.pending,
+                },
+              }
+            },
+            reply: async (value: unknown) => {
+              calls.reply++
+              replies.push(structuredClone(value))
+              saved.pending = false
+              if (mode === "reply") throw new Error("Synthetic dropped accepted full reply response")
+              return { data: true }
+            },
+            reject: async () => {
+              calls.reject++
+              return { data: true }
+            },
+            acknowledge: async (value: { ack: string }) => {
+              calls.ack++
+              expect(value.ack).toBe(saved.completion?.ack)
+              done.resolve()
+              return { data: true }
+            },
+          },
+        },
+      } as unknown as KiloClient
+      const connection = harness(client)
+      const bridge = new BrowserBridge(connection.value, {
+        show: async () => undefined,
+        execute: async () => {
+          calls.execute++
+          return { operation: "click", url: "https://example.test", title: "Retained payload" }
+        },
+      })
+      try {
+        connection.event({ type: "kilocode.browser.requested", properties: request })
+        if (mode === "changed") {
+          await bounded(seen.promise)
+          await Bun.sleep(0)
+          connection.event({ type: "kilocode.browser.requested", properties: request })
+        }
+        await bounded(done.promise)
+        expect(calls.execute).toBe(1)
+        expect(calls.dispatch).toBe(1)
+        expect(calls.confirm).toBe(mode === "changed" ? 2 : 1)
+        expect(Object.keys(saved.completion ?? {}).sort()).toEqual(
+          [
+            "version",
+            "identity",
+            "invocation",
+            "ack",
+            "requestID",
+            "operation",
+            "outcome",
+            "startedAt",
+            "finishedAt",
+            "resultDigest",
+          ].sort(),
+        )
+        expect(calls.reject).toBe(0)
+        expect(calls.reply).toBe(mode === "changed" ? 0 : 1)
+        expect(calls.ack).toBe(mode === "changed" ? 0 : 1)
+        expect(calls.read).toBe(mode === "changed" ? 2 : 1)
+        if (mode !== "changed")
+          expect(replies[0]).toMatchObject({
+            requestID: request.id,
+            result: { operation: "click", title: "Retained payload", receipt: { outcome: "confirmed" } },
+          })
+      } finally {
+        bridge.dispose()
+      }
+    },
+  )
+
+  it.each(["changed target", "missing proof"] as const)("refuses %s before browser dispatch", async (kind) => {
+    const done = Promise.withResolvers<unknown>()
+    const calls = { shown: 0, executed: 0, dispatched: 0 }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => ({ data: [] }),
+          dispatch: async () => {
+            calls.dispatched++
+            return { data: { granted: true } }
+          },
+          reply: async () => ({ data: true }),
+          reject: async (value: unknown) => {
+            done.resolve(value)
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => {
+        calls.shown++
+      },
+      execute: async () => {
+        calls.executed++
+        return { operation: "click", title: "wrong target" }
+      },
+    })
+    try {
+      const request = sealed()
+      connection.event(
+        {
+          type: "kilocode.browser.requested",
+          properties:
+            kind === "changed target"
+              ? { ...request, selector: "#different" }
+              : { ...request, confirmation: undefined },
+        },
+        true,
+      )
+      const value = await bounded(done.promise)
+      expect(value).toMatchObject({
+        requestID: request.id,
+        error: {
+          code: "invalid_request",
+          message: expect.stringContaining(
+            kind === "changed target" ? "changed after admission" : "lacks durable confirmation",
+          ),
+        },
+      })
+      expect(calls).toEqual({ shown: 0, executed: 0, dispatched: 0 })
+    } finally {
+      bridge.dispose()
+    }
+  })
+
   it("negotiates a shared Computer Use grant without showing or executing the browser", async () => {
     const replies: unknown[] = []
     let shown = 0
@@ -703,6 +937,7 @@ describe("Raya browser bridge", () => {
     const release = Promise.withResolvers<void>()
     const capacity = Promise.withResolvers<void>()
     const finished = Promise.withResolvers<void>()
+    const entered = Promise.withResolvers<void>()
     let calls = 0
     let replies = 0
     const failures: unknown[] = []
@@ -727,6 +962,7 @@ describe("Raya browser bridge", () => {
       show: async () => undefined,
       execute: async () => {
         calls++
+        if (calls === 1024) entered.resolve()
         await release.promise
         return { operation: "click", url: "https://example.test", title: "Saved" }
       },
@@ -746,6 +982,7 @@ describe("Raya browser bridge", () => {
       for (let id = 0; id <= 1024; id++) send(id)
       await capacity.promise
       send(0)
+      await entered.promise
       expect(calls).toBe(1024)
       expect(failures[0]).toMatchObject({ error: { message: expect.stringContaining("not dispatched") } })
       release.resolve()
@@ -1296,6 +1533,7 @@ describe("Raya browser bridge", () => {
     })
     const saved = store.read() as { blocked: string[] }
     expect(saved.blocked).toHaveLength(1)
+    expect(JSON.stringify(saved)).not.toContain("The click acknowledgement was lost")
     expect(saved.blocked[0]).toMatch(/^[a-f0-9]{64}$/)
     expect(saved).toMatchObject({
       version: 1,
@@ -1816,6 +2054,37 @@ describe("Raya browser bridge", () => {
   })
 })
 
+function sealed() {
+  return {
+    id: "brr_proof",
+    sessionID: "ses_test",
+    operation: "click" as const,
+    selector: "#save",
+    authorization: prompt("browser"),
+    confirmation: {
+      version: 1 as const,
+      identity: "00000000-0000-4000-8000-000000000001",
+      slot: 0,
+      scope: "1c468bd6a69c917b2acf4c54c46e7c1027eb84a9a2dd457e95ebaa6575e19609",
+      digest: "e381bd3cc4e08520ab1ee6f67490f4b717a2c3734e908d6c2225c162e5c49f18",
+    },
+  }
+}
+
+async function bounded<T>(body: Promise<T>): Promise<T> {
+  const timer = { value: undefined as ReturnType<typeof setTimeout> | undefined }
+  try {
+    return await Promise.race([
+      body,
+      new Promise<never>((_resolve, reject) => {
+        timer.value = setTimeout(() => reject(new Error("Browser confirmation did not settle")), 2_000)
+      }),
+    ])
+  } finally {
+    if (timer.value !== undefined) clearTimeout(timer.value)
+  }
+}
+
 function prompt(
   action: "observe" | "browser" | "scroll" | "files",
   windowID?: string,
@@ -1892,6 +2161,49 @@ function failing() {
 }
 
 function harness(client: KiloClient) {
+  const seals = new Map<string, ReturnType<typeof sealed>["confirmation"]>()
+  const browser = client.kilocode.browser as unknown as Record<string, unknown>
+  browser.dispatch ??= async () => ({ data: { granted: true } })
+  browser.confirm ??= async (input: { completion: BrowserConfirmationCompletion }) => ({ data: input.completion })
+  browser.acknowledge ??= async () => ({ data: true })
+  const prepare = (request: unknown) => {
+    if (
+      !request ||
+      typeof request !== "object" ||
+      !("operation" in request) ||
+      request.operation === "authorize" ||
+      "confirmation" in request
+    )
+      return request
+    const { id, ...body } = request as Record<string, unknown>
+    const scoped = path.resolve("C:\\workspace").toLowerCase()
+    const digest = (value: unknown) =>
+      createHash("sha256")
+        .update(
+          JSON.stringify(value, (_key, item: unknown) => {
+            if (!item || typeof item !== "object" || Array.isArray(item)) return item
+            return Object.fromEntries(
+              Object.entries(item).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+            )
+          }),
+        )
+        .digest("hex")
+    const proof = seals.get(String(id)) ?? {
+      version: 1 as const,
+      identity: `00000000-0000-4000-8000-${createHash("sha256").update(String(id)).digest("hex").slice(0, 12)}`,
+      slot: 0,
+      scope: createHash("sha256").update(scoped).digest("hex"),
+      digest: digest(body),
+    }
+    seals.set(String(id), proof)
+    return { ...request, confirmation: proof }
+  }
+  const listed = browser.list as (() => Promise<{ data?: unknown[] }>) | undefined
+  if (listed)
+    browser.list = async () => {
+      const response = await listed()
+      return Array.isArray(response.data) ? { ...response, data: response.data.map(prepare) } : response
+    }
   let event: (event: SSEPayload, directory?: string) => void = () => undefined
   let state: (state: "connecting" | "connected" | "disconnected" | "error") => void = () => undefined
   const value: BrowserConnection = {
@@ -1908,8 +2220,18 @@ function harness(client: KiloClient) {
   }
   return {
     value,
-    event(input: unknown) {
-      event(input as SSEPayload, "C:\\workspace")
+    event(input: unknown, raw = false) {
+      if (raw || !input || typeof input !== "object" || !("properties" in input)) {
+        event(input as SSEPayload, "C:\\workspace")
+        return
+      }
+      event(
+        {
+          ...(input as object),
+          properties: prepare(input.properties),
+        } as SSEPayload,
+        "C:\\workspace",
+      )
     },
     state(input: "connecting" | "connected" | "disconnected" | "error") {
       state(input)

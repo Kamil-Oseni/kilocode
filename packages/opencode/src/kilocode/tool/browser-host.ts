@@ -66,8 +66,15 @@ function render(result: Result) {
   return `${text.slice(0, LIMIT)}\n\n[Browser result truncated by ${text.length - LIMIT} characters]`
 }
 
-function run(browser: Browser.Interface, input: Input, signal: AbortSignal) {
-  return browser.request(input).pipe(Effect.raceFirst(abort(signal)), Effect.orDie)
+function run(browser: Browser.Interface, input: Input, ctx: Tool.Context, tool: string) {
+  return browser
+    .request(input, {
+      messageID: ctx.messageID,
+      ...(ctx.callID ? { callID: ctx.callID } : {}),
+      tool,
+      supported: 1,
+    })
+    .pipe(Effect.raceFirst(abort(ctx.abort)), Effect.orDie)
 }
 
 function classified(value: Classification): SensitiveKind | false {
@@ -82,6 +89,7 @@ function verify(value: Classification, target: typeof Selector.Type) {
 function approve(
   browser: Browser.Interface,
   ctx: Tool.Context,
+  tool: string,
   input: Parameters<Tool.Context["ask"]>[0] & {
     action: "observe" | "browser" | "scroll" | "files"
     tabID?: string
@@ -100,10 +108,15 @@ function approve(
         sensitive,
         ...(input.tabID ? { windowID: input.tabID } : {}),
       },
-      ctx.abort,
+      ctx,
+      tool,
     )
     const auth =
       result.operation === "authorize" ? result : yield* Effect.die(new Error("Browser host returned the wrong result"))
+    if (auth.confirmationVersion !== 1)
+      return yield* Effect.die(
+        new Error("Browser host does not support durable confirmation; update the host before controlling the browser"),
+      )
     if (auth.decision === "deny") yield* Effect.die(new Error(`Browser control denied: ${auth.reason}`))
     const base = {
       version: 1 as const,
@@ -153,7 +166,7 @@ export const BrowserNavigateTool = Tool.define<
       parameters: NavigateParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_navigate", {
             action: "browser",
             tabID: params.tab_id,
             sensitive: classified(params.sensitive_category),
@@ -165,7 +178,8 @@ export const BrowserNavigateTool = Tool.define<
           const result = yield* run(
             browser,
             { operation: "navigate", tabID: params.tab_id, sessionID: ctx.sessionID, authorization, url: params.url },
-            ctx.abort,
+            ctx,
+            "browser_navigate",
           )
           return {
             title: `Browser: ${result.url ?? params.url}`,
@@ -193,7 +207,7 @@ export const BrowserSnapshotTool = Tool.define<
       parameters: SnapshotParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_snapshot", {
             action: "observe",
             tabID: params.tab_id,
             permission: "browser_snapshot",
@@ -210,7 +224,8 @@ export const BrowserSnapshotTool = Tool.define<
               sessionID: ctx.sessionID,
               authorization,
             },
-            ctx.abort,
+            ctx,
+            "browser_snapshot",
           )
           return { title: "Browser snapshot", output: render(result), metadata: { url: result.url } }
         }),
@@ -230,7 +245,7 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
       execute: (params, ctx) =>
         Effect.gen(function* () {
           yield* verify(params.sensitive_category, params.selector)
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_click", {
             action: "browser",
             tabID: params.tab_id,
             sensitive: classified(params.sensitive_category),
@@ -250,7 +265,8 @@ export const BrowserClickTool = Tool.define<typeof ClickParams, { url?: string }
               authorization,
               selector: params.selector,
             },
-            ctx.abort,
+            ctx,
+            "browser_click",
           )
           return { title: `Clicked ${target(params.selector)}`, output: render(result), metadata: { url: result.url } }
         }),
@@ -277,7 +293,7 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
       execute: (params, ctx) =>
         Effect.gen(function* () {
           yield* verify(params.sensitive_category, params.selector)
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_type", {
             action: "browser",
             tabID: params.tab_id,
             sensitive: classified(params.sensitive_category),
@@ -299,7 +315,8 @@ export const BrowserTypeTool = Tool.define<typeof TypeParams, { url?: string }, 
               text: params.text,
               submit: params.submit === true,
             },
-            ctx.abort,
+            ctx,
+            "browser_type",
           )
           return {
             title: `Typed into ${target(params.selector)}`,
@@ -328,7 +345,7 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
       execute: (params, ctx) =>
         Effect.gen(function* () {
           yield* verify(params.sensitive_category, params.selector)
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_select", {
             action: "browser",
             tabID: params.tab_id,
             sensitive: classified(params.sensitive_category),
@@ -349,7 +366,8 @@ export const BrowserSelectTool = Tool.define<typeof SelectParams, { url?: string
               selector: params.selector,
               values: params.values,
             },
-            ctx.abort,
+            ctx,
+            "browser_select",
           )
           return { title: `Selected ${target(params.selector)}`, output: render(result), metadata: { url: result.url } }
         }),
@@ -375,7 +393,7 @@ export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string
       execute: (params, ctx) =>
         Effect.gen(function* () {
           const pattern = params.selector === undefined ? "*" : target(params.selector)
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_scroll", {
             action: "scroll",
             tabID: params.tab_id,
             sensitive: classified(params.sensitive_category),
@@ -397,7 +415,8 @@ export const BrowserScrollTool = Tool.define<typeof ScrollParams, { url?: string
               deltaY: params.delta_y,
               selector: params.selector,
             },
-            ctx.abort,
+            ctx,
+            "browser_scroll",
           )
           return { title: "Scrolled browser", output: render(result), metadata: { url: result.url } }
         }),
@@ -423,7 +442,7 @@ export const BrowserScreenshotTool = Tool.define<
       parameters: ScreenshotParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_screenshot", {
             action: "observe",
             tabID: params.tab_id,
             permission: "browser_screenshot",
@@ -440,7 +459,8 @@ export const BrowserScreenshotTool = Tool.define<
               authorization,
               fullPage: params.full_page === true,
             },
-            ctx.abort,
+            ctx,
+            "browser_screenshot",
           )
           if (result.operation !== "screenshot")
             return yield* Effect.die(new Error("Browser host returned the wrong result"))
@@ -483,7 +503,7 @@ export const BrowserEvaluateTool = Tool.define<
       parameters: EvaluateParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_evaluate", {
             action: "browser",
             tabID: params.tab_id,
             sensitive: classified(params.sensitive_category),
@@ -503,7 +523,8 @@ export const BrowserEvaluateTool = Tool.define<
               authorization,
               expression: params.expression,
             },
-            ctx.abort,
+            ctx,
+            "browser_evaluate",
           )
           return { title: "Browser evaluation", output: render(result), metadata: { url: result.url } }
         }),
@@ -536,7 +557,7 @@ export const BrowserSmokeTestTool = Tool.define<
       parameters: SmokeParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_smoke_test", {
             action: "browser",
             tabID: params.tab_id,
             sensitive: classified(params.sensitive_category),
@@ -556,7 +577,8 @@ export const BrowserSmokeTestTool = Tool.define<
               mode: params.mode ?? "scripted",
               steps: params.steps,
             },
-            ctx.abort,
+            ctx,
+            "browser_smoke_test",
           )
           if (result.operation !== "smoke")
             return yield* Effect.die(new Error("Browser host returned the wrong smoke result"))
@@ -599,7 +621,7 @@ export const BrowserTabsTool = Tool.define<typeof TabsParams, { url?: string }, 
       parameters: TabsParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_tabs", {
             action: params.action === "list" ? "observe" : "browser",
             tabID: "tab_id" in params ? params.tab_id : undefined,
             sensitive: params.action === "list" ? false : classified(params.sensitive_category),
@@ -626,7 +648,7 @@ export const BrowserTabsTool = Tool.define<typeof TabsParams, { url?: string }, 
                     sessionID: ctx.sessionID,
                     authorization,
                   }
-          const result = yield* run(browser, input, ctx.abort)
+          const result = yield* run(browser, input, ctx, "browser_tabs")
           return { title: "Browser tabs", output: render(result), metadata: { url: result.url } }
         }),
     }
@@ -652,7 +674,7 @@ export const BrowserFramesTool = Tool.define<typeof FramesParams, { url?: string
       parameters: FramesParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_frames", {
             action: "observe",
             tabID: params.tab_id,
             permission: "browser_frames",
@@ -678,7 +700,7 @@ export const BrowserFramesTool = Tool.define<typeof FramesParams, { url?: string
                   parentID: params.parent_frame_id,
                   selector: params.selector,
                 }
-          const result = yield* run(browser, input, ctx.abort)
+          const result = yield* run(browser, input, ctx, "browser_frames")
           return { title: "Browser frames", output: render(result), metadata: { url: result.url } }
         }),
     }
@@ -715,7 +737,7 @@ export const BrowserDialogTool = Tool.define<typeof DialogParams, { url?: string
       parameters: DialogParams,
       execute: (params, ctx) =>
         Effect.gen(function* () {
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_dialog", {
             action: params.action === "list" ? "observe" : "browser",
             tabID: params.tab_id,
             sensitive: params.action === "list" ? false : classified(params.sensitive_category),
@@ -752,7 +774,7 @@ export const BrowserDialogTool = Tool.define<typeof DialogParams, { url?: string
                     authorization,
                     dialogID: params.dialog_id,
                   }
-          const result = yield* run(browser, input, ctx.abort)
+          const result = yield* run(browser, input, ctx, "browser_dialog")
           return { title: "Browser dialog state", output: render(result), metadata: { url: result.url } }
         }),
     }
@@ -806,7 +828,7 @@ export const BrowserDownloadTool = Tool.define<
                 ? params.transfer_id
                 : "list"
           if (params.action === "start") yield* verify(params.sensitive_category, params.selector)
-          const authorization = yield* approve(browser, ctx, {
+          const authorization = yield* approve(browser, ctx, "browser_download", {
             action: "files",
             tabID: "tab_id" in params ? params.tab_id : undefined,
             sensitive: params.action === "start" ? classified(params.sensitive_category) : false,
@@ -842,7 +864,7 @@ export const BrowserDownloadTool = Tool.define<
                     authorization,
                     transferID: params.transfer_id,
                   }
-          const result = yield* run(browser, input, ctx.abort)
+          const result = yield* run(browser, input, ctx, "browser_download")
           if (result.operation !== "download") throw new Error("Browser returned an unrelated download result")
           const transfer =
             params.action === "inspect"

@@ -471,6 +471,14 @@ export type NotebookRequest = NotebookReadRequest | NotebookEditRequest | Notebo
 
 export type BrowserRequestId = string
 
+export type BrowserConfirmationProof = {
+  version: 1
+  identity: string
+  slot: number
+  scope: string
+  digest: string
+}
+
 export type ComputerUseGrantId = string
 
 export type BrowserAuthorizationEvidence =
@@ -549,6 +557,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "profile"
       action: "info" | "retry"
     }
@@ -559,6 +568,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "profile"
       action: "reset"
       profileID: string
@@ -570,6 +580,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "auth"
       action: "list"
     }
@@ -580,6 +591,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "auth"
       action: "inspect" | "restore" | "delete"
       profileID: string
@@ -589,6 +601,7 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -629,6 +642,7 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       operation: "upload"
       action: "list"
     }
@@ -636,6 +650,7 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       operation: "upload"
       action: "inspect" | "cancel"
       uploadID: string
@@ -644,6 +659,7 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -681,6 +697,7 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       operation: "download"
       action: "list"
       offset?: number
@@ -689,6 +706,7 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       operation: "download"
       action: "inspect" | "cancel"
       transferID: string
@@ -700,6 +718,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "list"
@@ -712,6 +731,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "accept"
@@ -725,6 +745,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "dismiss"
@@ -737,6 +758,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "list"
@@ -748,6 +770,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "open"
@@ -760,6 +783,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "select"
@@ -771,6 +795,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "close"
@@ -779,6 +804,7 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -790,6 +816,7 @@ export type BrowserRequest =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -809,6 +836,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "navigate"
       url: string
@@ -824,6 +852,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "snapshot"
     }
@@ -839,6 +868,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "click"
       /**
@@ -875,6 +905,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "type"
       /**
@@ -913,6 +944,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "select"
       /**
@@ -950,6 +982,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "scroll"
       deltaX: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -980,6 +1013,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "screenshot"
       fullPage: boolean
@@ -996,6 +1030,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "evaluate"
       expression: string
@@ -1007,6 +1042,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "auth_capture"
       name: string
     }
@@ -1017,6 +1053,7 @@ export type BrowserRequest =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "smoke"
       name: string
@@ -6050,6 +6087,7 @@ export type BrowserResult =
   | {
       operation: "authorize"
       decision: "allow" | "ask" | "deny"
+      confirmationVersion?: 1
       reason: string
       grantID?: ComputerUseGrantId
       url?: string
@@ -6458,6 +6496,41 @@ export type BrowserFailure = {
     | "unsupported"
   message: string
   receipt?: ComputerUseReceipt
+}
+
+export type BrowserDispatchInput = {
+  proof: BrowserConfirmationProof
+  invocation: string
+}
+
+export type BrowserConfirmationCompletion = {
+  version: 1
+  identity: string
+  invocation: string
+  ack: string
+  requestID: string
+  operation:
+    | "profile"
+    | "auth"
+    | "auth_capture"
+    | "upload"
+    | "download"
+    | "dialog"
+    | "tabs"
+    | "frames"
+    | "navigate"
+    | "snapshot"
+    | "click"
+    | "type"
+    | "select"
+    | "scroll"
+    | "screenshot"
+    | "evaluate"
+    | "smoke"
+  outcome: "confirmed" | "refused" | "cancelled" | "unknown"
+  resultDigest?: string
+  startedAt: number
+  finishedAt: number
 }
 
 export type DesktopResult =
@@ -7581,6 +7654,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "profile"
       action: "info" | "retry"
     }
@@ -7591,6 +7665,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "profile"
       action: "reset"
       profileID: string
@@ -7602,6 +7677,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "auth"
       action: "list"
     }
@@ -7612,6 +7688,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "auth"
       action: "inspect" | "restore" | "delete"
       profileID: string
@@ -7621,6 +7698,7 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -7661,6 +7739,7 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       operation: "upload"
       action: "list"
     }
@@ -7668,6 +7747,7 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       operation: "upload"
       action: "inspect" | "cancel"
       uploadID: string
@@ -7676,6 +7756,7 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -7713,6 +7794,7 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       operation: "download"
       action: "list"
       offset?: number
@@ -7721,6 +7803,7 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       operation: "download"
       action: "inspect" | "cancel"
       transferID: string
@@ -7732,6 +7815,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "list"
@@ -7744,6 +7828,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "accept"
@@ -7757,6 +7842,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "dialog"
       action: "dismiss"
@@ -7769,6 +7855,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "list"
@@ -7780,6 +7867,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "open"
@@ -7792,6 +7880,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "select"
@@ -7803,6 +7892,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "tabs"
       action: "close"
@@ -7811,6 +7901,7 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -7822,6 +7913,7 @@ export type BrowserRequest1 =
       id: BrowserRequestId
       sessionID: string
       authorization: BrowserAuthorizationEvidence
+      confirmation?: BrowserConfirmationProof
       /**
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
@@ -7841,6 +7933,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "navigate"
       url: string
@@ -7856,6 +7949,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "snapshot"
     }
@@ -7871,6 +7965,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "click"
       /**
@@ -7907,6 +8002,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "type"
       /**
@@ -7945,6 +8041,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "select"
       /**
@@ -7982,6 +8079,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "scroll"
       deltaX: number | "NaN" | "Infinity" | "-Infinity"
@@ -8012,6 +8110,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "screenshot"
       fullPage: boolean
@@ -8028,6 +8127,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "evaluate"
       expression: string
@@ -8039,6 +8139,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       operation: "auth_capture"
       name: string
     }
@@ -8049,6 +8150,7 @@ export type BrowserRequest1 =
        * Opaque observed browser tab identity; never infer from a tab index or URL.
        */
       tabID?: string
+      confirmation?: BrowserConfirmationProof
       authorization: BrowserAuthorizationEvidence
       operation: "smoke"
       name: string
@@ -20934,6 +21036,184 @@ export type KilocodeBrowserRejectResponses = {
 }
 
 export type KilocodeBrowserRejectResponse = KilocodeBrowserRejectResponses[keyof KilocodeBrowserRejectResponses]
+
+export type KilocodeBrowserDispatchData = {
+  body?: BrowserDispatchInput
+  path: {
+    requestID: BrowserRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser/{requestID}/dispatch"
+}
+
+export type KilocodeBrowserDispatchErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeBrowserDispatchError = KilocodeBrowserDispatchErrors[keyof KilocodeBrowserDispatchErrors]
+
+export type KilocodeBrowserDispatchResponses = {
+  /**
+   * Success
+   */
+  200: {
+    granted: boolean
+    dispatch: {
+      version: 1
+      identity: string
+      invocation: string
+      requestID: string
+      at: number
+    }
+  }
+}
+
+export type KilocodeBrowserDispatchResponse = KilocodeBrowserDispatchResponses[keyof KilocodeBrowserDispatchResponses]
+
+export type KilocodeBrowserConfirmData = {
+  body?: {
+    proof: BrowserConfirmationProof
+    completion: BrowserConfirmationCompletion
+  }
+  path: {
+    requestID: BrowserRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser/{requestID}/confirm"
+}
+
+export type KilocodeBrowserConfirmErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeBrowserConfirmError = KilocodeBrowserConfirmErrors[keyof KilocodeBrowserConfirmErrors]
+
+export type KilocodeBrowserConfirmResponses = {
+  /**
+   * BrowserConfirmationCompletion
+   */
+  200: BrowserConfirmationCompletion
+}
+
+export type KilocodeBrowserConfirmResponse = KilocodeBrowserConfirmResponses[keyof KilocodeBrowserConfirmResponses]
+
+export type KilocodeBrowserConfirmationData = {
+  body?: {
+    proof: BrowserConfirmationProof
+  }
+  path: {
+    requestID: BrowserRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser/{requestID}/confirmation"
+}
+
+export type KilocodeBrowserConfirmationErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeBrowserConfirmationError =
+  KilocodeBrowserConfirmationErrors[keyof KilocodeBrowserConfirmationErrors]
+
+export type KilocodeBrowserConfirmationResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    proof: BrowserConfirmationProof
+    granted: false
+    pending: boolean
+    dispatch?: {
+      version: 1
+      identity: string
+      invocation: string
+      requestID: string
+      at: number
+    }
+    completion?: BrowserConfirmationCompletion
+    acknowledgement?: {
+      version: 1
+      identity: string
+      ack: string
+    }
+  }
+}
+
+export type KilocodeBrowserConfirmationResponse =
+  KilocodeBrowserConfirmationResponses[keyof KilocodeBrowserConfirmationResponses]
+
+export type KilocodeBrowserAcknowledgeData = {
+  body?: {
+    proof: BrowserConfirmationProof
+    ack: string
+  }
+  path: {
+    requestID: BrowserRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/browser/{requestID}/acknowledge"
+}
+
+export type KilocodeBrowserAcknowledgeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
+}
+
+export type KilocodeBrowserAcknowledgeError = KilocodeBrowserAcknowledgeErrors[keyof KilocodeBrowserAcknowledgeErrors]
+
+export type KilocodeBrowserAcknowledgeResponses = {
+  /**
+   * Success
+   */
+  200: {
+    version: 1
+    identity: string
+    ack: string
+  }
+}
+
+export type KilocodeBrowserAcknowledgeResponse =
+  KilocodeBrowserAcknowledgeResponses[keyof KilocodeBrowserAcknowledgeResponses]
 
 export type KilocodeDesktopListData = {
   body?: never

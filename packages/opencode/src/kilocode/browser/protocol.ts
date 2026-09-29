@@ -6,6 +6,7 @@ import { Observation, ObservationID, Receipt } from "@/kilocode/computer-use/pro
 import { Action as LeaseAction, GrantID, SensitiveCategory } from "@/kilocode/computer-use/lease"
 import { UploadFile, UploadInfo } from "./upload-schema"
 import { AuthSource, CaptureID, CaptureInfo, ProfileID, ProfileInfo } from "./profile-schema"
+import { Proof } from "./confirmation"
 
 export const RequestID = Schema.String.pipe(Schema.brand("BrowserRequestID")).annotate({
   identifier: "BrowserRequestID",
@@ -35,7 +36,7 @@ export const AuthorizationEvidence = Schema.Union([
   Schema.Struct({ ...AuthorizationBase, source: Schema.Literal("legacy_prompt") }),
 ]).annotate({ identifier: "BrowserAuthorizationEvidence" })
 export type AuthorizationEvidence = Schema.Schema.Type<typeof AuthorizationEvidence>
-const Authorized = { authorization: AuthorizationEvidence }
+const Authorized = { authorization: AuthorizationEvidence, confirmation: Schema.optional(Proof) }
 
 const Match = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000))
 const Scope = { scope: Schema.optional(Match) }
@@ -189,7 +190,12 @@ export const FramesResult = Schema.Struct({
   url: Schema.optional(Url),
   title: Schema.optional(Schema.String),
 })
-const Base = { id: RequestID, sessionID: SessionID, tabID: Schema.optional(TabID) }
+const Base = {
+  id: RequestID,
+  sessionID: SessionID,
+  tabID: Schema.optional(TabID),
+  confirmation: Schema.optional(Proof),
+}
 export const ProfileRequest = Schema.Union([
   Schema.Struct({ ...Base, operation: Schema.Literal("profile"), action: Schema.Literals(["info", "retry"]) }),
   Schema.Struct({
@@ -465,6 +471,7 @@ const ResultBase = {
 export const AuthorizeResult = Schema.Struct({
   operation: Schema.Literal("authorize"),
   decision: Schema.Literals(["allow", "ask", "deny"]),
+  confirmationVersion: Schema.optional(Schema.Literal(1)),
   reason: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_000)),
   grantID: Schema.optional(GrantID),
   url: Schema.optional(Url),

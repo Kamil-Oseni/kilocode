@@ -42,6 +42,9 @@ import type {
   BackgroundProcessStopSessionResponses,
   BranchNameGenerateErrors,
   BranchNameGenerateResponses,
+  BrowserConfirmationCompletion,
+  BrowserConfirmationProof,
+  BrowserDispatchInput,
   BrowserFailure,
   BrowserRequestId,
   BrowserResult,
@@ -196,6 +199,14 @@ import type {
   KilocodeBackgroundJobCancelResponses,
   KilocodeBackgroundJobsErrors,
   KilocodeBackgroundJobsResponses,
+  KilocodeBrowserAcknowledgeErrors,
+  KilocodeBrowserAcknowledgeResponses,
+  KilocodeBrowserConfirmationErrors,
+  KilocodeBrowserConfirmationResponses,
+  KilocodeBrowserConfirmErrors,
+  KilocodeBrowserConfirmResponses,
+  KilocodeBrowserDispatchErrors,
+  KilocodeBrowserDispatchResponses,
   KilocodeBrowserListErrors,
   KilocodeBrowserListResponses,
   KilocodeBrowserRejectErrors,
@@ -8313,6 +8324,174 @@ export class Browser extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/browser/{requestID}/reject",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Claim one browser dispatch
+   */
+  public dispatch<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: BrowserRequestId
+      directory?: string
+      workspace?: string
+      browserDispatchInput?: BrowserDispatchInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "browserDispatchInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeBrowserDispatchResponses,
+      KilocodeBrowserDispatchErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/browser/{requestID}/dispatch",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Retain browser execution confirmation
+   */
+  public confirm<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: BrowserRequestId
+      directory?: string
+      workspace?: string
+      proof?: BrowserConfirmationProof
+      completion?: BrowserConfirmationCompletion
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "proof" },
+            { in: "body", key: "completion" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeBrowserConfirmResponses,
+      KilocodeBrowserConfirmErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/browser/{requestID}/confirm",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read browser confirmation metadata
+   */
+  public confirmation<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: BrowserRequestId
+      directory?: string
+      workspace?: string
+      proof?: BrowserConfirmationProof
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "proof" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeBrowserConfirmationResponses,
+      KilocodeBrowserConfirmationErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/browser/{requestID}/confirmation",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Acknowledge browser confirmation
+   */
+  public acknowledge<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: BrowserRequestId
+      directory?: string
+      workspace?: string
+      proof?: BrowserConfirmationProof
+      ack?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "proof" },
+            { in: "body", key: "ack" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeBrowserAcknowledgeResponses,
+      KilocodeBrowserAcknowledgeErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/browser/{requestID}/acknowledge",
       ...options,
       ...params,
       headers: {

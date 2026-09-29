@@ -1,6 +1,8 @@
 # Browser confirmation contract
 
-Status: **proposed; not implemented or verified**. This contract describes a future bounded backend journal. It does not claim that the current host journal converges successful acknowledgements after restart, or that multiple hosts currently share dispatch ownership.
+Status: **implemented in source as version 1; installed-host and full restart acceptance remain unverified**. The backend uses immutable admission, one-time dispatch, metadata-only completion and exact acknowledgement. The host still keeps its version 1 Memento journal for unknown local failures. This source contract does not establish power-loss durability, rendered Windows recovery, or end-to-end latency goals.
+
+The current host journal does not persist the proof/invocation needed to settle a backend dispatch that is interrupted after its one-time grant and before completion publication. It conservatively refuses replay, but that unknown slot can remain occupied after restart. A versioned, bounded host recovery record and an actual process-kill/restart trial are required before claiming convergence. The backend's bounded slot scan is currently linear in occupied records; a 260-cycle source stress test took 185.03 seconds and does not meet the latency target.
 
 ## Existing boundaries
 
@@ -12,7 +14,7 @@ Status: **proposed; not implemented or verified**. This contract describes a fut
 
 ## Private admission and canonical origin
 
-Before publishing `kilocode.browser.requested`, persist a version 1 admission bound to an opaque admission ID, request ID, canonical directory scope hash, server-issued request digest, operation, session ID, assistant message ID, and tool call ID. Pass canonical origin privately from the real `Tool.Context` in `packages/opencode/src/kilocode/tool/browser-host.ts`; do not infer it from a session's latest tool or expose it as provider authority.
+Before publishing `kilocode.browser.requested`, persist a version 1 admission bound to an opaque identity, request ID, canonical directory scope hash, server-issued request digest, operation, session ID, assistant message ID, exact tool part ID, and tool call ID. Pass canonical origin privately from the real `Tool.Context` in `packages/opencode/src/kilocode/tool/browser-host.ts`; do not infer it from a session's latest tool or expose it as provider authority.
 
 Validate the actual retained tool's session/message/call identity, tool name, and eligible pending/running state. The request digest binds the exact request, including sensitive fields, without persisting those fields in the journal. Its encoding must be defined once by the backend; the host echoes the opaque value. Authorization-only requests remain distinct from native dispatch and cannot become dispatch grants through confirmation.
 
@@ -26,7 +28,7 @@ Dispatch ownership is not Computer Use permission. The host still revalidates th
 
 ## Metadata-only completion and acknowledgement
 
-An additive confirmation endpoint accepts a closed version 1 payload containing admission/dispatch/request identities, session/scope/digest, acknowledgement ID, operation, confirmed outcome, and bounded start/finish timestamps. It validates the exact persisted admission and dispatch before exclusively creating an immutable confirmation record.
+An additive confirmation endpoint accepts a closed version 1 payload containing admission/dispatch/request identities, acknowledgement ID, operation, outcome, result digest for confirmed actions, and bounded start/finish timestamps. Session, scope, canonical tool part, and request digest remain bound by the retained private admission and exact public proof. It validates the exact persisted admission and dispatch before exclusively creating an immutable confirmation record.
 
 An identical duplicate returns the original acknowledgement. Changed identity, timing, or outcome refuses. An authenticated exact receipt/read endpoint resolves a lost response without execution. Route definitions and handlers belong in `packages/opencode/src/kilocode/server/httpapi/groups/kilocode.ts` and `packages/opencode/src/kilocode/server/httpapi/handlers/kilocode.ts`; schemas belong in the Kilo browser boundary. Endpoint changes require generated SDK updates.
 
@@ -36,7 +38,7 @@ Page state and omitted result payloads require a fresh authorized observation wi
 
 ## Capacity and privacy
 
-Reserve capacity before request publication or native dispatch. A proposed maximum is 256 unresolved entries per scope, with a separate bounded global entry count and aggregate byte limit. Global bounds must include retained scopes and terminal records, not just live waiters. Fixed exclusive slot claims, or a scope mutation lock covering capacity and admission, must prevent independent callers from exceeding it; counting followed by unrelated writes is insufficient.
+Reserve capacity before request publication or native dispatch. The current source implementation has 256 global slots, each with at most five metadata records including its temporary retirement marker. It has no measured aggregate byte ceiling for adversarial pre-existing JSON files; the storage reader parses JSON before schema validation. Global bounds must include retained scopes and terminal records, not just live waiters. Fixed exclusive slot claims, or a scope mutation lock covering capacity and admission, must prevent independent callers from exceeding it; counting followed by unrelated writes is insufficient.
 
 Never evict unresolved admitted/attempted/unknown entries to admit new work. Refuse overflow before effects. Terminal collection requires durable confirmation/acknowledgement and absence of a current waiter; collection cannot make an old posted ID eligible for a new dispatch. An absent admission always refuses a dispatch rather than reconstructing one from caller input. Define terminal retention and cleanup separately from unresolved capacity.
 
@@ -60,4 +62,4 @@ All persisted payloads use closed, bounded schemas with strict identity/timestam
 
 Use the real canonical tool, backend HTTP/SSE, host bridge, and a disposable local browser destination. Lose a confirmation response after commit, restart host and backend, then verify one destination mutation, immutable exact acknowledgement, unchanged historical tool outcome, and a separately authorized fresh observation. Test changed retries, unknown partial effects, Stop races, orphan origins, capacity contention, and failed publication. Secret/DOM/iframe/evaluation/image canaries must be absent from journal and diagnostic artifacts.
 
-Existing publication syncs file contents and atomically exposes complete JSON through a hard link. It does not currently establish a directory-sync/power-loss guarantee or a multi-record transaction. Claim only the tested process-kill/restart properties. A later storage change or platform-specific proof is required before claiming power-loss durability. No cross-host dispatch or successful-result convergence is established by this design document.
+Existing publication syncs file contents and atomically exposes complete JSON through a hard link. It does not currently establish a directory-sync/power-loss guarantee or a multi-record transaction. Claim only the tested process-kill/restart properties. A later storage change or platform-specific proof is required before claiming power-loss durability. Source tests establish one-time dispatch grants and exact acknowledgement through the actual storage service, with interrupted collection recovery. The production bridge tests cover dropped responses through a controlled SDK seam. Cross-host/process-kill convergence and installed-host browser workflow acceptance are still unverified.

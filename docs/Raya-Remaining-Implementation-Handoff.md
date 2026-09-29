@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 14:00 EDT - confirmation recovery and latency next
+
+The current source adds exact canonical browser tool origin, immutable 256-slot backend admission/dispatch/completion/ACK, generated SDK endpoints and a production bridge that refuses changed workspace/request digests and duplicate native dispatch. The compiled source CLI plus SDK/SSE/bridge/headless Chromium passed five local workflows after the final bridge refactor in `.tmp/source-browser-workflow-confirmation-final.json` (`-runner.json`). These are source transport results, not a loaded Windows host or release benchmark. Focused extension bridge checks pass 47/47; scoped lint and typecheck pass. The full ledger stress check's 260 cycles took 185.03 seconds.
+
+Next publish/install the source-matched snapshot without activating or reloading either user window. Then implement a versioned bounded host record retaining only proof/invocation/operation/outcome metadata so post-grant cancellation or disconnect can settle the backend's unknown dispatch after process restart; migrate v1 conservatively, never replay native effects, and test actual host/backend process death and exact acknowledgements. Replace the linear ledger scan with measured bounded lookup, profile persistence/snapshot/model preparation, and then run loaded-host browser/native/Windows benchmark gates. Desktop remains Stopped, MCP deferred, EN-02 In progress and `FUT-CU-01` unverified.
+
 ## ChatGPT 2026-09-29 12:13 EDT - browser journal guard pushed and matching snapshot installed
 
 Runtime commit `b8eca69357` is pushed to origin/main with normal hooks: all 29 primary typecheck tasks pass (28 cached, extension fresh), plus cached JetBrains. Low-memory snapshot installation succeeds for `7.4.23-snapshot+b8eca69357.kamil-oseni.1790698188981`; source/webview types, ordinary lint, production bundles and native capture/input/accessibility self-tests pass. SDK inputs/output are unchanged. This extension-only slice reuses the unchanged compiled CLI rather than rebuilding it.

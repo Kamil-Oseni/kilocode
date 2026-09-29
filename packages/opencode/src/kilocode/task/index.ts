@@ -16,6 +16,7 @@ import { removals } from "./removal"
 import { archive as indexed, InvalidCursor } from "./archive"
 import { RayaTaskQueue } from "./queue"
 import { Create as OrganizationCreate, matchesDefinition } from "./organization"
+import { Trigger as TriggerSchema } from "./trigger"
 import type { Database } from "@opencode-ai/core/database/database"
 import * as Log from "@opencode-ai/core/util/log"
 
@@ -210,22 +211,7 @@ export namespace RayaTask {
   })
   export type Outcome = typeof Outcome.Type
 
-  export const Trigger = Schema.Union([
-    Schema.Struct({ kind: Schema.Literal("manual") }),
-    Schema.Struct({
-      kind: Schema.Literal("timer"),
-      id: Schema.String,
-      scheduledAt: Timestamp,
-      observedAt: Timestamp,
-      tz: Schema.optional(Schema.String),
-    }),
-    Schema.Struct({
-      kind: Schema.Literal("event"),
-      source: Schema.String,
-      filter: Schema.optional(Schema.String),
-      receivedAt: Timestamp,
-    }),
-  ])
+  export const Trigger = TriggerSchema
   export type Trigger = typeof Trigger.Type
 
   export const Run = Schema.Struct({
@@ -243,6 +229,31 @@ export namespace RayaTask {
     blockedReason: Schema.optional(Schema.String),
   })
   export type Run = typeof Run.Type
+
+  // The run and its public event are published in one atomic storage replacement.
+  // Event payloads are an allowlist: outcomes, prompts, and tool data stay in Run only.
+  export const Event = Schema.Struct({
+    version: Schema.Literal(1),
+    id: Schema.String,
+    stream: Schema.String,
+    sequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    kind: Schema.Literal("run.changed"),
+    visibility: Schema.Literal("workspace"),
+    runID: Schema.String,
+    agentID: Schema.String,
+    sessionID: SessionID,
+    stateRevision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    status: Run.fields.status,
+    at: Schema.Number,
+  })
+  export type Event = typeof Event.Type
+  export const History = Schema.Struct({
+    version: Schema.Literal(1),
+    cursor: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    runs: Schema.Array(Run),
+    events: Schema.Array(Event),
+  })
+  export type History = typeof History.Type
 
   export const Histories = Schema.Struct({
     items: Schema.Array(Schema.Struct({ agentID: Schema.String, runs: Schema.Array(Run) })),
@@ -309,7 +320,7 @@ export namespace RayaTask {
   const memory = (id: string) => ["raya", "agent-memory", id]
   const staging = (id: string) => ["raya", "agent-stage", id]
   const agents = Schema.decodeUnknownEffect(Schema.Array(Agent))
-  const runs = Schema.decodeUnknownEffect(Schema.Array(Run))
+  const historyData = Schema.decodeUnknownEffect(Schema.Union([Schema.Array(Run), History]))
   const memories = Schema.decodeUnknownEffect(Memory)
   const StageV1 = Schema.Struct({
     version: Schema.Literal(1),
@@ -721,12 +732,51 @@ export namespace RayaTask {
         }),
       )
 
-    const runsFor = Effect.fn("RayaTask.runs")(function* (id: string) {
+    const saved = Effect.fn("RayaTask.saved")(function* (id: string) {
       const raw = yield* deps.storage.read<unknown>(history(id)).pipe(
         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed([])),
         Effect.orDie,
       )
-      return yield* runs(raw).pipe(Effect.orDie)
+      const value = yield* historyData(raw).pipe(Effect.orDie)
+      if ("runs" in value) {
+        const events = value.events
+        if (
+          !Number.isSafeInteger(value.cursor) ||
+          events.length > 1024 ||
+          Buffer.byteLength(JSON.stringify(events)) > 512 * 1024 ||
+          (value.cursor === 0) !== (events.length === 0) ||
+          (events.length > 0 && events[events.length - 1]?.sequence !== value.cursor) ||
+          events.some(
+            (event, index) =>
+              event.stream !== id ||
+              event.agentID !== id ||
+              event.id !== `${id}:${event.sequence}` ||
+              (index > 0 && event.sequence !== events[index - 1]!.sequence + 1),
+          )
+        )
+          return yield* Effect.die(new Error("Routine event journal is inconsistent."))
+        return value
+      }
+      return { version: 1 as const, cursor: 0, runs: [...value], events: [] as Event[] }
+    })
+
+    const runsFor = Effect.fn("RayaTask.runs")(function* (id: string) {
+      return (yield* saved(id)).runs
+    })
+
+    const eventsFor = Effect.fn("RayaTask.events")(function* (id: string, after = 0) {
+      if (!Number.isSafeInteger(after) || after < 0)
+        return yield* new GuardError({ kind: "conflict", message: "Invalid routine event cursor." })
+      const state = yield* saved(id)
+      const first = state.events[0]?.sequence ?? state.cursor + 1
+      if (after < first - 1)
+        return yield* new GuardError({
+          kind: "conflict",
+          message: "Routine event cursor expired. Reload the snapshot.",
+        })
+      if (after > state.cursor)
+        return yield* new GuardError({ kind: "conflict", message: "Routine event cursor is ahead of the snapshot." })
+      return { cursor: state.cursor, runs: state.runs, events: state.events.filter((event) => event.sequence > after) }
     })
 
     const histories = Effect.fn("RayaTask.histories")(function* () {
@@ -845,7 +895,10 @@ export namespace RayaTask {
       return true
     })
 
-    const writeRuns = Effect.fn("RayaTask.writeRuns")(function* (id: string, items: Run[]) {
+    const writeRuns = Effect.fn("RayaTask.writeRuns")(function* (id: string, items: Run[], changed: Run) {
+      const prior = yield* saved(id)
+      const cursor = prior.cursor + 1
+      if (!Number.isSafeInteger(cursor)) yield* Effect.die(new Error("Routine event cursor limit reached."))
       const retained = new Set(
         items
           .filter((item) => !pending(item))
@@ -855,11 +908,32 @@ export namespace RayaTask {
       const version = items.reduce((max, item) => Math.max(max, item.scheduleVersion ?? 1), 1)
       const anchor = consumed(items, version)
       if (anchor) retained.add(anchor.id)
+      const event: Event = {
+        version: 1,
+        id: `${id}:${cursor}`,
+        stream: id,
+        sequence: cursor,
+        kind: "run.changed",
+        visibility: "workspace",
+        runID: changed.id,
+        agentID: changed.agentID,
+        sessionID: changed.sessionID,
+        stateRevision: changed.revision ?? 1,
+        status: changed.status,
+        at: changed.at,
+      }
+      // Bound both count and serialized bytes. A stale cursor must resnapshot.
+      const events = [...prior.events, event].slice(-1024)
+      if (Buffer.byteLength(JSON.stringify(event)) > 512 * 1024)
+        yield* Effect.die(new Error("Routine event identity exceeds the journal size limit."))
+      while (Buffer.byteLength(JSON.stringify(events)) > 512 * 1024) events.shift()
       yield* deps.storage
-        .replace(
-          history(id),
-          items.filter((item) => pending(item) || retained.has(item.id)),
-        )
+        .replace(history(id), {
+          version: 1,
+          cursor,
+          runs: items.filter((item) => pending(item) || retained.has(item.id)),
+          events,
+        } satisfies History)
         .pipe(Effect.orDie)
     })
 
@@ -1462,7 +1536,7 @@ export namespace RayaTask {
         return yield* Effect.die(new Error("Invalid routine schedule version."))
       const run: Run = { ...input, revision, scheduleVersion: version, ...(trigger ? { trigger } : {}) }
       const rest = items.filter((item) => item.id !== run.id)
-      yield* writeRuns(run.agentID, [...rest, run])
+      yield* writeRuns(run.agentID, [...rest, run], run)
       if (run.status !== "blocked" || !run.blockedReason || pending(run)) return run
       yield* enforce(run.agentID)
       return run
@@ -1669,6 +1743,7 @@ export namespace RayaTask {
       page,
       get,
       runsFor,
+      eventsFor,
       histories,
       usage,
       recall,

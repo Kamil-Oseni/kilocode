@@ -8,13 +8,14 @@ import { inspect } from "./recovery"
 import { isDeepStrictEqual } from "node:util"
 import { RayaTaskExecution } from "./execution"
 import { SessionID } from "@/session/schema"
+import { Trigger } from "./trigger"
 
 export const record = Schema.Struct({
   version: Schema.Literals([1, 2]),
   agentID: Schema.String,
   runID: Schema.String,
   scheduleVersion: Schema.Number,
-  trigger: RayaTask.Trigger,
+  trigger: Trigger,
   delegationID: Schema.optional(Schema.String),
   organizationID: Schema.optional(Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/))),
   organizationRevision: Schema.optional(

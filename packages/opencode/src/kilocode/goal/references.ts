@@ -17,7 +17,10 @@ export const references = (storage: Pick<Storage.Interface, "list" | "read">) =>
   Effect.gen(function* () {
     const sessions = new Set<string>()
     for (const key of yield* storage.list(["raya", "agent-runs"])) {
-      const rows = yield* Schema.decodeUnknownEffect(Schema.Array(RayaTask.Run))(yield* storage.read(key))
+      const saved = yield* Schema.decodeUnknownEffect(Schema.Union([Schema.Array(RayaTask.Run), RayaTask.History]))(
+        yield* storage.read(key),
+      )
+      const rows = "runs" in saved ? saved.runs : saved
       for (const run of rows) sessions.add(run.sessionID)
     }
     for (const key of yield* storage.list(["raya", "agent-claims"])) {

@@ -471,8 +471,8 @@ async function main() {
     try {
       fault.exec(`CREATE TRIGGER fail_installed_terminal_report
         BEFORE INSERT ON raya_routine_message
-        WHEN NEW.agent_id = '${recovery.id}' AND NEW.kind = 'report'
-        BEGIN SELECT RAISE(ABORT, 'injected installed terminal report failure'); END`)
+        WHEN NEW.agent_id = '${recovery.id}' AND NEW.kind = 'worker' AND NEW.source LIKE 'reply:%'
+        BEGIN SELECT RAISE(ABORT, 'injected installed terminal reply receipt failure'); END`)
     } finally {
       fault.close()
     }
@@ -527,7 +527,7 @@ async function main() {
           .query<
             { source: string; session_id: string | null },
             [string]
-          >("SELECT source, session_id FROM raya_routine_message WHERE agent_id = ? AND source LIKE 'report:%'")
+          >("SELECT source, session_id FROM raya_routine_message WHERE agent_id = ? AND kind = 'worker' AND source LIKE 'reply:%'")
           .all(recovery.id)
       } finally {
         ledger.close()
@@ -556,7 +556,7 @@ async function main() {
       )
       assert.deepEqual(await runs(recovery.id), [row])
       assert.deepEqual(await saved(row.sessionID), goal)
-      assert.deepEqual(reports(), [{ source: `report:${row.id}`, session_id: row.sessionID }])
+      assert.deepEqual(reports(), [{ source: `reply:${row.id}`, session_id: row.sessionID }])
       assert.equal(fake.count(), requests)
       await send(waiting.id, "waiting_followup", "WAIT_FOLLOWUP")
       await Bun.sleep(1_000)

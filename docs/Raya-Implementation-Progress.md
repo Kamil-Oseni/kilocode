@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-29 15:35 EDT - browser recovery snapshot installed and byte-verified
+
+Commit `87090df329` is pushed to `origin/main`; its normal hook passed all 29 primary package typechecks and the JetBrains typecheck. The low-memory snapshot regenerated the SDK without a tracked difference, rebuilt the CLI and passed version/models/sandbox-worker smokes, extension/webview typechecks, full lint, production bundling and native capture/input/accessibility self-tests. It installed as `7.4.23-snapshot+87090df329.kamil-oseni.1790710202746`.
+
+Independent retained receipt `.tmp/installed-snapshot-87090df329-verified.json` compares all 462 installed VSIX files against retained package `raya.6135d67c6a34ec22e54733478b65029db5cdedd52f1eba018f3481c79d6c9269.vsix`: binaries and bundles match byte for byte; installed `package.json` differs only by VS Code's own `__metadata`. Package SHA-256 is `6135d67c6a34ec22e54733478b65029db5cdedd52f1eba018f3481c79d6c9269`; installed CLI is 234761216 bytes with SHA-256 `ad60b693e310bd32a34f9d38d10e8d189aeac2e9204e3fcb1a69077dc25cc02e`. No user Raya or French Study window was reloaded, activated or controlled. This verifies package identity on disk, not the currently loaded host or the full restart/Windows benchmark. Next: a genuine installed host/backend interruption with one destination mutation, exact unknown/ACK recovery, no replay and a fresh observation; keep `FUT-CU-01` unverified and Desktop Stopped.
+
 ## ChatGPT 2026-09-29 15:23 EDT - restart metadata and atomic browser cancellation source gate
 
 The extension's bounded version 2 browser journal now retains only exact proof, invocation, scope and redacted outcome metadata before one-time dispatch and before native execution; version 1 records migrate conservatively. On reconnect, interrupted attempts can publish an unknown confirmation and exact acknowledgement without replaying input. Recovery skips active requests, uses bounded abortable settlement attempts, releases timed-out single-flight slots for a later retry, and ignores late responses. Independent read-only audits found and drove fixes for lost dispatch responses, active/recovery races, permanently cached timeouts and a cross-host reject/dispatch race. The final audit found no new severe safety/privacy/replay issue in this source slice.

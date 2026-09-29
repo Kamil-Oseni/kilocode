@@ -37,6 +37,8 @@ ChatGPT, 2026-09-28 23:41 EDT: bounded startup diagnostics now retain sanitized 
 
 ## Reproducible environment
 
+ChatGPT, 2026-09-29 00:08 EDT: current churn run remains `36518672345` on `b98257e36a`. The unpublished continuous-mode verifier uses finite, tightly approximate floating-total comparison (`1e-12` relative / `1e-9` second absolute) to avoid false refusal from Go/Python summation rounding. An actual local arithmetic check accepts rounding and refuses a millisecond mismatch or NaN; YAML/workflow checks and Python syntax compilation pass. This is verifier correctness evidence, not a new native resource result. Push the local correction only after the original benchmark is terminal.
+
 The `Raya media conformance` workflow builds the production CGO executable from the exact commit using the service Dockerfile and starts the pinned loopback-only LiveKit test SFU. Record the workflow run/job, source commit, build-image digest and binary SHA-256 with every result. These are synthetic local transport tests with no microphone, speaker, paid provider or installed desktop host. They do not measure model inference, Internet travel, browser capture, remote playback or a user's completed task.
 
 The normal push gate runs a 60-second resource diagnostic. For prolonged measurement, dispatch the same workflow on the reviewed commit with `resource_seconds=1800`. The dedicated test container has a 2 GiB memory cap and 256-process/thread cap. These are declared test-environment budgets, not configured production service limits. The separate SFU is outside that container and outside the measured parent/child aggregate.

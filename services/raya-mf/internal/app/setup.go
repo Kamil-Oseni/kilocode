@@ -21,9 +21,17 @@ type prepared interface {
 }
 
 func (s setup) settle(source prepared) error {
+	event, err := settlement(source, 1)
+	if event.Type == "" {
+		return err
+	}
+	return errors.Join(err, s.report(wire.Envelope{Session: s.id, Seq: 1, Event: event}))
+}
+
+func settlement(source prepared, seq uint64) (engine.Event, error) {
 	started, err := source.Startup()
 	if err != nil || !validStartup(started) {
-		return errors.New("provider startup identity is unconfirmed")
+		return engine.Event{}, errors.New("provider startup identity is unconfirmed")
 	}
 	data := map[string]any{"version": 1, "started": map[string]any{"event_id": started.EventID, "model": started.Model}}
 	final, observed := source.Usage()
@@ -32,8 +40,7 @@ func (s setup) settle(source prepared) error {
 	} else {
 		observed = errors.New("final provider setup usage is unconfirmed")
 	}
-	event := engine.Event{Seq: 1, Type: "session.setup.closed", Session: started.Session, At: time.Now().UTC(), Data: data}
-	return errors.Join(observed, s.report(wire.Envelope{Session: s.id, Seq: 1, Event: event}))
+	return engine.Event{Seq: seq, Type: "session.setup.closed", Session: started.Session, At: time.Now().UTC(), Data: data}, observed
 }
 
 func (s setup) report(event wire.Envelope) error {

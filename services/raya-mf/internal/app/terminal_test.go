@@ -17,10 +17,11 @@ import (
 )
 
 func TestParentCancellationDeliversExactLiveTerminalUsageToHTTPBackend(t *testing.T) {
-	for _, kind := range []string{"accepted", "backend-refused", "missing-receipt"} {
+	for _, kind := range []string{"accepted", "backend-refused", "missing-receipt", "startup-lost", "setup-refused", "startup-lost-missing-final"} {
 		t.Run(kind, func(t *testing.T) {
-			refused := kind == "backend-refused"
-			missing := kind == "missing-receipt"
+			refused := kind == "backend-refused" || kind == "setup-refused"
+			missing := kind == "missing-receipt" || kind == "startup-lost-missing-final"
+			lost := kind == "startup-lost" || kind == "setup-refused" || kind == "startup-lost-missing-final"
 			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				conn, err := websocket.Accept(w, r, nil)
 				if err != nil {
@@ -65,17 +66,30 @@ func TestParentCancellationDeliversExactLiveTerminalUsageToHTTPBackend(t *testin
 			}))
 			defer provider.Close()
 			received := make(chan wire.Envelope, 1)
+			started := make(chan uint64, 1)
 			var calls atomic.Int32
+			var latest atomic.Uint64
 			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var event wire.Envelope
 				if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
 					t.Error(err)
 				}
-				if event.Event.Type == "session.closed" {
+				prior := latest.Swap(event.Seq)
+				if event.Event.Type == "session.started" {
+					started <- event.Seq
+					if lost {
+						<-r.Context().Done()
+						return
+					}
+				}
+				if event.Event.Type == "session.closed" || event.Event.Type == "session.setup.closed" {
+					if event.Seq <= prior || event.Seq != event.Event.Seq {
+						t.Error("terminal accounting did not advance beyond earlier callbacks")
+					}
 					calls.Add(1)
 					received <- event
 					if refused {
-						http.Error(w, "refused", http.StatusServiceUnavailable)
+						w.Write([]byte("false"))
 						return
 					}
 				}
@@ -88,15 +102,39 @@ func TestParentCancellationDeliversExactLiveTerminalUsageToHTTPBackend(t *testin
 				cancel()
 				t.Fatal(err)
 			}
-			s := NewSessionWithDescriptor(ctx, "logical_terminal", voice, newFakeRoom(), HTTPBackend{URL: backend.URL}, "client-logical_terminal", (live.Engine{}).Descriptor())
-			cancel()
+			media := newFakeRoom()
+			s := NewSessionWithDescriptor(ctx, "logical_terminal", voice, media, HTTPBackend{URL: backend.URL, Control: "loopback-capability", Strict: true}, "client-logical_terminal", (live.Engine{}).Descriptor())
+			var sequence uint64
+			select {
+			case sequence = <-started:
+			case <-time.After(time.Second):
+				cancel()
+				t.Fatal("actual startup callback was not attempted")
+			}
+			if !lost {
+				deadline := time.Now().Add(time.Second)
+				for !s.startup.Load() && time.Now().Before(deadline) {
+					time.Sleep(time.Millisecond)
+				}
+				if !s.startup.Load() {
+					cancel()
+					t.Fatal("actual strict startup HTTP ACK was not confirmed")
+				}
+			}
+			if lost {
+				// Controlled room-boundary loss, not a claimed native child crash.
+				close(media.input)
+			} else {
+				cancel()
+			}
 			status := finished(t, s)
+			cancel()
 			err = s.Close()
 			failed := refused || missing
 			if (err != nil) != failed || status.BackendReport != map[bool]string{false: "succeeded", true: "failed"}[failed] {
 				t.Fatalf("terminal delivery status = %#v / %v", status, err)
 			}
-			if missing {
+			if missing && !lost {
 				if calls.Load() != 0 {
 					t.Fatal("lost final provider receipt synthesized usage")
 				}
@@ -104,8 +142,21 @@ func TestParentCancellationDeliversExactLiveTerminalUsageToHTTPBackend(t *testin
 			}
 			select {
 			case event := <-received:
+				want := "session.closed"
+				if lost {
+					want = "session.setup.closed"
+				}
 				raw, _ := json.Marshal(event.Event.Data)
-				if event.Session != "logical_terminal" || event.Event.Session != "live_terminal_fixture" || event.Seq != event.Event.Seq || !strings.Contains(string(raw), `"event_id":"terminal_receipt"`) || !strings.Contains(string(raw), `"model":"gpt-live-1"`) || !strings.Contains(string(raw), `"seconds":0.125`) || !strings.Contains(string(raw), `"reason":"close_requested"`) {
+				if lost && missing {
+					if event.Event.Type != want || event.Seq <= sequence || event.Session != "logical_terminal" || event.Event.Session != "live_terminal_fixture" || !strings.Contains(string(raw), `"event_id":"start_receipt"`) {
+						t.Fatalf("known startup accounting was lost: %#v", event)
+					}
+					if _, exists := event.Event.Data["final"]; exists {
+						t.Fatal("unknown final usage was fabricated")
+					}
+					break
+				}
+				if event.Event.Type != want || event.Seq <= sequence || event.Session != "logical_terminal" || event.Event.Session != "live_terminal_fixture" || event.Seq != event.Event.Seq || !strings.Contains(string(raw), `"event_id":"terminal_receipt"`) || !strings.Contains(string(raw), `"model":"gpt-live-1"`) || !strings.Contains(string(raw), `"seconds":0.125`) || !strings.Contains(string(raw), `"reason":"close_requested"`) || lost && !strings.Contains(string(raw), `"event_id":"start_receipt"`) {
 					t.Fatalf("terminal receipt changed: %#v", event)
 				}
 			case <-time.After(time.Second):
@@ -113,6 +164,10 @@ func TestParentCancellationDeliversExactLiveTerminalUsageToHTTPBackend(t *testin
 			}
 			if calls.Load() != 1 {
 				t.Fatalf("terminal usage replayed %d times", calls.Load())
+			}
+			_ = s.Close()
+			if calls.Load() != 1 {
+				t.Fatal("repeated Close replayed provider accounting")
 			}
 		})
 	}

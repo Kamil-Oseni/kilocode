@@ -12,6 +12,23 @@ import (
 )
 
 func (s *Session) terminal(source engine.Terminal) error {
+	if !s.startup.Load() && s.backend != nil {
+		owned, ok := source.(prepared)
+		if !ok {
+			s.statusMu.Lock()
+			s.status.BackendReport = "failed"
+			s.statusMu.Unlock()
+			return errors.New("provider startup receipt is unavailable")
+		}
+		event, observed := settlement(owned, s.seq.Add(1))
+		if event.Type == "" {
+			s.statusMu.Lock()
+			s.status.BackendReport = "failed"
+			s.statusMu.Unlock()
+			return observed
+		}
+		return s.accounting(event, observed)
+	}
 	usage, err := source.Usage()
 	if err != nil || !validUsage(usage) {
 		if s.backend != nil {
@@ -27,9 +44,13 @@ func (s *Session) terminal(source engine.Terminal) error {
 	seq := s.seq.Add(1)
 	event := engine.Event{Type: "session.closed", Session: usage.Session, Seq: seq, At: usage.At,
 		Data: map[string]any{"event_id": usage.EventID, "model": usage.Model, "reason": usage.Reason, "usage": map[string]any{"seconds": usage.Seconds}}}
+	return s.accounting(event, nil)
+}
+
+func (s *Session) accounting(event engine.Event, observed error) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	err = s.backend.Event(ctx, wire.Envelope{Session: s.id, Seq: seq, Event: event})
+	err := errors.Join(observed, s.backend.Event(ctx, wire.Envelope{Session: s.id, Seq: event.Seq, Event: event}))
 	s.statusMu.Lock()
 	s.status.BackendReport = delivery(err)
 	s.statusMu.Unlock()

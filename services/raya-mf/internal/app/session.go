@@ -27,6 +27,7 @@ type Session struct {
 	cancel     context.CancelFunc
 	wait       sync.WaitGroup
 	seq        atomic.Uint64
+	startup    atomic.Bool
 	queue      chan wire.Envelope
 	speaking   atomic.Bool
 	generating atomic.Bool
@@ -456,6 +457,14 @@ func (s *Session) forward() {
 			if err != nil {
 				s.fail("backend_delivery")
 				return
+			}
+			if envelope.Event.Type == "session.started" {
+				if source, ok := s.engine.(prepared); ok {
+					started, err := source.Startup()
+					if err == nil && validStartup(started) && envelope.Event.Session == started.Session && envelope.Event.Data["eventID"] == started.EventID && envelope.Event.Data["model"] == started.Model {
+						s.startup.Store(true)
+					}
+				}
 			}
 		}
 	}

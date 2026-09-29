@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 17:42 EDT - architecture snapshot installed; loaded host remains open
+
+Pushed `fa1aff3d8d` with normal primary/JetBrains hooks, built the low-memory snapshot and installed `7.4.23-snapshot+fa1aff3d8d.kamil-oseni.1790717756258` on disk. `.tmp/installed-snapshot-fa1aff3d8d-verified.json` independently matches all 462 VSIX extension files to the installed directory except VS Code's `package.json` metadata; installed CLI SHA-256 is `ad60b693e310bd32a34f9d38d10e8d189aeac2e9204e3fcb1a69077dc25cc02e`. The installed CLI/production source bridge/headless-Chromium backend-restart gate `.tmp/installed-browser-workflow-architecture-fa1aff3d8d.json` passed one destination effect, dropped ACK, exact reconciliation without replay, fresh observation and clean owned-process retirement. The source-mode five-case regression also passed. No open VS Code window was reloaded or controlled. Loaded UI, native Windows Desktop, prolonged resources and the release benchmark remain unverified; `FUT-ARCH-*` In progress, `FUT-CU-01` unverified, Desktop Stopped and MCP deferred.
+
 ## ChatGPT 2026-09-29 17:28 EDT - Codex-inspired contracts and first Raya slices
 
 The owner approved adapting public Codex architecture patterns into Raya's existing TypeScript/Kilo engine. The canonical Progress table now has four `FUT-ARCH-*` rows for authoritative task events/UI projection, owned worker lifecycle, bounded queues/shutdown and last-moment execution authority, with concrete build and adverse-test plans. This is not a Rust rewrite or a claim about unpublished Codex Desktop source.

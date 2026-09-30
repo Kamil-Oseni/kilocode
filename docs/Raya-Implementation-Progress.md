@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-30 - matching installed chat and Unicode draft recovery pass
+
+Source checkpoint `e9d781944c` passes packaging, CLI/model/sandbox-worker smoke checks, extension/webview typing, lint, production bundling and native self-tests. Its private installation independently matches all 465 payload files and equivalent package metadata (`.tmp/installed-snapshot-e9d781944c-verified.json`). The actual extension and backend load from that installation. Computer Use tests run in a generated temporary Git workspace outside Raya's ancestry, on the second screen; the French Study workspace and installation are untouched.
+
+The installed UI accepts an ordinary prompt, displays its completed reply and clears the composer. An unsent draft containing accented text, Chinese characters and an emoji is saved exactly, restored after Reload Window alongside the original conversation, and successfully sent once. Private SQL confirms one session, exactly two user messages and two completed assistant messages, no assistant errors, each controlled prompt occurring once, and the session draft cleared at accepted revision 5. Preserve `.tmp/installed-e9-gui-recovery-observation.json`. The model is a synthetic loopback OpenAI-compatible fixture, not a real GPU/model operating test. Earlier failed profiles and receipts remain retained; this pass does not establish the cause of their original stale refusal.
+
+**Basic stable readiness is 48/100**: restart/reinstall 19/20, portable recovery 0/20, local routing/context 12/20, bounded shared inference 8/20, installed/new-PC 9/20. The extra point reflects source-matched visible chat and draft recovery. Startup remains slow: the reload logs show approximately 22.7 seconds from extension activation to backend start and 33.6 seconds to instance bootstrap completion; those are phase measurements, not full UI-ready latency. Complete portable capture/restore, remaining database-owner coordination and real new-PC/local-model acceptance remain open. Export stays disabled.
+
 ## ChatGPT 2026-09-30 - local startup and Core database lifecycle source gates
 
 Local chat startup no longer awaits the optional account-profile request. The production `syncWebviewState` method and generated SDK are tested against a held loopback HTTP response: local agent, configuration, status and composer-scope requests progress first, a current profile publishes once, and results from replaced clients or connection generations never publish. The focused startup suite passes **3/3 with 12 assertions**; the combined startup/controller/provider-recovery suite passes **27/27 with 105 assertions**, with extension/webview typing, full lint, Knip, formatting and diff checks passing.

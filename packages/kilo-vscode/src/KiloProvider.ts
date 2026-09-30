@@ -84,6 +84,8 @@ import { recovery } from "./shared/routine-error"
 import { encode as encodeRoutineFile, MAX_ROUTINE_FILE_BYTES } from "./kilo-provider/routine-files"
 import { RoutineRefresh } from "./kilo-provider/routine-refresh"
 import { RoutineEvents } from "./kilo-provider/routine-events"
+import { RoutineDrafts, type RoutineDraftProof } from "./kilo-provider/routine-drafts"
+import type { WebviewMessage } from "../webview-ui/src/types/messages/webview-messages"
 import { editGoal, start as startGoal, stopGoal, stopResult } from "./kilo-provider/goal"
 import { evidence as goalEvidence } from "./kilo-provider/goal-evidence"
 import { shouldNotify } from "./kilo-provider/presence-notify"
@@ -414,6 +416,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
     (message) => this.postMessage(message),
   )
+  private readonly routineDrafts = new RoutineDrafts()
   private readonly routineRefresh = new RoutineRefresh(
     () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
     (message) => {
@@ -1886,19 +1889,133 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       section?: unknown
     },
   ): Promise<boolean> {
+    const routine = message as WebviewMessage
     const client = this.client
     const directory = this.getWorkspaceDirectory()
     const generation = this.connectionGeneration
     const current = () =>
       this.client === client && this.getWorkspaceDirectory() === directory && this.connectionGeneration === generation
     try {
+      if (routine.type === "routineInboxUnmount") {
+        this.routineDrafts.unmount(routine.paneID, routine.agentID)
+        return true
+      }
+      if (routine.type === "routineInboxMount") {
+        if (!client || !current()) throw new Error("Reconnect before opening this worker draft.")
+        const read = async () => {
+          if (!current()) throw new Error("This worker conversation changed.")
+          const result = await client.kilocode.routine.inbox2.page(
+            { directory, agentID: routine.agentID },
+            { throwOnError: true },
+          )
+          if (!current()) throw new Error("This worker conversation changed.")
+          return result.data?.draftState as RoutineDraftProof | undefined
+        }
+        const proof = await read()
+        if (
+          !proof ||
+          proof.owner !== routine.owner ||
+          proof.conversationID !== routine.conversationID ||
+          proof.revision !== routine.revision
+        )
+          throw new Error("This saved conversation changed. Reload it before editing.")
+        this.routineDrafts.mount(routine.paneID, {
+          agentID: routine.agentID,
+          owner: proof.owner,
+          conversationID: proof.conversationID,
+          revision: proof.revision,
+          current,
+          read,
+          write: async (draft, attachmentIDs, revision) => {
+            if (!current()) throw new Error("This worker conversation changed.")
+            const result = await client.kilocode.routine.inbox2.draft(
+              {
+                directory,
+                agentID: routine.agentID,
+                owner: proof.owner,
+                conversationID: proof.conversationID,
+                expectedRevision: revision,
+                draft: draft ?? "",
+                attachmentIDs,
+              },
+              { throwOnError: true },
+            )
+            return result.data as RoutineDraftProof | undefined
+          },
+        })
+        this.postMessage({
+          type: "routineInboxMounted",
+          requestID: routine.requestID,
+          paneID: routine.paneID,
+          agentID: routine.agentID,
+          owner: proof.owner,
+          conversationID: proof.conversationID,
+          revision: proof.revision,
+        })
+        return true
+      }
+      if (routine.type === "routineInboxFlush") {
+        const proof = await this.routineDrafts.flush(
+          routine.paneID,
+          routine,
+          { cutoff: routine.cutoff, draft: routine.draft, attachmentIDs: routine.attachmentIDs },
+          Date.now() + 5000,
+        )
+        this.postMessage({
+          type: "routineInboxFlushed",
+          requestID: routine.requestID,
+          paneID: routine.paneID,
+          agentID: routine.agentID,
+          committed: true,
+          owner: proof.owner,
+          conversationID: proof.conversationID,
+          revision: proof.revision,
+        })
+        return true
+      }
+      const sendProof =
+        routine.type === "routineInboxSend"
+          ? await this.routineDrafts.flush(
+              routine.paneID,
+              routine,
+              { cutoff: routine.cutoff, draft: routine.body || null, attachmentIDs: routine.attachmentIDs },
+              Date.now() + 5000,
+            )
+          : undefined
+      const sendTicket =
+        sendProof && routine.type === "routineInboxSend" ? this.routineDrafts.send(routine.paneID, routine) : undefined
+      const draft =
+        routine.type === "routineInboxDraft" ||
+        routine.type === "routineInboxFilesPick" ||
+        routine.type === "routineInboxFilesForget"
+      const ticket = draft
+        ? this.routineDrafts.issue({
+            paneID: routine.paneID,
+            agentID: routine.agentID,
+            owner: routine.owner,
+            conversationID: routine.conversationID,
+            expectedRevision: routine.expectedRevision,
+            sequence: routine.sequence,
+            draft: routine.draft,
+          })
+        : undefined
       return await dispatchRoutine({
         message,
         client,
         directory,
         post: (msg) => {
+          if (ticket && msg && typeof msg === "object") {
+            const ack = msg as Record<string, unknown>
+            if (ack.requestID === message.requestID && ack.agentID === message.agentID)
+              ticket.settle(ack.error ? undefined : ({ ...ack, attachments: ack.files } as RoutineDraftProof))
+          }
           if (current()) this.postMessage(msg)
         },
+        before: ticket?.before,
+        beforeSend: sendTicket?.before,
+        finishSend: sendTicket?.settle,
+        sendProof,
+        current,
         pick: async (limit) => {
           const uris = await vscode.window.showOpenDialog({
             canSelectFiles: true,
@@ -1926,8 +2043,22 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         },
         refresh: (requestID, viewID) =>
           current() ? this.routineRefresh.request(requestID, viewID) : Promise.resolve(),
+      }).finally(() => {
+        ticket?.settle()
+        sendTicket?.settle()
       })
     } catch (err) {
+      if (routine.type === "routineInboxMount" || routine.type === "routineInboxFlush") {
+        this.postMessage({
+          type: routine.type === "routineInboxMount" ? "routineInboxMounted" : "routineInboxFlushed",
+          requestID: routine.requestID,
+          paneID: routine.paneID,
+          agentID: routine.agentID,
+          committed: false,
+          error: reason(err),
+        })
+        return true
+      }
       if (message.type === "routineSnapshot") {
         this.postMessage({
           type: "routineSnapshot",
@@ -1996,6 +2127,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         message.type === "routineInboxSend" ||
         message.type === "routineInboxRead" ||
         message.type === "routineInboxDraft" ||
+        message.type === "routineInboxFilesPick" ||
+        message.type === "routineInboxFilesForget" ||
         message.type === "routineInboxAttachmentOpen" ||
         message.type === "routineInboxAttachmentPreview" ||
         message.type === "routineDelegate" ||
@@ -2004,21 +2137,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       ) {
         this.postMessage({
           type:
-            message.type === "routineInboxSend"
-              ? "routineInboxSent"
-              : message.type === "routineInboxAttachmentOpen"
-                ? "routineInboxAttachmentOpened"
-                : message.type === "routineInboxAttachmentPreview"
-                  ? "routineInboxAttachmentPreviewed"
-                  : message.type === "routineDelegate"
-                    ? "routineDelegated"
-                    : message.type === "routineDelegateCancel"
-                      ? "routineDelegateStopped"
-                      : message.type,
+            message.type === "routineInboxFilesPick" || message.type === "routineInboxFilesForget"
+              ? "routineInboxFiles"
+              : message.type === "routineInboxSend"
+                ? "routineInboxSent"
+                : message.type === "routineInboxAttachmentOpen"
+                  ? "routineInboxAttachmentOpened"
+                  : message.type === "routineInboxAttachmentPreview"
+                    ? "routineInboxAttachmentPreviewed"
+                    : message.type === "routineDelegate"
+                      ? "routineDelegated"
+                      : message.type === "routineDelegateCancel"
+                        ? "routineDelegateStopped"
+                        : message.type,
           requestID: message.requestID,
           agentID: message.agentID,
-          error: "Could not connect to the routine inbox. Reconnect and try again.",
-          recovery: recovery({ kind: "unavailable" }),
+          paneID: "paneID" in message ? message.paneID : undefined,
+          sequence: "sequence" in message ? message.sequence : undefined,
+          error: reason(err),
+          recovery: recovery(err) ?? recovery({ kind: "unavailable" }),
         })
         return true
       }
@@ -7145,6 +7282,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Dispose of the provider and clean up subscriptions.
    * Does NOT kill the server — that's the connection service's job.
    */
+  async flushRoutineDrafts(deadline: number): Promise<boolean> {
+    return this.routineDrafts.drain(deadline)
+  }
+
   dispose(): void {
     this.composerView?.dispose()
     this.composer.dispose()

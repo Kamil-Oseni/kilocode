@@ -46,6 +46,7 @@ import { PersonalTodoReminderCoordinator } from "./services/personal-todo-remind
 
 let agentManager: AgentManagerProvider | undefined
 let shuttingDown = false
+let drainRoutine: (() => Promise<void>) | undefined
 
 const RESTORE_KEY = "kilo.workbench.restore"
 
@@ -207,6 +208,27 @@ export function activate(context: vscode.ExtensionContext) {
     focusContext: "raya.sidebarFocused",
     snapshotInitialization: "wait", // raya_change - wait out slow first snapshots instead of prompting to disable them for the project
   })
+  let cleanup: Promise<void> | undefined
+  const disposeRaya = () => {
+    cleanup ??= (async () => {
+      shuttingDown = true
+      const deadline = Date.now() + 5000
+      const results = await Promise.allSettled(
+        [provider, ...tabPanels.values()].map((pane) => pane.flushRoutineDrafts(deadline)),
+      )
+      if (results.some((result) => result.status === "rejected" || !result.value))
+        console.warn("[Raya] One or more mounted Routine drafts could not be confirmed before shutdown.")
+      unsubscribeStateChange()
+      attention.dispose()
+      browserAutomationService.dispose()
+      canvasService.dispose() // raya_change - Milestone E
+      provider.dispose()
+      notebookBridge.dispose()
+      connectionService.dispose()
+    })()
+    return cleanup
+  }
+  drainRoutine = disposeRaya
   provider.setRemoteService(remoteService)
   provider.setAdminBrowser(browserAutomationService)
   context.subscriptions.push(registerCheckpointCommands(connectionService, provider)) // raya_change - named checkpoints
@@ -348,7 +370,7 @@ export function activate(context: vscode.ExtensionContext) {
           () => {
             console.log("[Raya] Tab panel restored from restart disposed")
             tabPanels.delete(panel)
-            tabProvider.dispose()
+            void tabProvider.flushRoutineDrafts(Date.now() + 5000).finally(() => tabProvider.dispose())
           },
           null,
           context.subscriptions,
@@ -756,14 +778,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Dispose services when extension deactivates (kills the server)
   context.subscriptions.push({
     dispose: () => {
-      shuttingDown = true
-      unsubscribeStateChange()
-      attention.dispose()
-      browserAutomationService.dispose()
-      canvasService.dispose() // raya_change - Milestone E
-      provider.dispose()
-      notebookBridge.dispose()
-      connectionService.dispose()
+      void disposeRaya()
     },
   })
 }
@@ -771,6 +786,7 @@ export function activate(context: vscode.ExtensionContext) {
 export async function deactivate() {
   shuttingDown = true
   await agentManager?.shutdown()
+  await drainRoutine?.()
   TelemetryProxy.getInstance().shutdown()
 }
 
@@ -818,7 +834,7 @@ function openKiloInNewTab(
     () => {
       console.log("[Raya] Tab panel disposed")
       tabPanels.delete(panel)
-      tabProvider.dispose()
+      void tabProvider.flushRoutineDrafts(Date.now() + 5000).finally(() => tabProvider.dispose())
     },
     null,
     context.subscriptions,

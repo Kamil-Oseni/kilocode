@@ -10105,6 +10105,9 @@ export class Inbox extends HeyApiClient {
       agentID: string
       directory?: string
       workspace?: string
+      owner?: string
+      conversationID?: string
+      expectedRevision?: number
       source?: string
       body?: string
       attachments?: Array<{
@@ -10126,6 +10129,9 @@ export class Inbox extends HeyApiClient {
             { in: "path", key: "agentID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "owner" },
+            { in: "body", key: "conversationID" },
+            { in: "body", key: "expectedRevision" },
             { in: "body", key: "source" },
             { in: "body", key: "body" },
             { in: "body", key: "attachments" },
@@ -10245,6 +10251,9 @@ export class Inbox extends HeyApiClient {
       agentID: string
       directory?: string
       workspace?: string
+      owner?: string
+      conversationID?: string
+      expectedRevision?: number
       draft?: string
       attachments?: Array<{
         id: string
@@ -10254,7 +10263,6 @@ export class Inbox extends HeyApiClient {
         data: string
       }>
       attachmentIDs?: Array<string>
-      revision?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -10266,10 +10274,12 @@ export class Inbox extends HeyApiClient {
             { in: "path", key: "agentID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "owner" },
+            { in: "body", key: "conversationID" },
+            { in: "body", key: "expectedRevision" },
             { in: "body", key: "draft" },
             { in: "body", key: "attachments" },
             { in: "body", key: "attachmentIDs" },
-            { in: "body", key: "revision" },
           ],
         },
       ],

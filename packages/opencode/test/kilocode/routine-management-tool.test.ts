@@ -1701,7 +1701,13 @@ it.live(
               ],
             })
             yield* inbox.read(books.id, report.time)
-            yield* inbox.draft(books.id, { draft: "Ask about the reconciliation." })
+            const proof = (yield* inbox.page(books.id)).draftState
+            yield* inbox.draft(books.id, {
+              owner: proof.owner,
+              conversationID: proof.conversationID,
+              expectedRevision: proof.revision,
+              draft: "Ask about the reconciliation.",
+            })
             const run = yield* tasks.record({
               id: "occ_restart_contract",
               agentID: books.id,

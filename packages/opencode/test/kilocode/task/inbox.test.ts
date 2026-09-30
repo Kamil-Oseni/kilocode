@@ -11,6 +11,12 @@ import { RayaTaskInbox, status, posted } from "@/kilocode/task/inbox"
 import type { RayaTask } from "@/kilocode/task"
 import { SessionID } from "@/session/schema"
 
+const base = (row: { owner: string; conversationID: string; revision: number }) => ({
+  owner: row.owner,
+  conversationID: row.conversationID,
+  expectedRevision: row.revision,
+})
+
 const agent = (id: string, enabled = true, execution?: RayaTask.Agent["execution"]): RayaTask.Agent => ({
   id,
   name: "Books",
@@ -172,9 +178,15 @@ test("routine inbox publication is idempotent, unread ignores user messages, and
       expect(yield* inbox.read("agt_1", update.time)).toBe(update.time)
       expect((yield* inbox.summaries([agent("agt_1")], new Map()))[0].unread).toBe(0)
       expect(yield* inbox.read("agt_1", 0)).toBe(update.time)
-      yield* inbox.draft("agt_1", { draft: "Ask about travel" })
+      const initial = (yield* inbox.page("agt_1")).draftState
+      yield* inbox.draft("agt_1", { ...base(initial), draft: "Ask about travel" })
       expect((yield* inbox.summaries([agent("agt_1")], new Map()))[0].draft).toBe("Ask about travel")
-      expect(yield* inbox.draft("agt_1", { draft: "" })).toEqual({ draft: null, revision: 2 })
+      const cleared = (yield* inbox.page("agt_1")).draftState
+      expect(yield* inbox.draft("agt_1", { ...base(cleared), draft: "" })).toEqual({
+        ...cleared,
+        draft: null,
+        revision: 2,
+      })
       const page = yield* inbox.page("agt_1")
       expect(page.messages.map((item) => item.source).sort()).toEqual(
         ["user_1", "report:occ_1", "provision:worker_1"].sort(),
@@ -323,7 +335,12 @@ test("routine draft attachments persist, reorder, promote atomically, and expose
         size: 5,
         data: Buffer.from("notes").toString("base64"),
       }
-      const saved = yield* inbox.draft("books", { draft: "Review these", attachments: [first, second] })
+      const initial = (yield* inbox.page("books")).draftState
+      const saved = yield* inbox.draft("books", {
+        ...base(initial),
+        draft: "Review these",
+        attachments: [first, second],
+      })
       expect(saved.revision).toBe(1)
       expect(yield* inbox.used("books")).toBe(true)
       expect(saved.attachments).toEqual([
@@ -331,13 +348,15 @@ test("routine draft attachments persist, reorder, promote atomically, and expose
         { id: second.id, name: second.name, mime: second.mime, size: second.size },
       ])
       expect((yield* inbox.summaries([agent("books")], new Map()))[0].draftAttachments).toEqual(saved.attachments)
-      expect(yield* inbox.draft("books", { draft: "Text only save" })).toEqual({
-        draft: "Text only save",
-        attachments: saved.attachments,
-        revision: 2,
+      const text = yield* inbox.draft("books", { ...base(saved), draft: "Text only save" })
+      expect(text).toEqual({ ...saved, draft: "Text only save", revision: 2 })
+      const reordered = yield* inbox.draft("books", {
+        ...base(text),
+        draft: "Review these",
+        attachmentIDs: [second.id, first.id],
       })
       expect(
-        (yield* inbox.draft("books", { draft: "Review these", attachmentIDs: [second.id, first.id] })).attachments,
+        reordered.attachments,
       ).toEqual([saved.attachments![1]!, saved.attachments![0]!])
       expect(yield* inbox.content("other", first.id)).toBeUndefined()
       expect(yield* inbox.content("books", first.id)).toEqual(first)
@@ -364,7 +383,16 @@ test("routine draft attachments persist, reorder, promote atomically, and expose
         }),
       ).toEqual({ record: admitted.record, created: false })
       expect(
-        Exit.isFailure(yield* inbox.draft("other", { draft: "steal", attachmentIDs: [first.id] }).pipe(Effect.exit)),
+        Exit.isFailure(
+          yield* inbox
+            .draft("other", {
+              ...base((yield* inbox.page("other")).draftState),
+              expectedRevision: 0,
+              draft: "steal",
+              attachmentIDs: [first.id],
+            })
+            .pipe(Effect.exit),
+        ),
       ).toBe(true)
 
       const sid = SessionID.make("ses_attachment")
@@ -378,7 +406,12 @@ test("routine draft attachments persist, reorder, promote atomically, and expose
       yield* inbox.delivered(sid, "msg_dispatch")
       expect((yield* inbox.delivery(sid, "msg_dispatch"))?.delivered).toBe(true)
 
-      expect(yield* inbox.draft("books", { draft: null, attachmentIDs: [] })).toEqual({ draft: null, revision: 5 })
+      const clear = (yield* inbox.page("books")).draftState
+      expect(yield* inbox.draft("books", { ...base(clear), draft: null, attachmentIDs: [] })).toEqual({
+        ...clear,
+        draft: null,
+        revision: 5,
+      })
       expect(
         yield* database.db
           .select({ message: Attachment.message_id })
@@ -401,18 +434,17 @@ test("routine draft revisions reject delayed and divergent saves without replaci
   await Effect.runPromise(
     Effect.gen(function* () {
       const inbox = RayaTaskInbox.make(yield* Database.Service)
-      expect(yield* inbox.draft("books", { draft: "First", revision: 1 })).toEqual({ draft: "First", revision: 1 })
-      expect(yield* inbox.draft("books", { draft: "Newest", revision: 3 })).toEqual({ draft: "Newest", revision: 3 })
-      expect(Exit.isFailure(yield* inbox.draft("books", { draft: "Delayed", revision: 2 }).pipe(Effect.exit))).toBe(
-        true,
-      )
-      expect(yield* inbox.draft("books", { draft: "Newest", revision: 3 })).toEqual({ draft: "Newest", revision: 3 })
-      expect(Exit.isFailure(yield* inbox.draft("books", { draft: "Different", revision: 3 }).pipe(Effect.exit))).toBe(
-        true,
-      )
+      const initial = (yield* inbox.page("books")).draftState
+      const first = yield* inbox.draft("books", { ...base(initial), draft: "First" })
+      expect(first).toEqual({ ...initial, draft: "First", revision: 1 })
+      const newest = yield* inbox.draft("books", { ...base(first), draft: "Newest" })
+      expect(newest).toEqual({ ...first, draft: "Newest", revision: 2 })
+      expect(Exit.isFailure(yield* inbox.draft("books", { ...base(initial), draft: "Delayed" }).pipe(Effect.exit))).toBe(true)
+      expect(yield* inbox.draft("books", { ...base(first), draft: "Newest" })).toEqual(newest)
+      expect(Exit.isFailure(yield* inbox.draft("books", { ...base(first), draft: "Different" }).pipe(Effect.exit))).toBe(true)
       expect((yield* inbox.summaries([agent("books")], new Map()))[0]).toMatchObject({
         draft: "Newest",
-        draftRevision: 3,
+        draftRevision: 2,
       })
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )

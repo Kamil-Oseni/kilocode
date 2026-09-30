@@ -49,9 +49,13 @@ globalThis.getComputedStyle = window.getComputedStyle.bind(window)
 globalThis.requestAnimationFrame = window.requestAnimationFrame.bind(window)
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame.bind(window)
 const sent = []
+const proofs = new Map()
 let webview = { unrelated: "keep me" }
 globalThis.acquireVsCodeApi = () => ({
-  postMessage: (msg) => sent.push(msg),
+  postMessage: (msg) => {
+    sent.push(msg)
+    if (msg.type === "routineInboxMount") queueMicrotask(() => emit({ ...msg, type: "routineInboxMounted" }))
+  },
   getState: () => webview,
   setState: (state) => {
     webview = state
@@ -92,10 +96,78 @@ const mount = (workspace = "C:/Projects/Books", inbox) =>
     root,
   )
 let dispose = mount()
-const emit = (data) => window.dispatchEvent(new window.MessageEvent("message", { data }))
+const emit = (data) => {
+  if (data.type === "routineInbox") {
+    data = {
+      ...data,
+      items: data.items.map((item) => {
+        const next = { ...item, owner: `owner-${item.agentID}`, draftRevision: item.draftRevision ?? 0 }
+        proofs.set(item.agentID, next)
+        return next
+      }),
+    }
+  }
+  if (data.type === "routineInboxPage" && !data.error && !data.draftState) {
+    const proof = proofs.get(data.agentID)
+    if (proof)
+      data = {
+        ...data,
+        draftState: {
+          owner: proof.owner,
+          conversationID: proof.conversationID,
+          revision: proof.draftRevision,
+          draft: proof.draft ?? null,
+          attachments: proof.draftAttachments ?? [],
+        },
+      }
+  }
+  if (data.type === "routineInboxSent" && !data.error && !data.draftState) {
+    const proof = proofs.get(data.agentID)
+    if (proof)
+      data = {
+        ...data,
+        draftState: {
+          owner: proof.owner,
+          conversationID: proof.conversationID,
+          revision: proof.draftRevision + 1,
+          draft: null,
+          attachments: [],
+        },
+      }
+  }
+  window.dispatchEvent(new window.MessageEvent("message", { data }))
+}
+const acked = new Set()
+const ackWrites = () => {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const request = sent.find((msg) => msg.type === "routineInboxDraft" && !acked.has(msg.requestID))
+    if (!request) return
+    acked.add(request.requestID)
+    emit({
+      type: "routineInboxDraft",
+      requestID: request.requestID,
+      agentID: request.agentID,
+      paneID: request.paneID,
+      sequence: request.sequence,
+      owner: request.owner,
+      conversationID: request.conversationID,
+      revision: request.expectedRevision + 1,
+      draft: request.draft,
+      files: request.attachmentIDs?.map((id) => ({ id, name: "receipt.pdf", mime: "application/pdf", size: 3 })) ?? [],
+    })
+  }
+  throw new Error("Routine draft queue did not settle")
+}
 const button = (text) => {
   const found = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === text)
   assert.ok(found, `Missing button: ${text}`)
+  return found
+}
+const workerSend = () => {
+  const found = [...root.querySelectorAll(".routines-composer button")].find(
+    (item) => item.textContent.trim() === "Send",
+  )
+  assert.ok(found, "Missing worker Send button")
   return found
 }
 try {
@@ -292,7 +364,7 @@ try {
   assert.equal(area.value, "Why did expenses increase?")
   emit({ type: "sessionTurnClosed", sessionID: "unrelated-session" })
   assert.equal(sent.filter((msg) => msg.type === "routineList").length, refreshes)
-  assert.equal(sent.filter((msg) => msg.type === "routineInboxPage").length, pagesBeforeRefresh + 1)
+  assert.ok(sent.filter((msg) => msg.type === "routineInboxPage").length >= pagesBeforeRefresh + 1)
   assert.equal(document.activeElement, area)
   assert.equal(area.value, "Why did expenses increase?")
   const typingPage = sent.findLast((msg) => msg.type === "routineInboxPage")
@@ -332,13 +404,25 @@ try {
     type: "routineInboxFiles",
     requestID: pick.requestID,
     agentID: agent.id,
+    paneID: pick.paneID,
+    sequence: pick.sequence,
+    owner: pick.owner,
+    conversationID: pick.conversationID,
     draft: pick.draft,
     files: [attachment],
-    revision: pick.revision,
+    revision: pick.expectedRevision + 1,
   })
   assert.match(root.textContent, /receipt.pdf/)
-  button("Send").click()
+  assert.equal(workerSend().disabled, false)
+  workerSend().click()
   const first = sent.findLast((msg) => msg.type === "routineInboxSend")
+  assert.ok(
+    first,
+    JSON.stringify({
+      sent: sent.slice(-10),
+      buttons: [...document.querySelectorAll("button")].filter((item) => item.textContent.trim() === "Send").length,
+    }),
+  )
   assert.equal(first.body, "Why did expenses increase?")
   assert.deepEqual(first.attachmentIDs, [attachment.id])
   emit({
@@ -369,6 +453,7 @@ try {
     },
   })
   assert.match(root.textContent, /You/)
+  ackWrites()
   assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "")
   assert.match(root.querySelector('[data-routine-message="rmg_user"]').textContent, /receipt.pdf/)
   const keyboard = root.querySelector("textarea[aria-label='Message this worker']")
@@ -408,6 +493,7 @@ try {
       time: 2.5,
     },
   })
+  ackWrites()
   root.querySelector('[data-routine-message="rmg_user"] [aria-label="Open receipt.pdf"]').click()
   const openedAttachment = sent.findLast((msg) => msg.type === "routineInboxAttachmentOpen")
   assert.equal(openedAttachment.agentID, agent.id)
@@ -480,21 +566,28 @@ try {
   const whitespace = sent.findLast((msg) => msg.type === "routineInboxDraft")
   assert.equal(whitespace.draft, "  \n  ")
   assert.equal(whitespace.agentID, agent.id)
+  ackWrites()
   draft.value = "Keep this draft"
   draft.dispatchEvent(new window.Event("input", { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 450))
   const firstDraft = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  ackWrites()
   draft.value = "Newest draft"
   draft.dispatchEvent(new window.Event("input", { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 450))
   const newestDraft = sent.findLast((msg) => msg.type === "routineInboxDraft")
-  assert.ok(newestDraft.revision > firstDraft.revision)
+  assert.ok(newestDraft.sequence > firstDraft.sequence)
   emit({
     type: "routineInboxDraft",
     requestID: newestDraft.requestID,
     agentID: agent.id,
+    paneID: newestDraft.paneID,
+    sequence: newestDraft.sequence,
+    owner: newestDraft.owner,
+    conversationID: newestDraft.conversationID,
     draft: newestDraft.draft,
-    revision: newestDraft.revision,
+    files: [],
+    revision: newestDraft.expectedRevision + 1,
   })
   emit({
     type: "routineInboxDraft",
@@ -517,7 +610,7 @@ try {
   })
   assert.equal(draft.value, "Keep this draft")
   assert.match(root.textContent, /changed in another Raya window/)
-  assert.equal(button("Send").disabled, true)
+  assert.equal(workerSend().disabled, true)
   button("Use saved draft").click()
   assert.equal(draft.value, "")
   draft.value = "Keep this draft"

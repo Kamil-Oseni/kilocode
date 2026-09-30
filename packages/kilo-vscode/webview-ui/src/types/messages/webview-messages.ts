@@ -233,9 +233,13 @@ export interface RoutineInboxSendMessage {
   type: "routineInboxSend"
   requestID: string
   agentID: string
+  paneID: string
+  owner: string
+  conversationID: string
+  cutoff: number
   source: string
   body: string
-  attachmentIDs?: string[]
+  attachmentIDs: string[]
 }
 
 export interface RoutineInboxFilesPickMessage {
@@ -244,7 +248,11 @@ export interface RoutineInboxFilesPickMessage {
   agentID: string
   draft: string | null
   attachmentIDs?: string[]
-  revision: number
+  paneID: string
+  sequence: number
+  owner: string
+  conversationID: string
+  expectedRevision: number
 }
 
 export interface RoutineInboxFilesForgetMessage {
@@ -253,7 +261,11 @@ export interface RoutineInboxFilesForgetMessage {
   agentID: string
   draft: string | null
   attachmentIDs: string[] | null
-  revision: number
+  paneID: string
+  sequence: number
+  owner: string
+  conversationID: string
+  expectedRevision: number
 }
 
 export interface RoutineInboxAttachmentOpenMessage {
@@ -301,7 +313,39 @@ export interface RoutineInboxDraftMessage {
   agentID: string
   draft: string | null
   attachmentIDs: string[] | null
+  paneID: string
+  sequence: number
+  owner: string
+  conversationID: string
+  expectedRevision: number
+}
+
+export interface RoutineInboxMountMessage {
+  type: "routineInboxMount"
+  requestID: string
+  paneID: string
+  agentID: string
+  owner: string
+  conversationID: string
   revision: number
+}
+
+export interface RoutineInboxUnmountMessage {
+  type: "routineInboxUnmount"
+  paneID: string
+  agentID: string
+}
+
+export interface RoutineInboxFlushMessage {
+  type: "routineInboxFlush"
+  requestID: string
+  paneID: string
+  agentID: string
+  owner: string
+  conversationID: string
+  cutoff: number
+  draft: string | null
+  attachmentIDs: string[]
 }
 
 export interface RoutineDelegateMessage {
@@ -2142,6 +2186,9 @@ export type WebviewMessage =
   | RoutineContactDestinationMessage
   | RoutineInboxReadMessage
   | RoutineInboxDraftMessage
+  | RoutineInboxMountMessage
+  | RoutineInboxUnmountMessage
+  | RoutineInboxFlushMessage
   | RoutineDelegateMessage
   | RoutineDelegateCancelMessage
   | RoutineDelegateChainMessage

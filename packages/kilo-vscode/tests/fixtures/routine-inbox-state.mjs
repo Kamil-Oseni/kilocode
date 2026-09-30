@@ -67,7 +67,9 @@ const dispose = render(
           },
           box: {
             agentID: "books",
+            owner: "owner-books",
             conversationID: "rcv_books",
+            draftRevision: 0,
             name: "Books",
             role: "accountant",
             unread: 0,
@@ -84,9 +86,15 @@ const dispose = render(
   root,
 )
 const emit = (data) => window.dispatchEvent(new window.MessageEvent("message", { data }))
+const confirmMount = () => {
+  const request = sent.findLast((msg) => msg.type === "routineInboxMount")
+  assert.ok(request)
+  emit({ ...request, type: "routineInboxMounted" })
+}
 
 try {
   await new Promise((resolve) => setImmediate(resolve))
+  confirmMount()
   assert.equal(root.querySelector("[role='log']")?.getAttribute("aria-busy"), "true")
   assert.equal(root.querySelectorAll(".routines-line-skeleton").length, 3)
   const first = sent.findLast((msg) => msg.type === "routineInboxPage")
@@ -142,22 +150,34 @@ try {
     type: "routineInboxPage",
     requestID: filtered.requestID,
     agentID: "books",
-    messages: [
-      { id: "late", agentID: "books", kind: "worker", source: "late", body: "Obsolete reply", time: 1 },
-    ],
+    messages: [{ id: "late", agentID: "books", kind: "worker", source: "late", body: "Obsolete reply", time: 1 }],
   })
   await Promise.resolve()
   assert.equal(root.textContent.includes("Obsolete reply"), false)
 
   setConnection("connected")
   await Promise.resolve()
+  confirmMount()
   const recovered = sent.findLast((msg) => msg.type === "routineInboxPage")
   assert.notEqual(recovered.requestID, filtered.requestID)
   assert.equal(recovered.search, "tax")
   assert.equal(root.textContent.includes("Offline. Your messages and draft stay here"), false)
   assert.equal(root.querySelector("[role='log']")?.getAttribute("aria-busy"), "true")
   assert.equal(composer.value, "Keep this draft")
-  assert.equal(sent.findLast((msg) => msg.type === "routineInboxDraft")?.draft, "Keep this draft")
+  const draft = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  assert.equal(draft?.draft, "Keep this draft")
+  emit({
+    type: "routineInboxDraft",
+    requestID: draft.requestID,
+    agentID: "books",
+    paneID: draft.paneID,
+    sequence: draft.sequence,
+    owner: draft.owner,
+    conversationID: draft.conversationID,
+    revision: draft.expectedRevision + 1,
+    draft: draft.draft,
+    files: [],
+  })
 
   emit({ type: "routineInboxPage", requestID: recovered.requestID, agentID: "books", messages: [] })
   await Promise.resolve()
@@ -166,7 +186,7 @@ try {
   send.click()
   await Promise.resolve()
   const firstSend = sent.findLast((msg) => msg.type === "routineInboxSend")
-  assert.ok(firstSend)
+  assert.ok(firstSend, JSON.stringify(sent.slice(-8)))
   setConnection("disconnected")
   await Promise.resolve()
   assert.match(root.textContent, /connection was lost before Raya confirmed this message/)
@@ -176,6 +196,21 @@ try {
 
   setConnection("connected")
   await Promise.resolve()
+  confirmMount()
+  const resumed = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  if (resumed && resumed.paneID === sent.findLast((msg) => msg.type === "routineInboxMount")?.paneID)
+    emit({
+      type: "routineInboxDraft",
+      requestID: resumed.requestID,
+      agentID: resumed.agentID,
+      paneID: resumed.paneID,
+      sequence: resumed.sequence,
+      owner: resumed.owner,
+      conversationID: resumed.conversationID,
+      revision: resumed.expectedRevision + 1,
+      draft: resumed.draft,
+      files: [],
+    })
   const refreshed = sent.findLast((msg) => msg.type === "routineInboxPage")
   emit({ type: "routineInboxPage", requestID: refreshed.requestID, agentID: "books", messages: [] })
   await Promise.resolve()
@@ -185,10 +220,18 @@ try {
   const secondSend = sent.findLast((msg) => msg.type === "routineInboxSend")
   assert.notEqual(secondSend.requestID, firstSend.requestID)
   assert.equal(secondSend.source, firstSend.source)
+  const writes = sent.filter((msg) => msg.type === "routineInboxDraft").length
   emit({
     type: "routineInboxSent",
     requestID: secondSend.requestID,
     agentID: "books",
+    draftState: {
+      owner: "owner-books",
+      conversationID: "rcv_books",
+      revision: draft.expectedRevision + 2,
+      draft: null,
+      attachments: [],
+    },
     message: {
       id: "saved",
       agentID: "books",
@@ -200,7 +243,38 @@ try {
   })
   await Promise.resolve()
   assert.equal(composer.value, "")
-  assert.equal(sent.findLast((msg) => msg.type === "routineInboxDraft")?.draft, null)
+  assert.equal(sent.filter((msg) => msg.type === "routineInboxDraft").length, writes)
+  composer.value = "Send this step"
+  composer.dispatchEvent(new window.Event("input", { bubbles: true }))
+  send.click()
+  const laterSend = sent.findLast((msg) => msg.type === "routineInboxSend")
+  assert.equal(laterSend.body, "Send this step")
+  composer.value = "Keep this later edit"
+  composer.dispatchEvent(new window.Event("input", { bubbles: true }))
+  emit({
+    type: "routineInboxSent",
+    requestID: laterSend.requestID,
+    agentID: "books",
+    draftState: {
+      owner: "owner-books",
+      conversationID: "rcv_books",
+      revision: draft.expectedRevision + 4,
+      draft: null,
+      attachments: [],
+    },
+    message: {
+      id: "saved-later",
+      agentID: "books",
+      kind: "user",
+      source: laterSend.source,
+      body: laterSend.body,
+      time: 3,
+    },
+  })
+  assert.equal(composer.value, "Keep this later edit")
+  const retained = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  assert.equal(retained.draft, "Keep this later edit")
+  assert.equal(retained.expectedRevision, draft.expectedRevision + 4)
   console.log(
     "routine-inbox-state: load, retry, offline preservation, reconnect, exact send retry, and filtered-empty assertions passed",
   )

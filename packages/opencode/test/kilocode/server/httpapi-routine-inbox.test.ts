@@ -43,10 +43,23 @@ test("the shipped routine inbox requires a roster worker and keeps follow-ups id
   const route = `/kilocode/agent/${agent.id}/inbox`
   expect((await app.request(route, { headers })).status).toBe(200)
   expect((await app.request(`/kilocode/agent/missing/inbox`, { headers })).status).toBe(404)
+  const proof = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await (await app.request(route, { headers })).json()).draftState
   const send = {
+    owner: proof.owner,
+    conversationID: proof.conversationID,
+    expectedRevision: proof.revision,
     source: "user_1",
     body: "Why did expenses increase on that Friday report?",
   }
+  expect(
+    (
+      await app.request(route, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ source: "user_unbound", body: "Do not admit this message." }),
+      })
+    ).status,
+  ).toBe(400)
   const admitted = await app.request(route, { method: "POST", headers, body: JSON.stringify(send) })
   expect(admitted.status).toBe(200)
   const message = Schema.decodeUnknownSync(Schema.toCodecJson(Record))(await admitted.json())
@@ -63,12 +76,21 @@ test("the shipped routine inbox requires a roster worker and keeps follow-ups id
     ).status,
   ).toBe(409)
   expect(
-    (await app.request(route, { method: "POST", headers, body: JSON.stringify({ source: "user_2", body: "   " }) }))
+    (await app.request(route, { method: "POST", headers, body: JSON.stringify({ ...send, source: "user_2", body: "   " }) }))
       .status,
   ).toBe(400)
   const page = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await (await app.request(route, { headers })).json())
   expect(page.messages).toHaveLength(1)
   expect(page.messages[0].id).toBe(message.id)
+  expect(
+    (
+      await app.request(`${route}/draft`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ draft: "legacy unbound write", revision: 1 }),
+      })
+    ).status,
+  ).toBe(400)
   expect(message.sessionID).toBeDefined()
   const history = await (await app.request(`/kilocode/agent/${agent.id}/runs`, { headers })).json()
   expect(Array.isArray(history)).toBe(true)
@@ -82,16 +104,26 @@ test("the shipped routine inbox requires a roster worker and keeps follow-ups id
   const draft = await app.request(`${route}/draft`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ draft: "Ask for the travel breakdown", revision: 1 }),
+    body: JSON.stringify({
+      owner: page.draftState.owner,
+      conversationID: page.draftState.conversationID,
+      expectedRevision: page.draftState.revision,
+      draft: "Ask for the travel breakdown",
+    }),
   })
   expect(draft.status).toBe(200)
-  expect(await draft.json()).toEqual({ draft: "Ask for the travel breakdown", revision: 1 })
+  expect(await draft.json()).toEqual({ ...page.draftState, draft: "Ask for the travel breakdown", revision: 1 })
   expect(
     (
       await app.request(`${route}/draft`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ draft: "Older text", revision: 0 }),
+        body: JSON.stringify({
+          owner: page.draftState.owner,
+          conversationID: page.draftState.conversationID,
+          expectedRevision: page.draftState.revision,
+          draft: "Older text",
+        }),
       })
     ).status,
   ).toBe(409)
@@ -167,13 +199,37 @@ test("renamed workers keep conversation identity and archived inbox stays readab
       await (await app.request("/kilocode/agent-inbox", { headers })).json(),
     ).some((item) => item.agentID === books.id),
   ).toBe(false)
-  expect((await app.request(route, { headers })).status).toBe(200)
+  const archived = await app.request(route, { headers })
+  expect(archived.status).toBe(200)
+  const retained = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await archived.json()).draftState
+  expect(retained.owner).toBe(row!.owner)
+  expect(retained.conversationID).toBe(row!.conversationID)
+  expect(
+    (
+      await app.request(`${route}/draft`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          owner: retained.owner,
+          conversationID: retained.conversationID,
+          expectedRevision: retained.revision,
+          draft: "Do not revive archived work",
+        }),
+      })
+    ).status,
+  ).toBe(404)
   expect(
     (
       await app.request(route, {
         method: "POST",
         headers,
-        body: JSON.stringify({ source: "user_late", body: "Still there?" }),
+        body: JSON.stringify({
+          owner: retained.owner,
+          conversationID: retained.conversationID,
+          expectedRevision: retained.revision,
+          source: "user_late",
+          body: "Still there?",
+        }),
       })
     ).status,
   ).toBe(404)
@@ -255,13 +311,23 @@ test("routine inbox HTTP stages durable attachment drafts and reads content thro
     size: 6,
     data: Buffer.from("ledger").toString("base64"),
   }
+  const initial = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(await (await app.request(route, { headers })).json())
   const staged = await app.request(`${route}/draft`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ draft: "Review ledger", attachments: [file] }),
+    body: JSON.stringify({
+      owner: initial.draftState.owner,
+      conversationID: initial.draftState.conversationID,
+      expectedRevision: initial.draftState.revision,
+      draft: "Review ledger",
+      attachments: [file],
+    }),
   })
   expect(staged.status).toBe(200)
-  expect(await staged.json()).toEqual({
+  const ready = await staged.json()
+  expect(ready).toEqual({
+    owner: initial.draftState.owner,
+    conversationID: initial.draftState.conversationID,
     draft: "Review ledger",
     attachments: [{ id: file.id, name: file.name, mime: file.mime, size: file.size }],
     revision: 1,
@@ -275,7 +341,14 @@ test("routine inbox HTTP stages durable attachment drafts and reads content thro
   const sent = await app.request(route, {
     method: "POST",
     headers,
-    body: JSON.stringify({ source: "user_file", body: "Review ledger", attachmentIDs: [file.id] }),
+    body: JSON.stringify({
+      owner: ready.owner,
+      conversationID: ready.conversationID,
+      expectedRevision: ready.revision,
+      source: "user_file",
+      body: "Review ledger",
+      attachmentIDs: [file.id],
+    }),
   })
   expect(sent.status).toBe(200)
   const message = await sent.json()
@@ -285,12 +358,20 @@ test("routine inbox HTTP stages durable attachment drafts and reads content thro
       await app.request(route, {
         method: "POST",
         headers,
-        body: JSON.stringify({ source: "user_file", body: "Review ledger", attachmentIDs: [file.id] }),
+        body: JSON.stringify({
+          owner: ready.owner,
+          conversationID: ready.conversationID,
+          expectedRevision: ready.revision,
+          source: "user_file",
+          body: "Review ledger",
+          attachmentIDs: [file.id],
+        }),
       })
     ).status,
   ).toBe(200)
   expect(await (await app.request(`/kilocode/agent/${books.id}/runs`, { headers })).json()).toHaveLength(1)
   const page = await (await app.request(route, { headers })).text()
+  const proof = Schema.decodeUnknownSync(Schema.toCodecJson(Page))(JSON.parse(page)).draftState
   expect(page).not.toContain(file.data)
   expect(JSON.parse(page).messages[0].attachments).toEqual(message.attachments)
   expect(await (await app.request(`${route}/attachment/${file.id}`, { headers })).json()).toEqual(file)
@@ -299,14 +380,26 @@ test("routine inbox HTTP stages durable attachment drafts and reads content thro
   const cleared = await app.request(`${route}/draft`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ draft: null, attachmentIDs: [] }),
+    body: JSON.stringify({
+      owner: proof.owner,
+      conversationID: proof.conversationID,
+      expectedRevision: proof.revision,
+      draft: null,
+      attachmentIDs: [],
+    }),
   })
   expect(cleared.status).toBe(200)
-  expect(await cleared.json()).toEqual({ draft: null, revision: 3 })
+  expect(await cleared.json()).toEqual({ owner: proof.owner, conversationID: proof.conversationID, draft: null, revision: 3 })
   const invalid = await app.request(`${route}/draft`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ draft: "bad", attachments: [{ ...file, id: crypto.randomUUID(), size: 7 }] }),
+    body: JSON.stringify({
+      owner: proof.owner,
+      conversationID: proof.conversationID,
+      expectedRevision: 3,
+      draft: "bad",
+      attachments: [{ ...file, id: crypto.randomUUID(), size: 7 }],
+    }),
   })
   expect(invalid.status).toBe(400)
 }, 60_000)

@@ -6,6 +6,7 @@ test("routine inbox page send read and draft keep request identity and retry the
   const calls: Request[] = []
   const messages: unknown[] = []
   let payload: { source?: string; body?: string; attachmentIDs?: string[] } | undefined
+  let sent = false
   const drafts: Record<string, unknown>[] = []
   const id = "123e4567-e89b-42d3-a456-426614174000"
   const note = {
@@ -34,9 +35,20 @@ test("routine inbox page send read and draft keep request identity and retry the
             state: "scheduled",
           },
         ])
-      if (url.pathname.endsWith("/inbox") && request.method === "GET") return Response.json({ messages: [note] })
+      if (url.pathname.endsWith("/inbox") && request.method === "GET")
+        return Response.json({
+          messages: [note],
+          draftState: {
+            owner: "profile-one",
+            conversationID: "rcv_1",
+            revision: sent ? 3 : 1,
+            draft: sent ? null : "",
+            attachments: [],
+          },
+        })
       if (url.pathname.endsWith("/inbox") && request.method === "POST") {
         payload = await request.json()
+        sent = true
         return Response.json({
           id: "rmg_user",
           agentID: "routine",
@@ -52,7 +64,9 @@ test("routine inbox page send read and draft keep request identity and retry the
         drafts.push(body)
         return Response.json({
           draft: body.draft,
-          revision: body.revision,
+          owner: body.owner,
+          conversationID: body.conversationID,
+          revision: Number(body.expectedRevision) + 1,
           attachments:
             Array.isArray(body.attachmentIDs) && body.attachmentIDs.length === 0 && !body.attachments
               ? undefined
@@ -73,7 +87,11 @@ test("routine inbox page send read and draft keep request identity and retry the
       requestID: "pick1",
       agentID: "routine",
       draft: "Why?",
-      revision: 1,
+      paneID: "pane-one",
+      sequence: 1,
+      owner: "profile-one",
+      conversationID: "rcv_1",
+      expectedRevision: 1,
     },
   })
   expect(drafts.at(-1)).toMatchObject({
@@ -83,7 +101,9 @@ test("routine inbox page send read and draft keep request identity and retry the
   expect(messages.at(-1)).toMatchObject({
     type: "routineInboxFiles",
     files: [{ id, name: "ledger.pdf", mime: "application/pdf", size: 3 }],
-    revision: 1,
+    owner: "profile-one",
+    conversationID: "rcv_1",
+    revision: 2,
   })
   expect(JSON.stringify(messages.at(-1))).not.toContain("AQID")
   await handleRoutineMessage({
@@ -97,16 +117,23 @@ test("routine inbox page send read and draft keep request identity and retry the
     requestID: "page1",
     agentID: "routine",
     messages: [note],
+    draftState: { owner: "profile-one", conversationID: "rcv_1", revision: 1 },
   })
   expect(new URL(calls.at(-1)!.url).searchParams.get("search")).toBe("expenses")
   await handleRoutineMessage({
     client,
     directory: "workspace",
     post,
+    current: () => true,
+    sendProof: { owner: "profile-one", conversationID: "rcv_1", revision: 2 },
     message: {
       type: "routineInboxSend",
       requestID: "send1",
       agentID: "routine",
+      paneID: "pane-one",
+      owner: "profile-one",
+      conversationID: "rcv_1",
+      cutoff: 1,
       source: "user:retry",
       body: "Why?",
       attachmentIDs: [id],
@@ -116,6 +143,7 @@ test("routine inbox page send read and draft keep request identity and retry the
     type: "routineInboxSent",
     requestID: "send1",
     message: { source: "user:retry", body: "Why?" },
+    draftState: { owner: "profile-one", conversationID: "rcv_1", revision: 3, draft: null },
   })
   await handleRoutineMessage({
     client,
@@ -134,14 +162,20 @@ test("routine inbox page send read and draft keep request identity and retry the
       agentID: "routine",
       draft: "Why?",
       attachmentIDs: [id],
-      revision: 2,
+      paneID: "pane-one",
+      sequence: 2,
+      owner: "profile-one",
+      conversationID: "rcv_1",
+      expectedRevision: 2,
     },
   })
   expect(messages.at(-1)).toMatchObject({
     type: "routineInboxDraft",
     requestID: "draft1",
     draft: "Why?",
-    revision: 2,
+    owner: "profile-one",
+    conversationID: "rcv_1",
+    revision: 3,
   })
   await handleRoutineMessage({
     client: null,
@@ -154,8 +188,56 @@ test("routine inbox page send read and draft keep request identity and retry the
     requestID: "offline",
     error: "Raya is not connected.",
   })
-  expect(payload).toEqual({ source: "user:retry", body: "Why?", attachmentIDs: [id] })
-  expect(drafts.at(-1)).toMatchObject({ draft: "Why?", attachmentIDs: [id], revision: 2 })
+  expect(payload).toEqual({
+    owner: "profile-one",
+    conversationID: "rcv_1",
+    expectedRevision: 2,
+    source: "user:retry",
+    body: "Why?",
+    attachmentIDs: [id],
+  })
+  expect(drafts.at(-1)).toMatchObject({
+    draft: "Why?",
+    attachmentIDs: [id],
+    owner: "profile-one",
+    conversationID: "rcv_1",
+    expectedRevision: 2,
+  })
+})
+
+test("a committed send without a readable draft proof is reported as uncertain", async () => {
+  const messages: unknown[] = []
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      if (request.method === "POST")
+        return Response.json({ id: "sent-one", agentID: "routine", source: "send-one", body: "Hello", time: 1 })
+      return new Response("unavailable", { status: 503 })
+    },
+  })
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    current: () => true,
+    sendProof: { owner: "profile-one", conversationID: "rcv_1", revision: 2 },
+    post: (message) => messages.push(message),
+    message: {
+      type: "routineInboxSend",
+      requestID: "send-one",
+      paneID: "pane-one",
+      agentID: "routine",
+      owner: "profile-one",
+      conversationID: "rcv_1",
+      cutoff: 1,
+      source: "send-one",
+      body: "Hello",
+      attachmentIDs: [],
+    },
+  })
+  expect(messages.at(-1)).toMatchObject({ type: "routineInboxSent", requestID: "send-one", agentID: "routine" })
+  expect(messages.at(-1)).toHaveProperty("error")
+  expect(messages.at(-1)).not.toHaveProperty("message")
 })
 
 test("routine image preview returns verified bytes without opening an external editor", async () => {
@@ -308,7 +390,9 @@ test("routine attachment removal sends the ordered retained IDs and can clear th
       const kept = Array.isArray(body.attachmentIDs) ? body.attachmentIDs : []
       return Response.json({
         draft: body.draft,
-        revision: body.revision,
+        owner: body.owner,
+        conversationID: body.conversationID,
+        revision: Number(body.expectedRevision) + 1,
         ...(kept.length
           ? { attachments: kept.map((id) => ({ id, name: `${id}.txt`, mime: "text/plain", size: 1 })) }
           : {}),
@@ -326,14 +410,20 @@ test("routine attachment removal sends the ordered retained IDs and can clear th
       agentID: "routine",
       draft: "Review",
       attachmentIDs: [ids[0], ids[2]],
-      revision: 4,
+      paneID: "pane-one",
+      sequence: 1,
+      owner: "profile-one",
+      conversationID: "rcv_1",
+      expectedRevision: 4,
     },
   })
-  expect(calls.at(-1)).toMatchObject({ attachmentIDs: [ids[0], ids[2]], revision: 4 })
+  expect(calls.at(-1)).toMatchObject({ attachmentIDs: [ids[0], ids[2]], expectedRevision: 4 })
   expect(messages.at(-1)).toMatchObject({
     type: "routineInboxFiles",
     files: [{ id: ids[0] }, { id: ids[2] }],
-    revision: 4,
+    owner: "profile-one",
+    conversationID: "rcv_1",
+    revision: 5,
   })
   await handleRoutineMessage({
     client,
@@ -344,12 +434,16 @@ test("routine attachment removal sends the ordered retained IDs and can clear th
       requestID: "remove2",
       agentID: "routine",
       draft: null,
-      attachmentIDs: null,
-      revision: 5,
+      attachmentIDs: [],
+      paneID: "pane-one",
+      sequence: 2,
+      owner: "profile-one",
+      conversationID: "rcv_1",
+      expectedRevision: 5,
     },
   })
   expect(calls.at(-1)).toMatchObject({ attachmentIDs: [] })
-  expect(messages.at(-1)).toMatchObject({ type: "routineInboxFiles", files: [], revision: 5 })
+  expect(messages.at(-1)).toMatchObject({ type: "routineInboxFiles", files: [], revision: 6 })
 })
 
 test("routine delegate posts the same source on retry and refreshes inbox summaries", async () => {

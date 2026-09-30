@@ -3,7 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ConnectionState, ExtensionMessage } from "../../types/messages"
 import { routineFailure } from "../../utils/routine-recovery"
-import { matches } from "../../utils/routine-draft-recovery"
+import { matches, sameContent } from "../../utils/routine-draft-recovery"
 import { isEnterKeyCommitNotIme } from "../../utils/ime-enter"
 import { ChatInfo } from "./ChatInfo"
 import { ConversationSearch } from "./ConversationSearch"
@@ -42,6 +42,8 @@ type Draft = {
   body: string
   files: DraftFile[]
   at: number
+  owner?: string
+  conversationID?: string
   pending?: boolean
   revision?: number
   base?: number
@@ -82,6 +84,8 @@ function draftState(value: unknown): Draft | undefined {
     body: row.body,
     files: files.slice(0, 8),
     at: row.at,
+    ...(typeof row.owner === "string" && row.owner ? { owner: row.owner } : {}),
+    ...(typeof row.conversationID === "string" && row.conversationID ? { conversationID: row.conversationID } : {}),
     ...(typeof row.pending === "boolean" ? { pending: row.pending } : {}),
     ...(Number.isSafeInteger(row.revision) && Number(row.revision) >= 0 ? { revision: Number(row.revision) } : {}),
     ...(Number.isSafeInteger(row.base) && Number(row.base) >= 0 ? { base: Number(row.base) } : {}),
@@ -118,6 +122,7 @@ function removeLabel(id: string, active: string, failed: string) {
 
 export type Box = {
   agentID: string
+  owner?: string
   conversationID: string
   name: string
   role: string
@@ -699,7 +704,9 @@ export const Inbox: Component<{
   const [halt, setHalt] = createSignal<"idle" | "sending" | "failed">("idle")
   const [look, setLook] = createSignal("")
   const [loading, setLoading] = createSignal(true)
+  const [mountReady, setMountReady] = createSignal(false)
   const [pageError, setPageError] = createSignal("")
+  const [savedProof, setSavedProof] = createSignal<Box>()
   const [searching, setSearching] = createSignal(false)
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
   const [faults, setFaults] = createSignal<Record<string, string>>({})
@@ -708,15 +715,35 @@ export const Inbox: Component<{
   const [searchRevision, setSearchRevision] = createSignal(0)
   const [blocked, setBlocked] = createSignal(false)
   const removeDisabled = (id: string) =>
-    !ready() || !connected() || blocked() || phase() === "sending" || (!!removing() && removing() !== id)
+    !ready() ||
+    !connected() ||
+    !mountReady() ||
+    blocked() ||
+    phase() === "sending" ||
+    (!!removing() && removing() !== id)
   const attachDisabled = () =>
-    !ready() || !connected() || blocked() || phase() === "sending" || picking() || !!removing() || files().length >= 8
+    !ready() ||
+    !connected() ||
+    !mountReady() ||
+    blocked() ||
+    phase() === "sending" ||
+    picking() ||
+    !!removing() ||
+    files().length >= 8
   const sendDisabled = () =>
-    !ready() || !connected() || blocked() || phase() === "sending" || (!note().trim() && files().length === 0)
-  const recoverable = () => blocked() && connected() && props.box
+    !ready() ||
+    !connected() ||
+    !mountReady() ||
+    blocked() ||
+    phase() === "sending" ||
+    (!note().trim() && files().length === 0)
+  const recoverable = () => blocked() && connected() && savedProof()
   let source = `user:${crypto.randomUUID()}`
   let pageID = ""
   let sendID = ""
+  let sentBody = ""
+  let sentFiles: DraftFile[] = []
+  let sentCutoff = 0
   let pickID = ""
   let haltID = ""
   let lookID = ""
@@ -737,17 +764,69 @@ export const Inbox: Component<{
   let draftRevision = 0
   let dirty = false
   let base = 0
-  const saves = new Map<string, { agentID: string; revision: number; body: string; files: DraftFile[] }>()
+  let paneID = crypto.randomUUID()
+  let mountID = ""
+  let mounted = false
+  let closed = false
+  let owner = ""
+  let conversationID = ""
+  let active = ""
+  const saves = new Map<
+    string,
+    { agentID: string; paneID: string; sequence: number; expectedRevision: number; body: string; files: DraftFile[] }
+  >()
+  const flushes = new Map<
+    string,
+    { agentID: string; paneID: string; owner: string; conversationID: string; body: string; files: DraftFile[] }
+  >()
 
   const version = (id: string, agentID = props.agentID, body = note(), rows = files()) => {
     draftRevision++
-    saves.set(id, { agentID, revision: draftRevision, body, files: rows.slice() })
-    while (saves.size > 64) {
-      const first = saves.keys().next().value
-      if (first) saves.delete(first)
-      else break
-    }
+    saves.set(id, { agentID, paneID, sequence: draftRevision, expectedRevision: base, body, files: rows.slice() })
     return draftRevision
+  }
+
+  const mount = (proof?: { owner?: string; conversationID?: string; revision?: number; draftRevision?: number }) => {
+    const revision = proof?.revision ?? proof?.draftRevision
+    if (!proof?.owner || !proof.conversationID || !Number.isSafeInteger(revision) || !connected()) return
+    if (owner && (owner !== proof.owner || conversationID !== proof.conversationID)) {
+      setBlocked(true)
+      setError("This worker conversation changed. Your draft is still here; review it before saving again.")
+      return
+    }
+    if (owner === proof.owner && conversationID === proof.conversationID && (mounted || mountID)) return
+    owner = proof.owner
+    conversationID = proof.conversationID
+    base = revision!
+    mounted = false
+    setMountReady(false)
+    mountID = crypto.randomUUID()
+    vscode.postMessage({
+      type: "routineInboxMount",
+      requestID: mountID,
+      paneID,
+      agentID: props.agentID,
+      owner,
+      conversationID,
+      revision: base,
+    })
+  }
+
+  const flush = (agentID: string, body: string, rows: DraftFile[]) => {
+    if (!owner || !conversationID || !mounted) return
+    const requestID = crypto.randomUUID()
+    flushes.set(requestID, { agentID, paneID, owner, conversationID, body, files: rows.slice() })
+    vscode.postMessage({
+      type: "routineInboxFlush",
+      requestID,
+      paneID,
+      agentID,
+      owner,
+      conversationID,
+      cutoff: draftRevision,
+      draft: body || null,
+      attachmentIDs: rows.map((file) => file.id),
+    })
   }
 
   const viewState = () => {
@@ -768,11 +847,14 @@ export const Inbox: Component<{
     const inbox = state.routineInbox ?? {}
     const drafts = { ...(inbox.drafts ?? {}) }
     const key = draftKey(agentID)
+    const prior = draftState(drafts[key])
     if (body || rows.length || pending)
       drafts[key] = {
         body,
         files: rows.slice(0, 8),
         at: Date.now(),
+        owner: props.box?.agentID === agentID ? props.box.owner : prior?.owner,
+        conversationID: props.box?.agentID === agentID ? props.box.conversationID : prior?.conversationID,
         pending,
         revision: draftRevision,
         base,
@@ -793,6 +875,7 @@ export const Inbox: Component<{
     older = !!after
     setLoading(true)
     setPageError("")
+    setSavedProof()
     pageID = crypto.randomUUID()
     vscode.postMessage({
       type: "routineInboxPage",
@@ -870,14 +953,20 @@ export const Inbox: Component<{
   }
 
   const hydrate = (draft?: Draft) => {
-    draftRevision = Math.max(draftVersion(props.box), draft?.revision ?? 0)
+    draftRevision = draft?.revision ?? 0
     base = draft?.base ?? draftVersion(props.box)
     setBlocked(draft?.blocked ?? false)
-    dirty = !!draft && (draft.pending !== false || (draft.revision ?? 0) > draftVersion(props.box))
+    dirty = !!draft && draft.pending !== false
     if (props.box) {
       server = props.agentID
       if (dirty && draft && (!connected() || !matches(draft, props.box))) {
-        setBlocked(blocked() || draft.base === undefined || draftVersion(props.box) > base)
+        setBlocked(
+          blocked() ||
+            draft.base === undefined ||
+            draft.owner !== props.box.owner ||
+            draft.conversationID !== props.box.conversationID ||
+            draftVersion(props.box) > base,
+        )
         rememberDraft()
         setError("Your draft is still here. Review it before replacing it with the saved conversation draft.")
       } else {
@@ -888,9 +977,20 @@ export const Inbox: Component<{
   }
 
   const switcher = (id: string) => {
-    if (seen && timer) persist(note(), seen, files())
+    if (seen) {
+      rememberDraft(note(), files(), seen, dirty || [...saves.values()].some((item) => item.agentID === seen))
+      flush(seen, note(), files())
+    }
     if (timer) clearTimeout(timer)
     timer = undefined
+    paneID = crypto.randomUUID()
+    mountID = ""
+    mounted = false
+    setMountReady(false)
+    owner = ""
+    conversationID = ""
+    active = ""
+    sendID = ""
     seen = id
     wait = false
     source = `user:${crypto.randomUUID()}`
@@ -921,6 +1021,7 @@ export const Inbox: Component<{
     depth = 0
     server = ""
     hydrate(draft)
+    mount(props.box?.agentID === id ? props.box : undefined)
     load()
     queueMicrotask(() => frame?.focus())
   }
@@ -932,8 +1033,13 @@ export const Inbox: Component<{
       switcher(id)
       return
     }
-    draftRevision = Math.max(draftRevision, draftVersion(props.box))
-    if (props.box && dirty && draftVersion(props.box) > base && !matches({ body: note(), files: files() }, props.box)) {
+    if (props.box?.agentID === id) mount(props.box)
+    if (
+      props.box &&
+      dirty &&
+      draftVersion(props.box) > base &&
+      !sameContent({ body: note(), files: files() }, props.box)
+    ) {
       setBlocked(true)
       rememberDraft()
       setError(
@@ -957,6 +1063,13 @@ export const Inbox: Component<{
     if (state === connection) return
     connection = state
     if (state !== "connected") {
+      setSavedProof()
+      if (mounted) vscode.postMessage({ type: "routineInboxUnmount", paneID, agentID: props.agentID })
+      paneID = crypto.randomUUID()
+      mounted = false
+      setMountReady(false)
+      mountID = ""
+      active = ""
       pageID = crypto.randomUUID()
       wait = false
       setLoading(false)
@@ -990,6 +1103,7 @@ export const Inbox: Component<{
     }
     wait = false
     setPageError("")
+    mount(props.box)
     load(undefined, term || undefined)
     if (timer) {
       clearTimeout(timer)
@@ -1007,6 +1121,21 @@ export const Inbox: Component<{
       return
     }
     const rows = Array.isArray(msg.messages) ? (msg.messages as Note[]) : []
+    if (msg.draftState) {
+      mount(msg.draftState)
+      setSavedProof({
+        agentID: props.agentID,
+        owner: msg.draftState.owner,
+        conversationID: msg.draftState.conversationID,
+        name: props.name,
+        role: props.role,
+        unread: 0,
+        state: "waiting",
+        draft: msg.draftState.draft ?? "",
+        draftAttachments: msg.draftState.attachments ?? [],
+        draftRevision: msg.draftState.revision,
+      })
+    }
     setThread((prior) => (older ? [...rows, ...prior] : rows))
     setNext(msg.next)
     setPageError("")
@@ -1022,6 +1151,23 @@ export const Inbox: Component<{
     queueMicrotask(place)
   }
 
+  const matchesSendProof = (msg: Extract<ExtensionMessage, { type: "routineInboxSent" }>) => {
+    const proof = msg.draftState
+    return (
+      !!proof &&
+      proof.owner === owner &&
+      proof.conversationID === conversationID &&
+      Number.isSafeInteger(proof.revision)
+    )
+  }
+
+  const matchesSentMessage = (saved: Note | undefined): saved is Note =>
+    !!saved?.id && saved.source === source && saved.body === sentBody
+
+  const newerDraft = () =>
+    note().trim() !== sentBody ||
+    JSON.stringify(files().map((file) => file.id)) !== JSON.stringify(sentFiles.map((file) => file.id))
+
   const sent = (msg: ExtensionMessage) => {
     if (msg.type !== "routineInboxSent" || msg.requestID !== sendID || msg.agentID !== props.agentID) return
     if (msg.error) {
@@ -1029,25 +1175,42 @@ export const Inbox: Component<{
       setError(routineFailure(msg.error, msg.recovery, "Your draft and attachments are still here."))
       return
     }
+    if (!matchesSendProof(msg)) {
+      setPhase("failed")
+      setBlocked(true)
+      setError("Raya could not verify the saved conversation after sending. Your draft is still here.")
+      return
+    }
+    const proof = msg.draftState!
     const saved = msg.message as Note | undefined
-    if (saved?.id && (!term || saved.body.toLocaleLowerCase().includes(term.toLocaleLowerCase())))
+    if (!matchesSentMessage(saved)) {
+      setPhase("failed")
+      setError("Raya could not verify this sent message. Your draft is still here.")
+      return
+    }
+    if (!term || saved.body.toLocaleLowerCase().includes(term.toLocaleLowerCase()))
       setThread((prior) => (prior.some((item) => item.id === saved.id) ? prior : [...prior, saved]))
+    const changed = newerDraft()
+    for (const [id, save] of saves) {
+      if (save.paneID !== paneID || save.sequence > sentCutoff) continue
+      saves.delete(id)
+      if (active === id) active = ""
+    }
+    base = proof.revision
     source = `user:${crypto.randomUUID()}`
-    setNote("")
-    setFiles([])
-    rememberDraft("", [])
-    dirty = false
+    if (!changed) {
+      setNote(proof.draft ?? "")
+      setFiles(proof.attachments ?? [])
+      dirty = false
+      rememberDraft(proof.draft ?? "", proof.attachments ?? [], props.agentID, false)
+    }
     setPhase("idle")
     setError("")
-    const requestID = crypto.randomUUID()
-    vscode.postMessage({
-      type: "routineInboxDraft",
-      requestID,
-      agentID: props.agentID,
-      draft: null,
-      attachmentIDs: null,
-      revision: version(requestID),
-    })
+    if (changed) {
+      dirty = true
+      rememberDraft(note(), files(), props.agentID, true)
+      persist(note())
+    }
     stick = true
     queueMicrotask(pin)
   }
@@ -1059,19 +1222,22 @@ export const Inbox: Component<{
     const removal = removing()
     setPicking(false)
     setRemoving("")
-    if (sent === undefined || sent.agentID !== props.agentID || sent.revision < draftRevision) return
-    if (msg.revision !== undefined && msg.revision !== sent.revision) {
-      if (removal) setRemoveFailed(removal)
-      else setPickFailed(true)
-      setError("Raya returned a different draft version. Your text is still here; refresh before trying again.")
-      return
-    }
+    if (sent === undefined || sent.agentID !== props.agentID || sent.paneID !== paneID) return
+    active = ""
     if (msg.error) {
       if (removal) setRemoveFailed(removal)
       else setPickFailed(true)
       setError(routineFailure(msg.error, msg.recovery, "Your draft and attachments are still here."))
       return
     }
+    if (msg.revision !== sent.expectedRevision + 1 || msg.owner !== owner || msg.conversationID !== conversationID) {
+      setBlocked(true)
+      if (removal) setRemoveFailed(removal)
+      else setPickFailed(true)
+      setError("Raya returned a different draft version. Your text is still here; refresh before trying again.")
+      return
+    }
+    base = msg.revision
     const rows = attachments(msg.files)
     setFiles(rows)
     rememberDraft(typeof msg.draft === "string" ? msg.draft : note(), rows)
@@ -1087,7 +1253,11 @@ export const Inbox: Component<{
   ) => {
     const confirmed =
       !msg.error &&
-      msg.revision === sent.revision &&
+      msg.revision === sent.expectedRevision + 1 &&
+      msg.owner === owner &&
+      msg.conversationID === conversationID &&
+      msg.paneID === sent.paneID &&
+      msg.sequence === sent.sequence &&
       (msg.draft ?? "") === sent.body &&
       JSON.stringify(attachments(msg.files)) === JSON.stringify(sent.files)
     if (msg.error || confirmed) saves.delete(msg.requestID)
@@ -1095,14 +1265,14 @@ export const Inbox: Component<{
     const cached = draftState(state.routineInbox?.drafts?.[draftKey(sent.agentID)])
     if (
       confirmed &&
-      cached?.revision === sent.revision &&
+      cached?.revision === sent.sequence &&
       cached.body === sent.body &&
       JSON.stringify(cached.files) === JSON.stringify(sent.files)
     ) {
       const inbox = state.routineInbox ?? {}
       const drafts = {
         ...(inbox.drafts ?? {}),
-        [draftKey(sent.agentID)]: { ...cached, pending: false, base: sent.revision, blocked: false },
+        [draftKey(sent.agentID)]: { ...cached, pending: false, base: msg.revision, blocked: false },
       }
       vscode.setState<InboxState>({ ...state, routineInbox: { ...inbox, drafts } })
     }
@@ -1114,27 +1284,45 @@ export const Inbox: Component<{
     const sent = saves.get(msg.requestID)
     if (sent === undefined || sent.agentID !== msg.agentID) return
     const confirmed = settle(msg, sent)
-    if (msg.agentID !== props.agentID || sent.revision < draftRevision) return
-    if (confirmed) base = sent.revision
-    if (msg.revision !== undefined && msg.revision !== sent.revision) {
+    if (msg.agentID !== props.agentID || sent.paneID !== paneID) return
+    active = ""
+    if (sent.sequence < draftRevision && !msg.error && confirmed) {
+      base = msg.revision!
+      persist(note())
+      return
+    }
+    if (confirmed) {
+      base = msg.revision!
+      if (sent.sequence === draftRevision) dirty = false
+    }
+    if (msg.revision !== undefined && msg.revision !== sent.expectedRevision + 1) {
       dirty = true
+      setBlocked(true)
       setError("Raya returned a different draft version. Your text is still here; refresh before saving again.")
       return
     }
     if (!msg.error && !confirmed) {
       dirty = true
+      setBlocked(true)
       setError(
         "Raya could not confirm this draft. Your text and attachments are still here; refresh before saving again.",
       )
       return
     }
-    if (!msg.error) return
+    if (!msg.error) {
+      if (dirty) persist(note())
+      return
+    }
     dirty = true
-    if (msg.recovery?.kind === "conflict") setBlocked(true)
+    setBlocked(true)
     setError(
       msg.recovery?.kind === "conflict"
         ? "This draft changed in another Raya window. Your text and attachments are still here; refresh before saving again."
-        : routineFailure(msg.error, msg.recovery, "Your text and attachments are still here."),
+        : routineFailure(
+            msg.error,
+            msg.recovery,
+            "Your text and attachments are still here. Reload this worker before saving again.",
+          ),
     )
   }
 
@@ -1178,7 +1366,50 @@ export const Inbox: Component<{
     setLook("")
   }
 
+  const mountedResult = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineInboxMounted" || msg.requestID !== mountID || msg.paneID !== paneID) return
+    mountID = ""
+    if (msg.error || msg.owner !== owner || msg.conversationID !== conversationID || msg.revision !== base) {
+      setError("Raya could not confirm this worker draft. Your text and attachments are still here.")
+      return
+    }
+    mounted = true
+    setMountReady(true)
+    if (dirty) persist(note())
+  }
+
+  const flushedResult = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineInboxFlushed") return
+    const sent = flushes.get(msg.requestID)
+    if (!sent || msg.paneID !== sent.paneID || msg.agentID !== sent.agentID) return
+    flushes.delete(msg.requestID)
+    for (const [id, save] of saves) if (save.paneID === sent.paneID) saves.delete(id)
+    const confirmed =
+      msg.committed &&
+      msg.owner === sent.owner &&
+      msg.conversationID === sent.conversationID &&
+      Number.isSafeInteger(msg.revision)
+    if (confirmed) {
+      const state = viewState()
+      const inbox = state.routineInbox ?? {}
+      const drafts = { ...(inbox.drafts ?? {}) }
+      const cached = draftState(drafts[draftKey(sent.agentID)])
+      if (
+        cached &&
+        sameContent(cached, { draft: sent.body, draftAttachments: sent.files }) &&
+        cached.owner === sent.owner &&
+        cached.conversationID === sent.conversationID
+      )
+        drafts[draftKey(sent.agentID)] = { ...cached, pending: false, base: msg.revision, blocked: false }
+      vscode.setState<InboxState>({ ...state, routineInbox: { ...inbox, drafts } })
+    }
+    if (confirmed) vscode.postMessage({ type: "routineInboxUnmount", paneID: sent.paneID, agentID: sent.agentID })
+    if (closed && !flushes.size) unsub()
+  }
+
   const receive = (msg: ExtensionMessage) => {
+    mountedResult(msg)
+    flushedResult(msg)
     page(msg)
     sent(msg)
     picked(msg)
@@ -1194,27 +1425,45 @@ export const Inbox: Component<{
   }
 
   const persist = (value: string, agentID = props.agentID, rows = files()) => {
-    if (!connected() || blocked() || picking() || !!removing() || phase() === "sending") return
+    if (
+      !connected() ||
+      !mounted ||
+      !owner ||
+      !conversationID ||
+      active ||
+      blocked() ||
+      picking() ||
+      !!removing() ||
+      phase() === "sending"
+    )
+      return
     const requestID = crypto.randomUUID()
-    dirty = false
+    const sequence = version(requestID, agentID, value, rows)
+    active = requestID
     vscode.postMessage({
       type: "routineInboxDraft",
       requestID,
       agentID,
+      paneID,
+      sequence,
+      owner,
+      conversationID,
+      expectedRevision: base,
       draft: value.length ? value : null,
-      attachmentIDs: rows.length ? rows.map((file) => file.id) : null,
-      revision: version(requestID, agentID, value, rows),
+      attachmentIDs: rows.map((file) => file.id),
     })
     rememberDraft(value, rows, agentID, true)
   }
 
   const unsub = vscode.onMessage(receive)
   onCleanup(() => {
-    unsub()
+    closed = true
     remember()
-    if (!timer) return
-    clearTimeout(timer)
-    persist(note())
+    if (timer) clearTimeout(timer)
+    rememberDraft(note(), files(), props.agentID, dirty || !!active)
+    flush(props.agentID, note(), files())
+    if (!flushes.size) unsub()
+    else setTimeout(unsub, 6000)
   })
 
   createEffect(() => {
@@ -1231,6 +1480,7 @@ export const Inbox: Component<{
 
   const change = (value: string) => {
     setNote(value)
+    draftRevision++
     dirty = true
     rememberDraft(value, files())
     if (timer) clearTimeout(timer)
@@ -1268,7 +1518,10 @@ export const Inbox: Component<{
 
   const submit = () => {
     const body = note().trim()
-    if (!connected() || blocked() || (!body && files().length === 0) || phase() === "sending") return
+    if (!connected() || !mounted || blocked() || (!body && files().length === 0) || phase() === "sending") return
+    sentBody = body
+    sentFiles = files().slice()
+    sentCutoff = draftRevision
     setPhase("sending")
     setError("")
     if (timer) clearTimeout(timer)
@@ -1278,48 +1531,62 @@ export const Inbox: Component<{
       type: "routineInboxSend",
       requestID: sendID,
       agentID: props.agentID,
+      paneID,
+      owner,
+      conversationID,
+      cutoff: sentCutoff,
       source,
       body,
-      ...(files().length ? { attachmentIDs: files().map((file) => file.id) } : {}),
+      attachmentIDs: sentFiles.map((file) => file.id),
     })
   }
 
   const attach = () => {
-    if (!connected() || blocked() || picking() || files().length >= 8) return
+    if (!connected() || !mounted || active || blocked() || picking() || files().length >= 8) return
     setPicking(true)
     setPickFailed(false)
     setError("")
     pickID = crypto.randomUUID()
     if (timer) clearTimeout(timer)
     timer = undefined
-    dirty = false
+    const sequence = version(pickID)
+    active = pickID
     vscode.postMessage({
       type: "routineInboxFilesPick",
       requestID: pickID,
       agentID: props.agentID,
+      paneID,
+      sequence,
+      owner,
+      conversationID,
+      expectedRevision: base,
       draft: note().trim() ? note() : null,
       ...(files().length ? { attachmentIDs: files().map((file) => file.id) } : {}),
-      revision: version(pickID),
     })
   }
 
   const remove = (id: string) => {
     const next = files().filter((file) => file.id !== id)
-    if (!connected() || blocked() || removing() || phase() === "sending") return
+    if (!connected() || !mounted || active || blocked() || removing() || phase() === "sending") return
     setRemoving(id)
     setRemoveFailed("")
     setError("")
     pickID = crypto.randomUUID()
     if (timer) clearTimeout(timer)
     timer = undefined
-    dirty = false
+    const sequence = version(pickID, props.agentID, note(), next)
+    active = pickID
     vscode.postMessage({
       type: "routineInboxFilesForget",
       requestID: pickID,
       agentID: props.agentID,
+      paneID,
+      sequence,
+      owner,
+      conversationID,
+      expectedRevision: base,
       draft: note().trim() ? note() : null,
       attachmentIDs: next.length ? next.map((file) => file.id) : null,
-      revision: version(pickID),
     })
   }
 
@@ -1597,7 +1864,7 @@ export const Inbox: Component<{
             size="small"
             variant="ghost"
             onClick={() => {
-              const box = props.box
+              const box = savedProof()
               if (!box || !connected() || seen !== props.agentID) return
               if (timer) clearTimeout(timer)
               timer = undefined

@@ -26758,6 +26758,7 @@ export type KilocodeRoutineInboxResponses = {
    */
   200: Array<{
     agentID: string
+    owner: string
     conversationID: string
     name: string
     role: string
@@ -26850,6 +26851,18 @@ export type KilocodeRoutineInboxPageResponses = {
       }>
       time: number
     }>
+    draftState: {
+      owner: string
+      conversationID: string
+      draft: string
+      attachments?: Array<{
+        id: string
+        name: string
+        mime: string
+        size: number
+      }>
+      revision: number
+    }
     next?: string
   }
 }
@@ -26859,6 +26872,9 @@ export type KilocodeRoutineInboxPageResponse =
 
 export type KilocodeRoutineInboxSendData = {
   body?: {
+    owner: string
+    conversationID: string
+    expectedRevision: number
     source: string
     body: string
     attachments?: Array<{
@@ -27083,6 +27099,9 @@ export type KilocodeRoutineInboxReadResponse =
 
 export type KilocodeRoutineInboxDraftData = {
   body?: {
+    owner: string
+    conversationID: string
+    expectedRevision: number
     draft: string
     attachments?: Array<{
       id: string
@@ -27092,7 +27111,6 @@ export type KilocodeRoutineInboxDraftData = {
       data: string
     }>
     attachmentIDs?: Array<string>
-    revision?: number
   }
   path: {
     agentID: string
@@ -27126,6 +27144,8 @@ export type KilocodeRoutineInboxDraftResponses = {
    * Saved draft
    */
   200: {
+    owner: string
+    conversationID: string
     draft: string
     attachments?: Array<{
       id: string

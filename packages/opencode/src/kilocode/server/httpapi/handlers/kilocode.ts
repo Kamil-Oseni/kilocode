@@ -40,7 +40,7 @@ import { hold } from "@/kilocode/task/hold"
 import { propose, validate } from "@/kilocode/task/assignment-proposal"
 import { RayaTaskAuthority } from "@/kilocode/task/authority"
 import { MCP } from "@/mcp"
-import { RayaTaskInbox, type Draft as InboxDraft, type Upload as InboxUpload } from "@/kilocode/task/inbox"
+import { RayaTaskInbox, type Draft as InboxDraft, type Send as InboxSend } from "@/kilocode/task/inbox"
 import { RayaTaskInfo, type Identity as TaskIdentity } from "@/kilocode/task/info"
 import { RayaTaskDelegation, type Request as DelegationRequest } from "@/kilocode/task/delegation"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
@@ -941,12 +941,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     const agentInboxSend = Effect.fn("KilocodeHttpApi.agentInboxSend")(function* (ctx: {
       params: { agentID: string }
-      payload: {
-        source: string
-        body: string
-        attachments?: readonly InboxUpload[]
-        attachmentIDs?: readonly string[]
-      }
+      payload: InboxSend
     }) {
       yield* owned(ctx.params.agentID)
       yield* hold(storage)
@@ -964,7 +959,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           body: ctx.payload.body,
           attachments: ctx.payload.attachments,
           attachmentIDs: ctx.payload.attachmentIDs,
-        })
+        }, ctx.payload)
         .pipe(
           Effect.catchTag("RayaTaskInbox.Invalid", (err) =>
             Effect.fail(new InvalidRequestError({ message: err.message })),

@@ -1,7 +1,9 @@
 import { and, asc, count, desc, eq, gt, isNotNull, isNull, ne, sql } from "drizzle-orm"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
+import path from "node:path"
 import { Effect, Exit, Schema } from "effect"
-import type { Database } from "@opencode-ai/core/database/database"
+import { Database } from "@opencode-ai/core/database/database"
+import { Global } from "@opencode-ai/core/global"
 import {
   RayaRoutineConversationTable as Conversation,
   RayaRoutineAttachmentTable as Attachment,
@@ -18,6 +20,8 @@ export const Search = Schema.String.check(
   Schema.makeFilter((value) => (value === value.trim() ? undefined : "Inbox search must not have outer whitespace.")),
 )
 const Kind = Schema.Literals(["user", "worker", "report", "decision", "delegation", "system"])
+const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER))
+const Owner = Schema.String.check(Schema.isPattern(/^rpo_[a-f0-9]{48}$/))
 export const State = Schema.Literals(["scheduled", "running", "waiting", "needs_input", "paused", "failed"])
 export const Clip = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
@@ -126,6 +130,9 @@ export const Publish = Schema.Struct({
   ),
 )
 export const Send = Schema.Struct({
+  owner: Owner,
+  conversationID: token,
+  expectedRevision: Version,
   source: token,
   body: text,
   attachments: Schema.optional(Uploads),
@@ -145,12 +152,13 @@ export const Send = Schema.Struct({
 export const Read = Schema.Struct({
   at: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
 })
-const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER))
 export const Draft = Schema.Struct({
+  owner: Owner,
+  conversationID: token,
+  expectedRevision: Version,
   draft: Schema.Union([Schema.String.check(Schema.isMaxLength(8000)), Schema.Null]),
   attachments: Schema.optional(DraftUploads),
   attachmentIDs: Schema.optional(DraftAttachmentIDs),
-  revision: Schema.optional(Version),
 }).check(
   Schema.makeFilter((value) => {
     if (value.attachments === undefined && value.attachmentIDs === undefined) return
@@ -160,16 +168,20 @@ export const Draft = Schema.Struct({
   }),
 )
 export const DraftState = Schema.Struct({
+  owner: Owner,
+  conversationID: token,
   draft: Draft.fields.draft,
   attachments: Schema.optional(Attachments),
   revision: Version,
 })
 export const Page = Schema.Struct({
   messages: Schema.Array(Record),
+  draftState: DraftState,
   next: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
 })
 export const Item = Schema.Struct({
   agentID: Record.fields.agentID,
+  owner: Owner,
   conversationID: token,
   name: Schema.String,
   role: Schema.String,
@@ -183,6 +195,7 @@ export const Item = Schema.Struct({
 })
 export type Record = typeof Record.Type
 export type Publish = typeof Publish.Type
+export type Send = typeof Send.Type
 export type Upload = typeof Upload.Type
 export type AttachmentMeta = typeof AttachmentMeta.Type
 export type AttachmentContent = typeof AttachmentContent.Type
@@ -221,8 +234,8 @@ function marker(cursor?: string) {
   return { ok: true as const, time, id }
 }
 
-function key(agentID: string) {
-  return `rcv_${digest(agentID).slice(0, 48)}`
+function key() {
+  return `rcv_${randomUUID().replaceAll("-", "")}`
 }
 
 function receipt(agentID: string, source: string) {
@@ -349,11 +362,24 @@ export function posted(run: RayaTask.Run): Publish | undefined {
 }
 
 export namespace RayaTaskInbox {
-  export function make(database: Database.Interface) {
+  export function make(database: Database.Interface, profile?: { database: string; storage: string }) {
     const db = database.db
+    const root = profile ?? { database: Database.path(), storage: path.join(Global.Path.data, "storage") }
+    const canonical = (value: string) => (process.platform === "win32" ? path.resolve(value).toLowerCase() : path.resolve(value))
+    const owner = `rpo_${digest(JSON.stringify(["raya-routine-profile-v1", canonical(root.database), canonical(root.storage)])).slice(0, 48)}`
+    const state = (row: typeof Conversation.$inferSelect) => {
+      const attachments = listedAttachments(row.draft_attachments)
+      return {
+        owner,
+        conversationID: row.id,
+        draft: row.draft,
+        ...(attachments ? { attachments } : {}),
+        revision: row.draft_revision,
+      }
+    }
     const ensure = Effect.fn("RayaTaskInbox.ensure")(function* (agentID: string) {
       const now = Date.now()
-      const id = key(agentID)
+      const id = key()
       yield* db
         .insert(Conversation)
         .values({ agent_id: agentID, id, read_at: 0, time_updated: now })
@@ -369,7 +395,10 @@ export namespace RayaTaskInbox {
       if (!row) return yield* Effect.die(new Error("Routine conversation could not be created."))
       return row
     })
-    const admit = Effect.fn("RayaTaskInbox.admit")(function* (input: Publish) {
+    const admit = Effect.fn("RayaTaskInbox.admit")(function* (
+      input: Publish,
+      proof?: Pick<Send, "owner" | "conversationID" | "expectedRevision">,
+    ) {
       const value = yield* Schema.decodeUnknownEffect(Publish)(input).pipe(
         Effect.mapError(
           () => new Invalid({ message: "Routine inbox messages need a stable source and valid content." }),
@@ -379,12 +408,21 @@ export namespace RayaTaskInbox {
         .transaction(
           (tx) =>
             Effect.gen(function* () {
-              yield* tx
-                .insert(Conversation)
-                .values({ agent_id: value.agentID, id: key(value.agentID), read_at: 0, time_updated: Date.now() })
-                .onConflictDoNothing()
-                .run()
+              if (!proof)
+                yield* tx
+                  .insert(Conversation)
+                  .values({ agent_id: value.agentID, id: key(), read_at: 0, time_updated: Date.now() })
+                  .onConflictDoNothing()
+                  .run()
+                  .pipe(Effect.orDie)
+              const conversation = yield* tx
+                .select()
+                .from(Conversation)
+                .where(eq(Conversation.agent_id, value.agentID))
+                .get()
                 .pipe(Effect.orDie)
+              if (proof && (!conversation || proof.owner !== owner || proof.conversationID !== conversation.id))
+                return yield* new Conflict({ message: "This send belongs to a different routine conversation." })
               const prior = yield* tx
                 .select()
                 .from(Message)
@@ -416,28 +454,10 @@ export namespace RayaTaskInbox {
                   (value.sessionID !== undefined && saved.sessionID !== value.sessionID)
                 )
                   return yield* new Conflict({ message: "This inbox source already has a different message." })
-                const conversation = yield* tx
-                  .select()
-                  .from(Conversation)
-                  .where(eq(Conversation.agent_id, value.agentID))
-                  .get()
-                  .pipe(Effect.orDie)
-                const sent = new Set(expected)
-                const remaining = listedAttachments(conversation?.draft_attachments ?? null)?.filter(
-                  (file) => !sent.has(file.id),
-                )
-                yield* tx
-                  .update(Conversation)
-                  .set({
-                    ...(conversation?.draft === value.body ? { draft: null } : {}),
-                    draft_attachments: packedAttachments(remaining),
-                    time_updated: Date.now(),
-                  })
-                  .where(eq(Conversation.agent_id, value.agentID))
-                  .run()
-                  .pipe(Effect.orDie)
                 return { record: saved, created: false }
               }
+              if (proof && conversation?.draft_revision !== proof.expectedRevision)
+                return yield* new Conflict({ message: "This routine draft changed before it could be sent." })
               const staged: Upload[] = []
               for (const id of value.attachmentIDs ?? []) {
                 const file = yield* tx
@@ -511,12 +531,6 @@ export namespace RayaTaskInbox {
                   .run()
                   .pipe(Effect.orDie)
               }
-              const conversation = yield* tx
-                .select()
-                .from(Conversation)
-                .where(eq(Conversation.agent_id, value.agentID))
-                .get()
-                .pipe(Effect.orDie)
               const sent = new Set(uploads.map((file) => file.id))
               const remaining = listedAttachments(conversation?.draft_attachments ?? null)?.filter(
                 (file) => !sent.has(file.id),
@@ -768,7 +782,7 @@ export namespace RayaTaskInbox {
     ) {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50)
         return yield* new Invalid({ message: "Inbox pages are limited to 50 messages." })
-      yield* ensure(agentID)
+      const conversation = yield* ensure(agentID)
       const parsed = marker(cursor)
       if (!parsed.ok) return yield* new Invalid({ message: "This inbox page cursor is invalid." })
       const query =
@@ -795,6 +809,7 @@ export namespace RayaTaskInbox {
       const slice = rows.slice(0, limit).reverse()
       return {
         messages: slice.map(decode),
+        draftState: state(conversation),
         ...(extra && slice[0] ? { next: `${slice[0].time_created}:${slice[0].id}` } : {}),
       }
     })
@@ -816,7 +831,6 @@ export namespace RayaTaskInbox {
       const value = yield* Schema.decodeUnknownEffect(Draft)(input).pipe(
         Effect.mapError(() => new Invalid({ message: "Inbox drafts are limited to 8000 characters." })),
       )
-      yield* ensure(agentID)
       return yield* db
         .transaction(
           (tx) =>
@@ -828,12 +842,10 @@ export namespace RayaTaskInbox {
                 .get()
                 .pipe(Effect.orDie)
               if (!current) return yield* new Conflict({ message: "This routine conversation is no longer available." })
+              if (value.owner !== owner || value.conversationID !== current.id)
+                return yield* new Conflict({ message: "This draft belongs to a different routine conversation." })
               const saved = value.draft && value.draft.length ? value.draft : null
-              const revision = value.revision ?? current.draft_revision + 1
-              if (revision < current.draft_revision)
-                return yield* new Conflict({
-                  message: "This draft is older than the version Raya already saved.",
-                })
+              const revision = current.draft_revision + 1
               const explicit = value.attachments !== undefined || value.attachmentIDs !== undefined
               const files: Upload[] = []
               if (explicit) {
@@ -865,13 +877,17 @@ export namespace RayaTaskInbox {
                   return yield* new Invalid({ message: "Routine drafts allow 8 attachments and 20 MB total." })
               }
               const next = explicit ? metadata(files) : listedAttachments(current.draft_attachments)
-              if (revision === current.draft_revision) {
-                if (saved !== current.draft || !matchedAttachments(next, listedAttachments(current.draft_attachments)))
-                  return yield* new Conflict({
-                    message: "This draft revision already contains different text or attachments.",
-                  })
-                return { draft: current.draft, ...(next ? { attachments: next } : {}), revision }
+              if (value.expectedRevision !== current.draft_revision) {
+                if (
+                  value.expectedRevision + 1 !== current.draft_revision ||
+                  saved !== current.draft ||
+                  !matchedAttachments(next, listedAttachments(current.draft_attachments))
+                )
+                  return yield* new Conflict({ message: "This draft changed after the version Raya last showed you." })
+                return state(current)
               }
+              if (revision > Number.MAX_SAFE_INTEGER)
+                return yield* new Conflict({ message: "This draft revision is exhausted." })
               const update: {
                 draft: string | null
                 draft_revision: number
@@ -919,8 +935,8 @@ export namespace RayaTaskInbox {
                 .where(eq(Conversation.agent_id, agentID))
                 .get()
                 .pipe(Effect.orDie)
-              const attachments = listedAttachments(row?.draft_attachments ?? null)
-              return { draft: saved, ...(attachments ? { attachments } : {}), revision }
+              if (!row) return yield* new Conflict({ message: "This routine conversation disappeared during the draft save." })
+              return state(row)
             }),
           { behavior: "immediate" },
         )
@@ -981,6 +997,7 @@ export namespace RayaTaskInbox {
         const last = yield* latest(agent.id)
         items.push({
           agentID: agent.id,
+          owner,
           conversationID: row.id,
           name: agent.name,
           role: agent.role,

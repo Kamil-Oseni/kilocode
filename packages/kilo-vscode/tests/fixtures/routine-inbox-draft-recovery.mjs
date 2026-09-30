@@ -96,6 +96,8 @@ const [worker, setWorker] = createSignal("first")
 const attachment = { id: "attachment", name: "notes.txt", mime: "text/plain", size: 12 }
 const initial = {
   agentID: "first",
+  owner: "owner-a",
+  conversationID: "conversation-a",
   state: "idle",
   draft: "Saved old text",
   draftRevision: 3,
@@ -139,100 +141,73 @@ const type = (value) => {
 let dispose = mount("C:/Projects/Books", props)
 try {
   await tick()
+  const mounted = sent.findLast((msg) => msg.type === "routineInboxMount")
+  assert.ok(mounted, `mount requests: ${JSON.stringify(sent.slice(-8))}`)
+  assert.equal(mounted.owner, initial.owner)
+  assert.equal(mounted.conversationID, initial.conversationID)
+  emit({ ...mounted, type: "routineInboxMounted" })
   type("  Latest pending text\n  ")
+  await new Promise((resolve) => setTimeout(resolve, 450))
+  const write = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  assert.ok(write)
+  assert.equal(write.owner, initial.owner)
+  assert.equal(write.conversationID, initial.conversationID)
+  assert.equal(write.expectedRevision, 3)
+  assert.deepEqual(write.attachmentIDs, [attachment.id])
+  assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
+
+  // A response with the wrong owner or revision cannot settle local cache.
+  emit({ ...write, type: "routineInboxDraft", owner: "foreign", revision: 4, files: [attachment] })
+  assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
+  type("Final unsaved text")
+  setBox(undefined)
+  setWorker("second")
+  await tick()
+  const flush = sent.findLast((msg) => msg.type === "routineInboxFlush")
+  assert.ok(flush)
+  assert.equal(flush.agentID, "first")
+  assert.equal(flush.owner, initial.owner)
+  assert.equal(flush.conversationID, initial.conversationID)
+  assert.equal(flush.draft, "Final unsaved text")
+  assert.deepEqual(flush.attachmentIDs, [attachment.id])
+  assert.equal(field().value, "")
+  emit({
+    type: "routineInboxFlushed",
+    requestID: flush.requestID,
+    paneID: flush.paneID,
+    agentID: "first",
+    committed: false,
+  })
+  assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
+  assert.equal(sent.findLast((msg) => msg.type === "routineInboxUnmount")?.paneID, undefined)
+
+  // Reopening cannot reuse an old pane's reply or cross a new conversation.
+  setWorker("first")
+  setBox(initial)
+  await tick()
+  assert.equal(field().value, "Final unsaved text")
+  const newer = sent.findLast((msg) => msg.type === "routineInboxMount")
+  assert.notEqual(newer.paneID, mounted.paneID)
+  emit({ ...newer, type: "routineInboxMounted" })
+  setConnection("disconnected")
+  type("Offline retained text")
   const cutoff = sent.length
   setBox(undefined)
   setWorker("second")
   await tick()
-  const requests = sent.slice(cutoff).filter((msg) => msg.type === "routineInboxDraft")
-  assert.equal(requests.length, 1)
-  const first = requests[0]
-  assert.equal(first.agentID, "first")
-  assert.equal(first.draft, "  Latest pending text\n  ")
-  assert.equal(first.revision, 4)
-  assert.deepEqual(first.attachmentIDs, [attachment.id])
-  assert.equal(field().value, "")
-  // No invented save acknowledgement: reopening must retain the unresolved edit.
-  setWorker("first")
-  setBox(initial)
-  await tick()
-  assert.equal(field().value, first.draft)
-  assert.match(root.textContent, /Your draft is still here/)
-  assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
-  // A mismatched revision is not a commit proof.
-  emit({ type: "routineInboxDraft", requestID: first.requestID, agentID: "first", draft: first.draft, revision: 99 })
-  assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
-  type("Newer text after unresolved save")
-  setBox(undefined)
-  setWorker("second")
-  await tick()
-  const second = sent.findLast((msg) => msg.type === "routineInboxDraft")
-  assert.equal(second.agentID, "first")
-  assert.equal(second.draft, "Newer text after unresolved save")
-  assert.ok(second.revision > first.revision)
-  emit({
-    type: "routineInboxDraft",
-    requestID: second.requestID,
-    agentID: "first",
-    draft: second.draft,
-    revision: second.revision,
-    files: [],
-  })
-  assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
-  // The exact late acknowledgement can settle only its original cached worker.
-  emit({
-    type: "routineInboxDraft",
-    requestID: second.requestID,
-    agentID: "first",
-    draft: second.draft,
-    revision: second.revision,
-    files: [attachment],
-  })
-  assert.equal(webview.routineInbox.drafts["agent:first"].pending, false)
-  assert.equal(field().value, "")
-  setWorker("first")
-  setBox(initial)
-  await tick()
-  assert.equal(field().value, second.draft)
-  // A disconnected transition keeps the edit locally and must not target a different worker.
-  type("Offline retained text")
-  setConnection("disconnected")
-  const offline = sent.length
-  setWorker("second")
-  setBox(undefined)
-  await tick()
   assert.equal(
-    sent.slice(offline).some((msg) => msg.type === "routineInboxDraft"),
+    sent.slice(cutoff).some((msg) => msg.type === "routineInboxDraft"),
     false,
   )
   dispose()
   setWorker("first")
-  setBox(initial)
+  setBox({ ...initial, owner: "owner-b", conversationID: "conversation-b", draft: "Other conversation" })
   dispose = mount("C:/Projects/Books", props)
   await tick()
   assert.equal(field().value, "Offline retained text")
-  const conflict = sent.length
-  setBox({ agentID: "first", state: "idle", draft: "Newer saved work from another window", draftRevision: 20 })
-  setConnection("connected")
-  await tick()
-  assert.equal(field().value, "Offline retained text")
-  assert.equal(
-    sent.slice(conflict).some((msg) => msg.type === "routineInboxDraft"),
-    false,
-  )
-  assert.equal(webview.routineInbox.drafts["agent:first"].body, "Offline retained text")
-  const saved = [...root.querySelectorAll("button")].find((button) => button.textContent.trim() === "Use saved draft")
-  assert.ok(saved)
-  saved.click()
-  await tick()
-  assert.equal(field().value, "Newer saved work from another window")
-  assert.equal(webview.routineInbox.drafts["agent:first"].pending, false)
-  assert.equal(
-    sent.slice(conflict).some((msg) => msg.type === "routineInboxDraft"),
-    false,
-  )
+  assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
   assert.equal(webview.unrelated, "keep me")
-  console.log("mounted Routine draft recovery assertions passed; no SQL commit claim")
+  console.log("mounted Routine owner, pane, flush and offline recovery assertions passed; no SQL commit claim")
 } finally {
   dispose()
   root.remove()

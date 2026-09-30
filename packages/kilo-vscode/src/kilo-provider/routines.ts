@@ -23,6 +23,17 @@ type Ctx = {
   open?: (file: { name: string; mime: string; size: number; data: string }) => void
   track?: (sessionID: string) => void
   refresh?: (requestID?: string, viewID?: string) => Promise<void>
+  before?: (ids: string[]) => void
+  beforeSend?: () => void
+  finishSend?: (proof: {
+    owner: string
+    conversationID: string
+    revision: number
+    draft?: string | null
+    attachments?: { id: string }[]
+  }) => boolean
+  sendProof?: { owner: string; conversationID: string; revision: number }
+  current?: () => boolean
 }
 
 type Listed = { id: string }
@@ -440,6 +451,7 @@ async function page(ctx: Ctx) {
     agentID: msg.agentID,
     messages: result.data?.messages,
     next: result.data?.next,
+    draftState: result.data?.draftState,
   })
 }
 
@@ -451,17 +463,34 @@ async function send(ctx: Ctx) {
   const ids = attachmentIDs(msg.attachmentIDs)
   if ((!text.trim() && ids.length === 0) || text.length > 8000)
     throw new Error("Write a follow-up or attach a file before sending.")
+  if (!ctx.sendProof || !ctx.current?.()) throw new Error("Confirm this worker draft before sending.")
+  ctx.beforeSend?.()
   const result = await ctx.kilo.inbox2.send(
     {
       directory: ctx.dir,
       agentID: String(msg.agentID),
+      owner: ctx.sendProof.owner,
+      conversationID: ctx.sendProof.conversationID,
+      expectedRevision: ctx.sendProof.revision,
       source: String(msg.source),
       body: text,
       ...(ids.length ? { attachmentIDs: ids } : {}),
     },
     { throwOnError: true },
   )
-  ctx.post({ type: "routineInboxSent", requestID: msg.requestID, agentID: msg.agentID, message: result.data })
+  if (!ctx.current()) throw new Error("This worker conversation changed after sending. Reload it before trying again.")
+  const page = await ctx.kilo.inbox2.page({ directory: ctx.dir, agentID: String(msg.agentID) }, { throwOnError: true })
+  const proof = page.data?.draftState
+  if (!proof) throw new Error("The sent message could not be matched to its saved draft. Reload this conversation.")
+  if (ctx.finishSend && !ctx.finishSend(proof))
+    throw new Error("The sent message could not be matched to its saved draft. Reload this conversation.")
+  ctx.post({
+    type: "routineInboxSent",
+    requestID: msg.requestID,
+    agentID: msg.agentID,
+    message: result.data,
+    draftState: proof,
+  })
 }
 
 function attachmentIDs(value: unknown) {
@@ -574,16 +603,19 @@ async function seen(ctx: Ctx) {
 async function scribble(ctx: Ctx) {
   const msg = ctx.message
   if (!token(msg.requestID) || !token(msg.agentID)) throw new Error("Reload the conversation before saving a draft.")
-  const revision = draftVersion(msg)
-  const draft = msg.draft === null || msg.draft === undefined ? null : String(msg.draft)
-  if (draft !== null && draft.length > 8000) throw new Error("Inbox drafts are limited to 8000 characters.")
+  const expectedRevision = draftVersion(msg)
+  const draft = draftText(msg.draft)
+  const ids = attachmentIDs(msg.attachmentIDs)
+  ctx.before?.(ids)
   const result = await ctx.kilo.inbox2.draft(
     {
       directory: ctx.dir,
       agentID: String(msg.agentID),
       draft: draft ?? "",
-      revision,
-      ...(msg.attachmentIDs === undefined ? {} : { attachmentIDs: attachmentIDs(msg.attachmentIDs) }),
+      owner: String(msg.owner),
+      conversationID: String(msg.conversationID),
+      expectedRevision,
+      ...(msg.attachmentIDs === undefined ? {} : { attachmentIDs: ids }),
     },
     { throwOnError: true },
   )
@@ -591,6 +623,10 @@ async function scribble(ctx: Ctx) {
     type: "routineInboxDraft",
     requestID: msg.requestID,
     agentID: msg.agentID,
+    paneID: msg.paneID,
+    sequence: msg.sequence,
+    owner: result.data?.owner,
+    conversationID: result.data?.conversationID,
     draft: result.data?.draft ?? null,
     files: result.data?.attachments,
     revision: result.data?.revision,
@@ -694,9 +730,15 @@ function revision(msg: Msg) {
 }
 
 function draftVersion(msg: Msg) {
-  const value = Number(msg.revision)
-  if (!Number.isSafeInteger(value) || value < 1) throw new Error("Reload the conversation before saving this draft.")
+  const value = Number(msg.expectedRevision)
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error("Reload the conversation before saving this draft.")
   return value
+}
+
+function draftText(value: unknown) {
+  const draft = value === null || value === undefined ? null : String(value)
+  if (draft !== null && draft.length > 8000) throw new Error("Inbox drafts are limited to 8000 characters.")
+  return draft
 }
 
 async function revise(ctx: Ctx) {
@@ -1336,6 +1378,24 @@ type Input = {
   open?: (file: { name: string; mime: string; size: number; data: string }) => void
   track?: (sessionID: string) => void
   refresh?: (requestID?: string, viewID?: string) => Promise<void>
+  before?: (ids: string[]) => void
+  beforeSend?: () => void
+  finishSend?: Ctx["finishSend"]
+  sendProof?: Ctx["sendProof"]
+  current?: () => boolean
+}
+
+async function selected(
+  input: Input,
+  type: "routineInboxFilesPick" | "routineInboxFilesForget",
+  limit: number,
+  count: number,
+) {
+  if (type === "routineInboxFilesForget") return []
+  return bundle(
+    await (input.pick?.(limit) ?? Promise.reject(new Error("File selection is unavailable in this host."))),
+    count,
+  )
 }
 
 async function stage(input: Input, type: "routineInboxFilesPick" | "routineInboxFilesForget") {
@@ -1351,27 +1411,23 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
   }
   try {
     if (!input.client) throw issue("unavailable", "Raya is not connected.")
-    const revision = draftVersion(msg)
+    const expectedRevision = draftVersion(msg)
     const ids = attachmentIDs(msg.attachmentIDs)
-    const draft = msg.draft === null || msg.draft === undefined ? "" : String(msg.draft)
-    if (draft.length > 8000) throw new Error("Inbox drafts are limited to 8000 characters.")
+    const draft = draftText(msg.draft)
     const limit = MAX_ROUTINE_FILES - ids.length
     if (type === "routineInboxFilesPick" && limit < 1) throw new Error("Remove a file before attaching another.")
-    const selected =
-      type === "routineInboxFilesPick"
-        ? bundle(
-            await (input.pick?.(limit) ?? Promise.reject(new Error("File selection is unavailable in this host."))),
-            ids.length,
-          )
-        : []
+    const files = await selected(input, type, limit, ids.length)
+    input.before?.([...ids, ...files.map((file) => file.id)])
     const result = await input.client.kilocode.routine.inbox2.draft(
       {
         directory: input.directory,
         agentID: String(msg.agentID),
-        draft,
-        revision,
+        draft: draft ?? "",
+        owner: String(msg.owner),
+        conversationID: String(msg.conversationID),
+        expectedRevision,
         attachmentIDs: ids,
-        ...(selected.length ? { attachments: selected } : {}),
+        ...(files.length ? { attachments: files } : {}),
       },
       { throwOnError: true },
     )
@@ -1379,6 +1435,10 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
       type: "routineInboxFiles",
       requestID: msg.requestID,
       agentID: msg.agentID,
+      paneID: msg.paneID,
+      sequence: msg.sequence,
+      owner: result.data?.owner,
+      conversationID: result.data?.conversationID,
       draft: result.data?.draft ?? null,
       files: result.data?.attachments ?? [],
       revision: result.data?.revision,
@@ -1388,6 +1448,8 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
       type: "routineInboxFiles",
       requestID: msg.requestID,
       agentID: msg.agentID,
+      paneID: msg.paneID,
+      sequence: msg.sequence,
       error: reason(err),
       recovery: recovery(err),
     })
@@ -1429,6 +1491,11 @@ export async function handleRoutineMessage(input: Input): Promise<boolean> {
     open: input.open,
     track: input.track,
     refresh: input.refresh,
+    before: input.before,
+    beforeSend: input.beforeSend,
+    finishSend: input.finishSend,
+    sendProof: input.sendProof,
+    current: input.current,
   }
   try {
     await (routes[type] ?? one)(ctx)

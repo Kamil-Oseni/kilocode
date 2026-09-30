@@ -349,6 +349,13 @@ export interface RoutineInboxPageResultMessage {
   agentID: string
   messages?: unknown[]
   next?: string
+  draftState?: {
+    owner: string
+    conversationID: string
+    revision: number
+    draft: string | null
+    attachments?: { id: string; name: string; mime: string; size: number }[]
+  }
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
@@ -358,6 +365,7 @@ export interface RoutineInboxSentMessage {
   requestID: string
   agentID: string
   message?: unknown
+  draftState?: RoutineInboxPageResultMessage["draftState"]
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
@@ -369,6 +377,10 @@ export interface RoutineInboxFilesMessage {
   draft?: string | null
   files?: { id: string; name: string; mime: string; size: number }[]
   revision?: number
+  paneID?: string
+  sequence?: number
+  owner?: string
+  conversationID?: string
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
 }
@@ -429,8 +441,35 @@ export interface RoutineInboxDraftResultMessage {
   draft?: string | null
   files?: { id: string; name: string; mime: string; size: number }[]
   revision?: number
+  paneID?: string
+  sequence?: number
+  owner?: string
+  conversationID?: string
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
+}
+
+export interface RoutineInboxMountedMessage {
+  type: "routineInboxMounted"
+  requestID: string
+  paneID: string
+  agentID: string
+  owner?: string
+  conversationID?: string
+  revision?: number
+  error?: string
+}
+
+export interface RoutineInboxFlushedMessage {
+  type: "routineInboxFlushed"
+  requestID: string
+  paneID: string
+  agentID: string
+  committed: boolean
+  owner?: string
+  conversationID?: string
+  revision?: number
+  error?: string
 }
 
 export interface RoutineDelegatedMessage {
@@ -2061,6 +2100,8 @@ export type ExtensionMessage =
   | RoutineContactDestinationResultMessage
   | RoutineInboxReadResultMessage
   | RoutineInboxDraftResultMessage
+  | RoutineInboxMountedMessage
+  | RoutineInboxFlushedMessage
   | RoutineDelegatedMessage
   | RoutineDelegateStoppedMessage
   | RoutineDelegateChainResultMessage

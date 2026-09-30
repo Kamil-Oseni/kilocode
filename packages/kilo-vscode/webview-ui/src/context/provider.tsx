@@ -11,10 +11,13 @@ import type { Provider, ProviderModel, ModelSelection, ExtensionMessage, Provide
 import type { ProviderAuthMethod } from "@kilocode/sdk/v2/client"
 import { flattenModels, findModel as _findModel, isModelValid as isValid } from "./provider-utils"
 import { KILO_AUTO } from "../../../src/shared/provider-model"
+import { providerLoading, providerRetry, type ProviderLoading } from "./provider-loading"
 
 export type EnrichedModel = ProviderModel & { providerID: string; providerName: string }
 
 interface ProviderContextValue {
+  status: Accessor<ProviderLoading["status"]>
+  retry: () => void
   providers: Accessor<Record<string, Provider>>
   connected: Accessor<string[]>
   defaults: Accessor<Record<string, string>>
@@ -30,6 +33,13 @@ export const ProviderContext = createContext<ProviderContextValue>()
 
 export const ProviderProvider: ParentComponent = (props) => {
   const vscode = useVSCode()
+  const [loading, setLoading] = createSignal<ProviderLoading>({ status: "loading", generation: 0, disconnected: false })
+  const retry = () => {
+    const type = providerRetry(loading())
+    if (!type) return
+    setLoading((state) => ({ ...state, status: "loading" }))
+    vscode.postMessage({ type })
+  }
 
   const [providers, setProviders] = createSignal<Record<string, Provider>>({})
   const [connected, setConnected] = createSignal<string[]>([])
@@ -51,9 +61,13 @@ export const ProviderProvider: ParentComponent = (props) => {
   // Register handler immediately (not in onMount) so we never miss
   // a providersLoaded message that arrives before the DOM mount.
   const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
+    const previous = loading()
+    const next = providerLoading(previous, message)
+    setLoading(next)
     if (message.type !== "providersLoaded") {
       return
     }
+    if (next === previous || next.status !== "ready") return
 
     setProviders(message.providers)
     setConnected(message.connected)
@@ -65,31 +79,12 @@ export const ProviderProvider: ParentComponent = (props) => {
 
   onCleanup(unsubscribe)
 
-  // Request providers immediately; if the extension's httpClient is not yet ready,
-  // extensionDataReady will fire once initialization completes and we retry once.
+  // The host refreshes after reconnect; an empty successful catalog is not a retry signal.
   vscode.postMessage({ type: "requestProviders" })
 
-  const fallback = setTimeout(() => {
-    if (Object.keys(providers()).length === 0) {
-      vscode.postMessage({ type: "requestProviders" })
-    }
-  }, 3000)
-
-  const unsubReady = vscode.onMessage((message: ExtensionMessage) => {
-    if (message.type !== "extensionDataReady") return
-    unsubReady()
-    clearTimeout(fallback)
-    if (Object.keys(providers()).length === 0) {
-      vscode.postMessage({ type: "requestProviders" })
-    }
-  })
-
-  onCleanup(() => {
-    unsubReady()
-    clearTimeout(fallback)
-  })
-
   const value: ProviderContextValue = {
+    status: () => loading().status,
+    retry,
     providers,
     connected,
     defaults,

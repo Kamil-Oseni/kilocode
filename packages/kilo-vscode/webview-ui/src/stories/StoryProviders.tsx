@@ -107,6 +107,8 @@ const MockProviderProvider: ParentComponent<{ kiloAuth?: boolean; training?: boo
     })),
   )
   const value = {
+    status: () => "ready" as const,
+    retry: () => undefined,
     providers: () => MOCK_PROVIDERS as any,
     connected: () => ["kilo"],
     defaults: () => ({}),

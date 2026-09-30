@@ -12,6 +12,7 @@ import {
 import type { ModelMessage } from "ai"
 import type { Provider } from "@/provider/provider"
 import { isRecord } from "@/util/record"
+import { Auth } from "@opencode-ai/llm/route" // kilocode_change - explicit keyless admission is carried from native-runtime
 
 type ToolInput = {
   readonly description?: string
@@ -21,6 +22,7 @@ type ToolInput = {
 export type RequestInput = {
   readonly model: Provider.Model
   readonly apiKey?: string
+  readonly keyless?: boolean // kilocode_change - set only after explicit local compatible admission
   readonly baseURL?: string
   readonly system?: readonly string[]
   readonly messages: readonly ModelMessage[]
@@ -168,12 +170,24 @@ export const model = (input: Provider.Model | RequestInput, headers?: Record<str
   if (model.api.npm === "@ai-sdk/anthropic") return Anthropic.configure(options).model(model.api.id)
   if (model.api.npm === "@ai-sdk/google") return Google.configure(options).model(model.api.id)
   if (model.api.npm === "@ai-sdk/amazon-bedrock") return AmazonBedrock.configure(options).model(model.api.id)
-  if (model.api.npm === "@ai-sdk/openai-compatible")
+  // kilocode_change start - keep credential and explicit no-auth options mutually exclusive
+  if (model.api.npm === "@ai-sdk/openai-compatible") {
+    if ("model" in input && input.keyless === true && !input.apiKey) {
+      const { apiKey: _, ...rest } = options
+      return OpenAICompatible.configure({
+        ...rest,
+        auth: Auth.none,
+        provider: String(model.providerID),
+        baseURL: requireBaseURL(model, url),
+      }).model(model.api.id)
+    }
     return OpenAICompatible.configure({
       ...options,
       provider: String(model.providerID),
       baseURL: requireBaseURL(model, url),
     }).model(model.api.id)
+  }
+  // kilocode_change end
   if (model.api.npm === "@openrouter/ai-sdk-provider") return OpenRouter.configure(options).model(model.api.id)
   throw new Error(`Native LLM request adapter does not support provider package ${model.api.npm}`)
 }

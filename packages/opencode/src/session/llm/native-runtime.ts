@@ -18,9 +18,11 @@ import {
 } from "@opencode-ai/llm"
 import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
+import { localConfig, localFetch } from "@/kilocode/provider/local-scheduler" // kilocode_change
+import { keyless } from "@/kilocode/provider/native-policy" // kilocode_change
 
 export type RuntimeStatus =
-  | { readonly type: "supported"; readonly apiKey: string; readonly baseURL?: string }
+  | { readonly type: "supported"; readonly apiKey?: string; readonly baseURL?: string } // kilocode_change - explicitly local compatible servers may omit authentication
   | { readonly type: "unsupported"; readonly reason: string }
 export type StreamResult =
   | { readonly type: "supported"; readonly stream: Stream.Stream<LLMEvent, unknown> }
@@ -77,7 +79,10 @@ function statusWithFetch(
   }
 
   const apiKey = typeof input.provider.options.apiKey === "string" ? input.provider.options.apiKey : input.provider.key
-  if (!apiKey) return { type: "unsupported", reason: "API key is not configured" }
+  // kilocode_change start - retain cloud credential refusal while admitting explicit keyless local servers
+  if (!apiKey && !keyless(input.provider.options, npm))
+    return { type: "unsupported", reason: "API key is not configured" }
+  // kilocode_change end
 
   return {
     type: "supported",
@@ -90,6 +95,7 @@ export function stream(input: StreamInput): StreamResult {
   const fetch = providerFetch(input)
   const current = statusWithFetch(input, fetch)
   if (current.type === "unsupported") return current
+  const transport = localFetch(input.provider.options, fetch) // kilocode_change
 
   // Integration point with @opencode-ai/llm: native-request lowers session data
   // into an LLMRequest, then LLMClient handles route selection and transport.
@@ -105,6 +111,7 @@ export function stream(input: StreamInput): StreamResult {
   const request = LLMNative.request({
     model: input.model,
     apiKey: current.apiKey,
+    keyless: !current.apiKey && keyless(input.provider.options, input.model.api.npm), // kilocode_change - explicit admission, never endpoint/name inference
     baseURL: current.baseURL,
     messages: ProviderTransform.message(input.messages, input.model, input.providerOptions ?? {}),
     toolChoice: input.toolChoice,
@@ -156,7 +163,21 @@ export function stream(input: StreamInput): StreamResult {
 
   return {
     ...current,
-    stream: fetch ? stream.pipe(Stream.provideService(FetchHttpClient.Fetch, fetch)) : stream,
+    // kilocode_change start - native inference shares the same local transport admission as the AI SDK
+    stream:
+      fetch || localConfig(input.provider.options).enabled
+        ? stream.pipe(
+            Stream.provideService(
+              FetchHttpClient.Fetch,
+              Object.assign(
+                (request: Parameters<typeof globalThis.fetch>[0], opts?: Parameters<typeof globalThis.fetch>[1]) =>
+                  transport(request, opts),
+                { preconnect: globalThis.fetch.preconnect },
+              ),
+            ),
+          )
+        : stream,
+    // kilocode_change end
   }
 }
 

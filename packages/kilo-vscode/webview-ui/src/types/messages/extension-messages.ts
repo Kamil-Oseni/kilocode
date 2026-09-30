@@ -22,6 +22,7 @@ import type { AgentManagerSidebarTarget } from "./webview-messages"
 import type { PermissionRequest } from "./permissions"
 import type { AnacondaDesktopExtensionMessage } from "../../../../src/shared/anaconda-desktop-messages"
 import type { ChiefNotesAvailable, ChiefNotesResult } from "../../../../src/shared/chief-notes-messages"
+import type { ProvidersLoadStateMessage } from "./providers"
 
 export interface BackgroundJobsLoadedMessage {
   type: "backgroundJobsLoaded"
@@ -886,6 +887,7 @@ export interface SpeechToTextModelsLoadedMessage {
 
 export interface ProvidersLoadedMessage {
   type: "providersLoaded"
+  generation?: number
   providers: Record<string, Provider>
   connected: string[]
   defaults: Record<string, string>
@@ -2109,6 +2111,7 @@ export type ExtensionMessage =
   | ImageModelsLoadedMessage
   | SpeechToTextModelsLoadedMessage
   | ProvidersLoadedMessage
+  | ProvidersLoadStateMessage
   | AgentsLoadedMessage
   | SkillsLoadedMessage
   | CommandsLoadedMessage

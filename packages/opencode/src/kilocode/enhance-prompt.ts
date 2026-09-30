@@ -40,7 +40,8 @@ export const resolveEnhanceModel = Effect.fn("EnhancePrompt.resolve")(function* 
   return (yield* svc.getSmallModel(ref.providerID)) ?? (yield* svc.getModel(ref.providerID, ref.modelID))
 })
 
-export async function enhancePrompt(text: string, selected?: Selection): Promise<string> {
+export async function enhancePrompt(text: string, selected?: Selection, signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted()
   log.info("enhancing", { length: text.length })
 
   const resolved = await AppRuntime.runPromise(
@@ -51,7 +52,9 @@ export async function enhancePrompt(text: string, selected?: Selection): Promise
         return { model, language }
       }),
     ),
+    { signal },
   )
+  signal?.throwIfAborted()
 
   const result = await generateText({
     model: resolved.language,
@@ -61,6 +64,7 @@ export async function enhancePrompt(text: string, selected?: Selection): Promise
       mergeDeep(ProviderTransform.smallOptions(resolved.model), resolved.model.options),
     ),
     maxRetries: 3,
+    abortSignal: signal,
     system: INSTRUCTION,
     messages: [{ role: "user" as const, content: `Draft prompt to enhance, not answer:\n\n${text}` }],
   })

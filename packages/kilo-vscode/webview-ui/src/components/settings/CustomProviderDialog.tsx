@@ -20,6 +20,7 @@ import {
   MASKED_CUSTOM_PROVIDER_KEY,
   resolveCustomProviderKey,
   customProviderModelSettings,
+  customProviderLocalInference,
 } from "../../../../src/shared/custom-provider"
 import {
   CUSTOM_PROVIDER_PACKAGE,
@@ -27,6 +28,7 @@ import {
   type CustomProviderPackage,
 } from "../../../../src/shared/provider-model"
 import { ModelCard } from "./CustomProviderModelCard"
+import { LocalServer } from "./CustomProviderLocalServer"
 import type {
   ChatTemplateArgsValue,
   EnableThinkingValue,
@@ -168,6 +170,7 @@ function initForm(existing: ExistingProvider | undefined, auth: ProviderAuthStat
     name: existing?.name ?? "",
     npm: isCustomProviderPackage(npm) ? npm : CUSTOM_PROVIDER_PACKAGE,
     baseURL: (existing?.config?.options as { baseURL?: string } | undefined)?.baseURL ?? "",
+    localInference: customProviderLocalInference(existing?.config),
     apiKey: resolveCustomProviderKey(auth),
     models: initModels(existing?.config),
     headers: initHeaders(existing?.config),
@@ -673,6 +676,11 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
               }}
               validationState={errors.baseURL ? "invalid" : undefined}
               error={errors.baseURL}
+            />
+            <LocalServer
+              checked={form.localInference === true}
+              onChange={(checked) => setForm("localInference", checked)}
+              t={language.t}
             />
             <TextField
               type="password"

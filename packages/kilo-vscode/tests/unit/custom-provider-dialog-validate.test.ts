@@ -3,6 +3,7 @@ import { validateCustomProvider } from "../../webview-ui/src/components/settings
 import type { FormState } from "../../webview-ui/src/components/settings/CustomProviderValidation"
 import {
   customProviderModelSettings,
+  customProviderLocalInference,
   sanitizeCustomProviderConfig,
   withCustomProviderDeletions,
 } from "../../src/shared/custom-provider"
@@ -34,6 +35,48 @@ function args(form: FormState) {
     existingProviderIDs: new Set<string>(),
   }
 }
+
+describe("custom provider local server save and reopen", () => {
+  it.each([true, false, undefined])("preserves the explicit %s choice across editing and normalization", (choice) => {
+    const form = base()
+    form.localInference = choice
+    const first = validateCustomProvider(args(form)).result
+    expect(first).toBeDefined()
+    const sanitized = sanitizeCustomProviderConfig(first!.config)
+    if (!("value" in sanitized)) throw new Error(sanitized.error)
+    const persisted: unknown = JSON.parse(JSON.stringify(sanitized.value))
+    const reopened = base()
+    reopened.localInference = customProviderLocalInference(persisted)
+    reopened.name = "Renamed server"
+    const result = validateCustomProvider({ ...args(reopened), editing: true }).result
+    expect(result?.config.options.localInference).toBe(choice)
+    expect(Object.hasOwn(result!.config.options, "localInference")).toBe(choice !== undefined)
+    const next = sanitizeCustomProviderConfig(result!.config)
+    if (!("value" in next)) throw new Error(next.error)
+    expect(withCustomProviderDeletions(persisted, next.value).options.localInference).toBe(choice)
+  })
+
+  it("writes explicit false when the saved local server choice is turned off", () => {
+    const existing = { options: { baseURL: "https://example.com/v1", localInference: true } }
+    const form = base()
+    form.localInference = customProviderLocalInference(existing)
+    form.localInference = false
+    const result = validateCustomProvider({ ...args(form), editing: true }).result
+    const next = sanitizeCustomProviderConfig(result!.config)
+    if (!("value" in next)) throw new Error(next.error)
+    expect(withCustomProviderDeletions(existing, next.value).options.localInference).toBe(false)
+  })
+
+  it("does not infer local scheduling from a loopback or LAN address", () => {
+    for (const url of ["http://127.0.0.1:1234/v1", "http://192.168.1.7:8000/v1", "https://example.com/v1"]) {
+      const form = base()
+      form.baseURL = url
+      const result = validateCustomProvider(args(form)).result
+      expect(Object.hasOwn(result!.config.options, "localInference")).toBe(false)
+      expect(customProviderLocalInference(result!.config)).toBeUndefined()
+    }
+  })
+})
 
 describe("custom provider model limits save path", () => {
   it("retains saved input/output/context limits and explicit false through edit, validation and the saved config patch", () => {

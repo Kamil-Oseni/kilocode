@@ -398,7 +398,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private loginAttempt = 0
   private isWebviewReady = false
   private readonly extensionVersion = vscode.extensions.getExtension("eden.raya")?.packageJSON?.version ?? "unknown"
-  private cachedProvidersMessage: unknown = null
   /**
    * Provider API keys retained extension-side for authenticated model
    * fetches (#10139). Keys are stripped before provider data reaches the
@@ -486,6 +485,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   })
   private unsubscribeEvent: (() => void) | null = null
   private unsubscribeState: (() => void) | null = null
+  private observing = false
+  private initializing = false
   /** Cached migration data so migration doesn't re-read from disk/SecretStorage. */ // legacy-migration
   private migrationCache: MigrationContext["migrationCache"] = new Map()
   /** Guard to prevent checkAndShowMigrationWizard running concurrently. */ // legacy-migration
@@ -670,6 +671,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.cachedConfigMessage = null
     this.postMessage({ type: "workspaceDirectoryChanged", directory: directory ?? "" })
     this.postMessage({ type: "configBindingExpired", reason: "project-changed" })
+    void this.fetchAndSendProviders().catch(() => {
+      console.error("[Raya] Provider: Project provider refresh could not finish")
+    })
   }
 
   public setDiffVirtualProvider(provider: import("./DiffVirtualProvider").DiffVirtualProvider): void {
@@ -2330,10 +2334,57 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (this.initConnectionPromise) {
       return this.initConnectionPromise
     }
+    this.initializing = true
     this.initConnectionPromise = this.doInitializeConnection().finally(() => {
+      this.initializing = false
       this.initConnectionPromise = null
     })
     return this.initConnectionPromise
+  }
+
+  /** Keep state observation alive even when the first shared connect attempt fails. */
+  private subscribeConnection(): void {
+    if (this.unsubscribeState) return
+    this.unsubscribeState = this.connectionService.onStateChange(async (state, error) => {
+      const prior = this.connectionState
+      if (prior === "connected" && state !== "connected") this.reconnectPending = true
+      if (prior !== state) {
+        this.routineRefresh.invalidate()
+        this.routineEvents.invalidate()
+        this.connectionGeneration++
+        this.configBindings.clear()
+        if (state !== "connected") {
+          this.providersGeneration++
+          this.speech?.drop()
+        }
+      }
+      this.connectionState = state
+      this.postConnectionState(error)
+      if (state !== "connected" || prior === "connected") return
+      // Provider discovery must not wait for optional gateway profile synchronization.
+      void this.fetchAndSendProviders().catch(() => {
+        console.error("[Raya] Provider: Provider refresh could not finish")
+      })
+      // Initial prompt recovery must wait until this provider observes acceptance events.
+      if (!this.observing || this.initializing) return
+      const reconnect = this.reconnectPending
+      this.reconnectPending = false
+      const generation = this.connectionGeneration
+      if (reconnect) void this.routineEvents.recover()
+      this.flushPendingKiloModel()
+      void this.checkConfigWarnings("state")
+      try {
+        const recovery = reconnect ? this.reconcileAfterReconnect(generation) : Promise.resolve()
+        await this.syncWebviewState("sse-connected")
+        await this.flushPendingSessionRefresh("sse-connected")
+        await recovery
+        if (this.connectionGeneration === generation && this.connectionState === "connected" && this.observing)
+          this.recoverPendingPrompts()
+      } catch (error) {
+        console.error("[Raya] Provider: ❌ Failed during connected state handling:", error)
+        this.postMessage({ type: "error", message: getErrorMessage(error) || "Failed to sync after connecting" })
+      }
+    })
   }
 
   private async doInitializeConnection(): Promise<void> {
@@ -2347,22 +2398,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.postMessage({ type: "connectionState", state: "connecting" })
 
     // Clean up any existing subscriptions (e.g., sidebar re-shown)
+    this.observing = false
     this.unsubscribeEvent?.()
-    this.unsubscribeState?.()
     this.unsubscribeNotificationDismiss?.()
     this.unsubscribeLanguageChange?.()
     this.unsubscribeProfileChange?.()
     this.unsubscribeFavoritesChange?.()
     this.unsubscribeModelSelectorExpanded?.()
+    this.unsubscribeMigrationComplete?.()
     this.unsubscribeClearPendingPrompts?.()
     this.unsubscribeDirectoryProvider?.()
 
+    this.subscribeConnection()
+
     try {
       const workspaceDir = this.settingsDirectory()
-
-      // Connect the shared service (no-op if already connected)
-      await this.connectionService.connect(workspaceDir)
-      this.flushPendingKiloModel()
 
       // Subscribe to SSE events for this webview (filtered by tracked sessions)
       this.unsubscribeEvent = this.connectionService.onEventFiltered(
@@ -2425,46 +2475,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         },
       )
 
-      // Subscribe to connection state changes
-      this.unsubscribeState = this.connectionService.onStateChange(async (state, error) => {
-        const prior = this.connectionState
-        if (prior === "connected" && state !== "connected") this.reconnectPending = true
-        if (this.connectionState !== state) {
-          this.routineRefresh.invalidate()
-          this.routineEvents.invalidate()
-          this.connectionGeneration++
-          this.configBindings.clear()
-          if (state !== "connected") this.speech?.drop()
-        }
-        this.connectionState = state
-        this.postConnectionState(error)
-
-        if (state === "connected") {
-          const reconnect = this.reconnectPending
-          this.reconnectPending = false
-          const generation = this.connectionGeneration
-          if (reconnect) void this.routineEvents.recover()
-          this.flushPendingKiloModel()
-          // Fire config warnings independently so a failure in the
-          // sequential await chain doesn't prevent warnings from being shown
-          void this.checkConfigWarnings("state")
-          try {
-            // Restore authoritative transcript tails before optional account data.
-            // This keeps reconnect recovery independent of a slow gateway profile request.
-            const recovery = reconnect ? this.reconcileAfterReconnect(generation) : Promise.resolve()
-            await this.syncWebviewState("sse-connected")
-            await this.flushPendingSessionRefresh("sse-connected")
-            await recovery
-            this.recoverPendingPrompts()
-          } catch (error) {
-            console.error("[Raya] Provider: ❌ Failed during connected state handling:", error)
-            this.postMessage({
-              type: "error",
-              message: getErrorMessage(error) || "Failed to sync after connecting",
-            })
-          }
-        }
-      })
+      this.observing = true
 
       // Subscribe to notification dismiss broadcast from other KiloProvider instances
       this.unsubscribeNotificationDismiss = this.connectionService.onNotificationDismissed(() => {
@@ -2508,6 +2519,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         return [this.getWorkspaceDirectory(), ...this.sessionDirectories.values()]
       })
 
+      // Attach every observer before connecting; a failed startup must not orphan this view.
+      await this.connectionService.connect(workspaceDir)
+      this.flushPendingKiloModel()
+
       // Get current state and push to webview
       const serverInfo = this.connectionService.getServerInfo()
       this.connectionState = this.connectionService.getConnectionState()
@@ -2526,16 +2541,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       }
       this.postConnectionState()
 
-      // connect() can resolve after SSE reaches "connected" but before this
-      // provider subscribes to onStateChange(). In that case the initial
-      // connected callback is missed, so run the warning check here too.
+      // A reused shared connection may already be connected without another state event.
       if (this.connectionState === "connected") {
         void this.checkConfigWarnings("init")
       }
 
+      const generation = this.connectionGeneration
+      const reconnect = this.reconnectPending
+      this.reconnectPending = false
+      if (reconnect) void this.routineEvents.recover()
+      const recovery = reconnect ? this.reconcileAfterReconnect(generation) : Promise.resolve()
       await this.syncWebviewState("initializeConnection")
       await this.flushPendingSessionRefresh("initializeConnection")
-      this.recoverPendingPrompts()
+      await recovery
+      if (this.connectionGeneration === generation && this.connectionState === "connected" && this.observing)
+        this.recoverPendingPrompts()
 
       // Fetch providers, agents, skills, config, notifications, and session statuses in parallel
       await Promise.all([
@@ -3296,6 +3316,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   /** Fetch providers and send to webview. Coalesced: at most one in-flight + one queued. */
   private async fetchAndSendProviders(): Promise<void> {
     const next = ++this.providersGeneration
+    this.postMessage({ type: "providersLoadState", state: "loading", generation: next })
     if (this.providersRefresh) {
       this.providersQueued = true
       await this.providersRefresh
@@ -3307,17 +3328,29 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.providersQueued = false
         const client = this.client
         if (!client) {
-          if (this.cachedProvidersMessage && generation === this.providersGeneration)
-            this.postMessage(this.cachedProvidersMessage)
+          if (generation === this.providersGeneration)
+            this.postMessage({
+              type: "providersLoadState",
+              state: "error",
+              generation,
+              error: "Providers could not be loaded. Try again.",
+            })
           return
         }
+        const connection = this.connectionGeneration
+        const directory = this.settingsDirectory()
         try {
           const { response, authMethods, authStates, storedKeys } = await fetchProviderData(
             client,
-            this.getWorkspaceDirectory(),
+            directory,
             this.providerSecrets, // raya_change - migrate/read keys through SecretStorage
           )
-          if (generation !== this.providersGeneration || client !== this.client) {
+          if (
+            generation !== this.providersGeneration ||
+            client !== this.client ||
+            connection !== this.connectionGeneration ||
+            !sameDirectory(directory, this.settingsDirectory())
+          ) {
             if (!this.providersQueued) return
             generation = this.providersGeneration
             continue
@@ -3326,6 +3359,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           const settings = vscode.workspace.getConfiguration("raya.model")
           const message = {
             type: "providersLoaded",
+            generation,
             providers: indexProvidersById(response.all),
             connected: response.connected,
             defaults: response.default,
@@ -3337,15 +3371,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             authMethods,
             authStates,
           }
-          this.cachedProvidersMessage = message
           this.postMessage(message)
-        } catch (error) {
-          if (generation !== this.providersGeneration) {
+        } catch {
+          if (
+            generation !== this.providersGeneration ||
+            client !== this.client ||
+            connection !== this.connectionGeneration ||
+            !sameDirectory(directory, this.settingsDirectory())
+          ) {
             if (!this.providersQueued) return
             generation = this.providersGeneration
             continue
           }
-          console.error("[Raya] Provider: Failed to fetch providers:", error)
+          console.error("[Raya] Provider: Providers could not be loaded")
+          this.postMessage({
+            type: "providersLoadState",
+            state: "error",
+            generation,
+            error: "Providers could not be loaded. Try again.",
+          })
         }
         if (!this.providersQueued) return
         generation = this.providersGeneration
@@ -6840,6 +6884,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Does NOT kill the server — that's the connection service's job.
    */
   dispose(): void {
+    this.observing = false
     this.voiceOrigin.clear()
     this.voicePage.clear()
     this.routineRefresh.dispose()

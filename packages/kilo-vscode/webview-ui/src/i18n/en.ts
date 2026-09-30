@@ -378,6 +378,8 @@ export const dict = {
   "provider.custom.field.name.placeholder": "My AI Provider",
   "provider.custom.field.package.label": "Provider API",
   "provider.custom.field.baseURL.label": "Base URL",
+  "provider.custom.field.localInference.label": "Local model server",
+  "provider.custom.field.localInference.description": "Let chats and workers take turns using this server.",
   "provider.custom.field.baseURL.placeholder": "https://api.myprovider.com/v1",
   "provider.custom.field.apiKey.label": "API key",
   "provider.custom.field.apiKey.placeholder": "API key",
@@ -575,6 +577,9 @@ export const dict = {
   "deviceAuth.error.detailsTitle": "Login error details",
 
   "common.retry": "Retry",
+  "settings.providers.loading": "Loading providers…",
+  "settings.providers.disconnected": "Reconnect to load your providers.",
+  "settings.providers.failed": "Providers couldn’t be loaded. Try again.",
   "common.refresh": "Refresh",
   "common.reload": "Reload",
   "common.reloadDescription": "Reload config, skills, agents, and commands from disk",

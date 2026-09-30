@@ -14,6 +14,7 @@ export type FormState = {
   name: string
   npm: CustomProviderPackage
   baseURL: string
+  localInference?: boolean
   apiKey: string
   models: ModelEntry[]
   headers: HeaderRow[]
@@ -55,7 +56,7 @@ type ValidateResult = {
       npm: CustomProviderPackage
       name: string
       env?: string[]
-      options: { baseURL: string; headers?: Record<string, string> }
+      options: { baseURL: string; localInference?: boolean; headers?: Record<string, string> }
       models: Record<string, unknown>
     }
   }
@@ -222,6 +223,7 @@ export function validateCustomProvider(input: ValidateArgs): ValidateResult {
 
   const options = {
     baseURL,
+    ...(input.form.localInference !== undefined ? { localInference: input.form.localInference } : {}),
     ...(Object.keys(headers).length ? { headers } : {}),
   }
 

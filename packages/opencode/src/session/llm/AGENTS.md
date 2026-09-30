@@ -85,6 +85,7 @@ Both runtimes converge on the same `LLMEvent` stream consumed by the session pro
 Safety boundary:
 
 - AI SDK remains the default.
-- `KILO_EXPERIMENTAL_NATIVE_LLM=true` or the umbrella `KILO_EXPERIMENTAL=true` opts in. Native is not a global replacement.
+- `KILO_EXPERIMENTAL_NATIVE_LLM=true` or the umbrella `KILO_EXPERIMENTAL=true` opts in. OpenAI-compatible DeepSeek selections also require the native DSML parser so recovered tool calls can execute. Native is not a global replacement.
 - Native execution currently supports OpenAI, opencode-managed OpenAI-compatible, and Anthropic API-key paths backed by `@ai-sdk/openai`, `@ai-sdk/openai-compatible`, or `@ai-sdk/anthropic` catalog entries.
-- Unsupported providers, OpenAI OAuth, and missing API-key cases fall back to AI SDK.
+- OpenAI-compatible providers with `options.localInference === true` and a valid explicit HTTP(S) `options.baseURL` may omit API keys. This exception does not infer locality from an endpoint or model name and does not manufacture an authentication header.
+- Unsupported explicitly local DSML-required requests fail clearly before AI SDK fallback. Ordinary cloud requests retain their existing unsupported-provider and missing-key fallback behavior; OpenAI OAuth requires its supported fetch override for native execution.

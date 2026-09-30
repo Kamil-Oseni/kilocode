@@ -10,7 +10,9 @@ export const enhancePromptHandlers = HttpApiBuilder.group(InstanceHttpApi, "enha
     const enhance = Effect.fn("EnhancePromptHttpApi.enhance")(function* (ctx: {
       payload: typeof EnhancePromptPayload.Type
     }) {
-      const text = yield* EffectBridge.fromPromise(() => enhancePrompt(ctx.payload.text, ctx.payload.model))
+      const run = EffectBridge.bind((signal: AbortSignal) => enhancePrompt(ctx.payload.text, ctx.payload.model, signal))
+      // Effect enables cancellation from callback arity; the bound rest-argument callback has length zero.
+      const text = yield* Effect.promise((signal) => run(signal))
       return { text }
     })
 

@@ -14,6 +14,7 @@ import { Storage } from "@/storage/storage"
 import { RayaVoice } from "@/kilocode/voice/service"
 import { Envelope, Start, type VoiceSessionID } from "@/kilocode/voice/protocol"
 import * as OpenAIVoice from "@/kilocode/voice/openai"
+import { startup } from "@/kilocode/voice/startup"
 import { pricing as livePricing } from "@/kilocode/voice/live-protocol"
 import type { OpenAIPricing } from "@/kilocode/voice/openai-usage"
 import * as TaskWorker from "@/kilocode/session/task-worker"
@@ -145,7 +146,7 @@ export const voiceHandlers = HttpApiBuilder.group(InstanceHttpApi, "raya-voice",
           Effect.mapError((error) => new OpenAIVoice.VoiceError({ code: "conflict", message: error.message })),
         ),
     })
-    yield* openai.reconcile().pipe(
+    yield* startup(storage, openai.reconcile()).pipe(
       Effect.catch((error) => Effect.logError("Voice usage reconciliation did not start", { error })),
       Effect.forkScoped,
     )

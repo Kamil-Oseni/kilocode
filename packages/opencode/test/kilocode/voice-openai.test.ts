@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import path from "node:path"
 import { createHash } from "node:crypto"
-import { Deferred, Effect, Exit, Fiber, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -21,6 +21,8 @@ import { Runner } from "@/effect/runner"
 import { observe } from "@/kilocode/effect/observation"
 import * as Workers from "@/kilocode/session/task-worker"
 import { make, VoiceError } from "@/kilocode/voice/openai"
+import { startup } from "@/kilocode/voice/startup"
+import { hold } from "@/kilocode/task/hold"
 import type { OpenAIPricing } from "@/kilocode/voice/openai-usage"
 import type { OpenAICall, OpenAICallInput } from "@/kilocode/voice/openai-protocol"
 import type { SessionPrompt } from "@/session/prompt"
@@ -3206,3 +3208,84 @@ it.live(
     }),
   30_000,
 )
+
+for (const retained of [false, true])
+  it.live(
+    `held startup preserves ${retained ? "retained" : "empty"} voice reconciliation across native storage restarts`,
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        const layers = Storage.layerFromDir(path.join(root, "storage")).pipe(
+          Layer.provideMerge(Database.layerFromPath(path.join(root, "voice.sqlite"))),
+        )
+        const saved = yield* Effect.gen(function* () {
+          const state = yield* fixture(root)
+          if (retained) {
+            yield* state.voice.meter(
+              state.binding.id,
+              {
+                generation: state.binding.generation,
+                receipt: { id: "saved_usage", kind: "response", model: "gpt-realtime-2.1", status: "missing" },
+              },
+              secret,
+              root,
+            )
+          }
+          if (!retained) yield* state.deps.database.db.delete(Table).run().pipe(Effect.orDie)
+          const charges: string[] = []
+          const voice = yield* make({
+            ...state.deps,
+            usageCharges: (input) =>
+              Effect.sync(() => {
+                charges.push(input.id)
+              }),
+          })
+          yield* startup(state.deps.storage, voice.reconcile())
+          expect(charges.length).toBe(retained ? 1 : 0)
+          const key = ["raya", "voice", "usage-reconciliation", "v1"]
+          const prior = yield* state.deps.storage.read<unknown>(key)
+          expect(prior).toMatchObject({
+            cycle: 1,
+            status: "complete",
+            scanned: retained ? 1 : 0,
+            receipts: retained ? 1 : 0,
+          })
+          const rows = yield* state.deps.database.db.select().from(Table).all().pipe(Effect.orDie)
+          const marker = yield* hold(state.deps.storage).begin()
+          return { deps: state.deps, key, prior, rows, marker }
+        }).pipe(Effect.provide(layers))
+        for (const attempt of [1, 2]) {
+          yield* Effect.gen(function* () {
+            const storage = yield* Storage.Service
+            const database = yield* Database.Service
+            const calls: string[] = []
+            const voice = yield* make({
+              ...saved.deps,
+              storage,
+              database,
+              usageCharges: (input) =>
+                Effect.sync(() => {
+                  calls.push(input.id)
+                }),
+              usageSettlements: (input) =>
+                Effect.sync(() => {
+                  calls.push(input.id)
+                }),
+            })
+            yield* startup(storage, voice.reconcile())
+            expect(calls).toEqual([])
+            expect(yield* storage.read(saved.key)).toEqual(saved.prior)
+            expect(yield* database.db.select().from(Table).all().pipe(Effect.orDie)).toEqual(saved.rows)
+            expect((yield* hold(storage).get())?.id).toBe(saved.marker.id)
+            if (attempt === 2) {
+              yield* storage.replace(["raya", "restore-hold"], { version: 2 })
+              expect(Exit.isFailure(yield* startup(storage, voice.reconcile()).pipe(Effect.exit))).toBe(true)
+              expect(calls).toEqual([])
+              expect(yield* storage.read(saved.key)).toEqual(saved.prior)
+              expect(yield* database.db.select().from(Table).all().pipe(Effect.orDie)).toEqual(saved.rows)
+            }
+          }).pipe(Effect.provide(layers))
+        }
+      }),
+    30_000,
+  )

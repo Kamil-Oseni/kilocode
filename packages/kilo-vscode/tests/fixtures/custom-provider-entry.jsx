@@ -7,8 +7,13 @@ import { createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { I18nProvider } from "@kilocode/kilo-ui/context"
 import { ModelCard } from "../../webview-ui/src/components/settings/CustomProviderModelCard"
+import { LocalServer } from "../../webview-ui/src/components/settings/CustomProviderLocalServer"
 import { validateCustomProvider } from "../../webview-ui/src/components/settings/CustomProviderValidation"
-import { customProviderModelSettings, sanitizeCustomProviderConfig } from "../../src/shared/custom-provider"
+import {
+  customProviderModelSettings,
+  customProviderLocalInference,
+  sanitizeCustomProviderConfig,
+} from "../../src/shared/custom-provider"
 import { dict } from "../../webview-ui/src/i18n/en"
 import { dict as ui } from "@kilocode/kilo-ui/i18n/en"
 const t = (key) => dict[key] ?? ui[key] ?? key
@@ -21,6 +26,7 @@ function Fixture() {
     name: "Local server",
     npm: "@ai-sdk/openai-compatible",
     baseURL: "http://127.0.0.1:1234/v1",
+    localInference: undefined,
     apiKey: "",
     models: [
       {
@@ -56,12 +62,18 @@ function Fixture() {
   }
   const reopen = () => {
     set("models", 0, customProviderModelSettings(saved().models["local-model"]))
+    set("localInference", customProviderLocalInference(saved()))
     issue({})
     show(true)
   }
   return (
     <main style={{ padding: "16px", "max-width": "760px", margin: "auto" }}>
       <Show when={open()}>
+        <LocalServer
+          checked={form.localInference === true}
+          onChange={(checked) => set("localInference", checked)}
+          t={t}
+        />
         <ModelCard
           m={form.models[0]}
           errors={errors()}

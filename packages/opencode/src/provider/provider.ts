@@ -48,6 +48,8 @@ import {
 import * as ModelsRefresh from "@/kilocode/provider/models-refresh"
 import * as Pricing from "@/kilocode/provider/pricing"
 import { bedrockAuth, providerKey, vertexAuth, vertexCredentials, vertexOptions } from "@/kilocode/provider/cloud-auth"
+import { localFetch } from "@/kilocode/provider/local-scheduler"
+import { substitute } from "@/kilocode/provider/helper-policy"
 // kilocode_change end
 import { ProviderError } from "./error"
 
@@ -1576,11 +1578,7 @@ const layer = Layer.effect(
               existingModel?.api.npm === m.api.npm
                 ? (existingModel.variants ?? ProviderTransform.variants(m))
                 : ProviderTransform.variants(m)
-            const generated = customProviderVariants(
-              parsedModel,
-              model.provider?.npm ?? provider.npm,
-              baseGenerate,
-            )
+            const generated = customProviderVariants(parsedModel, model.provider?.npm ?? provider.npm, baseGenerate)
             const merged = mergeDeep(generated, model.variants ?? {})
             // kilocode_change end
             parsedModel.variants = mapValues(
@@ -1831,12 +1829,17 @@ const layer = Layer.effect(
         if (existing) return existing
 
         const customFetch = options["fetch"]
+        const local = options["localInference"] // kilocode_change - opt-in local resource admission
+        delete options["localInference"] // kilocode_change - keep scheduler metadata out of provider transport options
         const chunkTimeout = options["chunkTimeout"]
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
-        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+        // kilocode_change start - admission precedes transport deadlines
+        options["fetch"] = localFetch({ localInference: local }, async (input: any, init?: BunFetchRequestInit) => {
+          // kilocode_change end
+          // kilocode_change - admission precedes transport deadlines
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
@@ -1879,7 +1882,7 @@ const layer = Layer.effect(
             throw err
           }
           // kilocode_change end
-        }
+        }) // kilocode_change
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
         if (bundledLoader) {
@@ -1992,6 +1995,7 @@ const layer = Layer.effect(
     })
 
     const getSmallModel = Effect.fn("Provider.getSmallModel")(function* (providerID: ProviderV2.ID) {
+      if (!substitute((yield* getProvider(providerID))?.options)) return undefined // kilocode_change - local helpers retain the caller's selected model
       const cfg = yield* config.get()
 
       if (cfg.small_model) {

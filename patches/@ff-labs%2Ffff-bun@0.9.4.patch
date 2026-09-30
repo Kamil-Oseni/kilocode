@@ -29,3 +29,36 @@ index 3454256..6dca25a 100644
 
      if (existsSync(binaryPath)) {
        return binaryPath;
+diff --git a/src/ffi.ts b/src/ffi.ts
+--- a/src/ffi.ts
++++ b/src/ffi.ts
+@@ -389 +389 @@
+-  resultPtr: Pointer | null,
++  resultPtr: Pointer | bigint | null,
+@@ -412 +412 @@
+-function parseBoolResult(resultPtr: Pointer | null): Result<boolean> {
++function parseBoolResult(resultPtr: Pointer | bigint | null): Result<boolean> {
+@@ -419 +419 @@
+-function parseIntResult(resultPtr: Pointer | null): Result<number> {
++function parseIntResult(resultPtr: Pointer | bigint | null): Result<number> {
+@@ -426 +426 @@
+-function parseStringResult(resultPtr: Pointer | null): Result<string | null> {
++function parseStringResult(resultPtr: Pointer | bigint | null): Result<string | null> {
+@@ -439 +439 @@
+-function parseJsonResult<T>(resultPtr: Pointer | null): Result<T> {
++function parseJsonResult<T>(resultPtr: Pointer | bigint | null): Result<T> {
+@@ -460 +460 @@
+-function parseVoidResult(resultPtr: Pointer | null): Result<void> {
++function parseVoidResult(resultPtr: Pointer | bigint | null): Result<void> {
+@@ -663 +663 @@
+-function parseSearchResult(resultPtr: Pointer | null): Result<SearchResult> {
++function parseSearchResult(resultPtr: Pointer | bigint | null): Result<SearchResult> {
+@@ -752 +752 @@
+-  resultPtr: Pointer | null,
++  resultPtr: Pointer | bigint | null,
+@@ -857 +857 @@
+-  resultPtr: Pointer | null,
++  resultPtr: Pointer | bigint | null,
+@@ -1060 +1060 @@
+-function parseGrepResult(resultPtr: Pointer | null): Result<GrepResult> {
++function parseGrepResult(resultPtr: Pointer | bigint | null): Result<GrepResult> {

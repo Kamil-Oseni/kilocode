@@ -62,6 +62,13 @@ export type ModelUsageMap = Record<string, ModelUsage>
 
 export type ProviderAuthState = "api" | "oauth" | "wellknown"
 
+export interface ProvidersLoadStateMessage {
+  type: "providersLoadState"
+  state: "loading" | "error"
+  generation: number
+  error?: string
+}
+
 export interface ProviderConfig {
   name?: string
   api_key?: string
@@ -69,5 +76,5 @@ export interface ProviderConfig {
   models?: Record<string, unknown>
   npm?: string
   env?: string[]
-  options?: Record<string, unknown>
+  options?: Record<string, unknown> & { localInference?: boolean }
 }

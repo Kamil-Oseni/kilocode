@@ -35,6 +35,7 @@ import { SessionExport } from "@/kilocode/session-export"
 import { getActiveOrg } from "@/kilocode/session-export/eligibility"
 import { normalizeUsageForExport, observeFullStreamForExport } from "@/kilocode/session-export/llm"
 import { TurnTools } from "@/kilocode/capability/turn-tools"
+import { refuse, LocalNativeError } from "@/kilocode/provider/native-policy"
 // kilocode_change end
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -339,6 +340,8 @@ const live: Layer.Layer<
             stream: native.stream,
           }
         }
+        if (refuse(item.options, LLMNativeRuntime.requiresNative(input.model))) // kilocode_change - local DSML requests require native tool execution
+          return yield* Effect.fail(new LocalNativeError()) // kilocode_change - local DSML requests cannot silently lose tool execution through SDK fallback
         yield* Effect.logInfo("llm runtime selected", {
           "llm.runtime": "ai-sdk",
           "llm.provider": input.model.providerID,

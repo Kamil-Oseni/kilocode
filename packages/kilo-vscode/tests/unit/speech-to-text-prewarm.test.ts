@@ -48,7 +48,7 @@ const SCRIPT = `
   const dispose = render(
     () =>
       createComponent(ProviderContext.Provider, {
-        value: { authStates: auth },
+        value: { authStates: auth, status: () => "ready", retry: () => undefined },
         get children() {
           return createComponent(ConfigContext.Provider, {
             value: { config },

@@ -142,6 +142,17 @@ describe("resolveCustomProviderKey", () => {
 })
 
 describe("sanitizeCustomProviderConfig", () => {
+  it.each(["true", 1, null, {}, []].map((value) => ({ value })))(
+    "rejects a mistyped local inference choice %s",
+    (row) => {
+      const result = sanitizeCustomProviderConfig({
+        name: "Explicit server",
+        options: { baseURL: "http://127.0.0.1:1234/v1", localInference: row.value },
+        models: { model: { name: "Model" } },
+      })
+      expect("error" in result).toBe(true)
+    },
+  )
   it("normalizes config and preserves an approved package", () => {
     const result = sanitizeCustomProviderConfig({
       npm: "@ai-sdk/anthropic",

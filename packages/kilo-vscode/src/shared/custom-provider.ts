@@ -91,6 +91,7 @@ export const CustomProviderConfigSchema = z
     env: z.array(EnvSchema).max(1).optional(),
     options: z
       .object({
+        localInference: z.boolean().optional(),
         baseURL: z
           .string()
           .trim()
@@ -125,6 +126,7 @@ export type SanitizedProviderConfig = {
   env?: string[]
   options: {
     baseURL: string
+    localInference?: boolean
     headers?: Record<string, string>
   }
   models: Record<
@@ -200,6 +202,7 @@ export function normalizeCustomProviderConfig(
     ...(config.env ? { env: config.env.map((item) => item.trim()) } : {}),
     options: {
       baseURL: config.options.baseURL.trim(),
+      ...(config.options.localInference !== undefined ? { localInference: config.options.localInference } : {}),
       ...(headers && Object.keys(headers).length > 0 ? { headers } : {}),
     },
     models: Object.fromEntries(
@@ -216,6 +219,11 @@ export function normalizeCustomProviderConfig(
       ]),
     ),
   }
+}
+
+export function customProviderLocalInference(provider: unknown): boolean | undefined {
+  const options = isRecord(provider) && isRecord(provider.options) ? provider.options : undefined
+  return typeof options?.localInference === "boolean" ? options.localInference : undefined
 }
 
 export function sanitizeCustomProviderConfig(provider: unknown): { value: SanitizedProviderConfig } | Issue {

@@ -1,4 +1,5 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
+import { closeProfileSqlite, profileSqlite } from "../kilocode/profile-sqlite" // kilocode_change
 import { drizzle } from "drizzle-orm/node-sqlite"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
@@ -148,14 +149,20 @@ const nativeLayer = (config: Config) =>
   Layer.effect(
     Sqlite.Native,
     Effect.gen(function* () {
-      const native = new DatabaseSync(config.filename, {
-        readOnly: config.readonly,
-        timeout: config.timeout,
-        allowExtension: config.allowExtension,
-        enableForeignKeyConstraints: true,
-        open: true,
-      })
-      yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
+      // kilocode_change start - native profile writer admission
+      const native = profileSqlite(
+        config.filename,
+        () =>
+          new DatabaseSync(config.filename, {
+            readOnly: config.readonly,
+            timeout: config.timeout,
+            allowExtension: config.allowExtension,
+            enableForeignKeyConstraints: true,
+            open: true,
+          }),
+      )
+      // kilocode_change end
+      yield* Effect.addFinalizer(() => Effect.promise(() => closeProfileSqlite(native))) // kilocode_change
       if (config.disableWAL !== true && config.readonly !== true) native.exec("PRAGMA journal_mode = WAL;")
       return native
     }),

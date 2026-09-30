@@ -5,6 +5,7 @@ import path from "node:path"
 import { admitProfileWriter, coordinateProfileWriters, profileScope } from "../../src/kilocode/profile-maintenance"
 import { Flock } from "../../src/util/flock"
 import { Database } from "bun:sqlite"
+import { Hash } from "../../src/util/hash"
 
 async function fixture() {
   const dir = await mkdtemp(path.join(os.tmpdir(), "raya-maintenance-"))
@@ -152,7 +153,7 @@ test("portable capture intent refuses before running a callback under incomplete
   expect(called).toBe(false)
 })
 
-test("a suspended live independent owner is never reclaimed when recovery is disabled", async () => {
+test("verified-dead recovery never reclaims a suspended live independent owner by heartbeat age", async () => {
   await using tmp = await fixture()
   await using worker = child(tmp.dir, "suspended-live")
   await wait(worker.input.ready)
@@ -164,7 +165,7 @@ test("a suspended live independent owner is never reclaimed when recovery is dis
       async () => {
         entered = true
       },
-      { dir: worker.input.dir, staleMs: 30, recover: false, timeoutMs: 120, baseDelayMs: 10, maxDelayMs: 10 },
+      { dir: worker.input.dir, staleMs: 30, recover: "dead", timeoutMs: 120, baseDelayMs: 10, maxDelayMs: 10 },
     ),
   ).rejects.toThrow("Timed out")
   expect(entered).toBe(false)
@@ -179,3 +180,45 @@ test("a suspended live independent owner is never reclaimed when recovery is dis
   )
   expect(entered).toBe(true)
 })
+
+test("verified-dead gate recovery admits after actual abrupt independent owner death", async () => {
+  await using tmp = await fixture()
+  await using worker = child(tmp.dir, "abrupt")
+  await wait(worker.input.ready)
+  worker.process.kill()
+  await worker.process.exited
+  expect(() => process.kill(worker.process.pid, 0)).toThrow()
+  await Flock.withLock(worker.input.key!, async () => "admitted", {
+    dir: worker.input.dir,
+    recover: "dead",
+    timeoutMs: 500,
+  })
+})
+
+for (const mode of ["foreign", "malformed", "live", "breaker"])
+  test(`verified-dead recovery refuses ${mode} ownership`, async () => {
+    await using tmp = await fixture()
+    await using worker = child(tmp.dir, "uncertain")
+    await wait(worker.input.ready)
+    worker.process.kill()
+    await worker.process.exited
+    const lock = path.join(worker.input.dir, Hash.fast(worker.input.key!) + ".lock")
+    const file = path.join(lock, "meta.json")
+    const raw = (await Bun.file(file).json()) as { pid: number; hostname: string; token: string }
+    if (mode === "foreign") await writeFile(file, JSON.stringify({ ...raw, hostname: "foreign-host" }))
+    if (mode === "malformed") await writeFile(file, "invalid JSON")
+    if (mode === "live") await writeFile(file, JSON.stringify({ ...raw, pid: process.pid }))
+    if (mode === "breaker") await mkdir(lock + ".breaker")
+    const before = await Bun.file(file).text()
+    await expect(
+      Flock.withLock(worker.input.key!, async () => "forbidden", {
+        dir: worker.input.dir,
+        recover: "dead",
+        timeoutMs: 50,
+        staleMs: 1,
+        baseDelayMs: 5,
+        maxDelayMs: 5,
+      }),
+    ).rejects.toThrow("Timed out")
+    expect(await Bun.file(file).text()).toBe(before)
+  })

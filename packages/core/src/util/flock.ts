@@ -39,7 +39,7 @@ export namespace Flock {
   export type Wait = (input: WaitEvent) => void | Promise<void>
 
   export interface Options {
-    recover?: boolean // kilocode_change - maintenance must not evict a suspended live owner by heartbeat age
+    recover?: boolean | "dead" // kilocode_change - opt-in verified dead owner recovery
     dir?: string
     signal?: AbortSignal
     staleMs?: number
@@ -50,7 +50,7 @@ export namespace Flock {
   }
 
   type Opts = {
-    recover: boolean // kilocode_change
+    recover: boolean | "dead" // kilocode_change
     staleMs: number
     timeoutMs: number
     baseDelayMs: number
@@ -147,6 +147,40 @@ export namespace Flock {
     return now - dir.mtimeMs > staleMs
   }
 
+  // kilocode_change start - only absent local PIDs prove ownership has ended; PID reuse refuses recovery
+  async function dead(file: string) {
+    const raw = await readFile(file, "utf8").catch(() => undefined)
+    if (!raw) return false
+    const owner: unknown = (() => {
+      try {
+        return JSON.parse(raw)
+      } catch {
+        return undefined
+      }
+    })()
+    if (
+      !owner ||
+      typeof owner !== "object" ||
+      !("hostname" in owner) ||
+      owner.hostname !== os.hostname() ||
+      !("pid" in owner) ||
+      typeof owner.pid !== "number" ||
+      !Number.isSafeInteger(owner.pid) ||
+      owner.pid <= 0 ||
+      !("token" in owner) ||
+      typeof owner.token !== "string" ||
+      !owner.token
+    )
+      return false
+    try {
+      process.kill(owner.pid, 0)
+      return false
+    } catch (error) {
+      return code(error) === "ESRCH" ? owner.token : false
+    }
+  }
+  // kilocode_change end
+
   async function tryAcquireLockDir(lockDir: string, opts: Opts): Promise<Owned | { acquired: false }> {
     const token = randomUUID?.() ?? randomBytes(16).toString("hex")
     const metaPath = path.join(lockDir, "meta.json")
@@ -160,7 +194,9 @@ export namespace Flock {
       }
 
       // kilocode_change start - maintenance locks never recover solely from heartbeat age
-      if (!opts.recover || !(await stale(lockDir, heartbeatPath, metaPath, opts.staleMs))) {
+      const owner =
+        opts.recover === "dead" ? await dead(metaPath) : await stale(lockDir, heartbeatPath, metaPath, opts.staleMs)
+      if (!opts.recover || !owner) {
         return { acquired: false }
       }
       // kilocode_change end
@@ -172,7 +208,8 @@ export namespace Flock {
         const errCode = code(claimErr)
         if (errCode === "EEXIST") {
           const breaker = await stats(breakerPath)
-          if (breaker && wall() - breaker.mtimeMs > opts.staleMs) {
+          if (opts.recover !== "dead" && breaker && wall() - breaker.mtimeMs > opts.staleMs) {
+            // kilocode_change - uncertain breaker ownership is never age-evicted in dead-only mode
             await rm(breakerPath, { recursive: true, force: true }).catch(() => undefined)
           }
           return { acquired: false }
@@ -187,9 +224,13 @@ export namespace Flock {
 
       try {
         // Breaker ownership ensures only one contender performs stale cleanup.
-        if (!(await stale(lockDir, heartbeatPath, metaPath, opts.staleMs))) {
+        // kilocode_change start - recheck exact dead owner after exclusive breaker ownership
+        const verified =
+          opts.recover === "dead" ? await dead(metaPath) : await stale(lockDir, heartbeatPath, metaPath, opts.staleMs)
+        if (!verified || (opts.recover === "dead" && verified !== owner)) {
           return { acquired: false }
         }
+        // kilocode_change end
 
         await rm(lockDir, { recursive: true, force: true })
 
@@ -314,7 +355,7 @@ export namespace Flock {
   export async function acquire(key: string, input: Options = {}): Promise<Lease> {
     input.signal?.throwIfAborted()
     const cfg: Opts = {
-      recover: input.recover !== false, // kilocode_change - preserve existing recovery unless explicitly disabled
+      recover: input.recover ?? true, // kilocode_change - preserve existing recovery unless explicitly selected
       staleMs: input.staleMs ?? defaultOpts.staleMs,
       timeoutMs: input.timeoutMs ?? defaultOpts.timeoutMs,
       baseDelayMs: input.baseDelayMs ?? defaultOpts.baseDelayMs,

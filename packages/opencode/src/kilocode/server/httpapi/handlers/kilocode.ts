@@ -35,6 +35,7 @@ import { Storage } from "@/storage/storage" // raya_change - Milestone A durable
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
 import { MissingRoster } from "@/kilocode/task/roster"
+import { hold } from "@/kilocode/task/hold"
 import { propose, validate } from "@/kilocode/task/assignment-proposal"
 import { RayaTaskAuthority } from "@/kilocode/task/authority"
 import { MCP } from "@/mcp"
@@ -946,6 +947,13 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       }
     }) {
       yield* owned(ctx.params.agentID)
+      yield* hold(storage)
+        .check()
+        .pipe(
+          Effect.catchTag("RayaTask.GuardError", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+          ),
+        )
       const admitted = yield* inbox
         .admit({
           agentID: ctx.params.agentID,

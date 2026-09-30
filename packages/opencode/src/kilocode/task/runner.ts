@@ -31,6 +31,7 @@ import { claim } from "./claim"
 import { record as ContinuationRecord } from "./continuation"
 import { inspect, recover } from "./recovery"
 import { stopped } from "./owner"
+import { hold } from "./hold"
 import { poll } from "./poll"
 import { InstanceState } from "@/effect/instance-state"
 import { capture } from "@/kilocode/instance"
@@ -209,6 +210,7 @@ export namespace RayaTaskRunner {
     pty?: PtyArchive.Interface
     continuation?: (run: RayaTask.Run) => Effect.Effect<void>
   }): Runner {
+    const transfer = hold(input.storage)
     const tasks = RayaTask.make(input)
     const execution = RayaTaskExecution.make(input.storage)
     const snapshots = RayaTaskSnapshot.make(input)
@@ -303,6 +305,7 @@ export namespace RayaTaskRunner {
     })
     const turn = (run: RayaTask.Run) =>
       Effect.gen(function* () {
+        yield* transfer.check()
         const row = errands ? yield* errands.bySession(run.sessionID) : undefined
         const session = yield* input.sessions.get(run.sessionID)
         const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
@@ -334,6 +337,7 @@ export namespace RayaTaskRunner {
           )
             return
         }
+        yield* transfer.check()
         return yield* input.continuation?.(run) ??
           kick({
             database: input.database,
@@ -364,6 +368,7 @@ export namespace RayaTaskRunner {
       } satisfies Organization
     })
     const continueRun = Effect.fn("RayaTaskRunner.continueRun")(function* (run: RayaTask.Run) {
+      yield* transfer.check()
       const permit = yield* execution.acquire(run)
       if (!permit) return
       yield* execution.enter(run, turn(run))
@@ -371,6 +376,7 @@ export namespace RayaTaskRunner {
     const launch = (run: RayaTask.Run) =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
+          yield* transfer.check()
           const permit = yield* execution.acquire(run)
           if (!permit) return
           yield* restore(execution.enter(run, turn(run))).pipe(
@@ -509,6 +515,7 @@ export namespace RayaTaskRunner {
     })
 
     const check = Effect.fn("RayaTaskRunner.check")(function* (id: string, trigger?: Trigger, follow?: boolean) {
+      yield* transfer.check()
       if (organizations && (yield* organizations.stopped(id)))
         return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
       const item = follow ? yield* tasks.get(id) : yield* tasks.launchable(id)
@@ -542,6 +549,7 @@ export namespace RayaTaskRunner {
     })
 
     const recoverable = Effect.fn("RayaTaskRunner.recoverable")(function* (id: string) {
+      yield* transfer.check()
       if (restore) yield* restore(id)
       return yield* recover(input.storage, id, (record) =>
         Effect.gen(function* () {
@@ -572,6 +580,7 @@ export namespace RayaTaskRunner {
         },
       ) =>
         Effect.gen(function* () {
+          yield* transfer.check()
           for (const run of yield* tasks.runsFor(id)) {
             const goal = yield* goals.get(run.sessionID)
             if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined)
@@ -658,6 +667,7 @@ export namespace RayaTaskRunner {
                       })
                     }),
                   )
+                  yield* transfer.check()
                   yield* owner.link(created.id)
                   if (reservations)
                     yield* reservations
@@ -821,6 +831,7 @@ export namespace RayaTaskRunner {
       question: string,
       opts?: { defer?: boolean; bind?: { source: string; sessionID: SessionID } },
     ) {
+      yield* transfer.check()
       if (organizations && (yield* organizations.stopped(id)))
         return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
       const item = yield* tasks.get(id)
@@ -873,6 +884,7 @@ export namespace RayaTaskRunner {
       return yield* fire(id, undefined, note, { follow: true, defer: opts?.defer, bind: opts?.bind })
     })
     const dispatch = Effect.fn("RayaTaskRunner.dispatch")(function* (id: string) {
+      yield* transfer.check()
       if (!inbox)
         return yield* new RayaTask.GuardError({
           kind: "unavailable",
@@ -889,6 +901,7 @@ export namespace RayaTaskRunner {
       return saved
     })
     const resume: Runner["resume"] = Effect.fn("RayaTaskRunner.resume")(function* (sessionID: SessionID) {
+      yield* transfer.check()
       const items = yield* tasks.list()
       const active = yield* Effect.forEach(items, (item) => tasks.runsFor(item.id), { concurrency: 1 })
       const goal = yield* goals.get(sessionID)
@@ -1003,6 +1016,7 @@ export namespace RayaTaskRunner {
     })
 
     const reviewReply = Effect.fn("RayaTaskRunner.reviewReply")(function* (sessionID: SessionID, intent: string) {
+      yield* transfer.check()
       const goal = yield* goals.get(sessionID)
       const marker = goal?.replyRecovery
       if (!goal || !marker || marker.reviewedAt !== undefined || goal.intent !== intent)
@@ -1051,6 +1065,7 @@ export namespace RayaTaskRunner {
     })
 
     const start = Effect.fn("RayaTaskRunner.startErrand")(function* (taken: Errand) {
+      yield* transfer.check()
       if (!errands)
         return yield* new RayaTask.GuardError({
           kind: "unavailable",
@@ -1229,6 +1244,7 @@ export namespace RayaTaskRunner {
       })
 
     const delegate = Effect.fn("RayaTaskRunner.delegate")(function* (input: Ask) {
+      yield* transfer.check()
       if (!errands)
         return yield* new RayaTask.GuardError({
           kind: "unavailable",
@@ -1451,6 +1467,7 @@ export namespace RayaTaskRunner {
     })
 
     const recoverStops = Effect.fn("RayaTaskRunner.recoverStops")(function* () {
+      if (yield* transfer.held().pipe(Effect.orDie)) return
       if (!input.database || !input.halt) return
       const pending = RayaTaskOrganization.make(input.database, { ...tasks, stop: stopMembers }, input.storage)
       const results = yield* Effect.forEach(
@@ -1502,6 +1519,7 @@ export namespace RayaTaskRunner {
     })
 
     const settle = Effect.fn("RayaTaskRunner.settle")(function* (sessionID: SessionID) {
+      if (yield* transfer.held().pipe(Effect.orDie)) return
       const recovery = (yield* goals.get(sessionID))?.replyRecovery
       // Review needs the original execution receipt; blocked is not a verified terminal outcome here.
       if (recovery && recovery.reviewedAt === undefined) return
@@ -1604,6 +1622,7 @@ export namespace RayaTaskRunner {
     })
 
     const terminal = Effect.fn("RayaTaskRunner.terminal")(function* (run: RayaTask.Run) {
+      yield* transfer.check()
       const goal = yield* goals.get(run.sessionID)
       if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) return { state: "blocked" as const, run }
       if (!(yield* execution.retained(run))) return { state: "skip" as const, run }
@@ -1638,6 +1657,7 @@ export namespace RayaTaskRunner {
     })
 
     const resolve = Effect.fn("RayaTaskRunner.resolve")(function* (id: string, runID: string) {
+      yield* transfer.check()
       yield* tasks.get(id)
       const claim = yield* inspect(input.storage, id)
       const current = claim && "runID" in claim ? claim : undefined
@@ -1776,6 +1796,7 @@ export namespace RayaTaskRunner {
     })
 
     const revive: Runner["revive"] = Effect.fn("RayaTaskRunner.revive")(function* () {
+      if (yield* transfer.held().pipe(Effect.orDie)) return
       const items = yield* tasks.list()
       for (const item of items) {
         if (organizations && (yield* organizations.stopped(item.id))) continue
@@ -1866,6 +1887,7 @@ export namespace RayaTaskRunner {
     })
 
     const announce = Effect.fn("RayaTaskRunner.announce")(function* (source: string, filter?: string) {
+      if (yield* transfer.held().pipe(Effect.orDie)) return []
       const receivedAt = Date.now()
       const items = yield* tasks.listenFor(source, filter)
       const runs: RayaTask.Run[] = []
@@ -1878,7 +1900,7 @@ export namespace RayaTaskRunner {
       return runs
     })
 
-    const tick = (from: number) =>
+    const pulse = (from: number) =>
       lapse(from).pipe(
         Effect.andThen(schedule ? schedule.clean() : Effect.void),
         Effect.andThen(tasks.list()),
@@ -1904,6 +1926,12 @@ export namespace RayaTaskRunner {
           ),
         ),
       )
+
+    const tick = (from: number) =>
+      Effect.gen(function* () {
+        if (yield* transfer.held().pipe(Effect.orDie)) return
+        yield* pulse(from)
+      })
 
     const preview = Effect.fn("RayaTaskRunner.preview")(function* (from: number) {
       const items = (yield* tasks.preview(from)).map((item) => ({ ...item, execution: undefined }))
@@ -2174,10 +2202,19 @@ export namespace RayaTaskRunner {
         const messenger = RayaContactMessenger.make(input.database, {
           clock: input.contact?.clock,
           exists: (id) =>
-            runner.tasks.get(id).pipe(
-              Effect.map((item) => item.enabled),
-              Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(false)),
-            ),
+            hold(input.storage)
+              .held()
+              .pipe(
+                Effect.orDie,
+                Effect.flatMap((held) =>
+                  held
+                    ? Effect.succeed(false)
+                    : runner.tasks.get(id).pipe(
+                        Effect.map((item) => item.enabled),
+                        Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(false)),
+                      ),
+                ),
+              ),
           permit: (request, target) =>
             target.scope.kind !== "organization"
               ? Effect.succeed(true)
@@ -2186,7 +2223,10 @@ export namespace RayaTaskRunner {
                 : Effect.succeed(false),
         })
         yield* poll(
-          messenger.drain(input.contact?.batch ?? 50),
+          Effect.gen(function* () {
+            if (yield* hold(input.storage).held().pipe(Effect.orDie)) return
+            yield* messenger.drain(input.contact?.batch ?? 50)
+          }),
           (cause) => log.error("Raya Messenger poll failed", { err: Cause.squash(cause) }),
           input.contact?.interval,
         ).pipe(Effect.forkScoped)

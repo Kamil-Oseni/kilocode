@@ -7,6 +7,7 @@ import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Git } from "@/git"
 import { publish } from "@/kilocode/session/review-publish" // kilocode_change - atomic review receipt persistence
 import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode_change - profile migration admission
+import { storageAdmission } from "@/kilocode/migration/storage-admission" // kilocode_change - cross-process JSON maintenance exclusion
 
 type Migration = (dir: string, fs: FSUtil.Interface, git: Git.Interface) => Effect.Effect<void, FSUtil.Error>
 
@@ -227,12 +228,14 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const git = yield* Git.Service
+      const writer = storageAdmission(root ?? path.join(Global.Path.data, "storage"), admission) // kilocode_change
       const locks = yield* RcMap.make({
         lookup: () => TxReentrantLock.make(),
         idleTimeToLive: 0,
       })
       const [cached, invalidate] = yield* Effect.cachedInvalidateWithTTL(
-        admission.run(
+        writer.run(
+          // kilocode_change - coordinate lazy migrations with profile maintenance
           Effect.gen(function* () {
             const dir = root ?? path.join(Global.Path.data, "storage")
             const marker = path.join(dir, "migration")
@@ -285,7 +288,8 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
       ): Effect.Effect<A, E | FSUtil.Error> =>
         Effect.gen(function* () {
           const dir = (yield* state).dir
-          return yield* admission.run(
+          return yield* writer.run(
+            // kilocode_change - hold JSON root through settled mutation
             Effect.scoped(
               Effect.gen(function* () {
                 const target = file(dir, key)

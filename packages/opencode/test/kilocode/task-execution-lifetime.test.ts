@@ -9,6 +9,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Git } from "@/git"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import type { Session } from "@/session/session"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
@@ -284,6 +285,7 @@ it.live(
         const database = yield* Database.Service
         const storage = yield* Storage.Service
         const turns = yield* Queue.unbounded<RayaTask.Run>()
+        const rows = new Map<SessionID, Session.Info>()
         let created = 0
         let fail = true
         const runner = RayaTaskRunner.make({
@@ -291,12 +293,25 @@ it.live(
           storage,
           halt: (id) => (id.endsWith("fail") && fail ? Effect.die(new Error("halt failed")) : Effect.void),
           sessions: {
-            create: () =>
+            create: (opts) =>
               Effect.sync(() => {
                 created++
-                return session(SessionID.make(created === 1 ? "ses_stop_ok" : "ses_stop_fail"))
+                const row = {
+                  ...session(SessionID.make(created === 1 ? "ses_stop_ok" : "ses_stop_fail")),
+                  metadata: opts?.metadata,
+                  permission: opts?.permission?.map((rule) => ({ ...rule })),
+                  agent: opts?.agent,
+                  model: opts?.model,
+                }
+                rows.set(row.id, row)
+                return row
               }),
-            get: (id) => Effect.succeed(session(id)),
+            get: (id) =>
+              Effect.sync(() => {
+                const row = rows.get(id)
+                if (!row) throw new Error("Unknown retained fixture session")
+                return row
+              }),
             messages: () => Effect.succeed([]),
             children: () => Effect.succeed([]),
           },

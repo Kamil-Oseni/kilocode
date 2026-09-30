@@ -18,6 +18,7 @@ import { owner, stopped } from "./owner"
 import { removals } from "./removal"
 import { archive as indexed, InvalidCursor } from "./archive"
 import { initialized, mark, MissingRoster } from "./roster"
+import { hold } from "./hold"
 import { RayaTaskQueue } from "./queue"
 import { Create as OrganizationCreate, matchesDefinition } from "./organization"
 import { Trigger as TriggerSchema } from "./trigger"
@@ -645,6 +646,7 @@ export namespace RayaTask {
   }
 
   export function make(deps: { storage: Store; database?: Database.Interface }) {
+    const transfer = hold(deps.storage)
     const store = deps.database ? indexed(deps.database) : undefined
     const archives = () =>
       deps.storage.read(["raya", "agent-archive"]).pipe(
@@ -1108,6 +1110,7 @@ export namespace RayaTask {
     })
 
     const create = Effect.fn("RayaTask.create")(function* (input: Create, id = crypto.randomUUID(), replay = false) {
+      yield* transfer.check()
       const items = yield* list()
       const existing = items.find((item) => item.id === id)
       if (existing) {
@@ -1142,6 +1145,7 @@ export namespace RayaTask {
       organization?: typeof OrganizationCreate.Type,
       organizationRevision?: number,
     ) {
+      yield* transfer.check()
       const paused = { ...input, enabled: false }
       const saved = yield* Effect.gen(function* () {
         const prior = yield* receipt(id)
@@ -1209,6 +1213,7 @@ export namespace RayaTask {
       expected?: typeof OrganizationCreate.Type,
       expectedRevision?: number,
     ) {
+      yield* transfer.check()
       const items = yield* list()
       const index = items.findIndex((item) => item.id === id)
       if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
@@ -1260,6 +1265,13 @@ export namespace RayaTask {
     })
 
     const recoverStages = Effect.fn("RayaTask.recoverStages")(function* () {
+      if (yield* transfer.held().pipe(Effect.orDie))
+        return {
+          recovered: 0,
+          pending: 0,
+          issues: ["Staged workers are paused for destination transfer review."],
+          truncated: false,
+        }
       const keys = (yield* deps.storage.list(["raya", "agent-stage"]).pipe(Effect.orDie)).sort((a, b) =>
         a.join("/").localeCompare(b.join("/")),
       )
@@ -1383,6 +1395,7 @@ export namespace RayaTask {
         provisioning?: typeof Provisioning.Type
       },
     ) {
+      if (patch.enabled === true || patch.provisioning?.enabled === true) yield* transfer.check()
       const items = yield* list()
       const index = items.findIndex((item) => item.id === id)
       if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
@@ -1514,6 +1527,7 @@ export namespace RayaTask {
           () => new GuardError({ kind: "capability", message: "Choose whether this worker can create workers." }),
         ),
       )
+      if (value.enabled) yield* transfer.check()
       const items = yield* list()
       const index = items.findIndex((item) => item.id === id)
       if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
@@ -1549,6 +1563,7 @@ export namespace RayaTask {
     }
 
     const launchable = Effect.fn("RayaTask.launchable")(function* (id: string) {
+      yield* transfer.check()
       const agent = yield* get(id)
       if (agent.access === undefined)
         return yield* new GuardError({
@@ -1656,6 +1671,7 @@ export namespace RayaTask {
     }
 
     const occurrence = Effect.fn("RayaTask.occurrence")(function* (agent: Agent, from: number) {
+      if (yield* transfer.held().pipe(Effect.orDie)) return undefined
       const history = yield* runsFor(agent.id)
       if (agent.access === undefined || history.some(pending) || blocked(agent, history)) return undefined
       const result = yield* evaluate(agent, from, consumed(history, agent.scheduleVersion ?? 1))

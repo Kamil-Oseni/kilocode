@@ -78,12 +78,16 @@ export const generate = Effect.fn("BranchName.generate")(function* (input: {
 
   const provider = yield* Provider.Service
   const llm = yield* LLM.Service
+  if ((input.providerID !== undefined || input.modelID !== undefined) && (!input.providerID || !input.modelID))
+    return yield* Effect.fail(new Error("Choose both a provider and model for branch naming"))
   const ref =
     input.providerID && input.modelID
       ? { providerID: input.providerID, modelID: input.modelID }
       : yield* provider.defaultModel()
   const model =
-    (yield* provider.getSmallModel(ref.providerID)) ?? (yield* provider.getModel(ref.providerID, ref.modelID))
+    input.providerID !== undefined
+      ? yield* provider.getModel(ref.providerID, ref.modelID)
+      : ((yield* provider.getSmallModel(ref.providerID)) ?? (yield* provider.getModel(ref.providerID, ref.modelID)))
   const agent: Agent.Info = {
     name: "branch-name",
     mode: "primary",

@@ -1,21 +1,39 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { createHash } from "node:crypto"
 import { request } from "./request"
-import { readFileSync, statSync } from "node:fs"
+import { existsSync, readFileSync, statSync } from "node:fs"
 import { open, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const bundled = import.meta.url.includes("$bunfs") || /[\\/]~BUN[\\/]/.test(import.meta.url)
-const directory = bundled
-  ? path.dirname(process.execPath)
-  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../native/kilocode/bin")
+export function resolveProcessHostLocation(meta: string, exe: string, exists = existsSync) {
+  const bin = path.dirname(exe)
+  if (exists(path.join(bin, "raya-process-mode.json"))) return { directory: bin, bundled: true }
+  if (meta.includes("$bunfs") || /[\\/]~BUN[\\/]/.test(meta) || !meta.startsWith("file:"))
+    return { directory: bin, bundled: true }
+  const source = fileURLToPath(meta)
+  // Bun's Windows executable can report a virtual B:\ source URL without its
+  // older $bunfs/~BUN markers. Resolve bundled helpers beside the real exe.
+  if (
+    !exists(source) ||
+    (process.platform === "win32" && path.basename(exe).toLowerCase() === "kilo.exe" && /^B:\\/i.test(source))
+  )
+    return { directory: bin, bundled: true }
+  return { directory: path.resolve(path.dirname(source), "../../../native/kilocode/bin"), bundled: false }
+}
+const selected = resolveProcessHostLocation(import.meta.url, process.execPath)
+const directory = selected.directory
+const bundled = selected.bundled
 const executable = path.join(directory, "raya-process-host.exe")
 let verified: { identity: string; pending: Promise<string> } | undefined
 
 /** Compiled hosts declare compatibility explicitly; a failed native host never falls back. */
 export function mode(): "native" | "legacy" {
   if (!bundled) return "native"
+  return readProcessMode(directory)
+}
+
+export function readProcessMode(directory: string): "native" | "legacy" {
   const file = path.join(directory, "raya-process-mode.json")
   if (statSync(file).size > 4096) throw new Error("Native process capability declaration exceeded bound")
   const value: unknown = JSON.parse(readFileSync(file, "utf8"))

@@ -10,7 +10,7 @@
  * once the WebSocket is up, raw bytes bypass postMessage entirely.
  */
 
-import { Component, createEffect, onCleanup, onMount } from "solid-js"
+import { Component, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
@@ -145,6 +145,7 @@ export const TerminalTab: Component<Props> = (props) => {
   const vscode = useVSCode()
   const { t } = useLanguage()
   let host!: HTMLDivElement
+  const [notice, setNotice] = createSignal<string>()
 
   /** Single logger so every error path in this file surfaces in the
    *  webview DevTools console with a consistent prefix. The component
@@ -299,8 +300,8 @@ export const TerminalTab: Component<Props> = (props) => {
     const replay = createReplayGate({
       write: (data, callback) => term.write(data, callback),
       flush: () => flush(true),
-      gap: () => term.writeln("\r\n\x1b[90m[Earlier terminal output is no longer available.]\x1b[0m"),
-      overflow: () => term.writeln("\r\n\x1b[90m[Some terminal output could not be recovered.]\x1b[0m"),
+      gap: () => setNotice("Earlier terminal output is no longer available."),
+      overflow: () => setNotice("Some terminal output could not be recovered."),
     })
     const disposeKey = term.onKey(markUser)
     for (const event of ["input", "paste", "compositionend", "mousedown", "wheel"]) {
@@ -344,8 +345,10 @@ export const TerminalTab: Component<Props> = (props) => {
         if (closed || ws !== next) return
         term.writeln(`\r\n\x1b[90m[${t("agentManager.terminal.connectionError")}]\x1b[0m`)
       }
-      next.onclose = () => {
+      next.onclose = (event) => {
         if (closed || ws !== next) return
+        if (replay.awaiting()) setNotice("Terminal output may be incomplete.")
+        if (event.code === 1013) setNotice("Terminal output was interrupted.")
         replay.end()
         ws = undefined
         if (readyTimer) {
@@ -627,5 +630,14 @@ export const TerminalTab: Component<Props> = (props) => {
     })
   })
 
-  return <div ref={host} class="am-terminal-host" data-terminal-id={props.terminalId} />
+  return (
+    <div class="am-terminal-shell" data-terminal-id={props.terminalId}>
+      <Show when={notice()}>
+        <div class="am-terminal-status" data-terminal-notice role="status" aria-live="polite">
+          {notice()}
+        </div>
+      </Show>
+      <div ref={host} class="am-terminal-host" />
+    </div>
+  )
 }

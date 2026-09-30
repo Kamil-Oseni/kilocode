@@ -233,3 +233,9 @@ body {
   margin: 0 auto;
 }
 /* raya_change end */
+.pv-terminal-test {
+  display: flex;
+  width: min(100%, 620px);
+  height: 340px;
+  border: 1px solid #272728;
+}

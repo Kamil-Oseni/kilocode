@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 22:43 EDT - packaged process-host path repair
+
+The core process-host resolver now selects the helper beside a packaged Windows CLI even when Bun reports an existing virtual `B:` source path. A sibling capability declaration takes precedence, and a missing or malformed declaration still fails closed. Four focused path/declaration tests and the Core typecheck pass. The installed PTY harness is bounded and prepared for a source-matched snapshot, but the currently installed `+3fb7454e22` binary still has the old resolver and fails `POST /pty` before a flood can run. Commit/push, build/install a new source-matched snapshot, and rerun the native PTY overflow, exact replay-gap, clean reconnect and cleanup acceptance. This is not yet an installed pass; `FUT-ARCH-03` remains In progress and Desktop remains Stopped.
+
+## ChatGPT 2026-09-29 22:26 EDT - terminal notice and installed PTY blocker
+
+Actual `TerminalTab` now keeps replay-gap and interrupted-output notices in a neutral accessible DOM status strip outside xterm, so a shell clear-screen cannot erase them. Focused production-component Playwright preview passes clear-screen/gap and premature-close/restart cases (2/2); extension/webview typechecks and scoped formatting pass. This is preview evidence, not loaded Raya host acceptance. The first isolated installed `+3fb7454e22` PTY test could not create a PTY: `POST /pty` returned 500 and the owned backend log shows an `ENOENT` lookup for `raya-process-host.exe` under Bun virtual `B:\native\kilocode\bin`. Source path resolution must use the installed helper location, then rebuild/install and rerun the exact native PTY flood/gap test. Desktop remains Stopped and `FUT-ARCH-03` In progress.
+
 ## ChatGPT 2026-09-29 22:14 EDT - bounded PTY package installed
 
 Pushed `3fb7454e22` after the primary and JetBrains hook passed. Low-memory snapshot `eden.raya@7.4.23-snapshot+3fb7454e22.kamil-oseni.1790734154268` built and installed after CLI, extension/webview, lint, bundle and native self-test gates. Independent comparison finds 461/461 installed files byte-equal to retained VSIX SHA-256 `72b033f4d08f386a3ab56e02d28c4029fd2f026915dafdf8e408780169ba1627`, excluding only VS Code `package.json` metadata; installed CLI SHA-256 is `ab2fb008ed4c9556cb7e9cb60fa261d60cc35d12c116603678036470f9af5e8a`. No open VS Code window was reloaded or controlled. Next run a disposable installed Windows PTY flood/slow-reader/reconnect and verify both server close/detach and visible gap handling, then loaded renderer/resource acceptance when Desktop Stop is lifted. Keep `FUT-ARCH-03` In progress.

@@ -10,6 +10,7 @@ export default defineConfig({
     "message-time.browser.ts",
     "routines-preview.browser.ts",
     "surfaces-preview.browser.ts",
+    "terminal-gap.browser.ts",
   ],
   workers: 1,
   reporter: "list",

@@ -5400,6 +5400,25 @@ body.vscode-high-contrast-light {
   flex: 1;
 }
 
+.am-terminal-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.am-terminal-status {
+  flex: none;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--vscode-panel-border, #272728);
+  color: var(--vscode-descriptionForeground, #a5a5a5);
+  background: var(--vscode-terminal-background, #1e1e1e);
+  font-family: var(--vscode-font-family, Outfit, sans-serif);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .am-terminal-host {
   flex: 1;
   min-height: 0;

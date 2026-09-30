@@ -36,6 +36,9 @@ import { ConversationPreview, SlashPreview, TopNavPreview, TranscriptPreview } f
 import { render } from "solid-js/web"
 import { For, Show, createSignal, type Component } from "solid-js"
 import { installMockVsCode } from "./mock-vscode"
+import { VSCodeProvider } from "../src/context/vscode"
+import { LanguageProvider } from "../src/context/language"
+import { TerminalTab } from "../agent-manager/terminal/TerminalTab"
 import { Card } from "@kilocode/kilo-ui/card"
 import { GoalBannerView } from "../src/components/chat/GoalBanner"
 import type { GoalBannerProps } from "../src/components/chat/GoalBanner"
@@ -525,6 +528,21 @@ render(
           result fixtures render production views with sample data.
         </p>
       </header>
+      <Show when={focused === "terminal-gap"}>
+        <div class="pv-terminal-test" data-preview-kind="production-view">
+          <VSCodeProvider>
+            <LanguageProvider>
+              <TerminalTab
+                terminalId="preview-terminal"
+                wsUrl="ws://127.0.0.1:5199/preview-pty"
+                font={{ fontFamily: "Consolas", fontSize: 13 }}
+                active
+                restartable
+              />
+            </LanguageProvider>
+          </VSCodeProvider>
+        </div>
+      </Show>
       <For each={fixtures}>
         {(fixture) => (
           <Show when={!focused || fixture.id === focused}>

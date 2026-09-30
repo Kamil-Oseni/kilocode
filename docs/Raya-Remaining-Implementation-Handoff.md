@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-30 14:55 EDT - export shutdown repair source gate green; portable capture remains off
+
+The first portable blocker is now repaired in source: the worker joins active event persistence before store close and emits a request-bound confirmed/refused shutdown result; the parent refuses missing/wrong/late ACKs and fences capture/init/respawn after refusal. Export remains disabled. Final focused 14/14 tests include a real worker/private SQLite 80-event drain and isolated wrong-ID/timeout parent refusal; CLI typecheck, targeted formatting/lint and affected guards pass. Preserve `.tmp/session-export-shutdown-final-tests.txt`. Commit/push, then consider a matching private snapshot only if this dormant export repair needs installed acceptance. Portable recovery remains **0/20**, basic stable readiness **47/100**. The 32-boundary writer audit still has 16 unintegrated and five uncertain paths; a shutdown fix is not a portable-transfer acceptance.
+
 ## ChatGPT 2026-09-30 14:37 EDT - matching private Routine install passes; readiness 47/100
 
 Commit `965f11090e08f6275514e1370ccd44ded62663be` is pushed. Private low-memory snapshot `7.4.23-snapshot+965f11090e.kamil-oseni.1790792361996` builds with all package smoke/self-tests and installs only in `.tmp/installed-965f11090e`. Independent archive comparison verifies 466 matching payload files except VS Code's expected package metadata rewrite and added manifest. Pinned installed HTTP/SQL Routine test saves exact draft text and attachment, recovers after restart, refuses stale/foreign writes, sends and verifies idempotency, then recovers the exact sent message and bytes after a third process start. All three owned PIDs are absent and the private profile is removed. Preserve `.tmp/snapshot-build-965f11090e.txt`, `.tmp/installed-snapshot-965f11090e-verified.json` and `.tmp/installed-routine-inbox-965f11090e.json`.

@@ -168,14 +168,16 @@ class FakeWorker {
 
   constructor(private failures: number) {}
 
-  postMessage(msg: { kind?: string }): void {
+  postMessage(msg: { kind?: string; requestID?: string }): void {
     this.messages.push(msg)
     if (msg.kind === "event" && this.failures > 0) {
       this.failures--
       throw new Error("post failed")
     }
     if (msg.kind === "shutdown") {
-      this.onmessage?.({ data: { kind: "shutdown_done" } } as MessageEvent)
+      this.onmessage?.({
+        data: { kind: "shutdown_done", requestID: msg.requestID, status: "confirmed" },
+      } as MessageEvent)
     }
   }
 

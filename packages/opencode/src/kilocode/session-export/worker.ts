@@ -2,7 +2,7 @@ import { Config } from "./config"
 import { Chunker } from "./worker/chunks"
 import { handleEvent } from "./worker/handlers"
 import { Inbox } from "./worker/inbox"
-import type { FromWorker, ToWorker } from "./worker/ipc"
+import type { FromWorker } from "./worker/ipc"
 import { Scrubber } from "./worker/scrub"
 import { Storage } from "./worker/storage"
 import { Uploader } from "./worker/uploader"
@@ -16,6 +16,8 @@ type Scope = {
   postMessage: (message: FromWorker | { kind: "test_event_count"; count: number }) => void
 }
 
+type ShutdownReply = Extract<FromWorker, { kind: "shutdown_done" | "shutdown_refused" }>
+
 const scope = self as unknown as Scope
 
 let storage: Storage | undefined
@@ -23,13 +25,15 @@ let chunker: Chunker | undefined
 let scrubber: Scrubber | undefined
 let inbox: Inbox | undefined
 let uploader: Uploader | undefined
-let draining = false
+let active: Promise<void> | undefined
 let tripped = false
+let stopping = false
+let failed = false
+let shutdown: Promise<ShutdownReply> | undefined
 
-async function drain(): Promise<void> {
-  if (draining) return
-  draining = true
-  try {
+function drain(): Promise<void> {
+  if (active) return active
+  const task = (async () => {
     while (inbox && storage && chunker && scrubber) {
       const batch = inbox.drainBatch(64)
       if (batch.length === 0) break
@@ -44,6 +48,7 @@ async function drain(): Promise<void> {
           })
           uploader?.scheduleFlush("event_persisted")
         } catch (err) {
+          failed = true
           scope.postMessage({
             kind: "telemetry",
             name: "session_export.handler_error",
@@ -52,8 +57,37 @@ async function drain(): Promise<void> {
         }
       }
     }
-  } finally {
-    draining = false
+  })()
+    .catch((err) => {
+      failed = true
+      scope.postMessage({ kind: "telemetry", name: "session_export.drain_error", props: { message: String(err) } })
+    })
+    .finally(() => {
+      if (active === task) active = undefined
+    })
+  active = task
+  return task
+}
+
+async function stop(requestID: string): Promise<ShutdownReply> {
+  stopping = true
+  try {
+    uploader?.dispose()
+    await drain()
+    await uploader?.flush("shutdown")
+    uploader?.dispose()
+    storage?.close()
+    clearInterval(cap)
+    storage = undefined
+    chunker = undefined
+    scrubber = undefined
+    inbox = undefined
+    uploader = undefined
+    if (failed) return { kind: "shutdown_refused", requestID, reason: "event-persistence-failed" }
+    return { kind: "shutdown_done", requestID, status: "confirmed" }
+  } catch (err) {
+    scope.postMessage({ kind: "telemetry", name: "session_export.shutdown_error", props: { message: String(err) } })
+    return { kind: "shutdown_refused", requestID, reason: "shutdown-failed" }
   }
 }
 
@@ -65,6 +99,7 @@ scope.onmessage = (event) => {
   }
   switch (msg.kind) {
     case "init":
+      if (stopping) return
       storage = new Storage(msg.dbPath)
       storage.migrate()
       chunker = new Chunker(storage, { chunkBytes: Config.chunkBytes })
@@ -88,7 +123,7 @@ scope.onmessage = (event) => {
       scope.postMessage({ kind: "ready" })
       return
     case "event": {
-      if (tripped) return
+      if (tripped || stopping) return
       if (!inbox) return
       const result = inbox.enqueue(msg.envelope.sessionId, msg.approxBytes, msg.envelope)
       if (!result.accepted && result.sessionFirstOverflow) {
@@ -105,28 +140,19 @@ scope.onmessage = (event) => {
       })()
       return
     case "shutdown":
-      void (async () => {
-        await drain()
-        await uploader?.flush("shutdown")
-        uploader?.dispose()
-        storage?.close()
-        clearInterval(cap)
-        storage = undefined
-        chunker = undefined
-        scrubber = undefined
-        inbox = undefined
-        uploader = undefined
-        scope.postMessage({ kind: "shutdown_done" })
-      })()
+      stopping = true
+      shutdown ??= stop(msg.requestID)
+      void shutdown.then((reply) => scope.postMessage(reply))
       return
     case "network_reconnect":
+      if (stopping) return
       uploader?.scheduleFlush("network_reconnect")
       return
   }
 }
 
 const cap = setInterval(() => {
-  if (!storage || tripped) return
+  if (!storage || tripped || stopping) return
   const result = checkBufferCap(storage, { capacityBytes: Config.bufferCapBytes })
   if (!result.tripped) return
   tripped = true

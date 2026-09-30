@@ -11,7 +11,7 @@ export type ToWorker =
       anonId?: string
     }
   | { kind: "event"; envelope: ExportEvent; approxBytes: number }
-  | { kind: "shutdown"; timeoutMs: number }
+  | { kind: "shutdown"; timeoutMs: number; requestID: string }
   | { kind: "network_reconnect" }
   | { kind: "test_event_count" }
 
@@ -19,5 +19,6 @@ export type FromWorker =
   | { kind: "pressure"; sessionId: string }
   | { kind: "ready" }
   | { kind: "telemetry"; name: string; props?: Record<string, unknown> }
-  | { kind: "shutdown_done" }
+  | { kind: "shutdown_done"; requestID: string; status: "confirmed" }
+  | { kind: "shutdown_refused"; requestID: string; reason: string }
   | { kind: "kill_switch"; reason: string }

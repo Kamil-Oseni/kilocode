@@ -26,7 +26,8 @@ export function parseMessage(value: unknown): ToWorker | undefined {
     }
     case "shutdown":
       if (typeof value.timeoutMs !== "number" || !Number.isFinite(value.timeoutMs)) return undefined
-      return { kind: "shutdown", timeoutMs: value.timeoutMs }
+      if (typeof value.requestID !== "string" || value.requestID.length === 0) return undefined
+      return { kind: "shutdown", timeoutMs: value.timeoutMs, requestID: value.requestID }
     case "network_reconnect":
       return { kind: "network_reconnect" }
     case "test_event_count":

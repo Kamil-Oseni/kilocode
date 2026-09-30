@@ -28,6 +28,9 @@ type Instance = { options: Opts; capture: Capture; subscriber: SyncSubscriber; u
 let worker: Worker | undefined
 let attempts = 0
 let shared: Opts | undefined
+let closing: Promise<void> | undefined
+let stopping = false
+let refused = false
 const instances = new Map<string, Instance>()
 
 const maxRespawns = 3
@@ -46,6 +49,7 @@ export const init = (opts: {
   subscribeAll: (cb: (event: unknown) => void) => () => void
   createWorker?: (url: WorkerTarget) => Worker
 }): void => {
+  if (stopping || refused) throw new Error("Session export shutdown is not confirmed")
   const url = target()
   try {
     const key = opts.workspaceKey ?? "default"
@@ -124,25 +128,55 @@ export const onSessionClose = async (sessionId: string, workspaceKey?: string): 
 }
 
 export const shutdown = async (): Promise<void> => {
+  if (closing) return closing
+  if (refused) throw new Error("Session export shutdown is not confirmed")
   if (!worker) return
   const current = worker
+  stopping = true
   for (const item of instances.values()) item.unsubscribe()
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, Config.shutdownFlushTimeoutMs + 500)
-    current.onmessage = (event: MessageEvent) => {
-      if ((event.data as { kind?: string }).kind === "shutdown_done") {
-        clearTimeout(timer)
-        resolve()
-      }
+  const requestID = crypto.randomUUID()
+  const task = (async () => {
+    try {
+      const timer: { value?: ReturnType<typeof setTimeout> } = {}
+      await new Promise<void>((resolve, reject) => {
+        timer.value = setTimeout(
+          () => reject(new Error("Session export shutdown timed out without confirmed drain")),
+          Config.shutdownFlushTimeoutMs + 500,
+        )
+        current.onmessage = (event: MessageEvent) => {
+          const msg: unknown = event.data
+          if (!msg || typeof msg !== "object" || !("requestID" in msg) || msg.requestID !== requestID) return
+          if ("kind" in msg && msg.kind === "shutdown_refused") {
+            const reason = "reason" in msg && typeof msg.reason === "string" ? msg.reason : "unknown"
+            reject(new Error(`Session export shutdown refused: ${reason}`))
+          }
+          if ("kind" in msg && msg.kind === "shutdown_done" && "status" in msg && msg.status === "confirmed") resolve()
+        }
+        current.onerror = (event: ErrorEvent) => reject(new Error(`Session export worker failed: ${event.message}`))
+        try {
+          current.postMessage({ kind: "shutdown", timeoutMs: Config.shutdownFlushTimeoutMs, requestID })
+        } catch (err) {
+          reject(err)
+        }
+      }).finally(() => clearTimeout(timer.value))
+    } catch (err) {
+      refused = true
+      setKillSwitch(true, "session_export_shutdown_unconfirmed")
+      throw err
+    } finally {
+      current.terminate()
+      if (worker === current) worker = undefined
+      for (const item of instances.values()) item.options.sequencer?.close()
+      instances.clear()
+      shared = undefined
+      attempts = 0
+      stopping = false
     }
-    current.postMessage({ kind: "shutdown", timeoutMs: Config.shutdownFlushTimeoutMs })
+  })()
+  closing = task.finally(() => {
+    closing = undefined
   })
-  current.terminate()
-  worker = undefined
-  for (const item of instances.values()) item.options.sequencer?.close()
-  instances.clear()
-  shared = undefined
-  attempts = 0
+  return closing
 }
 
 function target(): WorkerTarget {
@@ -166,7 +200,7 @@ function spawn(url = target()): void {
 }
 
 function configure(options: Opts): void {
-  if (!worker) return
+  if (!worker || stopping || refused) return
   instances.get(options.workspaceKey)?.unsubscribe()
   const capture = new Capture({
     worker,
@@ -205,6 +239,7 @@ function currentSurface(): string {
 }
 
 function respawn(err: unknown): void {
+  if (stopping || refused) return
   console.warn("[session-export] worker respawn", err)
   worker?.terminate()
   worker = undefined
@@ -217,6 +252,7 @@ function respawn(err: unknown): void {
 }
 
 function captureFor(key: string | undefined): Capture | undefined {
+  if (stopping || refused) return undefined
   if (key) return instances.get(key)?.capture
   return instances.get("default")?.capture ?? instances.values().next().value?.capture
 }

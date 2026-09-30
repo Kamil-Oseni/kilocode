@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-30 02:40 EDT - daily-use readiness approximately 20%; installed recovery response needs correction
+
+Source `8552b84dfd` is pushed, installed and byte-verified (462 files). Installed roster-loss acceptance refuses access but FAILS because the HTTP defect channel removes recovery guidance. Correct the API/UI contract and test real HTTP before another snapshot; do not weaken the installed assertion. Disposable owned backend PIDs14060/20336 both join and prove absent. See progress document for exact version/hash/receipt and the five-area readiness estimate. Keep the approximate 20% in user-facing progress updates as requested.
+
+Portable export must add genuine shared cross-process admission for both SQLite clients and included JSON writers; the existing writer manifest remains incomplete and an export-only lock cannot exclude old or unknown writers. Extend existing locking/coordination primitives, then integrate actual write boundaries before claiming capture consistency. Restore requires a durable hold before every recovery/dispatch path: merely disabling workers leaves pending replies, inbox and delegations revivable. Keep archive stop fences, identities and genuine delivery evidence; retain immutable originals and transformation receipts. Context controls can use existing provider-model `limit` and `tool_call` fields without new API keys. Current three-agent work is disjoint; root owns docs/integration and installation.
+
 ## ChatGPT 2026-09-30 02:05 EDT - owner-approved daily-use release priority
 
 Prioritize durable local-model chat/Routines/workers and recovery, then safe portable backup/transfer, then bounded inference scheduling. Desktop native benchmarks, full cloud sync, media generation and the standalone app remain separate later gates. Root and three agents work with disjoint file ownership; avoid simultaneous heavy builds/typechecks. Current slice corrects missing initialized worker-roster handling, exact selected-model prompt enhancement and bounded model discovery. No release or complete-local-mode claim yet.

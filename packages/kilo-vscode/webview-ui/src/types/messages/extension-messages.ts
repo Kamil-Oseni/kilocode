@@ -257,6 +257,7 @@ export interface RoutineRunsLoadedMessage {
   requestID?: string
   viewID?: string
   refreshID?: number
+  cursor?: number
   error?: string
   recovery?: import("../../../../src/shared/routine-error").RoutineRecovery
   agentID: string

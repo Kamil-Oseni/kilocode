@@ -35,6 +35,7 @@ import { OrganizationActivity } from "./OrganizationActivity"
 import { ArchivedOrganizations } from "./ArchivedOrganizations"
 import { ReportSetting } from "./ReportSetting"
 import { polling } from "./routine-polling"
+import { projectRuns } from "./run-projection"
 import { Output } from "../../../../src/shared/routine-output"
 import type { RoutinePaths } from "../../../../src/shared/routine-paths"
 
@@ -79,6 +80,7 @@ type Run = {
   trigger?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse[number]["trigger"]
   sessionID: string
   status: "running" | "complete" | "blocked" | "error"
+  revision?: number
   blockedReason?: string
   outcome?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse[number]["outcome"]
 }
@@ -828,6 +830,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [manage, setManage] = createSignal(false)
   const [templates, setTemplates] = createSignal<Template[]>([])
   const [runs, setRuns] = createSignal<Record<string, Run[]>>({})
+  const cursors = new Map<string, number>()
   const [inspection, setInspection] = createSignal<{ agentID: string; name: string; runID?: string }>()
   const [reviewed, setReviewed] = createSignal<Agent>()
   const [section, setSection] = createSignal<"access" | "output">("access")
@@ -1272,6 +1275,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setOrganizationRequest()
       setOrganizationNotice("")
       setRuns({})
+      cursors.clear()
       setStale({})
       setBoxes({})
       setChosen()
@@ -1302,7 +1306,17 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const history = (msg: Extract<ExtensionMessage, { type: "routineRuns" }>) => {
     if (msg.error) setStale((prior) => ({ ...prior, [msg.agentID]: routineFailure(msg.error, msg.recovery) }))
     if (Array.isArray(msg.runs)) {
-      setRuns((prior) => ({ ...prior, [msg.agentID]: msg.runs as Run[] }))
+      const cursor = cursors.get(msg.agentID)
+      if (msg.cursor !== undefined && cursor !== undefined && msg.cursor < cursor) return
+      if (msg.cursor !== undefined) cursors.set(msg.agentID, msg.cursor)
+      setRuns((prior) => ({
+        ...prior,
+        [msg.agentID]: projectRuns(
+          prior[msg.agentID] ?? [],
+          msg.runs as Run[],
+          msg.cursor === undefined && cursor !== undefined,
+        ),
+      }))
       setStale((prior) => {
         const next = { ...prior }
         delete next[msg.agentID]

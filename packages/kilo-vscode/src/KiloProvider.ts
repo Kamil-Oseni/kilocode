@@ -70,6 +70,7 @@ import { handleRoutineMessage as dispatchRoutine, reason } from "./kilo-provider
 import { recovery } from "./shared/routine-error"
 import { encode as encodeRoutineFile, MAX_ROUTINE_FILE_BYTES } from "./kilo-provider/routine-files"
 import { RoutineRefresh } from "./kilo-provider/routine-refresh"
+import { RoutineEvents } from "./kilo-provider/routine-events"
 import { editGoal, start as startGoal, stopGoal, stopResult } from "./kilo-provider/goal"
 import { evidence as goalEvidence } from "./kilo-provider/goal-evidence"
 import { shouldNotify } from "./kilo-provider/presence-notify"
@@ -378,9 +379,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private contextSessionID: string | undefined
   private connectionState: "connecting" | "connected" | "disconnected" | "error" = "connecting"
   private connectionGeneration = 0
-  private readonly routineRefresh = new RoutineRefresh(
+  private readonly routineEvents = new RoutineEvents(
     () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
     (message) => this.postMessage(message),
+  )
+  private readonly routineRefresh = new RoutineRefresh(
+    () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
+    (message) => {
+      if (Array.isArray(message.agents))
+        this.routineEvents.watch(
+          message.agents.flatMap((agent) =>
+            agent && typeof agent === "object" && "id" in agent && typeof agent.id === "string" ? [agent.id] : [],
+          ),
+        )
+      this.postMessage(message)
+    },
   )
   private loginAttempt = 0
   private isWebviewReady = false
@@ -649,6 +662,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   public setProjectDirectory(directory: string | null): void {
     if (this.projectDirectory === directory) return
     this.routineRefresh.invalidate()
+    this.routineEvents.invalidate()
     this.projectDirectory = directory
     this.providerUsageGeneration++
     this.cachedProviderUsageMessage = null
@@ -2327,6 +2341,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     this.connectionState = "connecting"
     this.routineRefresh.invalidate()
+    this.routineEvents.invalidate()
     this.connectionGeneration++
     this.configBindings.clear()
     this.postMessage({ type: "connectionState", state: "connecting" })
@@ -2361,6 +2376,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           if (event.type === "kilo-sessions.remote-status-changed") return true
           if (event.type === "memory.status" || event.type === "memory.updated" || event.type === "memory.error")
             return true
+          if ((event as { type: string }).type === "raya.routine.run.changed")
+            return Boolean(
+              directory && directory !== "global" && sameDirectory(directory, this.getWorkspaceDirectory()),
+            )
           if ((event as { type: string }).type === "raya.chief.note.available") {
             const raw = (event as { properties?: unknown }).properties
             if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false
@@ -2397,7 +2416,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         },
         (payload, directory) => {
           const event = unwrapSyncEvent(payload)
-          if (event) this.handleEvent(event, directory)
+          if (!event) return
+          if ((event as { type: string }).type === "raya.routine.run.changed") {
+            this.handleRoutineEvent(event, directory)
+            return
+          }
+          this.handleEvent(event, directory)
         },
       )
 
@@ -2407,6 +2431,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         if (prior === "connected" && state !== "connected") this.reconnectPending = true
         if (this.connectionState !== state) {
           this.routineRefresh.invalidate()
+          this.routineEvents.invalidate()
           this.connectionGeneration++
           this.configBindings.clear()
           if (state !== "connected") this.speech?.drop()
@@ -2418,6 +2443,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           const reconnect = this.reconnectPending
           this.reconnectPending = false
           const generation = this.connectionGeneration
+          if (reconnect) void this.routineEvents.recover()
           this.flushPendingKiloModel()
           // Fire config warnings independently so a failure in the
           // sequential await chain doesn't prevent warnings from being shown
@@ -5836,6 +5862,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Handle SSE events from the CLI backend.
    * Filters events by project ID and tracked session IDs so each webview only sees its own sessions.
    */
+  private handleRoutineEvent(event: ProviderEvent, directory?: string): void {
+    if (!directory || directory === "global" || !sameDirectory(directory, this.getWorkspaceDirectory())) return
+    const props = (event as { properties?: { event?: unknown } }).properties
+    void this.routineEvents.hint(props?.event)
+  }
+
   private handleEvent(event: ProviderEvent, directory?: string): void {
     if ((event as { type: string }).type === "raya.chief.note.available") {
       const raw = (event as { properties?: unknown }).properties
@@ -6811,6 +6843,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.voiceOrigin.clear()
     this.voicePage.clear()
     this.routineRefresh.dispose()
+    this.routineEvents.dispose()
     this.deliveries.clear()
     if (this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)

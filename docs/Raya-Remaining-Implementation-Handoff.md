@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 20:30 EDT - live Routine event source handoff
+
+Source now emits a redacted `raya.routine.run.changed` hint after durable history replacement and reconciles it through the typed saved-cursor endpoint in the extension. Duplicate/out-of-order hints, an expired cursor, stale workspace/generation replies, older bulk-history responses, unavailable-service recovery and worker-cap overflow have focused source tests. Backend SSE/journal 7/7 and extension event/refresh 15/15 pass; CLI, extension and webview typechecks and scoped extension lint pass. Publish/install this source as one conventional change, then test the exact installed binary and loaded Routines renderer when Desktop Stop is lifted. Do not mark `FUT-ARCH-01` Verified from source tests.
+
+The existing instance SSE `Queue.unbounded` can accumulate mixed events for a connected stalled reader. Next bound event count and bytes without silently evicting terminal events; on overflow send an explicit resync signal and close the stream, then replay the durable Routine cursor and refresh other projections. Test a deliberately stalled SSE consumer and restart. Preserve the full objective and user data; Desktop remains Stopped.
+
 ## ChatGPT 2026-09-29 19:21 EDT - installed Routine cursor replay passed
 
 Pushed `f83307d787` after primary/JetBrains hook success. Installed snapshot `7.4.23-snapshot+f83307d787.kamil-oseni.1790723571213`; `.tmp/installed-snapshot-f83307d787-verified.json` matches 462 extension files to retained VSIX SHA-256 `aa66de1514da51b4e67a812f4c7cb555e9516605c8c40eed41326a2c9ea7cded`, except VS Code metadata, and records CLI SHA-256 `346fc97eabd1d3c9f70a4228fed6a5ea0bdafa14881954803a1297770d41fcc5`. The installed archive harness now checks event cursor/terminal snapshot, future-cursor refusal and exact post-restart replay IDs as well as archive schedule fences, retained history and interruption recovery; it passes against the exact package. Commit/push that harness and this evidence. Next implement bounded live delivery and UI cursor/deduplication/gap recovery. `FUT-ARCH-01` remains In progress; Desktop Stopped.

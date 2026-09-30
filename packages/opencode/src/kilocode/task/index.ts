@@ -3,6 +3,9 @@ import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import path from "node:path"
 import { Storage } from "@/storage/storage"
+import { BusEvent } from "@/bus/bus-event"
+import { GlobalBus } from "@/bus/global"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "@/session/schema"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { Permission } from "@/permission"
@@ -247,6 +250,7 @@ export namespace RayaTask {
     at: Schema.Number,
   })
   export type Event = typeof Event.Type
+  export const Changed = BusEvent.define("raya.routine.run.changed", Schema.Struct({ event: Event }))
   export const History = Schema.Struct({
     version: Schema.Literal(1),
     cursor: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -946,6 +950,24 @@ export namespace RayaTask {
           events,
         } satisfies History)
         .pipe(Effect.orDie)
+      // The saved cursor is authoritative. SSE is only a best-effort wake-up hint.
+      yield* Effect.gen(function* () {
+        const ctx = yield* Effect.exit(InstanceState.context)
+        if (Exit.isFailure(ctx)) return
+        const workspace = yield* InstanceState.workspaceID
+        yield* Effect.sync(() =>
+          GlobalBus.emit("event", {
+            directory: ctx.value.directory,
+            project: ctx.value.project.id,
+            workspace,
+            payload: { id: event.id, type: Changed.type, properties: { event } },
+          }),
+        )
+      }).pipe(
+        Effect.catchCause(() =>
+          Effect.sync(() => log.warn("Routine live notification unavailable; saved cursor remains authoritative.")),
+        ),
+      )
     })
 
     const memoryState = Effect.fn("RayaTask.memoryState")(function* (id: string) {

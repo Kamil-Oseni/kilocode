@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 22:44 EDT - packaged PTY acceptance and remaining slow-reader gate
+
+Pushed `45a46f7dcb` after 29 primary package and JetBrains typechecks. Low-memory snapshot `eden.raya@7.4.23-snapshot+45a46f7dcb.kamil-oseni.1790735883885` installed after CLI, extension/webview, lint, bundle and native self-test gates; compiled CLI SHA-256 is `72c534a01284aff47490d9fa971a05c77980a4632d1156a1e634ec3dd0596254`. A hash-pinned disposable native PTY burst passed `1013 terminal output backlog`, exact 2 MiB retained replay and declared gap, no-gap reconnect, and owned cleanup; see `.tmp/installed-pty-backpressure-45a46f7dcb.json`. Bun's `ws` client warns that `pause()`/`resume()` are unimplemented, so the run does **not** count as a truly stalled reader. Next use a client that actually stops socket reads, measure backend memory/queue bounds over prolonged output, then verify the status strip in the loaded Raya renderer after Desktop Stop is lifted. Neither open VS Code window was reloaded or controlled. Keep `FUT-ARCH-03` In progress.
+
 ## ChatGPT 2026-09-29 22:43 EDT - packaged process-host path repair
 
 The core process-host resolver now selects the helper beside a packaged Windows CLI even when Bun reports an existing virtual `B:` source path. A sibling capability declaration takes precedence, and a missing or malformed declaration still fails closed. Four focused path/declaration tests and the Core typecheck pass. The installed PTY harness is bounded and prepared for a source-matched snapshot, but the currently installed `+3fb7454e22` binary still has the old resolver and fails `POST /pty` before a flood can run. Commit/push, build/install a new source-matched snapshot, and rerun the native PTY overflow, exact replay-gap, clean reconnect and cleanup acceptance. This is not yet an installed pass; `FUT-ARCH-03` remains In progress and Desktop remains Stopped.

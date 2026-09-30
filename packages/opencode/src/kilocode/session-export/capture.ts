@@ -61,6 +61,10 @@ export class Capture {
 
   constructor(private readonly deps: CaptureDeps) {}
 
+  busy(): boolean {
+    return this.baselines.size > 0 || this.deltas.size > 0
+  }
+
   async settle(): Promise<void> {
     this.closing = true
     await Promise.allSettled([...this.baselines.values(), ...this.deltas.values()])

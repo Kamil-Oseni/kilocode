@@ -51,9 +51,10 @@ export const init = (opts: {
 }): void => {
   if (stopping || refused) throw new Error("Session export shutdown is not confirmed")
   if (shared && shared.dbPath !== opts.dbPath) throw new Error("Session export database identity changed")
+  const key = opts.workspaceKey ?? "default"
+  if (instances.get(key)?.capture.busy()) throw new Error("Session export workspace capture is still active")
   const url = target()
   try {
-    const key = opts.workspaceKey ?? "default"
     const previous = instances.get(key)
     previous?.unsubscribe()
     previous?.options.sequencer?.close()

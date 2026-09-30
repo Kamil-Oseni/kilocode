@@ -82,6 +82,29 @@ describe("SessionExport worker respawn", () => {
     expect(worker.terminated).toBe(true)
   })
 
+  test("refuses same-workspace replacement while its baseline is pending", async () => {
+    const worker = new FakeWorker(0)
+    const pending = Promise.withResolvers<{ snapshotId: string; files: [] }>()
+    const options = {
+      agentVersion: "v0",
+      dbPath: ":memory:",
+      syncSeq: () => 1,
+      subscribeAll: () => () => {},
+      createWorker: () => worker as unknown as Worker,
+      snapshotProvider: {
+        baseline: () => pending.promise,
+        diff: async () => ({ snapshotHash: "after", diff: [] }),
+      },
+    }
+    SessionExport.init(options)
+    SessionExport.beforeRequest(request("s1"))
+    expect(() => SessionExport.init(options)).toThrow("workspace capture is still active")
+    expect(worker.terminated).toBe(false)
+    pending.resolve({ snapshotId: "snapshot-a", files: [] })
+    await SessionExport.shutdown()
+    expect(worker.terminated).toBe(true)
+  })
+
   test("respawns once when worker postMessage fails", () => {
     const workers: FakeWorker[] = []
     SessionExport.init({

@@ -6,6 +6,7 @@ import { Context, Effect, Layer } from "effect"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { DbPreflight } from "../kilocode/db-preflight" // kilocode_change
+import { prepareDatabase } from "../kilocode/profile-database" // kilocode_change
 import { ensure as compat } from "../kilocode/database-compat" // kilocode_change
 import { resolve } from "../kilocode/database-path" // kilocode_change
 import { EnvAlias } from "../kilocode/env-alias" // kilocode_change
@@ -43,7 +44,7 @@ const layer = Layer.effect(
 )
 
 export function layerFromPath(filename: string) {
-  DbPreflight.assertWritable(filename) // kilocode_change - actionable error (and self-heal for kilo-owned files) instead of an opaque wal_checkpoint crash on read-only db files
+  prepareDatabase(filename, () => DbPreflight.assertWritable(filename)) // kilocode_change - fence repair before native database acquisition
   return layer.pipe(Layer.provide(sqliteLayer({ filename, disableWAL: true }))) // kilocode_change - Database configures WAL after busy_timeout
 }
 

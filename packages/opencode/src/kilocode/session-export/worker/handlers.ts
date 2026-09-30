@@ -37,11 +37,12 @@ export async function handleBatch(envelopes: ExportEvent[], ctx: HandlerCtx): Pr
   if (envelopes.length > 64) throw new Error("Session export batch exceeds event limit")
   const limit = ctx.batchBytes ?? 64 * 1024 * 1024
   const staged = ctx.chunker.stage(limit)
+  const scrubber = ctx.scrubber.batch()
   const events: EventRow[] = []
   let bytes = 0
   for (let offset = 0; offset < envelopes.length; offset += 4) {
     const rows = await Promise.allSettled(
-      envelopes.slice(offset, offset + 4).map((envelope) => prepare(envelope, { ...ctx, chunker: staged })),
+      envelopes.slice(offset, offset + 4).map((envelope) => prepare(envelope, { ...ctx, scrubber, chunker: staged })),
     )
     for (const result of rows) {
       if (result.status === "rejected") throw result.reason

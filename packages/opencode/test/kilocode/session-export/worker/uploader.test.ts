@@ -531,6 +531,39 @@ describe("Uploader", () => {
     uploader.dispose()
     expect(calls.length).toBe(0)
   })
+
+  test("dispose fences later scheduled work while explicit shutdown flush remains joinable", async () => {
+    let calls = 0
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => {
+        calls += 1
+        return new Response(null, { status: 204 })
+      },
+    })
+    const uploader = new Uploader({
+      storage,
+      endpoint: `http://127.0.0.1:${server.port}`,
+      fetch: globalThis.fetch,
+      reportTelemetry: () => {},
+      agentVersion: "test",
+      surface: "test",
+    })
+    try {
+      uploader.dispose()
+      uploader.scheduleFlush("late_event_persisted")
+      uploader.scheduleFlush("network_reconnect")
+      await Bun.sleep(50)
+      expect(calls).toBe(0)
+      expect(storage.pendingEvents({ now: Date.now(), limitBytes: 1000000 })).toHaveLength(1)
+      await uploader.flush("shutdown")
+      expect(calls).toBe(1)
+      expect(storage.pendingEvents({ now: Date.now(), limitBytes: 1000000 })).toEqual([])
+    } finally {
+      uploader.dispose()
+      await server.stop(true)
+    }
+  })
 })
 
 async function sha256(value: string): Promise<string> {

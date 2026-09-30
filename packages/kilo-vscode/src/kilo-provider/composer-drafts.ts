@@ -123,14 +123,23 @@ export async function composerIdentity(
   const projectID = await ctx.project(directory)
   const session = target.sessionID ? await ctx.session(target.sessionID, directory) : undefined
   const selected = ctx.scopes().find((item) => item.box === target.box)
-  if (
-    !ctx.current() ||
-    !selected ||
-    !samePath(directory, realpathSync.native(selected.directory)) ||
-    (target.projectID && target.projectID !== projectID) ||
-    (session && (session.projectID !== projectID || !samePath(realpathSync.native(session.directory), directory)))
-  )
+  const reason = !ctx.current()
+    ? "connection"
+    : !selected
+      ? "pane"
+      : !samePath(directory, realpathSync.native(selected.directory))
+        ? "directory"
+        : target.projectID && target.projectID !== projectID
+          ? "project"
+          : session && session.projectID !== projectID
+            ? "session-project"
+            : session && !samePath(realpathSync.native(session.directory), directory)
+              ? "session-directory"
+              : undefined
+  if (reason) {
+    console.warn("[Raya] Composer draft scope changed", { reason })
     refused("stale")
+  }
   return { ...target, workspace: directory, projectID }
 }
 type Sending = {

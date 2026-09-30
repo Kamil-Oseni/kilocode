@@ -22,6 +22,7 @@ export class Uploader {
   private periodic: ReturnType<typeof setInterval> | undefined
   private active: Promise<void> | undefined
   private requested = false
+  private disposed = false
   private next = 0
 
   constructor(private readonly deps: UploaderDeps) {
@@ -31,6 +32,7 @@ export class Uploader {
   }
 
   dispose(): void {
+    this.disposed = true
     if (this.timer) clearTimeout(this.timer)
     if (this.periodic) clearInterval(this.periodic)
     this.timer = undefined
@@ -38,6 +40,7 @@ export class Uploader {
   }
 
   scheduleFlush(_reason: string): void {
+    if (this.disposed) return
     if (this.active) {
       this.requested = true
       return

@@ -113,7 +113,39 @@ export type ScrubbedEvent<T> =
     }
 
 export class Scrubber {
+  private cache: Map<string, Promise<ScrubResult>> | undefined
+
   constructor(private readonly opts: { patterns?: Pattern[] } = {}) {}
+
+  batch(): Scrubber {
+    const scrubber = new Scrubber(this.opts)
+    scrubber.cache = new Map()
+    return scrubber
+  }
+
+  private string(input: string): Promise<ScrubResult> {
+    const cached = this.cache?.get(input)
+    if (cached) return cached
+    const task = (async () => {
+      const lint = await scrubSecretlint(input)
+      const out = scrubString(lint.value, this.opts.patterns)
+      const totals = { ...lint.redactionsByType }
+      for (const [key, val] of Object.entries(out.redactionsByType)) totals[key] = (totals[key] ?? 0) + val
+      return { value: out.value, redactionsByType: totals }
+    })()
+    if (this.cache && input.length <= 4096 && Buffer.byteLength(input) <= 4096 && this.cache.size < 128) {
+      this.cache.set(input, task)
+      void task.then(
+        (result) => {
+          if (Buffer.byteLength(result.value) > 4096 && this.cache?.get(input) === task) this.cache.delete(input)
+        },
+        () => {
+          if (this.cache?.get(input) === task) this.cache.delete(input)
+        },
+      )
+    }
+    return task
+  }
 
   async scrubEvent<T>(event: T): Promise<ScrubbedEvent<T>> {
     const totals: Record<string, number> = {}
@@ -135,9 +167,7 @@ export class Scrubber {
 
   private async walk(node: unknown, totals: Record<string, number>): Promise<unknown> {
     if (typeof node === "string") {
-      const lint = await scrubSecretlint(node)
-      const out = scrubString(lint.value, this.opts.patterns)
-      for (const [key, val] of Object.entries(lint.redactionsByType)) totals[key] = (totals[key] ?? 0) + val
+      const out = await this.string(node)
       for (const [key, val] of Object.entries(out.redactionsByType)) totals[key] = (totals[key] ?? 0) + val
       return out.value
     }

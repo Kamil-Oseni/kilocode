@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it, spyOn } from "bun:test"
 import {
   ComposerDrafts,
   composerIdentity,
@@ -363,6 +363,28 @@ describe("durable composer host bridge", () => {
         ),
       ).rejects.toMatchObject({ code: "stale" })
     } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+  it("reports only a static reason when session scope verification refuses", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "raya-composer-reason-"))
+    const warning = spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      await expect(
+        composerIdentity(
+          { box: "private", key: "private-content-must-not-be-logged", sessionID: "private-session" },
+          {
+            scopes: () => [{ box: "private", directory: root }],
+            current: () => true,
+            ambiguous: () => false,
+            project: async () => "expected-project",
+            session: async () => ({ projectID: "different-project", directory: root }),
+          },
+        ),
+      ).rejects.toMatchObject({ code: "stale" })
+      expect(warning.mock.calls).toEqual([["[Raya] Composer draft scope changed", { reason: "session-project" }]])
+    } finally {
+      warning.mockRestore()
       await rm(root, { recursive: true, force: true })
     }
   })

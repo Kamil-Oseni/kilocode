@@ -845,13 +845,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     // Use fire-and-forget (no throwOnError) to match old getProfile() which returned null on error.
     if (this.connectionState === "connected" && this.client) {
       console.log("[Raya] Provider: 👤 syncWebviewState fetching profile...")
-      const profileResult = await retry(() => this.client!.kilo.profile())
-      const profileData = profileResult.data ?? null
-      console.log("[Raya] Provider: 👤 syncWebviewState profile:", profileData ? "received" : "null")
-      this.postMessage({
-        type: "profileData",
-        data: profileData,
-      })
+      const client = this.client
+      const generation = this.connectionGeneration
+      const current = () =>
+        this.client === client &&
+        this.connectionGeneration === generation &&
+        this.connectionState === "connected" &&
+        this.isWebviewReady
+      void retry(() => client.kilo.profile())
+        .then((result) => {
+          if (!current()) return
+          const data = result.data ?? null
+          console.log("[Raya] Provider: 👤 syncWebviewState profile:", data ? "received" : "null")
+          this.postMessage({ type: "profileData", data })
+        })
+        .catch(() => {
+          if (!current()) return
+          console.warn("[Raya] Provider: Optional profile unavailable")
+          this.postMessage({ type: "profileData", data: null })
+        })
 
       if (this.currentSession) {
         this.refreshSessionDetails(this.currentSession.id, this.getWorkspaceDirectory(this.currentSession.id))

@@ -1,5 +1,6 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
-import { closeProfileSqlite, profileSqlite } from "../kilocode/profile-sqlite" // kilocode_change
+import { profileSqlite } from "../kilocode/profile-sqlite" // kilocode_change
+import { closeDatabase, openDatabase } from "../kilocode/profile-database" // kilocode_change
 import { drizzle } from "drizzle-orm/node-sqlite"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
@@ -150,19 +151,21 @@ const nativeLayer = (config: Config) =>
     Sqlite.Native,
     Effect.gen(function* () {
       // kilocode_change start - native profile writer admission
-      const native = profileSqlite(
-        config.filename,
-        () =>
-          new DatabaseSync(config.filename, {
-            readOnly: config.readonly,
-            timeout: config.timeout,
-            allowExtension: config.allowExtension,
-            enableForeignKeyConstraints: true,
-            open: true,
-          }),
+      const native = openDatabase(config.filename, () =>
+        profileSqlite(
+          config.filename,
+          () =>
+            new DatabaseSync(config.filename, {
+              readOnly: config.readonly,
+              timeout: config.timeout,
+              allowExtension: config.allowExtension,
+              enableForeignKeyConstraints: true,
+              open: true,
+            }),
+        ),
       )
       // kilocode_change end
-      yield* Effect.addFinalizer(() => Effect.promise(() => closeProfileSqlite(native))) // kilocode_change
+      yield* Effect.addFinalizer(() => Effect.promise(() => closeDatabase(native))) // kilocode_change
       if (config.disableWAL !== true && config.readonly !== true) native.exec("PRAGMA journal_mode = WAL;")
       return native
     }),

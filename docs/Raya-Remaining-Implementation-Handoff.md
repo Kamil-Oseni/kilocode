@@ -1,5 +1,23 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-30 07:09 EDT - installed local acceptance passes; draft bridge is next
+
+Installed local93705 terminalPASS: both native/SDK dispatch directions serialize, reverse logs native selection before SDK release, independent Node cancellation/fresh helper37ms with zero stale dispatch, keylessnative no-auth. Exactly8syntheticrequests. Receipt.tmp/installed-local-inference-8cb4fb76c7.json cleanuptrue: backend17656 and Node23924 joined/absent, privateprofile removed; root confirmsabsence. Internalqueue metrics and installednative-tool parsing explicitly untested, source4/17 remains separate.
+
+Readiness42/100≈40%: restart16, portable0, localrouting12, boundedinference8, installed6 (each/20). No full gate closed. Commit/push these dated acceptance records, then start three isolated file-ownership lanes for full durable draft bridge. Immutable installed8cb snapshot stays pinned for pending dummy provider UI acceptance after manual Firewall dismissal; source edits do not constitute loaded UI proof. Preserve complete portable/new-PC/GPU and all wider roadmap scope.
+
+## ChatGPT 2026-09-30 07:08 EDT - held installed recovery passes; readiness approximately30%
+
+Transfer-hold70440 terminalPASStwo held restarts with unchanged all-record preservation assertion, zero due worker/model dispatch, eight declared400writer refusals, retained completed/question-waiting histories and voice reconciliation. Receipt.tmp/installed-transfer-hold-8cb4fb76c7.json confirms three backend PIDs7548/24132/23040 joined/absent. Root checked absence independently. This corrects the prior installed895 preservation failure without excluding any record.
+
+Readiness29/100≈30%: restart16/20, portable0/20, localrouting8/20, boundedinference0/20, installed5/20; no full gate closed. /root/pty_slow_reader is authorized to run the prepared pinned installed-local-inference harness now; wait its live/terminal handle and inspect cleanup/limits before more runtime tests. Loaded dummy provider UI remains unverified behind manual Firewall dismissal. Full encrypted transfer, durable draft bridge and new-PC/GPU acceptance remain open.
+
+## ChatGPT 2026-09-30 07:06 EDT - matching installed snapshot; acceptance active
+
+Commit8cb4fb76c7eb31e97144ab1f82772b672919f645 pushed normally, snapshot7.4.23-snapshot+8cb4fb76c7.kamil-oseni.1790765900384 installed. SDK generation leaves no diff; fresh CLI292,680,704bytes and all snapshot checks/smokes/native helper self-tests pass. Independent464file verification passes with one expected metadata-only manifest change. VSIXsha b7a924bcaac4304ea892e1032b62d81007272e2add757ded699ca44e121a5bd1, CLIsha29b9f8197f521250d1dc06ae694c01852c526036eb850e62632e67495824b0e0; receipt.tmp/installed-snapshot-8cb4fb76c7-verified.json.
+
+Root installed transfer-hold70440 is live; collect its terminal result/receipt and owned process absence. Then release runtime slot to /root/pty_slow_reader for prepared .tmp/test-installed-local-inference.ts using these exact pins. No compiled local routing/cancellation or held-restart pass yet. Dummy window still covered by Windows Firewall prompt: no security input, no new loaded-version/provider acceptance. Readiness25%; after acceptance, implement the full three-lane durable composer bridge and portable capture rather than closing full requirements from narrow tests.
+
 ## ChatGPT 2026-09-30 06:57 EDT - all source release checks pass
 
 Full typecheck34623 terminal PASS30tasks/30, 22cached, 2m41.62s across33scoped packages, including CLI/TUI/Core/extension/webview/JetBrains. Root lint warning total remains documented; extensionlint/Knip/annotations/Promise/forbiddenmarkers/Markdown/diff guards pass. Source native4/17 and inference18/139 plus final cancellation/helper/storage/voice/FFF evidence are green. Commit/push then low-memory source-matched snapshot; independently verify packaged/installed hashes, run unchanged installed transfer-hold and prepared installed local-inference acceptance before raising readiness25%. Dummy CU remains subject to manual Firewall prompt dismissal. Complete durable draft UI/portable capture scope remains open.

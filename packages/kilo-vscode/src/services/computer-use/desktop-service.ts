@@ -1,5 +1,9 @@
 import * as vscode from "vscode"
 import { join } from "node:path"
+import { createHash } from "node:crypto"
+import { readFile } from "node:fs/promises"
+import { nativeCaptureTrial } from "../../commands/native-capture-trial-core"
+import { registerNativeCaptureTrial } from "../../commands/native-capture-trial"
 import { DesktopPanel } from "./desktop-panel"
 import { DesktopSession } from "./desktop-session"
 import { WindowsDesktopDriver } from "./desktop-windows"
@@ -45,6 +49,7 @@ export class DesktopAutomationService implements vscode.Disposable {
         : undefined,
     )
     context.subscriptions.push(
+      registerNativeCaptureTrial((signal) => this.nativeTrial(context, connection, signal)),
       vscode.commands.registerCommand("raya.captureTiming", async () => {
         const controller = new AbortController()
         const timing = await vscode.window.withProgress(
@@ -232,6 +237,57 @@ export class DesktopAutomationService implements vscode.Disposable {
   /** Numeric timing from an existing local capture, or null when none is running. */
   captureTiming(signal?: AbortSignal) {
     return this.driver?.captureTiming(signal) ?? Promise.resolve(null)
+  }
+
+  private nativeTrial(context: vscode.ExtensionContext, connection: KiloConnectionService, signal: AbortSignal) {
+    const binary = join(context.extensionPath, "bin", "raya-desktop-capture.exe")
+    return nativeCaptureTrial({
+      lease: () => this.lease?.current(),
+      ready: () => !!this.hotkey?.isReady,
+      connected: () => connection.getConnectionState() === "connected",
+      manual: () => this.session?.current().control !== "agent",
+      concurrent: this.driver?.captureSource() ?? { path: "stopped", pid: null },
+      onLease: (listener) => this.lease!.onChange(listener),
+      onConnection: (listener) => connection.onStateChange(listener),
+      onState: (listener) => this.session!.onState(listener),
+      load: async (signal) => ({
+        path: binary,
+        sha256: createHash("sha256")
+          .update(await readFile(binary, { signal }))
+          .digest("hex"),
+      }),
+      open: (lease, failed, valid) => {
+        const driver = new WindowsDesktopDriver(
+          undefined,
+          undefined,
+          binary,
+          [],
+          join(context.globalStorageUri.fsPath, "desktop-capture-faults"),
+        )
+        const lifecycle = new DesktopCaptureLifecycle(
+          {
+            current: () => (valid() ? lease : undefined),
+            onChange: (listener) => this.lease!.onChange(listener),
+          },
+          this.session!,
+          driver,
+          connection,
+          () => {
+            failed()
+            void this.pause("Raya desktop control paused because the native capture trial failed.").catch(() =>
+              console.error("[Raya] Native capture trial pause could not be saved"),
+            )
+          },
+          () => valid(),
+        )
+        return {
+          timing: (signal, window) => driver.captureTiming(signal, window),
+          pid: () => driver.captureSource().pid ?? undefined,
+          stop: () => lifecycle.dispose(),
+        }
+      },
+      signal,
+    })
   }
 
   async authorize(request: AuthorizationRequest): Promise<Authorization> {

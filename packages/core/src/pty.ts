@@ -16,6 +16,7 @@ import type { Active, Subscriber } from "./kilocode/pty/registry" // kilocode_ch
 import { KiloPtyLifecycle, type Lease } from "./kilocode/pty/lifecycle" // kilocode_change
 import { NativePty } from "./kilocode/pty/native" // kilocode_change
 import { NativeProcess } from "./kilocode/process-host" // kilocode_change
+import { Replay as KiloPtyReplay } from "./kilocode/pty/replay" // kilocode_change
 import { Exit } from "effect" // kilocode_change
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
@@ -269,7 +270,7 @@ const layer = Layer.effect(
             authority, // kilocode_change
             containment: contained, // kilocode_change
             process: proc,
-            buffer: "",
+            buffer: new KiloPtyReplay(BUFFER_LIMIT), // kilocode_change
             bufferCursor: 0,
             cursor: 0,
             subscribers: new Map(),
@@ -293,11 +294,7 @@ const layer = Layer.effect(
                   session.subscribers.delete(token)
                 }
               }
-              session.buffer += chunk
-              if (session.buffer.length <= BUFFER_LIMIT) return
-              const excess = session.buffer.length - BUFFER_LIMIT
-              session.buffer = session.buffer.slice(excess)
-              session.bufferCursor += excess
+              session.bufferCursor += session.buffer.append(chunk) // kilocode_change - bounded segments avoid whole-tail copying
             }),
             proc.onExit(({ exitCode }) => {
               // kilocode_change start - helper exit alone never proves descendant drain.
@@ -445,7 +442,7 @@ const layer = Layer.effect(
           : undefined
       // kilocode_change end
       const replay = (() => {
-        if (!session.buffer || from >= end) return ""
+        if (!session.buffer.length || from >= end) return "" // kilocode_change - segmented retention
         const offset = Math.max(0, from - start)
         if (offset >= session.buffer.length) return ""
         return session.buffer.slice(offset)

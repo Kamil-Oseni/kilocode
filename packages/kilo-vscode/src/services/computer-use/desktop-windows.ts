@@ -1991,14 +1991,21 @@ export class WindowsDesktopDriver implements DesktopDriver {
   }
 
   /** Sample the current capture passively; a diagnostic never starts or renews capture. */
-  async captureTiming(signal?: AbortSignal) {
+  async captureTiming(signal?: AbortSignal, windowMs?: number) {
     if (!this.worker) return null
     this.timing?.cancel()
-    const timing = observeCapture(this, signal)
+    const timing = observeCapture(this, signal, windowMs)
     this.timing = timing
     return timing.result.finally(() => {
       if (this.timing === timing) this.timing = undefined
     })
+  }
+
+  captureSource() {
+    return {
+      path: !this.worker ? ("stopped" as const) : this.host ? ("native" as const) : ("powershell_fallback" as const),
+      pid: this.host?.pid() ?? null,
+    }
   }
 
   stopCapture(): void {

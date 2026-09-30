@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { hostname } from "node:os"
 
-const cache: { done: boolean; value?: string } = { done: false }
+const cache: { probing: boolean; next: number; value?: string } = { probing: false, next: 0 }
 
 function birth(pid: number) {
   if (process.platform === "linux") {
@@ -37,11 +37,19 @@ function birth(pid: number) {
 }
 
 function current() {
-  if (!cache.done) {
+  if (cache.value) return cache.value
+  if (cache.probing || performance.now() < cache.next) return
+  cache.probing = true
+  try {
     cache.value = birth(process.pid)
-    cache.done = true
+    return cache.value
+  } catch {
+    // A failed probe never proves an owner stopped or authorizes durable work.
+    return
+  } finally {
+    cache.probing = false
+    cache.next = performance.now() + 1_000
   }
-  return cache.value
 }
 
 export function owner() {

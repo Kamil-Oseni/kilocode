@@ -176,6 +176,11 @@
         "category": "Raya"
       },
       {
+        "command": "raya.nativeCaptureTrial",
+        "title": "Measure Selected Native Capture",
+        "category": "Raya"
+      },
+      {
         "command": "raya.inspectInstalledDesktopHost",
         "title": "Inspect Installed Desktop Host",
         "category": "Raya",

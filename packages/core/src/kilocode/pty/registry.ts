@@ -7,6 +7,7 @@ import type { PtyID } from "../../pty/schema"
 import { KiloPtyTermination } from "./termination"
 import type { Request } from "./lifecycle"
 import type { NativePty } from "./native"
+import type { Replay } from "./replay"
 
 const log = Log.create({ service: "pty.registry" })
 
@@ -25,7 +26,7 @@ export type Active = {
   readonly authority?: Request
   readonly containment?: NativePty
   process: Proc
-  buffer: string
+  buffer: Replay
   bufferCursor: number
   cursor: number
   subscribers: Map<object, Subscriber>

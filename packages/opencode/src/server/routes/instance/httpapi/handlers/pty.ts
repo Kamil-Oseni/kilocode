@@ -8,6 +8,7 @@ import { PtyID } from "@opencode-ai/core/pty/schema"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { LocationServiceMap } from "@opencode-ai/core/location-services" // kilocode_change
 import { locationServiceMapLayer } from "@/kilocode/pty/location-map" // kilocode_change
+import { drain } from "@/kilocode/pty/closing" // kilocode_change
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Shell } from "@opencode-ai/core/shell"
@@ -318,19 +319,12 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
         if (!outbox.closed) outbox.offer(PtyProtocol.metaFrame(attachment.cursor, attachment.replayGap))
         if (!outbox.closed) attachment.activate()
 
-        const drain = Effect.gen(function* () {
-          while (true) {
-            const item = yield* outbox.take
-            yield* write(item)
-            if (item instanceof Socket.CloseEvent) return
-          }
-        })
         // kilocode_change end
 
         // The reader runs concurrently with the writer; whichever finishes first ends the
         // connection and the attachment is always released.
         yield* Effect.race(
-          drain,
+          drain(outbox.take, write), // kilocode_change
           socket.runRaw((message) => {
             const decoded = PtyProtocol.decodeInput(message)
             if (decoded !== undefined) attachment.write(decoded)

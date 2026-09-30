@@ -1,0 +1,78 @@
+Historical ordering draft. Its 55-row count and rankings are outdated. Use the canonical requirements table in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md) for current scope and status.
+
+You’re right. I grouped related rows together, which made the list shorter than the actual `55` rows. That was useful for strategy, but not what you asked for. Here is the full feature/order list, all `55`, easiest-to-hardest by likely closure effort.
+
+**1-15: Fastest Closures**
+1. `EN-11` — Browser identity and captured authentication lifecycle
+2. `EN-12` — Media failures and session ownership
+3. `UX-02` — Progress as current work and next decision
+4. `UX-03` — Consistent interruption/recovery vocabulary
+5. `UI-02` — Measurable accessibility gates
+6. `UI-03` — Consolidated component semantics
+7. `EN-10` — Local-service security topology
+8. `11.10 OVR-10` — Browser runtime and product overhaul
+9. `EN-01` — Explicit upgrade policy for destructive migration
+10. `EN-06` — Preserve working canvas across failures/restarts
+11. `EN-09` — Update path and credential storage hardening
+12. `EN-15` — Reproducible release confidence
+13. `UX-04` — Context provenance and work location control
+14. `UX-05` — History as a route back to work
+15. `11.9 OVR-09` — Self-heal as verified recovery and repair
+
+**16-30: Medium Closures**
+16. `PR-01` — Outcome-led default experience
+17. `11.7 OVR-07` — Complete Raya UI and UX redesign
+18. `PR-05` — Spending understandable and bounded
+19. `11.4 OVR-04` — Explainable token and tool costs
+20. `11.2 OVR-02` — First-class browser skill
+21. `11.3 OVR-03` — Smarter Auto routing and orchestration
+22. `11.8 OVR-08` — Broad work tools with discoverable capabilities
+23. `11.1 OVR-01` — Native realtime multimodal voice
+24. `11.6 OVR-06` — Outcome-driven Goal system
+25. `11.5 OVR-05` — Durable, understandable routine system
+26. `FUT-TODO-01` — Personal Todo and focus timer
+27. `FUT-ADM-01` — Admin health and logs
+28. `FUT-CHAT-01` — Truthful time in chat
+29. `FUT-RMSG-01` — Messenger-grade Routine conversations
+30. `FUT-RCHAT-01` — Create routines and organizations from main chat
+
+**31-44: Hard Closures**
+31. `PR-04` — Routine authority by capabilities
+32. `EN-02` — Atomic routine execution ownership/restart semantics
+33. `FUT-PERSIST-01` — Restart/rebuild survival for agents and routines
+34. `FUT-AGENT-01` — Intelligent spawning and durable delegated-agent names
+35. `FUT-AGENT-02` — Visible and accessible active subagents
+36. `FUT-ORG-01` — Durable organizations executing company work
+37. `FUT-SKILL-01` — Universal role skills for every agent
+38. `FUT-CONTACT-01` — Agent contact by Raya/email/Telegram/WhatsApp
+39. `FUT-CU-01` — Astra-class computer use
+40. `FUT-VIS-01` — Live multimodal desktop and mobile vision
+41. `FUT-BRAND-01` — Raya public identity / Kilo migration
+42. `FUT-CLOUD-01` — Cloud session storage and remote continuation
+43. `FUT-EDITOR-01` — Raya-owned VS Code distribution
+44. `PR-02` — Completion as inspectable agreement
+
+**45-55: Already Completed / Verified**
+45. `PR-03` — Routine scheduling explicit before activation
+46. `PR-06` — Supported-client and feature matrix
+47. `EN-03` — Timezone and event-filter semantics
+48. `EN-04` — Review actions acknowledged before dismissal
+49. `EN-05` — Reviewed content identified by revision
+50. `EN-07` — Explicit compatibility contracts
+51. `EN-08` — Schema regression checks and contract-test isolation
+52. `EN-13` — Recordings and telemetry separated
+53. `EN-14` — Recovery/streaming performance measured
+54. `UX-01` — Review labels match action scope
+55. `UI-01` — Real components in visual harness
+
+Small correction: `PR-02` is actually already `Verified` in the doc too, so it belongs in the completed bucket, not hard closures. The completed set is `11` items, and the unfinished set is `44` if we include the `2` planned future items as still not done.
+
+The clean math is:
+
+- `55` total
+- `11` completed/verified
+- `41` in progress
+- `2` planned
+- `1` deferred (`FUT-EDITOR-01`) if we count its status separately from planned/in-progress
+
+So next week I’d start with items `1-10` from the first section.

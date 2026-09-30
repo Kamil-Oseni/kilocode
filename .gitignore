@@ -93,3 +93,7 @@ packages/opencode/.artifacts/
 
 # raya_change - packaged extension builds are large; share them out of band, never commit
 *.vsix
+
+# raya_change - local generated media and SDK configuration
+/.cache/
+/.sdkgen-config/

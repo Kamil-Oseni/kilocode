@@ -1,0 +1,353 @@
+RAYA SESSION-LOG ISSUE REPORT
+Generated: 2026-09-19
+
+SCOPE REVIEWED
+==============
+
+Primary sources:
+- C:\Users\User\.local\share\kilo\kilo.db
+- C:\Users\User\.local\share\kilo\kilo-main.db
+- C:\Users\User\.local\share\kilo\kilo-local.db
+- C:\Users\User\.local\share\kilo\log\opencode.log
+- C:\Users\User\Desktop\raya\.kilo-dev\data\kilo\kilo.db
+- C:\Users\User\Desktop\raya\.kilo-dev\data\kilo\log\opencode.log
+- C:\Users\User\Desktop\raya\.kilo-dev\data\kilo\log\dev.log
+
+The live main database contains 50 sessions, 1,087 messages, and 4,413 parts. The French Study / Etymon subset contains 37 sessions, 928 messages, and 3,877 parts. That subset records 85 failed tool calls and 26 assistant-message errors. Repeated symptoms below are deduplicated into root issues.
+
+Important counting note: the runtime log spans more than the Etymon redesign. Counts labelled "runtime-wide" include every retained Raya session. Counts labelled "French Study" are limited to C:\Users\User\Desktop\French Study.
+
+
+EXECUTIVE SUMMARY
+=================
+
+The Etymon work exposed one confirmed application bug and several independent Raya/runtime failures that could look like application bugs:
+
+1. Etymon's Continue/Back hang was a real React effect loop in LessonReader. This was diagnosed and fixed during the session.
+2. Raya's browser host repeatedly wedged or timed out, preventing visual verification even when Etymon itself was responding.
+3. The Next.js dev server repeatedly became stale, orphaned, stopped, or accepted connections without completing requests.
+4. A provider/tool-schema incompatibility caused 18 French Study assistant failures and triggered many failed replacement subagents while trying to fix Vercel.
+5. Session context grew beyond model limits despite pruning, causing 632 large-payload warnings and two explicit token-limit failures.
+6. A response/event schema mismatch generated 164,892 runtime-wide warnings for a missing metadata.variant field, making the logs extremely noisy.
+7. Vercel was configured inconsistently for a nested Next.js app, leading it to expect a public output directory instead of treating the app as Next.js.
+
+
+ETYMON APPLICATION AND PROJECT ISSUES
+=====================================
+
+ISSUE E-01 - Lesson Continue/Back buttons appeared to hang
+Severity: Critical for the affected lesson flow
+Status: Fixed in the Etymon session; old open tabs still needed a reload
+Evidence: User report on 2026-09-06; dedicated diagnosis session; pre-fix Playwright click timed out; last_opened_at rewrote repeatedly while idle.
+Cause: LessonReader placed the whole identity API object in React effect dependency arrays. markLessonOpened changed the guest snapshot, IdentityProvider rebuilt the API object, the dependency changed, and the effect ran again indefinitely. The loop repeatedly wrote localStorage, recalculated progression, and rerendered the page, starving the main thread. A mount-time write also raced and overwrote the saved resume pointer.
+Resolution recorded in the session: call the identity API through a ref and depend only on stable primitives such as ready, lesson.id, and sectionId. Verification reported zero idle writes, one write per section change, working Back/Continue controls, restored resume behavior, and a clean TypeScript check.
+
+ISSUE E-02 - Stale Etymon tabs could keep the fixed render loop alive
+Severity: High until tabs were reloaded
+Status: Operational cleanup required after E-01
+Evidence: The diagnosis observed a second lesson pointer still changing from another open tab after the source fix.
+Cause: Hot reload updated the server code but an already-open browser tab continued executing the old client bundle and its infinite effect loop.
+Remedy: Reload or close all old localhost:3000 tabs after deploying the fix.
+
+ISSUE E-03 - The Etymon development server repeatedly stopped or became orphaned
+Severity: High for development and review
+Status: Recurring environmental problem
+Evidence: The user reported that localhost:3000 stopped; the restart session found an untracked stale Next.js process tree holding port 3000. The user had to request a restart repeatedly.
+Cause: Earlier server starts were tied to a session or left as untracked child processes. Their lifetime and ownership were not durable across agent/session boundaries.
+Remedy: Start the server under one durable process owner, persist its PID/command, verify port ownership, and expose an authoritative restart/stop operation.
+
+ISSUE E-04 - A later dev server accepted connections but never completed requests
+Severity: High
+Status: Recovered by restart; underlying recurrence risk remains
+Evidence: On 2026-09-12, both browser and independent HTTP requests stalled while PID 17224 still accepted connections and emitted no new log lines.
+Cause: The Next.js development process was alive at the socket level but internally hung. The logs do not prove whether Turbopack, application work, or resource pressure was the immediate blocker.
+Remedy: Add a health check that tests a completed HTTP response, not only an open port, and automatically distinguish "listening" from "healthy."
+
+ISSUE E-05 - Vercel treated the nested Next.js app as a static/Other project
+Severity: High for deployment
+Status: Repository-side diagnosis made; dashboard state was never verified
+Evidence: Repeated Vercel error: No Output Directory named "public" found after the Build completed. Local Next.js production builds passed and generated 19 routes.
+Cause: The app lives in etymon-web, but repo-root and app-root configuration were mixed. An earlier root vercel.json used framework:null, which disables framework detection. Moving a minimal vercel.json into etymon-web did not set Vercel's dashboard-only Root Directory. The public-directory error is consistent with Vercel using an Other/static preset or retaining public as its Output Directory instead of using the Next.js preset.
+Remedy: Set Vercel Root Directory to etymon-web, Framework Preset to Next.js, clear any Output Directory override, and redeploy. Do not set outputDirectory to public or .next as a workaround.
+Confidence: High, but the exact dashboard setting could not be inspected from the session.
+
+ISSUE E-06 - The configured lint command is invalid for Next.js 16
+Severity: Medium
+Status: Unresolved in the recorded session
+Evidence: npm run lint executed next lint and failed with "Invalid project directory ...\\etymon-web\\lint."
+Cause: Next.js 16 removed the next lint command, so "next lint" is interpreted as a project-directory invocation.
+Remedy: Configure ESLint directly and change the lint script to invoke eslint with the intended source paths.
+
+ISSUE E-07 - MicroCheck is effectively unreachable with the seeded content
+Severity: Medium product/content defect
+Status: Identified, not resolved in the recorded session
+Evidence: The redesign session found that all seeded <details> self-check blocks were in sections classified as quiz sections. LessonReader replaces those sections with a quiz CTA instead of rendering their Markdown.
+Cause: Content classification and rendering rules conflict: the content contains MicroCheck-compatible markup, but the section-title quiz rule bypasses that markup.
+Remedy: Move self-check content to non-quiz lesson sections, render the relevant quiz-section content before the CTA, or replace title-based classification with explicit section types.
+
+ISSUE E-08 - Root/project deployment setup was internally contradictory
+Severity: Medium
+Status: Partially corrected, but contributed to E-05
+Evidence: A root package.json delegated commands into etymon-web while a root vercel.json also delegated with --prefix; under a Vercel Root Directory of etymon-web this would resolve etymon-web/etymon-web. framework:null also contradicted the requested Next.js autodetection.
+Cause: Configuration attempted to support both repository-root and nested-root execution without one authoritative deployment root.
+Remedy: Choose etymon-web as the single Vercel root and keep commands relative to it. Treat the root package.json only as a local convenience wrapper.
+
+
+RAYA BROWSER, PROCESS, AND TOOLING ISSUES
+=========================================
+
+ISSUE R-01 - Browser host repeatedly timed out or became wedged
+Severity: Critical for visual/frontend work
+Status: Recurring
+Evidence in French Study sessions: 13 browser_navigate host timeouts, 7 browser_evaluate host timeouts, 4 browser_tabs host timeouts, 2 browser_snapshot host timeouts, plus screenshot, click, navigation, and snapshot timeouts. The host wedged after a heavy 17-route screenshot/evaluation sweep and later recovered.
+Cause: Long-running or queued browser actions left the tab plane unresponsive. Failed clicks could trigger manual-takeover state, after which unrelated browser calls also timed out. Heavy screenshot/evaluation workloads appear to increase the likelihood.
+Remedy: Enforce per-tab action cancellation, bounded queues, host health probes, automatic tab replacement after repeated timeouts, and a supported reset action that preserves a clear receipt.
+
+ISSUE R-02 - Browser scrolling was unavailable or unreliable
+Severity: High for page review
+Status: Reported by the user; exact host cause not proven
+Evidence: User explicitly reported that the accessible browser was not allowing scroll and believed it was causing failures. The redesign agent documented work left incomplete because of the browser issue.
+Cause: Browser automation/input delivery failed independently of the web app. The logs do not identify whether this was viewport focus, overlay/takeover state, or a host scroll implementation defect.
+Remedy: Add a deterministic browser_scroll operation with post-scroll position receipts and test it against long pages before design verification.
+
+ISSUE R-03 - Browser selector contracts were inconsistent
+Severity: Medium
+Status: Unresolved in logs
+Evidence: browser_click received a structured locator object serialized into the CSS selector field and failed on the "{" token. Other click/evaluate attempts targeted absent elements and failed after retries.
+Cause: The agent/model used a structured selector shape where the tool expected a CSS string, and some evaluation scripts assumed queried elements existed.
+Remedy: Use a typed locator union or validate/translate structured locators before dispatch. Return a schema error before attempting CSS parsing.
+
+ISSUE R-04 - Browser profile reset was requested with an unsupported schema
+Severity: Medium
+Status: Unresolved in that session
+Evidence: browser_profile rejected action "reset" and a profile_id that did not satisfy the required 64-character lowercase hexadecimal format.
+Cause: The model inferred a reset action that the tool did not expose and used a workspace identifier as a browser profile identifier.
+Remedy: Expose a documented reset/recover action or return an actionable recovery command from timeout errors.
+
+ISSUE R-05 - Browser/Playwright service was unavailable 15 times
+Severity: Medium
+Status: Historical recurring startup problem
+Evidence: Runtime-wide warnings show 15 "server unavailable" events for the local kilo-playwright service.
+Cause: The local browser automation service failed startup/readiness checks or was not reachable.
+Remedy: Record startup stderr and exit reason, retry with backoff, and surface browser unavailability before an agent begins a browser-dependent task.
+
+ISSUE R-06 - Persistent background-process identity and ownership could not be verified
+Severity: High
+Status: Recurring
+Evidence: background_process reported "Persistent process identity could not be verified" for two server handles and later "Cannot verify ownership" when stopping one.
+Cause: Process handles outlived the creating session, but ownership/identity metadata was not reliably recoverable across sessions.
+Remedy: Persist process PID, creation time, executable, command, working directory, and owner scope; verify all fields before status/stop/restart operations.
+
+ISSUE R-07 - Tool availability changed between parent and child/model contexts
+Severity: High
+Status: Recurring in the large redesign session
+Evidence: 14 "Unknown tool: bash" errors, 2 "Unknown tool: read" errors, 2 unknown browser_navigate errors, and individual unknown discover_capabilities, glob, browser_evaluate, and background_process errors.
+Cause: The model was prompted or resumed with tool assumptions that did not match the callable tool registry for that turn/provider/child session.
+Remedy: Generate prompts from the actual per-turn tool registry, reject unavailable calls locally, and preserve capability provenance when resuming children.
+
+ISSUE R-08 - Auto-agent delegation policy and available actions disagreed
+Severity: Medium
+Status: Observed once
+Evidence: A task call failed with "Auto must call chief_route before delegating with task," while later continuation instructions explicitly said not to call chief_route.
+Cause: Routing policy, system continuation instructions, and tool authorization were not synchronized.
+Remedy: Resolve routing requirements before constructing the prompt and expose one authoritative delegation policy to the model.
+
+ISSUE R-09 - Direct file attachments generated expected permission failures
+Severity: Medium UX/orchestration issue
+Status: Recurring
+Evidence: SITE_MAP.md, LEARNING_AUDIT.md, and LEARNING_AUDIT_V2.md direct reads failed because the active agent was required to delegate. The same content then had to be recovered through child sessions.
+Cause: The UI injected a direct Read action even though the selected routing agent was forbidden from using Read.
+Remedy: Route attachment ingestion through an authorized reader before constructing the turn, rather than logging a predictable failed tool call.
+
+ISSUE R-10 - Exact-string editing failed on changed content
+Severity: Low
+Status: Recoverable
+Evidence: One edit failed because oldString no longer matched globals.css exactly.
+Cause: The edit was based on stale text after earlier changes or formatting differences.
+Remedy: Re-read the narrow target region or use a context-aware patch operation with revision checking.
+
+ISSUE R-11 - A doubled Desktop path caused a false file-not-found
+Severity: Low
+Status: One occurrence
+Evidence: Read attempted C:\Users\User\Desktop\Desktop\French Study\...\micro-check.tsx.
+Cause: An absolute workspace path was prefixed with Desktop a second time.
+Remedy: Normalize and resolve paths once at the tool boundary.
+
+ISSUE R-12 - Snapshot tracking raced with a temporary replacement file
+Severity: Low to Medium
+Status: One recorded occurrence
+Evidence: git snapshot add failed because etymon-web/.raya-replace-... no longer existed by the time it was added.
+Cause: Snapshot enumeration observed a temporary file that was deleted before git add consumed the path.
+Remedy: Ignore Raya temporary replacement files or tolerate ENOENT/pathspec misses for ephemeral files.
+
+
+MODEL, PROVIDER, AND SESSION-CONTRACT ISSUES
+============================================
+
+ISSUE M-01 - Response/event schema rejected missing metadata.variant
+Severity: High due volume and diagnostic impact
+Status: Unresolved in retained logs
+Evidence: 164,892 runtime-wide warnings; 3,233 during the main Etymon dates. Every sampled warning says: Expected JSON value, got undefined at [0]["metadata"]["variant"].
+Cause: A producer emits metadata.variant as undefined while the receiving schema requires a JSON value. The event continues often enough that work proceeds, but every occurrence creates a warning.
+Impact: Massive log noise, wasted I/O/storage, and reduced visibility of real failures.
+Remedy: Omit optional undefined fields before serialization or make variant explicitly optional/nullable in the shared contract. Add a regression test at the producer/consumer boundary.
+
+ISSUE M-02 - Provider rejected task tool schemas because parameters.type was missing
+Severity: Critical for delegation
+Status: Unresolved for the affected provider path
+Evidence: 18 French Study assistant API errors, 19 runtime process errors, and 19 stream errors report: tools.function.parameters.type is required and must be "object". Repeated attempts spawned numerous short-lived Vercel-fix children that failed immediately.
+Cause: The OpenAI-compatible request sent at least one function schema without a top-level parameters.type="object", and the Moonshot/Kimi endpoint enforced that requirement.
+Remedy: Normalize every tool schema before provider dispatch, even when a tool has no arguments; add provider-contract tests and stop retrying a deterministic HTTP 400 with newly spawned children.
+
+ISSUE M-03 - Deterministic subagent failures caused a retry/spawn storm
+Severity: High
+Status: Unresolved behavior
+Evidence: The Vercel issue produced many Coder children with numbered duplicate titles. They failed with the same non-retryable schema error. Task calls also returned resumable child IDs, but replacement children continued to be created.
+Cause: The orchestrator treated a provider-level deterministic schema rejection as if a fresh child might succeed.
+Remedy: Classify non-retryable provider 400s, resume only when recovery is plausible, cap equivalent child retries, and escalate the shared provider/tool contract after the first repeated failure.
+
+ISSUE M-04 - Session payload pruning did not keep context within limits
+Severity: Critical for long sessions
+Status: Unresolved in logs
+Evidence: 632 runtime warnings say "payload still large after pruning," with sampled payloads around 1.26-1.35 MB. Two requests exceeded the 262,144-token model limit, requesting 519,485 and 398,574 tokens.
+Cause: Long-lived sessions retained large tool outputs, attached documents, screenshots/evidence, and repeated continuation material. The pruning/compaction step did not reduce the final provider payload enough.
+Remedy: Apply hard post-pruning token checks, summarize or externalize large tool outputs, avoid reinjecting full documents, and force compaction before provider dispatch rather than after a rejected request.
+
+ISSUE M-05 - Invalid ModelMessage history reached the provider adapter
+Severity: High
+Status: Two runtime process errors; one in the Etymon overhaul
+Evidence: "Invalid prompt: The messages do not match the ModelMessage[] schema."
+Cause: Stored or reconstructed message history contained a shape/order not accepted by the AI SDK. The logs do not expose the exact invalid item safely enough to isolate it further.
+Remedy: Validate and repair history before dispatch; log a redacted path to the invalid message/part instead of only the aggregate error.
+
+ISSUE M-06 - Provider moderation rejected one redesign request
+Severity: Medium
+Status: One occurrence
+Evidence: Qwen/Aliyun returned data_inspection_failed: "Input text data may contain inappropriate content."
+Cause: Provider-side content inspection rejected some text in the accumulated prompt. The log does not identify the exact offending span.
+Remedy: Surface the provider moderation category clearly, avoid blind retries, and offer a safe redacted diagnostic showing which attached/tool-output segment caused rejection when the provider supplies that data.
+
+ISSUE M-07 - Provider transport failures interrupted work
+Severity: High but external/transient
+Status: Recurring
+Evidence: Three runtime process errors say RequestExecutor.execute: HTTP transport failed; another stream closed unexpectedly; one operation timed out; a DeepSeek-compatible stream could not be read.
+Cause: Network/provider transport or stream termination. These are distinct from local internet quality because the remote endpoint or stream can fail while general connectivity remains healthy.
+Remedy: Use bounded retries with jitter for retryable transport failures, preserve partial state, and display the provider/attempt receipt.
+
+ISSUE M-08 - Provider balance suspension and insufficient-balance failures
+Severity: Critical while active
+Status: External account/configuration issue
+Evidence: Runtime log contains 8 explicit account-suspended-for-insufficient-balance matches, 4 "insufficient balance (1008)" matches, and 7 "Insufficient Balance" API error matches (some log lines represent the same request in multiple layers).
+Cause: The selected provider account lacked usable credit.
+Remedy: Preflight provider billing/availability, fail over only when authorized, and do not repeatedly retry a non-retryable balance response.
+
+ISSUE M-09 - Provider TPM rate limit was repeatedly exceeded
+Severity: High
+Status: External capacity issue
+Evidence: 29 runtime matches report organization TPM usage above the 1,500,000-token limit.
+Cause: Very large prompts and/or concurrent requests exceeded the provider organization's tokens-per-minute allowance. M-04 amplified this problem.
+Remedy: Reduce context, limit concurrency, respect Retry-After/provider windows, and queue work rather than immediately retrying.
+
+ISSUE M-10 - One malformed tool call targeted an unavailable tool named invalid
+Severity: Medium
+Status: One occurrence
+Evidence: append reported that the model tried to call unavailable tool "invalid."
+Cause: Malformed model tool-call generation or parser recovery produced an invalid tool name.
+Remedy: Validate tool names before execution and request a constrained model repair without adding a failed tool part to normal workflow history.
+
+ISSUE M-11 - Some OpenAI-chat tool-call arguments contained invalid JSON
+Severity: High
+Status: Two process errors
+Evidence: ProviderShared.stream reported "Invalid JSON input for openai-chat tool call task."
+Cause: The model/provider emitted malformed JSON arguments for a task call.
+Remedy: Use incremental JSON repair only when unambiguous; otherwise return a structured tool-call validation error and ask the model to regenerate once.
+
+ISSUE M-12 - Generic UnknownError obscured actionable causes
+Severity: Medium
+Status: Historical recurring problem
+Evidence: Multiple session command failures and one prompt_async failure surfaced only as UnknownError: UnknownError.
+Cause: Error translation discarded the original typed cause or failed to serialize it.
+Remedy: Preserve cause chains and stable error codes across Effect/HTTP/session boundaries, with secret-safe diagnostic IDs.
+
+
+STORAGE, SNAPSHOT, AND API ISSUES
+=================================
+
+ISSUE S-01 - Snapshot restore used Unix-style paths on Windows
+Severity: Critical for undo/discard safety
+Status: Historical but serious
+Evidence: Six "file existed in snapshot but checkout failed" errors used /Users/User/Desktop/... on Windows. Git treated them as outside the repository at C:/. Follow-on errors said files could not be restored or the snapshot was unavailable.
+Cause: Path normalization persisted or reconstructed Unix absolute paths for a Windows workspace.
+Remedy: Store workspace-relative paths in snapshots, reject cross-platform absolute paths, and add Windows restore/discard integration tests.
+
+ISSUE S-02 - Snapshot garbage collection referenced a nonexistent "global" path
+Severity: Medium
+Status: Two warnings
+Evidence: git gc cleanup failed with FileSystem.access on C:\Users\User\Desktop\French Study\global.
+Cause: Cleanup constructed or inherited an invalid worktree-relative path while running snapshot maintenance.
+Remedy: Run git maintenance against the snapshot git directory without resolving an unrelated global child path; validate the worktree before invocation.
+
+ISSUE S-03 - Malformed HTTP JSON bodies reached the server parser
+Severity: Medium
+Status: Three observed errors across retained logs
+Evidence: One unterminated JSON string and two "Unrecognized token '\\'" parse failures in HttpApiBuilder.
+Cause: A client sent improperly escaped or incomplete JSON, and the server logged the parser exception as a generic failed request.
+Remedy: Return a typed 400 with request correlation and client-side serialization tests; avoid hand-built JSON strings.
+
+ISSUE S-04 - A literal session route placeholder reached the server
+Severity: Low to Medium
+Status: One occurrence
+Evidence: Session validation received %7BsessionID%7D instead of an ID beginning with ses.
+Cause: A client URL template was sent without substituting {sessionID}.
+Remedy: Generate routes through typed SDK methods and reject unresolved template braces client-side.
+
+ISSUE S-05 - Model catalog refresh failed four times
+Severity: Medium
+Status: Transient/external
+Evidence: Four "Failed to fetch models.dev" errors: one connection failure and three timeouts.
+Cause: The remote catalog endpoint was unreachable or slow.
+Remedy: Cache the last known catalog, use bounded background retries, and clearly mark stale data rather than blocking core operation.
+
+ISSUE S-06 - Late replies/rejections arrived after request tracking was gone
+Severity: Low to Medium
+Status: 10 runtime warnings
+Evidence: Seven "reply for unknown request" and three "reject for unknown request" warnings.
+Cause: A request timed out, was cancelled, or its tracking state was cleared before the eventual response arrived.
+Remedy: Keep tombstones for recently cancelled request IDs and classify late responses without warning spam; investigate if responses routinely exceed cancellation windows.
+
+
+EXPECTED OR NON-BUG EVENTS
+==========================
+
+The following were present but should not be counted as independent product defects without more evidence:
+
+- 33 runtime process entries marked Aborted and five French Study MessageAbortedError records. Some correspond to user interruption, parent cancellation, or superseded work.
+- Permission denials that correctly enforced agent policy. The orchestration/attachment mismatch is R-09, but the denial itself was expected.
+- A one-off exact-string edit miss. This is normal optimistic-edit behavior unless it becomes frequent.
+- A Next.js node:sqlite ExperimentalWarning. The Etymon build still exited successfully.
+- Bare /lessons, /phases, and /quiz returning 404. The project intentionally defines only dynamic child routes.
+
+
+RECOMMENDED FIX ORDER
+=====================
+
+1. M-02: normalize tool schemas before provider dispatch. This blocked delegation and caused the largest visible retry storm.
+2. M-04 and M-09: enforce hard context limits and concurrency/rate controls.
+3. M-01: stop metadata.variant warning spam so logs become usable.
+4. R-01, R-05, and R-06: make browser and persistent-process recovery authoritative.
+5. S-01: fix Windows snapshot path handling because failed restore/discard can threaten user work.
+6. E-05 and E-08: make etymon-web the single Vercel root and clear the static public output override.
+7. E-06: replace next lint with direct ESLint.
+8. E-07: align MicroCheck content placement with lesson rendering.
+9. M-05, M-11, and M-12: validate message/tool-call structures early and preserve actionable causes.
+10. S-02 through S-06 and the remaining low-frequency tool argument/path issues.
+
+
+ROOT-CAUSE BOUNDARIES
+=====================
+
+- E-01 is proven from live behavior and code-level diagnosis.
+- E-05 is a high-confidence deployment diagnosis, but Vercel dashboard settings were not available in the logs, so the exact active setting is not proven.
+- R-01 is proven as a browser-host failure; it should not be used as evidence that Etymon itself was broken in every occurrence.
+- Provider balance, moderation, rate-limit, and transport failures are external responses, though Raya should handle them more intelligently.
+- Counts can overlap when one request is logged at stream, process, message, and tool layers. They measure log evidence, not necessarily unique user-visible incidents.

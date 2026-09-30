@@ -5204,7 +5204,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return result.data
     }
     return {
-      list: async (scope) => check(await client.kilocode.composerDraft.list({ directory: scope.workspace, scope })),
+      list: async (scope, cursor, limit) =>
+        check(await client.kilocode.composerDraft.list({ directory: scope.workspace, scope, cursor, limit })),
       load: async (identity) =>
         check(await client.kilocode.composerDraft.load({ directory: identity.workspace, identity })),
       save: async (identity, expected, content, mutation) =>

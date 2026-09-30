@@ -20520,6 +20520,8 @@ export type KilocodeComposerDraftListData = {
       projectID?: string
       box: string
     }
+    cursor?: string
+    limit?: number
   }
   path?: never
   query?: {
@@ -20606,6 +20608,7 @@ export type KilocodeComposerDraftListResponses = {
         request: string
       }
     }>
+    cursor?: string
   }
 }
 

@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "de452715-06c5-4e79-a00c-26affa2c032f",
+  "id": "b1fdf8d4-e565-4378-805e-b1cac24b75d4",
   "prevIds": [
-    "9f6a3cc0-abfc-4913-8af0-8a682155b0e6"
+    "de452715-06c5-4e79-a00c-26affa2c032f"
   ],
   "ddl": [
     {
@@ -20,6 +20,14 @@
     },
     {
       "name": "raya_routine_archive",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_composer_control",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_composer_draft",
       "entityType": "tables"
     },
     {
@@ -303,6 +311,206 @@
       "name": "definition",
       "entityType": "columns",
       "table": "raya_routine_archive"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "storage",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "database",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "generation",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "phase",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_digest",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "marker",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "marker_digest",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cursor_secret",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content_bytes",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata_bytes",
+      "entityType": "columns",
+      "table": "raya_composer_control"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "sequence",
+      "entityType": "columns",
+      "table": "raya_composer_draft"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_composer_draft"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "workspace",
+      "entityType": "columns",
+      "table": "raya_composer_draft"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project",
+      "entityType": "columns",
+      "table": "raya_composer_draft"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "box",
+      "entityType": "columns",
+      "table": "raya_composer_draft"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "record",
+      "entityType": "columns",
+      "table": "raya_composer_draft"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "content_bytes",
+      "entityType": "columns",
+      "table": "raya_composer_draft"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "metadata_bytes",
+      "entityType": "columns",
+      "table": "raya_composer_draft"
     },
     {
       "type": "text",
@@ -3626,6 +3834,24 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "raya_composer_control_pk",
+      "table": "raya_composer_control",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "sequence"
+      ],
+      "nameExplicit": false,
+      "name": "raya_composer_draft_pk",
+      "table": "raya_composer_draft",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "raya_contact_destination_pk",
       "table": "raya_contact_destination",
       "entityType": "pks"
@@ -3872,6 +4098,46 @@
       "name": "raya_routine_archive_order",
       "entityType": "indexes",
       "table": "raya_routine_archive"
+    },
+    {
+      "columns": [
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_composer_identity",
+      "entityType": "indexes",
+      "table": "raya_composer_draft"
+    },
+    {
+      "columns": [
+        {
+          "value": "workspace",
+          "isExpression": false
+        },
+        {
+          "value": "project",
+          "isExpression": false
+        },
+        {
+          "value": "box",
+          "isExpression": false
+        },
+        {
+          "value": "sequence",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_composer_catalog",
+      "entityType": "indexes",
+      "table": "raya_composer_draft"
     },
     {
       "columns": [

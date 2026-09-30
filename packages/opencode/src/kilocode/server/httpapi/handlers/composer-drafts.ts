@@ -3,11 +3,13 @@ import path from "node:path"
 import { Cause, Effect, Result } from "effect"
 import z from "zod"
 import { Global } from "@opencode-ai/core/global"
+import { Database } from "@opencode-ai/core/database/database"
 import { InstanceState } from "@/effect/instance-state"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
-import { composerDrafts, DraftError, DraftSchemas, type DraftIdentity } from "@/kilocode/session/composer-drafts"
+import { DraftError, DraftSchemas, type DraftIdentity } from "@/kilocode/session/composer-drafts"
+import { composerRetention } from "@/kilocode/session/composer-retention"
 import {
   ComposerDraftError,
   type Scope,
@@ -23,8 +25,12 @@ const failure = (code: ComposerDraftError["code"]) =>
 const canonical = (dir: string) => (process.platform === "win32" ? dir.toLowerCase() : dir)
 
 /** No arbitrary Storage root or profile-wide snapshot is accepted from a client. */
-export function composerHandlers(storage: Storage.Interface, sessions: Session.Interface) {
-  const drafts = composerDrafts(storage, path.join(Global.Path.data, "storage"))
+export function composerHandlers(
+  storage: Storage.Interface,
+  sessions: Session.Interface,
+  database: Database.Interface,
+) {
+  const drafts = composerRetention(database, storage, path.join(Global.Path.data, "storage"), Database.path())
   const boundary = <A, E, R>(body: Effect.Effect<A, E, R>) =>
     body.pipe(
       Effect.catchCause((cause) => {
@@ -69,15 +75,7 @@ export function composerHandlers(storage: Storage.Interface, sessions: Session.I
       boundary(
         Effect.gen(function* () {
           const owner = yield* scope(ctx.payload.scope)
-          const data = yield* drafts.snapshot()
-          return {
-            entries: data.entries.filter(
-              (entry) =>
-                entry.identity.workspace === owner.workspace &&
-                entry.identity.projectID === owner.projectID &&
-                entry.identity.box === owner.box,
-            ),
-          }
+          return yield* drafts.page(owner, { cursor: ctx.payload.cursor, limit: ctx.payload.limit })
         }),
       ),
     load: (ctx: { payload: typeof Load.Type }) =>

@@ -132,6 +132,9 @@ function checked(value: unknown) {
   return data
 }
 
+/** Shared validated v1 import boundary; the SQL store never loosens legacy validation. */
+export const DraftLegacy = { key, mark, hash, same, id, checked }
+
 /** Effect-native durable state only. The caller supplies the actual Storage root, never a project directory. */
 export function composerDrafts(store: Storage.Interface, dir: string) {
   const validate = <T>(body: () => T) =>

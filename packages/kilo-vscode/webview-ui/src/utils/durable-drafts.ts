@@ -15,6 +15,7 @@ type Transport = {
   postMessage: (message: ComposerDraftWebviewMessage) => void
   onMessage: (handler: (message: ComposerDraftExtensionMessage) => void) => () => void
 }
+type Seal = { revision: number; content: DraftContent; owner: string }
 type Record = {
   owner?: string
   context?: string
@@ -28,6 +29,7 @@ type Record = {
   uncertain?: { mutation: string; content: DraftContent; revision: number }
   held?: DraftCapture
   captured?: number
+  seal?: Seal
   job?: Promise<void>
   moving?: boolean
   reviewed?: boolean
@@ -57,6 +59,29 @@ function canonical(value: unknown): unknown {
 const same = (left: DraftContent, right: DraftContent) =>
   JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
 const snapshot = (content: DraftContent) => structuredClone(content)
+const cutoff = (record: Record) => record.seal?.revision ?? record.revision
+const contents = (record: Record) => snapshot(record.seal?.content ?? record.content)
+const merged = (record: Record, local: DraftContent) => !!record.seal && !same(record.content, local)
+const sendable = (record: Record): record is Record & { owner: string } =>
+  !record.error && !record.held && !record.seal && !record.reading && !record.moving && !!record.owner
+const committed = (
+  record: Record,
+  seal: Seal,
+  identity: DraftTarget,
+  owner?: string,
+): record is Record & { entry: DraftEntry & { content: DraftContent } } =>
+  record.seal === seal &&
+  record.loaded &&
+  !record.error &&
+  !record.held &&
+  !record.reading &&
+  !record.moving &&
+  record.owner === seal.owner &&
+  record.owner === owner &&
+  record.identity.key === identity.key &&
+  record.saved === seal.revision &&
+  !!record.entry?.content &&
+  same(record.entry.content, seal.content)
 const target = (entry: DraftEntry): DraftTarget => {
   return {
     key: entry.identity.key,
@@ -188,6 +213,7 @@ export class DurableDrafts {
       !record.entry ||
       record.error ||
       record.held ||
+      record.seal ||
       record.reading ||
       record.moving ||
       record.revision !== revision ||
@@ -404,6 +430,7 @@ export class DurableDrafts {
         agent: local.agent ?? remote.agent,
         variant: local.variant ?? remote.variant,
       }
+      if (merged(record, local)) record.error = "conflict"
     }
     this.notify()
   }
@@ -412,13 +439,13 @@ export class DurableDrafts {
     if (!record.loaded || record.uncertain) await this.load(record)
     if (record.error) return
     while (
-      record.saved !== record.revision &&
+      record.saved !== cutoff(record) &&
       this.connected &&
       !record.held &&
       record.owner === this.owners.get(record.identity.box)
     ) {
-      const revision = record.revision
-      const content = snapshot(record.content)
+      const revision = cutoff(record)
+      const content = contents(record)
       const mutation = crypto.randomUUID()
       const reply = await this.request(
         {
@@ -499,20 +526,17 @@ export class DurableDrafts {
 
   async capture(identity: DraftTarget): Promise<DraftCapture | undefined> {
     const record = this.record(identity)
-    const revision = record.revision
+    if (!sendable(record)) return undefined
+    const seal = { revision: record.revision, content: snapshot(record.content), owner: record.owner }
+    record.seal = seal
     await this.sync(record)
-    if (
-      !record.loaded ||
-      record.error ||
-      record.held ||
-      record.reading ||
-      revision !== record.revision ||
-      record.saved !== revision ||
-      !record.entry?.content
-    )
+    if (!committed(record, seal, identity, this.owners.get(identity.box))) {
+      if (record.seal === seal) record.seal = undefined
+      if (!record.error) void this.sync(record)
       return undefined
+    }
     const capture: DraftCapture = {
-      owner: record.owner!,
+      owner: seal.owner,
       epoch: this.epoch,
       generation: this.generation,
       identity: { ...identity },
@@ -520,8 +544,9 @@ export class DurableDrafts {
       mutation: record.entry.mutation,
       digest: record.entry.digest,
     }
+    record.seal = undefined
     record.held = capture
-    record.captured = revision
+    record.captured = seal.revision
     return capture
   }
 

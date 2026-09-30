@@ -75,7 +75,11 @@ export const Entry = Schema.Struct({
   digest,
   receipt: Schema.optional(Schema.Struct({ request: digest }).annotate(strict)),
 }).annotate(strict)
-export const List = Schema.Struct({ scope: Scope }).annotate(strict)
+export const List = Schema.Struct({
+  scope: Scope,
+  cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048))),
+  limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100))),
+}).annotate(strict)
 export const Load = Schema.Struct({ identity: Identity }).annotate(strict)
 export const Save = Schema.Struct({
   identity: Identity,
@@ -115,7 +119,7 @@ export const endpoints = [
   HttpApiEndpoint.post("composerDraftList", `${root}/list`, {
     query: WorkspaceRoutingQuery,
     payload: List,
-    success: Schema.Struct({ entries: Schema.Array(Entry) }),
+    success: Schema.Struct({ entries: Schema.Array(Entry), cursor: Schema.optional(Schema.String) }),
     error: ComposerDraftError,
   }).annotateMerge(
     OpenApi.annotations({ identifier: "kilocode.composerDraft.list", summary: "List scoped composer drafts" }),

@@ -42,6 +42,38 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(`
+        CREATE TABLE \`raya_composer_control\` (
+          \`id\` text PRIMARY KEY,
+          \`storage\` text NOT NULL,
+          \`database\` text NOT NULL,
+          \`generation\` text NOT NULL,
+          \`phase\` text NOT NULL,
+          \`source\` text,
+          \`source_digest\` text NOT NULL,
+          \`marker\` text,
+          \`marker_digest\` text NOT NULL,
+          \`cursor_secret\` text NOT NULL,
+          \`content_bytes\` integer NOT NULL,
+          \`metadata_bytes\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_composer_draft\` (
+          \`sequence\` integer PRIMARY KEY AUTOINCREMENT,
+          \`id\` text NOT NULL,
+          \`workspace\` text NOT NULL,
+          \`project\` text NOT NULL,
+          \`box\` text NOT NULL,
+          \`record\` text NOT NULL,
+          \`content_bytes\` integer NOT NULL,
+          \`metadata_bytes\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
         CREATE TABLE \`raya_contact_destination\` (
           \`id\` text PRIMARY KEY,
           \`source\` text NOT NULL,
@@ -522,6 +554,14 @@ export default {
       // kilocode_change start
       yield* tx.run(
         `CREATE INDEX \`raya_routine_archive_order\` ON \`raya_routine_archive\` ("archived_at" desc,\`id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`CREATE UNIQUE INDEX \`raya_composer_identity\` ON \`raya_composer_draft\` (\`id\`);`)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE INDEX \`raya_composer_catalog\` ON \`raya_composer_draft\` (\`workspace\`,\`project\`,\`box\`,\`sequence\`);`,
       )
       // kilocode_change end
       // kilocode_change start

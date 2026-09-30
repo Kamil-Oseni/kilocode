@@ -4,11 +4,12 @@ import type { ServerConfig } from "./types"
 type Connection = { client: KiloClient; config: ServerConfig }
 type Feature = "client.vscode" | "client.cli" | "client.console" | "events.additive" | "goal.commandCheck"
 type Manifest = { version: 1; features: Record<string, unknown> }
+type Outcome = { kind: "manifest"; manifest: Manifest } | { kind: "unsupported" } | { kind: "unavailable" }
 
 // Client identity is the connection generation. A replacement at the same URL
 // must never inherit a cached semantic guarantee from the previous process.
 export class Capabilities {
-  private readonly cache = new WeakMap<KiloClient, Promise<Manifest | undefined>>()
+  private readonly cache = new WeakMap<KiloClient, Promise<Outcome>>()
 
   constructor(
     private readonly current: () => Connection | undefined,
@@ -20,18 +21,52 @@ export class Capabilities {
   }
 
   async require(client: KiloClient, feature: Feature): Promise<() => boolean> {
-    const connection = this.current()
-    if (!connection || connection.client !== client) return () => false
-    const pending = this.cache.get(client) ?? this.read(connection.config)
-    this.cache.set(client, pending)
-    const manifest = await pending
-    const supported = manifest?.features[feature] === 1
-    // Failed or unsupported probes can be retried after connectivity or the backend is restored.
-    if (!supported) this.cache.delete(client)
-    return () => supported && this.current()?.client === client
+    return (await this.probe(client, feature)).permit
   }
 
-  private async read(config: ServerConfig): Promise<Manifest | undefined> {
+  async probe(client: KiloClient, feature: Feature) {
+    const connection = this.current()
+    if (!connection || connection.client !== client) return { status: "unavailable" as const, permit: () => false }
+    const pending = this.cache.get(client) ?? this.read(connection.config)
+    this.cache.set(client, pending)
+    const outcome = await pending
+    const supported = outcome.kind === "manifest" && outcome.manifest.features[feature] === 1
+    // Failed or unsupported probes can be retried after connectivity or the backend is restored.
+    if (!supported) this.cache.delete(client)
+    const current = this.current()?.client === client
+    const status =
+      !current || outcome.kind === "unavailable"
+        ? ("unavailable" as const)
+        : supported
+          ? ("supported" as const)
+          : ("unsupported" as const)
+    return { status, permit: () => supported && this.current()?.client === client }
+  }
+
+  private manifest(value: unknown): Outcome {
+    if (
+      !value ||
+      typeof value !== "object" ||
+      !("version" in value) ||
+      typeof value.version !== "number" ||
+      !Number.isSafeInteger(value.version) ||
+      value.version < 1 ||
+      !("features" in value) ||
+      !value.features ||
+      typeof value.features !== "object" ||
+      Array.isArray(value.features)
+    ) {
+      this.failure?.({ code: "INVALID_MANIFEST" })
+      return { kind: "unavailable" }
+    }
+    if (value.version !== 1) {
+      this.failure?.({ code: "UNSUPPORTED_MANIFEST_VERSION" })
+      return { kind: "unsupported" }
+    }
+    return { kind: "manifest", manifest: { version: 1, features: Object.fromEntries(Object.entries(value.features)) } }
+  }
+
+  private async read(config: ServerConfig): Promise<Outcome> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 3000)
     try {
@@ -42,22 +77,19 @@ export class Capabilities {
       })
       if (!response.ok) {
         this.failure?.({ status: response.status })
-        return undefined
+        return { kind: "unavailable" }
       }
-      const value: unknown = await response.json()
-      if (!value || typeof value !== "object" || !("version" in value) || value.version !== 1) {
-        this.failure?.({ code: "INVALID_MANIFEST" })
-        return undefined
-      }
-      if (!("features" in value) || !value.features || typeof value.features !== "object") {
-        this.failure?.({ code: "INVALID_MANIFEST" })
-        return undefined
-      }
-      return { version: 1, features: Object.fromEntries(Object.entries(value.features)) }
+      return this.manifest(await response.json())
     } catch (error) {
-      this.failure?.(error)
-      // The caller receives an explicit compatibility failure; never mutate to probe support.
-      return undefined
+      this.failure?.({
+        code: controller.signal.aborted
+          ? "CAPABILITIES_TIMEOUT"
+          : error instanceof SyntaxError
+            ? "INVALID_MANIFEST"
+            : "CAPABILITIES_TRANSPORT_FAILED",
+      })
+      // Connectivity never grants support; only a valid manifest can admit the client.
+      return { kind: "unavailable" }
     } finally {
       clearTimeout(timer)
     }

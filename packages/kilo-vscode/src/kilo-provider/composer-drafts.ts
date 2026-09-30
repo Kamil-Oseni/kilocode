@@ -17,7 +17,11 @@ import type {
 } from "../shared/composer-drafts-messages"
 
 export interface DraftBackend {
-  list(scope: { workspace: string; projectID?: string; box: string }): Promise<{ entries: DraftEntry[] }>
+  list(
+    scope: { workspace: string; projectID?: string; box: string },
+    cursor?: string,
+    limit?: number,
+  ): Promise<{ entries: DraftEntry[]; cursor?: string }>
   load(identity: DraftIdentity): Promise<{ entry: DraftEntry | null }>
   save(
     identity: DraftIdentity,
@@ -255,13 +259,7 @@ export class ComposerDrafts {
   }
   private async execute(backend: DraftBackend, message: ComposerDraftRequest) {
     if (message.type === "composerDraftList") {
-      const scope = await this.ctx.scope({ box: message.box, key: "list", pendingID: "list" })
-      const result = await backend.list({ workspace: scope.workspace, projectID: scope.projectID, box: scope.box })
-      const entries = await Promise.all(result.entries.map((entry) => this.restored(backend, entry)))
-      return {
-        entries: entries.flatMap((item) => (item.entry ? [item.entry] : [])),
-        error: entries.some((item) => item.error) ? ("uncertain" as const) : undefined,
-      }
+      return this.catalog(backend, message)
     }
     if (message.type === "composerDraftPromote") {
       const from = await this.ctx.scope(message.from)
@@ -282,6 +280,85 @@ export class ComposerDrafts {
     if (!this.current(message.epoch, message.generation)) refused("stale")
     return backend.clear(identity, message.expected, message.mutation)
   }
+  private async catalog(backend: DraftBackend, message: Extract<ComposerDraftRequest, { type: "composerDraftList" }>) {
+    const deadline = Date.now() + 15_000
+    const check = () => {
+      if (Date.now() >= deadline) refused("timeout")
+      if (!this.current(message.epoch, message.generation)) refused("stale")
+      if (this.ctx.owners().find((item) => item.box === message.box)?.owner !== message.owner) refused("scope")
+    }
+    const drain = async () => {
+      const scope = await this.ctx.scope({ box: message.box, key: "list", pendingID: "list" })
+      check()
+      const entries: DraftEntry[] = []
+      const cursors = new Set<string>()
+      const identities = new Set<string>()
+      let cursor: string | undefined
+      do {
+        check()
+        const page = await backend.list(
+          { workspace: scope.workspace, projectID: scope.projectID, box: scope.box },
+          cursor,
+          100,
+        )
+        check()
+        await this.owned(scope)
+        check()
+        if (
+          page.entries.some(
+            (entry) =>
+              entry.identity.workspace !== scope.workspace ||
+              entry.identity.projectID !== scope.projectID ||
+              entry.identity.box !== scope.box,
+          )
+        )
+          refused("scope")
+        for (const entry of page.entries) {
+          const key = JSON.stringify([entry.identity.key, entry.identity.sessionID, entry.identity.pendingID])
+          if (identities.has(key)) refused("unavailable")
+          identities.add(key)
+          entries.push(entry)
+        }
+        cursor = page.cursor
+        if (cursor !== undefined && (typeof cursor !== "string" || !cursor)) refused("unavailable")
+        if (cursor && cursors.has(cursor)) refused("unavailable")
+        if (cursor) cursors.add(cursor)
+      } while (cursor)
+      // Publish only a complete catalog. Accepted-user reconciliation remains
+      // an independent exact-token CAS per entry, never a catalog transaction.
+      const restored: Array<{ entry: DraftEntry | null; error?: DraftCode }> = []
+      for (let offset = 0; offset < entries.length; offset += 8) {
+        check()
+        restored.push(
+          ...(await Promise.all(
+            entries.slice(offset, offset + 8).map((entry) => this.restored(backend, entry, check)),
+          )),
+        )
+        check()
+      }
+      check()
+      await this.owned(scope)
+      check()
+      return {
+        entries: restored.flatMap((item) => (item.entry ? [item.entry] : [])),
+        error: restored.some((item) => item.error) ? ("uncertain" as const) : undefined,
+      }
+    }
+    const timer: { value?: ReturnType<typeof setTimeout> } = {}
+    try {
+      return await Promise.race([
+        drain(),
+        new Promise<never>((_, reject) => {
+          timer.value = setTimeout(
+            () => reject(Object.assign(new Error("Composer draft operation refused"), { code: "timeout" })),
+            Math.max(0, deadline - Date.now()),
+          )
+        }),
+      ])
+    } finally {
+      if (timer.value) clearTimeout(timer.value)
+    }
+  }
   private async owned(identity: DraftIdentity) {
     const current = await this.ctx.scope(identity)
     if (current.workspace !== identity.workspace || current.projectID !== identity.projectID) refused("stale")
@@ -289,15 +366,19 @@ export class ComposerDrafts {
   private async restored(
     backend: DraftBackend,
     entry: DraftEntry | null,
+    check?: () => void,
   ): Promise<{ entry: DraftEntry | null; error?: DraftCode }> {
+    check?.()
     if (!entry?.content || !entry.mutation.startsWith("send:")) return { entry }
     const sessionID = entry.identity.sessionID
     const messageID = entry.mutation.slice(5)
     if (!sessionID || !messageID) return { entry, error: "uncertain" }
     const info = await this.ctx.message(sessionID, messageID, entry.identity.workspace).catch(() => undefined)
+    check?.()
     if (info?.role !== "user" || info.sessionID !== sessionID || info.id !== messageID)
       return { entry, error: "uncertain" }
     await this.owned(entry.identity)
+    check?.()
     return backend.clear(entry.identity, entry.token, `accepted:${messageID}`)
   }
   async validate(capture: DraftCapture) {

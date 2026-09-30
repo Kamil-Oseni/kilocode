@@ -213,7 +213,8 @@ test("serialized CAS saves retain edits made while a real disk write is delayed"
 
 test("lost committed ACK reconciles normalized digest and exact mutation without another write", async () => {
   await using storage = await draftStorage()
-  using view = pane(storage, 100)
+  // The fixture drops the save ACK itself; allow the real SQL store to finish its first migration.
+  using view = pane(storage, 2000)
   await until(() => view.controller.ready())
   await view.controller.hydrate(identity)
   view.controls.drop = true
@@ -282,11 +283,27 @@ test("accepted pending send clears only captured revision and saves newer typing
   using view = pane(storage)
   await until(() => view.controller.ready())
   await view.controller.hydrate(identity)
+  const held = gate()
+  view.controls.pause = held
   view.controller.edit(identity, rich)
-  const capture = (await view.controller.capture(identity))!
+  await until(() => view.requests.some((request) => request.type === "composerDraftSave"))
+  const waiting = view.controller.capture(identity)
+  view.controller.edit(identity, { ...rich, text: "Typed while the first message was accepted" })
+  held.open()
+  const capture = (await waiting)!
+  expect(capture).toBeDefined()
+  const original = await storage.handle({
+    owner: storage.root,
+    epoch: view.controller.epoch,
+    generation: 1,
+    requestID: crypto.randomUUID(),
+    type: "composerDraftLoad",
+    identity,
+  })
+  expect(original.entry?.token).toEqual(capture.token)
+  expect(original.entry?.content?.text).toBe(rich.text)
   const next = { box: identity.box, key: `${identity.box}:session:created`, sessionID: "created" }
   view.controller.created(identity.pendingID!, "created", identity.box)
-  view.controller.edit(next, { ...rich, text: "Typed while the first message was accepted" })
   const base = { owner: storage.root, epoch: view.controller.epoch, generation: 1, requestID: crypto.randomUUID() }
   const moved = await storage.handle({
     ...base,

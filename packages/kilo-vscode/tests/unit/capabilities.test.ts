@@ -180,3 +180,132 @@ test("replacement connections cannot inherit pending or cached support even at t
     await server.stop(true)
   }
 })
+
+test("startup probes distinguish unavailable transport from confirmed unsupported manifests without admitting either", async () => {
+  let response = Response.json({ private: "response-body-must-not-be-logged" }, { status: 503 })
+  const diagnostics: unknown[] = []
+  let calls = 0
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      calls++
+      return response.clone()
+    },
+  })
+  const config = { baseUrl: server.url.origin, password: "credential-must-not-be-logged" }
+  const client = createKiloClient({ baseUrl: config.baseUrl })
+  const capabilities = new Capabilities(
+    () => ({ client, config }),
+    (error) => diagnostics.push(error),
+  )
+  try {
+    for (const value of [
+      response,
+      Response.json({}, { status: 401 }),
+      new Response("response-body-must-not-be-logged"),
+      Response.json({ version: 1, features: [] }),
+    ]) {
+      response = value
+      const probe = await capabilities.probe(client, "client.vscode")
+      expect(probe.status).toBe("unavailable")
+      expect(probe.permit()).toBe(false)
+    }
+    for (const value of [
+      Response.json({ version: 2, features: { "client.vscode": 1 } }),
+      Response.json({ version: 1, features: {} }),
+      Response.json({ version: 1, features: { "client.vscode": 2 } }),
+    ]) {
+      response = value
+      const probe = await capabilities.probe(client, "client.vscode")
+      expect(probe.status).toBe("unsupported")
+      expect(probe.permit()).toBe(false)
+    }
+    expect(calls).toBe(7)
+    response = Response.json({ version: 1, features: { "client.vscode": 1 } })
+    const ready = await capabilities.probe(client, "client.vscode")
+    expect(ready.status).toBe("supported")
+    expect(ready.permit()).toBe(true)
+    expect((await capabilities.require(client, "client.vscode"))()).toBe(true)
+    expect(calls).toBe(8)
+    expect(JSON.stringify(diagnostics)).not.toContain("response-body-must-not-be-logged")
+    expect(JSON.stringify(diagnostics)).not.toContain(config.password)
+    await server.stop(true)
+    const replacement = createKiloClient({ baseUrl: config.baseUrl })
+    const disconnected = new Capabilities(
+      () => ({ client: replacement, config }),
+      (error) => diagnostics.push(error),
+    )
+    const down = await disconnected.probe(replacement, "client.vscode")
+    expect(down.status).toBe("unavailable")
+    expect(down.permit()).toBe(false)
+    expect(diagnostics.at(-1)).toEqual({ code: "CAPABILITIES_TRANSPORT_FAILED" })
+  } finally {
+    await server.stop(true)
+  }
+})
+
+test("the unchanged three-second probe deadline reports unavailable and never grants command admission", async () => {
+  const entered = Promise.withResolvers<void>()
+  const completed = Promise.withResolvers<void>()
+  const diagnostics: unknown[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch() {
+      entered.resolve()
+      await Bun.sleep(3100)
+      completed.resolve()
+      return Response.json({ version: 1, features: { "client.vscode": 1, "goal.commandCheck": 1 } })
+    },
+  })
+  try {
+    const config = { baseUrl: server.url.origin, password: "secret" }
+    const client = createKiloClient({ baseUrl: config.baseUrl })
+    const capabilities = new Capabilities(
+      () => ({ client, config }),
+      (error) => diagnostics.push(error),
+    )
+    const pending = capabilities.probe(client, "client.vscode")
+    await entered.promise
+    const probe = await pending
+    expect(probe.status).toBe("unavailable")
+    expect(probe.permit()).toBe(false)
+    expect(diagnostics).toEqual([{ code: "CAPABILITIES_TIMEOUT" }])
+    await completed.promise
+    expect(probe.permit()).toBe(false)
+  } finally {
+    await server.stop(true)
+  }
+}, 5000)
+
+test("a retired client cannot classify a replacement using its delayed supported manifest", async () => {
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch() {
+      entered.resolve()
+      await release.promise
+      return Response.json({ version: 1, features: { "client.vscode": 1 } })
+    },
+  })
+  try {
+    const config = { baseUrl: server.url.origin, password: "secret" }
+    const first = createKiloClient({ baseUrl: config.baseUrl })
+    let current = { client: first, config }
+    const capabilities = new Capabilities(() => current)
+    const pending = capabilities.probe(first, "client.vscode")
+    await entered.promise
+    current = { client: createKiloClient({ baseUrl: config.baseUrl }), config }
+    release.resolve()
+    const probe = await pending
+    expect(probe.status).toBe("unavailable")
+    expect(probe.permit()).toBe(false)
+    expect((await capabilities.command(first))()).toBe(false)
+  } finally {
+    release.resolve()
+    await server.stop(true)
+  }
+})

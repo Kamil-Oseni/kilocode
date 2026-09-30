@@ -20,7 +20,14 @@ const aliases = {
   "solid-js/web": path.join(solid, "web/dist/web.js"),
   "solid-js/store": path.join(solid, "store/dist/store.js"),
 }
-const resources = { home: undefined, host: undefined, context: undefined, profiles: new Map(), pending: new Set() }
+const resources = {
+  home: undefined,
+  host: undefined,
+  frontend: undefined,
+  context: undefined,
+  profiles: new Map(),
+  pending: new Set(),
+}
 let closing
 function close() {
   if (closing) return closing
@@ -33,9 +40,11 @@ function close() {
         errors.push(error)
       }
     }
+    if (resources.frontend) await attempt(() => resources.frontend.stop(true))
     if (resources.context) await attempt(() => resources.context.dispose())
     if (resources.host) await attempt(() => resources.host.stop(true))
-    await Promise.allSettled([...resources.pending])
+    const settled = await Promise.allSettled([...resources.pending])
+    for (const result of settled) if (result.status === "rejected") errors.push(result.reason)
     for (const profile of resources.profiles.values()) await attempt(async () => (await profile)[Symbol.asyncDispose]())
     if (resources.host)
       await attempt(async () => {
@@ -49,6 +58,7 @@ function close() {
       JSON.stringify({
         profileRemoved: !resources.home || !fs.existsSync(resources.home),
         profiles: resources.profiles.size,
+        frontendStopped: !!resources.frontend,
       }),
     )
   })()
@@ -139,6 +149,7 @@ async function main() {
     entryPoints: [path.join(__dirname, "composer-entry.jsx")],
     outdir: dir,
     bundle: true,
+    metafile: true,
     platform: "browser",
     format: "iife",
     conditions: ["browser"],
@@ -176,8 +187,44 @@ async function main() {
     ],
   })
   resources.context = context
-  await context.rebuild()
-  await context.serve({ host: "127.0.0.1", port: 5201, servedir: dir })
+  const build = await context.rebuild()
+  const mime = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".svg": "image/svg+xml",
+  }
+  const assets = new Map()
+  const outputs = [
+    ...Object.keys(build.metafile.outputs).map((file) => path.resolve(path.resolve(__dirname, "../.."), file)),
+    ...["index.html", "eden-logo-light.svg", "eden-logo-dark.svg"].map((file) => path.join(dir, file)),
+  ]
+  for (const file of outputs) {
+    const name = path.relative(dir, file)
+    if (!name || name.startsWith("..") || path.isAbsolute(name) || !mime[path.extname(file)])
+      throw new Error("Composer fixture asset boundary refused")
+    assets.set(`/${name.split(path.sep).join("/")}`, {
+      bytes: new Uint8Array(fs.readFileSync(file)),
+      type: mime[path.extname(file)],
+    })
+  }
+  resources.frontend = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 5201,
+    fetch(request) {
+      if (closing) return new Response(null, { status: 503 })
+      if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405 })
+      const name = new URL(request.url).pathname
+      const asset = assets.get(name === "/" ? "/index.html" : name)
+      if (!asset) return new Response(null, { status: 404 })
+      return new Response(request.method === "HEAD" ? null : asset.bytes, {
+        headers: { "Content-Type": asset.type, "Cache-Control": "no-cache" },
+      })
+    },
+  })
 }
 main().catch(async (error) => {
   console.error(error)

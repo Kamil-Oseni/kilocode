@@ -15702,6 +15702,9 @@
                         "required": ["identity", "token", "content", "mutation", "digest"],
                         "additionalProperties": false
                       }
+                    },
+                    "cursor": {
+                      "type": "string"
                     }
                   },
                   "required": ["entries"],
@@ -15756,6 +15759,16 @@
                     },
                     "required": ["workspace", "box"],
                     "additionalProperties": false
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
                   }
                 },
                 "required": ["scope"],

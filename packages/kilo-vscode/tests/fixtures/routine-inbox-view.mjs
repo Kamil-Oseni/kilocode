@@ -517,6 +517,11 @@ try {
   })
   assert.equal(draft.value, "Keep this draft")
   assert.match(root.textContent, /changed in another Raya window/)
+  assert.equal(button("Send").disabled, true)
+  button("Use saved draft").click()
+  assert.equal(draft.value, "")
+  draft.value = "Keep this draft"
+  draft.dispatchEvent(new window.Event("input", { bubbles: true }))
   const infoToggle = button("Info")
   infoToggle.click()
   assert.equal(infoToggle.getAttribute("aria-expanded"), "true")
@@ -1033,6 +1038,7 @@ try {
   setWorker("draft-second")
   await new Promise((resolve) => setTimeout(resolve, 450))
   assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "")
+  // A known newer, divergent SQL summary cannot be overwritten by raising the local revision.
   assert.equal(
     sent.slice(cutoff).some((msg) => msg.type === "routineInboxDraft"),
     false,

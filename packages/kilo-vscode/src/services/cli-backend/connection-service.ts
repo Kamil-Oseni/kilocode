@@ -22,6 +22,12 @@ type ClearPendingPromptsListener = () => void
 type DirectoryProvider = () => string[]
 const DRAIN_CONCURRENCY = 4
 
+class Superseded extends Error {
+  constructor() {
+    super("Raya connection attempt was replaced. Retry using the current connection.")
+  }
+}
+
 async function parallel(items: string[], fn: (item: string) => Promise<void>): Promise<void> {
   let next = 0
   const errors = new Map<number, unknown>()
@@ -101,6 +107,7 @@ export class KiloConnectionService {
   private state: ConnectionState = "disconnected"
   private error: Error | null = null
   private connectPromise: Promise<void> | null = null
+  private generation = 0
   private healthPollTimer: ReturnType<typeof setInterval> | null = null
   private remoteService: import("../RemoteStatusService").RemoteStatusService | null = null
 
@@ -170,16 +177,19 @@ export class KiloConnectionService {
     // Mark as connecting early so concurrent callers won't start another connection attempt.
     this.setState("connecting")
 
-    this.connectPromise = this.doConnect(workspaceDir)
+    const pending = this.doConnect(workspaceDir)
+    const generation = this.generation
+    this.connectPromise = pending
     try {
-      await this.connectPromise
+      await pending
     } catch (error) {
+      if (error instanceof Superseded || this.connectPromise !== pending || this.generation !== generation) throw error
       // If doConnect() fails before SSE can emit a state transition, avoid leaving consumers stuck in "connecting".
       this.resetConnection()
       this.setState("error", this.error ?? (error instanceof Error ? error : new Error(String(error))))
       throw error
     } finally {
-      this.connectPromise = null
+      if (this.connectPromise === pending) this.connectPromise = null
     }
   }
 
@@ -695,6 +705,8 @@ export class KiloConnectionService {
    * Clean up everything: kill server, close SSE, clear listeners.
    */
   dispose(): void {
+    this.generation += 1
+    this.connectPromise = null
     this.stopHealthPoll()
     this.sseClient?.dispose()
     this.serverManager.dispose()
@@ -795,6 +807,7 @@ export class KiloConnectionService {
   }
 
   private resetConnection(): void {
+    this.generation += 1
     this.stopHealthPoll()
     this.stopCheckin()
     const sse = this.sseClient
@@ -812,17 +825,20 @@ export class KiloConnectionService {
     const reason = signal ? `signal ${signal}` : `code ${code ?? "unknown"}`
     console.warn(`[Raya] ConnectionService: CLI background process exited with ${reason}`)
     this.resetConnection()
+    this.connectPromise = null
     this.setState("error", new Error(`CLI background process exited with ${reason}. Retry to reconnect.`))
   }
 
   private async doConnect(_dir: string): Promise<void> {
     // Never expose a stale SDK client while its replacement server is starting.
     this.resetConnection()
+    const generation = this.generation
 
     const server = await this.serverManager.getServer().catch((error: unknown) => {
       console.error("[Raya] Connection diagnostic:", connectionDiagnostic("startup", undefined, error))
       throw error
     })
+    if (this.generation !== generation) throw new Superseded()
     this.info = { port: server.port }
 
     const config: ServerConfig = {
@@ -858,13 +874,19 @@ export class KiloConnectionService {
     this.client = client
     this.sseClient = sse
 
-    const compatible = await this.capabilities.require(client, "client.vscode")
-    if (!compatible()) {
+    const compatible = await this.capabilities.probe(client, "client.vscode")
+    if (this.generation !== generation || this.client !== client || this.sseClient !== sse) throw new Superseded()
+    if (!compatible.permit()) {
+      const unsupported = compatible.status === "unsupported"
       this.client = null
       this.sseClient = null
       this.config = null
       this.info = null
-      throw new Error("This Raya backend is not compatible with the installed extension. Update or reinstall Raya.")
+      throw new Error(
+        unsupported
+          ? "This Raya backend is not compatible with the installed extension. Update or reinstall Raya."
+          : "Raya could not confirm its backend is ready. Retry to reconnect.",
+      )
     }
 
     // Wait until SSE yields its first server event before resolving connect().
@@ -897,7 +919,7 @@ export class KiloConnectionService {
     sse.onStateChange((sseState) => {
       if (this.sseClient !== sse) {
         if (!didConnect && sseState === "disconnected") {
-          rejectConnected?.(new Error(`SSE connection ended in state: ${sseState}`))
+          rejectConnected?.(new Superseded())
           resolveConnected = null
           rejectConnected = null
         }
@@ -922,9 +944,16 @@ export class KiloConnectionService {
       }
     })
 
+    if (this.generation !== generation || this.client !== client || this.sseClient !== sse) throw new Superseded()
     sse.connect()
 
     const timeout = setTimeout(() => {
+      if (this.generation !== generation || this.client !== client || this.sseClient !== sse) {
+        rejectConnected?.(new Superseded())
+        rejectConnected = null
+        resolveConnected = null
+        return
+      }
       console.error(
         "[Raya] Connection diagnostic:",
         connectionDiagnostic("initial-sse", server.port, { code: "SSE_CONNECT_TIMEOUT" }),
@@ -939,6 +968,7 @@ export class KiloConnectionService {
       clearTimeout(timeout)
     }
 
+    if (this.generation !== generation || this.client !== client || this.sseClient !== sse) throw new Superseded()
     this.startCheckin()
     // Start the independent health poll once we are confirmed connected.
     this.startHealthPoll(config.baseUrl, config.password)

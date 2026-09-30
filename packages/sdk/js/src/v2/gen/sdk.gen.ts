@@ -7927,6 +7927,8 @@ export class ComposerDraft extends HeyApiClient {
         projectID?: string
         box: string
       }
+      cursor?: string
+      limit?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -7938,6 +7940,8 @@ export class ComposerDraft extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "scope" },
+            { in: "body", key: "cursor" },
+            { in: "body", key: "limit" },
           ],
         },
       ],

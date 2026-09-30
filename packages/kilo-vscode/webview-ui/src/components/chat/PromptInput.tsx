@@ -343,10 +343,39 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [text, setText] = createSignal("")
   const [reviewComments, setReviewComments] = createSignal<ReviewCommentEntry[]>([])
+  // A model chosen while this draft is loading belongs to its current partition,
+  // even if the host assigns the first owner before hydration finishes.
+  type Choice = ReturnType<typeof session.selected>
+  let observed: { key: string; context?: string; owner?: string; agent: string; model: Choice } | undefined
+  let chosen: { key: string; context?: string; owner?: string; model: NonNullable<Choice> } | undefined
+  const choice = () => {
+    const current = scope()
+    if (chosen?.key !== current.key || chosen.context !== current.context) return undefined
+    if (chosen.owner !== current.owner && !(chosen.owner === undefined && current.owner)) return undefined
+    return chosen.model
+  }
+  createEffect(() => {
+    const current = scope()
+    const model = session.selected(sid())
+    const agent = session.selectedAgent(sid())
+    const same = observed?.key === current.key && observed.context === current.context
+    const claimed = observed?.owner === undefined && current.owner !== undefined
+    if (
+      same &&
+      (observed?.owner === current.owner || claimed) &&
+      observed?.agent === agent &&
+      model &&
+      (observed?.model?.providerID !== model.providerID || observed.model.modelID !== model.modelID) &&
+      !durable.view(identity()).loaded
+    )
+      chosen = { key: current.key, context: current.context, owner: current.owner, model }
+    if (!same || (observed?.owner !== current.owner && !claimed)) chosen = undefined
+    observed = { ...current, agent, model }
+  })
   const content = (): DraftContent => {
     const images = imageAttach.images().map((image) => ({ ...image }))
     const loaded = durable.view(identity()).loaded
-    const selected = loaded ? session.selected(sid()) : undefined
+    const selected = loaded ? session.selected(sid()) : choice()
     return {
       ...readDraft(),
       images,
@@ -627,9 +656,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (!restored.has(key)) {
         restored.add(key)
         if (value.agent) session.setSessionAgent(target.sessionID ?? target.pendingID!, value.agent)
-        if (value.model)
+        if (value.model && !choice())
           session.setSessionModel(target.sessionID ?? target.pendingID!, value.model.providerID, value.model.modelID)
-        if (value.model)
+        if (value.model && !choice())
           session.setSessionVariant(
             target.sessionID ?? target.pendingID!,
             value.model.providerID,
@@ -650,6 +679,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         if (value.selection) textareaRef.setSelectionRange(value.selection.start, value.selection.end)
       }
       setHydrating(false)
+      if (choice())
+        queueMicrotask(() => {
+          const model = choice()
+          if (!model) return
+          const selected = session.selected(sid())
+          if (selected?.providerID !== model.providerID || selected.modelID !== model.modelID) {
+            chosen = undefined
+            return
+          }
+          persistDraft()
+          const current = scope()
+          const saved = durable.view(identity())
+          if (
+            projected?.key === current.key &&
+            projected.owner === current.owner &&
+            projected.context === current.context &&
+            saved.loaded &&
+            saved.content.model?.providerID === model.providerID &&
+            saved.content.model.modelID === model.modelID
+          )
+            chosen = undefined
+        })
     })
   })
   createEffect(() => {

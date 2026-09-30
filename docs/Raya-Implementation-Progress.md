@@ -1,5 +1,9 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-29 22:14 EDT - bounded PTY snapshot installed and verified
+
+Commit `3fb7454e22` is pushed to `origin/main`; its push hook passed 29 primary package typechecks and JetBrains. Low-memory snapshot `eden.raya@7.4.23-snapshot+3fb7454e22.kamil-oseni.1790734154268` passed CLI smoke tests, extension/webview typechecks, ordinary lint, production bundling and native capture/input/accessibility self-tests, then installed without reloading either open VS Code window. Independent VSIX comparison matches 461 installed extension files with zero mismatches, excluding VS Code's rewritten `package.json`; retained VSIX SHA-256 is `72b033f4d08f386a3ab56e02d28c4029fd2f026915dafdf8e408780169ba1627`, and installed CLI SHA-256 is `ab2fb008ed4c9556cb7e9cb60fa261d60cc35d12c116603678036470f9af5e8a`. The worktree is clean. This proves package identity, not a loaded PTY flood/replay-gap experience. Next use this exact installed CLI in a disposable Windows PTY slow-reader/reconnect and resource test; retain `FUT-ARCH-03` In progress.
+
 ## ChatGPT 2026-09-29 22:04 EDT - bounded PTY output and explicit replay gaps
 
 Each PTY WebSocket now has a 256-frame/8-MiB FIFO output bound with a reserved close frame. Overflow detaches the PTY subscriber, drains accepted frames and closes with code 1013 instead of retaining an unbounded live backlog. Core PTY attachment reports the exact requested cursor and retained range when replay has rolled past the requested point; the existing post-replay metadata frame carries this optional gap. The Agent Manager terminal buffers initial and reconnect replay until that metadata arrives, shows a neutral loss notice before retained output, and separately marks any local pre-metadata buffer loss under its own 256-frame/8-MiB cap. No existing cursor-only frame shape changes.

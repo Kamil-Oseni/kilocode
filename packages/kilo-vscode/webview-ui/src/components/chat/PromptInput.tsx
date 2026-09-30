@@ -103,6 +103,7 @@ import { parseMemoryCommand, type ParsedMemoryCommand } from "../../utils/memory
 import { useMemory } from "../../context/memory"
 import { parseGoalCommand } from "../../../../src/shared/goal" // raya_change - Milestone A /goal parser
 import { durableDrafts } from "../../utils/durable-drafts"
+import { draftNotice } from "../../utils/draft-notice"
 import type { DraftContent, DraftTarget } from "../../../../src/shared/composer-drafts-messages"
 
 function mergeReviewComments(current: ReviewCommentEntry[], incoming: ReviewCommentEntry[]): ReviewCommentEntry[] {
@@ -299,6 +300,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const draftError = () => {
     draftStatus()
     return durable.view(identity()).error
+  }
+  const notice = () => {
+    draftStatus()
+    return draftNotice(durable.view(identity()))
   }
   const scope = createMemo(
     () => {
@@ -1773,9 +1778,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 when={draftError() === "conflict" || draftError() === "promotion"}
                 fallback={
                   <>
-                    <p>Your draft is still here. It could not be saved.</p>
+                    <p>{notice().text}</p>
                     <Button size="small" variant="secondary" onClick={() => void durable.retry(identity())}>
-                      Retry saving
+                      {notice().action}
                     </Button>
                   </>
                 }

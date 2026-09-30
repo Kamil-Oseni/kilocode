@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { DurableDrafts } from "../../webview-ui/src/utils/durable-drafts"
+import { draftNotice } from "../../webview-ui/src/utils/draft-notice"
 import { draftStorage } from "../fixtures/durable-draft-storage"
 import type {
   ComposerDraftExtensionMessage,
@@ -110,6 +111,53 @@ function pane(
     },
   }
 }
+
+test("timed out initial hydration retries on host readiness and retains typing", async () => {
+  const handlers = new Set<(message: ComposerDraftExtensionMessage) => void>()
+  const loads: ComposerDraftRequest[] = []
+  const controller = new DurableDrafts(
+    {
+      onMessage(handler) {
+        handlers.add(handler)
+        return () => handlers.delete(handler)
+      },
+      postMessage(message) {
+        if (message.type === "composerDraftLoad") loads.push(message)
+      },
+    },
+    20,
+  )
+  using cleanup = { [Symbol.dispose]: () => controller.dispose() }
+  const state: ComposerDraftExtensionMessage = {
+    type: "composerDraftState",
+    epoch: controller.epoch,
+    generation: 1,
+    connected: true,
+    owners: [{ box: identity.box, owner: "private-owner" }],
+  }
+  for (const handler of handlers) handler(state)
+  await controller.hydrate(identity)
+  expect(controller.view(identity)).toMatchObject({ loaded: false, error: "timeout" })
+  expect(draftNotice(controller.view(identity)).action).toBe("Retry loading")
+  controller.edit(identity, rich)
+  await controller.hydrate(identity)
+  expect(loads).toHaveLength(2)
+  for (const handler of handlers) handler(state)
+  expect(loads).toHaveLength(3)
+  const request = loads[2]
+  for (const handler of handlers)
+    handler({
+      type: "composerDraftResult",
+      operation: "composerDraftLoad",
+      requestID: request.requestID,
+      owner: request.owner,
+      epoch: request.epoch,
+      generation: request.generation,
+      entry: null,
+    })
+  await until(() => controller.view(identity).loaded)
+  expect(controller.view(identity)).toMatchObject({ content: rich, loaded: true, error: undefined })
+})
 
 test("production disk drafts restore exact rich content and unavailable selections in a fresh pane", async () => {
   await using storage = await draftStorage()

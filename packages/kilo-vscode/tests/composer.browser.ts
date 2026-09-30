@@ -1,6 +1,19 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("actual composer saves and sends a reactive model selection without clone errors", async ({ page }) => {
+  const failures: string[] = []
+  page.on("pageerror", (error) => failures.push(error.message))
+  await page.goto(`/?theme=dark&draft=${crypto.randomUUID()}`)
+  const prompt = page.locator("textarea.prompt-input")
+  const text = "Private isolated chat check — café. Reply briefly."
+  await prompt.fill(text)
+  await page.getByRole("button", { name: "Send", exact: true }).click()
+  await expect(page.locator("[data-sent]")).toContainText(text)
+  await expect(page.locator("[data-sent]")).toContainText("anthropic/claude-sonnet-4-6")
+  expect(failures).toEqual([])
+})
+
 test("actual composer restores rich exact-whitespace drafts from disk after a fresh browser load", async ({
   page,
 }, info) => {

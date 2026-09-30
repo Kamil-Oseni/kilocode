@@ -58,7 +58,9 @@ function canonical(value: unknown): unknown {
 }
 const same = (left: DraftContent, right: DraftContent) =>
   JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
-const snapshot = (content: DraftContent) => structuredClone(content)
+// Model selections and other draft fields can come from Solid stores. Project
+// their enumerable data before cloning because structuredClone rejects proxies.
+const snapshot = (content: DraftContent) => structuredClone(canonical(content) as DraftContent)
 const cutoff = (record: Record) => record.seal?.revision ?? record.revision
 const contents = (record: Record) => snapshot(record.seal?.content ?? record.content)
 const merged = (record: Record, local: DraftContent) => !!record.seal && !same(record.content, local)

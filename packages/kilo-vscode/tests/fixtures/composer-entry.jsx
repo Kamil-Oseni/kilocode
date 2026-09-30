@@ -5,6 +5,7 @@ import "../../webview-ui/src/styles/prompt-input.css"
 import "../../webview-ui/src/styles/welcome.css"
 import "../../webview-ui/preview/preview.css"
 import { createSignal, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { StoryProviders, mockSessionValue } from "../../webview-ui/src/stories/StoryProviders"
 import { ProviderContext, useProvider } from "../../webview-ui/src/context/provider"
@@ -304,7 +305,9 @@ function Fixture() {
     status: "preview",
   })
   const [agent, setAgent] = createSignal("auto")
-  const [selected, setSelected] = createSignal({ providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" })
+  const [models, setModels] = createStore({ selected: { providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" } })
+  const selected = () => models.selected
+  const setSelected = (model) => setModels("selected", model)
   const [variant, setVariant] = createSignal()
   const [sent, setSent] = createSignal([])
   const [busy, setBusy] = createSignal(false)

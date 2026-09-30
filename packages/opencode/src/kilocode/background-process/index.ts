@@ -1246,7 +1246,7 @@ export namespace BackgroundProcess {
   )
 
   const runtime = makeRuntime(StateService, stateLayer)
-  KiloShutdown.register(() => runtime.dispose())
+  KiloShutdown.register(() => runtime.retire())
 
   function state() {
     return runtime.runPromise((svc) => svc.get())

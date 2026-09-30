@@ -485,7 +485,7 @@ export namespace InteractiveTerminal {
   )
 
   const runtime = makeRuntime(RuntimeService, stateLayer)
-  KiloShutdown.register(() => runtime.dispose())
+  KiloShutdown.register(() => runtime.retire())
 
   function state() {
     const ctx = capture()

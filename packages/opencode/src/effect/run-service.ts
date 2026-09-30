@@ -7,6 +7,7 @@ import type { InstanceContext } from "@/project/instance-context"
 import { context as instanceContext } from "@/project/instance-context" // kilocode_change
 import { LocalContext } from "@/util/local-context" // kilocode_change
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { runtimeOwner } from "@/kilocode/runtime-owner" // kilocode_change
 
 type Refs = {
   instance?: InstanceContext
@@ -44,8 +45,10 @@ export function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A
 }
 
 export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
-  let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined
-  const getRuntime = () => (rt ??= ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer), { memoMap }))
+  // kilocode_change start - keep reusable disposal separate from permanent outer retirement
+  const owner = runtimeOwner(() => ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer), { memoMap }))
+  const getRuntime = owner.get
+  // kilocode_change end
 
   return {
     runSync: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) => getRuntime().runSync(attach(service.use(fn))),
@@ -57,11 +60,8 @@ export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Laye
     runCallback: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) =>
       getRuntime().runCallback(attach(service.use(fn))),
     // kilocode_change start - allow Kilo-owned service runtimes to release persistent resources
-    dispose: async () => {
-      const current = rt
-      rt = undefined
-      await current?.dispose()
-    },
+    dispose: owner.dispose,
+    retire: owner.retire,
     // kilocode_change end
   }
 }

@@ -21,6 +21,7 @@ type EventPage = {
   events: Array<{ id: string; sequence: number; status: string; runID: string }>
 }
 type Page = { items: Organization[] }
+type Wire = { payload: { type: string; properties?: { event?: { agentID?: string; sequence?: number } } } }
 
 async function installed() {
   const home = process.env.USERPROFILE
@@ -151,6 +152,58 @@ function request(host: Host, password: string, root: string, method: string, pat
   })
 }
 
+async function subscribe(host: Host, password: string, root: string) {
+  const abort = new AbortController()
+  const deadline = AbortSignal.timeout(20_000)
+  const response = await fetch(`${host.url}/global/event`, {
+    headers: {
+      Authorization: `Basic ${Buffer.from(`kilo:${password}`).toString("base64")}`,
+      "x-kilo-directory": root,
+    },
+    signal: AbortSignal.any([abort.signal, deadline]),
+  })
+  assert.equal(response.status, 200)
+  assert.ok(response.body)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let pending = ""
+  const next = async (type: string) => {
+    while (true) {
+      const cut = pending.indexOf("\n\n")
+      if (cut >= 0) {
+        const block = pending.slice(0, cut)
+        pending = pending.slice(cut + 2)
+        const data = block
+          .split("\n")
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trimStart())
+          .join("\n")
+        if (!data) continue
+        const event = JSON.parse(data) as Wire
+        if (event.payload.type === type) return event
+        continue
+      }
+      const chunk = await reader.read()
+      if (chunk.done) throw new Error(`Installed SSE ended before ${type}`)
+      pending += decoder.decode(chunk.value, { stream: true }).replaceAll("\r\n", "\n")
+    }
+  }
+  return { next, close: () => abort.abort() }
+}
+
+async function live(host: Host, password: string, root: string, worker: Worker) {
+  const feed = await subscribe(host, password, root)
+  try {
+    await feed.next("server.connected")
+    await call(host, password, root, "POST", `/kilocode/agent/${worker.id}/run`)
+    const change = await feed.next("raya.routine.run.changed")
+    assert.equal(change.payload.properties?.event?.agentID, worker.id)
+    assert.equal(change.payload.properties?.event?.sequence, 1)
+  } finally {
+    feed.close()
+  }
+}
+
 async function call(host: Host, password: string, root: string, method: string, path: string, body?: unknown) {
   const response = await request(host, password, root, method, path, body)
   const value = await response.json()
@@ -261,7 +314,7 @@ async function main() {
         { agentID: event.id, role: "Event" },
       ],
     })) as Organization
-    await call(host, password, root, "POST", `/kilocode/agent/${manual.id}/run`)
+    await live(host, password, root, manual)
     await wait(() => fake.count() > 0, "The manual worker did not reach the model fixture")
     const before = (await call(host, password, root, "GET", `/kilocode/agent/${manual.id}/runs`)) as Run[]
     assert.equal(before[0]?.status, "running")

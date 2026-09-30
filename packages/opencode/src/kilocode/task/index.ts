@@ -750,8 +750,26 @@ export namespace RayaTask {
       const value = yield* historyData(raw).pipe(Effect.orDie)
       if ("runs" in value) {
         const events = value.events
+        const runs = new Map(value.runs.map((run) => [run.id, run]))
+        const latest = new Map<string, Event>()
+        const seen = new Map<string, Event>()
+        const inconsistent = events.some((event) => {
+          const prior = seen.get(event.runID)
+          if (prior && (prior.sessionID !== event.sessionID || prior.stateRevision >= event.stateRevision)) return true
+          seen.set(event.runID, event)
+          latest.set(event.runID, event)
+          const run = runs.get(event.runID)
+          return !!run && (run.sessionID !== event.sessionID || (run.revision ?? 1) < event.stateRevision)
+        })
         if (
           !Number.isSafeInteger(value.cursor) ||
+          value.runs.some((run) => run.agentID !== id) ||
+          runs.size !== value.runs.length ||
+          inconsistent ||
+          [...latest].some(([key, event]) => {
+            const run = runs.get(key)
+            return !!run && ((run.revision ?? 1) !== event.stateRevision || run.status !== event.status)
+          }) ||
           events.length > 1024 ||
           Buffer.byteLength(JSON.stringify(events)) > 512 * 1024 ||
           (value.cursor === 0) !== (events.length === 0) ||

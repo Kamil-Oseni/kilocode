@@ -1538,6 +1538,19 @@ test("parent run cost stays independent of a completed child request", async () 
       yield* runner.settle(parent)
       const run = (yield* runner.tasks.runsFor(chief.id)).find((item) => item.id === "occ_parent")
       expect(run?.outcome?.cost).toBe(2)
+      expect(run?.status).toBe("complete")
+      const before = yield* store.byRun("occ_parent")
+      const late = yield* runner
+        .delegate({
+          source: "dlg_after_parent",
+          senderID: chief.id,
+          recipientID: books.id,
+          parentRunID: "occ_parent",
+          objective: "Start another accounting request after Friday close ended.",
+        })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(late)).toBe(true)
+      expect(yield* store.byRun("occ_parent")).toEqual(before)
       expect(run?.outcome?.cost).not.toBe(3.5)
       const report = (yield* inbox.page(chief.id)).messages.find((item) => item.source === "report:occ_parent")
       expect(report?.body).toContain("Friday close used the accounting reply.")

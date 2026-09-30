@@ -268,7 +268,7 @@ export namespace RayaTaskRunner {
         })
       if (row.parentRunID) {
         const parent = (yield* tasks.runsFor(sender.id)).find((item) => item.id === row.parentRunID)
-        if (!parent || parent.status === "error")
+        if (!RayaTask.pending(parent))
           return yield* new RayaTask.GuardError({ message: "The original requesting run was removed or stopped." })
       }
     })
@@ -1245,6 +1245,8 @@ export namespace RayaTaskRunner {
         : undefined
       if (input.parentRunID) {
         if (!parent) return yield* new Invalid({ message: "The parent run was not found for this worker." })
+        if (!RayaTask.pending(parent))
+          return yield* new RayaTask.GuardError({ message: "The parent run has ended and cannot assign new work." })
       }
       const goal = parent ? yield* goals.get(parent.sessionID) : undefined
       const allocation = goal?.budget?.modelCost

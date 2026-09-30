@@ -143,7 +143,7 @@ describe("routine event journal", () => {
           ...saved.events[0],
           id: `${agent.id}:${index + 1}`,
           sequence: index + 1,
-          runID: "x".repeat(6000),
+          runID: `${"x".repeat(5996)}${index.toString().padStart(4, "0")}`,
         }))
         yield* storage.replace(["raya", "agent-runs", agent.id], { ...saved, cursor: 80, events })
         yield* tasks.record({
@@ -188,6 +188,12 @@ describe("routine event journal", () => {
           { ...saved, events: [{ ...first, agentID: "other" }, second] },
           { ...saved, events: [{ ...first, id: "other" }, second] },
           { ...saved, events: [{ ...first, sequence: 0 }, second] },
+          { ...saved, events: [{ ...first, sessionID: SessionID.make("ses_foreign") }, second] },
+          { ...saved, events: [{ ...first, stateRevision: 2 }, second] },
+          { ...saved, events: [{ ...first, status: "running" }, second] },
+          { ...saved, events: [{ ...first, runID: second.runID }, second] },
+          { ...saved, runs: [{ ...saved.runs[0], agentID: "other" }, ...saved.runs.slice(1)] },
+          { ...saved, runs: [saved.runs[0], saved.runs[0], ...saved.runs.slice(1)] },
           { ...saved, cursor: 3 },
           { ...saved, events: [{ ...first, runID: "x".repeat(512 * 1024) }, second] },
           {

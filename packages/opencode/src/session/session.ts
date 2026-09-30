@@ -11,7 +11,6 @@ import * as Accounting from "@/kilocode/session/accounting" // kilocode_change
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
-import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -54,7 +53,7 @@ import { SessionRetention } from "@/kilocode/session/retention" // kilocode_chan
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
-const runtime = makeRuntime(Database.Service, AppNodeBuilder.build(Database.node))
+// kilocode_change - Session operations use service owners; do not retain an unused private runtime.
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "

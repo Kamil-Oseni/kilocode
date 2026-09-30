@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-30 14:37 EDT - matching private Routine install passes; readiness 47/100
+
+Commit `965f11090e08f6275514e1370ccd44ded62663be` is pushed. Private low-memory snapshot `7.4.23-snapshot+965f11090e.kamil-oseni.1790792361996` builds with all package smoke/self-tests and installs only in `.tmp/installed-965f11090e`. Independent archive comparison verifies 466 matching payload files except VS Code's expected package metadata rewrite and added manifest. Pinned installed HTTP/SQL Routine test saves exact draft text and attachment, recovers after restart, refuses stale/foreign writes, sends and verifies idempotency, then recovers the exact sent message and bytes after a third process start. All three owned PIDs are absent and the private profile is removed. Preserve `.tmp/snapshot-build-965f11090e.txt`, `.tmp/installed-snapshot-965f11090e-verified.json` and `.tmp/installed-routine-inbox-965f11090e.json`.
+
+**Readiness 47/100** (restart 19, portable 0, local 12, bounded inference 8, installed/new-PC 8). The installed proof is HTTP/SQL, not loaded KiloProvider/visible UI. Next gates: portable cross-PC recovery; a loaded new/saved chat and Routine Inbox UI when Computer Use returns; local-model routing and shared inference under new-PC resource limits. Do not touch the active French Study installation.
+
 ## ChatGPT 2026-09-30 14:11 EDT - Routine mounted SQL proof green; installation still open
 
 Current Routine source checks: backend 26/26 with 393 assertions; extension 23/23 with 78 assertions, including actual mounted Inbox/private SQL worker switch and second-process recovery of exact attachment bytes. Both fixture children exited and the private profile was removed. Backend and extension/webview typechecks, whole lint, Knip and affected guards pass; 49 unrelated formatter-only files were restored from the clean-before set. Commit/push and build/install a matching snapshot into private VS Code data/extension directories. Do not claim full installed KiloProvider/UI acceptance from the focused host relay. Computer Use remains unavailable and French Study is untouched. Readiness **45/100** until matching installed acceptance.

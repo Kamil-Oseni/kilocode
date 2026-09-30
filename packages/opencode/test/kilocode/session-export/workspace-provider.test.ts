@@ -2,11 +2,155 @@ import { describe, expect, test } from "bun:test"
 import { $ } from "bun"
 import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises"
 import { tmpdir as osTmpdir } from "node:os"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 import { tmpdir } from "../../fixture/fixture"
 import { createWorkspaceProvider } from "@/kilocode/session-export/workspace-provider"
 
+function processState(root: string, state: string, dir: string, name: string, session: string) {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      resolve(import.meta.dir, "fixtures/workspace-state-process.ts"),
+      root,
+      state,
+      dir,
+      name,
+      session,
+    ],
+    { cwd: resolve(import.meta.dir, "../../.."), stdout: "pipe", stderr: "pipe", stdin: "ignore", windowsHide: true },
+  )
+  const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
+  const timer = setTimeout(() => child.kill(), 30_000)
+  return {
+    wait(name: string) {
+      return Promise.race([
+        gate(dir, name),
+        child.exited.then(async () => {
+          const [stdout, stderr] = await output
+          throw new Error(`Workspace state child exited before ${name}: ${stdout}${stderr}`)
+        }),
+      ])
+    },
+    async result(): Promise<{ ok: boolean; id?: string; error?: string; pid: number }> {
+      const code = await child.exited
+      const [stdout, stderr] = await output
+      expect(code, stdout + stderr).toBe(0)
+      return JSON.parse(stdout)
+    },
+    async [Symbol.asyncDispose]() {
+      clearTimeout(timer)
+      if (child.exitCode === null) child.kill()
+      await child.exited
+      await output
+    },
+  }
+}
+
+async function gate(dir: string, name: string) {
+  const file = join(dir, name)
+  const deadline = Date.now() + 15_000
+  while (!(await Bun.file(file).exists())) {
+    if (Date.now() >= deadline) throw new Error(`Missing workspace state gate: ${name}`)
+    await Bun.sleep(10)
+  }
+  return Bun.file(file).text()
+}
+
 describe("workspace provider", () => {
+  test("refuses a lock held by another process and recovers after it releases", async () => {
+    await using repo = await tmpdir({ git: true })
+    await using dir = await tmpdir()
+    const state = join(dir.path, "state.json")
+    await writeFile(join(repo.path, "src.ts"), "export const value = 1\n")
+    await using child = processState(repo.path, state, dir.path, "holder", "__lock__")
+    await child.wait("holder.loaded")
+    const provider = createWorkspaceProvider({ root: repo.path, statePath: state })
+    const err = await provider.baseline().then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+    expect(err).toBeInstanceOf(Error)
+    expect(err instanceof Error ? err.message : "").toBe("Workspace state lock unavailable")
+    expect(await Bun.file(state).exists()).toBe(false)
+    await Bun.write(join(dir.path, "holder.commit"), "go")
+    expect((await child.result()).ok).toBe(true)
+    const baseline = await provider.baseline()
+    provider.remember("session", baseline.snapshotId)
+    expect(createWorkspaceProvider({ root: repo.path, statePath: state }).current("session")).toBe(baseline.snapshotId)
+    expect(await Bun.file(`${state}.lock`).exists()).toBe(false)
+  }, 40_000)
+
+  test("independent processes merge concurrent captures and survive a fresh provider", async () => {
+    await using first = await tmpdir({ git: true })
+    await using second = await tmpdir({ git: true })
+    await using dir = await tmpdir()
+    const state = join(dir.path, "state.json")
+    await writeFile(join(first.path, "first.ts"), "export const first = true\n")
+    await writeFile(join(second.path, "second.ts"), "export const second = true\n")
+    await using a = processState(first.path, state, dir.path, "a", "first")
+    await using b = processState(second.path, state, dir.path, "b", "second")
+    await Promise.all([a.wait("a.loaded"), b.wait("b.loaded")])
+    await Bun.write(join(dir.path, "capture"), "go")
+    const [one, two] = await Promise.all([a.wait("a.captured"), b.wait("b.captured")])
+    await Promise.all([Bun.write(join(dir.path, "a.commit"), "go"), Bun.write(join(dir.path, "b.commit"), "go")])
+    const [left, right] = await Promise.all([a.result(), b.result()])
+    expect(left.ok).toBe(true)
+    expect(right.ok).toBe(true)
+    expect(left.pid).not.toBe(right.pid)
+    expect(left.pid).not.toBe(process.pid)
+    expect(left.id).toBe(one)
+    expect(right.id).toBe(two)
+    const persisted = await Bun.file(state).json()
+    expect(persisted.sessions).toEqual({ first: one, second: two })
+    expect(Object.keys(persisted.snapshots).sort()).toEqual([one, two].sort())
+    expect(persisted.pending).toEqual({})
+    const fresh = createWorkspaceProvider({ root: first.path, statePath: state })
+    expect(fresh.current("first")).toBe(one)
+    expect(fresh.current("second")).toBe(two)
+    expect(await Bun.file(`${state}.lock`).exists()).toBe(false)
+  }, 40_000)
+
+  test("a stale independent process cannot overwrite another process's session", async () => {
+    await using first = await tmpdir({ git: true })
+    await using second = await tmpdir({ git: true })
+    await using dir = await tmpdir()
+    const state = join(dir.path, "state.json")
+    await writeFile(join(first.path, "first.ts"), "first\n")
+    await writeFile(join(second.path, "second.ts"), "second\n")
+    await using a = processState(first.path, state, dir.path, "a", "same")
+    await using b = processState(second.path, state, dir.path, "b", "same")
+    await Promise.all([a.wait("a.loaded"), b.wait("b.loaded")])
+    await Bun.write(join(dir.path, "capture"), "go")
+    const [one, two] = await Promise.all([a.wait("a.captured"), b.wait("b.captured")])
+    await Bun.write(join(dir.path, "a.commit"), "go")
+    expect((await a.result()).ok).toBe(true)
+    const bytes = await Bun.file(state).text()
+    await Bun.write(join(dir.path, "b.commit"), "go")
+    const result = await b.result()
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe("Workspace state changed for session")
+    expect(await Bun.file(state).text()).toBe(bytes)
+    const persisted = JSON.parse(bytes)
+    expect(persisted.sessions).toEqual({ same: one })
+    expect(persisted.snapshots[two]).toBeDefined()
+    expect(persisted.pending[two]).toHaveLength(1)
+    expect(await Bun.file(`${state}.lock`).exists()).toBe(false)
+  }, 40_000)
+
+  test("an independent process refuses corrupt state without rewriting it", async () => {
+    await using repo = await tmpdir({ git: true })
+    await using dir = await tmpdir()
+    const state = join(dir.path, "state.json")
+    const bytes = '{"sessions":{"same":"missing"},"snapshots":{}}'
+    await writeFile(state, bytes)
+    await using child = processState(repo.path, state, dir.path, "a", "same")
+    const result = await child.result()
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe("Invalid workspace session")
+    expect(await Bun.file(state).text()).toBe(bytes)
+    expect(await Bun.file(`${state}.lock`).exists()).toBe(false)
+  }, 40_000)
+
   test("captures the repository root when started from a nested git directory", async () => {
     await using tmp = await tmpdir({ git: true })
     await mkdir(join(tmp.path, "src", "nested"), { recursive: true })

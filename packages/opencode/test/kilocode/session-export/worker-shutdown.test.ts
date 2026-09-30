@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync } from "node:fs"
+import { rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { LlmRequestStarted } from "@/kilocode/session-export/events"
@@ -20,7 +21,14 @@ test("shutdown requires a correlated request identity", () => {
 test("real worker joins event persistence before confirmed shutdown and fences late intake", async () => {
   const dir = mkdtempSync(join(tmpdir(), "raya-export-shutdown-"))
   const file = join(dir, "session-export.db")
-  const server = Bun.serve({ port: 0, fetch: () => new Response("later", { status: 503 }) })
+  let requests = 0
+  const server = Bun.serve({
+    port: 0,
+    fetch: () => {
+      requests += 1
+      return new Response("later", { status: 503 })
+    },
+  })
   const worker = new Worker(new URL("../../../src/kilocode/session-export/worker.ts", import.meta.url))
   const messages: FromWorker[] = []
   worker.onmessage = (event: MessageEvent<FromWorker>) => messages.push(event.data)
@@ -39,8 +47,10 @@ test("real worker joins event persistence before confirmed shutdown and fences l
     }
     worker.postMessage({ kind: "shutdown", timeoutMs: 10_000, requestID: "shutdown-1" })
     worker.postMessage({ kind: "event", envelope: started(80), approxBytes: 512 })
-    await until(() =>
-      messages.some((message) => message.kind === "shutdown_done" || message.kind === "shutdown_refused"),
+    worker.postMessage({ kind: "test_event_count" })
+    await until(
+      () => messages.some((message) => message.kind === "shutdown_done" || message.kind === "shutdown_refused"),
+      () => ({ messages, requests }),
     )
     expect(messages.find((message) => message.kind === "shutdown_done" || message.kind === "shutdown_refused")).toEqual(
       {
@@ -60,9 +70,58 @@ test("real worker joins event persistence before confirmed shutdown and fences l
       storage.close()
     }
   } finally {
-    await worker.terminate()
-    server.stop(true)
-    rmSync(dir, { recursive: true, force: true })
+    worker.terminate()
+    await server.stop(true)
+    await remove(dir)
+  }
+}, 30_000)
+
+test("real worker retains failed batch evidence and refuses shutdown confirmation", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "raya-export-failed-batch-"))
+  const file = join(dir, "session-export.db")
+  const server = Bun.serve({ port: 0, fetch: () => new Response("later", { status: 503 }) })
+  const worker = new Worker(new URL("../../../src/kilocode/session-export/worker.ts", import.meta.url))
+  const messages: FromWorker[] = []
+  worker.onmessage = (event: MessageEvent<FromWorker>) => messages.push(event.data)
+  try {
+    worker.postMessage({
+      kind: "init",
+      dbPath: file,
+      endpoint: `http://127.0.0.1:${server.port}`,
+      allowCustomEndpoint: true,
+      agentVersion: "test",
+      surface: "test",
+    })
+    await until(() => messages.some((message) => message.kind === "ready"))
+    worker.postMessage({ kind: "event", envelope: started(0), approxBytes: 512 })
+    worker.postMessage({ kind: "event", envelope: started(0), approxBytes: 512 })
+    worker.postMessage({ kind: "shutdown", timeoutMs: 10_000, requestID: "failed-stop" })
+    await until(() => messages.some((message) => message.kind === "shutdown_refused"))
+    expect(messages.find((message) => message.kind === "shutdown_refused")).toEqual({
+      kind: "shutdown_refused",
+      requestID: "failed-stop",
+      reason: "event-persistence-failed",
+    })
+    expect(messages.some((message) => message.kind === "shutdown_done")).toBe(false)
+    const failure = messages.find(
+      (message) => message.kind === "telemetry" && message.name === "session_export.handler_error",
+    )
+    expect(failure?.kind === "telemetry" ? failure.props : undefined).toMatchObject({
+      retainedEvents: 1,
+      queuedBytes: 512,
+    })
+    const store = new Storage(file)
+    try {
+      expect(store.pendingEvents({ now: 1_000_000_000_000_000, limitBytes: 10_000_000 }).map((row) => row.id)).toEqual([
+        "export-0",
+      ])
+    } finally {
+      store.close()
+    }
+  } finally {
+    worker.terminate()
+    await server.stop(true)
+    await remove(dir)
   }
 }, 30_000)
 
@@ -86,11 +145,25 @@ function started(seq: number): LlmRequestStarted {
   }
 }
 
-async function until(check: () => boolean): Promise<void> {
+async function until(check: () => boolean, details?: () => unknown): Promise<void> {
   const start = Date.now()
   while (Date.now() - start < 15_000) {
     if (check()) return
     await Bun.sleep(10)
   }
-  throw new Error("timed out waiting for worker acknowledgement")
+  throw new Error(`timed out waiting for worker acknowledgement: ${JSON.stringify(details?.())}`)
+}
+
+async function remove(dir: string): Promise<void> {
+  const stop = performance.now() + 5000
+  while (true) {
+    try {
+      await rm(dir, { recursive: true, force: true })
+      return
+    } catch (err) {
+      if (!err || typeof err !== "object" || !("code" in err) || err.code !== "EBUSY" || performance.now() >= stop)
+        throw err
+      await Bun.sleep(100)
+    }
+  }
 }

@@ -43,7 +43,15 @@ export class Uploader {
       return
     }
     if (this.timer) clearTimeout(this.timer)
-    this.timer = setTimeout(() => void this.flush("scheduled"), 0)
+    this.timer = setTimeout(() => {
+      void this.flush("scheduled").catch((err) => {
+        this.deps.reportTelemetry({
+          kind: "telemetry",
+          name: "session_export.upload_flush_error",
+          props: { message: String(err) },
+        })
+      })
+    }, 0)
   }
 
   async flush(_reason: string): Promise<void> {
@@ -144,7 +152,7 @@ export class Uploader {
         }
         const retryAt = Date.now()
         const delay = retryAfter(res.headers) ?? backoffFor(rows[0]?.uploadAttempts ?? 0)
-        for (const row of rows) this.deps.storage.markRetry(row.id, retryAt + delay)
+        this.deps.storage.retry(rows.map((row) => ({ id: row.id, next: retryAt + delay })))
         this.deps.reportTelemetry({
           kind: "telemetry",
           name: "session_export.upload_retryable",
@@ -154,7 +162,7 @@ export class Uploader {
       }
     } catch (err) {
       const retryAt = Date.now()
-      for (const row of rows) this.deps.storage.markRetry(row.id, retryAt + backoffFor(row.uploadAttempts))
+      this.deps.storage.retry(rows.map((row) => ({ id: row.id, next: retryAt + backoffFor(row.uploadAttempts) })))
       this.deps.reportTelemetry({
         kind: "telemetry",
         name: "session_export.upload_network_error",

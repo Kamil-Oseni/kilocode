@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { Storage } from "./storage"
+import { Storage, type ChunkRow } from "./storage"
 import { compressZstd, decompressZstd } from "./zstd"
 
 export type ChunkerConfig = { chunkBytes: number }
@@ -9,6 +9,34 @@ export class Chunker {
     private readonly storage: Storage,
     private readonly cfg: ChunkerConfig,
   ) {}
+
+  stage(limit: number) {
+    const chunks: ChunkRow[] = []
+    const cache = new Map<string, ChunkRow>()
+    let size = 0
+    return {
+      chunks,
+      write: async (bytes: Uint8Array): Promise<string[]> => {
+        if (size + bytes.byteLength > limit) throw new Error("Session export staged chunks exceed batch limit")
+        size += bytes.byteLength
+        const ids: string[] = []
+        for (let offset = 0; offset < bytes.byteLength; offset += this.cfg.chunkBytes) {
+          const slice = bytes.subarray(offset, Math.min(offset + this.cfg.chunkBytes, bytes.byteLength))
+          const id = sha256Hex(slice)
+          ids.push(id)
+          const row = cache.get(id) ?? {
+            id,
+            bytes: await compressZstd(slice),
+            size: slice.byteLength,
+            encoding: "zstd" as const,
+          }
+          cache.set(id, row)
+          chunks.push(row)
+        }
+        return ids
+      },
+    }
+  }
 
   async write(bytes: Uint8Array): Promise<string[]> {
     const ids: string[] = []

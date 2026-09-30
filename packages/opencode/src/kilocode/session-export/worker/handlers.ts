@@ -1,7 +1,7 @@
 import type { ExportEvent } from "../events"
 import type { Chunker } from "./chunks"
 import { isHighRiskPath, type Scrubber } from "./scrub"
-import type { Storage } from "./storage"
+import type { Storage, EventRow } from "./storage"
 
 export type HandlerCtx = {
   storage: Storage
@@ -9,7 +9,10 @@ export type HandlerCtx = {
   scrubber: Scrubber
   inlineThresholdBytes: number
   maxPayloadBytes?: number
+  batchBytes?: number
 }
+
+type Context = Omit<HandlerCtx, "chunker"> & { chunker: Pick<Chunker, "write"> }
 
 const ENVELOPE = new Set([
   "id",
@@ -27,13 +30,39 @@ const IDENTITY = new Set(["accountid", "email", "org", "orgid", "organizationid"
 const METADATA = new Set(["eventSeq", "time", "durationMs", "retryCount", "requestedAt", "durationToDecideMs"])
 
 export async function handleEvent(envelope: ExportEvent, ctx: HandlerCtx): Promise<void> {
+  await handleBatch([envelope], ctx)
+}
+
+export async function handleBatch(envelopes: ExportEvent[], ctx: HandlerCtx): Promise<void> {
+  if (envelopes.length > 64) throw new Error("Session export batch exceeds event limit")
+  const limit = ctx.batchBytes ?? 64 * 1024 * 1024
+  const staged = ctx.chunker.stage(limit)
+  const events: EventRow[] = []
+  let bytes = 0
+  for (let offset = 0; offset < envelopes.length; offset += 4) {
+    const rows = await Promise.allSettled(
+      envelopes.slice(offset, offset + 4).map((envelope) => prepare(envelope, { ...ctx, chunker: staged })),
+    )
+    for (const result of rows) {
+      if (result.status === "rejected") throw result.reason
+      const row = result.value
+      if (!row) continue
+      bytes += Buffer.byteLength(row.dataJson)
+      if (bytes > limit) throw new Error("Session export staged events exceed batch limit")
+      events.push(row)
+    }
+  }
+  ctx.storage.persist(events, staged.chunks)
+}
+
+async function prepare(envelope: ExportEvent, ctx: Context): Promise<EventRow | undefined> {
   const result = await ctx.scrubber.scrubEvent(envelope)
-  if (!result.success) return
+  if (!result.success) return undefined
   const payload = await normalizePayload(result.data, ctx)
   const chunked = await chunkLargeStrings(payload, ctx)
   const dataJson = JSON.stringify(chunked)
 
-  ctx.storage.insertEvent({
+  return {
     id: envelope.id,
     schemaVersion: envelope.schemaVersion,
     sessionId: envelope.sessionId,
@@ -46,10 +75,10 @@ export async function handleEvent(envelope: ExportEvent, ctx: HandlerCtx): Promi
     agentVersion: envelope.agentVersion,
     dataJson,
     clientScrubbed: result.success ? 1 : 0,
-  })
+  }
 }
 
-async function normalizePayload(envelope: ExportEvent, ctx: HandlerCtx): Promise<unknown> {
+async function normalizePayload(envelope: ExportEvent, ctx: Context): Promise<unknown> {
   const payload = stripIdentity(stripEnvelopeFields(envelope))
   if (envelope.type === "workspace_baseline_completed") return normalizeBaseline(payload, ctx)
   if (envelope.type === "workspace_delta_captured") return normalizeDelta(payload, ctx)
@@ -68,7 +97,7 @@ async function normalizePayload(envelope: ExportEvent, ctx: HandlerCtx): Promise
   return out
 }
 
-async function normalizeBaseline(payload: unknown, ctx: HandlerCtx): Promise<unknown> {
+async function normalizeBaseline(payload: unknown, ctx: Context): Promise<unknown> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload
   const out = { ...(payload as Record<string, unknown>) }
   delete out.snapshotId
@@ -120,7 +149,7 @@ function normalizeCompletion(payload: unknown): unknown {
   return out
 }
 
-async function normalizeDelta(payload: unknown, ctx: HandlerCtx): Promise<unknown> {
+async function normalizeDelta(payload: unknown, ctx: Context): Promise<unknown> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload
   const out = { ...(payload as Record<string, unknown>) }
   delete out.snapshotHash
@@ -198,7 +227,7 @@ function stripIdentity(node: unknown): unknown {
   return out
 }
 
-async function chunkLargeStrings(node: unknown, ctx: HandlerCtx): Promise<unknown> {
+async function chunkLargeStrings(node: unknown, ctx: Context): Promise<unknown> {
   if (typeof node === "string") {
     const bytes = Buffer.from(node, "utf8")
     const original = bytes.byteLength

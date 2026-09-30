@@ -1,6 +1,6 @@
 import { Config } from "./config"
 import { Chunker } from "./worker/chunks"
-import { handleEvent } from "./worker/handlers"
+import { handleBatch } from "./worker/handlers"
 import { Inbox } from "./worker/inbox"
 import type { FromWorker } from "./worker/ipc"
 import { Scrubber } from "./worker/scrub"
@@ -33,28 +33,34 @@ let shutdown: Promise<ShutdownReply> | undefined
 
 function drain(): Promise<void> {
   if (active) return active
+  if (failed) return Promise.resolve()
   const task = (async () => {
     while (inbox && storage && chunker && scrubber) {
-      const batch = inbox.drainBatch(64)
+      const batch = inbox.take(64, Config.flushSizeBytes)
       if (batch.length === 0) break
-      for (const item of batch) {
-        try {
-          await handleEvent(item.envelope, {
+      try {
+        await handleBatch(
+          batch.map((item) => item.envelope),
+          {
             storage,
             chunker,
             scrubber,
             inlineThresholdBytes: Config.inlineThresholdBytes,
             maxPayloadBytes: Config.maxPayloadBytes,
-          })
-          uploader?.scheduleFlush("event_persisted")
-        } catch (err) {
-          failed = true
-          scope.postMessage({
-            kind: "telemetry",
-            name: "session_export.handler_error",
-            props: { message: String(err) },
-          })
-        }
+            batchBytes: Config.ringBufferBytes,
+          },
+        )
+        inbox.commit(batch)
+        uploader?.scheduleFlush("event_persisted")
+      } catch (err) {
+        inbox.restore(batch)
+        failed = true
+        scope.postMessage({
+          kind: "telemetry",
+          name: "session_export.handler_error",
+          props: { message: String(err), retainedEvents: batch.length, queuedBytes: inbox.usedBytes() },
+        })
+        return
       }
     }
   })()
@@ -74,6 +80,7 @@ async function stop(requestID: string): Promise<ShutdownReply> {
   try {
     uploader?.dispose()
     await drain()
+    if (failed) return { kind: "shutdown_refused", requestID, reason: "event-persistence-failed" }
     await uploader?.flush("shutdown")
     uploader?.dispose()
     storage?.close()
@@ -83,7 +90,6 @@ async function stop(requestID: string): Promise<ShutdownReply> {
     scrubber = undefined
     inbox = undefined
     uploader = undefined
-    if (failed) return { kind: "shutdown_refused", requestID, reason: "event-persistence-failed" }
     return { kind: "shutdown_done", requestID, status: "confirmed" }
   } catch (err) {
     scope.postMessage({ kind: "telemetry", name: "session_export.shutdown_error", props: { message: String(err) } })
@@ -123,7 +129,7 @@ scope.onmessage = (event) => {
       scope.postMessage({ kind: "ready" })
       return
     case "event": {
-      if (tripped || stopping) return
+      if (tripped || stopping || failed) return
       if (!inbox) return
       const result = inbox.enqueue(msg.envelope.sessionId, msg.approxBytes, msg.envelope)
       if (!result.accepted && result.sessionFirstOverflow) {

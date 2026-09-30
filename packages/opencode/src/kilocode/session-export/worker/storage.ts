@@ -1,4 +1,5 @@
 import { Database, type SQLQueryBindings, type Statement } from "bun:sqlite"
+import { profileSqlite } from "@opencode-ai/core/kilocode/profile-sqlite"
 import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm"
 import { drizzle, type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import type { ExportEventType } from "../envelope"
@@ -40,8 +41,8 @@ export class Storage {
   private readonly db: Client
 
   constructor(path: string) {
-    this.sqlite = new Database(path, { create: true })
-    this.db = drizzle({ client: finalizing(this.sqlite), schema: tables }) as Client
+    this.sqlite = profileSqlite(path, () => finalizing(new Database(path, { create: true })))
+    this.db = drizzle({ client: this.sqlite, schema: tables }) as Client
     this.sqlite.exec("PRAGMA journal_mode = WAL")
     this.sqlite.exec("PRAGMA synchronous = NORMAL")
     this.sqlite.exec("PRAGMA busy_timeout = 5000")
@@ -98,6 +99,13 @@ export class Storage {
         client_scrubbed: row.clientScrubbed,
       })
       .run()
+  }
+
+  persist(events: EventRow[], chunks: ChunkRow[]): void {
+    this.db.transaction(() => {
+      for (const row of chunks) this.upsertChunk(row)
+      for (const row of events) this.insertEvent(row)
+    })
   }
 
   upsertChunk(row: ChunkRow): void {
@@ -169,6 +177,13 @@ export class Storage {
       .set({ upload_attempts: sql`${EventTable.upload_attempts} + 1`, next_attempt_at: next })
       .where(eq(EventTable.id, id))
       .run()
+  }
+
+  retry(rows: { id: string; next: number }[]): void {
+    if (rows.length === 0) return
+    this.db.transaction(() => {
+      for (const row of rows) this.markRetry(row.id, row.next)
+    })
   }
 
   markUploaded(ids: string[]): void {
@@ -266,12 +281,16 @@ export class Storage {
 }
 
 function finalizing(db: Database): Database {
-  const client = Object.create(db) as Database
-  const prepare = db.prepare.bind(db) as (query: string) => Prepared
-  client.prepare = ((query: string) => wrap(prepare(query))) as Database["prepare"]
-  client.exec = db.exec.bind(db)
-  client.transaction = db.transaction.bind(db)
-  return client
+  // Finalize inside the native operation, before profile admission is released.
+  const prepare = (query: string) => wrap(db.prepare(query))
+  return new Proxy(db, {
+    get(target, key) {
+      const value: unknown = Reflect.get(target, key, target)
+      if (typeof value !== "function") return value
+      if (key === "prepare") return prepare
+      return value.bind(target)
+    },
+  })
 }
 
 function wrap(stmt: Prepared): Prepared {

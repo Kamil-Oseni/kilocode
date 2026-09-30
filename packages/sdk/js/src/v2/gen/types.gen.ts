@@ -99,6 +99,7 @@ export type Event =
   | EventSessionTurnOpen
   | EventSessionTurnClose
   | EventSessionQueueChanged
+  | EventRayaRoutineRunChanged1
   | EventRayaRoutineExecutionIdle
   | EventSessionNetworkAsked
   | EventSessionNetworkReplied
@@ -2633,6 +2634,7 @@ export type GlobalEvent = {
     | EventSessionTurnOpen
     | EventSessionTurnClose
     | EventSessionQueueChanged
+    | EventRayaRoutineRunChanged
     | EventRayaRoutineExecutionIdle
     | EventSessionNetworkAsked
     | EventSessionNetworkReplied
@@ -8351,6 +8353,27 @@ export type EventSessionQueueChanged = {
   }
 }
 
+export type EventRayaRoutineRunChanged = {
+  id: string
+  type: "raya.routine.run.changed"
+  properties: {
+    event: {
+      version: 1
+      id: string
+      stream: string
+      sequence: number
+      kind: "run.changed"
+      visibility: "workspace"
+      runID: string
+      agentID: string
+      sessionID: string
+      stateRevision: number
+      status: "running" | "complete" | "blocked" | "error"
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+  }
+}
+
 export type EventRayaRoutineExecutionIdle = {
   id: string
   type: "raya.routine.execution.idle"
@@ -13975,6 +13998,27 @@ export type EventGlobalConfigUpdated1 = {
   type: "global.config.updated"
   properties: {
     [key: string]: unknown
+  }
+}
+
+export type EventRayaRoutineRunChanged1 = {
+  id: string
+  type: "raya.routine.run.changed"
+  properties: {
+    event: {
+      version: 1
+      id: string
+      stream: string
+      sequence: number
+      kind: "run.changed"
+      visibility: "workspace"
+      runID: string
+      agentID: string
+      sessionID: string
+      stateRevision: number
+      status: "running" | "complete" | "blocked" | "error"
+      at: number | "NaN" | "Infinity" | "-Infinity"
+    }
   }
 }
 

@@ -36,13 +36,56 @@ function eventResponse(request: HttpServerRequest.HttpServerRequest) {
   return Effect.gen(function* () {
     // kilocode_change end
     yield* Effect.logInfo("global event connected")
-    const events = Stream.callback<GlobalBusEvent>((queue) => {
-      const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
-      return Effect.acquireRelease(
-        Effect.sync(() => GlobalBus.on("event", handler)),
-        () => Effect.sync(() => GlobalBus.off("event", handler)),
-      )
-    })
+    // kilocode_change start - a slow client must resnapshot instead of retaining an unbounded mixed-event queue
+    const limit = 256
+    const budget = 1024 * 1024
+    let count = 0
+    let bytes = 0
+    const events = Stream.callback<{ event: GlobalBusEvent; bytes: number }>(
+      (queue) => {
+        let overflow = false
+        const handler = (event: GlobalBusEvent) => {
+          if (overflow) return
+          const size = (() => {
+            try {
+              return Buffer.byteLength(JSON.stringify(event))
+            } catch {
+              return budget + 1
+            }
+          })()
+          if (count >= limit || bytes + size > budget) {
+            overflow = true
+            Queue.offerUnsafe(queue, {
+              event: {
+                payload: {
+                  id: EventV2.ID.create(),
+                  type: "server.resync_required",
+                  properties: { reason: "overflow" },
+                },
+              },
+              bytes: 0,
+            })
+            Queue.endUnsafe(queue)
+            return
+          }
+          if (!Queue.offerUnsafe(queue, { event, bytes: size })) return
+          count++
+          bytes += size
+        }
+        return Effect.acquireRelease(
+          Effect.sync(() => GlobalBus.on("event", handler)),
+          () => Effect.sync(() => GlobalBus.off("event", handler)),
+        )
+      },
+      { bufferSize: 257, strategy: "dropping" },
+    ).pipe(
+      Stream.map((item) => {
+        if (item.bytes > 0) count -= 1
+        bytes -= item.bytes
+        return item.event
+      }),
+    )
+    // kilocode_change end
     const heartbeat = Stream.tick("10 seconds").pipe(
       Stream.drop(1),
       Stream.map(() => ({ payload: { id: EventV2.ID.create(), type: "server.heartbeat", properties: {} } })),
@@ -56,7 +99,7 @@ function eventResponse(request: HttpServerRequest.HttpServerRequest) {
         Stream.encodeText,
         // kilocode_change start - prevent disconnected SSE clients from retaining full diff payloads
         // Explicit interruption closes the stream scope, unregisters its GlobalBus listener, and
-        // releases the unbounded callback queue even when transport cancellation is not propagated.
+        // releases the callback queue even when transport cancellation is not propagated.
         Stream.interruptWhen(disconnect(request)),
         // kilocode_change end
         Stream.ensuring(Effect.logInfo("global event disconnected")),

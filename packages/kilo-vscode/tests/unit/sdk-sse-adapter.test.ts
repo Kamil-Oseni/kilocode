@@ -29,6 +29,13 @@ function event() {
   }
 }
 
+function resync(directory = "/repo") {
+  return {
+    directory,
+    payload: { type: "server.resync_required", properties: { reason: "overflow" } },
+  }
+}
+
 function sync() {
   return {
     directory: "/repo",
@@ -56,6 +63,98 @@ function aborted(signal?: AbortSignal) {
 }
 
 describe("SdkSSEAdapter", () => {
+  it("treats an overflow before the first connected event as a reconnect control frame", async () => {
+    let attempts = 0
+    const adapter = new SdkSSEAdapter(
+      client(async function* (opts) {
+        attempts++
+        if (attempts === 1) {
+          yield resync()
+          yield { directory: "/repo", payload: { type: "message.updated", properties: { id: "stale" } } }
+          return
+        }
+        yield event()
+        await aborted(opts.signal)
+      }),
+    )
+    const states: string[] = []
+    const seen: string[] = []
+    adapter.onStateChange((state) => states.push(state))
+    adapter.onEvent((item) => seen.push(item.type))
+    try {
+      adapter.connect()
+      const start = performance.now()
+      while (!seen.length && performance.now() - start < 1_000) await wait(5)
+      expect(attempts).toBe(2)
+      expect(seen).toEqual(["server.connected"])
+      expect(states).toEqual(["connecting", "connecting", "connected"])
+    } finally {
+      adapter.disconnect()
+    }
+  })
+
+  it("reconnects after a connected stream overflows and never forwards the control frame", async () => {
+    let attempts = 0
+    const adapter = new SdkSSEAdapter(
+      client(async function* (opts) {
+        attempts++
+        yield event()
+        if (attempts === 1) {
+          yield resync("global")
+          yield { directory: "/repo", payload: { type: "message.updated", properties: { id: "stale" } } }
+          return
+        }
+        await aborted(opts.signal)
+      }),
+    )
+    const states: string[] = []
+    const seen: string[] = []
+    adapter.onStateChange((state) => states.push(state))
+    adapter.onEvent((item) => seen.push(item.type))
+    try {
+      adapter.connect()
+      const start = performance.now()
+      while (seen.length < 2 && performance.now() - start < 1_000) await wait(5)
+      expect(attempts).toBe(2)
+      expect(seen).toEqual(["server.connected", "server.connected"])
+      expect(states).toEqual(["connecting", "connected", "connecting", "connected"])
+    } finally {
+      adapter.disconnect()
+    }
+  })
+
+  it("backs off repeated immediate overflow frames", async () => {
+    const timer = globalThis.setTimeout
+    const delays: number[] = []
+    let attempts = 0
+    globalThis.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      if (typeof timeout === "number" && timeout >= 250 && timeout <= 5_000) {
+        delays.push(timeout)
+        return timer(handler, 0, ...args)
+      }
+      return timer(handler, timeout, ...args)
+    }) as typeof setTimeout
+    const adapter = new SdkSSEAdapter(
+      client(async function* (opts) {
+        attempts++
+        yield event()
+        if (attempts <= 3) yield resync()
+        await aborted(opts.signal)
+      }),
+    )
+    try {
+      adapter.connect()
+      const start = performance.now()
+      while (attempts < 4 && performance.now() - start < 1_000) await wait(1)
+      adapter.disconnect()
+      expect(attempts).toBe(4)
+      expect(delays.slice(0, 3)).toEqual([250, 500, 1_000])
+    } finally {
+      adapter.disconnect()
+      globalThis.setTimeout = timer
+    }
+  })
+
   it("recovers a dropped real HTTP event stream within the client budget", async () => {
     const bytes = new TextEncoder().encode(`data: ${JSON.stringify(event())}\n\n`)
     let requests = 0

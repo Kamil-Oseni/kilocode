@@ -160,6 +160,7 @@ export class SdkSSEAdapter {
     while (!signal.aborted) {
       const attempt = new AbortController()
       let ready = false
+      let resync = false
 
       // Forward the outer abort to the per-attempt controller so
       // `disconnect()` cancels the current fetch immediately.
@@ -177,29 +178,7 @@ export class SdkSSEAdapter {
           // retry loop with exponential backoff runs in parallel, causing
           // duplicate connections and "error" state flicker.
           sseMaxRetryAttempts: 1,
-          onSseError: (error) => {
-            if (signal.aborted) {
-              return
-            }
-            // Filter AbortErrors — they are expected during heartbeat timeout
-            // or manual reconnect() calls, not real connection failures.
-            if (error instanceof DOMException && error.name === "AbortError") {
-              return
-            }
-            if (!ready && !this.reportedInitial) {
-              this.reportedInitial = true
-              this.initialFailure?.(error)
-            }
-            const transient =
-              error instanceof TypeError ||
-              (error instanceof Error && /terminated|ECONNRESET|fetch failed/i.test(error.message))
-            if (transient) {
-              console.warn("[Raya] SSE: SDK stream dropped, reconnecting:", error)
-              return
-            }
-            console.error("[Raya] SSE: ❌ SDK SSE error callback:", error)
-            this.notifyError(error instanceof Error ? error : new Error(String(error)))
-          },
+          onSseError: (error) => this.reportSseError(error, ready, signal),
         })
 
         console.log("[Raya] SSE: ⏳ Waiting for first stream event")
@@ -212,36 +191,29 @@ export class SdkSSEAdapter {
 
           this.resetHeartbeat(attempt)
 
+          // Overflow is a control frame. Close this stream and make consumers
+          // resnapshot after reconnect rather than forwarding it as chat data.
+          const payload = event.payload as { type?: string; properties?: { reason?: string } }
+          if (payload.type === "server.resync_required" && payload.properties?.reason === "overflow") {
+            resync = true
+            attempt.abort()
+            break
+          }
+
           if (!ready) {
             ready = true
-            delay = SdkSSEAdapter.RECONNECT_DELAY_MS
             console.log("[Raya] SSE: ✅ Stream opened successfully")
             this.notifyState("connected")
           }
+
+          if (payload.type !== "server.connected") delay = SdkSSEAdapter.RECONNECT_DELAY_MS
 
           this.notifyEvent(normalize(event.payload), event.directory)
         }
 
         console.log(ready ? "[Raya] SSE: 📭 Stream ended normally" : "[Raya] SSE: 📭 Stream ended before first event")
       } catch (error) {
-        // Suppress AbortErrors — they are expected when the heartbeat timer
-        // or reconnect() aborts the per-attempt controller.
-        const aborted = signal.aborted || (error instanceof DOMException && error.name === "AbortError")
-        const transient =
-          (error instanceof TypeError && /terminated|network|fetch/i.test(error.message)) ||
-          (error instanceof Error && /terminated|ECONNRESET|fetch failed/i.test(error.message))
-        if (!aborted) {
-          if (!ready && !this.reportedInitial) {
-            this.reportedInitial = true
-            this.initialFailure?.(error)
-          }
-          if (transient) {
-            console.warn("[Raya] SSE: stream dropped, reconnecting:", error)
-          } else {
-            console.error("[Raya] SSE: ❌ Stream error:", error)
-            this.notifyError(error instanceof Error ? error : new Error(String(error)))
-          }
-        }
+        this.reportStreamError(error, ready, signal)
       } finally {
         signal.removeEventListener("abort", onAbort)
         this.attemptController = null
@@ -253,13 +225,51 @@ export class SdkSSEAdapter {
       }
 
       const wait = delay
-      delay = ready ? SdkSSEAdapter.RECONNECT_DELAY_MS : Math.min(delay * 2, SdkSSEAdapter.MAX_RECONNECT_DELAY_MS)
+      delay =
+        ready && !resync ? SdkSSEAdapter.RECONNECT_DELAY_MS : Math.min(delay * 2, SdkSSEAdapter.MAX_RECONNECT_DELAY_MS)
       console.log(`[Raya] SSE: 🔄 Reconnecting in ${wait}ms...`)
       this.notifyState("connecting")
       await new Promise((resolve) => setTimeout(resolve, wait))
     }
 
     this.notifyState("disconnected")
+  }
+
+  private reportSseError(error: unknown, ready: boolean, signal: AbortSignal): void {
+    if (signal.aborted) return
+    // Abort is expected during heartbeat timeout and explicit reconnect.
+    if (error instanceof DOMException && error.name === "AbortError") return
+    if (!ready && !this.reportedInitial) {
+      this.reportedInitial = true
+      this.initialFailure?.(error)
+    }
+    const transient =
+      error instanceof TypeError ||
+      (error instanceof Error && /terminated|ECONNRESET|fetch failed/i.test(error.message))
+    if (transient) {
+      console.warn("[Raya] SSE: SDK stream dropped, reconnecting:", error)
+      return
+    }
+    console.error("[Raya] SSE: ❌ SDK SSE error callback:", error)
+    this.notifyError(error instanceof Error ? error : new Error(String(error)))
+  }
+
+  private reportStreamError(error: unknown, ready: boolean, signal: AbortSignal): void {
+    // Abort is expected during heartbeat timeout and explicit reconnect.
+    if (signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return
+    if (!ready && !this.reportedInitial) {
+      this.reportedInitial = true
+      this.initialFailure?.(error)
+    }
+    const transient =
+      (error instanceof TypeError && /terminated|network|fetch/i.test(error.message)) ||
+      (error instanceof Error && /terminated|ECONNRESET|fetch failed/i.test(error.message))
+    if (transient) {
+      console.warn("[Raya] SSE: stream dropped, reconnecting:", error)
+      return
+    }
+    console.error("[Raya] SSE: ❌ Stream error:", error)
+    this.notifyError(error instanceof Error ? error : new Error(String(error)))
   }
 
   /**

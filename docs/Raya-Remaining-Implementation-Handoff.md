@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 21:13 EDT - SSE overflow recovery source handoff
+
+The instance and global event streams now bound pending mixed events by count and serialized bytes, send `server.resync_required {reason:"overflow"}` and close on a stalled consumer. The extension recognizes that control frame, reconnects and refreshes Routine durable cursors plus other projections. Instance slow-reader tests pass 3/3, global HTTP overflow/lifecycle tests 2/2, and extension adapter/provider tests 22/22; package typechecks and scoped quality checks pass. This is source evidence. Commit and push the slice, build/install a source-matched snapshot without reloading either user window, and record package bytes. Desktop remains Stopped. Loaded-host SSE/restart, multi-app desktop and prolonged-resource acceptance remain open; do not mark `FUT-ARCH-01`, `FUT-ARCH-03` or `FUT-CU-01` Verified.
+
 ## ChatGPT 2026-09-29 20:57 EDT - live Routine event package installed, active host pending
 
 Pushed `20bee69a32` (live saved-cursor/SSE/UI projection) and `2ae69c10ea` (regenerated SDK event union). The low-memory snapshot installed from committed `2ae69c10ea` after CLI, extension/webview, lint, bundle and native self-test gates. `.tmp/installed-snapshot-2ae69c10ea-verified.json` finds 461/461 installed files byte-matched to retained VSIX SHA-256 `5dcef806a0f28e1a8cfd996462ecba16a04db97e34a0838a57c149127298161c`, excluding only VS Code `package.json` metadata. CLI SHA-256 is `D0E1A8D78E50A1043BAD93040AD5A0F6923BD80E9AA69C50CB2BAA0A7AE962A8`. `HEAD` and `origin/main` match with a clean worktree before this note. The earlier `+20bee69a32` installer produced uncommitted generated SDK types and is not source-matched evidence. The first sandboxed install attempt failed at local-state `EPERM`; the authorized rerun succeeded.

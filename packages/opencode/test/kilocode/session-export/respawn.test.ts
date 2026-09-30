@@ -97,6 +97,26 @@ describe("SessionExport worker respawn", () => {
     expect(worker.messages.filter((msg) => msg.kind === "init").length).toBe(1)
   })
 
+  test("rejects a second workspace database without disturbing the first worker", () => {
+    const worker = new FakeWorker(0)
+    const first = {
+      agentVersion: "v0",
+      dbPath: "first-export.db",
+      workspaceKey: "workspace-a",
+      syncSeq: () => 1,
+      subscribeAll: () => () => {},
+      createWorker: () => worker as unknown as Worker,
+    }
+    SessionExport.init(first)
+    expect(() => SessionExport.init({ ...first, dbPath: "other-export.db", workspaceKey: "workspace-b" })).toThrow(
+      "Session export database identity changed",
+    )
+    expect(worker.terminated).toBe(false)
+    expect(worker.messages.filter((msg) => msg.kind === "init")).toHaveLength(1)
+    SessionExport.beforeRequest(request("s1", "workspace-a"))
+    expect(worker.messages.some((msg) => msg.kind === "event")).toBe(true)
+  })
+
   test("keeps snapshot providers scoped by workspace", async () => {
     const worker = new FakeWorker(0)
     SessionExport.init({

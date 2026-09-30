@@ -64,6 +64,10 @@ Keep the two manifest maintenance entries separate: legacy JSON-to-SQL migration
 
 ## Next complete production boundary: session export
 
+**2026-09-30 14:55 EDT update:** The worker drain/close race and parent false-success shutdown in points 1–3 below were repaired in commit `832161175c50c94080ec833c40478e72985057ab` and tested with a real worker/private SQLite plus wrong-ID/timeout parent refusals. The remaining sequence/worker store admission, failed-envelope retention, detached workspace work, shared state publication and cross-process proof in point 4 and the following audit are still open. The writer remains declared-unintegrated and portable capture remains refused. The numbered findings below describe the pre-fix source state and are retained to explain the requirement.
+
+**2026-09-30 15:04 EDT update:** A later source guard refuses a second workspace's different raw `dbPath` before the first worker is changed; the first worker continues serving its workspace in a focused regression. This is not a canonical resolved-path or cross-process identity proof. The shared workspace state publication and remaining writer boundaries are still open.
+
 There is a concrete shutdown defect to address before treating session export as drained:
 
 1. [Worker `drain()`](../packages/opencode/src/kilocode/session-export/worker.ts), line 30, returns immediately if another drain is active. The active drain awaits `handleEvent` while processing its batch.

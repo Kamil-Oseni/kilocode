@@ -50,6 +50,7 @@ export const init = (opts: {
   createWorker?: (url: WorkerTarget) => Worker
 }): void => {
   if (stopping || refused) throw new Error("Session export shutdown is not confirmed")
+  if (shared && shared.dbPath !== opts.dbPath) throw new Error("Session export database identity changed")
   const url = target()
   try {
     const key = opts.workspaceKey ?? "default"

@@ -1,5 +1,9 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-30 15:04 EDT - export database mismatch refusal
+
+The shared session-export parent refuses a second workspace with a different `dbPath` before disturbing the first worker. Focused respawn tests pass 7/7 with 13 assertions; CLI typecheck passes. This protects one identity boundary but does not supply canonical alias/cross-process admission, shared workspace-state merge, failed-envelope retention or a portable capture proof. Readiness stays **47/100**, portable **0/20**.
+
 ## ChatGPT 2026-09-30 14:55 EDT - export shutdown repair source gate green; portable capture remains off
 
 The first portable blocker is now repaired in source: the worker joins active event persistence before store close and emits a request-bound confirmed/refused shutdown result; the parent refuses missing/wrong/late ACKs and fences capture/init/respawn after refusal. Export remains disabled. Final focused 14/14 tests include a real worker/private SQLite 80-event drain and isolated wrong-ID/timeout parent refusal; CLI typecheck, targeted formatting/lint and affected guards pass. Preserve `.tmp/session-export-shutdown-final-tests.txt`. Commit/push, then consider a matching private snapshot only if this dormant export repair needs installed acceptance. Portable recovery remains **0/20**, basic stable readiness **47/100**. The 32-boundary writer audit still has 16 unintegrated and five uncertain paths; a shutdown fix is not a portable-transfer acceptance.

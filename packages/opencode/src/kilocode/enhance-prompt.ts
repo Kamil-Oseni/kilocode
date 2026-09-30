@@ -5,6 +5,8 @@ import { ProviderTransform } from "@/provider/transform"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const log = Log.create({ service: "enhance-prompt" })
 
@@ -27,14 +29,24 @@ export function clean(text: string) {
  * Calls generateText directly with a prompt-rewrite system instruction, no agent identity,
  * tools, or plugins. The user message is labeled as a draft so it stays rewrite input.
  */
-export async function enhancePrompt(text: string): Promise<string> {
+type Selection = { providerID: string; modelID: string }
+
+export const resolveEnhanceModel = Effect.fn("EnhancePrompt.resolve")(function* (
+  svc: Provider.Interface,
+  selected?: Selection,
+) {
+  if (selected) return yield* svc.getModel(ProviderV2.ID.make(selected.providerID), ModelV2.ID.make(selected.modelID))
+  const ref = yield* svc.defaultModel()
+  return (yield* svc.getSmallModel(ref.providerID)) ?? (yield* svc.getModel(ref.providerID, ref.modelID))
+})
+
+export async function enhancePrompt(text: string, selected?: Selection): Promise<string> {
   log.info("enhancing", { length: text.length })
 
   const resolved = await AppRuntime.runPromise(
     Provider.Service.use((svc) =>
       Effect.gen(function* () {
-        const ref = yield* svc.defaultModel()
-        const model = (yield* svc.getSmallModel(ref.providerID)) ?? (yield* svc.getModel(ref.providerID, ref.modelID))
+        const model = yield* resolveEnhanceModel(svc, selected)
         const language = yield* svc.getLanguage(model)
         return { model, language }
       }),

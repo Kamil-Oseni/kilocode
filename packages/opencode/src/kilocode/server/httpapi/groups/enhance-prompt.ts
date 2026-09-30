@@ -12,6 +12,12 @@ const root = "/enhance-prompt"
 
 export const EnhancePromptPayload = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1)).annotate({ description: "The user's draft prompt to enhance" }),
+  model: Schema.optional(
+    Schema.Struct({
+      providerID: Schema.String.check(Schema.isMinLength(1)),
+      modelID: Schema.String.check(Schema.isMinLength(1)),
+    }),
+  ),
 })
 
 const EnhancePromptResponse = Schema.Struct({

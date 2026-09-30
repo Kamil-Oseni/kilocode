@@ -6939,6 +6939,10 @@ export class EnhancePrompt extends HeyApiClient {
       directory?: string
       workspace?: string
       text?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6950,6 +6954,7 @@ export class EnhancePrompt extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "text" },
+            { in: "body", key: "model" },
           ],
         },
       ],

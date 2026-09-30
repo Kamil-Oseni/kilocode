@@ -12892,6 +12892,21 @@
                     "type": "string",
                     "minLength": 1,
                     "description": "The user's draft prompt to enhance"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "modelID": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["providerID", "modelID"],
+                    "additionalProperties": false
                   }
                 },
                 "required": ["text"],
@@ -70681,6 +70696,9 @@
             "$ref": "#/components/schemas/EventSessionQueueChanged"
           },
           {
+            "$ref": "#/components/schemas/EventRayaRoutineRunChanged1"
+          },
+          {
             "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
           },
           {
@@ -78766,6 +78784,9 @@
               },
               {
                 "$ref": "#/components/schemas/EventSessionQueueChanged"
+              },
+              {
+                "$ref": "#/components/schemas/EventRayaRoutineRunChanged"
               },
               {
                 "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
@@ -97672,6 +97693,110 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventRayaRoutineRunChanged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.routine.run.changed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "stream": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["run.changed"]
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": ["workspace"]
+                  },
+                  "runID": {
+                    "type": "string"
+                  },
+                  "agentID": {
+                    "type": "string"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "stateRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["running", "complete", "blocked", "error"]
+                  },
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "version",
+                  "id",
+                  "stream",
+                  "sequence",
+                  "kind",
+                  "visibility",
+                  "runID",
+                  "agentID",
+                  "sessionID",
+                  "stateRevision",
+                  "status",
+                  "at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["event"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventRayaRoutineExecutionIdle": {
         "type": "object",
         "properties": {
@@ -115513,6 +115638,106 @@
           "properties": {
             "type": "object",
             "properties": {}
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventRayaRoutineRunChanged1": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.routine.run.changed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "stream": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["run.changed"]
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": ["workspace"]
+                  },
+                  "runID": {
+                    "type": "string"
+                  },
+                  "agentID": {
+                    "type": "string"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "stateRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["running", "complete", "blocked", "error"]
+                  },
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "version",
+                  "id",
+                  "stream",
+                  "sequence",
+                  "kind",
+                  "visibility",
+                  "runID",
+                  "agentID",
+                  "sessionID",
+                  "stateRevision",
+                  "status",
+                  "at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["event"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "properties"],

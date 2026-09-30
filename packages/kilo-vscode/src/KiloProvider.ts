@@ -1709,7 +1709,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             break
           }
           void sdkClient.enhancePrompt
-            .enhance({ text: message.text }, { throwOnError: true })
+            .enhance({ text: message.text, model: message.model }, { throwOnError: true })
             .then(({ data }) => {
               this.postMessage({ type: "enhancePromptResult", text: data.text, requestId: message.requestId })
             })

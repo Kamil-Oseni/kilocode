@@ -19513,6 +19513,10 @@ export type EnhancePromptEnhanceData = {
      * The user's draft prompt to enhance
      */
     text: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
   }
   path?: never
   query?: {

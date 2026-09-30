@@ -600,7 +600,7 @@ export const NewWorktreeDialog: Component<{
     const id = `enhance-newworktree-${crypto.randomUUID()}`
     request = id
     setEnhancing(true)
-    vscode.postMessage({ type: "enhancePrompt", text: draft, requestId: id })
+    vscode.postMessage({ type: "enhancePrompt", text: draft, requestId: id, model: model() ?? undefined })
   }
 
   // --- Import tab state ---

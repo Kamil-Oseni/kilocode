@@ -1629,6 +1629,7 @@ export interface EnhancePromptRequest {
   type: "enhancePrompt"
   text: string
   requestId: string
+  model?: { providerID: string; modelID: string }
 }
 
 // Open the standalone changes viewer tab from the sidebar

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
-for (const mode of ["wrong", "timeout"] as const)
+for (const mode of ["wrong", "timeout", "capture"] as const)
   test(`session export parent refuses ${mode} shutdown acknowledgement and fences restart`, async () => {
     const root = await mkdtemp(join(tmpdir(), "raya-export-shutdown-parent-"))
     const env = {
@@ -37,6 +37,7 @@ for (const mode of ["wrong", "timeout"] as const)
       expect(code, stdout + stderr).toBe(0)
       expect(stdout).toContain(`"mode":"${mode}"`)
       expect(stdout).toContain('"terminated":true')
+      if (mode === "capture") expect(stdout).toContain('"posts":0')
     } finally {
       clearTimeout(timer)
       if (child.exitCode === null) {

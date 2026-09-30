@@ -1,5 +1,14 @@
-import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { createHash, randomUUID } from "node:crypto"
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { lstat, readFile } from "node:fs/promises"
 import path from "node:path"
 import { formatPatch, structuredPatch } from "diff"
@@ -21,37 +30,66 @@ export function createWorkspaceProvider(opts: { root: string; statePath?: string
   const snapshots = new Map<string, Map<string, File>>(
     Object.entries(state.snapshots).map(([key, files]) => [key, new Map(files.map((file) => [file.path, file]))]),
   )
-  const pending = new Set<string>()
+  const owner = randomUUID()
+  const seen = new Map(Object.entries(state.sessions))
+  const orders = new Map<string, number>()
+  let sequence = 0
 
   const capture = async () => {
     const result = await scan(opts.root, opts.maxSnapshotBytes ?? Config.maxSnapshotBytes)
     const files = result.files
     const id = hash(files)
+    update(opts.statePath, state, (next) => {
+      next.snapshots[id] = [...files.values()].map(persist)
+      next.pending[id] = [...new Set([...(next.pending[id] ?? []), owner])]
+    })
     snapshots.set(id, files)
-    state.snapshots[id] = [...files.values()].map(persist)
-    pending.add(id)
-    setTimeout(() => pending.delete(id), 0).unref?.()
-    save(opts.statePath, state)
+    orders.set(id, ++sequence)
     return { id, files, capture: metadata(result.mode, files, result.truncated) }
   }
 
   return {
     current(sessionId: string): string | undefined {
-      return state.sessions[sessionId]
+      const latest = load(opts.statePath, state)
+      const id = latest.sessions[sessionId]
+      if (id && !snapshots.has(id)) snapshots.set(id, new Map(latest.snapshots[id].map((file) => [file.path, file])))
+      if (id) seen.set(sessionId, id)
+      else seen.delete(sessionId)
+      return id
     },
     remember(sessionId: string, snapshotId: string): void {
-      state.sessions[sessionId] = snapshotId
-      pending.delete(snapshotId)
-      prune(state, snapshots, pending)
-      save(opts.statePath, state)
+      update(opts.statePath, state, (next) => {
+        if (next.sessions[sessionId] !== seen.get(sessionId)) throw new Error("Workspace state changed for session")
+        if (!next.snapshots[snapshotId]) throw new Error("Workspace snapshot is unavailable")
+        next.sessions[sessionId] = snapshotId
+        next.pending[snapshotId] = (next.pending[snapshotId] ?? []).filter((id) => id !== owner)
+        if (!next.pending[snapshotId].length) delete next.pending[snapshotId]
+        const selected = orders.get(snapshotId)
+        if (selected !== undefined) {
+          for (const [id, order] of orders) {
+            if (order >= selected || !next.pending[id]) continue
+            next.pending[id] = next.pending[id].filter((item) => item !== owner)
+            if (!next.pending[id].length) delete next.pending[id]
+          }
+        }
+        prune(next)
+      })
+      seen.set(sessionId, snapshotId)
+      for (const id of snapshots.keys()) {
+        if (state.snapshots[id]) continue
+        snapshots.delete(id)
+      }
     },
     async baseline(): Promise<{ snapshotId: string; files: FileEntry[]; capture: CaptureMetadata }> {
       const snap = await capture()
       return { snapshotId: snap.id, files: [...snap.files.values()].map(entry), capture: snap.capture }
     },
     async diff(prevSnapshotHash: string): Promise<{ snapshotHash: string; diff: DeltaEntry[] }> {
+      const latest = load(opts.statePath, state)
+      const saved = latest.snapshots[prevSnapshotHash]
+      if (!saved) throw new Error("Workspace snapshot is unavailable")
+      const prev = snapshots.get(prevSnapshotHash) ?? new Map(saved.map((file) => [file.path, file]))
       const snap = await capture()
-      const prev = snapshots.get(prevSnapshotHash) ?? new Map()
       return { snapshotHash: snap.id, diff: delta(prev, snap.files) }
     },
   }
@@ -60,45 +98,49 @@ export function createWorkspaceProvider(opts: { root: string; statePath?: string
 type State = {
   sessions: Record<string, string>
   snapshots: Record<string, File[]>
+  pending: Record<string, string[]>
 }
 
-function prune(state: State, snapshots: Map<string, Map<string, File>>, pending: Set<string>): void {
-  const used = new Set([...Object.values(state.sessions), ...pending])
+function prune(state: State): void {
+  const used = new Set([...Object.values(state.sessions), ...Object.keys(state.pending)])
   for (const id of Object.keys(state.snapshots)) {
     if (used.has(id)) continue
     delete state.snapshots[id]
-    snapshots.delete(id)
   }
 }
 
-function load(file: string | undefined): State {
-  if (!file || !existsSync(file)) return { sessions: {}, snapshots: {} }
-  try {
-    const value = JSON.parse(readFileSync(file, "utf8"))
-    return state(value)
-  } catch {
-    return { sessions: {}, snapshots: {} }
-  }
+function load(file: string | undefined, memory?: State): State {
+  if (!file) return memory ?? { sessions: {}, snapshots: {}, pending: {} }
+  if (!existsSync(file)) return { sessions: {}, snapshots: {}, pending: {} }
+  return state(JSON.parse(readFileSync(file, "utf8")))
 }
 
 function state(value: unknown): State {
-  if (!plain(value)) return { sessions: {}, snapshots: {} }
-  const raw = plain(value.snapshots) ? value.snapshots : {}
+  if (!plain(value) || !plain(value.snapshots) || !plain(value.sessions)) {
+    throw new Error("Invalid workspace state")
+  }
+  if (value.pending !== undefined && !plain(value.pending)) throw new Error("Invalid workspace pending state")
+  const raw = value.snapshots
   const snapshots: Record<string, File[]> = {}
   for (const [id, files] of Object.entries(raw)) {
-    if (!Array.isArray(files)) continue
+    if (!Array.isArray(files)) throw new Error("Invalid workspace snapshot")
     const valid = files.filter((item): item is File => file(item))
-    if (valid.length !== files.length) continue
+    if (valid.length !== files.length) throw new Error("Invalid workspace snapshot file")
     snapshots[id] = valid
   }
   const sessions: Record<string, string> = {}
-  const refs = plain(value.sessions) ? value.sessions : {}
-  for (const [session, id] of Object.entries(refs)) {
-    if (typeof id !== "string") continue
-    if (!snapshots[id]) continue
+  for (const [session, id] of Object.entries(value.sessions)) {
+    if (typeof id !== "string" || !snapshots[id]) throw new Error("Invalid workspace session")
     sessions[session] = id
   }
-  return { sessions, snapshots }
+  const pending: Record<string, string[]> = {}
+  for (const [id, owners] of Object.entries(value.pending ?? {})) {
+    if (!snapshots[id] || !Array.isArray(owners) || owners.some((owner) => typeof owner !== "string")) {
+      throw new Error("Invalid workspace pending snapshot")
+    }
+    pending[id] = owners
+  }
+  return { sessions, snapshots, pending }
 }
 
 function file(value: unknown): value is File {
@@ -127,10 +169,40 @@ function plain(value: unknown): value is Record<string, unknown> {
   return true
 }
 
-function save(file: string | undefined, state: State): void {
-  if (!file) return
+function update(file: string | undefined, memory: State, change: (next: State) => void): void {
+  if (!file) {
+    change(memory)
+    return
+  }
   mkdirSync(path.dirname(file), { recursive: true })
-  writeFileSync(file, JSON.stringify(state))
+  const lock = `${file}.lock`
+  const deadline = Date.now() + 1_000
+  let fd: number
+  for (;;) {
+    try {
+      fd = openSync(lock, "wx")
+      break
+    } catch (err) {
+      if (!(err instanceof Error && "code" in err && err.code === "EEXIST") || Date.now() >= deadline) {
+        throw new Error("Workspace state lock unavailable", { cause: err })
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
+    }
+  }
+  const temp = `${file}.${randomUUID()}.tmp`
+  try {
+    const next = load(file)
+    change(next)
+    writeFileSync(temp, JSON.stringify(next), { flag: "wx" })
+    renameSync(temp, file)
+    memory.sessions = next.sessions
+    memory.snapshots = next.snapshots
+    memory.pending = next.pending
+  } finally {
+    closeSync(fd)
+    if (existsSync(temp)) unlinkSync(temp)
+    unlinkSync(lock)
+  }
 }
 
 async function scan(

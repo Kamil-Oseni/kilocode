@@ -53,9 +53,24 @@ export class Capture {
   private roots = new Map<string, string>()
   private snapshots = new Map<string, string>()
   private turns = new Map<string, string>()
+  private baselines = new Map<string, Promise<void>>()
   private deltas = new Map<string, Promise<void>>()
+  private failures: unknown[] = []
+  private closing = false
+  private aborted = false
 
   constructor(private readonly deps: CaptureDeps) {}
+
+  async settle(): Promise<void> {
+    this.closing = true
+    await Promise.allSettled([...this.baselines.values(), ...this.deltas.values()])
+    if (this.failures.length) throw new AggregateError(this.failures, "Session export capture did not settle cleanly")
+  }
+
+  abort(): void {
+    this.closing = true
+    this.aborted = true
+  }
 
   markDegraded(sessionId: string): void {
     this.degraded.add(sessionId)
@@ -94,6 +109,7 @@ export class Capture {
       params: Record<string, unknown>
     }
   }): void {
+    if (this.closing) return
     if (args.requestMeta.agent === "title") return
     const meta = args.requestMeta
     if (!isEligible(args.input)) {
@@ -165,6 +181,7 @@ export class Capture {
     retryCount: number
     workspaceKey?: string
   }): void {
+    if (this.closing) return
     if (!this.authorized.has(args.sessionId)) return
     if (this.degraded.has(args.sessionId)) return
     const seq = this.deps.syncSeq(args.sessionId)
@@ -191,6 +208,7 @@ export class Capture {
   }
 
   dispatchRaw(envelope: ExportEvent): void {
+    if (this.closing) return
     this.dispatch(envelope)
   }
 
@@ -206,6 +224,7 @@ export class Capture {
     usage?: { inputTokens: number; outputTokens: number }
     workspaceKey?: string
   }): void {
+    if (this.closing) return
     if (!this.authorized.has(args.sessionId)) return
     if (this.degraded.has(args.sessionId)) return
     const seq = this.deps.syncSeq(args.sessionId)
@@ -232,6 +251,7 @@ export class Capture {
   }
 
   async onSessionClose(sessionId: string): Promise<void> {
+    if (this.closing) return
     if (!this.authorized.has(sessionId)) return
     if (this.degraded.has(sessionId)) return
     const root = this.roots.get(sessionId) ?? sessionId
@@ -243,6 +263,7 @@ export class Capture {
     rootSessionId: string,
     trigger: "next_request" | "turn_end" | "session_close",
   ): Promise<void> {
+    if (this.closing) return
     const prev = this.deltas.get(sessionId) ?? Promise.resolve()
     const next = prev.then(
       () => this.captureDelta(sessionId, rootSessionId, trigger),
@@ -255,6 +276,7 @@ export class Capture {
       },
       (err) => {
         if (this.deltas.get(sessionId) === next) this.deltas.delete(sessionId)
+        this.failures.push(err)
         this.deps.onPostError?.(err)
       },
     )
@@ -268,6 +290,8 @@ export class Capture {
   ): Promise<void> {
     const provider = this.deps.snapshotProvider
     if (!provider) return
+    await this.baselines.get(sessionId)
+    if (this.aborted || !this.authorized.has(sessionId) || this.degraded.has(sessionId)) return
     const previous = this.snapshots.get(sessionId)
     if (!previous) return
     const next = await startDeltaFiber({
@@ -280,8 +304,10 @@ export class Capture {
       syncSeq: () => this.deps.syncSeq(sessionId),
       agentVersion: this.deps.agentVersion,
       requestDiff: provider.diff,
-      dispatch: (event) => this.dispatchRaw(event),
+      dispatch: (event) => this.dispatch(event),
+      active: () => !this.aborted && this.authorized.has(sessionId) && !this.degraded.has(sessionId),
     })
+    if (this.aborted) return
     if (next) this.snapshots.set(sessionId, next)
     if (next) provider.remember?.(sessionId, next)
   }
@@ -323,14 +349,31 @@ export class Capture {
       syncSeq: () => this.deps.syncSeq(meta.sessionId),
       agentVersion: this.deps.agentVersion,
       requestSnapshot: provider.baseline,
-      dispatch: (event) => this.dispatchRaw(event),
-    }).then((hash) => {
-      if (hash) this.snapshots.set(meta.sessionId, hash)
-      if (hash) provider.remember?.(meta.sessionId, hash)
-    })
+      dispatch: (event) => this.dispatch(event),
+      active: () => !this.aborted && this.authorized.has(meta.sessionId) && !this.degraded.has(meta.sessionId),
+      onSnapshot: (hash) => {
+        if (this.aborted) return
+        provider.remember?.(meta.sessionId, hash)
+        this.snapshots.set(meta.sessionId, hash)
+      },
+      onPending: (pending) => {
+        this.baselines.set(meta.sessionId, pending)
+        void pending.then(
+          () => {
+            if (this.baselines.get(meta.sessionId) === pending) this.baselines.delete(meta.sessionId)
+          },
+          (err) => {
+            if (this.baselines.get(meta.sessionId) === pending) this.baselines.delete(meta.sessionId)
+            this.failures.push(err)
+            this.deps.onPostError?.(err)
+          },
+        )
+      },
+    }).catch((err) => this.deps.onPostError?.(err))
   }
 
   private dispatch(envelope: ExportEvent): void {
+    if (this.aborted) return
     try {
       const safe = cloneable(envelope) as ExportEvent
       this.deps.worker.postMessage({ kind: "event", envelope: safe, approxBytes: JSON.stringify(safe).length })

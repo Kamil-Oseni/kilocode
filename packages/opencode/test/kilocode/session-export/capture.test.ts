@@ -314,6 +314,90 @@ describe("Capture", () => {
     expect(types.find((item) => item?.type === "workspace_delta_captured")?.trigger).toBe("turn_end")
   })
 
+  test("late baseline is remembered and queued delta waits for it before settle completes", async () => {
+    const gate = Promise.withResolvers<{ snapshotId: string; files: [] }>()
+    const remembered: string[] = []
+    const previous: string[] = []
+    const cap = new Capture({
+      worker,
+      agentVersion: "v0",
+      nowMs: () => 100,
+      syncSeq: () => 7,
+      baselineTimeoutMs: 5,
+      snapshotProvider: {
+        baseline: () => gate.promise,
+        diff: async (hash) => {
+          previous.push(hash)
+          return { snapshotHash: "h1", diff: [{ path: "src/a.ts", status: "modified", patchChunkIds: [] }] }
+        },
+        remember: (_session, hash) => remembered.push(hash),
+      },
+    })
+    cap.beforeRequest({
+      input: { model: { api: { npm: "@kilocode/kilo-gateway" }, isFree: true }, org: { type: "personal" } },
+      requestMeta: meta("s1"),
+      assembled: { system: [], messages: [], tools: {}, permissions: [], params: {} },
+    })
+    cap.afterRequest({
+      sessionId: "s1",
+      rootSessionId: "s1",
+      requestId: "r1",
+      output: { textParts: ["ok"] },
+      durationMs: 1,
+      retryCount: 0,
+    })
+    await until(() =>
+      posted.some((item) => (item as { envelope?: { consistency?: string } }).envelope?.consistency === "missing"),
+    )
+    const state = { settled: false }
+    const settling = cap.settle().then(() => {
+      state.settled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(state.settled).toBe(false)
+    expect(previous).toEqual([])
+    gate.resolve({ snapshotId: "h0", files: [] })
+    await settling
+    const events = posted.map((item) => (item as { envelope?: { type?: string; consistency?: string } }).envelope)
+    expect(
+      events.filter((item) => item?.type === "workspace_baseline_completed").map((item) => item?.consistency),
+    ).toEqual(["missing", "eventual"])
+    expect(remembered).toEqual(["h0", "h1"])
+    expect(previous).toEqual(["h0"])
+    expect(events.map((item) => item?.type)).toContain("workspace_delta_captured")
+  })
+
+  test("abort fences eventual baseline after an unsettled shutdown", async () => {
+    const gate = Promise.withResolvers<{ snapshotId: string; files: [] }>()
+    const remembered: string[] = []
+    const cap = new Capture({
+      worker,
+      agentVersion: "v0",
+      nowMs: () => 100,
+      syncSeq: () => 7,
+      baselineTimeoutMs: 5,
+      snapshotProvider: {
+        baseline: () => gate.promise,
+        diff: async () => ({ snapshotHash: "h1", diff: [] }),
+        remember: (_session, hash) => remembered.push(hash),
+      },
+    })
+    cap.beforeRequest({
+      input: { model: { api: { npm: "@kilocode/kilo-gateway" }, isFree: true }, org: { type: "personal" } },
+      requestMeta: meta("s1"),
+      assembled: { system: [], messages: [], tools: {}, permissions: [], params: {} },
+    })
+    await until(() =>
+      posted.some((item) => (item as { envelope?: { consistency?: string } }).envelope?.consistency === "missing"),
+    )
+    cap.abort()
+    gate.resolve({ snapshotId: "h0", files: [] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const events = posted.map((item) => (item as { envelope?: { consistency?: string } }).envelope?.consistency)
+    expect(events).not.toContain("eventual")
+    expect(remembered).toEqual([])
+  })
+
   test("turnId groups request completion and workspace delta", async () => {
     const cap = new Capture({
       worker,

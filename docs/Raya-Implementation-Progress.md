@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-09-30 - portable capture continuity and shared state source gate
+
+Session export now tracks a baseline even after its initial timeout: a late snapshot is emitted and remembered before queued deltas run. Shutdown closes new capture intake, joins pending baseline/delta work before closing the worker, and refuses with a kill switch if the capture or worker cannot settle by the existing deadline. Workspace snapshot state now merges under a bounded exclusive file lock, publishes by temporary file plus rename, refuses corrupt state and stale session updates, and reloads snapshots written by another provider. Export remains disabled.
+
+The focused combined suite passes **59 tests / 521 assertions**, with one unrelated Windows symlink test filtered because this sandbox cannot create its fixture. The isolated parent suite passes **3 tests / 10 assertions**, including a never-resolving capture that cannot yield a false successful shutdown. CLI typecheck passes. These tests establish source behavior, not full cross-process writer admission, power-loss durability, portable bundle/restore, or a loaded VS Code run. In-flight provider cache writes after abort and replacement of an initialized workspace while old capture work is pending remain explicit gaps. **Basic stable readiness stays 47/100** (restart/reinstall 19/20, portable recovery 0/20, local routing/context 12/20, bounded shared inference 8/20, installed/new-PC 8/20). Computer Use is unavailable in the user's VS Code session.
+
 ## ChatGPT 2026-09-30 15:04 EDT - shared export worker now refuses another database identity
 
 Session-export initialization now rejects a second workspace's different database path before unsubscribing, replacing or terminating the first workspace's worker. The focused regression verifies the first worker stays alive, receives no second init and can still post after the refusal; existing respawn tests pass 7/7 with 13 assertions, and CLI typecheck passes. This is a fail-closed identity guard, not canonical alias admission across processes. The real-worker shutdown gate remains the previous committed evidence. **Basic stable readiness stays 47/100; portable recovery stays 0/20.**

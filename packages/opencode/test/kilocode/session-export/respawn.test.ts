@@ -50,6 +50,38 @@ describe("SessionExport worker respawn", () => {
     expect(performance.now() - start).toBeLessThan(100)
   })
 
+  test("shutdown waits for an in-flight baseline before asking the worker to close", async () => {
+    const worker = new FakeWorker(0)
+    const pending = Promise.withResolvers<{ snapshotId: string; files: [] }>()
+    const remembered: string[] = []
+    SessionExport.init({
+      agentVersion: "v0",
+      dbPath: ":memory:",
+      syncSeq: () => 1,
+      subscribeAll: () => () => {},
+      createWorker: () => worker as unknown as Worker,
+      snapshotProvider: {
+        baseline: () => pending.promise,
+        diff: async () => ({ snapshotHash: "after", diff: [] }),
+        remember: (_, hash) => remembered.push(hash),
+      },
+    })
+    SessionExport.beforeRequest(request("s1"))
+    const closing = SessionExport.shutdown()
+    await Bun.sleep(20)
+    expect(worker.messages.some((msg) => msg.kind === "shutdown")).toBe(false)
+    pending.resolve({ snapshotId: "snapshot-a", files: [] })
+    await closing
+    expect(remembered).toEqual(["snapshot-a"])
+    const baseline = worker.messages.findIndex(
+      (msg) => msg.kind === "event" && msg.envelope?.type === "workspace_baseline_completed",
+    )
+    const closed = worker.messages.findIndex((msg) => msg.kind === "shutdown")
+    expect(baseline).toBeGreaterThanOrEqual(0)
+    expect(closed).toBeGreaterThan(baseline)
+    expect(worker.terminated).toBe(true)
+  })
+
   test("respawns once when worker postMessage fails", () => {
     const workers: FakeWorker[] = []
     SessionExport.init({

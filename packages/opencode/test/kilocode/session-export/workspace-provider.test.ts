@@ -274,13 +274,82 @@ describe("workspace provider", () => {
     expect(delta.diff[0].patch).toContain("value = 2")
   })
 
-  test("ignores corrupt persisted snapshot state", async () => {
+  test("refuses corrupt persisted snapshot state", async () => {
     await using tmp = await tmpdir({ git: true })
     const state = join(await mkdtemp(join(osTmpdir(), "session-export-provider-")), "state.json")
     await writeFile(state, JSON.stringify({ sessions: { s1: "bad" }, snapshots: { bad: { path: "src.ts" } } }))
 
-    const provider = createWorkspaceProvider({ root: tmp.path, statePath: state })
+    expect(() => createWorkspaceProvider({ root: tmp.path, statePath: state })).toThrow("Invalid workspace snapshot")
+    expect(await Bun.file(state).text()).toContain('"s1":"bad"')
+  })
 
-    expect(provider.current("s1")).toBeUndefined()
+  test("independent providers preserve different sessions and snapshots after concurrent captures", async () => {
+    await using first = await tmpdir({ git: true })
+    await using second = await tmpdir({ git: true })
+    const state = join(await mkdtemp(join(osTmpdir(), "session-export-provider-")), "state.json")
+    await writeFile(join(first.path, "first.ts"), "export const first = true\n")
+    await writeFile(join(second.path, "second.ts"), "export const second = true\n")
+    const a = createWorkspaceProvider({ root: first.path, statePath: state })
+    const b = createWorkspaceProvider({ root: second.path, statePath: state })
+
+    const [one, two] = await Promise.all([a.baseline(), b.baseline()])
+    expect(one.snapshotId).not.toBe(two.snapshotId)
+    a.remember("first", one.snapshotId)
+    b.remember("second", two.snapshotId)
+
+    const persisted = JSON.parse(await Bun.file(state).text()) as {
+      sessions: Record<string, string>
+      snapshots: Record<string, unknown>
+    }
+    expect(persisted.sessions).toEqual({ first: one.snapshotId, second: two.snapshotId })
+    expect(Object.keys(persisted.snapshots).sort()).toEqual([one.snapshotId, two.snapshotId].sort())
+    const reopened = createWorkspaceProvider({ root: first.path, statePath: state })
+    expect(reopened.current("first")).toBe(one.snapshotId)
+    expect(reopened.current("second")).toBe(two.snapshotId)
+  })
+
+  test("diffs from a snapshot published by an independent provider", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const state = join(await mkdtemp(join(osTmpdir(), "session-export-provider-")), "state.json")
+    await writeFile(join(tmp.path, "src.ts"), "export const value = 1\n")
+    const a = createWorkspaceProvider({ root: tmp.path, statePath: state })
+    const b = createWorkspaceProvider({ root: tmp.path, statePath: state })
+    const first = await a.baseline()
+    a.remember("shared", first.snapshotId)
+    await writeFile(join(tmp.path, "src.ts"), "export const value = 2\n")
+
+    const id = b.current("shared")
+    expect(id).toBe(first.snapshotId)
+    const result = await b.diff(id!)
+    expect(result.diff.map((item) => [item.path, item.status])).toEqual([["src.ts", "modified"]])
+    expect(result.diff[0].patch).toContain("value = 2")
+  })
+
+  test("refuses a stale provider changing a session another provider advanced", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const state = join(await mkdtemp(join(osTmpdir(), "session-export-provider-")), "state.json")
+    await writeFile(join(tmp.path, "src.ts"), "export const value = 1\n")
+    const a = createWorkspaceProvider({ root: tmp.path, statePath: state })
+    const b = createWorkspaceProvider({ root: tmp.path, statePath: state })
+    const first = await a.baseline()
+    a.remember("same", first.snapshotId)
+    await writeFile(join(tmp.path, "src.ts"), "export const value = 2\n")
+    const next = await b.baseline()
+
+    expect(() => b.remember("same", next.snapshotId)).toThrow("Workspace state changed for session")
+    expect(b.current("same")).toBe(first.snapshotId)
+    b.remember("same", next.snapshotId)
+    expect(a.current("same")).toBe(next.snapshotId)
+  })
+
+  test("refuses publication while a lock is held without altering state", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const state = join(await mkdtemp(join(osTmpdir(), "session-export-provider-")), "state.json")
+    await writeFile(join(tmp.path, "src.ts"), "export const value = 1\n")
+    const provider = createWorkspaceProvider({ root: tmp.path, statePath: state })
+    await writeFile(`${state}.lock`, "held")
+
+    await expect(provider.baseline()).rejects.toThrow("Workspace state lock unavailable")
+    expect(await Bun.file(state).exists()).toBe(false)
   })
 })

@@ -3,7 +3,6 @@ import type {
   DeltaEntry,
   ExportEvent,
   FileEntry,
-  WorkspaceBaselineCompleted,
   WorkspaceDeltaCaptured,
 } from "./events"
 import { ulid } from "ulid"
@@ -18,6 +17,9 @@ export type BaselineFiberArgs = {
   agentVersion: string
   requestSnapshot: () => Promise<{ snapshotId: string; files: FileEntry[]; capture?: CaptureMetadata }>
   dispatch: (envelope: ExportEvent) => void
+  active?: () => boolean
+  onSnapshot?: (snapshotId: string) => void
+  onPending?: (pending: Promise<void>) => void
 }
 
 export type DeltaFiberArgs = {
@@ -31,12 +33,60 @@ export type DeltaFiberArgs = {
   agentVersion: string
   requestDiff: (prevSnapshotHash: string) => Promise<{ snapshotHash: string; diff: DeltaEntry[] }>
   dispatch: (envelope: ExportEvent) => void
+  active?: () => boolean
 }
 
 export async function startBaselineFiber(args: BaselineFiberArgs): Promise<string | undefined> {
-  const result = await resolveBaseline(args)
-  emitBaseline(args, result)
-  return result.snapshotId
+  const pending = Promise.resolve().then(args.requestSnapshot)
+  const settled = Promise.withResolvers<void>()
+  args.onPending?.(settled.promise)
+  const timer: { value?: ReturnType<typeof setTimeout> } = {}
+  const timeout = new Promise<"timeout">((resolve) => {
+    timer.value = setTimeout(() => resolve("timeout"), args.timeoutMs)
+  })
+  const winner = await Promise.race([pending, timeout]).catch((err) => {
+    console.warn("[session-export] baseline failed", err)
+    return undefined
+  })
+  clearTimeout(timer.value)
+  if (winner === "timeout") {
+    try {
+      emitBaseline(args, { consistency: "missing", files: [] })
+    } catch (err) {
+      settled.reject(err)
+      throw err
+    }
+    void pending.then(
+      (result) => {
+        try {
+          emitBaseline(args, { consistency: "eventual", ...result })
+          if (args.active?.() !== false) args.onSnapshot?.(result.snapshotId)
+          settled.resolve()
+        } catch (err) {
+          settled.reject(err)
+        }
+      },
+      (err) => {
+        console.warn("[session-export] eventual baseline failed", err)
+        settled.resolve()
+      },
+    )
+    return undefined
+  }
+  if (!winner) {
+    emitBaseline(args, { consistency: "missing", files: [] })
+    settled.resolve()
+    return undefined
+  }
+  try {
+    emitBaseline(args, { consistency: "stable", ...winner })
+    if (args.active?.() !== false) args.onSnapshot?.(winner.snapshotId)
+    settled.resolve()
+    return winner.snapshotId
+  } catch (err) {
+    settled.reject(err)
+    throw err
+  }
 }
 
 function emitBaseline(
@@ -48,6 +98,7 @@ function emitBaseline(
     capture?: CaptureMetadata
   },
 ): void {
+  if (args.active?.() === false) return
   const seq = args.syncSeq()
   args.dispatch({
     id: ulid(),
@@ -70,6 +121,7 @@ function emitBaseline(
 export async function startDeltaFiber(args: DeltaFiberArgs): Promise<string | undefined> {
   try {
     const result = await args.requestDiff(args.prevSnapshotHash)
+    if (args.active?.() === false) return undefined
     if (result.diff.length === 0) return result.snapshotHash
     const seq = args.syncSeq()
     const env: WorkspaceDeltaCaptured = {
@@ -93,35 +145,5 @@ export async function startDeltaFiber(args: DeltaFiberArgs): Promise<string | un
   } catch (err) {
     console.warn("[session-export] delta capture failed", err)
     return undefined
-  }
-}
-
-async function resolveBaseline(args: BaselineFiberArgs): Promise<{
-  consistency: "stable" | "eventual" | "missing"
-  snapshotId?: string
-  files: FileEntry[]
-  capture?: CaptureMetadata
-}> {
-  const pending = args.requestSnapshot()
-  const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), args.timeoutMs))
-  try {
-    const winner = await Promise.race([pending, timeout])
-    if (winner === "timeout") {
-      void pending.then(
-        (eventual) =>
-          emitBaseline(args, {
-            consistency: "eventual",
-            snapshotId: eventual.snapshotId,
-            files: eventual.files,
-            capture: eventual.capture,
-          }),
-        (err) => console.warn("[session-export] eventual baseline failed", err),
-      )
-      return { consistency: "missing", files: [] }
-    }
-    return { consistency: "stable", snapshotId: winner.snapshotId, files: winner.files, capture: winner.capture }
-  } catch (err) {
-    console.warn("[session-export] baseline failed", err)
-    return { consistency: "missing", files: [] }
   }
 }

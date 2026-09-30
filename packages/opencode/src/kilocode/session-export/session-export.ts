@@ -134,33 +134,50 @@ export const shutdown = async (): Promise<void> => {
   if (!worker) return
   const current = worker
   stopping = true
-  for (const item of instances.values()) item.unsubscribe()
+  const captures = [...instances.values()].map((item) => {
+    item.unsubscribe()
+    return item.capture
+  })
   const requestID = crypto.randomUUID()
   const task = (async () => {
     try {
-      const timer: { value?: ReturnType<typeof setTimeout> } = {}
-      await new Promise<void>((resolve, reject) => {
-        timer.value = setTimeout(
-          () => reject(new Error("Session export shutdown timed out without confirmed drain")),
-          Config.shutdownFlushTimeoutMs + 500,
-        )
-        current.onmessage = (event: MessageEvent) => {
-          const msg: unknown = event.data
-          if (!msg || typeof msg !== "object" || !("requestID" in msg) || msg.requestID !== requestID) return
-          if ("kind" in msg && msg.kind === "shutdown_refused") {
-            const reason = "reason" in msg && typeof msg.reason === "string" ? msg.reason : "unknown"
-            reject(new Error(`Session export shutdown refused: ${reason}`))
+      const deadline = Date.now() + Config.shutdownFlushTimeoutMs + 500
+      const bounded = <T>(work: Promise<T>, phase: string): Promise<T> => {
+        const timer: { value?: ReturnType<typeof setTimeout> } = {}
+        return Promise.race([
+          work,
+          new Promise<never>((_, reject) => {
+            timer.value = setTimeout(
+              () => reject(new Error(`Session export shutdown timed out during ${phase}`)),
+              Math.max(0, deadline - Date.now()),
+            )
+          }),
+        ]).finally(() => clearTimeout(timer.value))
+      }
+      await bounded(Promise.all(captures.map((capture) => capture.settle())), "capture drain")
+      await bounded(
+        new Promise<void>((resolve, reject) => {
+          current.onmessage = (event: MessageEvent) => {
+            const msg: unknown = event.data
+            if (!msg || typeof msg !== "object" || !("requestID" in msg) || msg.requestID !== requestID) return
+            if ("kind" in msg && msg.kind === "shutdown_refused") {
+              const reason = "reason" in msg && typeof msg.reason === "string" ? msg.reason : "unknown"
+              reject(new Error(`Session export shutdown refused: ${reason}`))
+            }
+            if ("kind" in msg && msg.kind === "shutdown_done" && "status" in msg && msg.status === "confirmed")
+              resolve()
           }
-          if ("kind" in msg && msg.kind === "shutdown_done" && "status" in msg && msg.status === "confirmed") resolve()
-        }
-        current.onerror = (event: ErrorEvent) => reject(new Error(`Session export worker failed: ${event.message}`))
-        try {
-          current.postMessage({ kind: "shutdown", timeoutMs: Config.shutdownFlushTimeoutMs, requestID })
-        } catch (err) {
-          reject(err)
-        }
-      }).finally(() => clearTimeout(timer.value))
+          current.onerror = (event: ErrorEvent) => reject(new Error(`Session export worker failed: ${event.message}`))
+          try {
+            current.postMessage({ kind: "shutdown", timeoutMs: Config.shutdownFlushTimeoutMs, requestID })
+          } catch (err) {
+            reject(err)
+          }
+        }),
+        "worker acknowledgement",
+      )
     } catch (err) {
+      for (const capture of captures) capture.abort()
       refused = true
       setKillSwitch(true, "session_export_shutdown_unconfirmed")
       throw err

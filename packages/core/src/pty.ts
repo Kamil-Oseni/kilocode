@@ -58,6 +58,9 @@ export type AttachInput = {
 export type Attachment = {
   // Retained output from the requested cursor to the current end.
   readonly replay: string
+  // kilocode_change start - explicit evidence that an older requested cursor lost output to retention.
+  readonly replayGap?: { readonly requestedCursor: number; readonly retainedFrom: number; readonly retainedTo: number }
+  // kilocode_change end
   // Absolute output cursor after replay.
   readonly cursor: number
   readonly write: (data: string) => void
@@ -435,6 +438,12 @@ const layer = Layer.effect(
           : typeof input.cursor === "number" && Number.isSafeInteger(input.cursor)
             ? Math.max(0, input.cursor)
             : 0
+      // kilocode_change start - never present a retention-clamped replay as complete history.
+      const replayGap =
+        input.cursor !== -1 && from < start
+          ? { requestedCursor: from, retainedFrom: start, retainedTo: end }
+          : undefined
+      // kilocode_change end
       const replay = (() => {
         if (!session.buffer || from >= end) return ""
         const offset = Math.max(0, from - start)
@@ -443,6 +452,7 @@ const layer = Layer.effect(
       })()
       return {
         replay,
+        ...(replayGap ? { replayGap } : {}), // kilocode_change
         cursor: end,
         write: (data: string) => {
           if (session.info.status === "running" && (!session.containment || session.containment.writable))

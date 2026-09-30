@@ -1,5 +1,17 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-29 22:04 EDT - PTY output backpressure source handoff
+
+Server PTY WebSockets now cap queued output at 256 frames/8 MiB, preserve accepted FIFO frames, reserve a terminal close, detach the subscriber on overflow and close with 1013. Core PTY exposes an optional exact replay-loss range in the existing post-replay meta frame, and the Agent Manager terminal shows the gap before retained output while bounding its own pre-meta buffer by count and bytes. Focused source checks pass: outbox 4/4, applicable HTTP PTY 6/6, protocol 4/4 and terminal replay 13/13; package typechecks, scoped lint/format and annotation guard pass. The core real-process rollover case is skipped on Windows because its test layer has no native lifecycle adapter; two broader core PTY tests fail on that existing adapter requirement. Do not count this as installed Windows slow-client or loaded-renderer proof. Commit/push, install/byte-verify matching snapshot, then exercise a real Windows PTY flood, overflow, gap notice, reconnect and bounded resource usage. Desktop remains Stopped.
+
+## ChatGPT 2026-09-29 21:53 EDT - installed Routine archive gate on current package
+
+The disposable archive harness passed on exact installed `+f1666266da`, including a live authenticated SSE hint, saved cursor, active-worker stop, one-shot/cron/event no-rearm after backend restart, retained membership/conversation, unknown-start recovery and stop-phase kill/recovery. This is installed CLI evidence with a loopback model fixture, not a loaded Routines renderer or the completed-parent late-delegation path. Add that exact installed denial next; preserve `FUT-ARCH-02` In progress and Desktop Stopped.
+
+## ChatGPT 2026-09-29 21:48 EDT - Routine lifecycle package installed
+
+Pushed `f1666266da` with completed-parent delegation and saved-journal integrity guards; normal primary/JetBrains push hook passed. Installed `eden.raya@7.4.23-snapshot+f1666266da.kamil-oseni.1790732523013` after low-memory CLI, extension/webview, lint, bundle and native self-test gates. Independent comparison finds 461/461 installed files equal to retained VSIX SHA-256 `7a53afd120bf488aa1a7ff73ec340d610dcab2c8977091ae3bbd1369798a8c6a`, excluding VS Code `package.json` metadata; installed CLI SHA-256 is `084e9c969fdd4eb3edc83b71546bf3e7152b7fb1284d41db4831c4c83b8b99f0`. Source is clean. The last full archive gate exercised the prior `+a1be6d2950` package; rerun it against this new exact install before claiming packaged lifecycle acceptance. Loaded Raya host and Desktop remain untouched/Stopped. Next fix bounded PTY output/gap handling and continue the open release matrix.
+
 ## ChatGPT 2026-09-29 21:41 EDT - Routine integrity and PTY follow-up
 
 Installed `+a1be6d2950` archive acceptance now observes a live authenticated `raya.routine.run.changed` SSE hint before the cursor snapshot and passes the existing full archive/restart/no-schedule-rearm matrix in a disposable workspace. It does not exercise the loaded Routines renderer or installed slow-reader overflow. Source changes fail closed on inconsistent version 1 run/event identities and reject new delegated work after a parent run completes; focused journal/delegation tests pass 24/222, package typechecks and scoped formatting/lint pass. Publish/install this source slice next, then test actual loaded-host replay only after Desktop Stop is lifted.

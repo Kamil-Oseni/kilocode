@@ -299,6 +299,8 @@ export const TerminalTab: Component<Props> = (props) => {
     const replay = createReplayGate({
       write: (data, callback) => term.write(data, callback),
       flush: () => flush(true),
+      gap: () => term.writeln("\r\n\x1b[90m[Earlier terminal output is no longer available.]\x1b[0m"),
+      overflow: () => term.writeln("\r\n\x1b[90m[Some terminal output could not be recovered.]\x1b[0m"),
     })
     const disposeKey = term.onKey(markUser)
     for (const event of ["input", "paste", "compositionend", "mousedown", "wheel"]) {
@@ -325,14 +327,17 @@ export const TerminalTab: Component<Props> = (props) => {
         streamed = true
         if (typeof event.data === "string") {
           replay.output(event.data)
-          scheduleFlush()
+          if (!replay.awaiting()) scheduleFlush()
           return
         }
         if (event.data instanceof ArrayBuffer) {
           const bytes = new Uint8Array(event.data)
-          if (replay.frame(bytes)) return
+          if (replay.frame(bytes)) {
+            scheduleFlush()
+            return
+          }
           replay.output(bytes)
-          scheduleFlush()
+          if (!replay.awaiting()) scheduleFlush()
         }
       }
       next.onerror = () => {
@@ -341,6 +346,7 @@ export const TerminalTab: Component<Props> = (props) => {
       }
       next.onclose = () => {
         if (closed || ws !== next) return
+        replay.end()
         ws = undefined
         if (readyTimer) {
           clearTimeout(readyTimer)

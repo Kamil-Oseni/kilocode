@@ -20,6 +20,7 @@ const layer = AppNodeBuilder.build(LayerNode.group([Pty.node, EventV2.node]), [
   ],
 ])
 const it = testEffect(layer)
+const replayTest = process.platform === "win32" ? it.live.skip : it.live
 
 async function alive(pid: number) {
   if (process.platform !== "win32") {
@@ -54,6 +55,50 @@ const attach = Effect.fn("PtyPlatformTest.attach")(function* (id: Pty.Info["id"]
 })
 
 describe("cross-platform PTY", () => {
+  replayTest(
+    "reports exact replay loss after retained output rolls over",
+    () =>
+      Effect.gen(function* () {
+        const pty = yield* Pty.Service
+        const info = yield* Effect.acquireRelease(
+          pty.create({
+            command: process.execPath,
+            args: ["-e", `process.stdout.write("x".repeat(${2 * 1024 * 1024 + 1024})); setTimeout(() => {}, 30000)`],
+            cwd: directory,
+          }),
+          (item) => pty.remove(item.id).pipe(Effect.ignore),
+        )
+        const probe = yield* Effect.gen(function* () {
+          while (true) {
+            const item = yield* pty.attach(info.id, { cursor: -1, onData: () => {}, onEnd: () => {} })
+            item.detach()
+            if (item.cursor > 2 * 1024 * 1024) return item
+            yield* Effect.sleep("100 millis")
+          }
+        }).pipe(Effect.timeout("30 seconds"))
+        expect(probe.replayGap).toBeUndefined()
+
+        const stale = yield* pty.attach(info.id, { cursor: 0, onData: () => {}, onEnd: () => {} })
+        expect(stale.replayGap).toEqual({
+          requestedCursor: 0,
+          retainedFrom: stale.cursor - stale.replay.length,
+          retainedTo: stale.cursor,
+        })
+        expect(stale.replayGap?.retainedFrom).toBeGreaterThan(0)
+        stale.detach()
+
+        const fresh = yield* pty.attach(info.id, {
+          cursor: stale.replayGap?.retainedFrom,
+          onData: () => {},
+          onEnd: () => {},
+        })
+        expect(fresh.replayGap).toBeUndefined()
+        expect(fresh.replay).toBe(stale.replay)
+        fresh.detach()
+      }),
+    45_000,
+  )
+
   it.live("starts the default shell and exits from input", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service

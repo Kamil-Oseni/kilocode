@@ -12,13 +12,17 @@ const decoder = new TextDecoder("utf-8", { fatal: true })
 // Replay can be megabytes; send it in bounded frames.
 export const REPLAY_CHUNK = 64 * 1024
 
-export function metaFrame(cursor: number) {
-  const bytes = encoder.encode(JSON.stringify({ cursor }))
+// kilocode_change start - retain the cursor-only frame for older clients and add exact replay-loss evidence.
+export type ReplayGap = { readonly requestedCursor: number; readonly retainedFrom: number; readonly retainedTo: number }
+
+export function metaFrame(cursor: number, replayGap?: ReplayGap) {
+  const bytes = encoder.encode(JSON.stringify({ cursor, ...(replayGap ? { replayGap } : {}) }))
   const out = new Uint8Array(bytes.length + 1)
   out[0] = 0
   out.set(bytes, 1)
   return out
 }
+// kilocode_change end
 
 export function chunks(data: string) {
   const out: string[] = []

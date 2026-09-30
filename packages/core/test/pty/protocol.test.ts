@@ -15,6 +15,16 @@ describe("pty protocol", () => {
     expect(JSON.parse(new TextDecoder().decode(frame.subarray(1)))).toEqual({ cursor: 42 })
   })
 
+  // kilocode_change start - additive PTY replay-loss metadata compatibility.
+  test("adds exact retained-range loss without changing cursor-only frames", () => {
+    const gap = { requestedCursor: 14, retainedFrom: 90, retainedTo: 150 }
+    const frame = PtyProtocol.metaFrame(150, gap)
+    expect(frame[0]).toBe(0)
+    expect(JSON.parse(new TextDecoder().decode(frame.subarray(1)))).toEqual({ cursor: 150, replayGap: gap })
+    expect(JSON.parse(new TextDecoder().decode(PtyProtocol.metaFrame(150).subarray(1)))).toEqual({ cursor: 150 })
+  })
+  // kilocode_change end
+
   test("splits replay into bounded frames", () => {
     expect(PtyProtocol.chunks("")).toEqual([])
     expect(PtyProtocol.chunks("abc")).toEqual(["abc"])

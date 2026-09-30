@@ -108,6 +108,7 @@ interface ScrollAnchor {
 // ---------------------------------------------------------------------------
 
 export interface ModelSelectorBaseProps {
+  disabled?: boolean
   /** Current selection (null = nothing selected) */
   value: ModelSelection | null
   /** Called when the user picks a model */
@@ -229,7 +230,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   })
 
   const hasProviders = () => visibleModels().length > 0
-  const canOpen = () => hasProviders() || ((props.allowClear ?? false) && !!props.value)
+  const canOpen = () => !props.disabled && (hasProviders() || ((props.allowClear ?? false) && !!props.value))
 
   // Flat filtered list for keyboard navigation
   const filtered = createMemo(() => {
@@ -568,6 +569,7 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   // Register before the popover mounts so programmatic slash-command opens
   // always restore the prompt before the popover's own Escape handler runs.
   const onTrigger = (event: Event) => {
+    if (props.disabled) return
     const source = (event as CustomEvent<{ source?: string }>).detail?.source
     if (source !== props.trigger) return
     setOpen(true)
@@ -588,12 +590,14 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
   })
 
   function pick(model: EnrichedModel) {
+    if (props.disabled) return
     props.onSelect(model.providerID, model.id)
     setOpen(false)
     props.onPick?.()
   }
 
   function pickClear() {
+    if (props.disabled) return
     setSelectedKey(CLEAR_KEY)
     setPreActiveKey(CLEAR_KEY)
     setPreviewKey(CLEAR_KEY)
@@ -1144,6 +1148,8 @@ export const ModelSelectorBase: Component<ModelSelectorBaseProps> = (props) => {
 // ---------------------------------------------------------------------------
 
 interface ModelSelectorProps {
+  disabled?: boolean
+  onChange?: () => void
   trigger?: string
   sessionID?: Accessor<string | undefined>
 }
@@ -1154,9 +1160,11 @@ export const ModelSelector: Component<ModelSelectorProps> = (props) => {
 
   return (
     <ModelSelectorBase
+      disabled={props.disabled}
       trigger={props.trigger}
       value={session.selected(id())}
       onSelect={(providerID, modelID) => {
+        props.onChange?.()
         session.selectModel(providerID, modelID, id())
       }}
       onPick={() => {

@@ -48,6 +48,7 @@ export class VscodeHost implements Host {
   openPanel(opts: {
     onBeforeMessage: (msg: Record<string, unknown>) => Promise<Record<string, unknown> | null>
     worktreeDirectories?: () => string[]
+    composerScopes?: () => Array<{ box: string; directory: string }>
   }): PanelContext {
     const panel = vscode.window.createWebviewPanel("raya.AgentManagerPanel", "Agent Manager", vscode.ViewColumn.One, {
       enableScripts: true,
@@ -63,6 +64,7 @@ export class VscodeHost implements Host {
     opts: {
       onBeforeMessage: (msg: Record<string, unknown>) => Promise<Record<string, unknown> | null>
       worktreeDirectories?: () => string[]
+      composerScopes?: () => Array<{ box: string; directory: string }>
       workspaceRoot?: () => string | undefined
       projectId?: () => string | undefined
     },
@@ -75,6 +77,7 @@ export class VscodeHost implements Host {
     opts: {
       onBeforeMessage: (msg: Record<string, unknown>) => Promise<Record<string, unknown> | null>
       worktreeDirectories?: () => string[]
+      composerScopes?: () => Array<{ box: string; directory: string }>
       workspaceRoot?: () => string | undefined
       projectId?: () => string | undefined
     },
@@ -105,6 +108,7 @@ export class VscodeHost implements Host {
       snapshotInitialization: SNAPSHOT_INITIALIZATION,
       slimEditMetadata: true,
       worktreeDirectories: () => opts.worktreeDirectories?.() ?? [],
+      composerScopes: opts.composerScopes,
       rootDirectory: opts.workspaceRoot,
       disableViewedRegistration: true,
       focusTargetContext: {

@@ -1295,6 +1295,7 @@ export interface AgentManagerWorktreeSetupMessage {
 // Agent Manager session added to an existing worktree (no setup overlay needed)
 export interface AgentManagerSessionAddedMessage {
   type: "agentManager.sessionAdded"
+  requestID?: string
   projectId?: string
   sessionId: string
   worktreeId: string
@@ -2003,6 +2004,7 @@ export interface FocusTimerResultMessage {
 }
 
 export type ExtensionMessage =
+  | import("../../../../src/shared/composer-drafts-messages").ComposerDraftExtensionMessage
   | HandoffCommand
   | ChiefNotesResult
   | ChiefNotesAvailable

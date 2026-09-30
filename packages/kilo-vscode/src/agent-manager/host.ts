@@ -118,6 +118,7 @@ export interface Host {
   openPanel(opts: {
     onBeforeMessage: (msg: Record<string, unknown>) => Promise<Record<string, unknown> | null>
     worktreeDirectories?: () => string[]
+    composerScopes?: () => Array<{ box: string; directory: string }>
     /** Dynamic root directory for the panel's session provider (follows the active project). */
     workspaceRoot?: () => string | undefined
     projectId?: () => string | undefined

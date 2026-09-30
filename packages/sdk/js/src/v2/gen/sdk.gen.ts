@@ -233,6 +233,16 @@ import type {
   KilocodeCheckpointRemoveResponses,
   KilocodeCommandFilesErrors,
   KilocodeCommandFilesResponses,
+  KilocodeComposerDraftClearErrors,
+  KilocodeComposerDraftClearResponses,
+  KilocodeComposerDraftListErrors,
+  KilocodeComposerDraftListResponses,
+  KilocodeComposerDraftLoadErrors,
+  KilocodeComposerDraftLoadResponses,
+  KilocodeComposerDraftPromoteErrors,
+  KilocodeComposerDraftPromoteResponses,
+  KilocodeComposerDraftSaveErrors,
+  KilocodeComposerDraftSaveResponses,
   KilocodeDesignSystemGetErrors,
   KilocodeDesignSystemGetResponses,
   KilocodeDesignSystemSetErrors,
@@ -7904,6 +7914,315 @@ export class Kilo extends HeyApiClient {
   }
 }
 
+export class ComposerDraft extends HeyApiClient {
+  /**
+   * List scoped composer drafts
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: {
+        workspace: string
+        projectID?: string
+        box: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeComposerDraftListResponses,
+      KilocodeComposerDraftListErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/composer-drafts/list",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Load a scoped composer draft
+   */
+  public load<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      identity?: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "identity" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeComposerDraftLoadResponses,
+      KilocodeComposerDraftLoadErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/composer-drafts/load",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Commit a composer draft revision
+   */
+  public save<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      identity?: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      expected?: {
+        generation: string
+        revision: number
+      }
+      content?: {
+        text: string
+        comments: Array<
+          | {
+              origin: "pr"
+              id: string
+              author: string
+              body: string
+              file?: string
+              line?: number
+              diffHunk?: string
+              outdated?: boolean
+              replies?: Array<{
+                author: string
+                body: string
+              }>
+            }
+          | {
+              id: string
+              file: string
+              side: "additions" | "deletions"
+              line: number
+              comment: string
+              selectedText: string
+            }
+        >
+        images: Array<{
+          id: string
+          filename: string
+          mime: string
+          dataUrl: string
+        }>
+        scroll: number
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        variant?: string
+        selection?: {
+          start: number
+          end: number
+        }
+      }
+      mutation?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "identity" },
+            { in: "body", key: "expected" },
+            { in: "body", key: "content" },
+            { in: "body", key: "mutation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeComposerDraftSaveResponses,
+      KilocodeComposerDraftSaveErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/composer-drafts/save",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Clear an exact composer draft revision
+   */
+  public clear<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      identity?: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      expected?: {
+        generation: string
+        revision: number
+      }
+      mutation?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "identity" },
+            { in: "body", key: "expected" },
+            { in: "body", key: "mutation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeComposerDraftClearResponses,
+      KilocodeComposerDraftClearErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/composer-drafts/clear",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Promote a pending composer draft atomically
+   */
+  public promote<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      from?: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      to?: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      source?: {
+        generation: string
+        revision: number
+      }
+      target?: {
+        generation: string
+        revision: number
+      }
+      mutation?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "from" },
+            { in: "body", key: "to" },
+            { in: "body", key: "source" },
+            { in: "body", key: "target" },
+            { in: "body", key: "mutation" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeComposerDraftPromoteResponses,
+      KilocodeComposerDraftPromoteErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/composer-drafts/promote",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Heap extends HeyApiClient {
   /**
    * Write heap snapshot
@@ -13759,6 +14078,11 @@ export class Kilocode extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _composerDraft?: ComposerDraft
+  get composerDraft(): ComposerDraft {
+    return (this._composerDraft ??= new ComposerDraft({ client: this.client }))
   }
 
   private _heap?: Heap

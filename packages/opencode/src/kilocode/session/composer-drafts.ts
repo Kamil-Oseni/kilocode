@@ -57,20 +57,44 @@ const content = z
           .object({
             id: short,
             filename: short,
-            mime: z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]),
+            mime: z
+              .string()
+              .max(255)
+              .regex(/^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*\/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$/),
             dataUrl: z.string().max(12_000_000),
           })
           .strict(),
       )
       .max(16),
     scroll: z.number().finite().min(0),
+    model: z.object({ providerID: short, modelID: short }).strict().optional(),
+    agent: short.optional(),
+    variant: short.optional(),
+    selection: z
+      .object({ start: z.number().int().min(0), end: z.number().int().min(0) })
+      .strict()
+      .optional(),
   })
   .strict()
+  .refine(
+    (value) =>
+      !value.selection || (value.selection.start <= value.selection.end && value.selection.end <= value.text.length),
+  )
 const token = z
   .object({ generation: z.string().uuid(), revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) })
   .strict()
 const entry = z
-  .object({ identity, token, content: content.nullable(), mutation: short, digest: z.string().regex(/^[a-f0-9]{64}$/) })
+  .object({
+    identity,
+    token,
+    content: content.nullable(),
+    mutation: short,
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
+    receipt: z
+      .object({ request: z.string().regex(/^[a-f0-9]{64}$/) })
+      .strict()
+      .optional(),
+  })
   .strict()
 const document = z.object({ version: z.literal(1), entries: z.array(entry).max(128) }).strict()
 
@@ -78,6 +102,8 @@ export type DraftIdentity = z.infer<typeof identity>
 export type DraftContent = z.infer<typeof content>
 export type DraftToken = z.infer<typeof token>
 export type DraftEntry = z.infer<typeof entry>
+
+export const DraftSchemas = { identity, content, token, entry }
 
 /** Deliberately carries no draft text, attachment bytes, filenames or workspace paths. */
 export class DraftError extends Error {
@@ -151,16 +177,35 @@ export function composerDrafts(store: Storage.Interface, dir: string) {
       // Publish the marker after the document: an interrupted first initialization never erases a valid document.
       yield* store.replace(mark, { version: 1 })
     })
+  const repair = Effect.gen(function* () {
+    const initialized = yield* store
+      .read<unknown>(mark)
+      .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
+    if (initialized === undefined) yield* store.replace(mark, { version: 1 })
+  })
   const change = (who: DraftIdentity, expected: DraftToken | undefined, value: DraftContent | null, mutation: string) =>
     locked(
       Effect.gen(function* () {
         const owner = yield* validate(() => parse(identity, who))
         const next = yield* validate(() => (value === null ? null : parse(content, value)))
         yield* validate(() => parse(short, mutation))
-        if (expected !== undefined) yield* validate(() => parse(token, expected))
+        const guard = expected === undefined ? undefined : yield* validate(() => parse(token, expected))
         const data = yield* read
         const index = data.entries.findIndex((item) => id(item.identity) === id(owner))
         const prior = data.entries[index]
+        const request = hash({
+          operation: value === null ? "clear" : "save",
+          identity: owner,
+          expected: guard,
+          content: next,
+        })
+        if (prior?.mutation === mutation) {
+          if (prior.receipt?.request === request) {
+            yield* repair
+            return prior
+          }
+          return yield* Effect.fail(new DraftError("conflict"))
+        }
         if (!same(expected, prior?.token)) return yield* Effect.fail(new DraftError("conflict"))
         if (index < 0 && data.entries.length === 128) return yield* Effect.fail(new DraftError("capacity"))
         const stamp = {
@@ -168,7 +213,14 @@ export function composerDrafts(store: Storage.Interface, dir: string) {
             prior?.content === null && next !== null ? randomUUID() : (prior?.token.generation ?? randomUUID()),
           revision: (prior?.token.revision ?? 0) + 1,
         }
-        const item = { identity: owner, content: next, token: stamp, mutation, digest: hash(next) }
+        const item = {
+          identity: owner,
+          content: next,
+          token: stamp,
+          mutation,
+          digest: hash(next),
+          receipt: { request },
+        }
         if (index < 0) data.entries.push(item)
         if (index >= 0) data.entries[index] = item
         yield* publish(data)
@@ -197,14 +249,29 @@ export function composerDrafts(store: Storage.Interface, dir: string) {
         Effect.gen(function* () {
           const left = yield* validate(() => parse(identity, from))
           const right = yield* validate(() => parse(identity, to))
-          yield* validate(() => parse(token, source))
-          if (target !== undefined) yield* validate(() => parse(token, target))
+          const stamp = yield* validate(() => parse(token, source))
+          const guard = target === undefined ? undefined : yield* validate(() => parse(token, target))
           yield* validate(() => parse(short, mutation))
           if (id(left) === id(right)) return yield* Effect.fail(new DraftError("invalid"))
           const data = yield* read
           const prior = data.entries.find((item) => id(item.identity) === id(left))
           const index = data.entries.findIndex((item) => id(item.identity) === id(right))
           const destination = data.entries[index]
+          const request = hash({ operation: "promote", from: left, to: right, source: stamp, target: guard })
+          if (prior?.mutation === mutation || destination?.mutation === mutation) {
+            if (
+              prior?.content === null &&
+              destination?.content &&
+              prior.mutation === mutation &&
+              destination.mutation === mutation &&
+              prior.receipt?.request === request &&
+              destination.receipt?.request === request
+            ) {
+              yield* repair
+              return { source: prior, target: destination }
+            }
+            return yield* Effect.fail(new DraftError("conflict"))
+          }
           if (!prior?.content || !same(source, prior.token) || !same(target, destination?.token))
             return yield* Effect.fail(new DraftError("conflict"))
           if (index < 0 && data.entries.length === 128) return yield* Effect.fail(new DraftError("capacity"))
@@ -214,11 +281,13 @@ export function composerDrafts(store: Storage.Interface, dir: string) {
             token: { generation: randomUUID(), revision: (destination?.token.revision ?? 0) + 1 },
             mutation,
             digest: prior.digest,
+            receipt: { request },
           }
           prior.content = null
           prior.token = { generation: prior.token.generation, revision: prior.token.revision + 1 }
           prior.mutation = mutation
           prior.digest = hash(null)
+          prior.receipt = { request }
           if (index < 0) data.entries.push(moved)
           if (index >= 0) data.entries[index] = moved
           yield* publish(data)

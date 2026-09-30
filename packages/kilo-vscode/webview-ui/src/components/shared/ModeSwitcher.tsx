@@ -29,6 +29,7 @@ function formatAgentLabel(agent: AgentInfo): string {
 // ---------------------------------------------------------------------------
 
 export interface ModeSwitcherBaseProps {
+  disabled?: boolean
   /** Available agents to pick from */
   agents: AgentInfo[]
   /** Currently selected agent name */
@@ -54,6 +55,7 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
 
   // Listen for slash command trigger
   const onTrigger = (event: Event) => {
+    if (props.disabled) return
     const source = (event as CustomEvent<{ source?: string }>).detail?.source
     if (source !== props.trigger) return
     slash = true
@@ -65,6 +67,7 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
   const hasAgents = () => props.agents.length > 1
 
   function pick(name: string) {
+    if (props.disabled) return
     props.onSelect(name)
     setOpen(false)
   }
@@ -84,6 +87,7 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
   }
 
   function onOpen(val: boolean) {
+    if (val && props.disabled) return
     if (val) {
       // A click on the trigger opens without the slash flag.
       slash = false
@@ -137,7 +141,13 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
         open={open()}
         onOpenChange={onOpen}
         triggerAs={Button}
-        triggerProps={{ variant: "ghost", size: "small" }}
+        triggerProps={{
+          variant: "ghost",
+          size: "small",
+          get disabled() {
+            return props.disabled
+          },
+        }}
         trigger={
           <>
             <span class="mode-switcher-trigger-label">{triggerLabel()}</span>
@@ -200,6 +210,8 @@ export const ModeSwitcherBase: Component<ModeSwitcherBaseProps> = (props) => {
 // ---------------------------------------------------------------------------
 
 interface ModeSwitcherProps {
+  disabled?: boolean
+  onChange?: () => void
   trigger?: string
   sessionID?: Accessor<string | undefined>
 }
@@ -210,10 +222,12 @@ export const ModeSwitcher: Component<ModeSwitcherProps> = (props) => {
 
   return (
     <ModeSwitcherBase
+      disabled={props.disabled}
       trigger={props.trigger}
       agents={session.agents()}
       value={session.selectedAgent(id())}
       onSelect={(name) => {
+        props.onChange?.()
         session.selectAgent(name, id())
         requestAnimationFrame(() =>
           window.dispatchEvent(new CustomEvent("focusPrompt", { detail: { source: props.trigger } })),

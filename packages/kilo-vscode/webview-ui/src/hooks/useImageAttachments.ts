@@ -12,7 +12,11 @@ export interface ImageAttachment {
 /** Callback for handling text/URI file path drops. */
 export type FilePathDropHandler = (paths: string[]) => void
 
-export function useImageAttachments() {
+export function useImageAttachments<T>(opts?: {
+  capture: () => T
+  commit: (scope: T, image: ImageAttachment) => void
+  error?: (scope: T) => void
+}) {
   const [images, setImages] = createSignal<ImageAttachment[]>([])
   const [dragging, setDragging] = createSignal(false)
   let onFilePaths: FilePathDropHandler | undefined
@@ -23,13 +27,20 @@ export function useImageAttachments() {
   }
 
   const add = (file: File) => {
+    const scope = opts?.capture()
     const reader = new FileReader()
+    reader.onerror = () => opts?.error?.(scope!)
+    reader.onabort = () => opts?.error?.(scope!)
     reader.onload = () => {
       const attachment: ImageAttachment = {
         id: crypto.randomUUID(),
         filename: file.name || "attachment",
         mime: file.type || "application/octet-stream",
         dataUrl: reader.result as string,
+      }
+      if (opts) {
+        opts.commit(scope!, attachment)
+        return
       }
       setImages((prev) => [...prev, attachment])
     }

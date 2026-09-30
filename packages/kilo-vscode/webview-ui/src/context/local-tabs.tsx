@@ -33,6 +33,7 @@ import {
   promotePendingDraftDiscard,
 } from "../utils/draft-store"
 import { moveTab, reorderTabs } from "../utils/tab-order"
+import { durableDrafts } from "../utils/durable-drafts"
 
 interface LocalTabsState extends Record<string, unknown> {
   sidebarSessionTabIDs?: string[]
@@ -43,7 +44,7 @@ interface LocalTabsValue {
   ids: Accessor<string[]>
   active: Accessor<string | undefined>
   pending: Accessor<string | undefined>
-  add: () => string
+  add: (id?: string) => string
   open: (id: string) => void
   openAfter: (source: string, id: string) => void
   select: (id: string) => void
@@ -65,11 +66,16 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   const session = useSession()
   const saved = vscode.getState<LocalTabsState>()
   const pending = () => `${PENDING_TAB_PREFIX}${crypto.randomUUID()}`
-  const init = restoreTabs(saved?.sidebarSessionTabIDs, saved?.sidebarActiveSessionTabID, pending)
+  const init = restoreTabs(saved?.sidebarSessionTabIDs, saved?.sidebarActiveSessionTabID, pending, isPendingTab, true)
+  const durable = durableDrafts(vscode)
+  const [catalog, setCatalog] = createSignal(0)
+  const unsubscribe = durable.subscribe(() => setCatalog((value) => value + 1))
+  onCleanup(unsubscribe)
   const [ids, setIds] = createSignal(init.ids)
   const [active, setActive] = createSignal(init.active)
   const [cloud, setCloud] = createSignal<string>()
   const fresh = new Set<string>()
+  let discovery: string | undefined
   const current = (): LocalTabState => ({ ids: ids(), active: active() })
   const apply = (next: LocalTabState) => {
     if (!same(ids(), next.ids)) setIds(next.ids)
@@ -84,6 +90,31 @@ export const LocalTabsProvider: ParentComponent = (props) => {
     session.selectSession(id)
   }
   const real = createMemo(() => ids().filter((id) => !isPendingTab(id)))
+  createEffect(() => {
+    catalog()
+    if (!durable.ready()) {
+      discovery = undefined
+      return
+    }
+    const owner = durable.owner("sidebar:new-task")
+    if (!owner || discovery === owner) return
+    discovery = owner
+    void Promise.all([durable.list("sidebar:new-task"), durable.list("sidebar:fallback")])
+      .then((groups) => {
+        const pending = groups
+          .flat()
+          .flatMap((entry) =>
+            entry.content && entry.identity.pendingID && isPendingTab(entry.identity.pendingID)
+              ? [entry.identity.pendingID]
+              : [],
+          )
+        if (durable.owner("sidebar:new-task") !== owner) return
+        setIds((current) => [...new Set([...current, ...pending])])
+      })
+      .catch(() => {
+        if (discovery === owner) discovery = undefined
+      })
+  })
   const activePending = createMemo(() => {
     const id = active()
     return id && isPendingTab(id) ? id : undefined
@@ -106,8 +137,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
     persist()
   }
 
-  const add = () => {
-    const id = pending()
+  const add = (id = pending()) => {
     apply(addPendingTab(current(), id))
     focus(id)
     return id
@@ -159,14 +189,14 @@ export const LocalTabsProvider: ParentComponent = (props) => {
 
   let timer: ReturnType<typeof setTimeout> | undefined
   const persist = () => {
-    const tabs = real()
+    const tabs = ids()
     const tab = active()
-    const selected = tab && !isPendingTab(tab) ? tab : undefined
+    const selected = tab
     const prev = vscode.getState<LocalTabsState>() ?? {}
     vscode.setState({ ...prev, sidebarSessionTabIDs: tabs, sidebarActiveSessionTabID: selected })
   }
   createEffect(() => {
-    real()
+    ids()
     active()
     clearTimeout(timer)
     timer = setTimeout(persist, 300)

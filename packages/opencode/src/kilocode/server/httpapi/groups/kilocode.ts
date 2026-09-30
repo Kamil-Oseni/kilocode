@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { endpoints as composerDrafts } from "./composer-drafts"
 import { UploadChunk } from "@/kilocode/browser/upload-schema"
 import {
   Proof as BrowserProof,
@@ -322,6 +323,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
   .add(
     HttpApiGroup.make("kilocode")
       .add(
+        ...composerDrafts,
         HttpApiEndpoint.post("heapSnapshot", KilocodePaths.heapSnapshot, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.String, "Heap snapshot file path"),

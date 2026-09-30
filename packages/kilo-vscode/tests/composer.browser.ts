@@ -1,6 +1,117 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("actual composer restores rich exact-whitespace drafts from disk after a fresh browser load", async ({
+  page,
+}, info) => {
+  const failures: string[] = []
+  page.on("pageerror", (error) => failures.push(error.message))
+  const profile = crypto.randomUUID()
+  await page.goto(`/?theme=dark&draft=${profile}`)
+  const prompt = page.locator("textarea.prompt-input")
+  const text = `  Learn violin\n${Array.from({ length: 30 }, (_, index) => `Practice ${index}: 你好 🎻`).join("\n")}  `
+  await prompt.fill(text)
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "violin.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/a5FAAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    })
+  await page.evaluate(() =>
+    window.postMessage(
+      {
+        type: "appendReviewComments",
+        comments: [
+          {
+            id: "durable-review",
+            file: "src/app.ts",
+            side: "additions",
+            line: 1,
+            comment: "Keep this",
+            selectedText: "x()",
+          },
+        ],
+      },
+      "*",
+    ),
+  )
+  await page.getByRole("button", { name: "Unavailable model", exact: true }).click()
+  await prompt.evaluate((node: HTMLTextAreaElement) => {
+    node.scrollTop = 42
+    node.setSelectionRange(2, 7)
+    node.dispatchEvent(new Event("scroll"))
+    node.dispatchEvent(new Event("select"))
+  })
+  const read = async () =>
+    page.evaluate(async () => {
+      const host = window as Window & {
+        __readDraft: (identity: {
+          box: string
+          key: string
+          sessionID: string
+        }) => Promise<{
+          entry?: {
+            content: {
+              text: string
+              scroll: number
+              selection?: { start: number; end: number }
+              images: unknown[]
+              comments: unknown[]
+              model?: { providerID: string; modelID: string }
+            }
+          }
+        }>
+      }
+      return (await host.__readDraft({ box: "fixture", key: "fixture:session:first", sessionID: "first" })).entry
+        ?.content
+    })
+  await expect
+    .poll(read)
+    .toMatchObject({
+      text,
+      images: [{ filename: "violin.png" }],
+      comments: [{ id: "durable-review" }],
+      selection: { start: 2, end: 7 },
+      model: { providerID: "missing-provider", modelID: "missing-model" },
+    })
+  const saved = await read()
+  await page.reload()
+  await expect(prompt).toHaveValue(text)
+  await expect.poll(read).toEqual(saved)
+  expect(
+    await prompt.evaluate((node: HTMLTextAreaElement) => ({
+      start: node.selectionStart,
+      end: node.selectionEnd,
+      scroll: node.scrollTop,
+    })),
+  ).toEqual({ start: 2, end: 7, scroll: saved!.scroll })
+  await page.screenshot({ path: info.outputPath("durable-rich-draft.png"), fullPage: true })
+  expect(failures).toEqual([])
+})
+
+test("actual composer waits for accepted-user receipt and keeps typing made after send", async ({ page }) => {
+  await page.goto(`/?theme=dark&draft=${crypto.randomUUID()}`)
+  const prompt = page.locator("textarea.prompt-input")
+  await prompt.fill("First saved message")
+  await page.evaluate(() => {
+    ;(window as Window & { __holdDraftAcceptance: boolean }).__holdDraftAcceptance = true
+  })
+  await page.getByRole("button", { name: "Send", exact: true }).click()
+  await expect(prompt).toHaveValue("First saved message")
+  await prompt.fill("New typing after send")
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as Window & { __acceptDraft?: () => void }).__acceptDraft))
+    .toBe("function")
+  await page.evaluate(() => (window as Window & { __acceptDraft: () => void }).__acceptDraft())
+  await expect(prompt).toHaveValue("New typing after send")
+  await page.reload()
+  await expect(prompt).toHaveValue("New typing after send")
+})
+
 test("OpenAI voice admission preserves the task agent and displays missing-key recovery", async ({ page }) => {
   await page.goto("/?theme=dark")
   await page.getByRole("button", { name: "Select OpenAI preview without key", exact: true }).click()
@@ -125,7 +236,7 @@ for (const [theme, width] of [
 
     await action.click()
     await page.evaluate(() => window.postMessage({ type: "workStyleApplied", style: "human-in-the-loop" }, "*"))
-    await expect(page.getByRole("heading", { name: "What would you like to get done?" })).toBeVisible()
+    await expect(page.locator(".raya-home__heading")).toHaveText("Chats")
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     if (theme === "contrast") await page.emulateMedia({ forcedColors: "none" })
     const audit = await new AxeBuilder({ page }).include("main").withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()
@@ -149,7 +260,7 @@ for (const theme of ["light", "dark", "contrast"])
       const disclosure = page.locator(".composer-configuration")
       const summary = disclosure.locator('[data-slot="collapsible-trigger"]')
       const logo = page.getByRole("img", { name: "Raya" })
-      await expect(page.getByRole("heading", { name: "What would you like to get done?" })).toBeVisible()
+      await expect(page.locator(".raya-home__heading")).toHaveText("Chats")
       await expect(logo).toBeVisible()
       if (theme === "contrast") {
         const colors = await logo.evaluate((node) => ({
@@ -237,6 +348,7 @@ for (const theme of ["light", "dark", "contrast"])
       await expect(page.locator("[data-sent]")).toContainText('"agent":"plan"')
       await expect(page.locator("[data-sent]")).toContainText('"variant":"high"')
       await expect(page.locator("[data-sent]")).toContainText("anthropic/claude-sonnet-4-6")
+      await expect(prompt).toHaveValue("")
       await prompt.fill("/goal Finish the report")
       await page
         .locator('input[type="file"]')
@@ -284,3 +396,260 @@ for (const theme of ["light", "dark", "contrast"])
       await page.screenshot({ path: info.outputPath("composer.png"), fullPage: true })
     })
   }
+
+test("actual composer keeps conflicting edits as a separate durable pending draft", async ({ page }) => {
+  const profile = crypto.randomUUID()
+  await page.goto(`/?theme=dark&draft=${profile}`)
+  const prompt = page.locator("textarea.prompt-input")
+  await prompt.fill("Original saved draft")
+  const identity = { box: "fixture", key: "fixture:session:first", sessionID: "first" }
+  await expect
+    .poll(() =>
+      page.evaluate(async (identity) => {
+        const host = window as Window & {
+          __readDraft: (identity: unknown) => Promise<{ entry?: { content?: { text: string } } }>
+        }
+        return (await host.__readDraft(identity)).entry?.content?.text
+      }, identity),
+    )
+    .toBe("Original saved draft")
+  await page.evaluate(async (identity) => {
+    const host = window as Window & { __changeRemoteDraft: (identity: unknown, text: string) => Promise<unknown> }
+    const reply = await host.__changeRemoteDraft(identity, "Other pane draft")
+    if (!reply || typeof reply !== "object" || "error" in reply)
+      throw new Error(
+        `Competing pane save failed: ${JSON.stringify(reply && typeof reply === "object" && "error" in reply ? reply.error : "missing-receipt")}`,
+      )
+  }, identity)
+  await prompt.fill("  My conflicting edits  ")
+  await expect(page.getByRole("button", { name: "Save as new draft", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Save as new draft", exact: true }).click()
+  await expect(prompt).toHaveValue("  My conflicting edits  ")
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { __pendingDraft?: string }).__pendingDraft))
+    .toBeTruthy()
+  const pending = await page.evaluate(() => (window as Window & { __pendingDraft: string }).__pendingDraft)
+  await page.goto(`/?theme=dark&draft=${profile}&pending=${encodeURIComponent(pending)}`)
+  await expect(prompt).toHaveValue("  My conflicting edits  ")
+  await page.getByRole("button", { name: "Discard draft", exact: true }).click()
+  await expect(prompt).toHaveValue("")
+  await expect
+    .poll(() =>
+      page.evaluate(async (pending) => {
+        const host = window as Window & {
+          __readDraft: (identity: unknown) => Promise<{ entry?: { content: unknown } }>
+        }
+        return (await host.__readDraft({ box: "fixture", key: `fixture:${pending}`, pendingID: pending })).entry
+          ?.content
+      }, pending),
+    )
+    .toBeNull()
+  await page.reload()
+  await expect(prompt).toHaveValue("")
+  await page.goto(`/?theme=dark&draft=${profile}`)
+  await expect(prompt).toHaveValue("Other pane draft")
+})
+
+test("actual composer restores text and PDF attachments and sends their exact bytes", async ({ page }) => {
+  const failures: string[] = []
+  page.on("pageerror", (error) => failures.push(error.message))
+  await page.goto(`/?theme=dark&draft=${crypto.randomUUID()}`)
+  const prompt = page.locator("textarea.prompt-input")
+  await prompt.fill("  Review these files  ")
+  await page.locator('input[type="file"]').setInputFiles([
+    { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("  exact notes\n你好  ", "utf8") },
+    { name: "lesson.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\nfixture\n%%EOF") },
+  ])
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const host = window as Window & {
+          __readDraft: (
+            identity: unknown,
+          ) => Promise<{ entry?: { content?: { images: Array<{ filename: string; mime: string; dataUrl: string }> } } }>
+        }
+        return (await host.__readDraft({ box: "fixture", key: "fixture:session:first", sessionID: "first" })).entry
+          ?.content?.images
+      }),
+    )
+    .toMatchObject([
+      {
+        filename: "notes.txt",
+        mime: "text/plain",
+        dataUrl: `data:text/plain;base64,${Buffer.from("  exact notes\n你好  ", "utf8").toString("base64")}`,
+      },
+      {
+        filename: "lesson.pdf",
+        mime: "application/pdf",
+        dataUrl: `data:application/pdf;base64,${Buffer.from("%PDF-1.7\nfixture\n%%EOF").toString("base64")}`,
+      },
+    ])
+  await page.reload()
+  await expect(prompt).toHaveValue("  Review these files  ")
+  await expect(page.locator(".image-attachment")).toHaveCount(2)
+  await page.getByRole("button", { name: "Send", exact: true }).click()
+  await expect(prompt).toHaveValue("")
+  await expect(page.locator("[data-sent]")).toContainText(
+    Buffer.from("  exact notes\n你好  ", "utf8").toString("base64"),
+  )
+  await expect(page.locator("[data-sent]")).toContainText(Buffer.from("%PDF-1.7\nfixture\n%%EOF").toString("base64"))
+  expect(failures).toEqual([])
+})
+
+test("actual composer carries rich choices into an explicitly captured new task without cross-owner apply", async ({
+  page,
+}) => {
+  await page.goto(`/?theme=dark&draft=${crypto.randomUUID()}`)
+  const prompt = page.locator("textarea.prompt-input")
+  await prompt.fill("  New task carry  ")
+  await page.getByRole("button", { name: "Unavailable model", exact: true }).click()
+  const task = crypto.randomUUID()
+  await page.evaluate((task) => {
+    const host = window as Window & { __draftProfile: string }
+    window.dispatchEvent(
+      new CustomEvent("agentManagerCaptureDraft", { detail: { id: task, owner: host.__draftProfile } }),
+    )
+    window.dispatchEvent(
+      new CustomEvent("agentManagerApplyDraft", {
+        detail: { id: task, sessionId: "second", boxId: "fixture", owner: "another-owner" },
+      }),
+    )
+  }, task)
+  expect(
+    await page.evaluate(async () => {
+      const host = window as Window & { __readDraft: (identity: unknown) => Promise<{ entry?: unknown }> }
+      return (await host.__readDraft({ box: "fixture", key: "fixture:session:second", sessionID: "second" })).entry
+    }),
+  ).toBeUndefined()
+  const valid = crypto.randomUUID()
+  await page.evaluate((task) => {
+    const host = window as Window & { __draftProfile: string }
+    window.dispatchEvent(
+      new CustomEvent("agentManagerCaptureDraft", { detail: { id: task, owner: host.__draftProfile } }),
+    )
+    window.dispatchEvent(
+      new CustomEvent("agentManagerApplyDraft", {
+        detail: { id: task, sessionId: "second", boxId: "fixture", owner: host.__draftProfile },
+      }),
+    )
+  }, valid)
+  await page.getByRole("button", { name: "Switch session", exact: true }).click()
+  await expect(prompt).toHaveValue("  New task carry  ")
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const host = window as Window & {
+          __readDraft: (
+            identity: unknown,
+          ) => Promise<{ entry?: { content?: { model?: { providerID: string; modelID: string } } } }>
+        }
+        return (await host.__readDraft({ box: "fixture", key: "fixture:session:second", sessionID: "second" })).entry
+          ?.content?.model
+      }),
+    )
+    .toEqual({ providerID: "missing-provider", modelID: "missing-model" })
+})
+
+test("actual composer leaves an untouched mount pristine but retains an explicit model-only choice", async ({
+  page,
+}) => {
+  await page.goto(`/?theme=dark&draft=${crypto.randomUUID()}`)
+  const prompt = page.locator("textarea.prompt-input")
+  await expect(prompt).toHaveValue("")
+  const list = () =>
+    page.evaluate(async () =>
+      (window as Window & { __listDrafts: () => Promise<{ entries: unknown[] }> }).__listDrafts(),
+    )
+  await expect.poll(list).toMatchObject({ entries: [] })
+  await page.reload()
+  await expect.poll(list).toMatchObject({ entries: [] })
+  await page.getByRole("button", { name: /Claude Sonnet 4.6/ }).click()
+  await page.getByRole("treeitem").filter({ hasText: "Claude Sonnet 4.6" }).last().click()
+  await page.keyboard.press("Enter")
+  await expect
+    .poll(list)
+    .toMatchObject({
+      entries: [{ content: { text: "", model: { providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" } } }],
+    })
+  await page.reload()
+  await expect
+    .poll(list)
+    .toMatchObject({
+      entries: [{ content: { text: "", model: { providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" } } }],
+    })
+  await prompt.press("Shift+Tab")
+  await expect.poll(list).toMatchObject({ entries: [{ content: { text: "", variant: "low" } }] })
+  await page.reload()
+  await expect.poll(list).toMatchObject({ entries: [{ content: { text: "", variant: "low" } }] })
+})
+
+test("actual composer hides ownerless A drafts immediately in B before first owner hydration", async ({ page }) => {
+  await page.goto(`/?theme=dark&cold=1&draft=${crypto.randomUUID()}`)
+  const prompt = page.locator("textarea.prompt-input")
+  await expect(page.getByRole("button", { name: /Select model:/ })).toBeDisabled()
+  await prompt.fill("  A before owner  ")
+  await page.evaluate(() =>
+    (window as Window & { __switchDraftWorkspace: (value: string) => void }).__switchDraftWorkspace("fixture-B"),
+  )
+  await expect(prompt).toHaveValue("")
+  await prompt.fill("B before owner")
+  await page.evaluate(() =>
+    (window as Window & { __switchDraftWorkspace: (value: string) => void }).__switchDraftWorkspace("fixture-A"),
+  )
+  await expect(prompt).toHaveValue("  A before owner  ")
+  await page.evaluate(() => (window as Window & { __releaseDraftOwner: () => void }).__releaseDraftOwner())
+  await expect(page.getByRole("button", { name: /Select model:/ })).toBeEnabled()
+  await expect
+    .poll(() =>
+      page.evaluate(async () =>
+        (window as Window & { __listDrafts: () => Promise<{ entries: unknown[] }> }).__listDrafts(),
+      ),
+    )
+    .toMatchObject({ entries: [{ content: { text: "  A before owner  " } }] })
+})
+
+test("actual composer delivers delayed FileReader attachments only to the captured session", async ({ page }) => {
+  await page.goto(`/?theme=dark&draft=${crypto.randomUUID()}`)
+  const prompt = page.locator("textarea.prompt-input")
+  await prompt.fill("A attachment draft")
+  await page.evaluate(() => {
+    const read = FileReader.prototype.readAsDataURL
+    FileReader.prototype.readAsDataURL = function (file) {
+      const reader = this
+      ;(window as Window & { __resumeFile?: () => void }).__resumeFile = () => read.call(reader, file)
+    }
+  })
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "captured.txt", mimeType: "text/plain", buffer: Buffer.from("captured A bytes") })
+  await page.getByRole("button", { name: "Switch session", exact: true }).click()
+  await expect(prompt).toHaveValue("")
+  await prompt.fill("B separate draft")
+  await page.evaluate(() => (window as Window & { __resumeFile?: () => void }).__resumeFile?.())
+  const read = (sessionID: string) =>
+    page.evaluate(async (sessionID) => {
+      const host = window as Window & {
+        __readDraft: (
+          identity: unknown,
+        ) => Promise<{ entry?: { content?: { text: string; images: { filename: string; dataUrl: string }[] } } }>
+      }
+      return (await host.__readDraft({ box: "fixture", key: `fixture:session:${sessionID}`, sessionID })).entry?.content
+    }, sessionID)
+  await expect
+    .poll(() => read("first"))
+    .toMatchObject({
+      text: "A attachment draft",
+      images: [
+        {
+          filename: "captured.txt",
+          dataUrl: `data:text/plain;base64,${Buffer.from("captured A bytes").toString("base64")}`,
+        },
+      ],
+    })
+  await expect.poll(() => read("second")).toMatchObject({ text: "B separate draft", images: [] })
+  await expect(prompt).toHaveValue("B separate draft")
+  await page.getByRole("button", { name: "Switch session", exact: true }).click()
+  await expect(prompt).toHaveValue("A attachment draft")
+  await page.reload()
+  await expect.poll(() => read("first")).toMatchObject({ images: [{ filename: "captured.txt" }] })
+})

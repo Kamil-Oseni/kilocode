@@ -827,10 +827,18 @@ export const Inbox: Component<{
     props.onAnchor?.({ id, offset: row.getBoundingClientRect().top - top })
   }
 
+  const restore = (box: Box) => {
+    setNote(box.draft ?? "")
+    setFiles(box.draftAttachments ?? [])
+    rememberDraft(box.draft ?? "", box.draftAttachments ?? [])
+  }
+
   createEffect(() => {
     const id = props.agentID
     const latest = props.box?.latest?.id
     if (id !== seen) {
+      if (timer) clearTimeout(timer)
+      timer = undefined
       seen = id
       wait = false
       source = `user:${crypto.randomUUID()}`
@@ -865,9 +873,7 @@ export const Inbox: Component<{
       saves.clear()
       if (props.box) {
         server = id
-        setNote(props.box.draft ?? "")
-        setFiles(props.box.draftAttachments ?? [])
-        rememberDraft(props.box.draft ?? "", props.box.draftAttachments ?? [])
+        restore(props.box)
       }
       load()
       queueMicrotask(() => frame?.focus())
@@ -876,9 +882,12 @@ export const Inbox: Component<{
     draftRevision = Math.max(draftRevision, draftVersion(props.box))
     if (props.box && server !== id) {
       server = id
-      setNote(props.box.draft ?? "")
-      setFiles(props.box.draftAttachments ?? [])
-      rememberDraft(props.box.draft ?? "", props.box.draftAttachments ?? [])
+      if (dirty || saves.size) {
+        setError("Your draft is still here. Review it before replacing it with the saved conversation draft.")
+        refresh(latest)
+        return
+      }
+      restore(props.box)
     }
     refresh(latest)
   })
@@ -1095,7 +1104,7 @@ export const Inbox: Component<{
       type: "routineInboxDraft",
       requestID,
       agentID: props.agentID,
-      draft: value.trim() ? value : null,
+      draft: value.length ? value : null,
       attachmentIDs: files().length ? files().map((file) => file.id) : null,
       revision: version(requestID),
     })
@@ -1127,7 +1136,12 @@ export const Inbox: Component<{
     rememberDraft(value, files())
     dirty = true
     if (timer) clearTimeout(timer)
-    timer = setTimeout(() => persist(value), 400)
+    const id = props.agentID
+    timer = setTimeout(() => {
+      timer = undefined
+      if (props.agentID !== id) return
+      persist(value)
+    }, 400)
   }
 
   const search = (value: string) => {
@@ -1525,9 +1539,7 @@ export const Inbox: Component<{
             />
           </label>
           <Show when={props.box?.state === "paused"}>
-            <p class="routines-hint">
-              You can still message this worker. Scheduled work stays paused.
-            </p>
+            <p class="routines-hint">You can still message this worker. Scheduled work stays paused.</p>
           </Show>
           <div class="routines-compose-actions">
             <Button type="button" size="small" variant="ghost" disabled={attachDisabled()} onClick={attach}>

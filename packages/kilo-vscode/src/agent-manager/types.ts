@@ -262,6 +262,7 @@ interface ErrorOutMessage {
 
 interface SessionAddedMessage {
   type: "agentManager.sessionAdded"
+  requestID?: string
   projectId?: string
   sessionId: string
   worktreeId: string
@@ -571,6 +572,7 @@ interface OpenLocallyIn {
 
 interface AddSessionToWorktreeIn {
   type: "agentManager.addSessionToWorktree"
+  requestID?: string
   worktreeId: string
   sessionId?: string
 }

@@ -21,6 +21,7 @@ import { isEnterKeyCommitNotIme } from "../../utils/ime-enter"
 // ---------------------------------------------------------------------------
 
 export interface ThinkingSelectorBaseProps {
+  disabled?: boolean
   /** Available variant names (e.g. ["low","medium","high"]) */
   variants: string[]
   /** Currently selected variant */
@@ -81,6 +82,7 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
   }
 
   function onOpen(val: boolean) {
+    if (val && props.disabled) return
     if (val) {
       const items = rows()
       const idx = items.findIndex((v) => v === props.value)
@@ -93,6 +95,7 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
   }
 
   const onTrigger = (event: Event) => {
+    if (props.disabled) return
     const source = (event as CustomEvent<{ source?: string }>).detail?.source
     if (source !== props.trigger) return
     if (rows().length === 0) return
@@ -104,6 +107,7 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
   }
 
   function pick(value: string | undefined) {
+    if (props.disabled) return
     if (value === undefined) {
       props.onClear?.()
       onOpen(false)
@@ -174,7 +178,14 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
           open={open()}
           onOpenChange={onOpen}
           triggerAs={Button}
-          triggerProps={{ variant: "ghost", size: "small", "aria-label": props.label }}
+          triggerProps={{
+            variant: "ghost",
+            size: "small",
+            "aria-label": props.label,
+            get disabled() {
+              return props.disabled
+            },
+          }}
           trigger={
             <>
               <span class="thinking-selector-trigger-label">{display(props.value)}</span>
@@ -220,6 +231,8 @@ export const ThinkingSelectorBase: Component<ThinkingSelectorBaseProps> = (props
 // ---------------------------------------------------------------------------
 
 interface ThinkingSelectorProps {
+  disabled?: boolean
+  onChange?: () => void
   trigger?: string
   sessionID?: Accessor<string | undefined>
 }
@@ -232,11 +245,18 @@ export const ThinkingSelector: Component<ThinkingSelectorProps> = (props) => {
 
   return (
     <ThinkingSelectorBase
+      disabled={props.disabled}
       trigger={props.trigger}
       variants={session.variantList(id())}
       value={session.currentVariant(id())}
-      onSelect={(value) => session.selectVariant(value, id())}
-      onClear={() => session.selectVariant(undefined, id())}
+      onSelect={(value) => {
+        props.onChange?.()
+        session.selectVariant(value, id())
+      }}
+      onClear={() => {
+        props.onChange?.()
+        session.selectVariant(undefined, id())
+      }}
       allowClear
       clearLabel={language.t("common.default")}
       cycleHint={settings()["chat.shiftTabCyclesVariant"] !== false}

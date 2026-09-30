@@ -400,13 +400,13 @@
   align-items: stretch;
   gap: 0;
   padding: 4px 9px;
-  color: #d6d6d6;
+  color: var(--text-base);
   text-align: left;
 }
 
 .raya-home__heading {
   padding: 1px 2px 7px;
-  color: #bcbcbc;
+  color: var(--text-weak);
   font: 400 13px/20px var(--font-body);
 }
 
@@ -426,7 +426,7 @@
   border: 0;
   border-radius: 15px;
   background: transparent;
-  color: #d7d7d7;
+  color: var(--text-base);
   text-align: left;
   font: 400 13px/20px var(--font-body);
   cursor: pointer;
@@ -434,7 +434,7 @@
 
 .raya-home__row:hover,
 .raya-home__row:focus-visible {
-  background: #2a2c2d;
+  background: var(--surface-base-hover);
 }
 
 .raya-home__row span:first-child {
@@ -447,7 +447,7 @@
 
 .raya-home__row span:last-child {
   flex: none;
-  color: #929292;
+  color: var(--text-weak);
   font-size: 12px;
 }
 
@@ -457,13 +457,13 @@
   padding: 3px 2px;
   border: 0;
   background: transparent;
-  color: #898989;
+  color: var(--text-weak);
   font: 400 12px var(--font-body);
   cursor: pointer;
 }
 
 .raya-home__all:hover {
-  color: #c4c4c4;
+  color: var(--text-base);
 }
 
 .raya-home__mark {

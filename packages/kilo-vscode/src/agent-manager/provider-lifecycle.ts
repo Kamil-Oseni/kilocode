@@ -231,6 +231,7 @@ export async function addSessionToLifecycleWorktree(
   host: LifecycleHost,
   worktreeId: string,
   sessionId?: string,
+  requestID?: string,
 ): Promise<null> {
   let client: KiloClient
   try {
@@ -289,7 +290,7 @@ export async function addSessionToLifecycleWorktree(
   state.addSession(session.id, worktreeId)
   host.register(session.id, worktree.path)
   host.push()
-  host.post({ type: "agentManager.sessionAdded", sessionId: session.id, worktreeId })
+  host.post({ type: "agentManager.sessionAdded", sessionId: session.id, worktreeId, requestID })
   host.sessions.register(session)
 
   host.capture("Agent Manager Session Started", {

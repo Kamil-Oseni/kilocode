@@ -41,6 +41,8 @@ export type KiloProviderOptions = {
    * is ambiguous.
    */
   projectQualifier?: () => { projectId: string } | undefined
+  /** Exact composer boxes owned by a composite host; never workspace paths supplied by the pane. */
+  composerScopes?: () => Array<{ box: string; directory: string }>
   /**
    * Hides the in-webview sidebar top bar (New Task, History, Agent Manager,
    * etc.) for dedicated single-purpose panels — Settings, Profile, and the

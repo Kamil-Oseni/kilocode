@@ -34,6 +34,105 @@ const rich: DraftContent = {
   images: [{ id: "image-1", filename: "violin.png", mime: "image/png", dataUrl: "data:image/png;base64,aGVsbG8=" }],
   scroll: 43.5,
 }
+
+test("selection state survives reload and exact lost acknowledgements replay without advancing CAS", async () => {
+  await using tmp = await fixture()
+  const content = {
+    ...rich,
+    model: { providerID: "local", modelID: "main-9b" },
+    agent: "build",
+    variant: "medium",
+    selection: { start: 2, end: 7 },
+  }
+  const saved = await tmp.run((store) => composerDrafts(store, tmp.dir).save(who, undefined, content, "lost-save"))
+  expect(await tmp.run((store) => composerDrafts(store, tmp.dir).save(who, undefined, content, "lost-save"))).toEqual(
+    saved,
+  )
+  expect((await tmp.run((store) => composerDrafts(store, tmp.dir).load(who)))?.content).toEqual(content)
+  const reordered = {
+    selection: content.selection,
+    variant: content.variant,
+    agent: content.agent,
+    model: { modelID: content.model.modelID, providerID: content.model.providerID },
+    scroll: content.scroll,
+    images: content.images,
+    comments: content.comments,
+    text: content.text,
+  }
+  expect(await tmp.run((store) => composerDrafts(store, tmp.dir).save(who, undefined, reordered, "lost-save"))).toEqual(
+    saved,
+  )
+  await refused(
+    tmp.run((store) =>
+      composerDrafts(store, tmp.dir).save(who, undefined, { ...content, text: "divergent" }, "lost-save"),
+    ),
+    "conflict",
+  )
+  const cleared = await tmp.run((store) => composerDrafts(store, tmp.dir).clear(who, saved.token, "lost-clear"))
+  expect(await tmp.run((store) => composerDrafts(store, tmp.dir).clear(who, saved.token, "lost-clear"))).toEqual(
+    cleared,
+  )
+  await refused(
+    tmp.run((store) => composerDrafts(store, tmp.dir).clear(who, cleared.token, "lost-clear")),
+    "conflict",
+  )
+  await refused(
+    tmp.run((store) =>
+      composerDrafts(store, tmp.dir).save(
+        who,
+        cleared.token,
+        { ...content, selection: { start: 0, end: content.text.length + 1 } },
+        "invalid-selection",
+      ),
+    ),
+    "invalid",
+  )
+})
+
+test("promotion replays its exact original request after a lost acknowledgement and refuses divergence", async () => {
+  await using tmp = await fixture()
+  const saved = await tmp.run((store) => composerDrafts(store, tmp.dir).save(who, undefined, rich, "seed"))
+  const target = { ...who, key: "target", pendingID: undefined, sessionID: "session-ack" }
+  const promoted = await tmp.run((store) =>
+    composerDrafts(store, tmp.dir).promote(who, target, saved.token, undefined, "lost-promotion"),
+  )
+  expect(
+    await tmp.run((store) =>
+      composerDrafts(store, tmp.dir).promote(who, target, saved.token, undefined, "lost-promotion"),
+    ),
+  ).toEqual(promoted)
+  await refused(
+    tmp.run((store) =>
+      composerDrafts(store, tmp.dir).promote(who, target, promoted.source.token, undefined, "lost-promotion"),
+    ),
+    "conflict",
+  )
+})
+test("validated exact replay repairs a document-only initialization crash without resetting missing data", async () => {
+  for (const operation of ["save", "clear", "promote"] as const) {
+    await using tmp = await fixture()
+    const saved = await tmp.run((store) => composerDrafts(store, tmp.dir).save(who, undefined, rich, "initial"))
+    const target = { ...who, key: "destination", pendingID: undefined, sessionID: "session-replay" }
+    const replay = (store: Storage.Interface) => {
+      const drafts = composerDrafts(store, tmp.dir)
+      if (operation === "save") return drafts.save(who, undefined, rich, "initial")
+      if (operation === "clear") return drafts.clear(who, saved.token, "accepted")
+      return drafts.promote(who, target, saved.token, undefined, "promoted").pipe(Effect.map((value) => value.target))
+    }
+    const committed = await tmp.run(replay)
+    await rm(path.join(tmp.dir, "raya", "composer-drafts-initialized.json"))
+    expect(await tmp.run(replay)).toEqual(committed)
+    expect(await tmp.run((store) => store.read<unknown>(["raya", "composer-drafts-initialized"]))).toEqual({
+      version: 1,
+    })
+    await rm(path.join(tmp.dir, "raya", "composer-drafts.json"))
+    await refused(
+      tmp.run((store) => composerDrafts(store, tmp.dir).load(who)),
+      "missing",
+    )
+    expect(await Bun.file(path.join(tmp.dir, "raya", "composer-drafts.json")).exists()).toBe(false)
+  }
+})
 async function refused(body: Promise<unknown>, code?: string) {
   const err = await body.then(
     () => undefined,

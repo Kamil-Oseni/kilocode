@@ -20,13 +20,97 @@ import { WelcomeEmptyState } from "../../webview-ui/src/components/chat/WelcomeE
 import { SidebarEmptyState } from "../../webview-ui/src/components/chat/SidebarEmptyState"
 import { WorkStyleProvider } from "../../webview-ui/src/context/work-style"
 import { DEFAULT_SPEECH_SETTINGS } from "../../src/shared/speech"
+import { useVSCode } from "../../webview-ui/src/context/vscode"
+import { durableDrafts } from "../../webview-ui/src/utils/durable-drafts"
 
 const messages = []
+const profile = new URLSearchParams(location.search).get("draft") ?? crypto.randomUUID()
+let held
+window.__releaseDraftOwner = () => {
+  if (held) {
+    window.postMessage(held, "*")
+    held = undefined
+  }
+}
+window.__draftProfile = profile
+const relay = async (message) => {
+  const response = await fetch("http://127.0.0.1:5202", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ profile, message }),
+  })
+  if (!response.ok) throw new Error("Draft fixture transport failed")
+  return response.json()
+}
+window.__readDraft = (identity) =>
+  relay({
+    type: "composerDraftLoad",
+    owner: profile,
+    identity,
+    requestID: crypto.randomUUID(),
+    epoch: "fixture-read",
+    generation: 1,
+  })
+window.__listDrafts = () =>
+  relay({
+    type: "composerDraftList",
+    owner: profile,
+    box: "fixture",
+    requestID: crypto.randomUUID(),
+    epoch: "fixture-list",
+    generation: 1,
+  })
+window.__changeRemoteDraft = async (identity, text) => {
+  const release = await window.__settleDraft(identity)
+  try {
+    const loaded = await window.__readDraft(identity)
+    return await relay({
+      type: "composerDraftSave",
+      owner: profile,
+      identity,
+      expected: loaded.entry.token,
+      content: { ...loaded.entry.content, text, selection: { start: text.length, end: text.length } },
+      mutation: crypto.randomUUID(),
+      requestID: crypto.randomUUID(),
+      epoch: "fixture-write",
+      generation: 1,
+    })
+  } finally {
+    release()
+  }
+}
 window.__composerMessages = messages
 window.acquireVsCodeApi = () => ({
   getState: () => undefined,
   setState: () => {},
-  postMessage: (msg) => messages.push(msg),
+  postMessage: (msg) => {
+    messages.push(msg)
+    if (msg.type === "composerDraftPane") {
+      if (msg.active)
+        queueMicrotask(() => {
+          const state = {
+            type: "composerDraftState",
+            epoch: msg.epoch,
+            generation: 1,
+            owners: [{ box: "fixture", owner: profile }],
+            connected: true,
+          }
+          if (new URLSearchParams(location.search).has("cold")) held = state
+          else window.postMessage(state, "*")
+        })
+      return
+    }
+    if (
+      [
+        "composerDraftList",
+        "composerDraftLoad",
+        "composerDraftSave",
+        "composerDraftClear",
+        "composerDraftPromote",
+      ].includes(msg.type)
+    )
+      void relay(msg).then((result) => window.postMessage(result, "*"))
+  },
 })
 if (new URLSearchParams(location.search).has("native")) {
   window.__configureVoice = () =>
@@ -195,10 +279,25 @@ document.body.style.background = colors.background
 document.body.style.color = colors.foreground
 
 function Fixture() {
+  const durable = durableDrafts(useVSCode())
+  window.__settleDraft = async (identity) => {
+    const capture = await durable.capture(identity)
+    if (!capture) throw new Error("Fixture draft did not settle")
+    return () => durable.release(capture)
+  }
   const server = useServer()
+  const [workspace, setWorkspace] = createSignal("fixture-A")
+  window.__switchDraftWorkspace = setWorkspace
   const provider = useProvider()
   const [connected, setConnected] = createSignal(true)
-  const [id, setID] = createSignal(new URLSearchParams(location.search).has("cloud") ? "cloud:fixture" : "first")
+  const [id, setID] = createSignal(
+    new URLSearchParams(location.search).has("pending")
+      ? ""
+      : new URLSearchParams(location.search).has("cloud")
+        ? "cloud:fixture"
+        : "first",
+  )
+  const [pending, setPending] = createSignal(new URLSearchParams(location.search).get("pending") ?? undefined)
   const [continuation, setContinuation] = createSignal({
     id: "ticket",
     directory: "C:/projects/a-very-long-unbroken-workspace-directory-name-for-narrow-history-recovery/recovery",
@@ -209,9 +308,46 @@ function Fixture() {
   const [variant, setVariant] = createSignal()
   const [sent, setSent] = createSignal([])
   const [busy, setBusy] = createSignal(false)
+  const accept = (capture) => {
+    if (capture) {
+      const requestID = crypto.randomUUID()
+      void relay({
+        type: "composerDraftClear",
+        owner: capture.owner,
+        requestID,
+        epoch: capture.epoch,
+        generation: capture.generation,
+        identity: capture.identity,
+        expected: capture.token,
+        mutation: `accepted:${requestID}`,
+      }).then((result) => {
+        const accepted = {
+          type: "composerDraftAccepted",
+          epoch: capture.epoch,
+          generation: capture.generation,
+          sessionID: id(),
+          messageID: requestID,
+          capture,
+          entry: result.entry,
+          error: result.error,
+        }
+        if (window.__holdDraftAcceptance) {
+          window.__acceptDraft = () => window.postMessage(accepted, "*")
+          return
+        }
+        window.postMessage(accepted, "*")
+      })
+    }
+  }
   const session = {
     ...mockSessionValue(),
-    currentSessionID: id,
+    currentSessionID: () => id() || undefined,
+    clearCurrentSession: () => setID(""),
+    draftSessionID: pending,
+    setDraftSessionID: (value) => {
+      window.__pendingDraft = value
+      setPending(value)
+    },
     cloudPreviewId: () => (id().startsWith("cloud:") ? "fixture" : null),
     cloudContinuation: continuation,
     sessions: () => [
@@ -229,21 +365,38 @@ function Fixture() {
     selectModel: (providerID, modelID) => setSelected({ providerID, modelID }),
     variantList: () => ["low", "high"],
     currentVariant: variant,
+    draftVariant: variant,
     selectVariant: setVariant,
+    setSessionAgent: (_, value) => setAgent(value),
+    setSessionModel: (_, providerID, modelID) => setSelected({ providerID, modelID }),
+    setSessionVariant: (_, providerID, modelID, value) => {
+      setSelected({ providerID, modelID })
+      setVariant(value || undefined)
+    },
     hasModelOverride: () => false,
     status: () => (busy() ? "busy" : "idle"),
     abort: () => {
       window.__workStops = (window.__workStops ?? 0) + 1
       setBusy(false)
     },
+    sendCommand: (...args) => {
+      setSent((prior) => [...prior, { args, agent: agent(), variant: variant() }])
+      accept(args[9])
+    },
     sendMessage: (...args) => {
       setSent((prior) => [...prior, { args, agent: agent(), variant: variant() }])
       if (id().startsWith("cloud:")) setContinuation((entry) => ({ ...entry, status: "pending" }))
+      accept(args[8])
     },
   }
   return (
     <ServerContext.Provider
-      value={{ ...server, isConnected: connected, connectionState: () => (connected() ? "connected" : "disconnected") }}
+      value={{
+        ...server,
+        workspaceDirectory: workspace,
+        isConnected: connected,
+        connectionState: () => (connected() ? "connected" : "disconnected"),
+      }}
     >
       <ProviderContext.Provider
         value={{

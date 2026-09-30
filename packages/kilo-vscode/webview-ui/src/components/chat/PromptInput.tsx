@@ -4,7 +4,19 @@ import { Card } from "@kilocode/kilo-ui/card"
  * Text input with send/abort buttons, ghost-text autocomplete, and @ file mention support
  */
 
-import { createSignal, createEffect, on, For, Index, onCleanup, onMount, Show, untrack, type Component } from "solid-js"
+import {
+  createSignal,
+  createMemo,
+  createEffect,
+  on,
+  For,
+  Index,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+  type Component,
+} from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
@@ -90,6 +102,8 @@ import { isEnterKeyCommitNotIme } from "../../utils/ime-enter"
 import { parseMemoryCommand, type ParsedMemoryCommand } from "../../utils/memory-command"
 import { useMemory } from "../../context/memory"
 import { parseGoalCommand } from "../../../../src/shared/goal" // raya_change - Milestone A /goal parser
+import { durableDrafts } from "../../utils/durable-drafts"
+import type { DraftContent, DraftTarget } from "../../../../src/shared/composer-drafts-messages"
 
 function mergeReviewComments(current: ReviewCommentEntry[], incoming: ReviewCommentEntry[]): ReviewCommentEntry[] {
   if (incoming.length === 0) return current
@@ -192,6 +206,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const voicePending = { start: false } // raya_change - create a backend parent before native voice admission
   const language = useLanguage()
   const vscode = useVSCode()
+  const durable = durableDrafts(vscode)
+  const [draftStatus, setDraftStatus] = createSignal(0)
+  const restored = new Set<string>()
+  const intended = new Set<string>()
+  const vacant = `${tabs ? "sidebar-pending:" : "pending:"}${crypto.randomUUID()}`
+  const [hydrating, setHydrating] = createSignal(true)
+  const stopDrafts = durable.subscribe(() => setDraftStatus((value) => value + 1))
+  onCleanup(stopDrafts)
   const projectMemory = useMemory()
   const sid = () => session.currentSessionID() ?? props.pendingSessionID ?? session.draftSessionID() ?? undefined
   const ctx = () => {
@@ -204,7 +226,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const mention = useFileMention(vscode, sid, hasGit)
   const terminal = useTerminalContext(props.resolveEmbeddedTerminal)
   const git = useGitChangesContext(vscode, ctx, hasGit)
-  const imageAttach = useImageAttachments()
+  const imageAttach = useImageAttachments({
+    capture: () => durable.destination(identity()),
+    commit: (scope, image): void => {
+      const value = scope.append(image, identity())
+      if (value) imageAttach.replace(value.images)
+    },
+    error: (scope) => {
+      scope.cancel()
+      showToast({ variant: "error", title: "Attachment could not be read", description: "Choose the file again." })
+    },
+  })
   imageAttach.setFilePathDropHandler((paths) => {
     const cwd = server.workspaceDirectory()
     const resolved = paths.map((p) => convertToMentionPath(p, cwd))
@@ -243,12 +275,58 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let slashDropdownRef: HTMLDivElement | undefined
 
   const boxKey = () => props.boxId ?? "prompt:default"
+  createEffect(() => {
+    if (boxKey().startsWith("agent-manager:")) return
+    durable.context(boxKey(), server.workspaceDirectory() || "unassigned-root")
+  })
   const blockedHelpId = () => `${boxKey().replace(/[^a-zA-Z0-9_-]/g, "-")}-blocked-help`
   const rawKey = () =>
     sessionDraftKey(session.currentSessionID()) ??
     pendingDraftKey(props.pendingSessionID ?? session.draftSessionID()) ??
-    "new"
+    pendingDraftKey(vacant)!
   const draftKey = () => scopeDraftKey(boxKey(), rawKey())
+  const identity = (): DraftTarget => {
+    const current = session.currentSessionID()
+    const sessionID = current?.startsWith("cloud:") ? undefined : current
+    const pendingID = current?.startsWith("cloud:")
+      ? current
+      : sessionID
+        ? undefined
+        : (props.pendingSessionID ?? session.draftSessionID() ?? vacant)
+    const value = { key: draftKey(), box: boxKey(), sessionID, pendingID }
+    return value
+  }
+  const draftError = () => {
+    draftStatus()
+    return durable.view(identity()).error
+  }
+  const scope = createMemo(
+    () => {
+      draftStatus()
+      return { key: draftKey(), owner: durable.view(identity()).owner, context: durable.partition(boxKey()) }
+    },
+    undefined,
+    {
+      equals: (left, right) =>
+        left?.key === right?.key && left?.owner === right?.owner && left?.context === right?.context,
+    },
+  )
+  let projected: ReturnType<typeof scope> | undefined
+  const recoverDraft = async () => {
+    const source = identity()
+    const pendingID = `${tabs ? "sidebar-pending:" : "pending:"}${crypto.randomUUID()}`
+    const destination = { box: source.box, pendingID, key: scopeDraftKey(source.box, pendingDraftKey(pendingID)) }
+    if (!(await durable.recover(source, destination))) return
+    if (tabs) {
+      tabs.add(pendingID)
+      return
+    }
+    window.dispatchEvent(
+      new CustomEvent("composerDraftRecovered", { detail: { ...destination, owner: durable.owner(source.box) } }),
+    )
+    session.clearCurrentSession()
+    session.setDraftSessionID(pendingID)
+  }
   const saveDraft = (
     key: string,
     next: string,
@@ -257,7 +335,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     scroll = textareaRef?.scrollTop ?? scrollDrafts.get(key) ?? 0,
   ) => savePromptDraft(key, next, comments, imgs, scroll)
   const readDraft = () => ({
-    text: text().trim(),
+    text: text(),
     comments: reviewComments(),
     images: imageAttach.images(),
     scroll: textareaRef?.scrollTop ?? scrollDrafts.get(draftKey()) ?? 0,
@@ -265,6 +343,59 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [text, setText] = createSignal("")
   const [reviewComments, setReviewComments] = createSignal<ReviewCommentEntry[]>([])
+  const content = (): DraftContent => {
+    const images = imageAttach.images().map((image) => ({ ...image }))
+    const loaded = durable.view(identity()).loaded
+    const selected = loaded ? session.selected(sid()) : undefined
+    return {
+      ...readDraft(),
+      images,
+      selection: textareaRef
+        ? {
+            start: Math.min(textareaRef.selectionStart, text().length),
+            end: Math.min(textareaRef.selectionEnd, text().length),
+          }
+        : undefined,
+      model: selected ?? undefined,
+      agent: loaded ? session.selectedAgent(sid()) : undefined,
+      variant: loaded ? session.draftVariant(sid()) : undefined,
+    }
+  }
+  const persistDraft = () => {
+    if (hydrating()) return
+    const current = scope()
+    if (
+      !projected ||
+      projected.key !== current.key ||
+      projected.owner !== current.owner ||
+      projected.context !== current.context
+    )
+      return
+    const state = durable.view(identity())
+    if (
+      !state.stored &&
+      state.revision === 0 &&
+      text() === "" &&
+      reviewComments().length === 0 &&
+      imageAttach.images().length === 0 &&
+      !intended.has(JSON.stringify([state.owner, durable.partition(boxKey()), draftKey()]))
+    )
+      return
+    durable.edit(identity(), content())
+  }
+  const intent = () => {
+    intended.add(JSON.stringify([durable.owner(boxKey()), durable.partition(boxKey()), draftKey()]))
+    queueMicrotask(persistDraft)
+  }
+  const choicesReady = () => {
+    draftStatus()
+    return !!durable.owner(boxKey()) && durable.view(identity()).loaded
+  }
+  const discardDraft = async () => {
+    const key = JSON.stringify([durable.owner(boxKey()), durable.partition(boxKey()), draftKey()])
+    const marked = intended.delete(key)
+    if (!(await durable.discard(identity())) && marked) intended.add(key)
+  }
   const [autoApprove, setAutoApprove] = createSignal(false)
   const [sandboxes, setSandboxes] = createSignal<Record<string, SandboxState>>({})
   const [sandboxDefault, setSandboxDefault] = createSignal<SandboxDefaultState>()
@@ -338,7 +469,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         name: "plan",
         description: "Switch to Plan mode before implementation",
         hints: ["design", "think"],
-        action: () => session.selectAgent("plan", sid()),
+        action: () => {
+          if (!choicesReady()) return
+          intent()
+          session.selectAgent("plan", sid())
+        },
       },
       {
         name: "status",
@@ -444,7 +579,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   // Save/restore input text when switching sessions.
   // Uses `on()` to track only draftKey — avoids re-running on every keystroke.
   createEffect(
-    on(draftKey, (key, prev) => {
+    on(scope, (value, previous) => {
+      projected = undefined
+      const key = value.key
+      const prev = previous?.owner === value.owner ? previous?.key : undefined
+      setHydrating(true)
       if (prev !== undefined && prev !== key) {
         const val = untrack(text)
         const comments = untrack(reviewComments)
@@ -453,12 +592,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           saveDraft(prev, val, comments, imgs)
         }
       }
-      const draft = drafts.get(key) ?? ""
-      const pending = reviewDrafts.get(key) ?? []
-      const scroll = scrollDrafts.get(key) ?? 0
+      const local = durable.view(identity()).content
+      const draft = local.text
+      const pending = local.comments
+      const scroll = local.scroll
       setText(draft)
       setReviewComments(pending)
-      imageAttach.replace(imageDrafts.get(key) ?? [])
+      imageAttach.replace(local.images)
       history.reset()
       if (textareaRef) {
         textareaRef.value = draft
@@ -471,8 +611,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (!props.deferFocusToQuestion?.() && (props.focusOnDraftChange?.() ?? true)) {
         window.dispatchEvent(new Event("focusPrompt"))
       }
+      const target = identity()
+      projected = value
+      void durable.hydrate(target)
     }),
   )
+  createEffect(() => {
+    draftStatus()
+    const target = identity()
+    const state = durable.view(target)
+    if (!state.loaded) return
+    const value = state.content
+    untrack(() => {
+      const key = JSON.stringify([state.owner, target.key])
+      if (!restored.has(key)) {
+        restored.add(key)
+        if (value.agent) session.setSessionAgent(target.sessionID ?? target.pendingID!, value.agent)
+        if (value.model)
+          session.setSessionModel(target.sessionID ?? target.pendingID!, value.model.providerID, value.model.modelID)
+        if (value.model)
+          session.setSessionVariant(
+            target.sessionID ?? target.pendingID!,
+            value.model.providerID,
+            value.model.modelID,
+            value.variant ?? "",
+            value.agent,
+          )
+      }
+      // Controller revisions, including post-send edits, are authoritative.
+      if (text() !== value.text) setText(value.text)
+      if (JSON.stringify(reviewComments()) !== JSON.stringify(value.comments)) setReviewComments(value.comments)
+      if (JSON.stringify(imageAttach.images()) !== JSON.stringify(value.images)) imageAttach.replace(value.images)
+      saveDraft(target.key, value.text, value.comments, value.images, value.scroll)
+      if (textareaRef && hydrating()) {
+        textareaRef.value = value.text
+        adjustHeight()
+        textareaRef.scrollTop = value.scroll
+        if (value.selection) textareaRef.setSelectionRange(value.selection.start, value.selection.end)
+      }
+      setHydrating(false)
+    })
+  })
+  createEffect(() => {
+    text()
+    reviewComments()
+    imageAttach.images()
+    session.selected(sid())
+    session.selectedAgent(sid())
+    session.draftVariant(sid())
+    untrack(persistDraft)
+  })
 
   // Seed prompt history from the current session's user messages (e.g., when a
   // session is loaded that has existing conversation). Tracks userMessages()
@@ -565,7 +753,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   // Start a new task, carrying over the current prompt text (without auto-sending it)
   const onNewTaskRequest = () => {
-    const draft = text().trim()
+    const snapshot = content()
+    const draft = text()
     const comments = reviewComments()
     const imgs = imageAttach.images()
     const scroll = textareaRef?.scrollTop ?? 0
@@ -573,14 +762,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!id) session.clearCurrentSession()
     const key = id ? scopeDraftKey(boxKey(), pendingDraftKey(id) ?? "new") : draftKey()
     saveDraft(key, draft, comments, imgs, scroll)
+    durable.edit({ box: boxKey(), key, pendingID: id ?? session.draftSessionID() ?? vacant }, snapshot)
   }
   window.addEventListener("newTaskRequest", onNewTaskRequest)
   onCleanup(() => window.removeEventListener("newTaskRequest", onNewTaskRequest))
 
-  const captured = new Map<string, ReturnType<typeof readDraft>>()
+  const captured = new Map<string, { owner: string; identity: DraftTarget; content: DraftContent }>()
   const onAgentManagerCaptureDraft = (event: Event) => {
     if (!(event instanceof CustomEvent) || typeof event.detail?.id !== "string") return
-    captured.set(event.detail.id, readDraft())
+    const owner = durable.owner(boxKey())
+    if (!owner || event.detail.owner !== owner) return
+    const target = {
+      box: boxKey(),
+      key: scopeDraftKey(boxKey(), pendingDraftKey(event.detail.id)),
+      pendingID: event.detail.id,
+    }
+    const draft = content()
+    captured.set(event.detail.id, { owner, identity: target, content: draft })
+    durable.edit(target, draft)
   }
   window.addEventListener("agentManagerCaptureDraft", onAgentManagerCaptureDraft)
   onCleanup(() => window.removeEventListener("agentManagerCaptureDraft", onAgentManagerCaptureDraft))
@@ -593,8 +792,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (typeof id !== "string" || typeof sid !== "string" || typeof box !== "string") return
     const draft = captured.get(id)
     captured.delete(id)
-    if (!draft) return
-    saveDraft(scopeDraftKey(box, sessionDraftKey(sid)), draft.text, draft.comments, draft.images, draft.scroll)
+    if (
+      !draft ||
+      draft.owner !== event.detail.owner ||
+      draft.owner !== durable.owner(box) ||
+      draft.identity.box !== box
+    )
+      return
+    durable.created(id, sid, box)
   }
   window.addEventListener("agentManagerApplyDraft", onAgentManagerApplyDraft)
   onCleanup(() => window.removeEventListener("agentManagerApplyDraft", onAgentManagerApplyDraft))
@@ -877,6 +1082,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (message.type === "sessionCreated") {
+      if (message.draftID) durable.created(message.draftID, message.session.id, boxKey())
       const raw = createdDraftKey(message.draftID, sandboxRequest(undefined) !== undefined)
       if (raw) {
         const source = scopeDraftKey(boxKey(), raw)
@@ -909,6 +1115,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   onCleanup(() => {
     // Persist current draft before unmounting
+    persistDraft()
     saveDraft(draftKey(), text(), reviewComments(), imageAttach.images())
     if (sandboxRetry) clearTimeout(sandboxRetry)
     unsubAutoApprove()
@@ -949,6 +1156,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!textareaRef) return
     scrollDrafts.set(draftKey(), textareaRef.scrollTop)
     if (highlightRef) highlightRef.scrollTop = textareaRef.scrollTop
+    persistDraft()
   }
 
   const adjustHeight = () => {
@@ -958,6 +1166,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handlePaste = (e: ClipboardEvent) => {
+    setHydrating(false)
     imageAttach.handlePaste(e)
     // After pasting text, the textarea content changes but the layout may not
     // have reflowed yet, causing the caret position to be visually out of sync.
@@ -972,6 +1181,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const target = e.target as HTMLTextAreaElement
     const val = target.value
     setText(val)
+    if (hydrating()) {
+      setHydrating(false)
+      durable.edit(identity(), content())
+    }
     adjustHeight()
     syncHighlightScroll()
     history.reset()
@@ -1031,11 +1244,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // Shift+Tab cycles reasoning effort variants (setting: chat.shiftTabCyclesVariant).
     // When disabled or no variants exist, fall through to default focus navigation.
     if (e.key === "Tab" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!choicesReady()) return
       if (settings()["chat.shiftTabCyclesVariant"] === false) return
       const list = session.variantList(sid())
       if (list.length === 0) return
       const next = cycleVariant(session.currentVariant(sid()), list)
       e.preventDefault()
+      intent()
       session.selectVariant(next, sid())
       return
     }
@@ -1078,11 +1293,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return false
     }
     // raya_change start - ordinary spoken language can switch voice behavior without a command
-    const intent = voiceIntent(cleaned)
-    if (intent) {
-      if (intent === "hands-free") startVoice()
-      if (intent !== "hands-free") voice.stop()
-      session.selectAgent(intent === "hands-free" ? "voice" : "auto", sid()) // raya_change - spoken mode changes mirror the orb
+    const mode = voiceIntent(cleaned)
+    if (mode) {
+      if (!choicesReady()) return false
+      intent()
+      if (mode === "hands-free") startVoice()
+      if (mode !== "hands-free") voice.stop()
+      session.selectAgent(mode === "hands-free" ? "voice" : "auto", sid()) // raya_change - spoken mode changes mirror the orb
       return false
     }
     // raya_change end
@@ -1311,33 +1528,46 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     git.pending() ||
     props.blocked?.()
 
-  const sendDraft = async (draft: string) => {
-    const memory = parseMemoryCommand(draft)
-    if (memory) {
-      if (!runMemory(memory)) return
-      history.append(draft)
-      setMemoryText(memory)
-      clearReviewComments()
-      imageAttach.clear()
-      mention.closeMention()
-      slash.close()
-      drafts.delete(draftKey())
-      reviewDrafts.delete(draftKey())
-      imageDrafts.delete(draftKey())
-      scrollDrafts.delete(draftKey())
-      if (textareaRef) textareaRef.style.height = "auto"
-      return
-    }
-
+  const matching = (draft: string) => {
     // Detect slash command (hoisted for both client and server command checks).
     // Prioritize exact name matches over hint/alias matches so that a server
     // command named e.g. "continue" is not hijacked by a client alias.
-    const cmdMatch = draft.match(/^\/(\S+)/)
-    const word = cmdMatch?.[1]
+    const match = draft.match(/^\/(\S+)/)
+    const word = match?.[1]
     const runnable = slash.commands().filter((command) => command.name !== "goal" && command.name !== "self-heal") // raya_change - goal and self-heal resolve client-side, not as server commands
-    const matched = word
-      ? (runnable.find((command) => command.name === word) ?? runnable.find((command) => command.hints.includes(word)))
-      : undefined
+    return {
+      match,
+      matched: word
+        ? (runnable.find((command) => command.name === word) ??
+          runnable.find((command) => command.hints.includes(word)))
+        : undefined,
+    }
+  }
+
+  const consumeMemory = (draft: string) => {
+    const memory = parseMemoryCommand(draft)
+    if (!memory) return false
+    if (!runMemory(memory)) return true
+    history.append(draft)
+    setMemoryText(memory)
+    clearReviewComments()
+    imageAttach.clear()
+    mention.closeMention()
+    slash.close()
+    drafts.delete(draftKey())
+    reviewDrafts.delete(draftKey())
+    imageDrafts.delete(draftKey())
+    scrollDrafts.delete(draftKey())
+    if (textareaRef) textareaRef.style.height = "auto"
+    return true
+  }
+
+  const sendDraft = async (draft: string) => {
+    if (consumeMemory(draft)) return
+
+    const command = matching(draft)
+    const matched = command.matched
+    const cmdMatch = command.match
 
     // Client-side slash command — runs locally without a backend round-trip
     if (matched?.action) {
@@ -1366,12 +1596,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const mentionFiles = mention.parseFileAttachments(draft)
     const imgFiles = imgs.map((img) => ({ mime: img.mime, url: img.dataUrl, filename: img.filename }))
     const origin = session.currentSessionID()
-    const pendingId = props.pendingSessionID ?? (!origin ? session.draftSessionID() : undefined)
+    const pendingId = props.pendingSessionID ?? (!origin ? (session.draftSessionID() ?? vacant) : undefined)
     const id = origin ?? pendingId
     beginPending(pendingId)
     const sel = session.selected(id)
     const context = ctx()
     const key = draftKey()
+    persistDraft()
+    const capture = origin?.startsWith("cloud:") ? undefined : await durable.capture(identity())
+    if (capture) intended.delete(JSON.stringify([capture.owner, durable.partition(boxKey()), draftKey()]))
+    if (!origin?.startsWith("cloud:") && !capture) {
+      finishPending(pendingId)
+      showToast({
+        variant: "error",
+        title: "Draft not saved",
+        description: "Your draft is still here. Save it before sending.",
+      })
+      return
+    }
 
     const terminalFile = await terminal
       .resolveAttachment(message, id, readTerminalContext(props.terminalContext))
@@ -1380,6 +1622,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return undefined
       })
     if (hasTerminalMention(message) && !terminalFile) {
+      if (capture) durable.release(capture)
       finishPending(pendingId)
       return
     }
@@ -1389,14 +1632,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return undefined
     })
     if (hasGit() && hasGitChangesMention(message) && !gitFile) {
+      if (capture) durable.release(capture)
       finishPending(pendingId)
       return
     }
     if (isDisabled()) {
+      if (capture) durable.release(capture)
       finishPending(pendingId)
       return
     }
-    if (finishPending(pendingId)) return
+    if (finishPending(pendingId)) {
+      if (capture) durable.release(capture)
+      return
+    }
 
     const allFiles = [
       ...mentionFiles,
@@ -1423,30 +1671,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           model: matched.model,
           variant: matched.variant,
         },
+        capture,
       )
     } else {
-      session.sendMessage(message, sel?.providerID, sel?.modelID, attachments, pendingId, context, data, origin ?? null)
+      session.sendMessage(
+        message,
+        sel?.providerID,
+        sel?.modelID,
+        attachments,
+        pendingId,
+        context,
+        data,
+        origin ?? null,
+        capture,
+      )
     }
 
     if (origin?.startsWith("cloud:")) {
       saveDraft(key, text(), reviewComments(), imageAttach.images())
       return
     }
-    drafts.delete(key)
-    reviewDrafts.delete(key)
-    imageDrafts.delete(key)
-    scrollDrafts.delete(key)
     history.append(draft)
-    if (draftKey() !== key) return
-
-    history.reset()
-    setText("")
-    clearReviewComments()
-    imageAttach.clear()
-    mention.closeMention()
-    slash.close()
-
-    if (textareaRef) textareaRef.style.height = "auto"
   }
 
   // raya_change start - Milestone A keeps /goal parsing outside the already-complex send pipeline
@@ -1468,6 +1713,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     >
       <NativeVoiceControls end={toggleVoice} />
       <NativeVoiceRecovery />
+      <Show when={draftError()}>
+        <Card variant="info" role="status">
+          <Show
+            when={draftError() === "uncertain"}
+            fallback={
+              <Show
+                when={draftError() === "conflict" || draftError() === "promotion"}
+                fallback={
+                  <>
+                    <p>Your draft is still here. It could not be saved.</p>
+                    <Button size="small" variant="secondary" onClick={() => void durable.retry(identity())}>
+                      Retry saving
+                    </Button>
+                  </>
+                }
+              >
+                <p>Another saved draft changed. Keep this version as a separate draft.</p>
+                <Button size="small" variant="secondary" onClick={() => void recoverDraft()}>
+                  Save as new draft
+                </Button>
+              </Show>
+            }
+          >
+            <p>Your draft is still here. Check the chat before sending again.</p>
+            <Button size="small" variant="secondary" onClick={() => void durable.review(identity())}>
+              Keep editing
+            </Button>
+          </Show>
+        </Card>
+      </Show>
       <Show when={session.cloudPreviewId()}>
         <Card variant="info" role="status" data-slot="cloud-continuation">
           <strong>Cloud preview</strong>
@@ -1536,6 +1811,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         multiple
         aria-label={language.t("prompt.action.attach")}
         onChange={(event) => {
+          setHydrating(false)
           for (const file of Array.from(event.currentTarget.files ?? [])) imageAttach.add(file)
           event.currentTarget.value = ""
         }}
@@ -1741,7 +2017,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onPaste={handlePaste}
             onDragOver={imageAttach.handleDragOver}
             onDragEnter={imageAttach.handleDragEnter}
-            onDrop={imageAttach.handleDrop}
+            onDrop={(event) => {
+              setHydrating(false)
+              imageAttach.handleDrop(event)
+            }}
             onClick={syncGhost}
             onFocus={() => {
               syncGhost()
@@ -1754,6 +2033,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onSelect={() => {
               syncGhost()
               if (textareaRef) mention.snapSelection(textareaRef)
+              persistDraft()
             }}
             onScroll={syncHighlightScroll}
             aria-disabled={isDisabled()}
@@ -1781,13 +2061,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             class="prompt-attach-button"
           />
         </Tooltip>
+        <Show when={identity().pendingID && hasInput()}>
+          <Tooltip value="Discard draft" placement="top" openDelay={0}>
+            <IconButton
+              icon="trash"
+              size="small"
+              variant="ghost"
+              aria-label="Discard draft"
+              disabled={isDisabled() || !!draftError()}
+              onClick={() => void discardDraft()}
+            />
+          </Tooltip>
+        </Show>
         <span class="prompt-input-hint-spacer" />
         <ContextProgress compact />
         <div class="prompt-input-hint-selectors">
           <ComposerConfiguration sessionID={sid} scope={boxKey()}>
-            <ModeSwitcher sessionID={sid} trigger={boxKey()} />
-            <ModelSelector sessionID={sid} trigger={boxKey()} />
-            <ThinkingSelector sessionID={sid} trigger={boxKey()} />
+            <ModeSwitcher sessionID={sid} trigger={boxKey()} onChange={intent} disabled={!choicesReady()} />
+            <ModelSelector sessionID={sid} trigger={boxKey()} onChange={intent} disabled={!choicesReady()} />
+            <ThinkingSelector sessionID={sid} trigger={boxKey()} onChange={intent} disabled={!choicesReady()} />
             <Show when={session.hasModelOverride(sid())}>
               <Tooltip value={language.t("prompt.action.resetModel")} placement="top" openDelay={0}>
                 <Button

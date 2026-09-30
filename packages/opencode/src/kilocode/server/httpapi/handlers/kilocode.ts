@@ -1,4 +1,5 @@
 import { Cause, Effect, Result, Schema } from "effect"
+import { composerHandlers } from "./composer-drafts"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { Database } from "@opencode-ai/core/database/database"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
@@ -133,6 +134,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.Service // raya_change - Milestone A goal state and evidence
     const storage = yield* Storage.Service // raya_change - Milestone A durable goal storage
+    const drafts = composerHandlers(storage, sessions)
     const mcp = yield* MCP.Service
     const goals = RayaGoal.make({ storage, sessions, background }) // raya_change - Chief completion sees live child jobs
     const database = yield* Database.Service
@@ -1205,6 +1207,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
 
     return (
       handlers
+        .handle("composerDraftList", drafts.list)
+        .handle("composerDraftLoad", drafts.load)
+        .handle("composerDraftSave", drafts.save)
+        .handle("composerDraftClear", drafts.clear)
+        .handle("composerDraftPromote", drafts.promote)
         .handle("heapSnapshot", heapSnapshot)
         .handle("commandFiles", commandFiles)
         .handle("removeCommand", removeCommand)

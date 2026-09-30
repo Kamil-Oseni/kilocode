@@ -267,6 +267,7 @@ export function mockSessionValue(overrides?: {
     toggleFavorite: noop,
     variantList: () => [],
     currentVariant: () => undefined,
+    draftVariant: () => undefined,
     variantForAgent: () => undefined,
     selectVariant: noop,
     sendMessage: noop,

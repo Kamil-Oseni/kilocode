@@ -13,7 +13,7 @@ export default defineConfig({
   webServer: {
     command: "bun tests/fixtures/composer-serve.cjs",
     url: "http://127.0.0.1:5201",
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.RAYA_COMPOSER_EXTERNAL === "true",
     timeout: 90_000,
   },
 })

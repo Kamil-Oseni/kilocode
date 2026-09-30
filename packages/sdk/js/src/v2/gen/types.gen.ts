@@ -5811,6 +5811,12 @@ export type CloudSessionImportError = {
   error: string
 }
 
+export type ComposerDraftError = {
+  _tag: "ComposerDraftError"
+  code: "invalid" | "scope" | "corrupt" | "missing" | "conflict" | "capacity" | "admission" | "unavailable"
+  message: string
+}
+
 export type CommandFile = {
   name: string
   description?: string
@@ -20506,6 +20512,648 @@ export type KiloCloudSessionImportResponses = {
 }
 
 export type KiloCloudSessionImportResponse = KiloCloudSessionImportResponses[keyof KiloCloudSessionImportResponses]
+
+export type KilocodeComposerDraftListData = {
+  body?: {
+    scope: {
+      workspace: string
+      projectID?: string
+      box: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/composer-drafts/list"
+}
+
+export type KilocodeComposerDraftListErrors = {
+  /**
+   * ComposerDraftError | InvalidRequestError
+   */
+  400: ComposerDraftError | InvalidRequestError
+}
+
+export type KilocodeComposerDraftListError = KilocodeComposerDraftListErrors[keyof KilocodeComposerDraftListErrors]
+
+export type KilocodeComposerDraftListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    entries: Array<{
+      identity: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      token: {
+        generation: string
+        revision: number
+      }
+      content: {
+        text: string
+        comments: Array<
+          | {
+              origin: "pr"
+              id: string
+              author: string
+              body: string
+              file?: string
+              line?: number
+              diffHunk?: string
+              outdated?: boolean
+              replies?: Array<{
+                author: string
+                body: string
+              }>
+            }
+          | {
+              id: string
+              file: string
+              side: "additions" | "deletions"
+              line: number
+              comment: string
+              selectedText: string
+            }
+        >
+        images: Array<{
+          id: string
+          filename: string
+          mime: string
+          dataUrl: string
+        }>
+        scroll: number
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        variant?: string
+        selection?: {
+          start: number
+          end: number
+        }
+      }
+      mutation: string
+      digest: string
+      receipt?: {
+        request: string
+      }
+    }>
+  }
+}
+
+export type KilocodeComposerDraftListResponse =
+  KilocodeComposerDraftListResponses[keyof KilocodeComposerDraftListResponses]
+
+export type KilocodeComposerDraftLoadData = {
+  body?: {
+    identity: {
+      key: string
+      workspace: string
+      projectID?: string
+      box: string
+      sessionID?: string
+      pendingID?: string
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/composer-drafts/load"
+}
+
+export type KilocodeComposerDraftLoadErrors = {
+  /**
+   * ComposerDraftError | InvalidRequestError
+   */
+  400: ComposerDraftError | InvalidRequestError
+}
+
+export type KilocodeComposerDraftLoadError = KilocodeComposerDraftLoadErrors[keyof KilocodeComposerDraftLoadErrors]
+
+export type KilocodeComposerDraftLoadResponses = {
+  /**
+   * Success
+   */
+  200: {
+    entry: {
+      identity: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      token: {
+        generation: string
+        revision: number
+      }
+      content: {
+        text: string
+        comments: Array<
+          | {
+              origin: "pr"
+              id: string
+              author: string
+              body: string
+              file?: string
+              line?: number
+              diffHunk?: string
+              outdated?: boolean
+              replies?: Array<{
+                author: string
+                body: string
+              }>
+            }
+          | {
+              id: string
+              file: string
+              side: "additions" | "deletions"
+              line: number
+              comment: string
+              selectedText: string
+            }
+        >
+        images: Array<{
+          id: string
+          filename: string
+          mime: string
+          dataUrl: string
+        }>
+        scroll: number
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        variant?: string
+        selection?: {
+          start: number
+          end: number
+        }
+      }
+      mutation: string
+      digest: string
+      receipt?: {
+        request: string
+      }
+    }
+  }
+}
+
+export type KilocodeComposerDraftLoadResponse =
+  KilocodeComposerDraftLoadResponses[keyof KilocodeComposerDraftLoadResponses]
+
+export type KilocodeComposerDraftSaveData = {
+  body?: {
+    identity: {
+      key: string
+      workspace: string
+      projectID?: string
+      box: string
+      sessionID?: string
+      pendingID?: string
+    }
+    expected?: {
+      generation: string
+      revision: number
+    }
+    content: {
+      text: string
+      comments: Array<
+        | {
+            origin: "pr"
+            id: string
+            author: string
+            body: string
+            file?: string
+            line?: number
+            diffHunk?: string
+            outdated?: boolean
+            replies?: Array<{
+              author: string
+              body: string
+            }>
+          }
+        | {
+            id: string
+            file: string
+            side: "additions" | "deletions"
+            line: number
+            comment: string
+            selectedText: string
+          }
+      >
+      images: Array<{
+        id: string
+        filename: string
+        mime: string
+        dataUrl: string
+      }>
+      scroll: number
+      model?: {
+        providerID: string
+        modelID: string
+      }
+      agent?: string
+      variant?: string
+      selection?: {
+        start: number
+        end: number
+      }
+    }
+    mutation: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/composer-drafts/save"
+}
+
+export type KilocodeComposerDraftSaveErrors = {
+  /**
+   * ComposerDraftError | InvalidRequestError
+   */
+  400: ComposerDraftError | InvalidRequestError
+}
+
+export type KilocodeComposerDraftSaveError = KilocodeComposerDraftSaveErrors[keyof KilocodeComposerDraftSaveErrors]
+
+export type KilocodeComposerDraftSaveResponses = {
+  /**
+   * Success
+   */
+  200: {
+    entry: {
+      identity: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      token: {
+        generation: string
+        revision: number
+      }
+      content: {
+        text: string
+        comments: Array<
+          | {
+              origin: "pr"
+              id: string
+              author: string
+              body: string
+              file?: string
+              line?: number
+              diffHunk?: string
+              outdated?: boolean
+              replies?: Array<{
+                author: string
+                body: string
+              }>
+            }
+          | {
+              id: string
+              file: string
+              side: "additions" | "deletions"
+              line: number
+              comment: string
+              selectedText: string
+            }
+        >
+        images: Array<{
+          id: string
+          filename: string
+          mime: string
+          dataUrl: string
+        }>
+        scroll: number
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        variant?: string
+        selection?: {
+          start: number
+          end: number
+        }
+      }
+      mutation: string
+      digest: string
+      receipt?: {
+        request: string
+      }
+    }
+  }
+}
+
+export type KilocodeComposerDraftSaveResponse =
+  KilocodeComposerDraftSaveResponses[keyof KilocodeComposerDraftSaveResponses]
+
+export type KilocodeComposerDraftClearData = {
+  body?: {
+    identity: {
+      key: string
+      workspace: string
+      projectID?: string
+      box: string
+      sessionID?: string
+      pendingID?: string
+    }
+    expected: {
+      generation: string
+      revision: number
+    }
+    mutation: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/composer-drafts/clear"
+}
+
+export type KilocodeComposerDraftClearErrors = {
+  /**
+   * ComposerDraftError | InvalidRequestError
+   */
+  400: ComposerDraftError | InvalidRequestError
+}
+
+export type KilocodeComposerDraftClearError = KilocodeComposerDraftClearErrors[keyof KilocodeComposerDraftClearErrors]
+
+export type KilocodeComposerDraftClearResponses = {
+  /**
+   * Success
+   */
+  200: {
+    entry: {
+      identity: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      token: {
+        generation: string
+        revision: number
+      }
+      content: {
+        text: string
+        comments: Array<
+          | {
+              origin: "pr"
+              id: string
+              author: string
+              body: string
+              file?: string
+              line?: number
+              diffHunk?: string
+              outdated?: boolean
+              replies?: Array<{
+                author: string
+                body: string
+              }>
+            }
+          | {
+              id: string
+              file: string
+              side: "additions" | "deletions"
+              line: number
+              comment: string
+              selectedText: string
+            }
+        >
+        images: Array<{
+          id: string
+          filename: string
+          mime: string
+          dataUrl: string
+        }>
+        scroll: number
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        variant?: string
+        selection?: {
+          start: number
+          end: number
+        }
+      }
+      mutation: string
+      digest: string
+      receipt?: {
+        request: string
+      }
+    }
+  }
+}
+
+export type KilocodeComposerDraftClearResponse =
+  KilocodeComposerDraftClearResponses[keyof KilocodeComposerDraftClearResponses]
+
+export type KilocodeComposerDraftPromoteData = {
+  body?: {
+    from: {
+      key: string
+      workspace: string
+      projectID?: string
+      box: string
+      sessionID?: string
+      pendingID?: string
+    }
+    to: {
+      key: string
+      workspace: string
+      projectID?: string
+      box: string
+      sessionID?: string
+      pendingID?: string
+    }
+    source: {
+      generation: string
+      revision: number
+    }
+    target?: {
+      generation: string
+      revision: number
+    }
+    mutation: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/composer-drafts/promote"
+}
+
+export type KilocodeComposerDraftPromoteErrors = {
+  /**
+   * ComposerDraftError | InvalidRequestError
+   */
+  400: ComposerDraftError | InvalidRequestError
+}
+
+export type KilocodeComposerDraftPromoteError =
+  KilocodeComposerDraftPromoteErrors[keyof KilocodeComposerDraftPromoteErrors]
+
+export type KilocodeComposerDraftPromoteResponses = {
+  /**
+   * Success
+   */
+  200: {
+    source: {
+      identity: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      token: {
+        generation: string
+        revision: number
+      }
+      content: {
+        text: string
+        comments: Array<
+          | {
+              origin: "pr"
+              id: string
+              author: string
+              body: string
+              file?: string
+              line?: number
+              diffHunk?: string
+              outdated?: boolean
+              replies?: Array<{
+                author: string
+                body: string
+              }>
+            }
+          | {
+              id: string
+              file: string
+              side: "additions" | "deletions"
+              line: number
+              comment: string
+              selectedText: string
+            }
+        >
+        images: Array<{
+          id: string
+          filename: string
+          mime: string
+          dataUrl: string
+        }>
+        scroll: number
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        variant?: string
+        selection?: {
+          start: number
+          end: number
+        }
+      }
+      mutation: string
+      digest: string
+      receipt?: {
+        request: string
+      }
+    }
+    target: {
+      identity: {
+        key: string
+        workspace: string
+        projectID?: string
+        box: string
+        sessionID?: string
+        pendingID?: string
+      }
+      token: {
+        generation: string
+        revision: number
+      }
+      content: {
+        text: string
+        comments: Array<
+          | {
+              origin: "pr"
+              id: string
+              author: string
+              body: string
+              file?: string
+              line?: number
+              diffHunk?: string
+              outdated?: boolean
+              replies?: Array<{
+                author: string
+                body: string
+              }>
+            }
+          | {
+              id: string
+              file: string
+              side: "additions" | "deletions"
+              line: number
+              comment: string
+              selectedText: string
+            }
+        >
+        images: Array<{
+          id: string
+          filename: string
+          mime: string
+          dataUrl: string
+        }>
+        scroll: number
+        model?: {
+          providerID: string
+          modelID: string
+        }
+        agent?: string
+        variant?: string
+        selection?: {
+          start: number
+          end: number
+        }
+      }
+      mutation: string
+      digest: string
+      receipt?: {
+        request: string
+      }
+    }
+  }
+}
+
+export type KilocodeComposerDraftPromoteResponse =
+  KilocodeComposerDraftPromoteResponses[keyof KilocodeComposerDraftPromoteResponses]
 
 export type KilocodeHeapSnapshotData = {
   body?: never

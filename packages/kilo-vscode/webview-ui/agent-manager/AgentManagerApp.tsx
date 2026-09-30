@@ -175,7 +175,8 @@ import { createSidebarSearch, type SidebarSearchItem } from "./sidebar-search"
 import { randomColor } from "./section-colors"
 import { createMarkdownRender } from "./review-preferences"
 import { createSidebarCollapse } from "./sidebar-collapse"
-import { createNewTaskDrafts } from "./new-task-drafts"
+import { createPendingComposers } from "./pending-composers"
+import { durableDrafts } from "../src/utils/durable-drafts"
 import {
   buildTopLevelItems,
   buildSidebarOrder,
@@ -235,6 +236,7 @@ const AgentManagerContent: Component = () => {
   const { t } = useLanguage()
   const session = useSession()
   const vscode = useVSCode()
+  const durable = durableDrafts(vscode)
   const dialog = useDialog()
   const mode = createModeRouter()
   let sidebarSearchMenu: SidebarSearchMenuRef | undefined
@@ -412,6 +414,10 @@ const AgentManagerContent: Component = () => {
   const PENDING_PREFIX = "pending:"
   const closedDrafts = new Set<string>()
   const [activePendingId, setActivePendingId] = createSignal<string | undefined>()
+  createEffect(() => {
+    const sel = selection()
+    durable.context(`agent-manager:${sel ?? "unassigned"}`, sel ? (currentProjectId() ?? "single") : "unassigned-root")
+  })
   const [terminalFont, setTerminalFont] = createSignal<TerminalFont>({
     fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--vscode-editor-font-family").trim(),
     fontSize: readFontSize(),
@@ -657,8 +663,7 @@ const AgentManagerContent: Component = () => {
     terminalIdsFor: (key) => terms.forSelection(nsKey(key)).map((t) => t.id),
   })
   const appendToTabOrder = tabOrderSync.append
-  const addPendingTab = () => {
-    const id = `${PENDING_PREFIX}${crypto.randomUUID()}`
+  const addPendingTab = (id = `${PENDING_PREFIX}${crypto.randomUUID()}`) => {
     const next = addLocalPendingTab({ ids: localSessionIDs(), active: activePendingId() }, id)
     setLocalSessionIDs(next.ids)
     appendToTabOrder(LOCAL, id)
@@ -667,6 +672,18 @@ const AgentManagerContent: Component = () => {
     session.clearCurrentSession()
     return id
   }
+  const pendingComposers = createPendingComposers({
+    local: LOCAL,
+    selection,
+    durable,
+    title: () => t("agentManager.session.newSession"),
+    store: () => registry.active(),
+    setActive: setActivePendingId,
+    add: addPendingTab,
+    clear: () => session.clearCurrentSession(),
+    blur: () => terms.setActiveId(undefined),
+    post: (message) => vscode.postMessage(message),
+  })
   const placeLocal = (id: string, pending: string | undefined, active: string | undefined) => {
     const next = pending
       ? replacePendingTab({ ids: localSessionIDs(), active }, pending, id)
@@ -789,11 +806,7 @@ const AgentManagerContent: Component = () => {
     )
   }
 
-  const activeWorktreeSessions = createMemo((): SessionInfo[] => {
-    const sel = selection()
-    if (!sel || sel === LOCAL) return []
-    return sessionsForWorktree(sel)
-  })
+  const activeWorktreeSessions = createMemo(() => pendingComposers.sessions(sessionsForWorktree))
 
   const activeWorktreeSessionIds = createMemo<ReadonlySet<string> | undefined>(() => {
     const sel = selection()
@@ -805,12 +818,7 @@ const AgentManagerContent: Component = () => {
     )
   })
 
-  const activeTabs = createMemo((): SessionInfo[] => {
-    const sel = selection()
-    if (sel === LOCAL) return localSessions()
-    if (sel) return activeWorktreeSessions()
-    return []
-  })
+  const activeTabs = createMemo(() => pendingComposers.active(localSessions, activeWorktreeSessions))
 
   const contextEmpty = createMemo(() => {
     const sel = selection()
@@ -1310,18 +1318,6 @@ const AgentManagerContent: Component = () => {
     }
     window.addEventListener("focus", onWindowFocus)
 
-    const drafts = createNewTaskDrafts()
-    const newTaskHandler = (e: Event) => {
-      const sel = selection()
-      if (!sel || sel === LOCAL) return
-      e.stopImmediatePropagation()
-      const draft = drafts.create(sel)
-      window.dispatchEvent(new CustomEvent("agentManagerCaptureDraft", { detail: { id: draft.id } }))
-      terms.setActiveId(undefined)
-      vscode.postMessage({ type: "agentManager.addSessionToWorktree", worktreeId: sel })
-    }
-    window.addEventListener("newTaskRequest", newTaskHandler, true)
-
     // Add created sessions as local tabs (both direct from the prompt and
     // backend follow-ups). Dedups HTTP + SSE firing together.
     const createdSessions = new Set<string>()
@@ -1450,13 +1446,13 @@ const AgentManagerContent: Component = () => {
       if (msg.type === "agentManager.importResult" && !msg.success) creation.abandon(msg.projectId)
 
       if (msg.type === "agentManager.sessionAdded") {
-        const ev = msg as { type: string; sessionId: string; worktreeId: string }
+        const ev = msg as { type: string; sessionId: string; worktreeId: string; requestID?: string }
         if (!isCurrent(msg, currentProjectId())) return
         saveTabMemory()
         appendToTabOrder(ev.worktreeId, ev.sessionId)
         setSelection(ev.worktreeId)
         evictLocal(ev.sessionId)
-        drafts.apply(ev.worktreeId, ev.sessionId)
+        pendingComposers.apply(ev)
         session.selectSession(ev.sessionId)
         requestChatFocus(true)
       }
@@ -1621,8 +1617,6 @@ const AgentManagerContent: Component = () => {
       window.removeEventListener("keyup", modTrack, true)
       window.removeEventListener("blur", modReset)
       window.removeEventListener("focus", onWindowFocus)
-      window.removeEventListener("newTaskRequest", newTaskHandler, true)
-      drafts.cleanup()
       unsubCreate()
       unsubSessions()
       unsubRun()
@@ -1975,6 +1969,9 @@ const AgentManagerContent: Component = () => {
     forgetSessionFocus(sessionId)
     if (pending || localSet().has(sessionId)) {
       setLocalSessionIDs((prev) => prev.filter((id) => id !== sessionId))
+    }
+    if (pending && selection() !== LOCAL) {
+      pendingComposers.remove(sessionId)
     }
     if (pending) {
       closedDrafts.add(sessionId)
@@ -2573,7 +2570,7 @@ const AgentManagerContent: Component = () => {
                     promptBoxId={`agent-manager:${selection() ?? "unassigned"}`}
                     terminalContext={() => selection() ?? undefined}
                     deferFocusToQuestion={hasQuestionOption}
-                    pendingSessionID={selection() === LOCAL ? activePendingId() : undefined}
+                    pendingSessionID={activePendingId()}
                     focusOnDraftChange={focusOnDraftChange}
                     onFocusChange={focusCtl.prompt}
                     resolveEmbeddedTerminal={resolveTerminal}

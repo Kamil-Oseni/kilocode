@@ -4,6 +4,7 @@ import type { KiloClient, Session } from "@kilocode/sdk/v2/client"
 import type { KiloConnectionService } from "../services/cli-backend"
 import { getErrorMessage, sessionToWebview } from "../kilo-provider-utils"
 import { samePath } from "./project/paths"
+import { directories, scopes } from "./composer-scopes"
 import { resolveLocalDiffTarget } from "../diff/shared/target"
 import { DiffSourceCatalog } from "../diff/sources/catalog"
 import { getDiffMarkdownRender, setDiffMarkdownRender } from "../review-settings"
@@ -375,6 +376,7 @@ export class AgentManagerProvider implements Disposable {
     const panel = this.host.openPanel({
       onBeforeMessage: (msg) => this.onMessage(msg),
       worktreeDirectories: () => this.getWorktreeDirectories(),
+      composerScopes: () => this.getComposerScopes(),
       workspaceRoot: () => this.getRoot(),
       projectId: () => this.contexts.active()?.id,
     })
@@ -602,7 +604,8 @@ export class AgentManagerProvider implements Disposable {
     if (m.type === "agentManager.deleteWorktree") return this.onDeleteWorktree(m.worktreeId)
     if (m.type === "agentManager.removeStaleWorktree") return this.onRemoveStaleWorktree(m.worktreeId)
     if (m.type === "agentManager.promoteSession") return this.onPromoteSession(m.sessionId)
-    if (m.type === "agentManager.addSessionToWorktree") return this.onAddSessionToWorktree(m.worktreeId, m.sessionId)
+    if (m.type === "agentManager.addSessionToWorktree")
+      return this.onAddSessionToWorktree(m.worktreeId, m.sessionId, m.requestID)
     if (m.type === "agentManager.forkSession") return this.onForkSession(m.sessionId, m.worktreeId, m.messageId)
     if (m.type === "agentManager.closeSession") return this.onCloseSession(m.sessionId)
   }
@@ -1161,10 +1164,10 @@ export class AgentManagerProvider implements Disposable {
   }
 
   /** Add a new session to an existing worktree. */
-  private async onAddSessionToWorktree(worktreeId: string, sessionId?: string): Promise<null> {
+  private async onAddSessionToWorktree(worktreeId: string, sessionId?: string, requestID?: string): Promise<null> {
     const ctx = this.context
     if (!ctx) return null
-    return addSessionToLifecycleWorktree(ctx, this.lifecycleHost, worktreeId, sessionId)
+    return addSessionToLifecycleWorktree(ctx, this.lifecycleHost, worktreeId, sessionId, requestID)
   }
 
   private onForkSession(sessionId: string, worktreeId?: string, messageId?: string) {
@@ -1772,13 +1775,9 @@ export class AgentManagerProvider implements Disposable {
     return this.panel?.sessions.getSessionDirectories() ?? new Map()
   }
 
-  public getWorktreeDirectories(): string[] {
-    return (
-      this.getStateManager()
-        ?.getWorktrees()
-        .map((wt) => wt.path) ?? []
-    )
-  }
+  public getWorktreeDirectories = () => directories(this.getStateManager()?.getWorktrees())
+
+  public getComposerScopes = () => scopes(this.getRoot(), this.getStateManager()?.getWorktrees() ?? [])
 
   public workspaceRoot = () => this.getRoot()
 

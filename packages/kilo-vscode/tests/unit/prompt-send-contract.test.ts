@@ -1,7 +1,7 @@
 /**
  * Source contract tests for prompt send paths.
  *
- * Static analysis — reads session.tsx source and verifies that sendMessage and
+ * Static analysis — reads session.tsx and its sender helper and verifies that sendMessage and
  * sendCommand still dismiss suggestions and reject questions before dispatching.
  * Also reads ChatView.tsx and asserts the prompt-block predicate is fed only
  * permission counts, never question counts — guarantees that a pending question
@@ -17,6 +17,7 @@ import { clearIfOn } from "../../webview-ui/src/context/session-cloud-prune"
 
 const ROOT = path.resolve(import.meta.dir, "../..")
 const SESSION_FILE = path.join(ROOT, "webview-ui/src/context/session.tsx")
+const SENDER_FILE = path.join(ROOT, "webview-ui/src/context/session-send.ts")
 const CHATVIEW_FILE = path.join(ROOT, "webview-ui/src/components/chat/ChatView.tsx")
 const PROMPT_UTILS_FILE = path.join(ROOT, "webview-ui/src/components/chat/prompt-input-utils.ts")
 const PROMPT_FILE = path.join(ROOT, "webview-ui/src/components/chat/PromptInput.tsx")
@@ -47,10 +48,11 @@ function extractFunctionBody(source: string, name: string): string {
 }
 
 describe("sendMessage dismisses pending tool requests", () => {
-  const source = readFile(SESSION_FILE)
+  const source = readFile(SENDER_FILE)
   const body = extractFunctionBody(source, "sendMessage")
 
-  it("function sendMessage exists in session.tsx", () => {
+  it("wires the actual sender into session.tsx", () => {
+    expect(readFile(SESSION_FILE)).toContain("const sendMessage = createMessageSender({")
     expect(body.length).toBeGreaterThan(0)
   })
 
@@ -258,6 +260,7 @@ describe("KiloProvider pruneDeletedSession contract", () => {
 
 describe("sendMessage / sendCommand draft id contract", () => {
   const source = readFile(SESSION_FILE)
+  const sender = readFile(SENDER_FILE)
 
   it("sendMessage mints a draftID when there is no current session and none was supplied", () => {
     // External session deletions leave currentSessionID() undefined and clear
@@ -266,8 +269,9 @@ describe("sendMessage / sendCommand draft id contract", () => {
     // extension's sessionCreated echo has no key to migrate the in-flight draft
     // from ":pending:<id>" to ":session:<newSessionId>". The user loses the
     // typed message and the new session starts empty.
-    const body = extractFunctionBody(source, "sendMessage")
-    expect(body).toMatch(/const effectiveDraftID = !sid && !draftID \? crypto\.randomUUID\(\) : draftID/)
+    const body = extractFunctionBody(sender, "stage")
+    expect(body).toMatch(/const draft = !sid && !draftID \? crypto\.randomUUID\(\) : draftID/)
+    expect(extractFunctionBody(sender, "sendMessage")).toContain("draftID: staged.draft,")
   })
 
   it("sendCommand mints a draftID when there is no current session and none was supplied", () => {
@@ -280,10 +284,11 @@ describe("sendMessage / sendCommand draft id contract", () => {
     // pendingAgentSelection(). The draft scope must inherit that pending agent
     // before promptAgent(scope) runs, otherwise the first send pairs the selected
     // model with the default agent's system prompt.
-    const body = extractFunctionBody(source, "sendMessage")
-    expect(body).toMatch(
-      /if \(!sid && !draftID && effectiveDraftID\) agentDrafts\.seed\(effectiveDraftID\)[\s\S]*const agent = promptAgent\(scope\)/,
+    expect(extractFunctionBody(sender, "stage")).toContain("if (!sid && !draftID && draft) opts.seed(draft)")
+    expect(extractFunctionBody(sender, "sendMessage")).toMatch(
+      /const staged = stage\(sid, draftID, messageID, text, files, review\)[\s\S]*const agent = opts\.agent\(staged\.scope\)/,
     )
+    expect(source).toContain("seed: (id) => agentDrafts.seed(id)")
   })
 
   it("sendCommand seeds the pending agent before resolving the draft-scoped agent", () => {
@@ -294,7 +299,8 @@ describe("sendMessage / sendCommand draft id contract", () => {
   })
 
   it("sendMessage and sendCommand post the agent returned by promptAgent", () => {
-    expect(extractFunctionBody(source, "sendMessage")).toContain("const agent = promptAgent(scope)")
+    expect(extractFunctionBody(sender, "sendMessage")).toContain("const agent = opts.agent(staged.scope)")
+    expect(source).toContain("agent: promptAgent,")
     expect(extractFunctionBody(source, "sendCommand")).toContain("const agent = promptAgent(scope)")
     expect(extractFunctionBody(source, "promptAgent")).toContain("return resolvePromptAgent({")
   })
@@ -373,22 +379,22 @@ describe("PromptInput send origin contract", () => {
   })
 
   it("passes the captured origin to message and command sends", () => {
-    expect(source).toMatch(/session\.sendMessage\([\s\S]*origin \?\? null\)/)
-    expect(source).toMatch(/session\.sendCommand\([\s\S]*origin \?\? null\)/)
+    expect(source).toMatch(/session\.sendMessage\([\s\S]*origin \?\? null,\s*capture,\s*\)/)
+    expect(source).toMatch(
+      /session\.sendCommand\([\s\S]*origin \?\? null,\s*\{[\s\S]*variant: matched\.variant,\s*\},\s*capture,\s*\)/,
+    )
   })
 
-  it("records sent prompts before a pending session key change can return", () => {
+  it("records dispatched local prompts without eagerly clearing an unaccepted draft", () => {
     const start = source.indexOf("const sendDraft = async (draft: string) =>")
     const end = source.indexOf("\n  const handleSend = async () =>", start)
     const body = source.slice(start, end)
     const send = Math.max(body.indexOf("session.sendMessage("), body.indexOf("session.sendCommand("))
     const append = body.lastIndexOf("history.append(draft)")
-    const guard = body.indexOf("if (draftKey() !== key) return")
-
     expect(send).toBeGreaterThan(-1)
     expect(append).toBeGreaterThan(send)
-    expect(append).toBeLessThan(guard)
-    expect(body.indexOf('setText("")', guard)).toBeGreaterThan(guard)
+    expect(body.slice(send)).not.toContain('setText("")')
+    expect(body.slice(send)).not.toContain("if (draftKey() !== key) return")
   })
 })
 
@@ -445,8 +451,9 @@ describe("SessionContext userClearedSession contract", () => {
     // Resetting the flag at the moment the user starts the new draft closes
     // that window: the failure is for the current in-progress draft and must
     // be restorable.
-    const body = extractFunctionBody(source, "sendMessage")
-    const block = body.match(/if \(!sid && \(!draftID \|\| draftSessionID\(\) === scope\)\) \{([\s\S]*?)\}/)
+    const body = extractFunctionBody(readFile(SENDER_FILE), "stage")
+    expect(body).toContain("if (!sid && (!draftID || opts.draft() === scope)) opts.activate(scope)")
+    const block = source.match(/activate: \(scope\) => \{([\s\S]*?)\}/)
     expect(block).not.toBeNull()
     expect(block![1]).toMatch(/setUserClearedSession\(false\)/)
     expect(block![1]).toMatch(/setDraftSessionID\(scope\)/)

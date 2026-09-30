@@ -1,4 +1,17 @@
 import { createHash } from "node:crypto"
+import {
+  ComposerDrafts,
+  composerIdentity,
+  composerOwner,
+  composerScopes,
+  type DraftBackend,
+} from "./kilo-provider/composer-drafts"
+import type {
+  ComposerDraftWebviewMessage,
+  DraftCapture,
+  DraftIdentity,
+  DraftTarget,
+} from "./shared/composer-drafts-messages"
 import { fingerprint } from "./edit-review/revision"
 // raya_change - Raya extension namespace
 import * as path from "path"
@@ -371,6 +384,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly instanceId = crypto.randomUUID()
 
   private webview: vscode.Webview | null = null
+  private composerView?: vscode.Disposable
   private readonly voiceOrigin = new VoiceOrigin()
   private readonly voicePage = new VoiceOrigin()
   private voiceCurrent = () => false
@@ -379,6 +393,23 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private contextSessionID: string | undefined
   private connectionState: "connecting" | "connected" | "disconnected" | "error" = "connecting"
   private connectionGeneration = 0
+  private composerRevision = 0
+  private composerSignature?: string
+  private composerReady = false
+  private composerLoading?: Promise<void>
+  private composerOwners: Array<{ box: string; owner: string }> = []
+  private readonly composer = new ComposerDrafts({
+    backend: () => this.composerBackend(),
+    scope: (target) => this.composerScope(target),
+    post: (message) => this.postMessage(message),
+    generation: () => this.composerGeneration(),
+    owners: () => this.composerOwners,
+    message: async (sessionID, messageID, directory) => {
+      if (!this.client) return
+      const { data } = await this.client.session.message({ sessionID, messageID, directory }, { throwOnError: true })
+      return data.info
+    },
+  })
   private readonly routineEvents = new RoutineEvents(
     () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
     (message) => this.postMessage(message),
@@ -868,6 +899,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview)
     this.setupWebviewMessageHandler(webviewView.webview)
+    this.composerView?.dispose()
+    this.composerView = webviewView.onDidDispose(() => this.composer.detach())
 
     this.setSidebarVisible(webviewView.visible)
     this.visibilityDisposable?.dispose()
@@ -905,6 +938,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     panel.webview.html = this._getHtmlForWebview(panel.webview)
 
     this.setupWebviewMessageHandler(panel.webview)
+    this.composerView?.dispose()
+    this.composerView = panel.onDidDispose(() => this.composer.detach())
     this.viewStateDisposable?.dispose()
     this.viewStateDisposable = this.visibleTaskStreams.bindPanel(panel, () => {
       this.focused = panel.visible
@@ -1057,6 +1092,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Called by AgentManagerProvider after worktree recovery completes.
    */
   public refreshSessions(): void {
+    void this.syncComposerScopes()
     void this.handleLoadSessions()
   }
 
@@ -1160,6 +1196,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private setupWebviewMessageHandler(webview: vscode.Webview): void {
+    this.composer.detach()
     const current = this.voiceOrigin.bind(webview)
     this.voiceCurrent = this.voicePage.bind(webview)
     if (this.webviewMessageDisposable)
@@ -1317,6 +1354,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             parseReview(message.review, message.text),
             typeof message.agentManagerContext === "string" ? message.agentManagerContext : undefined,
             typeof msg.contextDirectory === "string" ? msg.contextDirectory : undefined,
+            message.capture,
           )
           break
         }
@@ -1335,6 +1373,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             parseMessageFiles(message.files),
             typeof message.agentManagerContext === "string" ? message.agentManagerContext : undefined,
             typeof msg.contextDirectory === "string" ? msg.contextDirectory : undefined,
+            message.capture,
           )
           break
         }
@@ -2359,6 +2398,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         }
       }
       this.connectionState = state
+      this.composer.state()
       this.postConnectionState(error)
       if (state !== "connected" || prior === "connected") return
       // Provider discovery must not wait for optional gateway profile synchronization.
@@ -2394,6 +2434,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.routineRefresh.invalidate()
     this.routineEvents.invalidate()
     this.connectionGeneration++
+    this.composer.state()
     this.configBindings.clear()
     this.postMessage({ type: "connectionState", state: "connecting" })
 
@@ -3141,6 +3182,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     partID?: string
     text?: string
   }): Promise<boolean> {
+    if (await this.handleComposer(message as ComposerDraftWebviewMessage)) return true
     if (message.type === "abort") {
       this.cancelRetry(message.sessionID ?? "")
       await this.handleAbort(message.sessionID, webviewAbortSource(message.source))
@@ -5038,6 +5080,192 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
   }
 
+  private async handleComposer(message: ComposerDraftWebviewMessage): Promise<boolean> {
+    if (
+      message.type !== "composerDraftPane" &&
+      message.type !== "composerDraftFlushed" &&
+      message.type !== "composerDraftList" &&
+      message.type !== "composerDraftLoad" &&
+      message.type !== "composerDraftSave" &&
+      message.type !== "composerDraftClear" &&
+      message.type !== "composerDraftPromote"
+    )
+      return false
+    if (message.type !== "composerDraftPane" || message.active) await this.syncComposerScopes()
+    await this.composer.handle(message)
+    return true
+  }
+
+  private composerGeneration(): number {
+    const scopes = composerScopes(
+      { box: "scope", key: "scope", pendingID: "scope" },
+      {
+        scopes: this.opts.composerScopes,
+        directory: (sessionID) => this.getWorkspaceDirectory(sessionID),
+        sessionID: this.contextSessionID,
+      },
+    )
+      .filter((item) => existsSync(item.directory))
+      .map((item) => ({ ...item, directory: canonicalizePath(item.directory) }))
+    const signature = JSON.stringify({
+      connection: this.connectionGeneration,
+      root: this.getRootDirectory(),
+      project: this.opts.projectQualifier?.()?.projectId,
+      scopes,
+    })
+    if (signature === this.composerSignature) return this.composerRevision
+    this.composerSignature = signature
+    const revision = ++this.composerRevision
+    this.composerReady = false
+    this.composerOwners = []
+    const client = this.client
+    if (client && this.connectionState === "connected") {
+      const loading = Promise.all(
+        scopes.map(async (scope) => {
+          const { data } = await client.project.current({ directory: scope.directory }, { throwOnError: true })
+          return { box: scope.box, owner: composerOwner(scope.directory, data.id) }
+        }),
+      )
+        .then(async (owners) => {
+          if (client !== this.client || this.composerGeneration() !== revision || this.connectionState !== "connected")
+            return
+          this.composerOwners = owners
+          this.composerReady = true
+          await this.composer.ready()
+        })
+        .catch(() => {
+          console.error("[Raya] Saved composer scopes could not be loaded")
+        })
+        .finally(() => {
+          if (this.composerLoading === loading) this.composerLoading = undefined
+        })
+      this.composerLoading = loading
+    }
+    queueMicrotask(() => this.composer.state())
+    return revision
+  }
+
+  private async syncComposerScopes(): Promise<void> {
+    if (!this.composerReady && !this.composerLoading) this.composerSignature = undefined
+    this.composerGeneration()
+    await this.composerLoading
+  }
+
+  private async composerScope(target: DraftTarget): Promise<DraftIdentity> {
+    const client = this.client
+    const revision = this.composerGeneration()
+    const generation = this.connectionGeneration
+    const project = this.opts.projectQualifier?.()?.projectId
+    if (!client) throw Object.assign(new Error("Composer scope is unavailable"), { code: "disconnected" })
+    const identity = await composerIdentity(target, {
+      scopes: () =>
+        composerScopes(target, {
+          scopes: this.opts.composerScopes,
+          directory: (sessionID) => this.getWorkspaceDirectory(sessionID),
+          sessionID: this.contextSessionID,
+        }),
+      current: () =>
+        this.client === client &&
+        this.connectionState === "connected" &&
+        generation === this.connectionGeneration &&
+        project === this.opts.projectQualifier?.()?.projectId,
+      ambiguous: (sessionID) => this.routeSessionDirectory(sessionID) === null,
+      project: async (directory) => (await client.project.current({ directory }, { throwOnError: true })).data.id,
+      session: async (sessionID, directory) =>
+        (await client.session.get({ directory, sessionID }, { throwOnError: true })).data,
+    })
+    if (
+      !identity.projectID ||
+      this.composerGeneration() !== revision ||
+      this.composerOwners.find((item) => item.box === target.box)?.owner !==
+        composerOwner(identity.workspace, identity.projectID)
+    ) {
+      this.composerSignature = undefined
+      this.composerGeneration()
+      throw Object.assign(new Error("Composer scope changed"), { code: "scope" })
+    }
+    return identity
+  }
+
+  private composerBackend(): DraftBackend | undefined {
+    this.composerGeneration()
+    const client = this.client
+    const generation = this.connectionGeneration
+    if (!client || this.connectionState !== "connected" || !this.composerReady) return
+    const check = <T>(result: { data?: T; error?: unknown }): T => {
+      if (client !== this.client || generation !== this.connectionGeneration || this.connectionState !== "connected")
+        throw Object.assign(new Error("Composer connection changed"), { code: "disconnected" })
+      if (result.error || !result.data) {
+        const err = result.error
+        const code =
+          err && typeof err === "object" && "code" in err && typeof err.code === "string" ? err.code : "unavailable"
+        throw Object.assign(new Error("Composer request failed"), { code })
+      }
+      return result.data
+    }
+    return {
+      list: async (scope) => check(await client.kilocode.composerDraft.list({ directory: scope.workspace, scope })),
+      load: async (identity) =>
+        check(await client.kilocode.composerDraft.load({ directory: identity.workspace, identity })),
+      save: async (identity, expected, content, mutation) =>
+        check(
+          await client.kilocode.composerDraft.save({
+            directory: identity.workspace,
+            identity,
+            expected,
+            content,
+            mutation,
+          }),
+        ),
+      clear: async (identity, expected, mutation) =>
+        check(
+          await client.kilocode.composerDraft.clear({ directory: identity.workspace, identity, expected, mutation }),
+        ),
+      promote: async (from, to, source, target, mutation) =>
+        check(
+          await client.kilocode.composerDraft.promote({
+            directory: from.workspace,
+            from,
+            to,
+            source,
+            target,
+            mutation,
+          }),
+        ),
+    }
+  }
+
+  private async composerSubmit(
+    fn: () => Promise<{ error?: unknown; response?: Response }>,
+    sid: string,
+    messageID?: string,
+    capture?: DraftCapture,
+  ): Promise<void> {
+    if (!capture) return this.withRetry(fn, sid, messageID)
+    const client = this.client
+    const generation = this.connectionGeneration
+    const directory = this.getWorkspaceDirectory(sid)
+    const result = await fn().catch(() => ({ error: true }))
+    const receipt =
+      client && messageID
+        ? await client.session.message({ sessionID: sid, messageID, directory }).catch(() => undefined)
+        : undefined
+    if (
+      client === this.client &&
+      generation === this.connectionGeneration &&
+      receipt?.data?.info.role === "user" &&
+      receipt.data.info.id === messageID &&
+      receipt.data.info.sessionID === sid
+    ) {
+      await this.composer.accepted(sid, messageID, "user")
+      return
+    }
+    if (result.error)
+      throw new Error(
+        "Raya could not confirm this message was accepted. Your draft is saved. Check the chat before sending again.",
+      )
+  }
+
   private async handleSendMessage(
     text: string,
     messageID?: string,
@@ -5051,6 +5279,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     review?: ReviewMessageData,
     context?: string,
     contextDirectory?: string,
+    capture?: DraftCapture,
   ): Promise<void> {
     if (!this.client) {
       this.postMessage({
@@ -5068,6 +5297,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     let resolved: { sid: string; dir: string } | undefined
     try {
+      if (capture) {
+        if (
+          (capture.identity.pendingID && capture.identity.pendingID !== draftID) ||
+          (capture.identity.sessionID && capture.identity.sessionID !== (sessionID ?? this.currentSession?.id))
+        )
+          throw new Error("The saved draft belongs to a different chat. Reopen it before sending.")
+        await this.syncComposerScopes()
+        await this.composer.validate(capture)
+      }
       const sandbox = this.sandboxTransitions.get(
         this.sandboxKey({ sessionID, draftID, agentManagerContext: context, contextDirectory }),
       )
@@ -5136,8 +5374,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       }
 
       await this.checkpoints.get(sid)
+      if (capture) {
+        if (!messageID) throw new Error("Reload the composer before sending this saved draft.")
+        await this.composer.prepare(capture, sid, messageID)
+      }
       await runWithMessageConfirmation(this.confirmations, messageID, "Raya provider: Message request", () =>
-        this.withRetry(
+        this.composerSubmit(
           () => {
             if (command?.kind === "start" && !current())
               throw new Error(
@@ -5157,6 +5399,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           },
           sid,
           messageID,
+          capture,
         ),
       )
     } catch (error) {
@@ -5241,6 +5484,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     files?: MessageFile[],
     context?: string,
     contextDirectory?: string,
+    capture?: DraftCapture,
   ): Promise<void> {
     if (!this.client) {
       this.postMessage({
@@ -5257,6 +5501,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
     let resolved: { sid: string; dir: string } | undefined
     try {
+      if (capture) {
+        if (
+          (capture.identity.pendingID && capture.identity.pendingID !== draftID) ||
+          (capture.identity.sessionID && capture.identity.sessionID !== (sessionID ?? this.currentSession?.id))
+        )
+          throw new Error("The saved draft belongs to a different chat. Reopen it before sending.")
+        await this.syncComposerScopes()
+        await this.composer.validate(capture)
+      }
       const sandbox = this.sandboxTransitions.get(
         this.sandboxKey({ sessionID, draftID, agentManagerContext: context, contextDirectory }),
       )
@@ -5265,6 +5518,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (sandbox) await sandbox
       const sid = resolved.sid
       const dir = resolved.dir
+      if (capture) {
+        if (!messageID) throw new Error("Reload the composer before sending this saved draft.")
+        await this.composer.prepare(capture, sid, messageID)
+      }
 
       if (messageID) {
         this.connectionService.recordMessageSessionId(messageID, sid)
@@ -5280,7 +5537,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
       await this.checkpoints.get(sid)
       await runWithMessageConfirmation(this.confirmations, messageID, "Raya provider: Command request", () =>
-        this.withRetry(
+        this.composerSubmit(
           () =>
             this.client!.session.command({
               sessionID: sid,
@@ -5296,6 +5553,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             }),
           sid,
           messageID,
+          capture,
         ),
       )
       if (messageID && completesWithoutStatus(command)) {
@@ -6007,6 +6265,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
 
     if (event.type === "message.updated") {
+      void this.composer
+        .accepted(event.properties.sessionID, event.properties.info.id, event.properties.info.role)
+        .catch(() => console.error("[Raya] Saved composer acceptance could not be confirmed"))
       this.confirmations.confirm(event.properties.info.id)
       this.speech?.trackMessage(event.properties.sessionID, event.properties.info.role, event.properties.info.id) // raya_change - extension-host Voice to MiniMax handoff
     }
@@ -6884,6 +7145,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Does NOT kill the server — that's the connection service's job.
    */
   dispose(): void {
+    this.composerView?.dispose()
+    this.composer.dispose()
     this.observing = false
     this.voiceOrigin.clear()
     this.voicePage.clear()

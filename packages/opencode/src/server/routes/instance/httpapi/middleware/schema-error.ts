@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import { InvalidRequestError } from "../errors"
+import { rejection as draftRejection } from "@/kilocode/server/httpapi/composer-draft-rejection" // kilocode_change
 
 // Effect's Issue formatter recursively dumps the rejected `actual` value with
 // no truncation, so a 5KB invalid array produces a ~360KB string. Cap to keep
@@ -23,6 +24,10 @@ export class SchemaErrorMiddleware extends HttpApiMiddleware.Service<SchemaError
 ) {}
 
 export const schemaErrorLayer = HttpApiMiddleware.layerSchemaErrorTransform(SchemaErrorMiddleware, (error, context) => {
+  // kilocode_change start - composer payloads must never reach the issue formatter or logs
+  const draft = draftRejection(context.endpoint.path)
+  if (draft) return Effect.logWarning("composer draft schema rejection", { kind: error.kind }).pipe(Effect.as(draft))
+  // kilocode_change end
   const reason = truncateReason(error.cause.message)
   const response = context.endpoint.path.startsWith("/api/")
     ? Effect.fail(

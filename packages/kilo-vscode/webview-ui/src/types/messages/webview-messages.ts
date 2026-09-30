@@ -8,6 +8,7 @@ import type { ModelSelection, ProviderConfig } from "./providers"
 import type { Config } from "./config"
 import type { ModelAllocation, ReviewCommentEntry, TerminalDestination, TerminalPlacement } from "./agent-manager"
 import type { ReviewMessageData } from "../../../../src/shared/review-comments"
+import type { ComposerDraftWebviewMessage, DraftCapture } from "../../../../src/shared/composer-drafts-messages"
 import type { WorkStyle, WorkStyleState } from "../../../../src/shared/work-style-presets"
 import type { RefreshProviderUsageMessage, RequestProviderUsageMessage } from "./provider-usage"
 import type { AnacondaDesktopWebviewMessage } from "../../../../src/shared/anaconda-desktop-messages"
@@ -26,6 +27,7 @@ import type { MemoryShowMessage, MemoryOperationMessage, RequestMemoryMessage } 
 
 export interface SendMessageRequest {
   type: "sendMessage"
+  capture?: DraftCapture
   projectId?: string
   text: string
   messageID?: string
@@ -728,6 +730,7 @@ export interface RequestCommandsMessage {
 }
 
 export interface SendCommandRequest {
+  capture?: DraftCapture
   type: "sendCommand"
   command: string
   arguments: string
@@ -1202,6 +1205,7 @@ export interface OpenLocallyRequest {
 // Add a new session to an existing worktree
 export interface AddSessionToWorktreeRequest {
   type: "agentManager.addSessionToWorktree"
+  requestID?: string
   worktreeId: string
   sessionId?: string
 }
@@ -2086,6 +2090,7 @@ export interface FocusTimerActionMessage {
 }
 
 export type WebviewMessage =
+  | ComposerDraftWebviewMessage
   | HandoffEvent
   | import("../../../../src/shared/chief-notes-messages").ChiefNotesRequest
   | { type: "speechLiveControl"; requestId: string; eventID: string; action: "mute" | "unmute" | "stop_speaking" }

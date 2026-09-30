@@ -14,6 +14,7 @@ import {
 import type { ParentComponent, Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useVSCode } from "./vscode"
+import type { DraftCapture } from "../../../src/shared/composer-drafts-messages"
 import { useServer } from "./server"
 import { useProvider } from "./provider"
 import { useConfig } from "./config"
@@ -91,6 +92,7 @@ import { clearIfOn, createCloudPrune } from "./session-cloud-prune"
 import { isSameSessionTree } from "./model-usage"
 import { createDraftAgentSeed, resolvePromptAgent } from "./session-agent"
 import { createModelSelector } from "./session-model-selector"
+import { createMessageSender } from "./session-send"
 
 const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
@@ -229,6 +231,7 @@ interface SessionContextValue {
   // Thinking variant for the selected model
   variantList: (sessionID?: string) => string[]
   currentVariant: (sessionID?: string) => string | undefined
+  draftVariant: (sessionID?: string) => string | undefined
   variantForAgent: (agent: string, model: ModelSelection | null) => string | undefined
   selectVariant: (value: string | undefined, sessionID?: string) => void
 
@@ -260,6 +263,7 @@ interface SessionContextValue {
     context?: string,
     review?: ReviewMessageData,
     origin?: string | null,
+    capture?: DraftCapture,
   ) => void
   sendCommand: (
     command: string,
@@ -271,6 +275,7 @@ interface SessionContextValue {
     context?: string,
     origin?: string | null,
     overrides?: { agent?: string; model?: string; variant?: string },
+    capture?: DraftCapture,
   ) => void
   abort: (source?: "user-stop" | "user-escape") => void
   compact: () => void
@@ -689,6 +694,14 @@ export const SessionProvider: ParentComponent = (props) => {
   })
   const { carry: carryVariant, list: variantList, agent: variantForAgent, current: currentVariant } = variants
   const selectVariant = variants.select
+  const draftVariant = (scope?: string) => {
+    const id = scope ?? currentSessionID()
+    const model = selected(id)
+    if (!model) return undefined
+    const key = variantKey(model, agentForScope(id), id)
+    const raw = store.variantSelections[key]
+    return raw === undefined ? currentVariant(id) : raw || undefined
+  }
   const models = createModelSelector({
     current: currentSessionID,
     agent: agentForScope,
@@ -2241,86 +2254,32 @@ export const SessionProvider: ParentComponent = (props) => {
     queueMicrotask(() => window.dispatchEvent(new CustomEvent("resumeAutoScroll")))
   }
 
-  function sendMessage(
-    text: string,
-    providerID?: string,
-    modelID?: string,
-    files?: FileAttachment[],
-    draftID?: string,
-    context?: string,
-    review?: ReviewMessageData,
-    origin?: string | null,
-  ) {
-    if (!server.isConnected()) {
-      console.warn("[Raya] Cannot send message: not connected")
-      return
-    }
-
-    const messageID = Identifier.ascending("message")
-
-    const sid = origin === undefined ? currentSessionID() : (origin ?? undefined)
-    const selection = providerID && modelID ? { providerID, modelID } : selected(sid)
-    recordModelUsage(selection?.providerID, selection?.modelID)
-    const preview = sid?.startsWith("cloud:")
-      ? sid.slice("cloud:".length)
-      : origin === undefined
-        ? cloudPreviewId()
-        : null
-    if (preview) {
-      const scope = draftID ?? sid
-      const agent = promptAgent(scope)
-      vscode.postMessage({
-        type: "importAndSend",
-        cloudSessionId: preview,
-        continuationID: cloud.send(preview),
-        text,
-        messageID,
-        providerID,
-        modelID,
-        agent,
-        variant: currentVariant(scope),
-        files,
-        review,
-      })
-      return
-    }
-
-    const suggestion = scopedSuggestions(sid)[0]
-    if (suggestion) dismissSuggestion(suggestion.id)
-    for (const q of scopedQuestions(sid)) {
-      dismissQuestion(q.id)
-    }
-
-    const effectiveDraftID = !sid && !draftID ? crypto.randomUUID() : draftID
-    const scope = effectiveDraftID ?? sid
-    if (!sid && !draftID && effectiveDraftID) agentDrafts.seed(effectiveDraftID)
-    if (scope) {
+  const sendMessage = createMessageSender({
+    connected: server.isConnected,
+    current: currentSessionID,
+    selected,
+    usage: recordModelUsage,
+    preview: cloudPreviewId,
+    continuation: (id) => cloud.send(id),
+    agent: promptAgent,
+    variant: currentVariant,
+    post: vscode.postMessage,
+    suggestions: scopedSuggestions,
+    questions: scopedQuestions,
+    dismissSuggestion,
+    dismissQuestion,
+    seed: (id) => agentDrafts.seed(id),
+    prepare: (scope, message, text, files, review) => {
       clearClose(scope)
-      addOptimistic(scope, messageID, text, files, review)
-      startSubmission(scope, messageID)
-      if (!sid && (!draftID || draftSessionID() === scope)) {
-        setUserClearedSession(false)
-        setDraftSessionID(scope)
-      }
-    }
-    const agent = promptAgent(scope)
-
-    vscode.postMessage({
-      type: "sendMessage",
-      text,
-      messageID,
-      sessionID: sid,
-      draftID: effectiveDraftID,
-      providerID,
-      modelID,
-      agent,
-      variant: currentVariant(scope),
-      files,
-      review,
-      agentManagerContext: context,
-    })
-  }
-
+      addOptimistic(scope, message, text, files, review)
+      startSubmission(scope, message)
+    },
+    activate: (scope) => {
+      setUserClearedSession(false)
+      setDraftSessionID(scope)
+    },
+    draft: draftSessionID,
+  })
   function sendCommand(
     command: string,
     args: string,
@@ -2331,6 +2290,7 @@ export const SessionProvider: ParentComponent = (props) => {
     context?: string,
     origin?: string | null,
     overrides?: { agent?: string; model?: string; variant?: string },
+    capture?: DraftCapture,
   ) {
     if (!server.isConnected()) {
       console.warn("[Raya] Cannot send command: not connected")
@@ -2405,6 +2365,7 @@ export const SessionProvider: ParentComponent = (props) => {
 
     vscode.postMessage({
       type: "sendCommand",
+      capture,
       command,
       arguments: args,
       messageID,
@@ -3049,6 +3010,7 @@ export const SessionProvider: ParentComponent = (props) => {
     toggleFavorite,
     variantList,
     currentVariant,
+    draftVariant,
     variantForAgent,
     selectVariant,
     revert,

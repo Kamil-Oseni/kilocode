@@ -303,6 +303,7 @@ export function activate(context: vscode.ExtensionContext) {
         const ctx = agentManagerHost.wrapExistingPanel(panel, {
           onBeforeMessage: (msg) => agentManagerProvider.handleMessage(msg),
           worktreeDirectories: () => agentManagerProvider.getWorktreeDirectories(),
+          composerScopes: () => agentManagerProvider.getComposerScopes(),
           workspaceRoot: () => agentManagerProvider.workspaceRoot(),
           projectId: () => agentManagerProvider.projectId(),
         })

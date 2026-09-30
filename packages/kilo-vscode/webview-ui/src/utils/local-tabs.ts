@@ -68,9 +68,10 @@ export function restoreTabs(
   active: string | undefined,
   pending: PendingTabFactory,
   check: PendingTabCheck = isPendingTab,
+  durable = false,
 ): LocalTabState {
-  const tabs = ids?.filter((id) => !check(id)) ?? []
-  const tab = active && !check(active) ? active : undefined
+  const tabs = ids?.filter((id) => durable || !check(id)) ?? []
+  const tab = active && (durable || !check(active)) ? active : undefined
   return normalize(tabs, tab, pending)
 }
 

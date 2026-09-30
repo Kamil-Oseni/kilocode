@@ -57,17 +57,17 @@ globalThis.acquireVsCodeApi = () => ({
     webview = state
   },
 })
-const { createComponent } = await import("solid-js")
+const { createComponent, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { VSCodeProvider } = await import("../../webview-ui/src/context/vscode.tsx")
 const { LanguageContext } = await import("../../webview-ui/src/context/language.tsx")
 const { SessionContext } = await import("../../webview-ui/src/context/session.tsx")
 const { DialogProvider } = await import("@kilocode/kilo-ui/context/dialog")
 const { default: RoutinesView } = await import("../../webview-ui/src/components/routines/RoutinesView.tsx")
-const { status } = await import("../../webview-ui/src/components/routines/Inbox.tsx")
+const { status, Inbox } = await import("../../webview-ui/src/components/routines/Inbox.tsx")
 const root = document.createElement("div")
 document.body.append(root)
-const mount = (workspace = "C:/Projects/Books") =>
+const mount = (workspace = "C:/Projects/Books", inbox) =>
   render(
     () =>
       createComponent(VSCodeProvider, {
@@ -80,7 +80,7 @@ const mount = (workspace = "C:/Projects/Books") =>
                 get children() {
                   return createComponent(DialogProvider, {
                     get children() {
-                      return createComponent(RoutinesView, { workspace })
+                      return inbox ? createComponent(Inbox, inbox) : createComponent(RoutinesView, { workspace })
                     },
                   })
                 },
@@ -474,6 +474,12 @@ try {
   assert.equal(pane.getAttribute("aria-label"), "Messages with Books")
   const draft = root.querySelector("textarea[aria-label='Message this worker']")
   draft.focus()
+  draft.value = "  \n  "
+  draft.dispatchEvent(new window.Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 450))
+  const whitespace = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  assert.equal(whitespace.draft, "  \n  ")
+  assert.equal(whitespace.agentID, agent.id)
   draft.value = "Keep this draft"
   draft.dispatchEvent(new window.Event("input", { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 450))
@@ -982,7 +988,56 @@ try {
   assert.equal(root.querySelector(".routines-thread[role='region']"), null)
   assert.equal(webview.routineInbox.selected["c:/projects/legal"], undefined)
   assert.equal(webview.routineInbox.selected["c:/projects/books"], agent.id)
-  console.log("routine-inbox-view: conversation return and report arrival assertions passed")
+  dispose()
+  const [worker, setWorker] = createSignal("draft-first")
+  const [box, setBox] = createSignal()
+  dispose = mount("C:/Projects/Books", {
+    get agentID() {
+      return worker()
+    },
+    get box() {
+      return box()
+    },
+    name: "Draft worker",
+    role: "Reviewer",
+    workspace: "C:/Projects/Books",
+    objective: "Review",
+    schedule: "When you ask",
+    manual: true,
+    access: "Read only",
+    output: "Report",
+    enabled: true,
+    canInspect: false,
+    connection: "connected",
+    onEdit() {},
+    onAccess() {},
+    onOutput() {},
+    onInspect() {},
+    onToggle() {},
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  const pending = root.querySelector("textarea[aria-label='Message this worker']")
+  assert.equal(pending.disabled, true)
+  setBox({ agentID: worker(), state: "idle", draft: "Old server draft", draftRevision: 3 })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(pending.disabled, false)
+  assert.equal(pending.value, "Old server draft")
+  pending.value = "Typed before the saved draft arrived"
+  pending.dispatchEvent(new window.Event("input", { bubbles: true }))
+  setBox({ agentID: worker(), state: "idle", draft: "Delayed server draft", draftRevision: 4 })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(pending.value, "Typed before the saved draft arrived")
+  assert.equal(pending.disabled, false)
+  const cutoff = sent.length
+  setBox(undefined)
+  setWorker("draft-second")
+  await new Promise((resolve) => setTimeout(resolve, 450))
+  assert.equal(root.querySelector("textarea[aria-label='Message this worker']").value, "")
+  assert.equal(
+    sent.slice(cutoff).some((msg) => msg.type === "routineInboxDraft"),
+    false,
+  )
+  console.log("routine-inbox-view: conversation, whitespace, late hydration, and worker-switch assertions passed")
 } finally {
   dispose()
   root.remove()

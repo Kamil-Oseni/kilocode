@@ -7,7 +7,12 @@ import { WindowsDesktopDriver } from "../services/computer-use/desktop-windows"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 import type { ComputerUseLeaseStore } from "../services/computer-use/lease-store"
 import type { DesktopAutomationService } from "../services/computer-use/desktop-service"
-import { inspectInstalledHost, ObservationFailure, type ObservationStage } from "./installed-desktop-host-core"
+import {
+  inspectInstalledHost,
+  observeStage,
+  type ObservationDiagnostic,
+  type ObservationStage,
+} from "./installed-desktop-host-core"
 import { desktopNames } from "./windows-desktop-name"
 import { measure } from "./installed-desktop-stage"
 
@@ -37,7 +42,12 @@ export function registerInstalledDesktopHost(
       const off = connection.onStateChange((state) => {
         if (state !== "connected") lost.value = true
       })
-      const timeout = setTimeout(() => driver?.cancel(), 15_000)
+      const observation = { path: "powershell_fallback" as const, stages: [] as ObservationDiagnostic[] }
+      const deadline = { expired: false }
+      const timeout = setTimeout(() => {
+        deadline.expired = true
+        driver?.cancel()
+      }, 15_000)
       const probe = inspectInstalledHost({
         loadedVersion: String(context.extension.packageJSON.version),
         loadedCaptureSha256: capture.value,
@@ -49,6 +59,7 @@ export function registerInstalledDesktopHost(
           desktop: { status: names.status, elapsedMs: names.elapsedMs },
           capture: { status: capture.status, elapsedMs: capture.elapsedMs },
         },
+        observation,
         backend: () => (lost.value ? "disconnected" : connection.getConnectionState()),
         process: () => connection.currentProcessIdentity(),
         lease: () => lease.summary(),
@@ -56,9 +67,7 @@ export function registerInstalledDesktopHost(
         observe: async () => {
           if (!driver) throw new Error("Windows desktop is unavailable")
           const stage = <T>(name: ObservationStage, operation: () => Promise<T>) =>
-            operation().catch(() => {
-              throw new ObservationFailure(name)
-            })
+            observeStage(observation.stages, name, operation, () => deadline.expired)
           const before = await stage("foreground_before", () => driver.current())
           const initial = await stage("identity_before", () => driver.identity(before.windowID))
           const frame = await stage("capture", () => driver.observe({ fresh: true }))

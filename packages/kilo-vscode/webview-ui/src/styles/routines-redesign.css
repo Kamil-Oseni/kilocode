@@ -250,9 +250,6 @@
   .routines-view .routines-inbox {
     grid-template-columns: minmax(0, 1fr);
   }
-  .routines-view .routines-people {
-    max-height: 300px;
-  }
   .routines-view .routines-thread {
     min-height: 370px;
   }
@@ -807,7 +804,6 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
   .routines-view .routines-people {
     border-right: 0;
     border-bottom: 1px solid var(--routine-line);
-    max-height: 250px;
   }
 
   .routines-view .routines-thread-head {

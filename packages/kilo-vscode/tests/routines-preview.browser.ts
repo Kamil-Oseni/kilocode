@@ -1,6 +1,36 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+for (const width of [400, 600, 680, 900]) {
+  test(`worker roster fills the sidebar at ${width}px without clipping under its toolbar`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 1100 })
+    await page.goto("/?state=dark-routines", { waitUntil: "domcontentloaded" })
+    const roster = page.locator(".routines-people")
+    const workers = page.locator(".routines-identity[data-routine-worker]")
+    await expect(workers.first()).toBeVisible()
+    await page.locator(".routines-roster-more > summary").click()
+    await expect(roster).toBeVisible()
+    const size = await roster.evaluate((node) => ({
+      height: node.clientHeight,
+      cap: getComputedStyle(node).maxHeight,
+      overflow: getComputedStyle(node).overflowY,
+    }))
+    expect(size.cap).toBe("none")
+    expect(size.height).toBeGreaterThan(300)
+    expect(size.overflow).toBe("auto")
+    await expect(workers.first()).toBeInViewport()
+    await page.screenshot({ path: info.outputPath(`roster-${width}.png`), fullPage: true })
+    await page.locator('.routines-identity[data-routine-worker="routine"]').click()
+    await expect(page.getByRole("region", { name: "Conversation with Books" })).toBeVisible()
+    if (width <= 600) await expect(roster).toBeHidden()
+    if (width > 600) {
+      await expect(roster).toBeVisible()
+      expect(await roster.evaluate((node) => node.clientHeight)).toBeGreaterThan(300)
+      await expect(workers.first()).toBeInViewport()
+    }
+  })
+}
+
 test("Routines overview sends a team request and opens teams", async ({ page }, info) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await page.goto("/?state=dark-routines")
@@ -45,7 +75,9 @@ test("paused worker composer keeps message field usable at narrow and wide width
     expect(box!.width).toBeGreaterThan(form!.width * 0.6)
     expect(box!.x).toBeGreaterThanOrEqual(form!.x)
     expect(box!.x + box!.width).toBeLessThanOrEqual(form!.x + form!.width + 1)
-    expect(await page.locator(".routines-composer").evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
+    expect(
+      await page.locator(".routines-composer").evaluate((node) => node.scrollWidth - node.clientWidth),
+    ).toBeLessThanOrEqual(1)
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1)
     await page.screenshot({ path: info.outputPath(`paused-composer-${width}.png`), fullPage: true })
   }

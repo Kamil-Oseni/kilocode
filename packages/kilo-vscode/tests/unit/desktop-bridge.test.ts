@@ -7,6 +7,7 @@ import {
   type DesktopReceiptStore,
 } from "../../src/services/computer-use/desktop-bridge"
 import { DesktopSession, type DesktopDriver } from "../../src/services/computer-use/desktop-session"
+import { NativeInputPreflightError } from "../../src/services/computer-use/desktop-input-host"
 import { ComputerUseLeaseStore, type SensitivePolicy } from "../../src/services/computer-use/lease-store"
 import { firstChanged } from "../../src/services/computer-use/desktop-cadence"
 import type { ConnectionState } from "../../src/services/cli-backend/connection-service"
@@ -119,7 +120,7 @@ function setup(
     focus: async (target) => {
       focused.push(target.windowID)
     },
-    perform: async (action, _target, hook) => {
+    perform: async (action, _target, hook, guard) => {
       if (input.native && hook) {
         const identity = {
           session: "broker_private_session",
@@ -127,6 +128,12 @@ function setup(
           sequence: actions.length + 1,
         }
         await hook({ phase: "reserved", identity })
+        try {
+          guard?.()
+        } catch (error) {
+          await hook({ phase: "settled", identity, outcome: "cancelled" })
+          throw new NativeInputPreflightError(error instanceof Error ? error.message : String(error))
+        }
         input.native.reserved?.()
         await hook({
           phase: "settled",
@@ -2027,6 +2034,33 @@ describe("desktop observation bridge", () => {
     expect(JSON.stringify(saved.native)).not.toContain(click.sessionID)
     expect(JSON.stringify(saved.native)).not.toContain("broker_private")
     expect(test.bridge.journalEvents()?.releaseGateEligible).toBe(false)
+    test.bridge.dispose()
+  })
+
+  it("refuses expired authority after durable reservation as known no-effect", async () => {
+    const data = memory()
+    let allowed = true
+    const store: DesktopReceiptStore = {
+      get: data.get,
+      update: async (key, value) => {
+        await data.update(key, value)
+        if ((value as { native?: Array<{ phase: string }> }).native?.some((row) => row.phase === "reserved"))
+          allowed = false
+      },
+    }
+    const test = setup({ store, dispatch: () => (allowed ? "allow" : "deny"), native: { outcome: "confirmed" } })
+    await native(test, "native_authority_expired")
+    expect(test.actions).toEqual([])
+    expect((data.read() as { native: Array<Record<string, unknown>> }).native).toMatchObject([
+      { phase: "settled", outcome: "cancelled" },
+    ])
+    expect(test.rejects).toContainEqual(
+      expect.objectContaining({
+        requestID: "native_authority_expired",
+        error: expect.not.objectContaining({ receipt: expect.anything() }),
+      }),
+    )
+    expect(test.bridge.journalEvents()?.events).toContainEqual(expect.objectContaining({ outcome: "refused" }))
     test.bridge.dispose()
   })
 

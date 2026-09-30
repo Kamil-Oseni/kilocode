@@ -11,6 +11,7 @@ import type { ConnectionState } from "../cli-backend/connection-service"
 import type { SSEPayload } from "../cli-backend/sdk-sse-adapter"
 import { DesktopOutcomeError, type DesktopNativeDispatch, type DesktopSession } from "./desktop-session"
 import type { DesktopPlannedAction } from "./desktop-sequence"
+import { NativeInputPreflightError } from "./desktop-input-host"
 
 export interface DesktopConnection {
   onEvent(listener: (event: SSEPayload, directory?: string) => void): () => void
@@ -401,8 +402,9 @@ export class DesktopBridge {
     startedAt: number,
     dispatched: boolean,
   ): Promise<void> {
-    const uncertain = dispatched || error instanceof DesktopOutcomeError
-    if (!dispatched && error instanceof DesktopAuthorizationRefusal)
+    const unsent = error instanceof NativeInputPreflightError
+    const uncertain = !unsent && (dispatched || error instanceof DesktopOutcomeError)
+    if (unsent || (!dispatched && error instanceof DesktopAuthorizationRefusal))
       await this.preEvent(request, fingerprint, "refused", startedAt)
     receipt.failure = {
       code: "invalid_request",
@@ -422,7 +424,7 @@ export class DesktopBridge {
         : {}),
     }
     if (uncertain) this.session.takeControl("A desktop action had an uncertain outcome. Inspect it before resuming.")
-    if (dispatched)
+    if (uncertain)
       this.record(request, fingerprint, "post_dispatch", "unknown", startedAt, receipt.failure.receipt!.finishedAt)
     await this.retain(receipt).catch((err) =>
       console.error("[Raya] Desktop failure receipt persistence failed; backend delivery will still be attempted", err),
@@ -789,6 +791,11 @@ export class DesktopBridge {
       },
       onDispatch,
       onNative,
+      (action) => {
+        const proof = proofs.get(action)
+        if (!proof) throw new Error("Desktop sequence authorization evidence is incomplete")
+        enforce(this.validate?.(sequenceAuthorization(request, action, proof)), proof)
+      },
     )
     const frame = result.scene
     const proof = request.steps[0]?.action.authorization

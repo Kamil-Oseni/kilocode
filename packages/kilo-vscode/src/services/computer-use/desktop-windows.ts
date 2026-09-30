@@ -2118,6 +2118,7 @@ export class WindowsDesktopDriver implements DesktopDriver {
     action: DesktopAction,
     target: DesktopDispatchTarget,
     onNative?: DesktopNativeDispatchHook,
+    guard?: () => void,
   ): Promise<void> {
     if (this.nativeInput) {
       if ((action.operation !== "pointer" || action.action !== "move") && action.operation !== "scroll")
@@ -2131,11 +2132,16 @@ export class WindowsDesktopDriver implements DesktopDriver {
       let binding: NativeInputDispatchIdentity | undefined
       let reserved = false
       const reply = await host
-        .dispatch(action, target, async (identity) => {
-          binding = identity
-          await onNative?.({ phase: "reserved", identity })
-          reserved = true
-        })
+        .dispatch(
+          action,
+          target,
+          async (identity) => {
+            binding = identity
+            await onNative?.({ phase: "reserved", identity })
+            reserved = true
+          },
+          guard,
+        )
         .catch(async (error: unknown) => {
           if (error instanceof NativeInputDispatchError) {
             this.inputUnknown = true

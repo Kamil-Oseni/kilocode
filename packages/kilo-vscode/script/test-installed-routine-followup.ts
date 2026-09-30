@@ -36,7 +36,11 @@ async function installed() {
   const exe = join(dir, "bin", "kilo.exe")
   const hash = createHash("sha256")
   for await (const chunk of createReadStream(exe, { highWaterMark: 65_536 })) hash.update(chunk)
-  return { exe, dir, version: expected, digest: hash.digest("hex") }
+  const digest = hash.digest("hex")
+  const pinned = process.env.RAYA_INSTALLED_CLI_SHA256
+  assert.match(pinned ?? "", /^[a-f0-9]{64}$/, "Pin RAYA_INSTALLED_CLI_SHA256")
+  assert.equal(digest, pinned, "Installed CLI does not match its acceptance pin")
+  return { exe, dir, version: expected, digest }
 }
 function fixture() {
   const state = { requests: 0, questions: 0, followupRequests: 0, followupUserRequests: 0 }
@@ -376,6 +380,63 @@ async function main() {
     await send(worker.id, "completed_first", "COMPLETED_FIRST")
     const first = await complete(worker.id, 1, "FIRST_REPLY_ACK")
     assert.equal(fake.count(), 1)
+    const recipient = await create("Late child recipient", [])
+    const snapshot = async () => {
+      assert.ok(host)
+      const ledger = new Sqlite(join(home, "archive-acceptance.db"), { readonly: true })
+      try {
+        return {
+          parent: await runs(worker.id),
+          goal: await saved(first.row.sessionID),
+          runs: await runs(recipient.id),
+          events: await call(host, password, root, "GET", `/kilocode/agent/${recipient.id}/events`),
+          delegations: ledger
+            .query("SELECT * FROM raya_routine_delegation WHERE sender_id = ? OR recipient_id = ? ORDER BY id")
+            .all(worker.id, recipient.id),
+          messages: ledger.query("SELECT * FROM raya_routine_message WHERE agent_id = ? ORDER BY id").all(recipient.id),
+          conversation: ledger.query("SELECT * FROM raya_routine_conversation WHERE agent_id = ?").all(recipient.id),
+          sessions: ledger.query("SELECT id FROM session ORDER BY id").all(),
+          requests: fake.count(),
+        }
+      } finally {
+        ledger.close()
+      }
+    }
+    const deny = async (stage: string) => {
+      assert.ok(host)
+      const before = await snapshot()
+      assert.deepEqual(before.runs, [])
+      assert.deepEqual(before.delegations, [])
+      for (const source of ["late_completed_parent", "late_completed_parent", `late_parent_${stage}`]) {
+        const response = await request(host, password, root, "POST", `/kilocode/agent/${worker.id}/delegate`, {
+          source,
+          senderID: worker.id,
+          recipientID: recipient.id,
+          parentRunID: first.row.id,
+          objective: "This child must not be admitted after its parent completed.",
+        })
+        assert.equal(response.status, 400)
+        const body = (await response.json()) as { message?: string }
+        assert.equal(body.message, "The parent run has ended and cannot assign new work.")
+        assert.deepEqual(await snapshot(), before, "Late refusal changed durable child state or parent receipts")
+      }
+      stages.push({ stage: `completed-parent-denied-${stage}`, parent: first.row.id, recipient: recipient.id, before })
+    }
+    await deny("initial")
+    if (process.env.RAYA_LATE_PARENT_ONLY === "1") {
+      for (const attempt of [1, 2]) {
+        await stop(host)
+        host = await backend(app.exe, root, env, hosts)
+        await call(host, password, root, "GET", "/kilocode/agent")
+        await wait(() => host?.markers.revival === true, "Restart did not finish routine revival", 45_000)
+        assert.equal(host.markers.failed, false)
+        assert.deepEqual(await runs(worker.id), [first.row])
+        assert.deepEqual(await saved(first.row.sessionID), first.goal)
+        await deny(`restart${attempt}`)
+      }
+      console.log(`Installed completed-parent late-delegation acceptance passed: ${app.version}`)
+      return
+    }
     await send(worker.id, "completed_second", "COMPLETED_SECOND")
     const second = await complete(worker.id, 2, "SECOND_REPLY_ACK")
     assert.notEqual(second.row.id, first.row.id)
@@ -558,6 +619,7 @@ async function main() {
       assert.deepEqual(await saved(row.sessionID), goal)
       assert.deepEqual(reports(), [{ source: `reply:${row.id}`, session_id: row.sessionID }])
       assert.equal(fake.count(), requests)
+      await deny(`restart${attempt + 1}`)
       await send(waiting.id, "waiting_followup", "WAIT_FOLLOWUP")
       await Bun.sleep(1_000)
       assert.equal((await runs(waiting.id)).length, 1)
@@ -574,6 +636,8 @@ async function main() {
     console.log(`Installed routine follow-up acceptance passed: ${app.version}`)
   } catch (err) {
     error = err instanceof assert.AssertionError ? err.message : "Installed follow-up failed; inspect stage receipts"
+    // This fixture uses synthetic local context only; retain bounded backend diagnostics on failure.
+    stages.push({ stage: "failed", diagnostics: hosts.map((item) => item.diagnostic.text) })
     throw err
   } finally {
     const cleanup = await Promise.allSettled(hosts.map(stop))
@@ -588,6 +652,7 @@ async function main() {
           stages,
           model: fake.receipt(),
           error,
+          recovery: hosts.map((item) => item.markers),
           cleanup: cleanup.map((item, index) => ({
             pid: hosts[index].child.pid,
             joined: item.status === "fulfilled",

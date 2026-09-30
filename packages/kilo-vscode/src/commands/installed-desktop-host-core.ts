@@ -2,6 +2,36 @@ import type { Diagnostic } from "./installed-desktop-stage"
 
 const stages = ["foreground_before", "identity_before", "capture", "identity_after", "foreground_after"] as const
 export type ObservationStage = (typeof stages)[number]
+const codes = ["ready", "deadline", "timeout", "cancelled", "failed"] as const
+export type ObservationDiagnostic = { stage: ObservationStage; code: (typeof codes)[number]; elapsedMs: number }
+
+/** Preserve timing and a fixed reason code without retaining native exception text. */
+export async function observeStage<T>(
+  rows: ObservationDiagnostic[],
+  stage: ObservationStage,
+  operation: () => Promise<T>,
+  expired: () => boolean,
+  now = () => performance.now(),
+): Promise<T> {
+  const started = now()
+  const elapsed = () => Math.max(0, Math.min(15_000, Math.round(now() - started)))
+  try {
+    const value = await operation()
+    rows.push({ stage, code: "ready", elapsedMs: elapsed() })
+    return value
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ""
+    const code = expired()
+      ? "deadline"
+      : /timed out|timeout/i.test(message)
+        ? "timeout"
+        : /cancelled|canceled/i.test(message)
+          ? "cancelled"
+          : "failed"
+    rows.push({ stage, code, elapsedMs: elapsed() })
+    throw new ObservationFailure(stage)
+  }
+}
 
 /** A bounded diagnostic: native exception text can contain private window or process details. */
 export class ObservationFailure extends Error {
@@ -17,6 +47,7 @@ export type Probe = {
   expected?: { version: string; digest: string; captureSha256?: string }
   desktop: { host?: string; input?: string }
   diagnostics?: { vault: Diagnostic; desktop: Diagnostic; capture: Diagnostic }
+  observation?: { path: "powershell_fallback" | "native"; stages: ObservationDiagnostic[] }
   backend: () => string
   process: () => { pid: number; startedAt: number; port: number; generation: number } | null
   lease: () => {
@@ -115,6 +146,21 @@ function evidence(value: ReturnType<typeof journal>) {
   return value.status === "durable" ? ("durable_summary" as const) : ("not_inspected" as const)
 }
 
+function diagnostics(value: Probe["observation"]) {
+  if (!value) return null
+  return {
+    path: value.path === "native" || value.path === "powershell_fallback" ? value.path : "unknown",
+    stages: value.stages
+      .slice(0, stages.length)
+      .filter((row) => stages.includes(row.stage) && codes.includes(row.code))
+      .map((row) => ({
+        stage: row.stage,
+        code: row.code,
+        elapsedMs: Number.isFinite(row.elapsedMs) ? Math.max(0, Math.min(15_000, Math.round(row.elapsedMs))) : 0,
+      })),
+  }
+}
+
 // Only host-local, non-pixel evidence is returned. A benchmark task needs separate action receipts and a final-state scorer.
 export async function inspectInstalledHost(input: Probe) {
   const process = input.process()
@@ -122,7 +168,7 @@ export async function inspectInstalledHost(input: Probe) {
   const receipt = journal(input.journal())
   const base = {
     format: "raya.installed-desktop-host-probe" as const,
-    version: 5 as const,
+    version: 6 as const,
     observedAt: new Date().toISOString(),
     loadedVersion: input.loadedVersion,
     loadedCaptureSha256: input.loadedCaptureSha256 ?? null,
@@ -130,6 +176,7 @@ export async function inspectInstalledHost(input: Probe) {
     expected: input.expected ?? null,
     desktop: input.desktop,
     diagnostics: input.diagnostics ?? null,
+    observationDiagnostics: diagnostics(input.observation),
     backendProcess: process,
     lease,
     journal: receipt,
@@ -152,6 +199,7 @@ export async function inspectInstalledHost(input: Probe) {
       stage: error instanceof ObservationFailure && stages.includes(error.stage) ? error.stage : "unknown",
     }),
   )
+  base.observationDiagnostics = diagnostics(input.observation)
   if (input.backend() !== "connected")
     return { ...base, status: "unavailable" as const, reason: "The Raya backend disconnected during observation" }
   const after = changed(input, process!, lease)

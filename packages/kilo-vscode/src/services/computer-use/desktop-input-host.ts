@@ -150,6 +150,7 @@ export class NativeInputHost {
     action: DesktopAction,
     value: DesktopDispatchTarget,
     prepared?: (identity: NativeInputDispatchIdentity) => void | PromiseLike<void>,
+    guard?: () => void,
   ): Promise<Reply> {
     if (this.state !== "ready") throw new NativeInputPreflightError("Native input broker is not ready")
     if (this.pending.size || this.dispatching)
@@ -161,10 +162,17 @@ export class NativeInputHost {
         const effect = input(action)
         if (action.windowID.toLowerCase() !== value.windowID.toLowerCase())
           throw new Error("Native input action and target differ")
-        return this.send("dispatch", undefined, { ...detail, ...effect }, effect.payload, (value) => {
-          identity = value
-          return prepared?.(value)
-        })
+        return this.send(
+          "dispatch",
+          undefined,
+          { ...detail, ...effect },
+          effect.payload,
+          (value) => {
+            identity = value
+            return prepared?.(value)
+          },
+          guard,
+        )
       } catch (error) {
         throw new NativeInputPreflightError(error instanceof Error ? error.message : String(error))
       }
@@ -231,6 +239,7 @@ export class NativeInputHost {
     detail?: Record<string, unknown>,
     payload?: Buffer,
     prepared?: (identity: NativeInputDispatchIdentity) => void | PromiseLike<void>,
+    guard?: () => void,
   ) {
     const child = this.child
     if (!child || this.state === "closed") return Promise.reject(new Error("Native input broker is stopped"))
@@ -251,6 +260,12 @@ export class NativeInputHost {
     const packet = frame(header, payload)
     const transmit = () =>
       new Promise<Reply>((resolve, reject) => {
+        try {
+          guard?.()
+        } catch (error) {
+          reject(new NativeInputPreflightError(error instanceof Error ? error.message : String(error)))
+          return
+        }
         const timer = setTimeout(() => {
           if (kind === "dispatch") {
             this.state = "blocked"

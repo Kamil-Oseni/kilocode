@@ -57,6 +57,31 @@ function stop(host: NativeInputHost) {
 }
 
 describe("native input broker host", () => {
+  it("rechecks authority after a held reservation without writing rejected input", async () => {
+    const host = new NativeInputHost("node", ["-e", child("normal")])
+    await host.start()
+    const hold: { release?: () => void } = {}
+    const gate = new Promise<void>((resolve) => {
+      hold.release = resolve
+    })
+    let allowed = true
+    const pending = host.dispatch(
+      action,
+      target,
+      () => gate,
+      () => {
+        if (!allowed) throw new Error("grant expired")
+      },
+    )
+    allowed = false
+    hold.release?.()
+    await expect(pending).rejects.toBeInstanceOf(NativeInputPreflightError)
+    expect((host as unknown as { pending: Map<string, unknown> }).pending.size).toBe(0)
+    expect(await host.dispatch(action, target)).toMatchObject({ type: "refused", code: "unsupported" })
+    await host.cancel()
+    host.close()
+  })
+
   it("treats pre-send validation failures as typed and leaves the broker usable", async () => {
     const host = new NativeInputHost("node", ["-e", child("normal")])
     await host.start()

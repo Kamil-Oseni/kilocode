@@ -61,7 +61,19 @@ const report = {
   installed: { version: manifest.version, cliSha256: sha },
   scope: { installedCli: true, nativeWindowsPty: process.platform === "win32", renderedVsCode: false },
   backend: { pid: child.pid, exit: null as number | null, stderrTail: "", logTail: "" },
-  stall: { durationMs: 0, closeCode: null as number | null, closeReason: "", receivedBytes: 0 },
+  stall: {
+    runtime: "",
+    paused: false,
+    before: 0,
+    settled: 0,
+    after: 0,
+    durationMs: 0,
+    closeCode: null as number | null,
+    closeReason: "",
+    receivedBytes: 0,
+  },
+  memory: [] as { elapsedMs: number; workingSet: number; privateBytes: number }[],
+  gates: { stalledReader: false, replay: false, memory: false },
   replay: {
     cursor: null as number | null,
     gap: null as unknown,
@@ -69,14 +81,24 @@ const report = {
     settledCursor: 0,
     freshGap: null as unknown,
   },
-  cleanup: { ptyRemoved: false, backendExited: false, workspaceRemoved: false },
+  cleanup: {
+    ptyRemoved: false,
+    backendExited: false,
+    readerExited: false,
+    workspaceRemoved: false,
+    processesExited: false,
+  },
   failure: "" as string,
+  stage: "backend readiness",
 }
 const path = resolve(import.meta.dir, "../../../.tmp", `installed-pty-backpressure-${commit}.json`)
 const auth = `Basic ${Buffer.from(`kilo:${password}`).toString("base64")}`
 let url = ""
 let pty = ""
-let slow: WebSocket | undefined
+let slow: ReturnType<typeof Bun.spawn> | undefined
+let actor = 0
+const node = Bun.which("node")
+assert.ok(node, "Node is required for a real stalled socket reader")
 async function drain(reader: ReadableStreamDefaultReader<Uint8Array>, label: string) {
   let size = 0
   let tail = ""
@@ -116,7 +138,7 @@ async function ready() {
   const decoder = new TextDecoder()
   let output = ""
   while (output.length < 100_000) {
-    const next = await bounded(reader.read(), 20_000, "Installed backend readiness")
+    const next = await bounded(reader.read(), 60_000, "Installed backend readiness")
     if (next.done) throw new Error(`Installed backend exited before readiness: ${(await stderr).slice(-1200)}`)
     output += decoder.decode(next.value)
     const match = output.match(/listening on (http:\/\/[^\s]+)/)
@@ -137,30 +159,44 @@ async function request(method: string, route: string, body?: unknown) {
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(60_000),
   })
   if (!response.ok)
     throw new Error(`${method} ${route} returned ${response.status}: ${(await response.text()).slice(0, 500)}`)
   return response
 }
 
-async function connect(cursor: number) {
-  const ws = new WebSocket(
-    `${url.replace(/^http/, "ws")}/pty/${pty}/connect?directory=${encodeURIComponent(project)}&cursor=${cursor}`,
-    {
-      headers: { Authorization: auth },
-      perMessageDeflate: false,
-    },
+async function powershell(source: string) {
+  const proc = Bun.spawn(["powershell", "-NoProfile", "-NonInteractive", "-Command", source], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    windowsHide: true,
+  })
+  const output = drain(proc.stdout.getReader(), "Process sampling stdout")
+  const errors = drain(proc.stderr.getReader(), "Process sampling stderr")
+  try {
+    assert.equal(await bounded(proc.exited, 30_000, "Process sample"), 0, await errors)
+    return await output
+  } finally {
+    if (proc.exitCode === null) proc.kill("SIGKILL")
+    await bounded(proc.exited, 15_000, "Sampling process cleanup")
+  }
+}
+
+async function usage(pid: number) {
+  const result: unknown = JSON.parse(
+    await powershell(
+      `$task = Get-Process -Id ${pid} -ErrorAction Stop; @{workingSet=$task.WorkingSet64;privateBytes=$task.PrivateMemorySize64} | ConvertTo-Json -Compress`,
+    ),
   )
-  await bounded(
-    new Promise<void>((resolve, reject) => {
-      ws.once("open", () => resolve())
-      ws.once("error", reject)
-    }),
-    15_000,
-    "PTY WebSocket open",
-  )
-  return ws
+  assert.ok(result && typeof result === "object" && "workingSet" in result && "privateBytes" in result)
+  assert.ok(typeof result.workingSet === "number" && typeof result.privateBytes === "number")
+  return { workingSet: result.workingSet, privateBytes: result.privateBytes }
+}
+
+async function absent(pids: number[]) {
+  return (await powershell(`@(Get-Process -Id ${pids.join(",")} -ErrorAction SilentlyContinue).Count`)).trim() === "0"
 }
 
 async function metadata(cursor: number) {
@@ -198,6 +234,7 @@ async function metadata(cursor: number) {
 try {
   assert.equal(process.platform, "win32", "This acceptance harness is for native Windows PTY")
   url = await ready()
+  report.stage = "native PTY creation"
   const source = [
     "const chunk = Buffer.alloc(64 * 1024, 0x78)",
     "let started = false",
@@ -223,29 +260,53 @@ try {
   pty = info.id
   assert.ok(pty.startsWith("pty_"), "PTY create did not return an ID")
 
-  slow = await connect(-1)
-  slow.pause()
-  const close = bounded(
-    new Promise<{ code: number; reason: string }>((resolve, reject) => {
-      slow!.on("message", (data) => {
-        report.stall.receivedBytes += frame(data).byteLength
-      })
-      slow!.once("close", (code, reason) => resolve({ code, reason: reason.toString() }))
-      slow!.once("error", reject)
-    }),
-    50_000,
-    "Overflow close",
-  )
+  assert.ok("pid" in info && typeof info.pid === "number")
+  actor = info.pid
   const started = Date.now()
-  slow.send("GO\r")
-  await Bun.sleep(1500)
-  report.stall.durationMs = Date.now() - started
-  slow.resume()
-  const closed = await close
-  report.stall.closeCode = closed.code
-  report.stall.closeReason = closed.reason
-  assert.equal(closed.code, 1013, `Expected bounded backlog close, got ${closed.code} ${closed.reason}`)
-  assert.equal(closed.reason, "terminal output backlog")
+  report.memory.push({ elapsedMs: 0, ...(await usage(child.pid)) })
+  report.stage = "stalled Node reader"
+  const reader = Bun.spawn([node, join(import.meta.dir, "pty-stalled-reader.cjs")], {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+    windowsHide: true,
+  })
+  slow = reader
+  reader.stdin.write(
+    JSON.stringify({
+      url: `${url.replace(/^http/, "ws")}/pty/${pty}/connect?directory=${encodeURIComponent(project)}&cursor=-1`,
+      auth,
+    }),
+  )
+  reader.stdin.end()
+  const sampling = (async () => {
+    for (let n = 0; n < 8 && slow?.exitCode === null; n++) {
+      const sample = await usage(child.pid)
+      report.memory.push({ elapsedMs: Date.now() - started, ...sample })
+      await Bun.sleep(500)
+    }
+  })().then(
+    () => "",
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  )
+  const output = drain(reader.stdout.getReader(), "Node reader stdout")
+  const errors = drain(reader.stderr.getReader(), "Node reader stderr")
+  const code = await bounded(slow.exited, 50_000, "Stalled Node reader exit")
+  const sampled = await sampling
+  const diagnostic = await errors
+  const result = await output
+  if (result.trim()) report.stall = JSON.parse(result) as typeof report.stall
+  assert.equal(code, 0, diagnostic)
+  assert.equal(sampled, "", "Memory sampling failed")
+  const closed = report.stall
+  assert.equal(closed.paused, true, "Reader did not pause its socket")
+  assert.ok(closed.durationMs >= 2500, "Reader stall was too short")
+  assert.ok(closed.settled - closed.before <= 64 * 1024, "Node reader prefetch exceeded its bound")
+  assert.equal(closed.after, closed.settled, "Node transport read bytes after pause settled")
+  assert.equal(closed.closeCode, 1013, `Expected bounded backlog close, got ${closed.closeCode} ${closed.closeReason}`)
+  assert.equal(closed.closeReason, "terminal output backlog")
+  report.gates.stalledReader = true
+  report.stage = "output settlement and replay"
 
   let stable = 0
   let previous = -1
@@ -273,10 +334,22 @@ try {
   report.replay.freshGap = fresh.meta.replayGap ?? null
   assert.equal(fresh.meta.replayGap, undefined, "Exact retained cursor falsely reported a gap")
   assert.equal(fresh.received, fresh.meta.cursor - gap.retainedFrom)
+  report.gates.replay = true
+  report.memory.push({ elapsedMs: Date.now() - started, ...(await usage(child.pid)) })
+  report.stage = "memory bound"
+  for (const sample of report.memory) {
+    assert.ok(
+      sample.workingSet < 1024 * 1024 * 1024 && sample.privateBytes < 1024 * 1024 * 1024,
+      `Backend exceeded 1 GiB smoke-test memory bound: ${JSON.stringify(sample)}`,
+    )
+  }
+  report.gates.memory = true
+  report.stage = "completed"
 } catch (error) {
   report.failure = error instanceof Error ? error.message : String(error)
 } finally {
-  slow?.terminate()
+  if (slow?.exitCode === null) slow.kill("SIGKILL")
+  report.cleanup.readerExited = slow ? (await bounded(slow.exited, 15_000, "Node reader cleanup")) !== null : true
   if (report.failure) await Bun.sleep(500)
   if (pty && url) {
     const removed = await request("DELETE", `/pty/${pty}`).then(
@@ -288,6 +361,10 @@ try {
   if (child.exitCode === null) child.kill("SIGKILL")
   report.backend.exit = await bounded(child.exited, 15_000, "Owned backend exit").catch(() => null)
   report.cleanup.backendExited = report.backend.exit !== null
+  report.cleanup.processesExited = await absent([child.pid, actor].filter((pid) => pid > 0)).catch((error: unknown) => {
+    report.failure ||= error instanceof Error ? error.message : String(error)
+    return false
+  })
   report.backend.stderrTail = await bounded(stderr, 15_000, "Owned backend stderr drain").catch(() => "")
   const logs = join(state, ".local", "share", "kilo", "log")
   const names = await readdir(logs).catch(() => [])
@@ -315,3 +392,5 @@ try {
 if (report.failure) throw new Error(report.failure)
 assert.equal(report.cleanup.ptyRemoved, true)
 assert.equal(report.cleanup.backendExited, true)
+assert.equal(report.cleanup.readerExited, true)
+assert.equal(report.cleanup.processesExited, true)

@@ -3,6 +3,7 @@ import { ObservationLedger, type ComputerObservation, type ComputerTarget } from
 import type { SensitiveCategory } from "./lease-store"
 import { mismatch } from "./desktop-sensitive"
 import { DesktopFrameRing } from "./desktop-frame-ring"
+import { NativeInputPreflightError } from "./desktop-input-host"
 import {
   executeSequence,
   type DesktopPlannedAction,
@@ -143,7 +144,12 @@ export interface DesktopDriver {
   postAction?: boolean
   observeAfter?(target: DesktopDispatchTarget): Promise<DesktopFrame>
   focus(target: DesktopWindow): Promise<void>
-  perform(action: DesktopAction, target: DesktopDispatchTarget, onNative?: DesktopNativeDispatchHook): Promise<void>
+  perform(
+    action: DesktopAction,
+    target: DesktopDispatchTarget,
+    onNative?: DesktopNativeDispatchHook,
+    guard?: () => void,
+  ): Promise<void>
   cancel?(): void
 }
 
@@ -369,8 +375,10 @@ export class DesktopSession {
               validUntil: Math.min(observed.validUntil, observed.observedAt + 10_000),
             },
             onNative,
+            onDispatch,
           )
           .catch((error: unknown) => {
+            if (error instanceof NativeInputPreflightError) throw error
             const detail = error instanceof Error ? error.message : String(error)
             throw new DesktopOutcomeError(action.operation, detail)
           })
@@ -392,6 +400,7 @@ export class DesktopSession {
     authorize?: (action: DesktopPlannedAction) => string | void | Promise<string | void>,
     onDispatch?: () => void,
     onNative?: DesktopNativeDispatchHook,
+    guard?: (action: DesktopPlannedAction) => void,
   ): Promise<DesktopSequenceResult> {
     if (this.state.control === "manual")
       return Promise.reject(new Error("Resume agent desktop control before sending an action sequence"))
@@ -445,11 +454,17 @@ export class DesktopSession {
                 observedAt: before.observation.observedAt,
                 validUntil: Math.min(before.observation.validUntil, before.observation.observedAt + 10_000),
               }
-              await this.driver.perform(action, target, onNative).catch((error: unknown) => {
-                this.observations.cancel(token)
-                const detail = error instanceof Error ? error.message : String(error)
-                throw new DesktopOutcomeError(action.operation, detail)
-              })
+              await this.driver
+                .perform(action, target, onNative, () => {
+                  guard?.(planned)
+                  onDispatch?.()
+                })
+                .catch((error: unknown) => {
+                  this.observations.cancel(token)
+                  if (!effects && error instanceof NativeInputPreflightError) throw error
+                  const detail = error instanceof Error ? error.message : String(error)
+                  throw new DesktopOutcomeError(action.operation, detail)
+                })
               effects += 1
               if (this.current().control === "manual" || revision !== this.revision) {
                 this.observations.cancel(token)

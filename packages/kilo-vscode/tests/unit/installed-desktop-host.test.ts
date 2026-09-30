@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { inspectInstalledHost, ObservationFailure } from "../../src/commands/installed-desktop-host-core"
+import {
+  inspectInstalledHost,
+  ObservationFailure,
+  observeStage,
+  type ObservationDiagnostic,
+} from "../../src/commands/installed-desktop-host-core"
 
 const version = "7.4.23-snapshot+abc.test.1"
 const digest = "a".repeat(64)
@@ -46,6 +51,75 @@ function input() {
 }
 
 describe("installed interactive host probe", () => {
+  test("records bounded stage timing and distinguishes overall deadline from capture failure", async () => {
+    for (const [message, expired, code] of [
+      ["private clipboard secret", false, "failed"],
+      ["Desktop semantic read timed out: private", false, "timeout"],
+      ["Windows driver was cancelled: private", false, "cancelled"],
+      ["Windows driver was cancelled: private", true, "deadline"],
+    ] as const) {
+      const rows: ObservationDiagnostic[] = []
+      let clock = 100
+      const report = await inspectInstalledHost({
+        ...input(),
+        observation: { path: "powershell_fallback", stages: rows },
+        observe: async () => {
+          await observeStage(
+            rows,
+            "foreground_before",
+            async () => {
+              clock += 20
+            },
+            () => false,
+            () => clock,
+          )
+          await observeStage(
+            rows,
+            "capture",
+            async () => {
+              clock += 30_000
+              throw new Error(message)
+            },
+            () => expired,
+            () => clock,
+          )
+          return frame
+        },
+      })
+      expect(report.observationDiagnostics).toEqual({
+        path: "powershell_fallback",
+        stages: [
+          { stage: "foreground_before", code: "ready", elapsedMs: 20 },
+          { stage: "capture", code, elapsedMs: 15_000 },
+        ],
+      })
+      expect(report.observationFailure).toEqual({ stage: "capture" })
+      expect(JSON.stringify(report)).not.toContain(message)
+      expect(report.releaseGateEligible).toBe(false)
+    }
+  })
+
+  test("does not claim the hashed native binary was exercised by fallback capture", async () => {
+    const rows: ObservationDiagnostic[] = []
+    const report = await inspectInstalledHost({
+      ...input(),
+      observation: { path: "powershell_fallback", stages: rows },
+      observe: () =>
+        observeStage(
+          rows,
+          "capture",
+          async () => frame,
+          () => false,
+        ),
+    })
+    expect(report.status).toBe("observed")
+    expect(report.loadedCaptureSha256).toBe("c".repeat(64))
+    expect(report.observationDiagnostics).toMatchObject({
+      path: "powershell_fallback",
+      stages: [{ stage: "capture", code: "ready" }],
+    })
+  })
+
   test("distinguishes unavailable startup evidence from an actual package mismatch", async () => {
     for (const status of ["missing", "timeout", "failed"] as const) {
       let called = false
@@ -79,7 +153,7 @@ describe("installed interactive host probe", () => {
     const report = await inspectInstalledHost(input())
     expect(report.status).toBe("observed")
     expect(report.releaseGateEligible).toBe(false)
-    expect(report.version).toBe(5)
+    expect(report.version).toBe(6)
     expect(report.actionReceipts).toBeNull()
     expect(report.receiptEvidence).toBe("durable_summary")
     expect(report.journal).toEqual({

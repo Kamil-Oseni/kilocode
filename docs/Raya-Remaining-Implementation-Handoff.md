@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-30 03:22 EDT - approximately25% basic stable-use readiness; installed checks pass
+
+Sourcef8eb6279d9 is pushed, snapshot `7.4.23-snapshot+f8eb6279d9.kamil-oseni.1790751938530` installs and all464 installed files match retained VSIX `e93df36f42f09f819f024cd6e7cf4ac4cd9d95ddb85f90e8372d4d68fd995949`. CLI `75591f9f43cee5ea9030020cf7595a8b53dd23e8b1a22176451367e0fbf03224`. Exact missing-roster refusal/restoration/unchanged records/disabled archived worker passes; all three owned PIDs join/absent. Installed provider token limits and false tool support pass with zero model requests and complete private-profile cleanup. Receipts `.tmp/installed-roster-recovery-f8eb6279d9.json`, `.tmp/installed-custom-provider-f8eb6279d9.json`, `.tmp/installed-snapshot-f8eb6279d9-verified.json`.
+
+Current estimated readiness25% is partial release-gate credit, not full-roadmap completion. Keep it in chat updates as requested. Continue real writer coverage and consistent SQL+JSON capture, durable restore hold before revival/dispatch, inactive portable restoration, local-only auxiliary routing and inference scheduling. New-PC model/GPU acceptance remains open. Dummy window reload restores the saved chat; early visual report has new loaded source but old8552 vault active pointer/null backend, so settled host agreement remains unproven. Physical Escape stopped Computer Use; no further UI calls this turn. Do not touch French Study or infer approval for privacy grants.
+
 ## ChatGPT 2026-09-30 02:58 EDT - source recovery correction and local model budgets ready for integration
 
 Recovery API/UI correction, custom model token/tool controls and cooperative maintenance groundwork pass focused checks. RegeneratedSDK/OpenAPI are settled; source is frozen. Root must commit/push, install matching source, verify package bytes and rerun `.tmp/test-installed-roster-recovery.ts` with the new installed version/CLI digest. Do not reuse8552's installed pin or discard its failed response-guidance receipt. Readiness remains approximately20% until installed evidence changes.

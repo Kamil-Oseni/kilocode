@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test"
 import { validateCustomProvider } from "../../webview-ui/src/components/settings/CustomProviderValidation"
 import type { FormState } from "../../webview-ui/src/components/settings/CustomProviderValidation"
+import {
+  customProviderModelSettings,
+  sanitizeCustomProviderConfig,
+  withCustomProviderDeletions,
+} from "../../src/shared/custom-provider"
 
 // Simple translator that returns the key so tests can assert on key names
 const t = (key: string) => key
@@ -29,6 +34,58 @@ function args(form: FormState) {
     existingProviderIDs: new Set<string>(),
   }
 }
+
+describe("custom provider model limits save path", () => {
+  it("retains saved input/output/context limits and explicit false through edit, validation and the saved config patch", () => {
+    const form = base()
+    const model = { name: "Model One", limit: { context: 32768, input: 24576, output: 8192 }, tool_call: false }
+    Object.assign(form.models[0], customProviderModelSettings(model))
+    const result = validateCustomProvider({ ...args(form), editing: true }).result
+    expect(result).toBeDefined()
+    const sanitized = sanitizeCustomProviderConfig(result!.config)
+    if (!("value" in sanitized)) throw new Error(sanitized.error)
+    const patch = withCustomProviderDeletions({ models: { "model-1": model } }, sanitized.value)
+    expect(patch.models["model-1"]).toEqual(model)
+  })
+
+  it("retains an explicit tool choice without inventing limits", () => {
+    const form = base()
+    form.models[0].tools = false
+    expect(validateCustomProvider(args(form)).result?.config.models["model-1"]).toEqual({
+      name: "Model One",
+      tool_call: false,
+    })
+    form.models[0].tools = true
+    expect(validateCustomProvider(args(form)).result?.config.models["model-1"]).toEqual({
+      name: "Model One",
+      tool_call: true,
+    })
+  })
+
+  it.each(["-1", "0", "1.5", "Infinity", "32k", "9007199254740992"])("blocks invalid token text %s", (context) => {
+    const form = base()
+    form.models[0].context = context
+    const out = validateCustomProvider(args(form))
+    expect(out.result).toBeUndefined()
+    expect(out.errors.models[0].context).toBeDefined()
+  })
+
+  it("reports input/output limits at their fields when they exceed context", () => {
+    const form = base()
+    Object.assign(form.models[0], { context: "4096", input: "8192", output: "8192" })
+    const out = validateCustomProvider(args(form))
+    expect(out.result).toBeUndefined()
+    expect(out.errors.models[0].input).toBe("Must fit within the context window")
+    expect(out.errors.models[0].output).toBe("Must fit within the context window")
+  })
+
+  it("writes explicit zeros when all old limits are cleared", () => {
+    const form = base()
+    Object.assign(form.models[0], { limits: true, inputSet: true, context: "", input: "", output: "" })
+    const result = validateCustomProvider(args(form)).result
+    expect(result?.config.models["model-1"]).toEqual({ name: "Model One", limit: { context: 0, input: 0, output: 0 } })
+  })
+})
 
 describe("validateCustomProvider – variant name validation", () => {
   it("persists the selected provider package", () => {

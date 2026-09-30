@@ -1,4 +1,5 @@
 import type { KiloClient } from "@kilocode/sdk/v2/client"
+import { recovery as guidance } from "../shared/routine-error"
 
 type Scope = { client: KiloClient | null; directory: string; generation: number }
 type Post = (message: Record<string, unknown>) => void
@@ -8,6 +9,14 @@ type Histories = import("@kilocode/sdk/v2/client").KilocodeRoutineHistoriesRespo
 
 type Member = Organization["members"][number]
 type Delegation = Organization["delegations"][number]
+
+function failure(error: unknown) {
+  const result = guidance(error)
+  if (result?.kind !== "unavailable" || result.field !== "worker-roster")
+    return "Routines could not be refreshed. Previously loaded information is retained. Retry when connected."
+  // Present only this known recovery instruction, never arbitrary backend text.
+  return `Your saved worker list is missing from an initialized profile. ${result.next} Previously loaded information is retained.`
+}
 
 function member(value: unknown, position: number): value is Member {
   if (!value || typeof value !== "object") return false
@@ -190,7 +199,8 @@ export class RoutineRefresh {
       if (!valid()) return
       if (controller.signal.aborted) throw new Error("Refresh deadline exceeded")
       const [roster, catalog, box] = results
-      if (roster.status === "rejected" || catalog.status === "rejected") throw new Error("Roster unavailable")
+      if (roster.status === "rejected") throw roster.reason
+      if (catalog.status === "rejected") throw new Error("Roster unavailable")
       const agents = roster.value
       const templates = catalog.value
       if (!Array.isArray(agents.data) || !Array.isArray(templates.data)) throw new Error("Invalid roster")
@@ -229,11 +239,11 @@ export class RoutineRefresh {
         refresh: bundle.failed.length || !group ? "partial" : "complete",
         failed: bundle.failed,
       })
-    } catch {
+    } catch (error) {
       post({
         type: "routineState",
         refresh: "error",
-        error: "Routines could not be refreshed. Previously loaded information is retained. Retry when connected.",
+        error: failure(error),
       })
     } finally {
       clearTimeout(timer)

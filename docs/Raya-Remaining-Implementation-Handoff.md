@@ -1,5 +1,11 @@
 # Raya remaining implementation and agent handoff
 
+## ChatGPT 2026-09-30 02:58 EDT - source recovery correction and local model budgets ready for integration
+
+Recovery API/UI correction, custom model token/tool controls and cooperative maintenance groundwork pass focused checks. RegeneratedSDK/OpenAPI are settled; source is frozen. Root must commit/push, install matching source, verify package bytes and rerun `.tmp/test-installed-roster-recovery.ts` with the new installed version/CLI digest. Do not reuse8552's installed pin or discard its failed response-guidance receipt. Readiness remains approximately20% until installed evidence changes.
+
+Next backup integration uses `core/src/kilocode/profile-maintenance.ts`: its cooperative gates are tested with independent JSON/SQLite writers, but portable-capture intent deliberately refuses because actual runtime writer coverage is incomplete. Integrate both SQLite clients and included JSON boundaries, explicit writer ownership/drain and verified crash recovery before export. Never turn a cooperative receipt into backup authorization. Then implement the durable transfer hold before every worker recovery/dispatch path and paused restore transforms. Custom provider UI now preserves existing `limit` and `tool_call` fields; actual chosen local models, auxiliary routing and shared inference scheduling remain unverified.
+
 ## ChatGPT 2026-09-30 02:40 EDT - daily-use readiness approximately 20%; installed recovery response needs correction
 
 Source `8552b84dfd` is pushed, installed and byte-verified (462 files). Installed roster-loss acceptance refuses access but FAILS because the HTTP defect channel removes recovery guidance. Correct the API/UI contract and test real HTTP before another snapshot; do not weaken the installed assertion. Disposable owned backend PIDs14060/20336 both join and prove absent. See progress document for exact version/hash/receipt and the five-area readiness estimate. Keep the approximate 20% in user-facing progress updates as requested.

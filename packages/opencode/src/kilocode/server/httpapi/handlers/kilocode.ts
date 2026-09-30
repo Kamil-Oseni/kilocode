@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Result, Schema } from "effect"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { Database } from "@opencode-ai/core/database/database"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
@@ -34,6 +34,7 @@ import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace ch
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
+import { MissingRoster } from "@/kilocode/task/roster"
 import { propose, validate } from "@/kilocode/task/assignment-proposal"
 import { RayaTaskAuthority } from "@/kilocode/task/authority"
 import { MCP } from "@/mcp"
@@ -97,6 +98,20 @@ import {
 } from "../groups/kilocode"
 
 import { PtyArchive } from "@/kilocode/pty/archive"
+
+// Only the known missing-roster defect has safe, actionable persistence guidance.
+// Keep unrelated defects in the normal sanitized server error boundary.
+const roster = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E | InvalidRequestError, R> =>
+  effect.pipe(
+    Effect.catchCause((cause): Effect.Effect<never, E | InvalidRequestError> => {
+      const error = Result.getOrUndefined(Cause.findDefect(cause))
+      if (error instanceof MissingRoster)
+        return Effect.fail(
+          new InvalidRequestError({ message: error.message, kind: "unavailable", field: "worker-roster" }),
+        )
+      return Effect.failCause(cause)
+    }),
+  )
 
 export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode", (handlers) =>
   Effect.gen(function* () {
@@ -665,7 +680,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       )
     })
     const agentList = Effect.fn("KilocodeHttpApi.agentList")(function* () {
-      return yield* runner.preview(Date.now())
+      return yield* roster(runner.preview(Date.now()))
     })
     const agentAuthorityServices = Effect.fn("KilocodeHttpApi.agentAuthorityServices")(function* () {
       return RayaTaskAuthority.catalog(yield* mcp.tools())
@@ -676,7 +691,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       const created = ctx.payload.id
         ? runner.tasks.provision(ctx.payload, ctx.payload.id)
         : runner.tasks.create(ctx.payload)
-      return yield* created.pipe(
+      return yield* roster(created).pipe(
         Effect.catchTag("RayaTask.GuardError", (err) =>
           Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
         ),

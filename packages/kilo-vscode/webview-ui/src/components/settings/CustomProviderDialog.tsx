@@ -16,7 +16,11 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage, ProviderAuthState, ProviderConfig } from "../../types/messages"
 import { createProviderAction } from "../../utils/provider-action"
 import { configMessage } from "../../utils/open-config"
-import { MASKED_CUSTOM_PROVIDER_KEY, resolveCustomProviderKey } from "../../../../src/shared/custom-provider"
+import {
+  MASKED_CUSTOM_PROVIDER_KEY,
+  resolveCustomProviderKey,
+  customProviderModelSettings,
+} from "../../../../src/shared/custom-provider"
 import {
   CUSTOM_PROVIDER_PACKAGE,
   isCustomProviderPackage,
@@ -109,7 +113,15 @@ function parseVariant([name, cfg]: [string, Record<string, unknown>]): VariantEn
 }
 
 function initModels(cfg: ProviderConfig | undefined): ModelEntry[] {
-  const empty = { id: "", name: "", reasoning: false, supportsImages: false, modalities: {}, variants: [] }
+  const empty = {
+    id: "",
+    name: "",
+    reasoning: false,
+    supportsImages: false,
+    modalities: {},
+    variants: [],
+    tools: false,
+  }
   if (!cfg?.models || typeof cfg.models !== "object") return [{ ...empty }]
   const entries = Object.entries(cfg.models)
   if (entries.length === 0) return [{ ...empty }]
@@ -124,6 +136,7 @@ function initModels(cfg: ProviderConfig | undefined): ModelEntry[] {
       supportsImages: input.includes("image"),
       modalities,
       variants: Object.entries(raw.variants ?? {}).map(parseVariant),
+      ...customProviderModelSettings(raw),
     }
   })
 }
@@ -395,6 +408,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
       supportsImages: false,
       modalities: {},
       variants: [],
+      tools: false,
     })
     const merged = empty ? toAdd.map(defaults) : [...form.models, ...toAdd.map(defaults)]
 
@@ -452,7 +466,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
   function addModel() {
     setForm("models", (v) => [
       ...v,
-      { id: "", name: "", reasoning: false, supportsImages: false, modalities: {}, variants: [] },
+      { id: "", name: "", reasoning: false, supportsImages: false, modalities: {}, variants: [], tools: false },
     ])
     setErrors("models", (v) => [...v, { variants: [] }])
   }
@@ -767,6 +781,12 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
                   onChangeName={(v) => setForm("models", i(), "name", v)}
                   onChangeReasoning={(v) => setForm("models", i(), "reasoning", v)}
                   onChangeSupportsImages={(v) => setForm("models", i(), "supportsImages", v)}
+                  onChangeLimit={(field, value) => {
+                    setForm("models", i(), field, value)
+                    setForm("models", i(), "limits", true)
+                    if (field === "input") setForm("models", i(), "inputSet", true)
+                  }}
+                  onChangeTools={(value) => setForm("models", i(), "tools", value)}
                   onRemove={() => removeModel(i())}
                 />
               )}

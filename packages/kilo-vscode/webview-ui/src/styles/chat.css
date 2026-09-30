@@ -942,3 +942,30 @@
     flex-basis: 100%;
   }
 }
+
+/* Custom provider model limits */
+.custom-provider-limits-description {
+  margin: 0 0 12px;
+  color: var(--text-weak-base);
+  font-size: var(--kilo-font-size-12);
+  line-height: 1.5;
+}
+
+.custom-provider-limits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.custom-provider-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-provider-tools-label {
+  color: var(--text-weak-base);
+  font-size: var(--kilo-font-size-12);
+  font-weight: 500;
+}

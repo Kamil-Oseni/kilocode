@@ -1,5 +1,6 @@
 import type { CustomProviderPackage } from "../../../../src/shared/provider-model"
 import type { Modalities, ModelEntry, VariantEntry } from "./CustomProviderModelCard"
+import { parseCustomProviderLimits } from "../../../../src/shared/custom-provider"
 
 type Translator = (key: string, params?: Record<string, string>) => string
 
@@ -23,7 +24,14 @@ export type FormErrors = {
   providerID: string | undefined
   name: string | undefined
   baseURL: string | undefined
-  models: Array<{ id?: string; name?: string; variants?: Array<{ name?: string }> }>
+  models: Array<{
+    id?: string
+    name?: string
+    context?: string
+    input?: string
+    output?: string
+    variants?: Array<{ name?: string }>
+  }>
   headers: Array<{ key?: string; value?: string }>
 }
 
@@ -75,7 +83,7 @@ function checkModel(m: ModelEntry, seenModels: Set<string>, t: Translator) {
   const nameErr = !m.name.trim() ? t("provider.custom.error.required") : undefined
   const seen = new Set<string>()
   const variants = m.reasoning ? m.variants.map((v) => checkVariant(v, seen, t)) : []
-  return { id: idErr, name: nameErr, variants }
+  return { id: idErr, name: nameErr, variants, ...parseCustomProviderLimits(m).errors }
 }
 
 function checkHeader(h: HeaderRow, seenKeys: Set<string>, t: Translator) {
@@ -144,6 +152,9 @@ function serializeModel(m: ModelEntry): [string, Record<string, unknown>] {
   const entry: Record<string, unknown> = { name: m.name.trim() }
   const modes = modalities(m)
   if (m.reasoning) entry.reasoning = true
+  if (m.tools !== undefined) entry.tool_call = m.tools
+  const limits = parseCustomProviderLimits(m).value
+  if (limits) entry.limit = limits
   if (modes) entry.modalities = modes
   if (ventries.length > 0) entry.variants = Object.fromEntries(ventries)
   return [m.id.trim(), entry]
@@ -183,7 +194,9 @@ export function validateCustomProvider(input: ValidateArgs): ValidateResult {
 
   const seenModels = new Set<string>()
   const modelErrors = input.form.models.map((m) => checkModel(m, seenModels, input.t))
-  const modelsValid = modelErrors.every((m) => !m.id && !m.name && m.variants.every((v) => !v.name))
+  const modelsValid = modelErrors.every(
+    (m) => !m.id && !m.name && !m.context && !m.input && !m.output && m.variants.every((v) => !v.name),
+  )
 
   const seenHeaders = new Set<string>()
   const headerErrors = input.form.headers.map((h) => checkHeader(h, seenHeaders, input.t))

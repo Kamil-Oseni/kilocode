@@ -14,6 +14,15 @@ import { Storage } from "@/storage/storage"
 // initialized roster must never silently become a new empty worker collection.
 const marker = ["raya", "agent-initialized"]
 
+export class MissingRoster extends Error {
+  constructor() {
+    super(
+      "Your saved worker list is missing from an initialized profile. Restore the worker list from a backup before creating or running workers.",
+    )
+    this.name = "RayaTask.MissingRoster"
+  }
+}
+
 export const mark = (storage: Pick<Storage.Interface, "create">) => storage.create(marker, { version: 1 })
 
 export const initialized = (storage: Pick<Storage.Interface, "read" | "list">, database?: Database.Interface) =>

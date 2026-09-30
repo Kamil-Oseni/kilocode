@@ -26,6 +26,64 @@ const ModelModalitiesSchema = z.object({
 
 export type ModelModalities = z.infer<typeof ModelModalitiesSchema>
 
+const Tokens = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+const LimitsSchema = z
+  .object({ context: Tokens, input: Tokens.optional(), output: Tokens })
+  .strict()
+  .superRefine((limit, ctx) => {
+    for (const field of ["input", "output"] as const) {
+      if (limit.context > 0 && (limit[field] ?? 0) > limit.context)
+        ctx.addIssue({ code: "custom", path: [field], message: "Must fit within the context window" })
+    }
+  })
+
+type Limits = z.infer<typeof LimitsSchema>
+
+export function customProviderModelSettings(value: unknown) {
+  const model = isRecord(value) ? value : {}
+  const limit = isRecord(model.limit) ? model.limit : undefined
+  const text = (field: string) => (typeof limit?.[field] === "number" && limit[field] !== 0 ? String(limit[field]) : "")
+  return {
+    limits: limit !== undefined,
+    inputSet: !!limit && Object.hasOwn(limit, "input"),
+    context: text("context"),
+    input: text("input"),
+    output: text("output"),
+    tools: typeof model.tool_call === "boolean" ? model.tool_call : undefined,
+  }
+}
+
+export function parseCustomProviderLimits(model: {
+  context?: string
+  input?: string
+  output?: string
+  limits?: boolean
+  inputSet?: boolean
+}) {
+  const errors: { context?: string; input?: string; output?: string } = {}
+  const fields = ["context", "input", "output"] as const
+  const active = model.limits || fields.some((field) => model[field]?.trim())
+  if (!active) return { errors, value: undefined }
+  const values: Limits = { context: 0, output: 0, ...(model.inputSet ? { input: 0 } : {}) }
+  for (const field of fields) {
+    const raw = model[field]?.trim() ?? ""
+    if (!raw) continue
+    const value = Number(raw)
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value <= 0) {
+      errors[field] = "Enter a whole number of tokens, or leave blank if unknown"
+      continue
+    }
+    values[field] = value
+  }
+  const result = LimitsSchema.safeParse(values)
+  if (!result.success)
+    for (const issue of result.error.issues) {
+      const field = issue.path[0]
+      if (field === "context" || field === "input" || field === "output") errors[field] ??= issue.message
+    }
+  return { errors, value: Object.values(errors).some(Boolean) ? undefined : values }
+}
+
 export const CustomProviderConfigSchema = z
   .object({
     npm: z.enum(CUSTOM_PROVIDER_PACKAGES).default(CUSTOM_PROVIDER_PACKAGE),
@@ -50,6 +108,8 @@ export const CustomProviderConfigSchema = z
           .object({
             name: z.string().trim().min(1).max(200),
             reasoning: z.boolean().optional(),
+            tool_call: z.boolean().optional(),
+            limit: LimitsSchema.optional(),
             modalities: ModelModalitiesSchema.optional(),
             variants: z.record(z.string().trim().min(1), VariantConfigSchema).optional(),
           })
@@ -69,7 +129,14 @@ export type SanitizedProviderConfig = {
   }
   models: Record<
     string,
-    { name: string; reasoning?: true; modalities?: ModelModalities; variants?: Record<string, VariantConfig> }
+    {
+      name: string
+      reasoning?: true
+      tool_call?: boolean
+      limit?: Limits
+      modalities?: ModelModalities
+      variants?: Record<string, VariantConfig>
+    }
   >
 }
 
@@ -141,6 +208,8 @@ export function normalizeCustomProviderConfig(
         {
           name: model.name.trim(),
           ...(model.reasoning ? { reasoning: true as const } : {}),
+          ...(model.tool_call !== undefined ? { tool_call: model.tool_call } : {}),
+          ...(model.limit ? { limit: model.limit } : {}),
           ...(model.modalities ? { modalities: model.modalities } : {}),
           ...(model.variants && Object.keys(model.variants).length > 0 ? { variants: model.variants } : {}),
         },
@@ -167,6 +236,8 @@ type ProviderPatch = Omit<SanitizedProviderConfig, "models"> & {
     null | {
       name: string
       reasoning?: true | null
+      tool_call?: boolean
+      limit?: Limits
       modalities?: ModelModalities | null
       variants?: Record<string, VariantConfig | VariantPatch | null>
     }

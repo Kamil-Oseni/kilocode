@@ -7,8 +7,76 @@ import {
   sanitizeCustomProviderConfig,
   validateProviderID,
   withCustomProviderDeletions,
+  customProviderModelSettings,
+  parseCustomProviderLimits,
 } from "../../src/shared/custom-provider"
 import { isCustomProviderPackage } from "../../src/shared/provider-model"
+
+describe("custom provider model budgets", () => {
+  const provider = (model: Record<string, unknown>) => ({
+    name: "Local server",
+    options: { baseURL: "http://127.0.0.1:1234/v1" },
+    models: { "exact-local-id": { name: "Local model", ...model } },
+  })
+
+  it("preserves exact limits and explicitly disabled tools through host normalization", () => {
+    const limit = { context: 32768, input: 24576, output: 8192 }
+    const result = sanitizeCustomProviderConfig(provider({ limit, tool_call: false }))
+    expect("value" in result && result.value.models["exact-local-id"]).toEqual({
+      name: "Local model",
+      limit,
+      tool_call: false,
+    })
+  })
+
+  it("preserves zero as unknown and leaves absent legacy settings absent", () => {
+    const empty = sanitizeCustomProviderConfig(provider({}))
+    expect("value" in empty && empty.value.models["exact-local-id"]).toEqual({ name: "Local model" })
+    const zero = sanitizeCustomProviderConfig(provider({ limit: { context: 0, output: 0 } }))
+    expect("value" in zero && zero.value.models["exact-local-id"].limit).toEqual({ context: 0, output: 0 })
+  })
+
+  it.each([-1, 1.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1])("rejects invalid context %s", (context) => {
+    expect("error" in sanitizeCustomProviderConfig(provider({ limit: { context, output: 1024 } }))).toBe(true)
+  })
+
+  it("rejects limits exceeding context and mistyped tool capabilities", () => {
+    for (const limit of [
+      { context: 4096, input: 4097, output: 1024 },
+      { context: 4096, output: 4097 },
+    ])
+      expect("error" in sanitizeCustomProviderConfig(provider({ limit }))).toBe(true)
+    expect("error" in sanitizeCustomProviderConfig(provider({ tool_call: "false" }))).toBe(true)
+  })
+
+  it("hydrates configured limits and false tool support for editing", () => {
+    const model = { limit: { context: 32768, input: 24576, output: 8192 }, tool_call: false }
+    const settings = customProviderModelSettings(model)
+    expect(settings).toEqual({
+      limits: true,
+      inputSet: true,
+      context: "32768",
+      input: "24576",
+      output: "8192",
+      tools: false,
+    })
+    expect(parseCustomProviderLimits(settings).value).toEqual(model.limit)
+    expect(customProviderModelSettings({}).tools).toBeUndefined()
+  })
+
+  it("clears previously configured limits to zero instead of allowing a deep merge to revive them", () => {
+    const settings = customProviderModelSettings({ limit: { context: 32768, input: 24576, output: 8192 } })
+    const result = parseCustomProviderLimits({ ...settings, context: "", input: "", output: "" })
+    expect(result.errors).toEqual({})
+    expect(result.value).toEqual({ context: 0, input: 0, output: 0 })
+  })
+
+  it("preserves an absent optional input limit when editing or entering other limits", () => {
+    const settings = customProviderModelSettings({ limit: { context: 32768, output: 8192 } })
+    expect(parseCustomProviderLimits(settings).value).toEqual({ context: 32768, output: 8192 })
+    expect(parseCustomProviderLimits({ context: "4096" }).value).toEqual({ context: 4096, output: 0 })
+  })
+})
 
 describe("isCustomProviderPackage", () => {
   it("recognizes supported custom provider packages", () => {

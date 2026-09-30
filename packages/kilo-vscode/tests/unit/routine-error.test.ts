@@ -17,6 +17,22 @@ test("connection errors remain uncertain and never imply a safe replay", () => {
     })
 })
 
+test("missing worker roster guidance survives the real SDK error envelope without displaying its body", () => {
+  const error = new Error("Synthetic private diagnostic", {
+    cause: {
+      body: { kind: "unavailable", field: "worker-roster", message: "Synthetic private diagnostic" },
+      status: 400,
+    },
+  })
+  expect(recovery(error)).toEqual({
+    kind: "unavailable",
+    field: "worker-roster",
+    next: "Restore the worker list from a backup before creating or running workers.",
+  })
+  expect(recovery({ kind: "unavailable", field: "other" })?.next).toContain("Reconnect")
+  expect(recovery({ message: "Restore the worker list from a backup" })).toBeUndefined()
+})
+
 test("does not guess a cause from HTTP status, message text, unknown kinds or circular data", () => {
   for (const error of [null, "Bad Request", { status: 400 }, { message: "money" }, { kind: "future" }])
     expect(recovery(error)).toBeUndefined()

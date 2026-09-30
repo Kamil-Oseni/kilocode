@@ -1,0 +1,27 @@
+import { expect, test } from "@playwright/test"
+for (const width of [320, 760])
+  for (const theme of ["dark", "light"]) {
+    test(`${theme} model limits validate, save and reopen at ${width}px`, async ({ page }, info) => {
+      await page.setViewportSize({ width, height: 850 })
+      await page.goto(`/?theme=${theme}`)
+      await page.getByRole("button", { name: "Limits and tools" }).click()
+      await page.getByLabel("Context tokens").fill("4096")
+      await page.getByLabel("Output limit").fill("8192")
+      await page.getByRole("button", { name: "Save settings" }).click()
+      await expect(page.getByText("Must fit within the context window")).toBeVisible()
+      await expect(page.getByRole("button", { name: "Reopen settings" })).toBeHidden()
+      await page.getByLabel("Output limit").fill("1024")
+      await page.getByLabel("Input limit").fill("3072")
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+      await page.screenshot({ path: info.outputPath("model-controls.png"), fullPage: true })
+      await page.getByRole("button", { name: "Save settings" }).click()
+      await expect(page.locator("[data-saved]")).toContainText('"tool_call":false')
+      await expect(page.locator("[data-saved]")).toContainText('"context":4096')
+      await page.getByRole("button", { name: "Reopen settings" }).click()
+      await expect(page.getByLabel("Context tokens")).toHaveValue("4096")
+      await expect(page.getByLabel("Input limit")).toHaveValue("3072")
+      await expect(page.getByLabel("Output limit")).toHaveValue("1024")
+      await expect(page.getByText("Not supported", { exact: true })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+    })
+  }

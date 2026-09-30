@@ -17,7 +17,7 @@ import { recover } from "./recovery"
 import { owner, stopped } from "./owner"
 import { removals } from "./removal"
 import { archive as indexed, InvalidCursor } from "./archive"
-import { initialized, mark } from "./roster"
+import { initialized, mark, MissingRoster } from "./roster"
 import { RayaTaskQueue } from "./queue"
 import { Create as OrganizationCreate, matchesDefinition } from "./organization"
 import { Trigger as TriggerSchema } from "./trigger"
@@ -672,13 +672,7 @@ export namespace RayaTask {
       )
       if (raw === undefined) {
         if (required || (yield* initialized(deps.storage, deps.database).pipe(Effect.orDie)))
-          return yield* Effect.die(
-            new GuardError({
-              kind: "unavailable",
-              message:
-                "Your saved worker list is missing from an initialized profile. Restore the worker list from a backup before creating or running workers.",
-            }),
-          )
+          return yield* Effect.die(new MissingRoster())
         return []
       }
       return yield* agents(raw).pipe(Effect.orDie)

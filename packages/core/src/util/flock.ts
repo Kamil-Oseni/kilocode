@@ -39,6 +39,7 @@ export namespace Flock {
   export type Wait = (input: WaitEvent) => void | Promise<void>
 
   export interface Options {
+    recover?: boolean // kilocode_change - maintenance must not evict a suspended live owner by heartbeat age
     dir?: string
     signal?: AbortSignal
     staleMs?: number
@@ -49,6 +50,7 @@ export namespace Flock {
   }
 
   type Opts = {
+    recover: boolean // kilocode_change
     staleMs: number
     timeoutMs: number
     baseDelayMs: number
@@ -157,9 +159,11 @@ export namespace Flock {
         throw err
       }
 
-      if (!(await stale(lockDir, heartbeatPath, metaPath, opts.staleMs))) {
+      // kilocode_change start - maintenance locks never recover solely from heartbeat age
+      if (!opts.recover || !(await stale(lockDir, heartbeatPath, metaPath, opts.staleMs))) {
         return { acquired: false }
       }
+      // kilocode_change end
 
       const breakerPath = lockDir + ".breaker"
       try {
@@ -310,6 +314,7 @@ export namespace Flock {
   export async function acquire(key: string, input: Options = {}): Promise<Lease> {
     input.signal?.throwIfAborted()
     const cfg: Opts = {
+      recover: input.recover !== false, // kilocode_change - preserve existing recovery unless explicitly disabled
       staleMs: input.staleMs ?? defaultOpts.staleMs,
       timeoutMs: input.timeoutMs ?? defaultOpts.timeoutMs,
       baseDelayMs: input.baseDelayMs ?? defaultOpts.baseDelayMs,

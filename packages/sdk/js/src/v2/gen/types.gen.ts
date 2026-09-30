@@ -24264,9 +24264,9 @@ export type KilocodeRoutineListData = {
 
 export type KilocodeRoutineListErrors = {
   /**
-   * Bad request
+   * InvalidRequestError
    */
-  400: BadRequestError
+  400: InvalidRequestError
 }
 
 export type KilocodeRoutineListError = KilocodeRoutineListErrors[keyof KilocodeRoutineListErrors]

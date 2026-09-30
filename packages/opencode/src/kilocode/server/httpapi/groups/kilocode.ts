@@ -854,6 +854,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
         HttpApiEndpoint.get("agentList", KilocodePaths.agents, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.Array(RayaTask.Agent), "Assigned agents"),
+          error: InvalidRequestError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.list",

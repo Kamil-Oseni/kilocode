@@ -1,5 +1,11 @@
 # Raya implementation progress
 
+## ChatGPT 2026-10-01 - private settings handoff prepared
+
+A one-off settings-only transfer is prepared privately on the old PC. Its authenticated AES-256-GCM envelope carries the standard profile's exact global configuration, five API-key mirror records, seven `raya.*` VS Code settings, speech preferences and model-variant selections. The separate unlock file and encrypted bundle are excluded from Git. Existing configuration export/import already carries non-secret scoped settings; the one-off importer uses the existing provider mirror-to-SecretStorage migration flow instead of copying encrypted VS Code credentials.
+
+Disposable source/destination tests pass authenticated round-trip recovery, exact configuration bytes, preservation of unrelated provider/editor settings and comments, speech preference recovery, exclusion of OAuth/schedules and tamper refusal before destination writes. The final actual export independently decrypts and matches its captured payload. New-PC import, running-provider acceptance and voice-specific secret migration have not been verified; speech-only secrets are excluded, and pre-existing destination SecretStorage keys can take precedence. This handoff excludes chats, workers, schedules and full profile state. **Basic stable readiness remains 48/100**, and portable capture/restore remains refused.
+
 ## ChatGPT 2026-10-01 - source handoff to the new PC
 
 **Basic stable readiness remains 48/100.** This score is for the intended stable local-first Raya, not merely the ability to clone or build the repository. The source-matched installed chat and Unicode draft recovery pass belongs to `e9d781944c`. The later Core/CLI shutdown fixes and bounded browser recovery fix have source checks, but have not yet passed a matching installed-host and real local-model run on the new PC. Do not increase installed acceptance for a Git push alone.

@@ -1,5 +1,13 @@
 # Raya implementation progress
 
+## ChatGPT 2026-10-01 - source handoff to the new PC
+
+**Basic stable readiness remains 48/100.** This score is for the intended stable local-first Raya, not merely the ability to clone or build the repository. The source-matched installed chat and Unicode draft recovery pass belongs to `e9d781944c`. The later Core/CLI shutdown fixes and bounded browser recovery fix have source checks, but have not yet passed a matching installed-host and real local-model run on the new PC. Do not increase installed acceptance for a Git push alone.
+
+The browser bridge now retries startup pending-list timeouts at most twice per recovery pass, keeps each read under its existing two-second deadline, and ignores results from disposed or superseded connections. The focused browser suite passes 61 tests with 252 assertions. Extension and webview typechecks, package lint, Knip and the applicable guards pass. The Core/CLI shutdown changes fence retired service runtimes and prevent reopening final process owners; they do not yet complete portable capture admission and drain. See [new-PC setup](Raya-New-PC-Setup.md) for the exact source checkout and build steps.
+
+Git transfers tracked source, tests and documentation. It does **not** transfer `.kilo-dev/`, local SQLite/JSON state, chat drafts, worker schedules, credentials, model weights, generated VSIX files or ignored `.tmp` receipts. The [portable writer audit](Raya-Portable-Capture-Writer-Audit.md) still records 32 boundaries: 11 integrated, 16 unintegrated and five uncertain. Portable capture/restore remains refused; do not treat copying an individual database as a safe migration or automatically restart old scheduled workers on the new PC. Keep the old installation and profile available until a verified transfer exists.
+
 ## ChatGPT 2026-09-30 19:11 EDT - matching installed chat and Unicode draft recovery pass
 
 Source checkpoint `e9d781944c` passes packaging, CLI/model/sandbox-worker smoke checks, extension/webview typing, lint, production bundling and native self-tests. Its private installation independently matches all 465 payload files and equivalent package metadata (`.tmp/installed-snapshot-e9d781944c-verified.json`). The actual extension and backend load from that installation. Computer Use tests run in a generated temporary Git workspace outside Raya's ancestry, on the second screen; the French Study workspace and installation are untouched.

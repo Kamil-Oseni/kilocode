@@ -14,6 +14,103 @@ import { BrowserBridge } from "../../src/services/browser-automation/browser-bri
 import { BrowserOutcomeError } from "../../src/services/browser-automation/browser-session"
 
 describe("Raya browser bridge", () => {
+  it("recovers after a bootstrap list timeout without replaying its late result", async () => {
+    const held = Promise.withResolvers<{ data: BrowserRequest[] }>()
+    const done = Promise.withResolvers<void>()
+    const request = sealed()
+    const calls = { list: 0, execute: 0, acknowledge: 0 }
+    const failures: unknown[] = []
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => (++calls.list === 1 ? held.promise : { data: [request] }),
+          reply: async () => ({ data: true }),
+          reject: async (input: unknown) => {
+            failures.push(input)
+            return { data: true }
+          },
+          acknowledge: async () => {
+            calls.acknowledge++
+            done.resolve()
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        calls.execute++
+        return { operation: "click", url: "https://example.test", title: "Recovered" }
+      },
+    })
+    try {
+      connection.state("connected")
+      await done.promise
+      held.reject(new Error("Late expired startup read"))
+      await Bun.sleep(10)
+      // Recovery verifies the ready result, but a missing execution receipt
+      // must remain a refusal rather than a new native dispatch.
+      expect(calls).toEqual({ list: 2, execute: 0, acknowledge: 1 })
+      expect(failures).toHaveLength(1)
+      expect(failures[0]).toMatchObject({
+        error: { code: "cancelled", message: expect.stringContaining("stopped before native dispatch") },
+      })
+    } finally {
+      held.resolve({ data: [] })
+      bridge.dispose()
+    }
+  })
+
+  it.each(["reconnect", "dispose"] as const)("ignores a late recovery list after %s", async (change) => {
+    const held = Promise.withResolvers<{ data: BrowserRequest[] }>()
+    const started = Promise.withResolvers<void>()
+    const current = Promise.withResolvers<void>()
+    const calls = { list: 0, execute: 0 }
+    const client = {
+      kilocode: {
+        browser: {
+          list: async () => {
+            calls.list++
+            if (calls.list === 1) {
+              started.resolve()
+              return held.promise
+            }
+            current.resolve()
+            return { data: [] }
+          },
+          reply: async () => ({ data: true }),
+          reject: async () => ({ data: true }),
+        },
+      },
+    } as unknown as KiloClient
+    const connection = harness(client)
+    const bridge = new BrowserBridge(connection.value, {
+      show: async () => undefined,
+      execute: async () => {
+        calls.execute++
+        return { operation: "click", url: "https://example.test", title: "Must not run" }
+      },
+    })
+    try {
+      connection.state("connected")
+      await started.promise
+      if (change === "dispose") bridge.dispose()
+      if (change === "reconnect") {
+        connection.state("disconnected")
+        connection.state("connected")
+        await current.promise
+      }
+      held.resolve({ data: [sealed()] })
+      await Bun.sleep(10)
+      expect(calls).toEqual({ list: change === "reconnect" ? 2 : 1, execute: 0 })
+    } finally {
+      held.resolve({ data: [] })
+      bridge.dispose()
+    }
+  })
+
   it.each([true, false])("executes proof-backed work only with a first dispatch grant (%s)", async (granted) => {
     const done = Promise.withResolvers<void>()
     const calls = { execute: 0, dispatch: 0, reply: 0, reject: 0, ack: 0 }
@@ -897,6 +994,9 @@ describe("Raya browser bridge", () => {
 
   it("does not replay an acknowledged failed dispatch during recovery", async () => {
     const delivered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<{ data: BrowserRequest[] }>()
+    const retried = Promise.withResolvers<void>()
+    let reads = 0
     const request = {
       id: "brr_failed_once",
       sessionID: "ses_test",
@@ -909,7 +1009,11 @@ describe("Raya browser bridge", () => {
     const client = {
       kilocode: {
         browser: {
-          list: async () => ({ data: [request] }),
+          list: async () => {
+            if (++reads === 1) return held.promise
+            retried.resolve()
+            return { data: [request] }
+          },
           reply: async () => ({}),
           reject: async (input: unknown) => {
             failures.push(input)
@@ -932,10 +1036,14 @@ describe("Raya browser bridge", () => {
       await delivered.promise
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
       connection.state("connected")
+      await retried.promise
+      held.resolve({ data: [request] })
       await Bun.sleep(10)
+      expect(reads).toBe(2)
       expect(calls).toBe(1)
       expect(failures).toHaveLength(1)
     } finally {
+      held.resolve({ data: [] })
       bridge.dispose()
     }
   })

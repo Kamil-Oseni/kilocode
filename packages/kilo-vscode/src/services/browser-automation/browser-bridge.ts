@@ -171,10 +171,16 @@ function digest(value: unknown, legacy = false) {
     .digest("hex")
 }
 
+class Timeout extends Error {
+  constructor() {
+    super("Browser recovery request timed out")
+  }
+}
+
 function deadline<T>(task: Promise<T>): Promise<T> {
   const clock = { id: undefined as ReturnType<typeof setTimeout> | undefined }
   const timeout = new Promise<never>((_resolve, reject) => {
-    clock.id = setTimeout(() => reject(new Error("Browser recovery request timed out")), 2_000)
+    clock.id = setTimeout(() => reject(new Timeout()), 2_000)
   })
   return Promise.race([task, timeout]).finally(() => {
     if (clock.id) clearTimeout(clock.id)
@@ -303,6 +309,9 @@ export class BrowserBridge {
   }
 
   private async recover(revision: number): Promise<void> {
+    // Bootstrap can outlast the list deadline. Allow at most two additional
+    // reads across this entire recovery pass, preserving each 2s deadline.
+    const budget = { remaining: 2 }
     for (const directory of this.connection.getKnownDirectories()) {
       if (this.disposed || revision !== this.revision) return
       for (const [id, receipt] of this.receipts) {
@@ -312,12 +321,8 @@ export class BrowserBridge {
           console.error("[Raya] Browser confirmation remains retained for later recovery", error),
         )
       }
-      const response = await deadline(this.connection.getClient().kilocode.browser.list({ directory })).catch(
-        (error) => {
-          console.error("[Raya] Browser pending list could not be read during recovery", error)
-          return undefined
-        },
-      )
+      const response = await this.pending(directory, revision, budget)
+      if (this.disposed || revision !== this.revision) return
       if (!response) continue
       if (response.error) {
         console.error("[Raya] BrowserBridge: request recovery failed:", response.error)
@@ -326,6 +331,25 @@ export class BrowserBridge {
       for (const request of response.data ?? []) {
         void this.run(request, directory, true)
       }
+    }
+  }
+
+  private async pending(directory: string, revision: number, budget: { remaining: number }) {
+    const timeout = Symbol("timeout")
+    for (;;) {
+      if (this.disposed || revision !== this.revision) return
+      const response = await deadline(this.connection.getClient().kilocode.browser.list({ directory })).catch(
+        (error: unknown) => {
+          if (this.disposed || revision !== this.revision) return
+          if (!(error instanceof Timeout) || budget.remaining === 0)
+            console.error("[Raya] Browser pending list could not be read during recovery", error)
+          return error instanceof Timeout ? timeout : undefined
+        },
+      )
+      if (this.disposed || revision !== this.revision) return
+      if (typeof response !== "symbol") return response
+      if (budget.remaining === 0) return
+      budget.remaining--
     }
   }
 

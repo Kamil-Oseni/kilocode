@@ -136,12 +136,15 @@ export const createSseClient = <TData = unknown>({
 
         let buffer = ""
 
+        let cancellation: Promise<{ error: unknown } | undefined> | undefined
+        let failure: { error: unknown } | undefined
         const abortHandler = () => {
-          try {
-            reader.cancel()
-          } catch {
-            // noop
-          }
+          cancellation ??= Promise.resolve()
+            .then(() => reader.cancel())
+            .then(
+              () => undefined,
+              (error: unknown) => ({ error }),
+            )
         }
 
         signal.addEventListener("abort", abortHandler)
@@ -212,9 +215,18 @@ export const createSseClient = <TData = unknown>({
               }
             }
           }
+        } catch (error) {
+          failure = { error }
+          throw error
         } finally {
           signal.removeEventListener("abort", abortHandler)
+          const cancelled = await cancellation
           reader.releaseLock()
+          if (cancelled && (!failure || cancelled.error !== failure.error)) {
+            throw failure
+              ? new AggregateError([failure.error, cancelled.error], "SSE read and cancellation failed")
+              : cancelled.error
+          }
         }
 
         break // exit loop on normal completion

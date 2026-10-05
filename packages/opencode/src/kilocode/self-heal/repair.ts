@@ -1,52 +1,23 @@
+import { Repairs as Data } from "./schemas"
 import { Effect, Schema } from "effect"
 import { createHash } from "node:crypto"
 import { Storage } from "@/storage/storage"
 import path from "node:path"
 import { Global } from "@opencode-ai/core/global"
 import * as Checkout from "./worktree"
-import { SessionID } from "@/session/schema"
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex")
-export const Source = Schema.Struct({ root: Schema.String, commit: Schema.String })
-export const Phase = Schema.Literals([
-  "reserved",
-  "worktree_creating",
-  "worktree_ready",
-  "worktree_unknown",
-  "session_creating",
-  "session_created",
-  "goal_creating",
-  "goal_created",
-  "dispatching",
-  "submitted",
-  "blocked",
-  "dispatch_unknown",
-  "legacy_conflict",
-])
-export const Outcome = Schema.Struct({
-  id: Schema.String,
-  itemID: Schema.String,
-  source: Source,
-  worktree: Schema.optional(Checkout.Worktree),
-  phase: Phase,
-  revision: Schema.Number,
-  sessionID: Schema.optional(SessionID),
-  reason: Schema.optional(Schema.String),
-  at: Schema.Number,
-})
-export const Admission = Schema.Struct({ source: Source })
-export const Granted = Schema.Struct({ owned: Schema.Boolean, outcome: Outcome, token: Schema.optional(Schema.String) })
-export const Prepare = Schema.Struct({ token: Schema.String, revision: Schema.Number })
-export const Advance = Schema.Struct({
-  token: Schema.String,
-  revision: Schema.Number,
-  phase: Phase,
-  sessionID: Schema.optional(SessionID),
-})
+export const Source = Data.Source
+export const Phase = Data.Phase
+export const Outcome = Data.Outcome
+export const Admission = Data.Admission
+export const Granted = Data.Granted
+export const Prepare = Data.Prepare
+export const Advance = Data.Advance
 export class Conflict extends Schema.TaggedErrorClass<Conflict>()("SelfHeal.RepairConflict", {
   message: Schema.String,
 }) {}
-const Claim = Schema.Struct({ outcome: Outcome, owner: Schema.String })
+export const Claim = Data.Claim
 const decode = Schema.decodeUnknownEffect(Claim)
 const stages: Partial<Record<typeof Phase.Type, typeof Phase.Type>> = {
   reserved: "worktree_creating",

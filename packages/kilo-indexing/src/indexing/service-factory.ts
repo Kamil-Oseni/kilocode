@@ -166,6 +166,9 @@ export class CodeIndexServiceFactory {
     try {
       log.info("validating embedder", { provider: embedder.embedderInfo.name })
       const result = fail ? await Promise.race([wait, fail]) : await wait
+      // A validation deadline reports refusal, but cannot release a still-owned transport.
+      // Each provider retains its own native request timeout; join its final completion.
+      if (fail) await wait
       if (result.valid) {
         log.info("embedder validation succeeded", { provider: embedder.embedderInfo.name })
       }

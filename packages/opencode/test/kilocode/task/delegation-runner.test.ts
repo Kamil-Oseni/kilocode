@@ -728,7 +728,7 @@ test("a durable removal owner refuses concurrent delegation admission", async ()
   )
 })
 
-test("restart resumes an accepted delegation that stopped before its startup claim", async () => {
+test("restart retains an accepted delegation that stopped before its startup claim", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -782,20 +782,21 @@ test("restart resumes an accepted delegation that stopped before its startup cla
       expect(opened).toHaveLength(0)
 
       yield* runner.revive()
+      yield* runner.revive()
 
       const running = yield* store.get(admitted.record.id)
       expect(running).toMatchObject({
-        state: "running",
+        state: "accepted",
         childRunID: taken.childRunID,
-        sessionID: SessionID.make("ses_restart_accepted"),
       })
-      expect(opened).toHaveLength(1)
-      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === taken.childRunID)).toHaveLength(1)
+      expect(running.sessionID).toBeUndefined()
+      expect(opened).toHaveLength(0)
+      expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === taken.childRunID)).toHaveLength(0)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
 
-test("restart attaches the exact saved run when delegation attachment was interrupted", async () => {
+test("restart preserves the saved run without executing an interrupted delegation attachment", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -853,14 +854,10 @@ test("restart attaches the exact saved run when delegation attachment was interr
       expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === accepted.childRunID)).toHaveLength(1)
       yield* database.db.run("DROP TRIGGER fail_delegation_attach")
 
-      yield* RayaTaskRunner.make({ database, storage, sessions }).revive()
+      yield* RayaTaskRunner.make({ database, storage: { ...storage }, sessions }).revive()
 
       const running = yield* store.get(accepted.id)
-      expect(running).toMatchObject({
-        state: "running",
-        childRunID: accepted.childRunID,
-        sessionID: SessionID.make("ses_restart_attach"),
-      })
+      expect(running).toEqual(accepted)
       expect(opened).toHaveLength(1)
       expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === accepted.childRunID)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
@@ -1251,7 +1248,7 @@ test("waiting for the user survives restart and holds the next delegation", asyn
         blockedReason: "waiting on you",
       })
 
-      const reopened = RayaTaskRunner.make(input)
+      const reopened = RayaTaskRunner.make({ ...input, storage: { ...storage } })
       yield* reopened.revive()
       yield* reopened.revive()
 
@@ -1270,15 +1267,15 @@ test("waiting for the user survives restart and holds the next delegation", asyn
 
       expect((yield* reopened.stop(first.id)).state).toBe("cancelled")
       const running = yield* store.get(second.id)
-      expect(running.state).toBe("running")
-      expect(starts).toEqual(["ses_wait_restart_1", "ses_wait_restart_2"])
+      expect(running.state).toBe("queued")
+      expect(starts).toEqual(["ses_wait_restart_1"])
       expect(halted).toEqual([firstSessionID])
       expect(
         (yield* RayaTaskInbox.make(database).page(chief.id)).messages.some(
           (item) => item.source === "reply:dlg_wait_first" && item.body.includes("cancelled"),
         ),
       ).toBe(true)
-      expect((yield* reopened.tasks.runsFor(books.id)).filter((run) => run.id === running.childRunID)).toHaveLength(1)
+      expect((yield* reopened.tasks.runsFor(books.id)).filter((run) => run.id === running.childRunID)).toHaveLength(0)
     }).pipe(Effect.scoped, Effect.provide(Database.layerFromPath(":memory:"))),
   )
 }, 30000)

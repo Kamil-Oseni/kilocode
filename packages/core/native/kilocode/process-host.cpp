@@ -10,6 +10,7 @@
 #include <string>
 #include <stdexcept>
 #include <vector>
+#include <utility>
 
 // Private handles stay with this guardian until contained membership is proved empty.
 struct Handle {
@@ -350,6 +351,8 @@ struct Envelope {
   }
 };
 
+#include "source-host.inc"
+
 void launch(DWORD controller, uint64_t parent, const std::wstring& control, const std::string& key) {
   Handle owner(pin(controller, parent, SYNCHRONIZE | PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION));
   for (const auto suffix : {L".go", L".go.tmp", L".job", L".launch", L".drained", L".running", L".exited"})
@@ -490,6 +493,14 @@ void guard(DWORD id, uint64_t expected, DWORD controller, uint64_t parent, const
     if (!QueryInformationJobObject(job.value, JobObjectBasicAccountingInformation, &state, sizeof(state), nullptr))
       throw std::runtime_error("Native containment state unavailable");
     if (!state.ActiveProcesses) {
+      DWORD code = STILL_ACTIVE;
+      if (!GetExitCodeProcess(process.value, &code) || code == STILL_ACTIVE)
+        throw std::runtime_error("Native contained root exit unavailable");
+      write(control + L".retired", "{\"version\":1,\"token\":\"" + key +
+        "\",\"proof\":\"windows-job\",\"pid\":" + std::to_string(id) +
+        ",\"birth\":\"" + std::to_string(expected) + "\",\"controller\":" + std::to_string(controller) +
+        ",\"parentBirth\":\"" + std::to_string(parent) + "\",\"empty\":true,\"forced\":" +
+        (stopping ? "true" : "false") + ",\"code\":" + std::to_string(code) + "}");
       write(control + L".drained", "{\"version\":2,\"token\":\"" + key + "\",\"proof\":\"windows-job\",\"empty\":true}");
       return;
     }
@@ -508,8 +519,17 @@ void guard(DWORD id, uint64_t expected, DWORD controller, uint64_t parent, const
   }
 }
 
+#include "source-pipe.inc"
+#include "profile-offline.inc"
+
 int wmain(int argc, wchar_t** argv) {
   try {
+    if (argc == 2 && std::wstring(argv[1]) == L"profile-offline") return Offline::launch();
+    if (argc == 2 && std::wstring(argv[1]) == L"profile-offline-guardian") return Offline::run(true);
+    if (argc == 2 && std::wstring(argv[1]) == L"source-pipe-serve") return SourcePipe::serve();
+    if (argc == 2 && std::wstring(argv[1]) == L"source-pipe-receive") return SourcePipe::receive();
+    if (argc == 13 && std::wstring(argv[1]) == L"source-member") return SourcePipe::member(argv);
+    if (argc == 13 && std::wstring(argv[1]) == L"source-successor") return SourcePipe::member(argv, true);
     if (argc == 2 && std::wstring(argv[1]) == L"--protocol") {
       std::printf("{\"version\":1,\"proof\":\"windows-job\",\"architecture\":\"x64\"}\n");
       return 0;
@@ -517,6 +537,17 @@ int wmain(int argc, wchar_t** argv) {
     if (argc == 2 && std::wstring(argv[1]) == L"--launch-protocol") {
       std::printf("{\"version\":1,\"operation\":\"pty-launch\",\"proof\":\"windows-job\"}\n");
       return 0;
+    }
+    if (argc == 2 && std::wstring(argv[1]) == L"--source-protocol") {
+      std::printf("{\"version\":1,\"operation\":\"source-launch\",\"proof\":\"windows-job\",\"suspended\":true,\"broker\":true}\n");
+      return 0;
+    }
+    if (argc == 2 && std::wstring(argv[1]) == L"--source-policy-protocol") {
+      std::printf("{\"version\":1,\"operation\":\"source-policy\",\"proof\":\"windows-job\",\"launch\":2}\n");
+      return 0;
+    }
+    if (argc == 6 && std::wstring(argv[1]) == L"source-launch") {
+      return Source::start(pid(argv[2]), number(argv[3]), argv[4], token(argv[5]));
     }
     if (argc == 2 && std::wstring(argv[1]) == L"--pty-lifecycle-protocol") {
       std::printf("{\"version\":1,\"operation\":\"pty-lifecycle\",\"proof\":\"windows-job\",\"targetExit\":true}\n");

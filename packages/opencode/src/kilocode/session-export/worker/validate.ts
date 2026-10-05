@@ -1,10 +1,19 @@
 import { ExportEventTypes, type ExportEventType } from "../envelope"
 import type { ExportEvent } from "../events"
 import type { ToWorker } from "./ipc"
+import { identity, accept } from "../worker-identity"
 
 const types = new Set<ExportEventType>(ExportEventTypes)
 
 export function parseMessage(value: unknown): ToWorker | undefined {
+  try {
+    return message(value)
+  } catch {
+    return undefined
+  }
+}
+
+function message(value: unknown): ToWorker | undefined {
   if (!plain(value)) return undefined
   switch (value.kind) {
     case "init":
@@ -17,6 +26,7 @@ export function parseMessage(value: unknown): ToWorker | undefined {
         allowCustomEndpoint: value.allowCustomEndpoint === true,
         surface: text(value.surface),
         anonId: text(value.anonId),
+        identity: identity(value.identity),
       }
     case "event": {
       const envelope = parseEnvelope(value.envelope)
@@ -25,9 +35,14 @@ export function parseMessage(value: unknown): ToWorker | undefined {
       return { kind: "event", envelope, approxBytes: value.approxBytes }
     }
     case "shutdown":
-      if (typeof value.timeoutMs !== "number" || !Number.isFinite(value.timeoutMs)) return undefined
-      if (typeof value.requestID !== "string" || value.requestID.length === 0) return undefined
-      return { kind: "shutdown", timeoutMs: value.timeoutMs, requestID: value.requestID }
+      if (
+        typeof value.timeoutMs !== "number" ||
+        !Number.isSafeInteger(value.timeoutMs) ||
+        value.timeoutMs <= 0 ||
+        value.timeoutMs > 60_000
+      )
+        return undefined
+      return { kind: "shutdown", timeoutMs: value.timeoutMs, ...accept(value, identity(value)) }
     case "network_reconnect":
       return { kind: "network_reconnect" }
     case "test_event_count":

@@ -14,6 +14,7 @@ import { Repository } from "./repository"
 import { AbsolutePath } from "./schema"
 import { makeGlobalNode } from "./effect/app-node"
 import { EffectFlock } from "./util/effect-flock"
+import { RepositoryAdmission } from "./kilocode/repository-admission" // kilocode_change
 
 export type Result = {
   readonly repository: string
@@ -145,7 +146,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
           const localPath = Repository.cachePath(global.repos, input.reference, input.branch)
           const cloneTarget = Repository.parse(input.reference.remote) ?? input.reference
 
-          return yield* flock
+          return yield* flock // kilocode_change
             .withLock(
               Effect.gen(function* () {
                 yield* cacheOperation(fs.ensureDir(path.dirname(localPath)), "ensure cache directory", localPath)
@@ -168,6 +169,10 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                     root && // kilocode_change
                     match, // kilocode_change
                 )
+                // kilocode_change start
+                if (reuse && existing)
+                  yield* RepositoryAdmission.admin([existing.gitDirectory, existing.commonDirectory])
+                // kilocode_change end
                 if (!reuse && (yield* fs.existsSafe(localPath))) {
                   yield* cacheOperation(fs.remove(localPath, { recursive: true }), "remove stale cache", localPath)
                 }
@@ -185,20 +190,31 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                       directory: AbsolutePath.make(localPath),
                       branch: input.branch,
                     })
-                    .pipe(Effect.mapError((error) => new CloneFailedError({ repository, message: error.message })))
+                    // kilocode_change start
+                    .pipe(
+                      Effect.tapCause(RepositoryAdmission.failed),
+                      Effect.mapError((error) => new CloneFailedError({ repository, message: error.message })),
+                    )
+                  // kilocode_change end
                 }
 
                 if (status === "refreshed") {
                   if (!existing)
                     return yield* new FetchFailedError({ repository, message: "Repository is unavailable" })
-                  yield* git.sync
-                    .fetchRemotes(existing)
-                    .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))
+                  // kilocode_change start
+                  yield* git.sync.fetchRemotes(existing).pipe(
+                    Effect.tapCause(RepositoryAdmission.failed),
+                    Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })),
+                  )
+                  // kilocode_change end
 
                   if (input.branch) {
-                    yield* git.sync
-                      .fetchBranch(existing, { branch: input.branch })
-                      .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))
+                    // kilocode_change start
+                    yield* git.sync.fetchBranch(existing, { branch: input.branch }).pipe(
+                      Effect.tapCause(RepositoryAdmission.failed),
+                      Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })),
+                    )
+                    // kilocode_change end
                   }
 
                   // Checking out the tracked ref before resetting keeps the
@@ -206,19 +222,25 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                   // branch.
                   const branch = input.branch ?? (yield* git.history.defaultRemoteBranch(existing))
                   if (branch) {
-                    yield* git.sync
-                      .checkoutRemoteBranch(existing, { branch })
-                      .pipe(
-                        Effect.mapError(
-                          (error) => new CheckoutFailedError({ repository, branch, message: error.message }),
-                        ),
-                      )
+                    // kilocode_change start
+                    yield* git.sync.checkoutRemoteBranch(existing, { branch }).pipe(
+                      // kilocode_change end
+                      Effect.tapCause(RepositoryAdmission.failed), // kilocode_change
+                      // kilocode_change start
+                      Effect.mapError(
+                        (error) => new CheckoutFailedError({ repository, branch, message: error.message }),
+                      ),
+                    )
+                    // kilocode_change end
                   }
 
                   const target = branch ?? (yield* git.history.branch(existing))
-                  yield* git.sync
-                    .resetHard(existing, target ? `origin/${target}` : "HEAD")
-                    .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
+                  // kilocode_change start
+                  yield* git.sync.resetHard(existing, target ? `origin/${target}` : "HEAD").pipe(
+                    Effect.tapCause(RepositoryAdmission.failed),
+                    Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })),
+                  )
+                  // kilocode_change end
                 }
 
                 const checkout = yield* git.repo.discover(AbsolutePath.make(localPath))
@@ -234,8 +256,13 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                 } satisfies Result
               }),
               `repository-cache:${localPath}`,
+              // kilocode_change start
+              undefined,
+              // kilocode_change end
+              { strict: true, failed: RepositoryAdmission.failed }, // kilocode_change - retain owned lock cleanup failures
             )
             .pipe(
+              (body) => RepositoryAdmission.run({ ...global, target: localPath }, body), // kilocode_change
               Effect.mapError((error) =>
                 isError(error) ? error : new LockFailedError({ localPath, message: errorMessage(error) }),
               ),
@@ -257,6 +284,7 @@ function errorMessage(error: unknown) {
 
 function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: string, target: string) {
   return effect.pipe(
+    Effect.tapCause(RepositoryAdmission.failed), // kilocode_change
     Effect.mapError((error) => new CacheOperationError({ operation, path: target, message: errorMessage(error) })),
   )
 }

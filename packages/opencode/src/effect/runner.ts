@@ -2,6 +2,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Latch, Schema, Scope, Synchronize
 import { KiloRunner } from "@/kilocode/effect/runner" // kilocode_change
 import { cancel as cancelObserved } from "@/kilocode/effect/cancellation" // kilocode_change
 import { executing } from "@/kilocode/effect/observation" // kilocode_change
+import { SessionRetirement } from "@/kilocode/session/retirement" // kilocode_change
 
 export interface Runner<A, E = never> {
   readonly state: State<A, E>
@@ -141,7 +142,7 @@ export const make = <A, E = never>(
     Effect.gen(function* () {
       if (shell.ready) yield* shell.ready.await.pipe(Effect.exit, Effect.asVoid)
       yield* Deferred.succeed(shell.cancelled, undefined).pipe(Effect.asVoid)
-      yield* Fiber.interrupt(shell.fiber)
+      yield* SessionRetirement.interrupt(shell.fiber) // kilocode_change - attribute the genuine selected cancellation
     })
 
   // kilocode_change start - open work only after the Running state is committed
@@ -206,7 +207,7 @@ export const make = <A, E = never>(
                   yield* idleIfCurrent()
                 }),
               ),
-              Effect.forkChild,
+              SessionRetirement.child, // kilocode_change - reserve the actual shell child before it can start
             )
             const shell = { id, cancelled, ready, fiber } satisfies ShellHandle<A, E>
             return [
@@ -239,7 +240,7 @@ export const make = <A, E = never>(
         case "Running":
           return [
             Effect.gen(function* () {
-              yield* Fiber.interrupt(st.run.fiber)
+              yield* SessionRetirement.interrupt(st.run.fiber) // kilocode_change
               yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
               yield* idleIfCurrent()
             }),

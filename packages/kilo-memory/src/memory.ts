@@ -122,7 +122,7 @@ export namespace Memory {
         ...(input.settings.verbose === undefined ? {} : { verbose: input.settings.verbose }),
       }
       await MemoryFiles.writeState(input.root, next)
-      return { root: input.root, state: next }
+      return { root: input.root, state: await MemoryFiles.readState(input.root) }
     })
   }
 
@@ -268,6 +268,8 @@ export namespace Memory {
     if (!(await MemoryFiles.owned(input.root))) {
       const exists = await MemoryFiles.exists(input.root)
       if (!exists) return { root: input.root, purged: false, state: MemorySchema.missing() }
+      if (MemoryFiles.hosted() && !(await MemoryFiles.purge(input.root)))
+        return { root: input.root, purged: false, state: MemorySchema.missing() }
       throw new Error(`refusing to purge unowned memory root: ${input.root}`)
     }
     return MemoryFiles.queue(input.root, async () => {

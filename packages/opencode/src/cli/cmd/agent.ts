@@ -3,8 +3,7 @@ import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
-import fs from "fs/promises"
-import { Filesystem } from "@/util/filesystem"
+import { AgentPublication } from "@/kilocode/cli/agent-publication" // kilocode_change
 import matter from "gray-matter"
 import { EOL } from "os"
 import type { Argv } from "yargs"
@@ -211,9 +210,9 @@ const AgentCreateCommand = effectCmd({
       const content = matter.stringify(generated.systemPrompt, frontmatter)
       const filePath = path.join(targetPath, `${generated.identifier}.md`)
 
-      await fs.mkdir(targetPath, { recursive: true })
-
-      if (await Filesystem.exists(filePath)) {
+      // kilocode_change start
+      if (!(await AgentPublication.save(targetPath, generated.identifier, content))) {
+        // kilocode_change end
         if (isFullyNonInteractive) {
           console.error(`Error: Agent file already exists: ${filePath}`)
           process.exit(1)
@@ -221,8 +220,6 @@ const AgentCreateCommand = effectCmd({
         prompts.log.error(`Agent file already exists: ${filePath}`)
         throw new UI.CancelledError()
       }
-
-      await Filesystem.write(filePath, content)
 
       if (isFullyNonInteractive) {
         console.log(filePath)

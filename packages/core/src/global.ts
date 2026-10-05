@@ -6,6 +6,7 @@ import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
 import { markNoIndex } from "./kilocode/spotlight" // kilocode_change
 import { ensureRealDir, resolveState } from "./kilocode/global" // kilocode_change
+import { registerGlobalProfile, registerStateProfile } from "./kilocode/process-profile" // kilocode_change - mandatory managed-process profile lifetimes
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
@@ -23,7 +24,10 @@ const data = path.join(clean(xdgData)!, app)
 const cache = path.join(clean(xdgCache)!, app)
 const config = path.join(clean(xdgConfig)!, app)
 const preferred = path.join(clean(xdgState)!, app)
-const state = await resolveState(preferred, process.env.XDG_STATE_HOME ? undefined : path.join(data, "state"))
+const fallback = process.env.XDG_STATE_HOME ? undefined : path.join(data, "state")
+// Lifetime publication precedes resolveState's native mkdir/probe/fallback writes.
+registerStateProfile(preferred, fallback)
+const state = await resolveState(preferred, fallback)
 // kilocode_change end
 const tmp = path.join(os.tmpdir(), app)
 
@@ -44,6 +48,7 @@ const paths = {
 export const Path = paths
 
 Flock.setGlobal({ state })
+registerGlobalProfile(Path) // kilocode_change - publish every managed profile root before native initialization; tmp is shared/reconstructible
 
 await Promise.all([
   ensureRealDir(Path.data), // kilocode_change
@@ -73,11 +78,11 @@ export interface Interface {
 }
 
 export function make(input: Partial<Interface> = {}): Interface {
-  return {
+  const global = { // kilocode_change - injected independent graphs declare their own canonical roots
     home: Path.home,
     data: Path.data,
     cache: Path.cache,
-    config: Flag.KILO_CONFIG_DIR ?? Path.config,
+    config: Flag.KILO_CONFIG_DIR || Path.config, // kilocode_change - empty optional override retains the canonical default
     state: Path.state,
     tmp: Path.tmp,
     bin: Path.bin,
@@ -85,6 +90,8 @@ export function make(input: Partial<Interface> = {}): Interface {
     repos: Path.repos,
     ...input,
   }
+  registerGlobalProfile(global) // kilocode_change
+  return global // kilocode_change
 }
 
 const layer = Layer.effect(

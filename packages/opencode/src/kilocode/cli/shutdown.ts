@@ -1,14 +1,26 @@
-export namespace KiloShutdown {
+export function createShutdown() {
   const tasks = new Set<() => void | Promise<void>>()
+  let closing: Promise<void> | undefined
 
-  export function register(task: () => void | Promise<void>) {
+  function register(task: () => void | Promise<void>) {
+    if (closing) throw new Error("Process shutdown registration is closed")
     tasks.add(task)
     return () => tasks.delete(task)
   }
 
-  export async function run() {
+  function run() {
+    if (closing) return closing
     const pending = Array.from(tasks)
     tasks.clear()
-    await Promise.all(pending.map((task) => task()))
+    closing = Promise.allSettled(pending.map((task) => Promise.resolve().then(task))).then((results) => {
+      const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+      if (failures.length === 1) throw failures[0]
+      if (failures.length) throw new AggregateError(failures, "Process shutdown cleanup failed")
+    })
+    return closing
   }
+
+  return { register, run }
 }
+
+export const KiloShutdown = createShutdown()

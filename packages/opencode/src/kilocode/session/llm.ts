@@ -6,7 +6,7 @@ import type { Provider } from "@/provider/provider"
 import { KiloSessionOverflow } from "./overflow"
 
 const SAFETY = 2048
-const MIN_OUTPUT = 1024
+const MIN_OUTPUT = KiloSessionOverflow.OUTPUT_MIN
 
 export namespace KiloLLM {
   // Stream failures and interruptions propagate while text deltas are collected.

@@ -5,9 +5,8 @@ import { Session } from "@/session/session"
 import { PlanFile } from "@/kilocode/plan-file"
 import { PlanArtifact } from "@/kilocode/plan-artifact"
 import EXIT_DESCRIPTION from "@/tool/plan-exit.txt"
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "plan-exit" })
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import * as EncodedIO from "./encoded-io"
 
 export const Parameters = Schema.Struct({
   path: Schema.optional(
@@ -24,6 +23,7 @@ export const PlanExitTool = Tool.define(
   "plan_exit",
   Effect.gen(function* () {
     const session = yield* Session.Service
+    const fs = yield* FSUtil.Service
 
     return {
       description: EXIT_DESCRIPTION,
@@ -52,17 +52,15 @@ export const PlanExitTool = Tool.define(
             )
           }
           const plan = PlanFile.display(file, instance)
-          const markdown = yield* Effect.promise(() => Bun.file(file).text().catch(() => ""))
-          const structured = PlanArtifact.parse(markdown)
-          yield* Effect.promise(() => PlanArtifact.save(file, structured)).pipe(
-            Effect.catchCause((cause) => Effect.sync(() => log.warn("structured plan sidecar write failed", { err: cause }))),
-          )
+          const markdown = yield* EncodedIO.read(fs, file)
+          const structured = PlanArtifact.parse(markdown.text)
+          yield* PlanArtifact.save(file, structured, markdown.sha256, instance.directory)
           return {
             title: "Planning complete",
             output: `Plan is ready at ${plan}. Ending planning turn.`,
             metadata: { plan, structured },
           }
-        }).pipe(Effect.orDie),
+        }).pipe(Effect.provideService(FSUtil.Service, fs), Effect.orDie),
     }
   }),
 )

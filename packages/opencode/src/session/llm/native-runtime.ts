@@ -18,8 +18,11 @@ import {
 } from "@opencode-ai/llm"
 import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
-import { localConfig, localFetch } from "@/kilocode/provider/local-scheduler" // kilocode_change
+import { localConfig, localFetch, type LocalInferenceError } from "@/kilocode/provider/local-scheduler" // kilocode_change
+import type { OllamaBridgeError } from "@/kilocode/provider/ollama-bridge" // kilocode_change
 import { keyless } from "@/kilocode/provider/native-policy" // kilocode_change
+import { terminal } from "@/kilocode/provider/native-admission" // kilocode_change - local refusal must survive native HTTP error translation
+import { context as ollamaContext } from "@/kilocode/provider/ollama-context" // kilocode_change
 
 export type RuntimeStatus =
   | { readonly type: "supported"; readonly apiKey?: string; readonly baseURL?: string } // kilocode_change - explicitly local compatible servers may omit authentication
@@ -95,7 +98,18 @@ export function stream(input: StreamInput): StreamResult {
   const fetch = providerFetch(input)
   const current = statusWithFetch(input, fetch)
   if (current.type === "unsupported") return current
-  const transport = localFetch(input.provider.options, fetch) // kilocode_change
+  const transport = localFetch(
+    ollamaContext(input.provider.options, input.model, input.toolChoice === "none" ? undefined : input.tools),
+    fetch,
+  ) // kilocode_change
+  // kilocode_change start - retain the actual local refusal, not a provider-supplied error header
+  let refusal: LocalInferenceError | OllamaBridgeError | undefined
+  const selected = localConfig(input.provider.options).enabled
+    ? terminal(transport, (err) => {
+        refusal = err
+      })
+    : transport
+  // kilocode_change end
 
   // Integration point with @opencode-ai/llm: native-request lowers session data
   // into an LLMRequest, then LLMClient handles route selection and transport.
@@ -167,11 +181,12 @@ export function stream(input: StreamInput): StreamResult {
     stream:
       fetch || localConfig(input.provider.options).enabled
         ? stream.pipe(
+            Stream.mapError((err) => refusal ?? err),
             Stream.provideService(
               FetchHttpClient.Fetch,
               Object.assign(
                 (request: Parameters<typeof globalThis.fetch>[0], opts?: Parameters<typeof globalThis.fetch>[1]) =>
-                  transport(request, opts),
+                  selected(request, opts),
                 { preconnect: globalThis.fetch.preconnect },
               ),
             ),

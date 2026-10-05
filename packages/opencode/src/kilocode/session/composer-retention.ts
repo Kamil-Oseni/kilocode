@@ -9,6 +9,7 @@ import { RayaComposerTable as Rows, RayaComposerControlTable as Control } from "
 import { resolveProfileRoot } from "@opencode-ai/core/kilocode/profile-maintenance"
 import { Flock } from "@opencode-ai/core/util/flock"
 import type { Storage } from "@/storage/storage"
+import { DraftImported, DraftRetirement } from "./composer-codec"
 import {
   DraftError,
   DraftLegacy as Legacy,
@@ -31,17 +32,7 @@ const cursor = z
     upper: z.number().int().min(0),
   })
   .strict()
-const proof = z
-  .object({
-    version: z.literal(2),
-    generation: z.string().uuid(),
-    storage: z.string(),
-    database: z.string(),
-    source: z.string().regex(/^[a-f0-9]{64}$/),
-    marker: z.string().regex(/^[a-f0-9]{64}$/),
-    cursor: z.string().regex(/^[a-f0-9]{64}$/),
-  })
-  .strict()
+const proof = DraftRetirement.schema
 type Journal = typeof Control.$inferSelect
 type Transaction = Pick<Database.Interface["db"], "select" | "insert" | "update" | "get" | "all">
 type Scope = Pick<DraftIdentity, "workspace" | "projectID" | "box">
@@ -125,21 +116,8 @@ function parsed(source: string | null, marker: string | null) {
   }
   return source === null ? { version: 1 as const, entries: [] as DraftEntry[] } : Legacy.checked(json(source))
 }
-const sentinel = (journal: Journal) => ({
-  version: 2,
-  generation: journal.generation,
-  storage: journal.storage,
-  database: journal.database,
-  source: journal.source_digest,
-  marker: journal.marker_digest,
-  cursor: bytes(journal.cursor_secret),
-})
-const overhead = (journal: Journal) =>
-  Buffer.byteLength(journal.source ?? "") +
-  Buffer.byteLength(journal.marker ?? "") +
-  Buffer.byteLength(
-    JSON.stringify({ ...journal, phase: "pending", source: null, marker: null, content_bytes: 0, metadata_bytes: 0 }),
-  )
+const sentinel = DraftRetirement.encode
+const overhead = DraftRetirement.overhead
 function retired(value: string | null, journal: Journal) {
   if (value === null) return false
   try {
@@ -161,22 +139,7 @@ function stable(current: Journal, prior: Journal) {
     current.marker_digest === bytes(current.marker)
   )
 }
-function valid(prior: Journal) {
-  if (
-    prior.source_digest !== bytes(prior.source) ||
-    prior.marker_digest !== bytes(prior.marker) ||
-    !/^[a-f0-9]{64}$/.test(prior.cursor_secret) ||
-    !z.string().uuid().safeParse(prior.generation).success ||
-    !["pending", "active"].includes(prior.phase) ||
-    !Number.isSafeInteger(prior.content_bytes) ||
-    !Number.isSafeInteger(prior.metadata_bytes) ||
-    prior.content_bytes < 0 ||
-    prior.metadata_bytes < overhead(prior) ||
-    prior.content_bytes > budget ||
-    prior.metadata_bytes > metadata
-  )
-    throw new DraftError("corrupt")
-}
+const valid = DraftRetirement.validate
 
 /** SQL mutations are admitted only after an exact, recoverable JSON cutover. */
 export function composerRetention(
@@ -184,7 +147,10 @@ export function composerRetention(
   store: Storage.Interface,
   dir: string,
   file: string,
-  opts: { checkpoint?: (stage: string) => Effect.Effect<void> } = {},
+  opts: {
+    checkpoint?: (stage: string) => Effect.Effect<void>
+    project?: (workspace: string) => Effect.Effect<string>
+  } = {},
 ) {
   const db = database.db
   const checkpoint = (stage: string) => opts.checkpoint?.(stage) ?? Effect.void
@@ -266,7 +232,31 @@ export function composerRetention(
             prior ??
             (yield* Effect.gen(function* () {
               const data = yield* validate(() => parsed(source, marker))
-              const rows = data.entries.map(row)
+              const imported = marker === null ? undefined : DraftImported.safeParse(json(marker))
+              if (marker !== null && !imported?.success) {
+                const value = json(marker)
+                if (
+                  value &&
+                  typeof value === "object" &&
+                  "format" in value &&
+                  value.format === "raya.restored-composer-content"
+                )
+                  return yield* Effect.fail(new DraftError("corrupt"))
+              }
+              const entries = imported?.success
+                ? yield* Effect.forEach(data.entries, (entry) => {
+                    if (!entry.identity.pendingID) return Effect.succeed(entry)
+                    if (!opts.project) return Effect.fail(new DraftError("admission"))
+                    return opts.project(entry.identity.workspace).pipe(
+                      Effect.map((projectID) => ({
+                        ...entry,
+                        identity: { ...entry.identity, projectID },
+                      })),
+                    )
+                  })
+                : data.entries
+              yield* validate(() => Legacy.checked({ version: 1, entries }))
+              const rows = entries.map(row)
               const content = rows.reduce((sum, item) => sum + item.content_bytes, 0)
               const used = rows.reduce((sum, item) => sum + item.metadata_bytes, 0)
               if (content > budget || used > metadata) return yield* Effect.fail(new DraftError("capacity"))

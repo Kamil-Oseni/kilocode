@@ -1,3 +1,4 @@
+import { Verifications as Data } from "./schemas"
 import { createHash, randomUUID } from "node:crypto"
 import path from "node:path"
 import { Cause, Effect, Exit, Schema } from "effect"
@@ -11,42 +12,10 @@ import type { Completion } from "./completion"
 import * as Source from "./snapshot"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 
-const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
-const Time = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
-export const Assessment = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("unknown"), reason: Schema.String }),
-  Schema.Struct({
-    status: Schema.Literal("snapshot-input"),
-    digest: Hash,
-    head: Schema.String,
-    checks: Schema.Array(Schema.String),
-    contract: Schema.Literal("Captured source input; execution checkout is writable and dependencies are not sealed."),
-  }),
-]).annotate({ identifier: "Raya.SelfHealSourceAssessment" })
-const Identity = Schema.Struct({ createdAt: Time, objective: Schema.String, criteria: Schema.String })
-const Input = Schema.Struct({
-  action: Schema.optional(Schema.Literal("run")),
-  command: Schema.String,
-  setup: Schema.optional(Schema.String),
-  workdir: Schema.optional(Schema.String),
-  timeout: Schema.optional(Schema.Number),
-})
-const Receipt = Schema.Struct({
-  version: Schema.Literal(1),
-  id: Schema.String,
-  itemID: Schema.String,
-  attemptID: Schema.String,
-  sessionID: SessionID,
-  messageID: MessageID,
-  callID: Schema.String,
-  goal: Identity,
-  input: Input,
-  snapshot: Source.Snapshot,
-  directory: Schema.String,
-  startedAt: Time,
-  finishedAt: Time,
-  exit: Schema.Number,
-})
+export const Assessment = Data.Assessment
+export const Identity = Data.Identity
+export const Input = Data.Input
+export const Receipt = Data.Receipt
 type Identity = typeof Identity.Type
 type Input = typeof Input.Type
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")

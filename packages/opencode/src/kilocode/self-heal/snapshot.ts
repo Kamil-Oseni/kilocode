@@ -1,19 +1,11 @@
+import { Snapshots as Data } from "./schemas"
 import { createHash, randomUUID } from "node:crypto"
 import { execFile } from "node:child_process"
 import * as fs from "node:fs/promises"
 import path from "node:path"
-import { Schema } from "effect"
 
-const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
-const File = Schema.Struct({ path: Schema.String, digest: Hash, mode: Schema.Literals([420, 493]), size: Schema.Int })
-export const Snapshot = Schema.Struct({
-  version: Schema.Literal(1),
-  digest: Hash,
-  head: Schema.String,
-  files: Schema.Array(File),
-}).annotate({ identifier: "Raya.SelfHealSnapshot" })
+export const Snapshot = Data.Snapshot
 export type Snapshot = typeof Snapshot.Type
-
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex")
 const same = (one: string, two: string) =>
   process.platform === "win32" ? one.toLowerCase() === two.toLowerCase() : one === two
@@ -189,7 +181,7 @@ export async function capture(
       ),
     ].sort()
     if (names.length > 100_000) return fail("source exceeds the 100,000-file capture limit")
-    const files: Array<typeof File.Type> = []
+    const files: Array<typeof Data.File.Type> = []
     let size = 0
     for (const file of names) {
       if (
@@ -257,11 +249,9 @@ export async function materialize(store: string, snapshot: Snapshot) {
         const blob = path.join(store, "blobs", file.digest)
         const stat = await fs.lstat(blob)
         if (!stat.isFile() || !same(await fs.realpath(blob), blob)) fail("retained blob is redirected")
-        if (stat.size !== file.size || stat.size > 256 * 1024 * 1024)
-          fail("retained blob does not match the manifest")
+        if (stat.size !== file.size || stat.size > 256 * 1024 * 1024) fail("retained blob does not match the manifest")
         const data = await fs.readFile(blob)
-        if (hash(data) !== file.digest || data.length !== file.size)
-          fail("retained blob does not match the manifest")
+        if (hash(data) !== file.digest || data.length !== file.size) fail("retained blob does not match the manifest")
         const output = target(directory, file.path)
         const parent = path.dirname(output)
         const creating = parents.get(parent) ?? fs.mkdir(parent, { recursive: true })

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { SystemPrompt } from "../../src/session/system"
 import { environmentDetails } from "../../src/kilocode/editor-context"
 import { ProviderTest } from "../fake/provider"
+import { KilocodeSystemPrompt } from "../../src/kilocode/system-prompt"
+import { ProjectV2 } from "@opencode-ai/core/project"
 
 import PROMPT_ANTHROPIC from "../../src/session/prompt/anthropic.txt"
 import PROMPT_DEFAULT from "../../src/session/prompt/default.txt"
@@ -140,5 +142,44 @@ describe("environmentDetails", () => {
     expect(result).toContain("Working directory: /repo/.kilo/worktrees/feature")
     expect(result).toContain("Workspace root folder: /repo/.kilo/worktrees/feature")
     expect(result).toContain("Active file: src/app.ts")
+  })
+})
+
+describe("authoritative backend environment", () => {
+  test.each([
+    ["C:\\private workspace\\child", "C:\\"],
+    ["/private/workspace/child", "/private/workspace"],
+  ])("supplies directory %s without optional editor context", (directory, worktree) => {
+    const result = KilocodeSystemPrompt.environment({
+      ctx: {
+        directory,
+        worktree,
+        project: { id: ProjectV2.ID.make("global"), worktree, time: { created: 0, updated: 0 }, sandboxes: [] },
+      },
+      model: ProviderTest.model(),
+    }).join("\n")
+    expect(result).toContain(`Working directory: ${directory}`)
+    expect(result).toContain(`Worktree root: ${worktree}`)
+    expect(result).not.toContain(`Workspace root folder: ${worktree}`)
+    expect(result.includes("Do not invent a /workspace mount on Windows")).toBe(process.platform === "win32")
+  })
+
+  test("optional editor context cannot replace the backend directory", () => {
+    const result = KilocodeSystemPrompt.environment({
+      ctx: {
+        directory: "C:\\current\\child",
+        worktree: "C:\\current",
+        project: {
+          id: ProjectV2.ID.make("global"),
+          worktree: "C:\\current",
+          time: { created: 0, updated: 0 },
+          sandboxes: [],
+        },
+      },
+      model: ProviderTest.model(),
+      editor: { directory: "C:\\stale", worktree: "C:\\stale" },
+    }).join("\n")
+    expect(result).toContain("Working directory: C:\\current\\child")
+    expect(result).not.toContain("C:\\stale")
   })
 })

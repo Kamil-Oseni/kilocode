@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Checkouts as Data } from "./schemas"
 import * as fs from "node:fs/promises"
 import { createReadStream } from "node:fs"
 import path from "node:path"
@@ -6,13 +6,7 @@ import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
 
 export class Unsupported extends Error {}
-export const Worktree = Schema.Struct({
-  root: Schema.String,
-  directory: Schema.String,
-  branch: Schema.String,
-  common: Schema.String,
-  commit: Schema.String,
-})
+export const Worktree = Data.Worktree
 type Source = { root: string; commit: string }
 type Plan = typeof Worktree.Type
 type Pointer = { file: string; oid: string; size: number }

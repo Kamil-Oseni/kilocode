@@ -1,3 +1,6 @@
+import { header, type Lane } from "./inference-lane"
+import { ollama } from "./ollama-bridge"
+
 type Fetch = (
   input: Parameters<typeof globalThis.fetch>[0],
   init?: Parameters<typeof globalThis.fetch>[1],
@@ -18,6 +21,7 @@ type Job = {
   cancellation?: Promise<void>
   resolve: (response: Response) => void
   reject: (error: unknown) => void
+  lane: Lane
 }
 
 export class LocalInferenceError extends Error {
@@ -161,6 +165,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
   const queue: Job[] = []
   let active = 0
   let bytes = 0
+  let burst = 0
 
   const detach = (job: Job) => {
     clearTimeout(job.timer)
@@ -257,12 +262,21 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
   }
   function next() {
     while (active < limits.active && queue.length) {
-      const job = queue.shift()!
+      const high = queue.findIndex((job) => job.lane === "interactive")
+      const low = queue.findIndex((job) => job.lane === "background")
+      const index = high >= 0 && (low < 0 || burst < 3) ? high : low >= 0 ? low : 0
+      burst = high >= 0 && low >= 0 && index === high ? burst + 1 : 0
+      const job = queue.splice(index, 1)[0]
       bytes -= job.bytes
       void dispatch(job)
     }
   }
-  const fetch = (fetcher: Fetch, input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]): Promise<Response> => {
+  const fetch = (
+    fetcher: Fetch,
+    input: Parameters<Fetch>[0],
+    init?: Parameters<Fetch>[1],
+    lane: Lane = "interactive",
+  ): Promise<Response> => {
     const signal = init?.signal !== undefined ? init.signal : input instanceof Request ? input.signal : undefined
     if (signal?.aborted) return Promise.reject(signal.reason)
     const waiting = active >= limits.active || queue.length > 0
@@ -300,6 +314,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
         signal: signal ?? undefined,
         resolve,
         reject,
+        lane,
       }
       job.abort = () => {
         job.output?.error(signal?.reason)
@@ -337,7 +352,22 @@ export function status() {
 
 /** Both native and AI SDK integrations reuse this one backend-local scheduler. */
 export function localFetch(options: Readonly<Record<string, unknown>>, fetcher: Fetch = globalThis.fetch): Fetch {
+  const bridge = ollama(options, fetcher)
   if (!localConfig(options).enabled) return fetcher
-  const fetch: Fetch = (input, init) => shared.fetch(fetcher, input, init)
+  const fetch: Fetch = (input, init) => {
+    const source = init?.headers ?? (input instanceof Request ? input.headers : undefined)
+    const selected =
+      source instanceof Headers
+        ? source.get(header)
+        : Array.isArray(source)
+          ? source.find(([key]) => key.toLowerCase() === header)?.[1]
+          : source && Object.getOwnPropertyDescriptor(source, header)?.value
+    const transport: Fetch = (input, init) => {
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+      headers.delete(header)
+      return bridge(input, { ...init, headers })
+    }
+    return shared.fetch(transport, input, init, selected === "background" ? "background" : "interactive")
+  }
   return fetch
 }

@@ -161,7 +161,16 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
               yield* emitDisposed({ directory, project: input.project?.id })
             }
             yield* completeLoad(directory, input, entry)
-          }).pipe(Effect.forkIn(scope, { startImmediately: true }))
+            // kilocode_change start - settle reload waiters if previous instance cleanup fails
+          }).pipe(
+            Effect.onExit((exit) =>
+              Exit.isFailure(exit)
+                ? removeEntry(directory, entry).pipe(Effect.andThen(Deferred.failCause(entry.deferred, exit.cause)))
+                : Effect.void,
+            ),
+            Effect.forkIn(scope, { startImmediately: true }),
+          )
+          // kilocode_change end
           return yield* restore(Deferred.await(entry.deferred))
         }),
       ).pipe(Effect.withSpan("InstanceStore.reload"))

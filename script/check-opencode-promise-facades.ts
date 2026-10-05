@@ -29,11 +29,41 @@ const allow: Record<string, string> = {
 }
 
 const testAllow: Record<string, { count: number; reason: string }> = {
+  "kilocode/fixtures/scheduler-question-stop.ts": {
+    count: 2,
+    reason:
+      "process-isolated actual scheduled continuation crosses the production runtime into a pending Question and joins both original cancellation owners",
+  },
   "preload.ts": { count: 2, reason: "global test-suite AppRuntime cleanup boundary" },
   "kilocode/config-resilience.test.ts": { count: 4, reason: "existing runtime integration test" },
   "kilocode/config-validation.test.ts": { count: 2, reason: "existing runtime integration test" },
-  "kilocode/cli-shutdown.test.ts": { count: 1, reason: "mocked runtime boundary for shutdown unit tests" },
+  "kilocode/cli-shutdown.fixture.ts": {
+    count: 1,
+    reason: "process-isolated mocked runtime boundary for shutdown unit tests",
+  },
+  "kilocode/fixtures/runtime-drain.ts": {
+    count: 8,
+    reason: "isolated production AppRuntime ownership and all-entrypoint terminal retirement integration",
+  },
   "kilocode/plan-followup.test.ts": { count: 3, reason: "existing runtime integration test" },
+  "kilocode/task-goal-stop-idle.test.ts": {
+    count: 2,
+    reason:
+      "actual public Goal Stop joins the same production application graph's idle Routine execution and exact task history",
+  },
+  "kilocode/fixtures/profile-goal-stop-transfer.ts": {
+    count: 2,
+    reason: "actual public Goal Stop and native encrypted transfer use the same production application writer graph",
+  },
+  "kilocode/fixtures/config-rmw.ts": {
+    count: 10,
+    reason:
+      "isolated genuine global/project Config services compete with public MCP and agent writers, with original production runtime disposal",
+  },
+  "kilocode/fixtures/project-config-admission.ts": {
+    count: 2,
+    reason: "actual project config HTTP and unset Service updates share the production application writer graph",
+  },
   "kilocode/session-compaction-chunks.test.ts": {
     count: 2,
     reason: "disk-backed instance integration test cleanup",
@@ -67,13 +97,32 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     count: 6,
     reason: "listener and shared terminal archive AppRuntime integration test",
   },
+  "kilocode/server/http-retirement.fixture.ts": {
+    count: 1,
+    reason: "isolated production cached HTTP handler retirement closes its realized application runtime owner",
+  },
   "kilocode/fixtures/voice-spoken-server.ts": {
     count: 4,
     reason: "fresh-process production listener and shared SQLite receipt inspection for real transport loss",
   },
+  "kilocode/fixtures/scheduler-transport.ts": {
+    count: 2,
+    reason:
+      "isolated production application graph drives real local SSE transport, native metadata tool and admitted Routine settlement",
+  },
+  "kilocode/fixtures/async-prompt-admission.ts": {
+    count: 2,
+    reason:
+      "isolated production HTTP listener verifies accepted async model/tool work and retained native session rows across retirement",
+  },
   "kilocode/server/httpapi-child-steer.test.ts": {
     count: 11,
     reason: "real HTTP child steering test spans routed app instances, run ownership, and durable session messages",
+  },
+  "kilocode/server/httpapi-goal-configuration.test.ts": {
+    count: 3,
+    reason:
+      "actual HTTP Goal configuration and continuation share the server application graph; blocked-state setup and durable dispatch inspection must use the routed InstanceRef in that same runtime",
   },
   "kilocode/server/httpapi-personal-todo-subtask.test.ts": {
     count: 2,

@@ -4,6 +4,7 @@ import { DiagnosticError } from "@/kilocode/diagnostic-error" // kilocode_change
 import { KiloSessionHttpApi } from "@/kilocode/server/httpapi/session-fork" // kilocode_change
 import { TaskMetadata } from "@/kilocode/tool/task-metadata" // kilocode_change - protect server-issued child authority
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue" // kilocode_change
+import { scheduler } from "@/kilocode/task/admission" // kilocode_change - retain accepted async model/tool bodies past HTTP 204
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { KiloViewers } from "@/kilocode/presence/service" // kilocode_change
 import { Agent } from "@/agent/agent"
@@ -338,6 +339,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       yield* promptSvc
         .prompt({ ...ctx.payload, sessionID: ctx.params.sessionID } as unknown as SessionPrompt.PromptInput)
         .pipe(
+          (body) => scheduler.observe(body), // kilocode_change - retain actual failure before UI diagnostic handling
           Effect.catchCause((cause) => {
             if (Cause.hasInterruptsOnly(cause)) return Effect.void // kilocode_change - Stop is not an error
             return Effect.gen(function* () {
@@ -368,7 +370,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
               })
             })
           }),
-          Effect.forkIn(scope, { startImmediately: true }),
+          (body) => scheduler.scoped(body, scope, () => new HttpApiError.ServiceUnavailable({})), // kilocode_change
         )
       return HttpApiSchema.NoContent.make()
     })

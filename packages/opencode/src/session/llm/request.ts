@@ -30,6 +30,8 @@ import { KiloSession } from "@/kilocode/session"
 import { stripInternalOptions } from "@/kilocode/agent/options"
 import { KilocodeSystemPrompt } from "@/kilocode/system-prompt"
 import { TurnTools } from "@/kilocode/capability/turn-tools"
+import { LazyTools } from "@/kilocode/session/lazy-tools"
+import { CodePrompt } from "@/kilocode/agent/code-prompt"
 // kilocode_change end
 
 type PrepareInput = {
@@ -70,14 +72,14 @@ const mergeOptions = (target: Record<string, any>, source: Record<string, any> |
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
-  const tools = resolveTools(input) // kilocode_change - resolve the authoritative registry before composing the prompt
+  const available = resolveTools(input) // kilocode_change - resolve permissions before bounded advertisement
   const includePersona = KilocodeSystemPrompt.shouldIncludePersona(input.agent.name) // kilocode_change
   const system = [
     [
       // kilocode_change start - soul defines core identity and personality
       ...(isOpenaiOauth || !includePersona ? [] : [SystemPrompt.soul()]),
       // kilocode_change end
-      ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+      ...CodePrompt.prepare(input.agent, SystemPrompt.provider(input.model)), // kilocode_change - preserve default Code provider guidance without replacing custom prompts
       ...input.system,
       ...(input.user.system ? [input.user.system] : []),
     ]
@@ -96,7 +98,24 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system.length = 0
     system.push(header, rest.join("\n"))
   }
-  system.push(TurnTools.prompt(Object.keys(tools))) // kilocode_change - stale history and provider examples never grant tools
+  // kilocode_change start - size full schemas against the actual transformed fixed system
+  const chosen = yield* Effect.promise(() =>
+    LazyTools.select({
+      agent: input.agent.name,
+      mode: input.agent.mode,
+      tools: available,
+      system,
+      model: input.model,
+      discovery:
+        input.user.tools?.discover_tools !== false &&
+        !Permission.disabled(["discover_tools"], Permission.merge(input.agent.permission, input.permission ?? [])).has(
+          "discover_tools",
+        ),
+    }),
+  )
+  const tools = CapabilityCatalog.select(chosen)
+  system.push(TurnTools.prompt(Object.keys(tools)))
+  // kilocode_change end
 
   const variant =
     !input.small && input.model.variants && input.user.model.variant
@@ -269,9 +288,7 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   // kilocode_change start - bind discovery to the final model-visible tool selection
-  return CapabilityCatalog.select(
-    Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k)),
-  )
+  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
   // kilocode_change end
 }
 

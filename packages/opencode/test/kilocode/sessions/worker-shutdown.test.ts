@@ -4,6 +4,7 @@ import { createWorkerShutdown } from "../../../src/cli/tui/worker-shutdown"
 describe("createWorkerShutdown", () => {
   test("invokes drain before dispose and stopServer", async () => {
     const order: string[] = []
+    const started = Promise.withResolvers<void>()
     let resolveDrain!: () => void
     const gate = new Promise<void>((resolve) => {
       resolveDrain = resolve
@@ -12,6 +13,7 @@ describe("createWorkerShutdown", () => {
     const run = createWorkerShutdown({
       drain: async () => {
         order.push("drain-start")
+        started.resolve()
         await gate
         order.push("drain-end")
       },
@@ -27,6 +29,7 @@ describe("createWorkerShutdown", () => {
     })
 
     const pending = run()
+    await started.promise
     // dispose must not start while drain is still in flight
     expect(order).toEqual(["drain-start"])
 

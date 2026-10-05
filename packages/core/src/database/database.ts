@@ -44,8 +44,13 @@ const layer = Layer.effect(
 )
 
 export function layerFromPath(filename: string) {
-  prepareDatabase(filename, () => DbPreflight.assertWritable(filename)) // kilocode_change - fence repair before native database acquisition
-  return layer.pipe(Layer.provide(sqliteLayer({ filename, disableWAL: true }))) // kilocode_change - Database configures WAL after busy_timeout
+  // kilocode_change start - keep preflight and deferred native construction on the same selected path
+  const file = prepareDatabase(filename, (file) => {
+    DbPreflight.assertWritable(file)
+    return file
+  })
+  return layer.pipe(Layer.provide(sqliteLayer({ filename: file, disableWAL: true })))
+  // kilocode_change end
 }
 
 export function path() {

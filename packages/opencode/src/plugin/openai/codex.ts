@@ -576,6 +576,10 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     },
     "chat.params": async (input, output) => {
       if (input.model.providerID !== "openai") return
+      // kilocode_change start - explicit local Ollama preserves the selected output limit
+      if (input.provider.options.localInference === true && input.provider.options.localInferenceAPI === "ollama")
+        return
+      // kilocode_change end
       // Match codex cli
       output.maxOutputTokens = undefined
     },

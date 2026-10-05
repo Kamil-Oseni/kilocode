@@ -5,6 +5,7 @@ import path from "node:path"
 import { Global } from "@opencode-ai/core/global"
 import { Effect } from "effect"
 import { ProfileWriterLive } from "@/kilocode/migration/writer-live"
+import { jsonOperation } from "@/kilocode/migration/json-operation"
 
 export namespace SandboxPreference {
   export function root() {
@@ -33,16 +34,37 @@ export namespace SandboxPreference {
   ) {
     return Effect.runPromise(
       admission.run(
-        Effect.promise(async () => {
-          const base = root()
+        jsonOperation(root, async (base) => {
           const target = file(directory, base)
           const temp = path.join(base, `.${randomUUID()}.tmp`)
           await fs.mkdir(base, { recursive: true, mode: 0o700 })
-          await fs.writeFile(temp, JSON.stringify(enabled), { encoding: "utf8", flag: "wx", mode: 0o600 })
-          await fs.rename(temp, target).catch(async (err) => {
-            await fs.rm(temp, { force: true })
-            throw err
-          })
+          const handle = await fs.open(temp, "wx", 0o600)
+          await handle
+            .writeFile(JSON.stringify(enabled), "utf8")
+            .then(
+              () => handle.close(),
+              async (err: unknown) => {
+                const [result] = await Promise.allSettled([handle.close()])
+                if (result.status === "rejected")
+                  return Promise.reject(
+                    new AggregateError([err, result.reason], "Sandbox preference write and close failed", {
+                      cause: err,
+                    }),
+                  )
+                throw err
+              },
+            )
+            .then(() => fs.rename(temp, target))
+            .catch(async (err: unknown) => {
+              const [result] = await Promise.allSettled([fs.rm(temp, { force: true })])
+              if (result.status === "rejected")
+                return Promise.reject(
+                  new AggregateError([err, result.reason], "Sandbox preference publication and cleanup failed", {
+                    cause: err,
+                  }),
+                )
+              throw err
+            })
         }),
       ),
     )

@@ -25,6 +25,9 @@ import {
 // kilocode_change end
 import type { RemoteExitBridgeClient } from "@/kilocode/cli/cmd/tui/remote-exit-bridge" // kilocode_change - runtime import deferred
 import type { Exit } from "@opencode-ai/tui/context/exit" // kilocode_change
+import { parentStop } from "@/kilocode/cli/cmd/tui/parent-stop" // kilocode_change
+import * as WorkerIdentity from "@/kilocode/cli/cmd/tui/worker-identity" // kilocode_change
+import { parentLifecycle } from "@/kilocode/cli/cmd/tui/parent-lifecycle" // kilocode_change
 
 declare global {
   const KILO_WORKER_PATH: string
@@ -46,34 +49,39 @@ export async function runEmbeddedRemoteExitBridge(input: {
   const { createParentRemoteExitBridge } = await import("@/kilocode/cli/cmd/tui/remote-exit-bridge")
   const timeoutMs = input.timeoutMs ?? 5_000
   const bridge = createParentRemoteExitBridge(input.client, input.exit)
-  let ready = false
+  const failures: unknown[] = []
   try {
-    try {
-      await withTimeout(bridge.ready(), timeoutMs, "remote exit startup timed out")
-      ready = true
-    } catch {
-      await bridge.dispose(timeoutMs).catch(() => {})
-    }
-    await input.done
+    await withTimeout(bridge.ready(), timeoutMs, "remote exit startup timed out").catch((err) => failures.push(err))
+    await input.done.catch((err) => failures.push(err))
   } finally {
-    if (ready) await bridge.dispose(timeoutMs).catch(() => {})
+    await bridge.dispose(timeoutMs).catch((err) => failures.push(err))
   }
+  if (failures.length) throw new AggregateError(failures, "TUI remote exit retirement failed", { cause: failures[0] })
 }
 // kilocode_change end
 
 // kilocode_change start - share the extracted TUI runner between daemon and worker paths
-async function start(input: StartInput, remoteExitClient?: RpcClient) {
+async function start(input: StartInput, remoteExitClient?: RpcClient, publish?: (exit: Exit) => void) {
   const { Effect } = await import("effect")
   const { run } = await import("../tui/layer")
   const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
   const pluginHost = createLegacyTuiPluginHost()
   if (!remoteExitClient) {
-    await Effect.runPromise(run({ ...input, pluginHost }))
+    await Effect.runPromise(run({ ...input, pluginHost, onExit: publish ?? input.onExit }))
     return
   }
 
   const ready = Promise.withResolvers<Exit>()
-  const done = Effect.runPromise(run({ ...input, pluginHost, onExit: ready.resolve }))
+  const done = Effect.runPromise(
+    run({
+      ...input,
+      pluginHost,
+      onExit: (exit) => {
+        ready.resolve(exit)
+        publish?.(exit)
+      },
+    }),
+  )
   const exit = await Promise.race([ready.promise, done.then(() => undefined)])
   if (!exit) return
   await runEmbeddedRemoteExitBridge({ client: remoteExitClient, exit, done })
@@ -265,16 +273,14 @@ export const TuiThreadCommand = cmd({
 
     // kilocode_change start - lazy Kilo implementations so other CLI commands
     // don't pay their module cost at startup
-    const { importCloudSession, localSessionID, validateCloudFork, reportCloudImportError } = await import("@/kilocode/cloud-session")
+    const { importCloudSession, localSessionID, validateCloudFork, reportCloudImportError } = await import(
+      "@/kilocode/cloud-session"
+    )
     const { KiloTuiThreadDaemon } = await import("@/kilocode/cli/cmd/tui/thread")
     const { preload } = await import("@/kilocode/cli/cmd/tui")
     const { resolveTuiDirectory } = await import("@/kilocode/cli/cmd/tui-worktree")
     // kilocode_change end
     const unguard = win32InstallCtrlCGuard()
-    const shutdown = {
-      pending: undefined as Promise<void> | undefined,
-      exiting: false,
-    }
     try {
       const { TuiConfig } = await import("@/config/tui")
       if (args.fork && !args.continue && !args.session) {
@@ -314,12 +320,32 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
-      // kilocode_change start - default TUI sessions attach to the daemon unless explicitly disabled
-      if (await KiloTuiThreadDaemon.attach({ args, cwd, input: () => input(args.prompt), start })) return
+      // kilocode_change start - retire the attached renderer without stopping its independently owned daemon
+      const attached = parentLifecycle({
+        stop: async () => undefined,
+        interrupt: () => {
+          if (!process.stdin.isTTY) process.stdin.destroy()
+        },
+      })
+      const handled = await attached.use(async () => {
+        const handled = await KiloTuiThreadDaemon.attach({
+          args,
+          cwd,
+          input: () =>
+            input(args.prompt).catch((err) => {
+              if (attached.requested()) return undefined
+              throw err
+            }),
+          start: (input) => attached.render((publish) => start(input, undefined, publish)),
+        })
+        return handled || attached.requested()
+      })
+      if (handled) return
       // kilocode_change end
       const auth = KiloTuiThreadDaemon.workerAuth() // kilocode_change - protect TUI-owned HTTP routes from unauthenticated local callers
       // kilocode_change start - propagate stable run metadata and an explicit worker role
       const env = sanitizedProcessEnv({
+        [WorkerIdentity.GENERATION]: crypto.randomUUID(),
         [KILO_PROCESS_ROLE]: "worker",
         [KILO_RUN_ID]: ensureRunID(),
         ...auth.env,
@@ -339,111 +365,63 @@ export const TuiThreadCommand = cmd({
       }
       process.on("SIGUSR2", reload)
 
-      let stopped = false
-      const stop = async () => {
-        if (stopped) return
-        stopped = true
-        process.off("SIGUSR2", reload)
-        await withTimeout(client.call("shutdown", undefined), 5000).catch((err) =>
-          console.error("TUI worker shutdown failed", err),
-        )
-        worker.terminate()
-      }
-      // kilocode_change start - graceful shutdown on external signals
-      // The worker's postMessage for the RPC result may never be delivered
-      // after shutdown because the worker's event loop drains. Send the
-      // shutdown request without awaiting the response, wait for the worker
-      // to exit naturally or force-terminate after a timeout.
-      // Guard against multiple invocations (SIGHUP + SIGTERM + onExit).
-      const shutdownAndExit = (input: { reason: string; code: number; signal?: NodeJS.Signals }) => {
-        if (shutdown.exiting) return
-        shutdown.exiting = true
-        console.info("Shutting down TUI thread", {
-          reason: input.reason,
-          signal: input.signal,
-          code: input.code,
-          pid: process.pid,
-          ppid: process.ppid,
-        })
-        stop()
-          .catch((err) => {
-            console.error("Failed to terminate TUI worker during shutdown", {
-              reason: input.reason,
-              signal: input.signal,
-              error: err,
-            })
-          })
-          .finally(() => {
-            unguard?.()
-            process.exit(input.code)
-          })
-      }
-      process.once("SIGHUP", () => shutdownAndExit({ reason: "signal", signal: "SIGHUP", code: 129 }))
-      process.once("SIGTERM", () => shutdownAndExit({ reason: "signal", signal: "SIGTERM", code: 143 }))
-      // kilocode_change - external kill -INT takes the same graceful path as SIGHUP/SIGTERM.
-      // Interactive Ctrl-C in the TUI is a raw-mode keypress, not a signal.
-      process.once("SIGINT", () => shutdownAndExit({ reason: "signal", signal: "SIGINT", code: 130 }))
-      // In some terminal/tab-close paths the parent shell is terminated without
-      // forwarding a signal to this process, leaving the TUI orphaned. Detect
-      // parent PID re-parenting and exit explicitly.
-      const parent = process.ppid
-      const orphanWatch = setInterval(() => {
-        const orphaned = (() => {
-          if (process.ppid !== parent) return true
-          if (parent === 1) return false
-          try {
-            process.kill(parent, 0)
-            return false
-          } catch (err) {
-            const code = (err as NodeJS.ErrnoException).code
-            if (code !== "ESRCH") {
-              console.debug("TUI parent liveness check failed", {
-                parent,
-                code,
-                error: err,
-              })
-              return false
-            }
-            console.debug("TUI detected dead parent process", {
-              parent,
-              error: err,
-            })
-            return true
-          }
-        })()
-        if (!orphaned) return
-        shutdownAndExit({ reason: "parent-exit", code: 0 })
-      }, 1000)
-      orphanWatch.unref()
+      // kilocode_change start - join repeated exits and retain any unconfirmed forced shutdown
+      const request = WorkerIdentity.request(WorkerIdentity.identity(env))
+      const stop = parentStop({
+        worker,
+        request,
+        shutdown: () => client.call("shutdown", request),
+        detach: () => process.off("SIGUSR2", reload),
+      })
       // kilocode_change end
+      // kilocode_change start - own signals and join the renderer scope before worker retirement
+      const lifecycle = parentLifecycle({
+        stop,
+        interrupt: () => {
+          if (!process.stdin.isTTY) process.stdin.destroy()
+        },
+      })
+      lifecycle.defer(() => process.off("SIGUSR2", reload))
+      await lifecycle.use(async () => {
+        // kilocode_change end
 
-      const prompt = await input(args.prompt)
-      const config = await TuiConfig.get()
+        // kilocode_change start - signal interruption of owned piped input returns through retirement
+        const prompt = await input(args.prompt).catch((err) => {
+          if (lifecycle.requested()) return undefined
+          throw err
+        })
+        // kilocode_change end
+        if (lifecycle.requested()) return // kilocode_change
+        const config = await TuiConfig.get()
+        if (lifecycle.requested()) return // kilocode_change
 
-      const network = resolveNetworkOptionsNoConfig(args)
-      const external = hasArg("--port") || hasArg("--hostname") || network.mdns === true
+        const network = resolveNetworkOptionsNoConfig(args)
+        const external = hasArg("--port") || hasArg("--hostname") || network.mdns === true
 
-      const transport = external
-        ? {
-            url: (await client.call("server", network)).url,
-            fetch: undefined,
-            headers: auth.headers, // kilocode_change
-            events: undefined,
-          }
-        : {
-            url: "http://kilo.internal",
-            fetch: createWorkerFetch(client),
-            headers: auth.headers, // kilocode_change
-            events: createEventSource(client),
-          }
+        const transport = external
+          ? {
+              url: (await client.call("server", network)).url,
+              fetch: undefined,
+              headers: auth.headers, // kilocode_change
+              events: undefined,
+            }
+          : {
+              url: "http://kilo.internal",
+              fetch: createWorkerFetch(client),
+              headers: auth.headers, // kilocode_change
+              events: createEventSource(client),
+            }
 
-      // kilocode_change - upstream validates here, but --cloud-fork's session id is only local after
-      // the import below; the guarded validateSession further down covers both paths.
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch((err) => console.error("Upgrade check failed", err))
-      }, 1000).unref?.()
+        if (lifecycle.requested()) return // kilocode_change
+        // kilocode_change - upstream validates here, but --cloud-fork's session id is only local after
+        // the import below; the guarded validateSession further down covers both paths.
+        const upgrade = setTimeout(() => {
+          // kilocode_change
+          client.call("checkUpgrade", { directory: cwd }).catch((err) => console.error("Upgrade check failed", err))
+        }, 1000) // kilocode_change
+        upgrade.unref?.() // kilocode_change
+        lifecycle.defer(() => clearTimeout(upgrade)) // kilocode_change
 
-      try {
         // kilocode_change start - import cloud session before TUI renders
         if (args.cloudFork && args.session) {
           UI.println("Importing session from cloud...")
@@ -460,12 +438,13 @@ export const TuiThreadCommand = cmd({
             args.cloudFork = false
           } catch (err) {
             reportCloudImportError(err)
-            shutdownAndExit({ reason: "cloud-fork-failed", code: 1 })
+            process.exitCode = 1
             return
           }
         }
         // kilocode_change end
 
+        if (lifecycle.requested()) return // kilocode_change
         try {
           await validateSession({
             url: transport.url, // kilocode_change
@@ -481,36 +460,37 @@ export const TuiThreadCommand = cmd({
         }
 
         // kilocode_change start
-        await start(
-          {
-            // kilocode_change - shared lazy loader also supports daemon attach
-            url: transport.url,
-            async onSnapshot() {
-              const tui = await HeapSnapshot.write({ role: "tui" })
-              const server = await client.call("snapshot", undefined)
-              return [tui, server]
+        await lifecycle.render((publish) =>
+          start(
+            {
+              // kilocode_change - shared lazy loader also supports daemon attach
+              url: transport.url,
+              async onSnapshot() {
+                const tui = await HeapSnapshot.write({ role: "tui" })
+                const server = await client.call("snapshot", undefined)
+                return [tui, server]
+              },
+              config,
+              directory: cwd,
+              fetch: transport.fetch,
+              headers: transport.headers,
+              events: transport.events,
+              args: {
+                continue: args.continue,
+                sessionID: args.session,
+                agent: args.agent,
+                model: args.model,
+                prompt,
+                fork: args.fork,
+                auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
+              },
             },
-            config,
-            directory: cwd,
-            fetch: transport.fetch,
-            headers: transport.headers,
-            events: transport.events,
-            args: {
-              continue: args.continue,
-              sessionID: args.session,
-              agent: args.agent,
-              model: args.model,
-              prompt,
-              fork: args.fork,
-              auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
-            },
-          },
-          embeddedRemoteExitClient(external, client),
+            embeddedRemoteExitClient(external, client),
+            publish,
+          ),
         )
         // kilocode_change end
-      } finally {
-        await stop()
-      }
+      }) // kilocode_change
     } finally {
       try {
         unguard?.()
@@ -518,7 +498,6 @@ export const TuiThreadCommand = cmd({
         console.error("Failed to remove Windows Ctrl+C guard", err)
       }
     }
-    if (shutdown.exiting) return
-    process.exit(0)
+    return // kilocode_change - preserve exitCode and retire parent owners through index.ts finally
   },
 })

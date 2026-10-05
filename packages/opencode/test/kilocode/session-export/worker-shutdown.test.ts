@@ -7,18 +7,25 @@ import type { LlmRequestStarted } from "@/kilocode/session-export/events"
 import type { FromWorker } from "@/kilocode/session-export/worker/ipc"
 import { Storage } from "@/kilocode/session-export/worker/storage"
 import { parseMessage } from "@/kilocode/session-export/worker/validate"
+import { stopExportWorker } from "@/kilocode/session-export/worker-stop"
+import * as Identity from "@/kilocode/session-export/worker-identity"
+import { Database } from "bun:sqlite"
+import { profileSqlite } from "@opencode-ai/core/kilocode/profile-sqlite"
 
 test("shutdown requires a correlated request identity", () => {
+  const expected = Identity.request(Identity.spawn(crypto.randomUUID()))
   expect(parseMessage({ kind: "shutdown", timeoutMs: 1000 })).toBeUndefined()
   expect(parseMessage({ kind: "shutdown", timeoutMs: 1000, requestID: "" })).toBeUndefined()
-  expect(parseMessage({ kind: "shutdown", timeoutMs: 1000, requestID: "stop-1" })).toEqual({
+  expect(parseMessage({ kind: "shutdown", timeoutMs: 1000, ...expected })).toEqual({
     kind: "shutdown",
     timeoutMs: 1000,
-    requestID: "stop-1",
+    ...expected,
   })
 })
 
 test("real worker joins event persistence before confirmed shutdown and fences late intake", async () => {
+  const owner = Identity.spawn(crypto.randomUUID())
+  const request = Identity.request(owner)
   const dir = mkdtempSync(join(tmpdir(), "raya-export-shutdown-"))
   const file = join(dir, "session-export.db")
   let requests = 0
@@ -31,10 +38,17 @@ test("real worker joins event persistence before confirmed shutdown and fences l
   })
   const worker = new Worker(new URL("../../../src/kilocode/session-export/worker.ts", import.meta.url))
   const messages: FromWorker[] = []
+  let closed = false
+  worker.addEventListener("close", (event) => {
+    closed = true
+    expect("code" in event && event.code).toBe(0)
+    expect("wasClean" in event && event.wasClean).toBe(true)
+  })
   worker.onmessage = (event: MessageEvent<FromWorker>) => messages.push(event.data)
   try {
     worker.postMessage({
       kind: "init",
+      identity: owner,
       dbPath: file,
       endpoint: `http://127.0.0.1:${server.port}`,
       allowCustomEndpoint: true,
@@ -45,19 +59,16 @@ test("real worker joins event persistence before confirmed shutdown and fences l
     for (const seq of Array.from({ length: 80 }, (_, index) => index)) {
       worker.postMessage({ kind: "event", envelope: started(seq), approxBytes: 512 })
     }
-    worker.postMessage({ kind: "shutdown", timeoutMs: 10_000, requestID: "shutdown-1" })
+    const stopping = stopExportWorker(worker, request, 10_000)
+    await Promise.resolve()
+    worker.postMessage({ kind: "shutdown", timeoutMs: 10_000, ...request })
     worker.postMessage({ kind: "event", envelope: started(80), approxBytes: 512 })
     worker.postMessage({ kind: "test_event_count" })
-    await until(
-      () => messages.some((message) => message.kind === "shutdown_done" || message.kind === "shutdown_refused"),
-      () => ({ messages, requests }),
-    )
+    await stopping
+    expect(closed).toBe(true)
+    expect(messages.filter((message) => message.kind === "shutdown_done")).toHaveLength(1)
     expect(messages.find((message) => message.kind === "shutdown_done" || message.kind === "shutdown_refused")).toEqual(
-      {
-        kind: "shutdown_done",
-        requestID: "shutdown-1",
-        status: "confirmed",
-      },
+      await stopping,
     )
     const storage = new Storage(file)
     try {
@@ -70,13 +81,83 @@ test("real worker joins event persistence before confirmed shutdown and fences l
       storage.close()
     }
   } finally {
-    worker.terminate()
+    if (!closed) worker.terminate()
     await server.stop(true)
     await remove(dir)
   }
 }, 30_000)
 
+test("production worker cannot acknowledge or exit before a real held upload settles", async () => {
+  const owner = Identity.spawn(crypto.randomUUID())
+  const request = Identity.request(owner)
+  const dir = mkdtempSync(join(tmpdir(), "raya-export-held-natural-exit-"))
+  const file = join(dir, "session-export.db")
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const server = Bun.serve({
+    port: 0,
+    async fetch() {
+      entered.resolve()
+      await release.promise
+      return new Response("later", { status: 503 })
+    },
+  })
+  const worker = new Worker(new URL("../../../src/kilocode/session-export/worker.ts", import.meta.url))
+  const ready = Promise.withResolvers<void>()
+  const messages: FromWorker[] = []
+  let closed = false
+  worker.addEventListener("close", () => {
+    closed = true
+  })
+  worker.onmessage = (event: MessageEvent<FromWorker>) => {
+    messages.push(event.data)
+    if (event.data.kind === "ready") ready.resolve()
+  }
+  const timer = setTimeout(() => release.resolve(), 10_000)
+  try {
+    worker.postMessage({
+      kind: "init",
+      identity: owner,
+      dbPath: file,
+      endpoint: `http://127.0.0.1:${server.port}`,
+      allowCustomEndpoint: true,
+    })
+    await ready.promise
+    worker.postMessage({ kind: "event", envelope: started(0), approxBytes: 512 })
+    await entered.promise
+    let settled = false
+    const pending = stopExportWorker(worker, request, 10_000).then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    worker.postMessage({ kind: "shutdown", timeoutMs: 1000, ...request })
+    const other = Identity.request(owner)
+    worker.postMessage({ kind: "shutdown", timeoutMs: 1000, ...other })
+    await until(() => messages.some((msg) => msg.kind === "shutdown_refused" && msg.requestID === other.requestID))
+    expect(settled).toBe(false)
+    expect(closed).toBe(false)
+    release.resolve()
+    await pending
+    expect(closed).toBe(true)
+    expect(messages.filter((msg) => msg.kind === "shutdown_done")).toHaveLength(1)
+    const store = new Storage(file)
+    try {
+      expect(store.pendingEvents({ now: 1_000_000_000_000_000, limitBytes: 10_000_000 })).toHaveLength(1)
+    } finally {
+      store.close()
+    }
+  } finally {
+    clearTimeout(timer)
+    release.resolve()
+    if (!closed) worker.terminate()
+    await server.stop(true)
+    await remove(dir)
+  }
+}, 20_000)
+
 test("real worker retains failed batch evidence and refuses shutdown confirmation", async () => {
+  const owner = Identity.spawn(crypto.randomUUID())
+  const request = Identity.request(owner)
   const dir = mkdtempSync(join(tmpdir(), "raya-export-failed-batch-"))
   const file = join(dir, "session-export.db")
   const server = Bun.serve({ port: 0, fetch: () => new Response("later", { status: 503 }) })
@@ -86,6 +167,7 @@ test("real worker retains failed batch evidence and refuses shutdown confirmatio
   try {
     worker.postMessage({
       kind: "init",
+      identity: owner,
       dbPath: file,
       endpoint: `http://127.0.0.1:${server.port}`,
       allowCustomEndpoint: true,
@@ -95,12 +177,13 @@ test("real worker retains failed batch evidence and refuses shutdown confirmatio
     await until(() => messages.some((message) => message.kind === "ready"))
     worker.postMessage({ kind: "event", envelope: started(0), approxBytes: 512 })
     worker.postMessage({ kind: "event", envelope: started(0), approxBytes: 512 })
-    worker.postMessage({ kind: "shutdown", timeoutMs: 10_000, requestID: "failed-stop" })
+    worker.postMessage({ kind: "shutdown", timeoutMs: 10_000, ...request })
     await until(() => messages.some((message) => message.kind === "shutdown_refused"))
     expect(messages.find((message) => message.kind === "shutdown_refused")).toEqual({
       kind: "shutdown_refused",
-      requestID: "failed-stop",
+      ...request,
       reason: "event-persistence-failed",
+      failures: ["Session export event persistence failed"],
     })
     expect(messages.some((message) => message.kind === "shutdown_done")).toBe(false)
     const failure = messages.find(
@@ -124,6 +207,58 @@ test("real worker retains failed batch evidence and refuses shutdown confirmatio
     await remove(dir)
   }
 }, 30_000)
+
+test("production worker pins init identity, refuses unrelated shutdowns before cleanup, and observes only local roots", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "raya-export-pinned-identity-"))
+  const file = join(dir, "session-export.db")
+  const unused = join(dir, "unselected.db")
+  const owner = Identity.spawn(crypto.randomUUID())
+  const worker = new Worker(new URL("../../../src/kilocode/session-export/worker.ts", import.meta.url))
+  const messages: FromWorker[] = []
+  let closed = false
+  worker.addEventListener("close", () => {
+    closed = true
+  })
+  worker.onmessage = (event: MessageEvent<FromWorker>) => messages.push(event.data)
+  try {
+    worker.postMessage({ kind: "init", dbPath: file, identity: owner })
+    await until(() => messages.some((msg) => msg.kind === "ready"))
+    worker.postMessage({ kind: "init", dbPath: unused, identity: Identity.spawn(crypto.randomUUID()) })
+    await until(() =>
+      messages.some((msg) => msg.kind === "telemetry" && msg.name === "session_export.init_identity_already_pinned"),
+    )
+    expect(await Bun.file(unused).exists()).toBe(false)
+    for (const changed of [
+      { ...owner, runID: crypto.randomUUID() },
+      { ...owner, generation: crypto.randomUUID() },
+    ]) {
+      const request = Identity.request(changed)
+      worker.postMessage({ kind: "shutdown", timeoutMs: 1000, ...request })
+      await until(() => messages.some((msg) => msg.kind === "shutdown_refused" && msg.requestID === request.requestID))
+    }
+    expect(closed).toBe(false)
+    expect(messages.filter((msg) => msg.kind === "ready")).toHaveLength(1)
+    const peer = profileSqlite(file, () => new Database(file))
+    try {
+      const reply = await stopExportWorker(worker, Identity.request(owner), 5000)
+      expect(reply.receipt.roots).toEqual([
+        { kind: "json", path: dir },
+        { kind: "sqlite", path: file },
+      ])
+      expect(reply.scopes).toEqual({ version: 2, states: [], globals: [] })
+      expect(reply.receipt.processLocal).toBe(true)
+      expect("nativeOwners" in reply.receipt).toBe(false)
+      expect("operations" in reply.receipt).toBe(false)
+      expect(peer.query("SELECT COUNT(*) AS count FROM event").get()).toEqual({ count: 0 })
+      expect(closed).toBe(true)
+    } finally {
+      peer.close()
+    }
+  } finally {
+    if (!closed) worker.terminate()
+    await remove(dir)
+  }
+}, 15_000)
 
 function started(seq: number): LlmRequestStarted {
   return {

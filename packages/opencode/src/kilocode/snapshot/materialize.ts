@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { SnapshotSource } from "./source"
 import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Log from "@opencode-ai/core/util/log"
@@ -18,28 +19,39 @@ export namespace KiloSnapshotMaterialize {
     opts?: { cwd?: string; env?: Record<string, string>; stdin?: string },
   ) => Effect.Effect<Result>
 
-  export interface Input {
+  export interface Input extends SnapshotSource.Input {
     readonly gitdir: string
     readonly git: Git
+    readonly write?: Git
     readonly fs: FSUtil.Interface
   }
+
+  const write = (input: Input, cmd: string[], opts?: Parameters<Input["git"]>[1]) =>
+    SnapshotSource.write(input, (input.write ?? input.git)(cmd, opts))
+  const remove = (input: Input, file: string, opts?: Parameters<Input["fs"]["remove"]>[1]) =>
+    SnapshotSource.observe(input, input.fs.remove(file, { ...opts, force: true }))
+  const observe = <A, E, R>(input: Input, body: Effect.Effect<A, E, R>) => SnapshotSource.observe(input, body)
 
   export const ref = (gitdir: string) => `refs/kilo/materialize/${Hash.fast(path.resolve(gitdir))}`
   const snapshotRef = (hash: string, time = Date.now()) => `refs/kilo/snapshots/${time}/${hash}`
 
   const pack = Effect.fnUntraced(function* (input: Input, dir: string, name: string, objects: string[]) {
     if (!objects.length) return true
-    yield* input.fs.ensureDir(dir).pipe(Effect.catch(() => Effect.void))
-    const result = yield* input.git(["--git-dir", input.gitdir, "pack-objects", "--non-empty", path.join(dir, name)], {
-      stdin: `${objects.join("\n")}\n`,
-    })
+    yield* observe(input, input.fs.ensureDir(dir)).pipe(Effect.catch(() => Effect.void))
+    const result = yield* write(
+      input,
+      ["--git-dir", input.gitdir, "pack-objects", "--non-empty", path.join(dir, name)],
+      {
+        stdin: `${objects.join("\n")}\n`,
+      },
+    )
     if (result.code === 0 && result.text.trim()) return true
     log.warn("failed to localize snapshot objects", { name, objects: objects.length, stderr: result.stderr })
     return false
   })
 
   export const pin = Effect.fnUntraced(function* (input: Input, hash: string) {
-    const result = yield* input.git(["--git-dir", input.gitdir, "update-ref", snapshotRef(hash), hash])
+    const result = yield* write(input, ["--git-dir", input.gitdir, "update-ref", snapshotRef(hash), hash])
     if (result.code === 0) return true
     log.warn("failed to pin snapshot", { hash, stderr: result.stderr })
     return false
@@ -112,7 +124,7 @@ export namespace KiloSnapshotMaterialize {
         return Number.isSafeInteger(time) && time < before
       })
     if (!refs.length) return true
-    const removed = yield* input.git(["--git-dir", input.gitdir, "update-ref", "--stdin"], {
+    const removed = yield* write(input, ["--git-dir", input.gitdir, "update-ref", "--stdin"], {
       stdin: refs.map((item) => `delete ${item}`).join("\n") + "\n",
     })
     if (removed.code === 0) return true
@@ -124,14 +136,15 @@ export namespace KiloSnapshotMaterialize {
     const started = Date.now()
     const alt = path.join(input.gitdir, "objects", "info", "alternates")
     const hold = `${alt}.materializing`
-    if (!(yield* input.fs.exists(alt)) && (yield* input.fs.exists(hold))) yield* input.fs.rename(hold, alt)
+    if (!(yield* input.fs.exists(alt)) && (yield* input.fs.exists(hold)))
+      yield* observe(input, input.fs.rename(hold, alt))
     if (!(yield* input.fs.exists(alt))) {
       yield* Effect.all(
         [
-          input.fs.remove(`${alt}.seed`).pipe(Effect.catch(() => Effect.void)),
-          input.fs
-            .remove(path.join(input.gitdir, "seed-objects"), { recursive: true })
-            .pipe(Effect.catch(() => Effect.void)),
+          remove(input, `${alt}.seed`).pipe(Effect.catch(() => Effect.void)),
+          remove(input, path.join(input.gitdir, "seed-objects"), { recursive: true }).pipe(
+            Effect.catch(() => Effect.void),
+          ),
         ],
         { discard: true },
       )
@@ -160,7 +173,7 @@ export namespace KiloSnapshotMaterialize {
         ),
       )
       if (listed.length) return listed
-      const tree = yield* input.git(["--git-dir", input.gitdir, "write-tree"])
+      const tree = yield* write(input, ["--git-dir", input.gitdir, "write-tree"])
       const hash = tree.text.trim()
       if (tree.code !== 0 || !hash) return []
       if (!(yield* pin(input, hash))) return []
@@ -169,7 +182,7 @@ export namespace KiloSnapshotMaterialize {
     if (!roots.length) return false
 
     // Without --local, repack copies all reachable objects from alternates into this repository.
-    const packed = yield* input.git(["--git-dir", input.gitdir, "repack", "-a", "-d", "--no-write-bitmap-index"])
+    const packed = yield* write(input, ["--git-dir", input.gitdir, "repack", "-a", "-d", "--no-write-bitmap-index"])
     if (packed.code !== 0) {
       log.warn("failed to repack snapshot objects", { stderr: packed.stderr })
       return false
@@ -190,7 +203,7 @@ export namespace KiloSnapshotMaterialize {
     })
 
     const connected = yield* Effect.acquireUseRelease(
-      input.fs.rename(alt, hold),
+      observe(input, input.fs.rename(alt, hold)),
       () =>
         input.git([
           "--git-dir",
@@ -201,7 +214,7 @@ export namespace KiloSnapshotMaterialize {
           "--no-reflogs",
           "--no-progress",
         ]),
-      () => input.fs.rename(hold, alt).pipe(Effect.orDie),
+      () => observe(input, input.fs.rename(hold, alt)).pipe(Effect.orDie),
     )
 
     if (!(yield* input.fs.exists(alt))) return false
@@ -211,7 +224,11 @@ export namespace KiloSnapshotMaterialize {
     }
 
     if (source) {
-      const removed = yield* input.git(["--git-dir", source.gitdir, "update-ref", "-d", source.ref, source.hash])
+      const removed = yield* SnapshotSource.run(
+        input,
+        source.gitdir,
+        write(input, ["--git-dir", source.gitdir, "update-ref", "-d", source.ref, source.hash]),
+      )
       if (removed.code !== 0) {
         log.warn("failed to remove source snapshot pin", { stderr: removed.stderr })
         return false
@@ -219,10 +236,10 @@ export namespace KiloSnapshotMaterialize {
     }
     yield* Effect.uninterruptible(
       Effect.gen(function* () {
-        yield* input.fs.remove(alt)
-        yield* input.fs
-          .remove(path.join(input.gitdir, "seed-objects"), { recursive: true })
-          .pipe(Effect.catch(() => Effect.void))
+        yield* observe(input, input.fs.remove(alt))
+        yield* remove(input, path.join(input.gitdir, "seed-objects"), { recursive: true }).pipe(
+          Effect.catch(() => Effect.void),
+        )
       }),
     )
     log.info("snapshot objects materialized", { roots: roots.length, duration: Date.now() - started })

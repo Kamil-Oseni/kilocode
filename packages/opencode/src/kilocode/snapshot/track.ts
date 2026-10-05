@@ -56,6 +56,8 @@ import { iife } from "@/util/iife"
 import { EffectBridge } from "@/effect/bridge"
 import { makeRuntime } from "@/effect/run-service"
 import type { Config } from "@/config/config"
+import type { SnapshotRuntime } from "./runtime"
+import type { SnapshotAdmission } from "./admission"
 // Avoid an eager `import { Session }` here: session/index.ts indirectly
 // re-exports this module (via Snapshot.Service), so resolving
 // `Session.Service` at module load races with our own initialization and
@@ -164,7 +166,19 @@ export namespace KiloSnapshotTrack {
   export const key = (ctx: { directory: string; worktree: string }) =>
     ctx.worktree === "/" ? ctx.directory : ctx.worktree
 
-  export interface ProtectInput<A> {
+  type Ownership =
+    | { readonly ownership?: undefined; readonly input?: undefined }
+    | {
+        readonly ownership: Pick<ReturnType<typeof SnapshotRuntime.install>, "launch" | "cancel" | "observe" | "failed">
+        readonly input: SnapshotAdmission.Input
+      }
+
+  const paired = (input: Ownership) => {
+    if (Boolean(input.ownership) !== Boolean(input.input))
+      throw new Error("Snapshot ownership and input must be paired")
+  }
+
+  export type ProtectInput<A> = Ownership & {
     readonly inner: Effect.Effect<A>
     readonly state: State
     readonly fallback: A
@@ -180,10 +194,13 @@ export namespace KiloSnapshotTrack {
    */
   export const protect = <A>(input: ProtectInput<A>): Effect.Effect<A> =>
     Effect.gen(function* () {
+      paired(input)
       if (input.state.disabledForSession) return input.fallback
       const timeoutMs = input.timeoutMs ?? TURN_TIMEOUT_MS
       return yield* Effect.acquireUseRelease(
-        Effect.forkDetach(input.inner, { startImmediately: true }),
+        input.ownership
+          ? input.ownership.launch(input.input, input.ownership.observe(input.inner)).pipe(Effect.orDie)
+          : Effect.forkDetach(input.inner, { startImmediately: true }),
         (fiber) =>
           Effect.gen(function* () {
             const result = yield* Fiber.join(fiber).pipe(
@@ -206,9 +223,11 @@ export namespace KiloSnapshotTrack {
             return input.fallback
           }),
         (fiber) =>
-          Effect.sync(() => {
-            setTimeout(() => Effect.runFork(Fiber.interrupt(fiber)), 0)
-          }),
+          input.ownership
+            ? input.ownership.cancel(fiber)
+            : Effect.sync(() => {
+                setTimeout(() => Effect.runFork(Fiber.interrupt(fiber)), 0)
+              }),
       )
     })
 
@@ -244,7 +263,7 @@ export namespace KiloSnapshotTrack {
     ended: boolean
   }
 
-  export interface WrapInput {
+  export type WrapInput = Ownership & {
     readonly inner: Effect.Effect<string | undefined>
     readonly state: State
     readonly snapshotInitialization?: SnapshotInitialization
@@ -285,6 +304,7 @@ export namespace KiloSnapshotTrack {
    */
   export const wrap = (input: WrapInput): Effect.Effect<string | undefined> =>
     Effect.gen(function* () {
+      paired(input)
       if (input.state.disabledForSession) return undefined
 
       const hooks = input.hooks ?? defaultHooks
@@ -310,6 +330,22 @@ export namespace KiloSnapshotTrack {
       let removal: Promise<void> | undefined
       let reset = false
       let frameIdx = 0
+      const errors: Error[] = []
+      const pending = new Set<Promise<void>>()
+      const retain = <A>(work: Promise<A>) => {
+        if (!input.ownership) return work
+        const task = work.catch((err: unknown) => {
+          errors.push(err instanceof Error ? err : new Error(String(err)))
+          throw err
+        })
+        const settled = task.then(
+          () => undefined,
+          () => undefined,
+        )
+        pending.add(settled)
+        void settled.then(() => pending.delete(settled))
+        return task
+      }
 
       const nextFrameText = () => {
         const frame = SPINNER_FRAMES[frameIdx % SPINNER_FRAMES.length]
@@ -327,9 +363,9 @@ export namespace KiloSnapshotTrack {
             ctl.abort()
             timeout.resolve(false)
           }, cleanupTimeoutMs)
+          const work = retain(hooks.endProgress({ handle }, ctl.signal))
           const removed = await Promise.race([
-            hooks
-              .endProgress({ handle }, ctl.signal)
+            work
               .then(() => true as const)
               .catch((err) => {
                 log.warn("failed to clear snapshot progress part", { err })
@@ -338,15 +374,17 @@ export namespace KiloSnapshotTrack {
             timeout.promise,
           ])
           clearTimeout(timer)
+          if (input.ownership) await Promise.all(pending)
           if (!removed) continue
           cleared = true
           return
         }
+        if (input.ownership) errors.push(new Error("Snapshot progress cleanup did not complete"))
         log.warn("snapshot progress part remained after cleanup retries")
       }
 
       const settleProgress = async (work: () => Promise<void>, warning: string) => {
-        const settled = await work()
+        const settled = await retain(work())
           .then(() => true)
           .catch((err) => {
             log.warn(warning, { err })
@@ -358,12 +396,19 @@ export namespace KiloSnapshotTrack {
 
       const clearProgress = () => {
         if (handle) handle.ended = true
-        if (!handle?.started || removal) return Effect.void
-        return Effect.sync(() => {
+        const current = removal
+        if (!handle?.started || removal) return input.ownership && current ? Effect.promise(() => current) : Effect.void
+        const clear = () => {
           removal = removeProgress(false).finally(() => {
             removal = undefined
           })
-        })
+          return removal
+        }
+        return input.ownership
+          ? Effect.promise(clear)
+          : Effect.sync(() => {
+              void clear()
+            })
       }
 
       // Delay the "Initializing snapshot…" indicator so fast snapshots never
@@ -406,11 +451,19 @@ export namespace KiloSnapshotTrack {
       })
 
       return yield* Effect.acquireUseRelease(
-        Effect.forkDetach(input.inner),
+        input.ownership
+          ? input.ownership.launch(input.input, input.ownership.observe(input.inner)).pipe(Effect.orDie)
+          : Effect.forkDetach(input.inner),
         (fiber) => {
-          const cancelSnapshot = Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid)
+          const cancelSnapshot = input.ownership
+            ? input.ownership.cancel(fiber)
+            : Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid)
           const cleanup = Effect.gen(function* () {
             yield* stopProgress
+            if (input.ownership) {
+              yield* Effect.promise(() => Promise.all(pending))
+              for (const err of errors) yield* input.ownership.failed(err)
+            }
             if (input.state.progress === owner) input.state.progress = undefined
             if (input.state.owner !== owner) return
             if (reset) input.state.asked = false
@@ -496,7 +549,7 @@ export namespace KiloSnapshotTrack {
               // Restore instance context across the Promise boundary; Effect.promise
               // drops it, and persistDisable needs the project directory.
               yield* EffectBridge.fromPromise(() =>
-                hooks.persistDisable().catch((err) => {
+                retain(hooks.persistDisable()).catch((err) => {
                   log.error("failed to persist snapshot:false to project config", { err })
                 }),
               )
@@ -507,7 +560,10 @@ export namespace KiloSnapshotTrack {
             return undefined
           }).pipe(Effect.ensuring(cleanup))
         },
-        (fiber) => Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid),
+        (fiber) =>
+          input.ownership
+            ? input.ownership.cancel(fiber)
+            : Fiber.interrupt(fiber).pipe(Effect.forkDetach, Effect.asVoid),
       )
     })
 

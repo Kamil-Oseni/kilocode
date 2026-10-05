@@ -154,11 +154,20 @@ export namespace ProfileWriterManifest {
       writer({
         id: "profile.data.memory",
         roots: ["data"],
-        sources: ["packages/opencode/src/kilocode/memory/runtime.ts", "packages/kilo-memory/src/storage/paths.ts"],
+        sources: [
+          "packages/opencode/src/kilocode/memory/runtime.ts",
+          "packages/opencode/src/kilocode/memory/admission.ts",
+          "packages/kilo-memory/src/storage/paths.ts",
+          "packages/kilo-memory/src/storage/store.ts",
+          "packages/kilo-memory/src/storage/fs.ts",
+          "packages/kilo-memory/src/storage/state.ts",
+          "packages/kilo-memory/src/storage/sessions.ts",
+        ],
         methods: ["configure", "write", "rename", "remove", "reset", "retain"],
-        lifecycle: "Dispose and reconfigure the one-shot memory runtime, including locks and retained sessions.",
+        lifecycle:
+          "Install the actual memory port lazily; retain canonical parent/file leases and count accepted operations through publication and final release; join pending work at shutdown and retain failures before refusing late writes.",
         copyPolicy: "copy-after-drain",
-        coverage: unintegrated,
+        coverage: "integrated",
       }),
       writer({
         id: "profile.data.plans",

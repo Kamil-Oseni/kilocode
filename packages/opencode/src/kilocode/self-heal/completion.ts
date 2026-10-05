@@ -1,60 +1,13 @@
+import { Completions as Data } from "./schemas"
 import { Effect, Schema } from "effect"
 import { createHash } from "node:crypto"
 import { Storage } from "@/storage/storage"
-import { MessageID, PartID, SessionID } from "@/session/schema"
-import { Source, Conflict, type repairs } from "./repair"
-import { Worktree } from "./worktree"
+import { SessionID } from "@/session/schema"
+import { Conflict, type repairs } from "./repair"
 import { Assessment } from "./verification"
 
-const Time = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
-const Evidence = Schema.Struct({
-  sessionID: SessionID,
-  messageID: MessageID,
-  partID: PartID,
-  callID: Schema.String,
-  summary: Schema.String,
-  record: Schema.Struct({ version: Schema.Literal(1), digest: Schema.String, at: Time }),
-})
-const Audit = Schema.Struct({
-  summary: Schema.String,
-  verifiedAt: Time,
-  requirements: Schema.Array(
-    Schema.Struct({
-      criterionID: Schema.optional(Schema.String),
-      requirement: Schema.String,
-      passed: Schema.Boolean,
-      evidence: Schema.Array(Evidence),
-    }),
-  ),
-})
-const Goal = Schema.Struct({
-  intent: Schema.String,
-  revision: Schema.String,
-  completedRevision: Schema.String,
-  createdAt: Time,
-  objective: Schema.String,
-  audit: Audit,
-  review: Schema.optional(
-    Schema.Struct({
-      status: Schema.Literal("accepted"),
-      at: Time,
-      criteria: Schema.Array(Schema.String),
-      acceptedAt: Time,
-    }),
-  ),
-})
-export const Completion = Schema.Struct({
-  version: Schema.Literal(1),
-  itemID: Schema.String,
-  attemptID: Schema.String,
-  sessionID: SessionID,
-  source: Source,
-  worktree: Worktree,
-  goal: Goal,
-  verification: Schema.optional(Assessment),
-  at: Time,
-}).annotate({ identifier: "Raya.SelfHealCompletion" })
-const identity = (goal: typeof Goal.Type) =>
+export const Completion = Data.Completion
+const identity = (goal: typeof Data.Goal.Type) =>
   JSON.stringify({
     ...goal,
     completedRevision: undefined,
@@ -102,7 +55,7 @@ export function completions(storage: Pick<Storage.Interface, "read" | "create">,
     const outcome = yield* link(id, sessionID, attempt)
     if (!["dispatching", "submitted", "dispatch_unknown"].includes(outcome.phase))
       return yield* new Conflict({ message: "Repair dispatch has not reached a completion-eligible phase." })
-    const goal = yield* Schema.decodeUnknownEffect(Goal)(input).pipe(
+    const goal = yield* Schema.decodeUnknownEffect(Data.Goal)(input).pipe(
       Effect.mapError(() => new Conflict({ message: "Completion requires a fully identified, accepted goal audit." })),
     )
     const receipt: typeof Completion.Type = {

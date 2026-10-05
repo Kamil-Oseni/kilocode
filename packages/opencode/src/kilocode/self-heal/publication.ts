@@ -1,45 +1,10 @@
+import { Publications as Data } from "./schemas"
 import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
 import type { Storage as Store } from "@/storage/storage"
 
-const Text = Schema.String.check(Schema.isMinLength(1))
-const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
-const Time = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
-const Source = Schema.Struct({
-  sessionID: Text,
-  messageID: Text,
-  partID: Text,
-  callID: Text,
-  summary: Text,
-  record: Schema.Struct({ version: Schema.Literal(1), digest: Hash, at: Time }),
-})
-const Requirement = Schema.Struct({
-  requirement: Text,
-  passed: Schema.Literal(true),
-  evidence: Schema.Array(Source).check(Schema.isMinLength(1)),
-})
-const Verification = Schema.Struct({
-  sessionID: Text,
-  goalRevision: Text,
-  summary: Text,
-  verifiedAt: Time,
-  reviewedAt: Time,
-  requirements: Schema.Array(Requirement).check(Schema.isMinLength(1)),
-})
-export const Publish = Schema.Struct({
-  installationID: Schema.String.check(Schema.isUUID()),
-  verification: Verification,
-})
-export const Receipt = Schema.Struct({
-  version: Schema.Literal(1),
-  itemID: Text,
-  installationID: Schema.String.check(Schema.isUUID()),
-  goalRevision: Text,
-  evidence: Schema.Struct({ summary: Text, artifact: Text, at: Time }),
-  verification: Verification,
-  createdAt: Time,
-})
-
+export const Publish = Data.Publish
+export const Receipt = Data.Receipt
 export class Conflict extends Schema.TaggedErrorClass<Conflict>()("SelfHeal.PublicationConflict", {
   message: Schema.String,
 }) {}

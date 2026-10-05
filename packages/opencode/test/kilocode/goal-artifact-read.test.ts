@@ -86,6 +86,7 @@ tool.instance(
       expect(yield* Artifact.current(fresh.metadata.rayaRevision)).toBe(true)
       const directory = yield* reader.execute({ filePath: instance.directory }, ctx)
       expect(directory.metadata.rayaRevision).toBeUndefined()
+      expect(directory.output).not.toContain("<file-format")
     }),
   30_000,
 )
@@ -105,11 +106,12 @@ it.live("binds read evidence to the inspected object and detects changes during 
           Effect.gen(function* () {
             const bytes = yield* Effect.tryPromise(() => bound.read())
             if (changed) yield* fs.writeFileString(file, "modified bytes")
-            return { output: bytes.toString(), metadata: { truncated: false } }
+            return { output: bytes.toString(), metadata: { truncated: false, display: { type: "file" } } }
           }),
         ),
       )
-      expect(result.output).toBe("original bytes")
+      expect(result.output.startsWith("original bytes")).toBe(true)
+      expect(result.output.includes("<file-format")).toBe(!changed)
       expect(result.metadata.rayaRevision.status).toBe(changed ? "unavailable" : "captured")
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(!changed)
       if (changed) continue
@@ -117,6 +119,70 @@ it.live("binds read evidence to the inspected object and detects changes during 
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(true)
       yield* fs.writeFileString(file, "modified bytes")
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(false)
+    }
+  }),
+)
+
+tool.instance(
+  "real text reads report exact source format independently of numbered display lines",
+  () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const fs = yield* FSUtil.Service
+      const info = yield* ReadTool
+      const reader = yield* info.init()
+      const ctx = {
+        sessionID: SessionID.make("ses_format_read"),
+        messageID: MessageID.make("msg_format_read"),
+        callID: "read",
+        agent: "code",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const cases = [
+        { text: "", endings: "none", newline: false, bom: "none" },
+        { text: "plain", endings: "none", newline: false, bom: "none" },
+        { text: "first\nlast", endings: "LF", newline: false, bom: "none" },
+        { text: "first\nlast\n", endings: "LF", newline: true, bom: "none" },
+        { text: "first\r\nlast\r\n", endings: "CRLF", newline: true, bom: "none" },
+        { text: "first\rlast\r", endings: "CR", newline: true, bom: "none" },
+        { text: "first\r\nlast\n", endings: "mixed", newline: true, bom: "none" },
+        { text: "\ufeffcafé\n", endings: "LF", newline: true, bom: "UTF-8" },
+        // The multibyte character crosses the bound reader's 64 KiB chunk boundary.
+        { text: "a".repeat(65535) + "é\r\n", endings: "CRLF", newline: true, bom: "none" },
+      ]
+      for (const [index, row] of cases.entries()) {
+        const file = path.join(instance.directory, `format-${index}.txt`)
+        yield* fs.writeFileString(file, row.text)
+        const result = yield* reader.execute({ filePath: file }, ctx)
+        expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(true)
+        expect(result.output).toContain(
+          `<file-format encoding="UTF-8" bom="${row.bom}" line-endings="${row.endings}" final-newline="${row.newline}" bytes="${Buffer.byteLength(row.text)}" />`,
+        )
+      }
+    }),
+  30_000,
+)
+
+it.live("bound reads with invalid UTF-8 or binary bytes retain revision without claiming text format", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const fs = yield* FSUtil.Service
+    for (const [index, bytes] of [
+      Buffer.from([0xc3, 0x28]),
+      Buffer.from([0xff, 0xfe, 0x61, 0]),
+      Buffer.from([97, 0, 98]),
+    ].entries()) {
+      const file = path.join(directory, `unsupported-${index}.txt`)
+      yield* Effect.promise(() => Bun.write(file, bytes))
+      const info = yield* KiloReadObject.file(file)
+      const result = yield* KiloReadObject.use(info, (bound) =>
+        read(fs, bound, Effect.succeed({ output: "display", metadata: { display: { type: "file" } } })),
+      )
+      expect(result.metadata.rayaRevision.status).toBe("captured")
+      expect(result.output).toBe("display")
     }
   }),
 )

@@ -2,9 +2,24 @@ import path from "path"
 import fs from "fs/promises"
 import z from "zod"
 import { Global } from "@opencode-ai/core/global"
-import { Filesystem } from "@/util/filesystem"
+import { ConfigIntent } from "@opencode-ai/core/kilocode/config-intent"
+import { publish } from "@opencode-ai/core/kilocode/markdown-publication"
+import { acquireProfileRoot, resolveProfileRoot } from "@opencode-ai/core/kilocode/profile-maintenance"
+import { registerProcessProfile } from "@opencode-ai/core/kilocode/process-profile"
+import { KiloShutdown } from "@/kilocode/cli/shutdown"
 
 export namespace AgentBuilder {
+  const pending = new Set<Promise<void>>()
+  const failures: unknown[] = []
+  let closing: Promise<void> | undefined
+
+  KiloShutdown.register(() => {
+    if (closing) return closing
+    closing = Promise.all(pending).then(() => {
+      if (failures.length) throw new AggregateError(failures, "Agent builder retirement failed")
+    })
+    return closing
+  })
   export const Scope = z.enum(["global", "project"])
   export type Scope = z.infer<typeof Scope>
 
@@ -64,11 +79,91 @@ export namespace AgentBuilder {
     }
   }
 
-  export async function save(ctx: Ctx, input: Input): Promise<Output> {
-    const output = await preview(ctx, input)
-    await fs.mkdir(path.dirname(output.path), { recursive: true })
-    await Filesystem.write(output.path, output.markdown)
-    return output
+  export function save(ctx: Ctx, input: Input): Promise<Output> {
+    if (closing) return Promise.reject(new Error("Agent builder is retired"))
+    const work = (async () => {
+      const output = {
+        id: input.id,
+        scope: input.scope,
+        path: file(ctx, input.scope, input.id),
+        markdown: markdown(input),
+      }
+      const ticket = ConfigIntent.reserveMarkdown(path.resolve(output.path))
+      const selected = path.resolve(
+        input.scope === "global"
+          ? Global.Path.config
+          : ctx.worktree && ctx.worktree !== "/"
+            ? ctx.worktree
+            : ctx.directory,
+      )
+      const dir = path.dirname(path.resolve(output.path))
+      const target = path.resolve(output.path)
+      const roots = await Promise.all(
+        [selected, dir, target].map((path) => resolveProfileRoot({ kind: "json", path })),
+      ).catch((err) => {
+        ticket.fail(err)
+        throw err
+      })
+      const expected = path.join(roots[1].path, path.basename(output.path))
+      if (
+        (process.platform === "win32" ? roots[2].path.toLowerCase() : roots[2].path) !==
+        (process.platform === "win32" ? expected.toLowerCase() : expected)
+      ) {
+        const err = new Error("Agent builder target is outside its admitted directory")
+        ticket.fail(err)
+        throw err
+      }
+      const scopes = [...new Map(roots.slice(0, 2).map((root) => [root.id, root])).values()]
+      scopes.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+      const leases: Awaited<ReturnType<typeof acquireProfileRoot>>[] = []
+      const errors: unknown[] = []
+      async function check() {
+        const current = await Promise.all(
+          [selected, dir, target].map((path) => resolveProfileRoot({ kind: "json", path })),
+        )
+        if (current.some((root, index) => root.id !== roots[index].id))
+          throw new Error("Agent builder target changed during save")
+      }
+      try {
+        for (const root of scopes) {
+          const lease = await acquireProfileRoot(root)
+          leases.push(lease)
+          if (lease.id !== root.id) throw new Error("Agent builder scope changed during admission")
+        }
+        await check()
+        registerProcessProfile(scopes.map((root) => root.path))
+        const predecessor = await ticket.prepare(roots[2].path)
+        await fs.mkdir(roots[1].path, { recursive: true })
+        await check()
+        const receipt = await publish(roots[2].path, output.markdown, predecessor)
+        await ticket.complete(receipt)
+        await check()
+      } catch (err) {
+        ticket.fail(err)
+        errors.push(err)
+      } finally {
+        for (const lease of leases.reverse()) {
+          try {
+            await lease.release()
+          } catch (err) {
+            errors.push(err)
+          }
+        }
+      }
+      if (errors.length) throw new AggregateError(errors, "Agent builder save failed")
+      return output
+    })()
+    const settled = work.then(
+      () => {
+        pending.delete(settled)
+      },
+      (err) => {
+        failures.push(err)
+        pending.delete(settled)
+      },
+    )
+    pending.add(settled)
+    return work
   }
 
   function file(ctx: Ctx, scope: Scope, id: string) {

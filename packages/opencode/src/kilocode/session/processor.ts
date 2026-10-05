@@ -14,6 +14,7 @@ import type { LLMEvent, ProviderMetadata, Usage } from "@opencode-ai/llm"
 import type { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionRetry } from "@/session/retry"
 import { computeMetrics as computeMetricsHelper, type TokenRates } from "@/kilocode/session/metrics"
+import { LocalInferenceError } from "@/kilocode/provider/local-scheduler"
 
 export type ReviewTelemetry = {
   mode: "review"
@@ -289,8 +290,7 @@ export namespace KiloSessionProcessor {
         if (!error && !input.replayable()) return
 
         yield* input.discard()
-        if (index === INCOMPLETE_RESPONSE_RETRIES)
-          return yield* Effect.fail(error ?? new IncompleteResponseError())
+        if (index === INCOMPLETE_RESPONSE_RETRIES) return yield* Effect.fail(error ?? new IncompleteResponseError())
         const wait = SessionRetry.delay(index + 1)
         yield* input.set({ attempt: index + 1, message: INCOMPLETE_RESPONSE_MESSAGE, next: Date.now() + wait })
         yield* Effect.sleep(`${wait} millis`)
@@ -299,6 +299,12 @@ export namespace KiloSessionProcessor {
   }
 
   export function parseError(error: unknown, input: { providerID: ProviderV2.ID; aborted: boolean }) {
+    if (error instanceof LocalInferenceError)
+      return new MessageV2.APIError({
+        message: error.message,
+        isRetryable: false,
+        metadata: { code: error.code, origin: "local-inference" },
+      }).toObject()
     if (!(error instanceof IncompleteResponseError)) return MessageV2.fromError(error, input)
     return new MessageV2.APIError({
       message: error.message,

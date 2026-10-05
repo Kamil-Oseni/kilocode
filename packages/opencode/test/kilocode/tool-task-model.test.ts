@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { afterEach, beforeAll, describe, expect } from "bun:test"
-import { Cause, Effect, Exit } from "effect"
+import { afterEach, beforeAll, describe, expect, test } from "bun:test"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import fs from "fs/promises"
 import path from "path"
@@ -22,7 +22,8 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "../../src/provider/provider"
 import { RayaToolModel } from "../../src/kilocode/chief/tool-model"
-import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { TaskTool, Parameters, type TaskPromptOps } from "../../src/tool/task"
+import { ToolJsonSchema } from "../../src/tool/json-schema"
 import { Truncate } from "../../src/tool/truncate"
 import { ToolRegistry } from "../../src/tool/registry"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
@@ -205,6 +206,8 @@ function writeState(input: unknown) {
 
 function run(input: {
   agent: "pinned" | "worker" | "generalist"
+  omit?: boolean
+  description?: string
   objective?: string // raya_change - exercise Chief auto-selection with model precedence
   state?: unknown
   client?: string
@@ -222,6 +225,11 @@ function run(input: {
         const { chat, assistant } = yield* seed(input.agent, input.variant)
         const tool = yield* TaskTool
         const def = yield* tool.init()
+        if (input.omit) {
+          const schema = ToolJsonSchema.fromTool({ ...def, id: tool.id })
+          expect(schema.properties?.description).toBeDefined()
+          expect(schema.required ?? []).not.toContain("description")
+        }
         const part = PartID.ascending()
         const receipts: unknown[] = []
         let seen: SessionPrompt.PromptInput | undefined
@@ -238,7 +246,7 @@ function run(input: {
         const result = yield* def
           .execute(
             {
-              description: `run ${input.agent}`,
+              ...(input.omit ? {} : { description: input.description ?? `run ${input.agent}` }),
               prompt: input.objective ?? "inspect resolution",
               subagent_type: input.objective ? undefined : input.agent, // raya_change
               task_id: child?.id,
@@ -300,6 +308,7 @@ function run(input: {
         expect(provenance.capability).toBe("normalized-provider-flag")
         const job = yield* jobs.get(result.metadata.sessionId)
         return {
+          title: (yield* sessions.get(result.metadata.sessionId)).title,
           provenance,
           prompt: seen?.model,
           variant: seen?.variant,
@@ -340,6 +349,37 @@ function reject<A, E, R>(effect: Effect.Effect<A, E, R>, reason: "missing" | "un
     }),
   )
 }
+
+test("optional task presentation label leaves other public argument validation strict", () => {
+  expect(
+    Schema.decodeUnknownSync(Parameters)({
+      prompt: "Inspect synthetic work",
+      subagent_type: "worker",
+      access: "read",
+    }),
+  ).toMatchObject({ access: "read" })
+  for (const input of [{ description: 3 }, { access: "invented" }, { brief: { objective: 3 } }, { task_id: 3 }]) {
+    expect(() => Schema.decodeUnknownSync(Parameters)(input)).toThrow()
+  }
+})
+
+it.live("missing display label executes the actual tool and creates a generic child title", () =>
+  run({ agent: "worker", omit: true }).pipe(
+    Effect.map((result) => {
+      expect(result.title).toBe("Delegated task \u00b7 Worker")
+      expect(result.title).not.toContain("inspect resolution")
+      expect(result.prompt).toEqual(parent)
+    }),
+  ),
+)
+
+it.live("supplied display label remains the actual child title", () =>
+  run({ agent: "worker", description: "Inspect API ownership" }).pipe(
+    Effect.map((result) => {
+      expect(result.title).toBe("Inspect API ownership \u00b7 Worker")
+    }),
+  ),
+)
 
 describe("tool.task model resolution", () => {
   it.live("unavailable saved picker model refuses instead of falling through to agent config", () =>

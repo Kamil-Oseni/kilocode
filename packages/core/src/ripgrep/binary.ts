@@ -9,6 +9,7 @@ import { httpClient } from "../effect/app-node-platform"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { which } from "../util/which"
+import { ripgrep, publish, cleanup } from "../kilocode/ripgrep-owner" // kilocode_change
 
 export namespace RipgrepBinary {
   const VERSION = "15.1.0"
@@ -53,13 +54,15 @@ export namespace RipgrepBinary {
         config: (typeof PLATFORM)[keyof typeof PLATFORM],
         target: string,
       ) {
-        const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: "ripgrep-" })
+        const dir = yield* fs.makeTempDirectoryScoped({ directory: path.dirname(target), prefix: "ripgrep-" }) // kilocode_change - admitted canonical bin root
 
         if (config.extension === "zip") {
           const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
           const result = yield* run(shell, [
             "-NoProfile",
             "-NonInteractive",
+            "-ExecutionPolicy", // kilocode_change - only this owned archive child; preserve host policy
+            "Bypass", // kilocode_change
             "-Command",
             `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
           ])
@@ -84,42 +87,48 @@ export namespace RipgrepBinary {
         )
         if (!(yield* fs.isFile(extracted))) throw new Error(`ripgrep archive did not contain executable: ${extracted}`)
 
-        yield* fs.copyFile(extracted, target)
-        if (process.platform !== "win32") yield* fs.chmod(target, 0o755)
+        yield* publish(fs, extracted, target) // kilocode_change - join atomic publication and cleanup inside admission
       }, Effect.scoped)
 
       return Service.of({
-        filepath: yield* Effect.cached(
-          Effect.gen(function* () {
-            // kilocode_change - Git for Windows may expose an incompatible MSYS rg.exe
-            const system = yield* Effect.sync(() => (process.platform === "win32" ? undefined : which("rg")))
-            if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
+        // kilocode_change start - every lookup reselects and owns its actual bin generation across Core graphs
+        filepath: ripgrep.run(
+          () => Global.Path.bin,
+          (root) =>
+            Effect.gen(function* () {
+              // kilocode_change end
+              // kilocode_change - Git for Windows may expose an incompatible MSYS rg.exe
+              const system = yield* Effect.sync(() => (process.platform === "win32" ? undefined : which("rg")))
+              if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
 
-            const target = path.join(Global.Path.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
-            if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
+              const target = path.join(root, `rg${process.platform === "win32" ? ".exe" : ""}`) // kilocode_change
+              if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
 
-            const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
-            const config = PLATFORM[platformKey]
-            if (!config) throw new Error(`unsupported platform for ripgrep: ${platformKey}`)
+              const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
+              const config = PLATFORM[platformKey]
+              if (!config) throw new Error(`unsupported platform for ripgrep: ${platformKey}`)
 
-            const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
-            const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
-            const archive = path.join(Global.Path.bin, filename)
+              const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
+              const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
+              const archive = path.join(root, filename) // kilocode_change
 
-            yield* Effect.logInfo("downloading ripgrep", { url })
-            yield* fs.ensureDir(Global.Path.bin).pipe(Effect.orDie)
-            const bytes = yield* HttpClientRequest.get(url).pipe(
-              http.execute,
-              Effect.flatMap((response) => response.arrayBuffer),
-              Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
-            )
-            if (bytes.byteLength === 0) throw new Error(`failed to download ripgrep from ${url}`)
+              yield* Effect.logInfo("downloading ripgrep", { url })
+              yield* fs.ensureDir(root).pipe(Effect.orDie) // kilocode_change
+              const bytes = yield* HttpClientRequest.get(url).pipe(
+                http.execute,
+                Effect.flatMap((response) => response.arrayBuffer),
+                Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
+              )
+              if (bytes.byteLength === 0) throw new Error(`failed to download ripgrep from ${url}`)
 
-            yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
-            yield* extract(archive, config, target)
-            yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
-            return target
-          }),
+              // kilocode_change start - preserve download/write/extraction failure together with cleanup failure
+              yield* cleanup(
+                fs.writeWithDirs(archive, new Uint8Array(bytes)).pipe(Effect.andThen(extract(archive, config, target))),
+                fs.remove(archive, { force: true }),
+              )
+              // kilocode_change end
+              return target
+            }),
         ),
       })
     }),

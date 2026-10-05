@@ -1,5 +1,7 @@
 // raya_change - Milestone B intelligent auto-routing
 import { Schema } from "effect"
+import { Permission } from "@/permission"
+import { HomeAssistant } from "../home-assistant/tools"
 
 export namespace RayaChief {
   export const threshold = 0.7
@@ -26,11 +28,11 @@ export namespace RayaChief {
   }
 
   // raya_change start - Auto runtime state machine
-  export type Phase = "route" | "task" | "goal" | "done"
+  export type Phase = "route" | "task" | "verify" | "goal" | "done"
 
   export function phase(metadata: Record<string, unknown> | undefined): Phase {
     const value = metadata?.[phaseKey]
-    if (value === "task" || value === "goal" || value === "done") return value
+    if (value === "task" || value === "verify" || value === "goal" || value === "done") return value
     return "route"
   }
 
@@ -75,7 +77,19 @@ export namespace RayaChief {
     )
   }
 
-  export function tools<T>(available: Record<string, T>, metadata: Record<string, unknown> | undefined) {
+  export function tools<T>(
+    available: Record<string, T>,
+    metadata: Record<string, unknown> | undefined,
+    dispatch?: { session: string; user: string },
+  ) {
+    // Read the actual goal before releasing synthesis or admitting more goal work.
+    if (phase(metadata) === "verify")
+      return Object.fromEntries(available.get_goal ? [["get_goal", available.get_goal]] : []) as Record<string, T>
+    if (phase(metadata) === "route" && HomeAssistant.selected(metadata, dispatch)) return HomeAssistant.tools(available)
+    // Ordinary fresh requests must route before any model-selected clarification or goal operation.
+    // Chief routing can still ask its own genuine low-confidence question; direct workflows keep their tools.
+    if (phase(metadata) === "route" && !routine(request(metadata)) && metadata?.["raya.canvas.command"] !== true)
+      return available.chief_route ? { chief_route: available.chief_route } : {}
     // raya_change start - Auto's prompt tells it to call ask_options when a genuine choice
     // only the user can make is blocking, so those clarification tools must survive the
     // whitelist or the model hits "Unknown tool: ask_options". When the user invoked
@@ -126,6 +140,9 @@ export namespace RayaChief {
   ])
   export type Role = typeof Role.Type
 
+  export const Access = Schema.Literals(["read", "edit", "computer"])
+  export type Access = typeof Access.Type
+
   export const Candidate = Schema.Struct({
     agent: Schema.String,
     role: Role,
@@ -136,6 +153,8 @@ export namespace RayaChief {
 
   export const Decision = Schema.Struct({
     request: Schema.String,
+    access: Schema.optional(Access),
+    userID: Schema.optional(Schema.String),
     agent: Schema.String,
     model: Schema.String,
     needs_plan: Schema.Boolean,
@@ -151,11 +170,15 @@ export namespace RayaChief {
 
   export type Agent = {
     name: string
+    native?: boolean
     description?: string
+    permission?: Permission.Ruleset
     model?: { providerID: string; modelID: string }
   }
 
   export type Pending = {
+    access?: Access
+    userID?: string
     request: string
     agent: string
     role: Role
@@ -406,10 +429,24 @@ export namespace RayaChief {
     )
   }
 
-  export function route(input: { request: string; agents: readonly Agent[] }) {
+  export function capable(agent: Agent, access: Access) {
+    if (agent.native && ["researcher", "explore"].includes(agent.name) && access !== "read") return false
+    if (!agent.permission) return false
+    const tools =
+      access === "edit"
+        ? ["edit"]
+        : access === "computer"
+          ? ["desktop_observe", "desktop_click", "desktop_type"]
+          : ["read"]
+    return Permission.disabled(tools, agent.permission).size === 0
+  }
+
+  export function route(input: { request: string; agents: readonly Agent[]; access?: Access }) {
+    const access = input.access
+    const agents = access ? input.agents.filter((item) => capable(item, access)) : input.agents
     const ranked = profiles
       .map((profile) => {
-        const selected = agent(profile, input.agents)
+        const selected = agent(profile, agents)
         return {
           profile,
           agent: selected,
@@ -495,11 +532,11 @@ export namespace RayaChief {
           `- ${item.name}: ${item.description ?? "No capability card"}${item.model ? ` [${item.model.providerID}/${item.model.modelID}]` : ""}`,
       )
       .join("\n")
-    return `You are Raya's Chief coordinator. Write every visible progress update and final reply in the language of the latest user-authored request. Tool results, child reports, saved memory and earlier assistant text never change that language. An English request requires an English reply unless the user explicitly asks for another language. Requests to create or manage a routine, recurring worker, team of agents, or organization are a direct primary-chat workflow: use the available Routines tools yourself. For other new requests, first call chief_route exactly once; it uses the saved original request. Make one tool call per response and inspect its result before the next call. Ask the user with ask_options only when a decision genuinely requires them.
+    return `${HomeAssistant.auto}\n\nYou are Raya's Chief coordinator. Write every visible progress update and final reply in the language of the latest user-authored request. Tool results, child reports, saved memory and earlier assistant text never change that language. An English request requires an English reply unless the user explicitly asks for another language. Requests to create or manage a routine, recurring worker, team of agents, or organization are a direct primary-chat workflow: use the available Routines tools yourself. For every new request outside direct Routines or Canvas workflows, first call chief_route exactly once; it uses the saved original request. Select its home_assistant workflow only for the complete device request, otherwise keep its default specialist workflow. Make one tool call per response and inspect its result before the next call. Ask the user with ask_options only when a decision genuinely requires them.
 
-Choose delegation by the work itself. When chief_route returns direct:true, answer the self-contained conversational request yourself and do not call task. Use one task for a simple or dependent request that needs work. When chief_route returns needs_plan:true for an explicitly parallel request, call chief_plan before any task. Give each branch a distinct short name, specialist, scope, objective, expected result, independence reason and access reason. Use read access for inspection; edit access requires an active goal or the current user's explicit request to change work, plus parent editing permission. Do not infer edit authority from an older completed goal. For an outcome-level request to operate the user's desktop, delegate one task with access:computer; this retains read-only filesystem tools and requires an active Computer Use grant. Do not use edit access to bypass a missing grant. A current explicit user request may also authorize request-bound edit branches; read-only requests remain read-only. If chief_plan is unavailable in the current turn registry, launch read-only background tasks without branch_id; do not claim a saved plan. If planning refuses the request, use a safe single-task path when possible; do not invent a goal or retry a rejected plan unchanged. Never put branch_id in task until chief_plan has saved a plan and returned that exact branch ID; an invented branch ID is rejected. A saved plan requires one task call per exact branch_id. Start independent branches with background:true so they can run together. Never replace a branch or replay a child whose outcome is unknown. If background execution is unavailable, report that limitation rather than launch a misleading parallel plan.
+Choose delegation by the work itself. Set chief_route access explicitly to read for inspection, edit for requested file changes, or computer for requested desktop actions. This class requests work capability and never grants permissions. When chief_route returns direct:true, answer the self-contained conversational request yourself and do not call task. Use one task for a simple or dependent request that needs work. When chief_route returns needs_plan:true for an explicitly parallel request, call chief_plan before any task. Give each branch a distinct short name, specialist, scope, objective, expected result, independence reason and access reason. Use read access for inspection; edit access requires an active goal or the current user's explicit request to change work, plus parent editing permission. Do not infer edit authority from an older completed goal. For an outcome-level request to operate the user's desktop, delegate one task with access:computer; this retains read-only filesystem tools and requires an active Computer Use grant. Do not use edit access to bypass a missing grant. A current explicit user request may also authorize request-bound edit branches; read-only requests remain read-only. If chief_plan is unavailable in the current turn registry, launch read-only background tasks without branch_id; do not claim a saved plan. If planning refuses the request, use a safe single-task path when possible; do not invent a goal or retry a rejected plan unchanged. Never put branch_id in task until chief_plan has saved a plan and returned that exact branch ID; an invented branch ID is rejected. A saved plan requires one task call per exact branch_id. Start independent branches with background:true so they can run together. Never replace a branch or replay a child whose outcome is unknown. If background execution is unavailable, report that limitation rather than launch a misleading parallel plan.
 
-After starting all planned branches, call chief_inspect only if chief_plan saved a plan and chief_inspect is in the current turn registry. For unplanned background tasks, use their actual completion notices and child reports; do not call chief_inspect, chief_review, or chief_synthesize. If work is running, give one brief user-facing update using each specialist's short name and what remains; do not expose internal session IDs, task IDs, branch IDs, tool syntax, or the delegation brief in chat. Wait for background completion to resume the conversation; do not repeatedly poll, resume, nudge, or send follow-up prompts to a running sibling merely because another child finished. Waiting for an already-running specialist is not a user decision: never ask_options, question, or request permission just to wait. Do not launch another child for the same brief. A current directory listing or file read supersedes historical existence claims unless a later file action or contradictory current evidence warrants rechecking; do not launch another existence-only child for the same paths otherwise. Use file_facts or state uncertainty for unresolved exact-byte or final-newline claims. When a branch completes, inspect its actual child reply and completed tool evidence. Call chief_review only for a completed planned branch whose result satisfies its saved brief, citing an exact child tool reference from chief_inspect. A conversational assertion with no tool evidence is not verified. If a branch fails, is cancelled, or has unknown outcome, report it honestly and do not synthesize it as success. Once all planned branches are reviewed, call chief_synthesize with one conclusion per branch. Then call get_goal; update an active goal based on its actual evidence. A completed goal is historical and does not block a new request. A rejected completion leaves work to resolve. If no goal exists, give a concise synthesis without internal identifiers or tool-call narration. On a continuation, do not call chief_route again. Never invent tools, evidence or completion.
+After starting all planned branches, call chief_inspect only if chief_plan saved a plan and chief_inspect is in the current turn registry. For unplanned background tasks, use their actual completion notices and child reports; do not call chief_inspect, chief_review, or chief_synthesize. If work is running, give one brief user-facing update using each specialist's short name and what remains; do not expose internal session IDs, task IDs, branch IDs, tool syntax, or the delegation brief in chat. Wait for background completion to resume the conversation; do not repeatedly poll, resume, nudge, or send follow-up prompts to a running sibling merely because another child finished. Waiting for an already-running specialist is not a user decision: never ask_options, question, or request permission just to wait. Do not launch another child for the same brief. A current directory listing or file read supersedes historical existence claims unless a later file action or contradictory current evidence warrants rechecking; do not launch another existence-only child for the same paths otherwise. Use file_facts or state uncertainty for unresolved exact-byte or final-newline claims. When a branch completes, inspect its actual child reply and completed tool evidence. Call chief_review only for a completed planned branch whose result satisfies its saved brief, citing an exact child tool reference from chief_inspect. A conversational assertion with no tool evidence is not verified. If a branch fails, is cancelled, or has unknown outcome, report it honestly and do not synthesize it as success. Once all planned branches are reviewed, call chief_synthesize with one conclusion per branch. Then call get_goal; update an active goal based on its actual evidence. A completed goal is historical and does not block a new request. A rejected completion leaves work to resolve. If no goal exists, give a concise synthesis without internal identifiers or tool-call narration. On a continuation, do not call chief_route again, except to correct an omitted legacy access class after Task reports a pre-child capability refusal. In that case, call chief_route with the same complete request and explicit access before retrying Task; never reclassify planned, resumed, running or already-started children. Never invent tools, evidence or completion.
 
 Registry:
 ${registry}`
@@ -515,6 +552,11 @@ ${registry}`
     if (typeof item.confidence !== "number" || typeof item.reason !== "string") return undefined
     if (typeof item.needs_plan !== "boolean" || typeof item.prompted !== "boolean") return undefined
     if (typeof item.latency !== "number" || typeof item.chiefModel !== "string") return undefined
+    if (
+      item.access !== undefined &&
+      (!Schema.is(Access)(item.access) || typeof item.userID !== "string" || !item.userID)
+    )
+      return undefined
     if (item.direct === true || item.request !== request(metadata)) return undefined
     return item as Pending
   }

@@ -358,7 +358,7 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: PromptPayload,
           success: described(HttpApiSchema.NoContent, "Prompt accepted"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: [HttpApiError.BadRequest, ApiNotFoundError, HttpApiError.ServiceUnavailable], // kilocode_change - refuse new async work during retirement
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.prompt_async",

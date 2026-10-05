@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionSchema as SessionV2 } from "@opencode-ai/core/session/schema" // kilocode_change - identifier schemas must not initialize services
 import { statics } from "@opencode-ai/core/schema"
 
 export const SessionID = SessionV2.ID

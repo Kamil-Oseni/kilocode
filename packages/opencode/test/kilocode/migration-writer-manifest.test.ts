@@ -14,6 +14,7 @@ describe("profile writer manifest", () => {
       "profile.cache.browser-uploads",
       "profile.credentials.auth",
       "profile.credentials.mcp",
+      "profile.data.memory",
       "profile.data.revert-note",
       "profile.data.tool-output",
       "profile.log.diagnostics",

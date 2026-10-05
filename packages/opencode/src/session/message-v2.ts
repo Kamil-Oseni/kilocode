@@ -37,7 +37,9 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Snapshot } from "@/snapshot" // kilocode_change
 import { SessionNetwork } from "./network" // kilocode_change
+import { OllamaBridgeError } from "@/kilocode/provider/ollama-bridge" // kilocode_change
 import { CodexAuthExpiredError } from "@/kilocode/provider/codex-refresh" // kilocode_change
+import { overflow } from "@/kilocode/provider/native-error" // kilocode_change
 import { KiloSessionMessageOrder } from "@/kilocode/session/message-order" // kilocode_change
 import * as TextStream from "@/kilocode/text-stream" // kilocode_change
 import { KiloModelHistory } from "@/kilocode/session/model-history" // kilocode_change - validate reconstructed provider history
@@ -757,6 +759,10 @@ export function fromError(
   e: unknown,
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
+  // kilocode_change start - preserve classified native context overflow before the generic Error fallback
+  const native = overflow(e)
+  if (native) return native
+  // kilocode_change end
   switch (true) {
     case e instanceof DOMException && e.name === "AbortError":
       return new AbortedError(
@@ -783,6 +789,10 @@ export function fromError(
         },
         { cause: e },
       ).toObject() // kilocode_change end
+    // kilocode_change start - retain the explicit local protocol refusal before generic cause-chain network classification
+    case e instanceof OllamaBridgeError:
+      return new NamedError.Unknown({ message: e.message }, { cause: e }).toObject()
+    // kilocode_change end
     case SessionNetwork.disconnected(e): // kilocode_change start
       return new APIError(
         {

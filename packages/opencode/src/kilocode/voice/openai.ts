@@ -26,6 +26,7 @@ import * as Obligations from "./openai-obligations"
 import { Storage } from "@/storage/storage"
 import type * as TaskWorker from "@/kilocode/session/task-worker"
 import { mutate } from "@/kilocode/task/mutation"
+import { Reconciliation } from "./reconciliation-schema"
 import {
   OpenAIBinding,
   OpenAICall,
@@ -74,30 +75,6 @@ type Reservation = {
   lease: Admission
   bound?: boolean
 }
-const Count = Schema.Number.check(
-  Schema.isInt(),
-  Schema.isGreaterThanOrEqualTo(0),
-  Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER),
-)
-const Key = Schema.String.check(Schema.isMaxLength(128))
-const Reconciliation = Schema.Struct({
-  version: Schema.Literal(1),
-  cycle: Count,
-  high: Key,
-  after: Schema.optional(Key),
-  status: Schema.Literals(["running", "failed", "complete"]),
-  scanned: Count,
-  receipts: Count,
-  quarantined: Count,
-  updatedAt: Schema.Finite,
-  failure: Schema.optional(
-    Schema.Struct({
-      id: Key,
-      message: Schema.String.check(Schema.isMaxLength(240)),
-    }),
-  ),
-})
-type Reconciliation = typeof Reconciliation.Type
 type Deps = {
   database: Database.Interface
   storage: Storage.Interface

@@ -1,11 +1,14 @@
+import { RuntimeRegistry } from "./runtime-registry"
+
 /** An outer owner can retire a lazy runtime once; callers cannot reacquire it during or after disposal. */
 export function runtimeOwner<A extends { dispose(): Promise<void> }>(create: () => A) {
   let current: A | undefined
   let closing: Promise<void> | undefined
   let closed = false
-  return {
+  const owner = {
     get(): A {
       if (closed) throw new Error("Core service runtime is closed")
+      RuntimeRegistry.check()
       return (current ??= create())
     },
     dispose(): Promise<void> {
@@ -14,4 +17,6 @@ export function runtimeOwner<A extends { dispose(): Promise<void> }>(create: () 
       return closing
     },
   }
+  RuntimeRegistry.register(() => owner.dispose())
+  return owner
 }

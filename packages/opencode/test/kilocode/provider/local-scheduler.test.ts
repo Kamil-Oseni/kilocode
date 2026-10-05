@@ -64,6 +64,70 @@ async function until(check: () => boolean) {
 }
 
 describe("local inference scheduler with real HTTP streams", () => {
+  test("interactive requests overtake background work with a three-request fairness limit", async () => {
+    const host = fixture()
+    const queue = createLocalScheduler()
+    try {
+      const first = await queue.fetch(fetch, host.url("/first"))
+      const worker = queue.fetch(fetch, host.url("/worker"), undefined, "background")
+      const jobs = [1, 2, 3, 4].map((id) => queue.fetch(fetch, host.url(`/chat${id}`), undefined, "interactive"))
+      host.end("/first")
+      await first.text()
+      for (const [path, pending] of [
+        ["/chat1", jobs[0]],
+        ["/chat2", jobs[1]],
+        ["/chat3", jobs[2]],
+        ["/worker", worker],
+        ["/chat4", jobs[3]],
+      ] as const) {
+        const response = await pending
+        expect(host.starts.at(-1)).toBe(path)
+        expect(queue.snapshot().active).toBe(1)
+        host.end(path)
+        await response.text()
+      }
+      expect(host.starts).toEqual(["/first", "/chat1", "/chat2", "/chat3", "/worker", "/chat4"])
+      expect(queue.snapshot()).toEqual({ active: 0, queued: 0, bytes: 0 })
+    } finally {
+      await host.close()
+    }
+  })
+
+  test("one cached local transport classifies each call and strips its internal priority tag", async () => {
+    const host = fixture()
+    const tags: (string | null)[] = []
+    const transport: typeof fetch = Object.assign(
+      (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        tags.push(new Headers(init?.headers).get("x-raya-inference-lane"))
+        return fetch(input, init)
+      },
+      { preconnect: fetch.preconnect },
+    )
+    const request = localFetch({ localInference: true }, transport)
+    try {
+      const first = await request(host.url("/first"))
+      const worker = request(host.url("/worker"), {
+        headers: { "x-raya-inference-lane": "background", "x-value": "worker" },
+      })
+      const chat = request(host.url("/chat"), {
+        headers: new Headers({ "x-raya-inference-lane": "interactive", "x-value": "chat" }),
+      })
+      host.end("/first")
+      await first.text()
+      const reply = await chat
+      expect(host.starts).toEqual(["/first", "/chat"])
+      host.end("/chat")
+      await reply.text()
+      const background = await worker
+      host.end("/worker")
+      await background.text()
+      expect(tags).toEqual([null, null, null])
+      expect(host.requests.map((item) => item.header)).toEqual([null, "chat", "worker"])
+    } finally {
+      await host.close()
+    }
+  })
+
   test("headers do not release a slot; EOF admits the next request", async () => {
     const host = fixture()
     const queue = createLocalScheduler()

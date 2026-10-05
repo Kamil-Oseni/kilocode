@@ -8,6 +8,7 @@ import { Shell } from "@opencode-ai/core/shell"
 import * as WindowsTree from "./windows-tree"
 import { guardian } from "./windows-job"
 import { NativeProcess } from "@opencode-ai/core/kilocode/process-host/index"
+import { image } from "../daemon/ownership"
 
 export namespace BackgroundProcessRunner {
   const MARKER = "__background-process-runner"
@@ -34,6 +35,8 @@ export namespace BackgroundProcessRunner {
       go: `${control}.go`,
       job: `${control}.job`,
       drained: `${control}.drained`,
+      retired: `${control}.retired`,
+      capture: `${control}.capture`,
     }
   }
 
@@ -304,7 +307,13 @@ export namespace BackgroundProcessRunner {
         if (performance.now() >= deadline) throw new Error("Native containment guardian did not admit the command")
         await Bun.sleep(50)
       }
-      await Filesystem.writeJson(sidecars(input.control).ready, { version: 1, token: input.token }, MODE)
+      const witness = await image(child.pid)
+      if (witness.birth !== root.birth) throw new Error("Contained command image identity changed")
+      await Filesystem.writeJson(
+        sidecars(input.control).ready,
+        { version: 1, token: input.token, pid: child.pid, ...witness },
+        MODE,
+      )
       await Filesystem.write(sidecars(input.control).go, "go", MODE)
       opened = true
       if ((await closed) !== 0 || !(await drained(input.control, input.token)))
@@ -379,6 +388,8 @@ export namespace BackgroundProcessRunner {
       rm(files.probe, { force: true }),
       rm(files.ack, { force: true }),
       rm(files.drained, { force: true }),
+      rm(files.retired, { force: true }),
+      rm(files.capture, { force: true }),
       rm(files.ready, { force: true }),
       rm(files.go, { force: true }),
       rm(files.job, { force: true }),
@@ -386,7 +397,7 @@ export namespace BackgroundProcessRunner {
     const output = await writer(input)
     const child = spawn(input.shell, gate(input), {
       cwd: input.cwd,
-      env: process.env,
+      env: { ...process.env, RAYA_BACKGROUND_CAPTURE_REQUEST: files.capture },
       stdio: input.terminal ? "inherit" : ["ignore", "pipe", "pipe"],
       windowsHide: true,
     })

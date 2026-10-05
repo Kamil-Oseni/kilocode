@@ -41,7 +41,7 @@ export class Storage {
   private readonly db: Client
 
   constructor(path: string) {
-    this.sqlite = profileSqlite(path, () => finalizing(new Database(path, { create: true })))
+    this.sqlite = profileSqlite(path, (file) => finalizing(new Database(file, { create: true })))
     this.db = drizzle({ client: this.sqlite, schema: tables }) as Client
     this.sqlite.exec("PRAGMA journal_mode = WAL")
     this.sqlite.exec("PRAGMA synchronous = NORMAL")

@@ -5,8 +5,12 @@ import { MemoryLog } from "@kilocode/kilo-memory/effect/log"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
 import { bind } from "@/kilocode/instance"
 import { MemoryEvents } from "./events"
+import { install } from "./admission"
 
 const log = Log.create({ service: "memory" })
+
+// Register the loaded module's retirement fence before a lazy bootstrap can realize it during shutdown.
+install()
 
 let installed = false
 

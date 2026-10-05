@@ -234,7 +234,7 @@ describe("Raya Chief routing", () => {
   })
 
   // raya_change start - Auto phase enforcement regression
-  it("withholds delegation until Chief routes a fresh request", () => {
+  it("advertises only Chief until an ordinary fresh request is routed", () => {
     const tools = {
       chief_route: { id: "chief" },
       chief_plan: { id: "plan-branches" },
@@ -260,8 +260,8 @@ describe("Raya Chief routing", () => {
       "update_goal_plan",
     ]
     const initial = workflow.filter((name) => name !== "task")
-    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "route" }))).toEqual(initial)
-    expect(Object.keys(RayaChief.tools(tools, undefined))).toEqual(initial)
+    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "route" }))).toEqual(["chief_route"])
+    expect(Object.keys(RayaChief.tools(tools, undefined))).toEqual(["chief_route"])
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "goal" }))).toEqual(workflow)
     expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "done" }))).toEqual(workflow)
@@ -274,13 +274,33 @@ describe("Raya Chief routing", () => {
       ),
     ).toContain("task")
 
-    // raya_change start - Auto's prompt tells it to ask the user directly, so ask_options must
-    // survive the whitelist; the canvas tools only join it when the user invoked /canvas.
-    const rich = { ...tools, ask_options: { id: "ask" }, create_canvas: { id: "cc" }, update_canvas: { id: "uc" } }
-    expect(Object.keys(RayaChief.tools(rich, { [RayaChief.phaseKey]: "route" }))).toEqual([...initial, "ask_options"])
+    // Ordinary fresh requests route first; clarification remains available after routing and
+    // during explicit Routines or canvas workflows.
+    const rich = {
+      ...tools,
+      ask_options: { id: "ask" },
+      question: { id: "question" },
+      create_canvas: { id: "cc" },
+      update_canvas: { id: "uc" },
+    }
+    expect(RayaChief.tools(rich, { [RayaChief.phaseKey]: "route" })).toEqual({ chief_route: tools.chief_route })
+    expect(RayaChief.tools({ question: rich.question }, undefined)).toEqual({})
+    expect(
+      Object.keys(
+        RayaChief.tools(rich, { [RayaChief.requestKey]: "Read acceptance.txt and report its exact content" }),
+      ),
+    ).toEqual(["chief_route"])
+    expect(Object.keys(RayaChief.tools(rich, { "raya.canvas.command": false }))).toEqual(["chief_route"])
+    for (const phase of ["task", "goal", "done"])
+      expect(Object.keys(RayaChief.tools(rich, { [RayaChief.phaseKey]: phase }))).toEqual([
+        ...workflow,
+        "ask_options",
+        "question",
+      ])
     expect(Object.keys(RayaChief.tools(rich, { "raya.canvas.command": true }))).toEqual([
       ...initial,
       "ask_options",
+      "question",
       "create_canvas",
       "update_canvas",
     ])
@@ -296,6 +316,7 @@ describe("Raya Chief routing", () => {
     const expected = [
       ...initial,
       "ask_options",
+      "question",
       "schedule_task",
       "inspect_routines",
       "create_organization",
@@ -322,7 +343,7 @@ describe("Raya Chief routing", () => {
       expect(Object.keys(RayaChief.tools(routines, { [RayaChief.requestKey]: request }))).toEqual(expected)
     expect(
       Object.keys(RayaChief.tools(routines, { [RayaChief.requestKey]: "Build a team dashboard for my workers" })),
-    ).toEqual([...initial, "ask_options"])
+    ).toEqual(["chief_route"])
     expect(RayaChief.prompt(agents)).toContain("use the available Routines tools yourself")
     expect(RayaChief.prompt(agents)).toContain("chief_plan")
     expect(RayaChief.prompt(agents)).toContain("background:true")
@@ -344,7 +365,6 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.routine("Spawn an agent to review this pull request")).toBe(false)
     expect(RayaChief.routine("I want an agent to review this pull request")).toBe(false)
     expect(RayaChief.routine("Create an agent to fix this bug")).toBe(false)
-    // raya_change end
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "goal" })).toBe("route")
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "goal" }, true)).toBe("task")
     expect(RayaChief.begin({ [RayaChief.phaseKey]: "route" }, true)).toBe("task")

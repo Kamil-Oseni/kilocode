@@ -4,7 +4,6 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Global } from "./global"
 import { Flag } from "./flag/flag"
-import { Flock } from "./util/flock"
 import { Hash } from "./util/hash"
 import { FSUtil } from "./fs-util"
 import { InstallationChannel, InstallationVersion } from "./installation/version"
@@ -13,6 +12,7 @@ import { EventV2 } from "./event"
 import { makeGlobalNode } from "./effect/app-node"
 import { httpClient } from "./effect/app-node-platform"
 import { Observability } from "./observability" // kilocode_change
+import { catalog } from "./kilocode/catalog-owner" // kilocode_change - all Core graphs share catalog disk admission
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -174,10 +174,14 @@ const layer = Layer.effect(
       source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`, // kilocode_change
     )
     const ttl = Duration.minutes(5)
-    const lockKey = `models-dev:${filepath}`
 
-    const fresh = Effect.fnUntraced(function* () {
-      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    const fresh = Effect.fnUntraced(function* (file: string) {
+      // kilocode_change - canonical admitted path
+      // kilocode_change start - only a missing cache is an expected stat fallback
+      const stat = yield* catalog
+        .observe(fs.stat(file), (error) => error.reason._tag === "NotFound")
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      // kilocode_change end
       if (!stat) return false
       const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
       return Date.now() - mtime < Duration.toMillis(ttl)
@@ -192,82 +196,110 @@ const layer = Layer.effect(
       )
     })
 
-    const loadFromDisk = fs.readJson(Flag.KILO_MODELS_PATH ?? filepath).pipe(
-      Effect.catch((error) => {
-        if (Flag.KILO_MODELS_PATH === undefined && error._tag === "FileSystemError" && error.method === "readJson") {
-          return fs.remove(filepath, { force: true }).pipe(Effect.ignore, Effect.as(undefined))
-        }
-        return Effect.succeed(undefined)
-      }),
-      Effect.map((v) => v as Record<string, Provider> | undefined),
-    )
+    // kilocode_change start - retain unexpected reads; missing/invalid catalog recovery remains supported
+    const loadFromDisk = (file: string) =>
+      catalog
+        .observe(fs.readJson(Flag.KILO_MODELS_PATH ?? file), (error) =>
+          error._tag === "FileSystemError" ? error.method === "readJson" : error.reason._tag === "NotFound",
+        )
+        .pipe(
+          // kilocode_change end
+          Effect.catch((error) => {
+            if (
+              Flag.KILO_MODELS_PATH === undefined &&
+              error._tag === "FileSystemError" &&
+              error.method === "readJson"
+            ) {
+              return fs.remove(file, { force: true }).pipe(Effect.uninterruptible, Effect.as(undefined)) // kilocode_change - join admitted native deletion and preserve failure
+            }
+            return Effect.succeed(undefined)
+          }),
+          Effect.map((v) => v as Record<string, Provider> | undefined),
+        )
 
     const loadSnapshot = Effect.sync(() => (typeof KILO_MODELS_DEV === "undefined" ? undefined : KILO_MODELS_DEV))
 
-    const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
+    const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* (file: string) {
+      // kilocode_change
       const text = yield* fetchApi()
-      const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
+      const tempfile = `${file}.${process.pid}.${Date.now()}.tmp` // kilocode_change
       yield* fs.writeWithDirs(tempfile, text).pipe(
-        Effect.andThen(fs.rename(tempfile, filepath)),
-        Effect.catch((error) =>
-          Effect.gen(function* () {
-            yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
-            return yield* Effect.fail(error)
-          }),
-        ),
+        // kilocode_change start - join native publication and cleanup; retain either failure
+        Effect.andThen(fs.rename(tempfile, file)),
+        Effect.ensuring(fs.remove(tempfile, { force: true }).pipe(Effect.orDie)),
+        Effect.uninterruptible,
+        // kilocode_change end
       )
       return text
     })
 
-    const populate = Effect.gen(function* () {
-      const fromDisk = yield* loadFromDisk
-      if (fromDisk) return fromDisk
-      const snapshot = yield* loadSnapshot
-      if (snapshot) return snapshot
-      if (Flag.KILO_DISABLE_MODELS_FETCH) return {}
-      // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
-      return yield* Effect.scoped(
+    const populate = catalog
+      .run(filepath, (file) =>
         Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
-          // kilocode_change start - re-read under the lock: a concurrent refresh
-          // may already have recovered the corrupted cache while we waited, and
-          // fetching again here would duplicate the network call.
-          const rechecked = yield* loadFromDisk
-          if (rechecked) return rechecked
-          // kilocode_change end
-          const text = yield* fetchAndWrite()
-          return JSON.parse(text) as Record<string, Provider>
+          // kilocode_change
+          const fromDisk = yield* loadFromDisk(file) // kilocode_change
+          if (fromDisk) return fromDisk
+          const snapshot = yield* loadSnapshot
+          if (snapshot) return snapshot
+          if (Flag.KILO_DISABLE_MODELS_FETCH) return {}
+          // kilocode_change - catalog owns canonical cross-process locking before any deletion or publication
+          return yield* Effect.scoped(
+            Effect.gen(function* () {
+              // kilocode_change start - re-read under the lock: a concurrent refresh
+              // may already have recovered the corrupted cache while we waited, and
+              // fetching again here would duplicate the network call.
+              const rechecked = yield* loadFromDisk(file)
+              if (rechecked) return rechecked
+              // kilocode_change end
+              const text = yield* fetchAndWrite(file) // kilocode_change
+              return JSON.parse(text) as Record<string, Provider>
+            }),
+          )
         }),
       )
-    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+      .pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie) // kilocode_change
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
 
     const get = (): Effect.Effect<Record<string, Provider>> => cachedGet
 
-    const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-      if (!force && (yield* fresh())) return
-      yield* Effect.scoped(
+    const action = Effect.fn("ModelsDev.refresh")(function* (file: string, force = false) {
+      // kilocode_change
+      if (!force && (yield* fresh(file))) return // kilocode_change
+      return yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
           // Re-check under the lock: another process may have refreshed between
           // our outer check and lock acquisition.
-          if (!force && (yield* fresh())) return
-          yield* fetchAndWrite()
+          if (!force && (yield* fresh(file))) return // kilocode_change
+          yield* fetchAndWrite(file) // kilocode_change
           yield* invalidate
           yield* ModelsRefresh.notify() // kilocode_change
           yield* events.publish(Event.Refreshed, {})
         }),
-      ).pipe(
+      )
+    }) // kilocode_change
+    const report = <A, E, R>(body: Effect.Effect<A, E, R>) =>
+      body.pipe(
+        // kilocode_change
         Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
         Effect.ignore,
         Effect.provideService(Logger.CurrentLoggers, loggers), // kilocode_change
       )
-    })
+    const refresh = (force = false) => report(catalog.run(filepath, (file) => action(file, force))) // kilocode_change - observe before ignore
 
     if (!Flag.KILO_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
-      // Schedule.spaced runs the effect once, then waits between completions.
-      yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced("60 minutes")), Effect.ignore))
+      // kilocode_change start - reserve initial refresh before fork; later ticks need fresh admission
+      const scope = yield* Effect.scope
+      yield* catalog.schedule(
+        filepath,
+        (file) =>
+          action(file).pipe(
+            Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
+            Effect.provideService(Logger.CurrentLoggers, loggers),
+          ),
+        scope,
+      )
+      // kilocode_change end
     }
 
     return Service.of({ get, refresh })

@@ -29,6 +29,23 @@ afterEach(async () => {
   await resetDatabase()
 })
 
+test("production listener quiescence keeps transport alive while refusing later dispatch", async () => {
+  Flag.KILO_SERVER_PASSWORD = undefined
+  delete process.env.KILO_SERVER_PASSWORD
+  const listener = await Server.listen({ hostname: "127.0.0.1", port: 0 })
+  try {
+    expect((await fetch(new URL("/global/health", listener.url))).status).toBe(200)
+    const closed = listener.quiesce()
+    expect(listener.quiesce()).toBe(closed)
+    await closed
+    const refused = await fetch(new URL("/global/health", listener.url))
+    expect(refused.status).toBe(503)
+    expect(await refused.text()).toBe("Server is shutting down")
+  } finally {
+    await listener.stop(true)
+  }
+})
+
 test("listener aborts shared parent and subagent runners", async () => {
   Flag.KILO_SERVER_PASSWORD = undefined
   delete process.env.KILO_SERVER_PASSWORD

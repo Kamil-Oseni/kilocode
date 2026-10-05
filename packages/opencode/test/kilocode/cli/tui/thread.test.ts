@@ -68,80 +68,76 @@ describe("kilo tui thread", () => {
     expect(calls).toBe(1)
   })
 
-  test(
-    "starts the TUI from a directory without OpenTUI dependencies",
-    async () => {
-      await using root = await tmpdir()
-      const state = { text: "", exit: undefined as Exit | undefined }
-      const ready = Promise.withResolvers<void>()
-      const stopped = Promise.withResolvers<void>()
-      const proc = spawn(
-        process.execPath,
-        [
-          "--conditions=browser",
-          `--preload=${fileURLToPath(import.meta.resolve("@opentui/solid/preload"))}`,
-          path.resolve(import.meta.dir, "../../../../src/index.ts"),
-        ],
-        {
-          name: "xterm-256color",
-          cols: 120,
-          rows: 40,
-          cwd: root.path,
-          env: sanitizedProcessEnv({
-            HOME: root.path,
-            XDG_CONFIG_HOME: path.join(root.path, ".config"),
-            XDG_DATA_HOME: path.join(root.path, ".local/share"),
-            XDG_STATE_HOME: path.join(root.path, ".local/state"),
-            XDG_CACHE_HOME: path.join(root.path, ".cache"),
-            KILO_TEST_HOME: root.path,
-            KILO_CONFIG_CONTENT: "{}",
-            KILO_AUTH_CONTENT: "{}",
-            KILO_DISABLE_PROJECT_CONFIG: "1",
-            KILO_DISABLE_AUTOUPDATE: "1",
-            KILO_DISABLE_MODELS_FETCH: "1",
-            KILO_DISABLE_TERMINAL_TITLE: "0",
-            KILO_DEV_CWD: "",
-            KILO_PURE: "1",
-            KILO_NO_DAEMON: "1",
-            TERM: "xterm-256color",
-          }),
-        },
-      )
-      const data = proc.onData((chunk) => {
-        state.text = (state.text + chunk).slice(-20_000)
-        if (state.text.includes("TUI worker error")) {
-          ready.reject(new Error(`TUI worker failed during startup:\n${state.text}`))
-          return
-        }
-        // The title is emitted only after the worker-backed TUI reaches its rendered app.
-        if (state.text.includes("Raya CLI")) ready.resolve()
-      })
-      const exit = proc.onExit((event) => {
-        state.exit = event
-        stopped.resolve()
-        ready.reject(
-          new Error(
-            `TUI exited before rendering (code ${event.exitCode}, signal ${event.signal ?? "none"}):\n${state.text}`,
-          ),
-        )
-      })
-      const timer = setTimeout(() => {
-        ready.reject(new Error(`Timed out waiting for the TUI to render:\n${state.text}`))
-      }, 30_000)
-
-      try {
-        await ready.promise
-        expect(state.text).toContain("Raya CLI")
-      } finally {
-        clearTimeout(timer)
-        data.dispose()
-        if (!state.exit) proc.kill()
-        await stopped.promise
-        exit.dispose()
+  test("starts the TUI from a directory without OpenTUI dependencies", async () => {
+    await using root = await tmpdir()
+    const state = { text: "", exit: undefined as Exit | undefined }
+    const ready = Promise.withResolvers<void>()
+    const stopped = Promise.withResolvers<void>()
+    const proc = spawn(
+      process.execPath,
+      [
+        "--conditions=browser",
+        `--preload=${fileURLToPath(import.meta.resolve("@opentui/solid/preload"))}`,
+        path.resolve(import.meta.dir, "../../../../src/index.ts"),
+      ],
+      {
+        name: "xterm-256color",
+        cols: 120,
+        rows: 40,
+        cwd: root.path,
+        env: sanitizedProcessEnv({
+          HOME: root.path,
+          XDG_CONFIG_HOME: path.join(root.path, ".config"),
+          XDG_DATA_HOME: path.join(root.path, ".local/share"),
+          XDG_STATE_HOME: path.join(root.path, ".local/state"),
+          XDG_CACHE_HOME: path.join(root.path, ".cache"),
+          KILO_TEST_HOME: root.path,
+          KILO_CONFIG_CONTENT: "{}",
+          KILO_AUTH_CONTENT: "{}",
+          KILO_DISABLE_PROJECT_CONFIG: "1",
+          KILO_DISABLE_AUTOUPDATE: "1",
+          KILO_DISABLE_MODELS_FETCH: "1",
+          KILO_DISABLE_TERMINAL_TITLE: "0",
+          KILO_DEV_CWD: "",
+          KILO_PURE: "1",
+          KILO_NO_DAEMON: "1",
+          TERM: "xterm-256color",
+        }),
+      },
+    )
+    const data = proc.onData((chunk) => {
+      state.text = (state.text + chunk).slice(-20_000)
+      if (state.text.includes("TUI worker error")) {
+        ready.reject(new Error(`TUI worker failed during startup:\n${state.text}`))
+        return
       }
-    },
-    45_000,
-  )
+      // The title is emitted only after the worker-backed TUI reaches its rendered app.
+      if (state.text.includes("Raya CLI")) ready.resolve()
+    })
+    const exit = proc.onExit((event) => {
+      state.exit = event
+      stopped.resolve()
+      ready.reject(
+        new Error(
+          `TUI exited before rendering (code ${event.exitCode}, signal ${event.signal ?? "none"}):\n${state.text}`,
+        ),
+      )
+    })
+    const timer = setTimeout(() => {
+      ready.reject(new Error(`Timed out waiting for the TUI to render:\n${state.text}`))
+    }, 30_000)
+
+    try {
+      await ready.promise
+      expect(state.text).toContain("Raya CLI")
+    } finally {
+      clearTimeout(timer)
+      data.dispose()
+      if (!state.exit) proc.kill()
+      await stopped.promise
+      exit.dispose()
+    }
+  }, 45_000)
 
   test("ignores stale PWD after cwd is changed by a process wrapper", async () => {
     await using root = await tmpdir()
@@ -175,7 +171,7 @@ describe("kilo tui thread", () => {
     expect(embeddedRemoteExitClient(false, undefined)).toBeUndefined()
   })
 
-  test("continues TUI startup when remote-exit readiness and cleanup never reply", async () => {
+  test("legacy synthetic never-reply bridge continues rendering and retains retirement refusal", async () => {
     const calls: string[] = []
     let handler: (() => void) | undefined
     let tuiContinued = false
@@ -183,7 +179,7 @@ describe("kilo tui thread", () => {
       tuiContinued = true
     })
 
-    await runEmbeddedRemoteExitBridge({
+    const failure = await runEmbeddedRemoteExitBridge({
       client: {
         on(_event, next) {
           calls.push("subscribe")
@@ -201,8 +197,13 @@ describe("kilo tui thread", () => {
       exit: () => {},
       done,
       timeoutMs: 5,
-    })
+    }).catch((err: unknown) => err)
 
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors.map(String)).toEqual([
+      "Error: remote exit startup timed out",
+      "Error: remote exit cleanup timed out",
+    ])
     expect(tuiContinued).toBe(true)
     expect(calls).toEqual(["subscribe", "tuiReady", "tuiGone", "unsubscribe"])
     expect(handler).toBeUndefined()

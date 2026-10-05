@@ -13,6 +13,7 @@ import type { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
 import { RayaToolModel } from "@/kilocode/chief/tool-model"
 import z from "zod"
+import { Refusal } from "../session/tool-refusal"
 
 // raya_change start - Milestone D automatic Chief routing and bounded child runs
 const STEP_KEY = "raya.task.stepCap"
@@ -134,7 +135,7 @@ export namespace KiloTask {
 
   export function brief(input: { prompt?: string; brief?: Brief; cap: number }) {
     const objective = input.brief?.objective.trim() || input.prompt?.trim()
-    if (!objective) throw new Error("Task requires brief.objective or prompt")
+    if (!objective) throw new Refusal("task-objective", "Task requires brief.objective or prompt")
     return [
       "<subagent_brief>",
       `Objective: ${objective}`,
@@ -186,6 +187,7 @@ export namespace KiloTask {
     caller: Agent.Info
     session: Pick<Session.Info, "permission">
     mcp: Config.Info["mcp"]
+    scoped?: boolean
   }): Permission.Ruleset {
     const rules = Permission.merge(input.caller.permission ?? [], input.session.permission ?? [])
     const prefixes = Object.keys(input.mcp ?? {}).map((k) => k.replace(/[^a-zA-Z0-9_-]/g, "_") + "_")
@@ -195,9 +197,13 @@ export namespace KiloTask {
     // `bash` is intentionally excluded — see the doc comment above (#11523).
     const mutation = new Set(["edit", ...guarded.filter((p) => p !== "bash")])
     const inherited = rules.filter(
-      (r: Permission.Rule) => r.action === "deny" && (mutation.has(r.permission) || isMcp(r.permission)),
+      (r: Permission.Rule) =>
+        r.action === "deny" &&
+        (!input.scoped || r.permission !== "edit") &&
+        (mutation.has(r.permission) || isMcp(r.permission)),
     )
     for (const permission of mutation) {
+      if (input.scoped && permission === "edit") continue
       if (Permission.evaluate(permission, "*", rules).action !== "deny") continue
       inherited.push({ permission, pattern: "*", action: "deny" })
     }

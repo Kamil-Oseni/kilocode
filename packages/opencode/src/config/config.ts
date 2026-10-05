@@ -2,11 +2,9 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
-import { pathToFileURL } from "url"
 import os from "os"
 import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
-import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -24,7 +22,6 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Fiber, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { RemoteAuthError } from "@opencode-ai/core/v1/config/error"
@@ -59,6 +56,9 @@ import { installLocalPluginDependency, needsLocalPluginDependency } from "@/kilo
 import * as RepairConfig from "@/kilocode/config/repair"
 import { Storage } from "@/storage/storage"
 import { PermissionEnv } from "@/kilocode/config/permission-env"
+import { ConfigIntent } from "@opencode-ai/core/kilocode/config-intent"
+import { ConfigPublication } from "@/kilocode/config/publication"
+import { ConfigSetup } from "@/kilocode/config/setup"
 // kilocode_change end
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import * as Log from "@opencode-ai/core/util/log" // kilocode_change
@@ -68,12 +68,17 @@ const log = Log.create({ service: "config" }) // kilocode_change
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
 function mergeConfig(target: Info, source: Info): Info {
-  return mergeDeep(target, source) as Info
+  // kilocode_change start
+  const merged = mergeDeep(target, source) as Info
+  ConfigIntent.combine(target, source, merged)
+  return merged
+  // kilocode_change end
 }
 
 function mergeConfigConcatArrays(target: Info, source: Info, trusted = true): Info {
   // kilocode_change
   const merged = trusted ? mergeConfig(target, source) : KilocodeConfig.mergeProject(target, source)
+  ConfigIntent.combine(target, source, merged) // kilocode_change
   if (target.instructions && source.instructions) {
     merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
   }
@@ -284,8 +289,8 @@ const layer = Layer.effect(
     const npmSvc = yield* Npm.Service
     const http = yield* HttpClient.HttpClient
     const git = yield* Git.Service // kilocode_change
-    const flock = yield* EffectFlock.Service // kilocode_change - serialize global config read-merge-write updates
     const storage = yield* Storage.Service // kilocode_change - inspect retained repair ownership before optional setup
+    const intent = ConfigIntent.graph("v1", Global.Path) // kilocode_change
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
 
@@ -334,21 +339,18 @@ const layer = Layer.effect(
       )
       const parsed = ConfigParse.jsonc(expanded, source)
       const data = ConfigParse.schema(ConfigV1.Info, normalizeLoadedConfig(parsed, source), source)
-      if (!("path" in options)) return data
+      // kilocode_change start
+      if (!("path" in options)) {
+        ConfigIntent.unavailable(intent)
+        return data
+      }
+      yield* Effect.promise(() => ConfigIntent.loaded(intent, data, options.path, options.original ?? text))
+      // kilocode_change end
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
       if (!data.$schema) {
         // kilocode_change start
         data.$schema = "https://app.kilo.ai/config.json"
-        const original = options.original ?? text
-        const edits = modify(original, ["$schema"], "https://app.kilo.ai/config.json", {
-          formattingOptions: { insertSpaces: true, tabSize: 2 },
-          getInsertionIndex: () => 0,
-        })
-        const updated = applyEdits(original, edits)
-        if (updated !== original && options.setup !== false) {
-          yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
-        }
         // kilocode_change end
       }
       return data
@@ -363,7 +365,13 @@ const layer = Layer.effect(
       setup = true, // kilocode_change - optional writes must not change managed repair source
     ) {
       yield* Effect.logInfo("loading", { path: filepath })
-      const text = yield* readConfigFile(filepath)
+      const original = yield* readConfigFile(filepath)
+      // kilocode_change start - reparse the locked current bytes after optional schema publication
+      const text =
+        original && setup && ConfigSetup.missing(original, filepath)
+          ? yield* Effect.promise(() => ConfigSetup.schema(filepath))
+          : original
+      // kilocode_change end
       if (!text) return {} as Info
       // kilocode_change start - remove variable-bearing project MCP headers before generic substitution can read them
       const sanitized =
@@ -398,9 +406,12 @@ const layer = Layer.effect(
           existsSync(path.join(Global.Path.config, name)),
         )
         if (!exists) {
-          yield* fs
-            .writeWithDirs(file, JSON.stringify({ $schema: "https://app.kilo.ai/config.json" }, null, 2))
-            .pipe(Effect.catch(() => Effect.void))
+          yield* Effect.promise(() =>
+            ConfigSetup.seed(
+              KilocodeConfig.READ_GLOBAL_CONFIG_FILES.map((name) => path.join(Global.Path.config, name)),
+              file,
+            ),
+          ).pipe(Effect.catch(() => Effect.void))
         }
         // kilocode_change end
       }
@@ -425,18 +436,22 @@ const layer = Layer.effect(
 
       const legacy = path.join(Global.Path.config, "config")
       if (existsSync(legacy)) {
-        yield* Effect.promise(() =>
-          import(pathToFileURL(legacy).href, { with: { type: "toml" } })
-            .then(async (mod) => {
-              const { provider, model, ...rest } = mod.default
-              if (provider && model) result.model = `${provider}/${model}`
-              result["$schema"] = "https://app.kilo.ai/config.json" // kilocode_change
-              result = mergeConfig(result, rest)
-              await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
-              await fsNode.unlink(legacy)
-            })
-            .catch(() => {}),
+        // kilocode_change start - migrate only the original legacy delta into a locked current destination
+        const files = KilocodeConfig.READ_GLOBAL_CONFIG_FILES.map((name) => path.join(Global.Path.config, name))
+        const converted = yield* Effect.promise(() =>
+          ConfigSetup.legacy(files, legacy, path.join(Global.Path.config, "config.json"), (before, patch) =>
+            mergeDeep(isRecord(before) ? before : {}, isRecord(patch) ? patch : {}),
+          ),
         )
+        if (converted) {
+          result = {}
+          for (const file of files)
+            result = mergeConfig(
+              result,
+              yield* loadFile(file, env, true, undefined, undefined, !/raya[.]jsonc?$/.test(file)),
+            )
+        }
+        // kilocode_change end
       }
 
       globalStamp = yield* KilocodeGlobalConfigStamp.read(fs, Global.Path.config) // kilocode_change
@@ -500,6 +515,7 @@ const layer = Layer.effect(
       function* (ctx: InstanceContext) {
         // kilocode_change start - warning accumulator and legacy Kilo config
         const warnings: Warning[] = []
+        const origin = ConfigIntent.graph("v1", Global.Path, ctx.directory)
         const setup = yield* RepairConfig.setup(storage, fs, ctx.directory)
         // Untrusted project config may only read files inside this root (worktree, or directory for non-git projects).
         const projectRoot = ctx.worktree === "/" ? ctx.directory : ctx.worktree
@@ -587,6 +603,7 @@ const layer = Layer.effect(
           const scope = kind ?? (yield* pluginScopeForSource(source))
           const trusted = sourceTrusted ?? scope === "global"
           const scoped = KilocodeConfig.scopeIndexing(SandboxConfig.scope(next, scope), scope)
+          ConfigIntent.inherit(next, scoped) // kilocode_change
           result = mergeConfigConcatArrays(result, scoped, trusted) // kilocode_change
           if (scoped.agent) configuredAgents = mergeDeep(configuredAgents, scoped.agent)
           if (next.instructions?.length) {
@@ -809,19 +826,34 @@ const layer = Layer.effect(
           result.command = mergeDeep(
             result.command ?? {},
             yield* Effect.promise(() =>
-              ConfigCommand.load(dir, warnings, dirTrusted, dirFileScope, sourceScopes(["command", "commands"])),
+              ConfigIntent.track(origin, () =>
+                ConfigCommand.load(
+                  dir,
+                  warnings,
+                  dirTrusted,
+                  dirFileScope,
+                  sourceScopes(["command", "commands"]),
+                  origin,
+                ),
+              ),
             ),
           )
           result.agent = KilocodeConfig.mergeAgentMarkdown(
             result.agent ?? {},
             yield* Effect.promise(() =>
-              ConfigAgent.load(dir, warnings, dirTrusted, dirFileScope, sourceScopes(["agent", "agents"])),
+              ConfigIntent.track(origin, () =>
+                ConfigAgent.load(dir, warnings, dirTrusted, dirFileScope, sourceScopes(["agent", "agents"]), origin),
+              ),
             ),
             configuredAgents,
           )
           result.agent = KilocodeConfig.mergeAgentMarkdown(
             result.agent ?? {},
-            yield* Effect.promise(() => ConfigAgent.loadMode(dir, warnings, dirTrusted, dirFileScope, dirSourceScope)),
+            yield* Effect.promise(() =>
+              ConfigIntent.track(origin, () =>
+                ConfigAgent.loadMode(dir, warnings, dirTrusted, dirFileScope, dirSourceScope, origin),
+              ),
+            ),
             configuredAgents,
           )
           // kilocode_change end
@@ -1003,6 +1035,7 @@ const layer = Layer.effect(
         // kilocode_change end
 
         yield* Effect.logInfo("instance config loaded") // kilocode_change - startup phase without private config values
+        ConfigIntent.ordered(origin, [result]) // kilocode_change
 
         return {
           config: result,
@@ -1090,10 +1123,18 @@ const layer = Layer.effect(
       // kilocode_change end
       const file = globalConfigFile()
       // kilocode_change start - serialize read-merge-write so concurrent approvals cannot lose rules
-      const result = yield* flock
-        .withLock(
+      const files = KilocodeConfig.READ_GLOBAL_CONFIG_FILES.map((name) => path.join(Global.Path.config, name))
+      const result = yield* ConfigPublication.run(
+        {
+          files,
+          targets: files
+            .filter((item) => item === file || existsSync(item))
+            .filter((item) => !/raya\.jsonc?$/.test(item)),
+        },
+        (tx) =>
           Effect.gen(function* () {
-            const before = (yield* readConfigFile(file)) ?? "{}"
+            if (globalConfigFile() !== file) throw new Error("Global config target changed during admission")
+            const before = (yield* Effect.promise(() => tx.read(file))) ?? "{}"
             const patch = writableGlobal(config)
             // Reads merge every global config file, so delete sentinels must be
             // removed from all of them, not just the primary write target.
@@ -1102,6 +1143,7 @@ const layer = Layer.effect(
               files: KilocodeConfig.GLOBAL_CONFIG_FILES.map((name) => path.join(Global.Path.config, name)),
               exclude: file,
               patch,
+              tx,
             })
 
             if (!file.endsWith(".jsonc")) {
@@ -1113,7 +1155,7 @@ const layer = Layer.effect(
               const next = KilocodeConfig.mergeConfig(writable(existing), patch)
               const serialized = JSON.stringify(next, null, 2)
               const changed = serialized !== before || propagated
-              if (serialized !== before) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
+              if (serialized !== before) yield* Effect.promise(() => tx.write(file, before, serialized)) // kilocode_change
               return { next, changed }
             }
 
@@ -1124,12 +1166,10 @@ const layer = Layer.effect(
               file,
             )
             const changed = updated !== before || propagated
-            if (updated !== before) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+            if (updated !== before) yield* Effect.promise(() => tx.write(file, before, updated)) // kilocode_change
             return { next, changed }
           }),
-          `config:global:${path.resolve(Global.Path.config)}`,
-        )
-        .pipe(Effect.orDie)
+      ).pipe(Effect.orDie)
       const next = result.next
       const changed = result.changed
       const sandboxChanged = changed && Object.hasOwn(config, "sandbox")
@@ -1187,17 +1227,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [
-    FSUtil.node,
-    Auth.node,
-    Account.node,
-    Env.node,
-    Npm.node,
-    httpClient,
-    Git.node,
-    EffectFlock.node,
-    Storage.node,
-  ], // kilocode_change
+  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient, Git.node, Storage.node], // kilocode_change
 })
 
 export * as Config from "./config"

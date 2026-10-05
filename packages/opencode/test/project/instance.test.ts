@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer, Cause, Exit } from "effect" // kilocode_change
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -189,6 +189,30 @@ describe("InstanceStore", () => {
       yield* store.reload({ directory: dir })
 
       expect(captured).toBe(first)
+    }),
+  )
+  // kilocode_change end
+
+  // kilocode_change start - failed finalizers must settle reload and permit later recovery
+  it.live("reload reports cleanup failure without leaving an unresolved cache entry", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const first = yield* store.load({ directory: dir })
+      const err = new Error("reload finalizer failed")
+      const off = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          registerDisposer((directory) => (directory === dir ? Promise.reject(err) : Promise.resolve())),
+        ),
+        (remove) => Effect.sync(remove),
+      )
+      const exit = yield* store.reload({ directory: dir }).pipe(Effect.exit, Effect.timeout("2 seconds"))
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(err)
+      off()
+      const restored = yield* store.load({ directory: dir }).pipe(Effect.timeout("2 seconds"))
+      expect(restored).not.toBe(first)
+      expect(yield* store.load({ directory: dir })).toBe(restored)
     }),
   )
   // kilocode_change end

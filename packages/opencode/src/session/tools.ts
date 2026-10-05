@@ -8,8 +8,11 @@ import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
 import { Permission } from "@/permission"
+import { visible as pathVisible } from "@/kilocode/tool/path-catalog" // kilocode_change
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
+import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - fence the original completed goal dispatch
+import { prepare as goalSchema } from "@/kilocode/goal/completion-schema" // kilocode_change - bind saved goal criteria before model schema transformation
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 
@@ -17,6 +20,7 @@ import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
+import { SessionRetirement } from "@/kilocode/session/retirement" // kilocode_change - own original registry tool callback fibers
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
@@ -33,6 +37,8 @@ import { McpApps } from "@/kilocode/mcp/apps"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - hide tools outside durable child authority
+import { LazyTools } from "@/kilocode/session/lazy-tools" // kilocode_change
+import { InstanceState } from "@/effect/instance-state" // kilocode_change
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -65,6 +71,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // kilocode_change start
   const agents = yield* Agent.Service
   const sessions = yield* Session.Service
+  const instance = yield* InstanceState.context
   // kilocode_change end
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
@@ -83,7 +90,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const authority = routine ? Permission.merge(input.agent.permission, input.session.permission ?? []) : undefined
   const visible = (id: string) =>
     TaskAuthority.permits(TaskAuthority.read(input.session.metadata), id, "*") &&
-    (!authority || Permission.evaluate(id, "*", authority).action !== "deny") // kilocode_change
+    (!authority || pathVisible(id, authority)) // kilocode_change - execution still checks the concrete authorized path
   const grant = (id: string) => (routine ? id : "read")
   // kilocode_change end
   const catalog = CapabilityCatalog.bind(tools, restricted) // kilocode_change
@@ -163,7 +170,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   }
   // kilocode_change end
 
-  for (const item of yield* registry.tools({
+  const items = yield* registry.tools({
+    // kilocode_change - bind the genuine goal owner
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     family: input.model.family, // kilocode_change
@@ -171,9 +179,23 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     permission: input.session.permission,
     networkRestricted: restricted, // kilocode_change - let the registry suppress code-mode in restricted sessions
     trustedOnly: routine, // kilocode_change - fail closed on local plugin tools in Routines
-  })) {
+  }) // kilocode_change - retain registry definitions for the original goal owner
+  // kilocode_change start - exact durable dispatch and current user determine final synthesis
+  const check = yield* GoalGate.prepare(
+    items.find((item) => item.id === "update_goal")?.jsonSchema,
+    input.session.id,
+    input.processor.message.parentID,
+    () =>
+      sessions.messages({ sessionID: input.session.id }).pipe(
+        Effect.map((rows) => rows.findLast((row) => row.info.role === "user")?.info.id),
+        Effect.orDie,
+      ),
+  )
+  // kilocode_change end
+  for (const item of items) {
+    // kilocode_change
     if (!visible(item.id)) continue // kilocode_change - the model must not see tools outside child authority
-    const base = ToolJsonSchema.fromTool(item)
+    const base = yield* goalSchema(item.id, ToolJsonSchema.fromTool(item), input.session.id) // kilocode_change - actual original goal owner supplies fresh criterion IDs
     const schema = ProviderTransform.schema(input.model, base)
     tools[item.id] = tool({
       description: item.description,
@@ -210,7 +232,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               yield* input.processor.completeToolCall(options.toolCallId, output)
             }
             return output
-          }),
+          }).pipe(SessionRetirement.tool(input.session.id, options.toolCallId)), // kilocode_change - retain the exact tool outcome until durable processor settlement
         )
       },
     })
@@ -477,7 +499,38 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   }
   // kilocode_change end
 
-  if (flags.experimentalCodeMode) return tools
+  // kilocode_change start - bind bounded discovery to genuine current-turn execution and completed parts
+  const finish = () => GoalGate.bind(select(), check, run.promise) // kilocode_change - check queued callbacks before original effects
+  const select = () => {
+    // kilocode_change - preserve the original complete catalogue
+    if (!LazyTools.eligible(input.agent)) return tools
+    const user = input.messages.findLast((row) => row.info.role === "user")
+    if (!user) throw new Error("Bounded tools require a current user turn")
+    return LazyTools.bind({
+      scope: instance,
+      session: input.session.id,
+      user: user.info.id,
+      message: input.processor.message.id,
+      tools,
+      messages: input.messages,
+      current: () => run.promise(sessions.messages({ sessionID: input.session.id })),
+      permits: (id) =>
+        run.promise(
+          sessions
+            .get(input.session.id)
+            .pipe(
+              Effect.map(
+                (session) =>
+                  !Permission.disabled([id], Permission.merge(input.agent.permission, session.permission ?? [])).has(
+                    id,
+                  ),
+              ),
+            ),
+        ),
+    })
+  }
+  // kilocode_change end
+  if (flags.experimentalCodeMode) return finish() // kilocode_change
 
   const mcpTools = restricted ? {} : yield* mcp.tools() // kilocode_change
   for (const [key, entry] of Object.entries(mcpTools)) {
@@ -596,7 +649,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     tools[key] = item
   }
 
-  return tools
+  return finish() // kilocode_change
 })
 
 function toRecord(value: unknown) {

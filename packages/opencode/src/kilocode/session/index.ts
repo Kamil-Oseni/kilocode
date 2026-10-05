@@ -20,6 +20,7 @@ import { existsSync } from "fs"
 import path from "path"
 import { iife } from "@/util/iife"
 import { KiloSessionEvent, type KiloSessionCloseReason } from "./event"
+import { descendants, exact } from "./directory-query"
 
 export namespace KiloSession {
   const log = Log.create({ service: "session.kilo" })
@@ -157,12 +158,13 @@ export namespace KiloSession {
     return [...new Set([id, ...ids])]
   }
 
-  export function filters(input: { projectID: ProjectV2.ID; directory?: string }): SQL[] {
+  export function filters(input: { projectID: ProjectV2.ID; directory?: string; descendants?: boolean }): SQL[] {
     const dir = input.directory ? Filesystem.resolve(input.directory) : undefined
     if (!dir) return [eq(SessionTable.project_id, input.projectID)]
+    if (input.descendants) return [eq(SessionTable.project_id, input.projectID), descendants(dir)]
     return [
-      or(eq(SessionTable.project_id, input.projectID), eq(SessionTable.directory, dir)),
-      eq(SessionTable.directory, dir),
+      or(eq(SessionTable.project_id, input.projectID), exact(dir)),
+      exact(dir),
     ].filter((item): item is SQL => item !== undefined)
   }
 

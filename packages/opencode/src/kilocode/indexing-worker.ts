@@ -3,6 +3,10 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { format } from "node:util"
 import type { Request, Result, Event, Log } from "./indexing-worker-protocol"
 import { parseQdrantWarning } from "./indexing-warning"
+import { registerProcessProfile, closeProcessProfile } from "@opencode-ai/core/kilocode/process-profile"
+import { RuntimeRegistry } from "@opencode-ai/core/kilocode/runtime-registry"
+import { drainFileLoggers } from "@opencode-ai/core/kilocode/file-logger"
+import * as Retirement from "./indexing-retirement"
 
 type Entry = {
   manager: CodeIndexManager
@@ -13,6 +17,9 @@ type Entry = {
 const managers = new Map<string, Entry>()
 const context = new AsyncLocalStorage<string>()
 const queues = new Map<string, Promise<void>>()
+const failures: unknown[] = []
+let closing: Promise<Retirement.Receipt> | undefined
+let selected: string | undefined
 
 function send(message: Result | Event) {
   postMessage(message)
@@ -43,6 +50,10 @@ async function dispose(key: string) {
 }
 
 async function init(request: Extract<Request, { method: "init" }>) {
+  registerProcessProfile([
+    request.input.root,
+    ...(request.input.config.lancedbVectorStoreDirectory ? [request.input.config.lancedbVectorStoreDirectory] : []),
+  ])
   await dispose(request.key)
   if (request.input.lancedbPath) process.env.KILO_LANCEDB_PATH = request.input.lancedbPath
   const [engine, status] = await Promise.all([
@@ -81,8 +92,9 @@ async function handle(request: Request) {
       return
     }
 
-    await init(request)
+    if (request.method === "init") await init(request)
   } catch (err) {
+    if (request.method === "dispose") failures.push(err)
     const error = err instanceof Error ? err.message : String(err)
     send({ type: "result", id: request.id, method: request.method, ok: false, error })
   }
@@ -90,6 +102,50 @@ async function handle(request: Request) {
 
 onmessage = (event: MessageEvent<Request>) => {
   const request = event.data
+  if (request.method === "shutdown") {
+    let ticket: Retirement.Request
+    try {
+      ticket = Retirement.accept(request.input)
+      if (selected && selected !== ticket.requestID) throw new Error("Indexing shutdown request changed")
+    } catch (err) {
+      send({ type: "result", id: request.id, method: "shutdown", ok: false, error: String(err) })
+      return
+    }
+    selected = ticket.requestID
+    closing ??= (async () => {
+      const queued = await Promise.allSettled([...queues.values()])
+      for (const result of queued) if (result.status === "rejected") failures.push(result.reason)
+      for (const key of managers.keys()) {
+        try {
+          await dispose(key)
+        } catch (err) {
+          failures.push(err)
+        }
+      }
+      for (const close of [() => RuntimeRegistry.drain(), drainFileLoggers]) {
+        try {
+          await close()
+        } catch (err) {
+          failures.push(err)
+        }
+      }
+      if (failures.length) throw new AggregateError(failures, "Indexing cleanup remains unconfirmed")
+      await closeProcessProfile()
+      return Retirement.acknowledge(ticket)
+    })()
+    void closing.then(
+      (value) => {
+        send({ type: "result", id: request.id, method: "shutdown", ok: true, value })
+        onmessage = null
+      },
+      (err) => send({ type: "result", id: request.id, method: "shutdown", ok: false, error: String(err) }),
+    )
+    return
+  }
+  if (closing) {
+    send({ type: "result", id: request.id, method: request.method, ok: false, error: "Indexing admission is closed" })
+    return
+  }
   const prior = queues.get(request.key) ?? Promise.resolve()
   const task = prior.then(() => context.run(request.key, () => handle(request)))
   const queued = task.finally(() => {

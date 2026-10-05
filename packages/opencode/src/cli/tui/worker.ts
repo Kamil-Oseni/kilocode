@@ -15,8 +15,15 @@ import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process" 
 import { createWorkerRemoteExit } from "@/kilocode/cli/cmd/tui/remote-exit-worker" // kilocode_change
 import { createWorkerShutdown } from "@/cli/tui/worker-shutdown" // kilocode_change
 import { KiloSessions } from "@/kilo-sessions/kilo-sessions" // kilocode_change
+import { workerIntake } from "@/kilocode/cli/cmd/tui/worker-intake" // kilocode_change
+import * as WorkerShutdown from "@/kilocode/cli/cmd/tui/worker-shutdown" // kilocode_change
+import { schedulerQuiesce } from "@/kilocode/task/admission" // kilocode_change
+import * as WorkerIdentity from "@/kilocode/cli/cmd/tui/worker-identity" // kilocode_change
+import { observation } from "@/kilocode/cli/profile-retirement" // kilocode_change
 
 ensureProcessMetadata("worker") // kilocode_change - retain worker role and parent run correlation
+const owner = WorkerIdentity.identity(process.env) // kilocode_change - capture this worker generation once
+const accept = WorkerIdentity.bind(owner) // kilocode_change - one exact shutdown request owns this worker retirement
 await KiloLog.init() // kilocode_change - keep compatibility logs off the TUI terminal
 Heap.start()
 
@@ -38,7 +45,7 @@ GlobalBus.on("event", (event) => {
   Rpc.emit("global.event", event)
 })
 
-let server: Awaited<ReturnType<typeof Server.listen>> | undefined
+const servers = WorkerShutdown.listener<Awaited<ReturnType<typeof Server.listen>>>() // kilocode_change
 const remoteExit = createWorkerRemoteExit(Rpc.emit) // kilocode_change
 // kilocode_change start - drain ingest before dispose so GlobalBus/remote stay live
 const runShutdown = createWorkerShutdown({
@@ -46,10 +53,15 @@ const runShutdown = createWorkerShutdown({
   stopHeap: () => Heap.stop(),
   dispose: () => InstanceRuntime.disposeAllInstances(),
   stopServer: async () => {
-    if (server) await server.stop(true)
-    process.off("unhandledRejection", onUnhandledRejection)
-    process.off("uncaughtException", onUncaughtException)
+    try {
+      await servers.stop()
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection)
+      process.off("uncaughtException", onUncaughtException)
+    }
   },
+  closeHandler: WorkerShutdown.handler,
+  retire: WorkerShutdown.retire,
 })
 // kilocode_change end
 
@@ -87,8 +99,7 @@ export const rpc = {
   },
   // kilocode_change end
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
-    if (server) await server.stop(true)
-    server = await Server.listen(input)
+    const server = await servers.open(() => Server.listen(input)) // kilocode_change - serialize and own late listener publication
     return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
@@ -104,15 +115,25 @@ export const rpc = {
       }),
     )
   },
-  async shutdown() {
+  async shutdown(input: ReturnType<typeof WorkerIdentity.request>) {
+    // kilocode_change - bind receipt to the exact worker generation and request
+    const request = WorkerIdentity.accept(input, owner) // kilocode_change
     remoteExit.shutdown() // kilocode_change
-    await runShutdown() // kilocode_change - drain → dispose → stopServer
+    await runShutdown() // kilocode_change - admitted RPC work settles before joined runtime retirement
+    const reply = WorkerIdentity.acknowledge(request, observation()) // kilocode_change - no receipt is fabricated on failed retirement
     // kilocode_change start - Clear the Rpc message channel so the worker's event loop can drain and
     // exit naturally. Without this, the active onmessage handle keeps the
     // worker alive even after all async work is done.
     onmessage = null
     // kilocode_change end
+    return reply // kilocode_change
   },
 }
 
-Rpc.listen(rpc)
+// kilocode_change start - fence HTTP and scheduler intake before joining admitted RPC calls
+const intake = workerIntake(() => WorkerShutdown.quiesce([servers.quiesce, schedulerQuiesce]))
+Rpc.listen(rpc, (method, work, input) => {
+  if (method === "shutdown") accept(input)
+  return intake(method, work)
+})
+// kilocode_change end

@@ -21,6 +21,7 @@ import * as Extract from "../kilocode/tool/read-extract"
 import * as TextStream from "../kilocode/text-stream"
 import * as Artifact from "@/kilocode/goal/read-artifact"
 import { PathHint } from "@/kilocode/tool/path-hint"
+import { Refusal } from "@/kilocode/session/tool-refusal"
 // kilocode_change end
 
 const DEFAULT_READ_LIMIT = 2000
@@ -90,16 +91,21 @@ export const ReadTool = Tool.define<
     // kilocode_change start - authorize missing paths without enumerating sibling names
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string, worktree: string, ctx: Tool.Context) {
       const dir = path.dirname(filepath)
-      const parent = yield* fs.realPath(dir).pipe(Effect.option)
-      if (parent._tag === "None") return yield* Effect.fail(new Error(`File not found: ${filepath}`))
-      yield* assertExternalDirectoryEffect(ctx, parent.value, { bypass: false, kind: "directory" })
+      const parent = yield* fs.realPath(dir).pipe(
+        Effect.catchIf(
+          (err) => "reason" in err && err.reason._tag === "NotFound",
+          () => Effect.succeed(undefined),
+        ),
+      )
+      if (!parent) return yield* Effect.fail(new Refusal("read-missing", `File not found: ${filepath}`))
+      yield* assertExternalDirectoryEffect(ctx, parent, { bypass: false, kind: "directory" })
       yield* ctx.ask({
         permission: "read",
-        patterns: [...new Set([filepath, parent.value].map((item) => path.relative(worktree, item)))],
+        patterns: [...new Set([filepath, parent].map((item) => path.relative(worktree, item)))],
         always: ["*"],
         metadata: {},
       })
-      return yield* Effect.fail(new Error(`File not found: ${filepath}`))
+      return yield* Effect.fail(new Refusal("read-missing", `File not found: ${filepath}`))
     })
     // kilocode_change end
 
@@ -236,7 +242,10 @@ export const ReadTool = Tool.define<
           if (!FSUtil.contains(instance.worktree, candidate)) continue
           if (!(yield* fs.existsSafe(candidate))) continue
           return yield* Effect.fail(
-            new Error(`File not found: ${requested}. The path repeats a directory name; retry with: ${candidate}`),
+            new Refusal(
+              "read-missing",
+              `File not found: ${requested}. The path repeats a directory name; retry with: ${candidate}`,
+            ),
           )
         }
         // kilocode_change end

@@ -9,6 +9,7 @@ import type * as LSPServer from "./server"
 import { withTimeout } from "../util/timeout"
 import { Filesystem } from "@/util/filesystem"
 import type { InstanceContext } from "@/project/instance-context"
+import { settle } from "@/kilocode/lsp/admission" // kilocode_change
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 const DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS = 5_000
@@ -205,6 +206,23 @@ export async function create(input: {
   ])
   connection.onRequest("workspace/diagnostic/refresh", async () => null)
   connection.listen()
+  // kilocode_change start - the managed owner closes the actual connection even on failed initialize
+  let ready = false
+  input.server.owner?.bind(() =>
+    settle(
+      () => (ready ? withTimeout(connection.sendRequest("shutdown"), 5_000) : Promise.resolve()),
+      async () => {
+        await settle(
+          () => connection.sendNotification("exit"),
+          async () => {
+            connection.end()
+            connection.dispose()
+          },
+        )
+      },
+    ).then(() => undefined),
+  )
+  // kilocode_change end
 
   // --- Initialize handshake ---
 
@@ -258,6 +276,7 @@ export async function create(input: {
   const hasStaticPullDiagnostics = Boolean(initialized.capabilities?.diagnosticProvider)
 
   await connection.sendNotification("initialized", {})
+  ready = true // kilocode_change
 
   if (input.server.initialization) {
     await connection.sendNotification("workspace/didChangeConfiguration", {
@@ -638,6 +657,7 @@ export async function create(input: {
       await waitForFullDiagnostics({ path: normalizedPath, version: request.version, after: request.after })
     },
     async shutdown() {
+      if (input.server.owner) return input.server.owner.close() // kilocode_change - never replace actual exit/EOF with a stop request
       connection.end()
       connection.dispose()
       await Process.stop(input.server.process)

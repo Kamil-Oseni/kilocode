@@ -89,6 +89,12 @@ export namespace MemoryPaths {
 
   export function identity(input: { ctx: Ctx }): Identity {
     const root = canon(project(base(input.ctx)))
+    return declared(root)
+  }
+
+  /** Calculate an already canonical manifest identity without reading the source filesystem. */
+  export function declared(root: string): Identity {
+    if (!path.isAbsolute(root) || /[\0\r\n]/.test(root)) throw new Error("Memory canonical identity must be absolute")
     const display = MemorySlug.safe(path.basename(root), { max: MemorySlug.max.label, fallback: "project" })
     const hash = createHash("sha1").update(root).digest("hex").slice(0, 12)
     return {

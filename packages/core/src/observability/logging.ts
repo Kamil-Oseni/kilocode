@@ -3,6 +3,7 @@ import path from "path"
 import { Global } from "../global"
 import { runID } from "./shared"
 import { EnvAlias } from "../kilocode/env-alias" // kilocode_change
+import { ownedFileLogger } from "../kilocode/file-logger" // kilocode_change
 
 function formatter(id: string = runID) {
   return Logger.map(Logger.formatStructured, (output) => {
@@ -49,7 +50,7 @@ function format(input: unknown) {
 
 export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
   // Do not set batchWindow to 0; it causes high idle CPU usage.
-  return Logger.toFile(formatter(id), file, { flag: "a" })
+  return ownedFileLogger(formatter(id), file) // kilocode_change - retain ignored native flush failures and terminal logger ownership
 }
 
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))

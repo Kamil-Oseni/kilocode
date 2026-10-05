@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -12,12 +12,14 @@ import { Storage } from "@/storage/storage"
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
 import { ChiefRequestReview } from "@/kilocode/chief/request-review"
 import { RayaChief } from "@/kilocode/chief"
+import { ChiefVerification } from "@/kilocode/chief/verification"
 import { RayaGoal } from "@/kilocode/goal"
 import { TaskAuthority } from "@/kilocode/tool/task-authority"
 import { chiefInspectTool } from "@/kilocode/tool/chief-inspect"
 import { chiefPlanTool } from "@/kilocode/tool/chief-plan"
 import { chiefReviewTool } from "@/kilocode/tool/chief-review"
 import { chiefSynthesizeTool } from "@/kilocode/tool/chief-synthesize"
+import { goalTools } from "@/kilocode/tool/goal"
 import { Truncate } from "@/tool/truncate"
 import { testEffect } from "../lib/effect"
 
@@ -310,6 +312,31 @@ describe("request-bound Chief review eligibility", () => {
           Effect.provideService(Agent.Service, agents),
           Effect.provideService(Truncate.Service, truncate),
         )
+        const assistant = yield* state.sessions.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: state.user.id,
+          sessionID: state.parent.id,
+          mode: "auto",
+          agent: "auto",
+          cost: 0,
+          path: { cwd: "/tmp", root: "/tmp" },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: model.modelID,
+          providerID: model.providerID,
+          time: { created: Date.now() },
+        })
+        const callID = "call-actual-synthesis"
+        yield* state.sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: state.parent.id,
+          type: "tool",
+          tool: "chief_synthesize",
+          callID,
+          state: { status: "running", input: {}, time: { start: Date.now() } },
+        })
+        const before = yield* goals.get(state.parent.id)
         yield* (yield* tool.init()).execute(
           {
             summary: "Both fixes verified",
@@ -320,7 +347,8 @@ describe("request-bound Chief review eligibility", () => {
           },
           {
             sessionID: state.parent.id,
-            messageID: MessageID.ascending(),
+            messageID: assistant.id,
+            callID,
             agent: "auto",
             abort: new AbortController().signal,
             messages: [],
@@ -328,7 +356,17 @@ describe("request-bound Chief review eligibility", () => {
             ask: () => Effect.void,
           },
         )
-        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("done")
+        const current = yield* state.sessions.get(state.parent.id)
+        expect(RayaChief.phase(current.metadata)).toBe("done")
+        const observation = yield* Schema.decodeUnknownEffect(ChiefVerification.Observation)(
+          current.metadata?.[ChiefVerification.key],
+        )
+        expect(observation.kind).toBe("synthesis")
+        expect(observation.userID).toBe(state.user.id)
+        expect(observation.messageID).toBe(assistant.id)
+        expect(observation.callID).toBe(callID)
+        expect(observation.goal.status).toBe("complete")
+        expect(yield* goals.get(state.parent.id)).toEqual(before)
         expect((yield* goals.get(state.parent.id))?.status).toBe("complete")
       }),
     30_000,
@@ -435,6 +473,12 @@ describe("request-bound Chief review eligibility", () => {
         )
         expect(result.metadata.requestRevision).toBe(state.plan.identity.revision)
         expect((yield* state.ledger.read(state.parent.id, state.user.id))?.synthesis?.findings).toHaveLength(2)
+        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("verify")
+        const reader = yield* goalTools(
+          RayaGoal.make({ storage: state.storage, sessions: state.sessions }),
+          state.sessions,
+        ).get.pipe(Effect.provideService(Agent.Service, agents), Effect.provideService(Truncate.Service, truncate))
+        yield* (yield* reader.init()).execute({}, ctx)
         expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("done")
       }),
     30_000,

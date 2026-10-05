@@ -4,6 +4,8 @@ import { Cause, Effect, Result } from "effect"
 import z from "zod"
 import { Global } from "@opencode-ai/core/global"
 import { Database } from "@opencode-ai/core/database/database"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceState } from "@/effect/instance-state"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
@@ -29,8 +31,11 @@ export function composerHandlers(
   storage: Storage.Interface,
   sessions: Session.Interface,
   database: Database.Interface,
+  project: ProjectV2.Interface,
 ) {
-  const drafts = composerRetention(database, storage, path.join(Global.Path.data, "storage"), Database.path())
+  const drafts = composerRetention(database, storage, path.join(Global.Path.data, "storage"), Database.path(), {
+    project: (workspace) => project.resolve(AbsolutePath.make(workspace)).pipe(Effect.map((value) => value.id)),
+  })
   const boundary = <A, E, R>(body: Effect.Effect<A, E, R>) =>
     body.pipe(
       Effect.catchCause((cause) => {
@@ -59,16 +64,24 @@ export function composerHandlers(
   const identity = (who: DraftIdentity) =>
     Effect.gen(function* () {
       if (Boolean(who.sessionID) === Boolean(who.pendingID)) return yield* failure("invalid")
-      const owner = { ...who, ...(yield* scope(who)) }
-      const selected = owner.sessionID
+      const selected = who.sessionID
       if (selected) {
         const id = yield* Effect.try({ try: () => SessionID.make(selected), catch: () => failure("scope") })
         const session = yield* sessions.get(id).pipe(Effect.mapError(() => failure("scope")))
-        const dir = yield* Effect.tryPromise({ try: () => realpath(session.directory), catch: () => failure("scope") })
-        if (session.projectID !== owner.projectID || canonical(dir) !== canonical(owner.workspace))
+        const instance = yield* InstanceState.context
+        const dirs = yield* Effect.tryPromise({
+          try: () => Promise.all([realpath(instance.directory), realpath(session.directory), realpath(who.workspace)]),
+          catch: () => failure("scope"),
+        })
+        if (
+          canonical(dirs[0]) !== canonical(dirs[1]) ||
+          canonical(dirs[0]) !== canonical(dirs[2]) ||
+          (who.projectID !== undefined && who.projectID !== session.projectID)
+        )
           return yield* failure("scope")
+        return { ...who, workspace: dirs[0], projectID: session.projectID }
       }
-      return owner
+      return { ...who, ...(yield* scope(who)) }
     })
   return {
     list: (ctx: { payload: typeof List.Type }) =>

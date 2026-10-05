@@ -1,25 +1,11 @@
+import { BuildInputs as Data } from "./schemas"
 import { createHash } from "node:crypto"
 import * as fs from "node:fs/promises"
 import path from "node:path"
 import { Schema } from "effect"
-import { Snapshot, unchanged } from "./snapshot"
+import { unchanged } from "./snapshot"
 
-const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
-export const Build = Schema.Struct({
-  version: Schema.Literal(1),
-  id: Schema.String.check(Schema.isPattern(/^[a-f0-9-]{36}$/)),
-  itemID: Schema.String,
-  attemptID: Schema.String,
-  completion: Hash,
-  checks: Schema.Array(Schema.String),
-  snapshot: Snapshot,
-  directory: Schema.String,
-  output: Schema.String,
-  target: Schema.Literals(["win32-x64", "win32-arm64", "linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]),
-  extension: Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+-repair\+[a-f0-9.]+$/)),
-  cli: Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+-repair\+[a-f0-9.]+$/)),
-  at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-}).annotate({ identifier: "Raya.SelfHealBuildInput" })
+export const Build = Data.Build
 export type Build = typeof Build.Type
 export const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex")
 

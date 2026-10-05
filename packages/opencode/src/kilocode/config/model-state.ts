@@ -5,6 +5,8 @@ import z from "zod"
 import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
 
+import { ModelOwner } from "./model-owner"
+
 const log = Log.create({ service: "model-state" })
 
 export namespace KilocodeModelState {
@@ -38,13 +40,12 @@ export namespace KilocodeModelState {
   }
 
   export async function update(input: Patch): Promise<State> {
-    const state = await get()
-    const next = {
-      ...state,
-      favorite: input.favorite ? refs(input.favorite) : state.favorite,
-    }
-    await Filesystem.writeJson(target(), next)
-    return next
+    return clean(
+      await ModelOwner.process.change(Global.Path.state, (current) => ({
+        ...current,
+        favorite: input.favorite ? refs(input.favorite) : clean(current).favorite,
+      })),
+    )
   }
 
   function target() {

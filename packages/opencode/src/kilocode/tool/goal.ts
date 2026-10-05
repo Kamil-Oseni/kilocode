@@ -3,6 +3,9 @@ import { Effect, Schema } from "effect"
 import * as Tool from "@/tool/tool"
 import { RayaGoal } from "@/kilocode/goal"
 import { Update } from "@/kilocode/goal/plan"
+import { owned } from "@/kilocode/goal/completion-schema"
+import * as GoalGate from "@/kilocode/goal/tool-gate"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import type { Session } from "@/session/session"
 import { RayaChief } from "@/kilocode/chief"
 import { associate } from "@/kilocode/goal/turn"
@@ -46,7 +49,7 @@ export function goalTools(
   const finish = Effect.fn("RayaGoalTool.finish")(function* (sessionID: Parameters<Goals["get"]>[0]) {
     if (!sessions) return
     const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
-    if (RayaChief.phase(session.metadata) !== "goal") return
+    if (RayaChief.phase(session.metadata) !== "goal" && RayaChief.phase(session.metadata) !== "verify") return
     yield* phase(sessionID, "done")
   })
 
@@ -82,6 +85,10 @@ export function goalTools(
             return result("No goal", "No goal is armed for this session.")
           }
           if (goal.status === "complete") yield* finish(ctx.sessionID)
+          if (goal.status !== "complete" && sessions) {
+            const session = yield* sessions.get(ctx.sessionID).pipe(Effect.orDie)
+            if (RayaChief.phase(session.metadata) === "verify") yield* phase(ctx.sessionID, "goal")
+          }
           const evidence = yield* goals.evidence(ctx.sessionID).pipe(
             Effect.match({
               onFailure: (err) => ({ error: failure(err) }),
@@ -108,8 +115,9 @@ export function goalTools(
   const update = Tool.define(
     "update_goal",
     Effect.succeed({
-      description: `Finish, block, pause, or resume the active goal. To mark complete, derive every concrete requirement from the full objective and submit a requirement-by-requirement audit. Cite only eligible callIDs from this goal session or its descendants (get_goal lists them). Task handoff reports and child summaries are not completion evidence; cite their underlying work or verification results. Never cite unrelated sessions; never reuse evidence or done-when text from another project. Shape: { "status": "complete", "audit": { "summary": "<one line>", "requirements": [ { "requirement": "<what was done>", "passed": true, "evidence": [ { "callID": "<a real completed work/verification call>", "summary": "<what it proved>" } ] } ] } } — a top-level "requirements" array is also accepted. Every required criterion and every claimed success must pass and cite one or more real completed work or verification tool calls by callID; a saved criterion explicitly marked required=false may instead be reported passed=false with an empty evidence list. Include every saved criterion exactly once, and provide at least one requirement supported by verified work. Criteria marked review=true require a separate goal-control acceptance: a valid audit pauses the goal ready for review instead of completing it. Do not resume it merely to bypass that review. If a criterion requires human judgment but is not classified, pause and request the needed review instead of claiming that judgment is verified. include messageID only when it is available. Successful command evidence must have exit code 0. Missing, failed, uncertain, goal-control-only, or invented evidence is rejected and leaves the goal active. When honest progress is impossible, mark blocked with a plain reason. Pause (with a short reason) instead of grinding when you hit an approval wall or genuinely need the user to act; the goal stops auto-continuing until they resume, and mark active again to resume a paused or blocked goal. You cannot clear a goal.`,
+      description: `Finish, block, pause, or resume the active goal. Read get_goal first and copy each saved criterion's exact id into criterionID and its description into requirement. Omit criterionID only when the goal has no saved criteria. To mark complete, derive every concrete requirement from the full objective and submit a requirement-by-requirement audit. Read get_goal again after verification and copy the exact eligibleEvidence.callID for each supporting result; never invent callIDs, part IDs, or short numeric IDs. Cite only eligible callIDs from this goal session or its descendants (get_goal lists them). Task handoff reports and child summaries are not completion evidence; cite their underlying work or verification results. Never cite unrelated sessions; never reuse evidence or done-when text from another project. Shape: { "status": "complete", "summary": "<one line>", "requirements": [ { "criterionID": "<saved criterion ID>", "requirement": "<exact saved criterion description; otherwise what was done>", "passed": true, "evidence": [ { "callID": "<copy exact eligibleEvidence.callID from get_goal>", "summary": "<what it proved>" } ] } ] } — use this top-level requirements shape and omit audit. If audit is explicitly supplied, it must be a native object, never a JSON-encoded string; do not send both shapes. Every required criterion and every claimed success must pass and cite one or more real completed work or verification tool calls by callID; a saved criterion explicitly marked required=false may instead be reported passed=false with an empty evidence list. Include every saved criterion exactly once, and provide at least one requirement supported by verified work. Criteria marked review=true require a separate goal-control acceptance: a valid audit pauses the goal ready for review instead of completing it. Do not resume it merely to bypass that review. If a criterion requires human judgment but is not classified, pause and request the needed review instead of claiming that judgment is verified. include messageID only when it is available. Successful command evidence must have exit code 0. Missing, failed, uncertain, goal-control-only, or invented evidence is rejected and leaves the goal active. When honest progress is impossible, mark blocked with a plain reason. Pause (with a short reason) instead of grinding when you hit an approval wall or genuinely need the user to act; the goal stops auto-continuing until they resume, and mark active again to resume a paused or blocked goal. You cannot clear a goal.`,
       parameters: RayaGoal.ModelUpdate,
+      jsonSchema: GoalGate.owned(owned(ToolJsonSchema.fromSchema(RayaGoal.ModelUpdate), goals.get), goals.get),
       execute: (input: RayaGoal.ModelUpdate, ctx) =>
         Effect.gen(function* () {
           const current = yield* goals.get(ctx.sessionID)

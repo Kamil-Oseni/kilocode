@@ -1,4 +1,5 @@
 import { Effect, Exit, Fiber, Latch, Scope } from "effect"
+import { SessionRetirement } from "../session/retirement"
 
 export namespace KiloRunner {
   export const start = <A, E, R>(input: {
@@ -9,7 +10,10 @@ export namespace KiloRunner {
   }) =>
     Effect.gen(function* () {
       const ready = yield* Latch.make()
-      const fiber = yield* ready.whenOpen(input.work).pipe(Effect.onExit(input.finish), Effect.forkIn(input.scope))
+      const fiber = yield* SessionRetirement.forkIn(
+        ready.whenOpen(input.work).pipe(Effect.onExit(input.finish)),
+        input.scope,
+      )
       return { run: input.handle(fiber), ready }
     })
 

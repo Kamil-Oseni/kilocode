@@ -1,4 +1,5 @@
 import path from "path"
+import { mkdir } from "node:fs/promises"
 import z from "zod"
 import { Effect, Layer, Schema } from "effect"
 import { applyEdits, modify } from "jsonc-parser"
@@ -14,6 +15,9 @@ import { GlobalBus } from "@/bus/global"
 import { Event } from "@/server/event"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { AppRuntime } from "@/effect/app-runtime"
+import { acquireProfileRoot, resolveProfileRoot } from "@opencode-ai/core/kilocode/profile-maintenance"
+import { registerProcessProfile } from "@opencode-ai/core/kilocode/process-profile"
+import { KiloShutdown } from "@/kilocode/cli/shutdown"
 
 export namespace KilocodeTuiConfig {
   export const Scope = z.enum(["project", "global"])
@@ -25,6 +29,18 @@ export namespace KilocodeTuiConfig {
 
   const files = ["tui.jsonc", "tui.json"] as const
   const dirs = [".kilo", ".kilocode"] as const
+  const pending = new Set<Promise<void>>()
+  const failures: unknown[] = []
+  let tail = Promise.resolve()
+  let closing: Promise<void> | undefined
+
+  KiloShutdown.register(() => {
+    if (closing) return closing
+    closing = Promise.all(pending).then(() => {
+      if (failures.length) throw new AggregateError(failures, "TUI config retirement failed")
+    })
+    return closing
+  })
 
   export async function get(input: { directory: string }) {
     const cfg = await AppRuntime.runPromise(
@@ -39,22 +55,88 @@ export namespace KilocodeTuiConfig {
     return writable(cfg)
   }
 
-  export async function update(input: { directory: string; worktree?: string; scope: Scope; patch: Patch }) {
-    const file = await target(input)
-    const source = await read(file)
-    const before = source ?? "{}"
-    const existing = parse(before, file)
-    const next = merge(existing, input.patch)
-    const output = file.endsWith(".jsonc") ? patchJsonc(before, next) : JSON.stringify(next, null, 2)
-
-    await Filesystem.write(file, output)
-    // Notify connected TUIs so they hot-reload keybinds/theme/ui settings. Mirrors
-    // Config.updateGlobal; directory "global" routes it to the TUI's global event handler.
-    GlobalBus.emit("event", {
-      directory: "global",
-      payload: { type: Event.ConfigUpdated.type, properties: {} },
+  export function update(input: { directory: string; worktree?: string; scope: Scope; patch: Patch }) {
+    if (closing) return Promise.reject(new Error("TUI config is retired"))
+    const cfg = { ...input, patch: structuredClone(input.patch) }
+    const work = tail.then(async () => {
+      const selected = path.resolve(
+        cfg.scope === "global"
+          ? Global.Path.config
+          : cfg.worktree && cfg.worktree !== "/"
+            ? cfg.worktree
+            : cfg.directory,
+      )
+      const file = path.resolve(await target(cfg))
+      const dir = path.dirname(file)
+      const paths = [selected, dir, file]
+      const roots = await Promise.all(paths.map((path) => resolveProfileRoot({ kind: "json", path })))
+      const expected = path.join(roots[1].path, path.basename(file))
+      const normalize = (value: string) => (process.platform === "win32" ? value.toLowerCase() : value)
+      if (normalize(roots[2].path) !== normalize(expected))
+        throw new Error("TUI config target is outside its admitted directory")
+      const scopes = [...new Map(roots.map((root) => [root.id, root])).values()]
+      scopes.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+      const leases: Awaited<ReturnType<typeof acquireProfileRoot>>[] = []
+      const errors: unknown[] = []
+      let result: Editable | undefined
+      async function check() {
+        const current = await Promise.all(paths.map((path) => resolveProfileRoot({ kind: "json", path })))
+        const chosen = await resolveProfileRoot({ kind: "json", path: path.resolve(await target(cfg)) })
+        if (current.some((root, index) => root.id !== roots[index].id) || chosen.id !== roots[2].id)
+          throw new Error("TUI config target changed during update")
+      }
+      try {
+        for (const root of scopes) {
+          const lease = await acquireProfileRoot(root)
+          leases.push(lease)
+          if (lease.id !== root.id) throw new Error("TUI config scope changed during admission")
+        }
+        await check()
+        registerProcessProfile(scopes.map((root) => root.path))
+        await mkdir(roots[1].path, { recursive: true })
+        await check()
+        const source = await read(roots[2].path)
+        const before = source ?? "{}"
+        const existing = parse(before, roots[2].path)
+        const next = merge(existing, cfg.patch)
+        const output = file.endsWith(".jsonc") ? patchJsonc(before, next) : JSON.stringify(next, null, 2)
+        await check()
+        await Filesystem.write(roots[2].path, output)
+        await check()
+        // Notify connected TUIs while the admitted publication and reload remain owned.
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: { type: Event.ConfigUpdated.type, properties: {} },
+        })
+        result = await get({ directory: cfg.directory })
+        await check()
+      } catch (err) {
+        errors.push(err)
+      } finally {
+        for (const lease of leases.reverse()) {
+          try {
+            await lease.release()
+          } catch (err) {
+            errors.push(err)
+          }
+        }
+      }
+      if (errors.length) throw new AggregateError(errors, "TUI config update failed")
+      if (!result) throw new Error("TUI config reload did not return settings")
+      return result
     })
-    return get({ directory: input.directory })
+    const settled = work.then(
+      () => {
+        pending.delete(settled)
+      },
+      (err) => {
+        failures.push(err)
+        pending.delete(settled)
+      },
+    )
+    pending.add(settled)
+    tail = settled
+    return work
   }
 
   async function target(input: { directory: string; worktree?: string; scope: Scope }) {

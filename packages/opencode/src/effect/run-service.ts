@@ -44,9 +44,16 @@ export function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A
   })
 }
 
-export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
-  // kilocode_change start - keep reusable disposal separate from permanent outer retirement
-  const owner = runtimeOwner(() => ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer), { memoMap }))
+// kilocode_change start - join actual producer generations before reusable disposal or permanent retirement
+export function makeRuntime<I, S, E>(
+  service: Context.Service<I, S>,
+  layer: Layer.Layer<I, E>,
+  settle?: () => Promise<unknown>,
+) {
+  const owner = runtimeOwner(
+    () => ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer), { memoMap }),
+    settle,
+  )
   const getRuntime = owner.get
   // kilocode_change end
 

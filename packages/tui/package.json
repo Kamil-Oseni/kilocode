@@ -12,6 +12,7 @@
   },
   "exports": {
     ".": "./src/index.tsx",
+    "./kilocode/settlement": "./src/kilocode/settlement.ts",
     "./builtins": "./src/feature-plugins/builtins.ts",
     "./config": "./src/config/index.tsx",
     "./context/args": "./src/context/args.tsx",

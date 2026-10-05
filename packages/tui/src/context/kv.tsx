@@ -1,9 +1,9 @@
 import { createSignal, type Setter } from "solid-js"
+import { onCleanup } from "solid-js" // kilocode_change
 import { createStore, unwrap } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { Flock } from "@opencode-ai/core/util/flock"
 import { Global } from "@opencode-ai/core/global"
-import { readJson, writeJsonAtomic } from "../util/persistence"
+import { kvOwner } from "../kilocode/kv-owner" // kilocode_change
 import { useTuiPaths } from "./runtime"
 import path from "path"
 
@@ -13,13 +13,15 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
     const paths = useTuiPaths()
     void Global.Path.state
     const file = path.join(paths.state, "kv.json")
-    const lock = `tui-kv:${file}`
     const [ready, setReady] = createSignal(false)
     const [store, setStore] = createStore<Record<string, any>>()
-    // Queue same-process writes so rapid updates persist in order.
-    let write = Promise.resolve()
+    // kilocode_change start - fence and join this realized preference writer
+    const owner = kvOwner(file)
+    onCleanup(() => void owner.retire().catch((error) => console.error("Failed to retire KV state", { error })))
+    // kilocode_change end
 
-    Flock.withLock(lock, () => readJson<Record<string, unknown>>(file))
+    owner // kilocode_change
+      .read() // kilocode_change
       .then((x) => {
         setStore(x)
       })
@@ -52,10 +54,11 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
         return store[key] ?? defaultValue
       },
       set(key: string, value: any) {
+        owner.check() // kilocode_change
         setStore(key, value)
         const snapshot = structuredClone(unwrap(store))
-        write = write
-          .then(() => Flock.withLock(lock, () => writeJsonAtomic(file, snapshot)))
+        void owner // kilocode_change
+          .write(snapshot) // kilocode_change
           .catch((error) => {
             console.error("Failed to write KV state", { error })
           })

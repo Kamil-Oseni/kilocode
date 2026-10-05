@@ -11,13 +11,14 @@ import { Slug } from "@opencode-ai/core/util/slug"
 import { errorMessage } from "../util/error"
 import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
-import { Effect, Layer, Path, Schema, Scope, Context } from "effect"
+import { Effect, Layer, Path, Schema, Scope, Context, Exit } from "effect" // kilocode_change
 import { ChildProcess } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 import { WorktreeCleanup } from "@/kilocode/worktree-cleanup" // kilocode_change
 import { clearPtys } from "@/kilocode/worktree/pty-cleanup" // kilocode_change
+import { WorktreeAdmission } from "@/kilocode/worktree/admission" // kilocode_change
 import { WorktreeEvent } from "@opencode-ai/schema/worktree-event"
 
 export const Event = WorktreeEvent
@@ -176,6 +177,42 @@ const layer: Layer.Layer<
       ),
     )
 
+    // kilocode_change start - reserve actual work before discovery, including scoped asynchronous children
+    const owned = <A, E, R>(directory: string | undefined, body: Effect.Effect<A, E, R>, create = false) =>
+      WorktreeAdmission.run(
+        Effect.gen(function* () {
+          const ctx = yield* InstanceState.context
+          if (ctx.project.vcs !== "git")
+            return yield* new NotGitError({ message: "Worktrees are only supported for git projects" })
+          const target = pathSvc.join(Global.Path.data, "worktree", ctx.project.id)
+          const selected = directory ? pathSvc.resolve(directory) : undefined
+          if (
+            directory &&
+            create &&
+            !pathSvc.isAbsolute(directory) &&
+            pathSvc.resolve(ctx.worktree, directory) !== selected
+          )
+            return yield* Effect.die(
+              new Error("Relative worktree creation resolves to different Git and bootstrap paths"),
+            )
+          const common =
+            ctx.project.vcs === "git"
+              ? yield* git(["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: ctx.worktree })
+              : undefined
+          if (common && (common.code !== 0 || !common.text.trim()))
+            return yield* Effect.die(new Error("Worktree common Git directory is unavailable"))
+          return yield* Effect.promise(() =>
+            WorktreeAdmission.roots(
+              [Global.Path.data, ctx.worktree, ...(common ? [common.text.trim()] : [])],
+              [target, ...(selected ? [selected, pathSvc.dirname(selected)] : [])],
+            ),
+          )
+        }),
+        body,
+        scope,
+      )
+    // kilocode_change end
+
     const MAX_NAME_ATTEMPTS = 26
     const candidate = Effect.fn("Worktree.candidate")(function* (input: {
       root: string
@@ -198,7 +235,11 @@ const layer: Layer.Layer<
 
         return { name, directory, ...(branch ? { branch } : {}) }
       }
-      return yield* new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
+      // kilocode_change start - retain safe read-only validation separately from mutation failures
+      return yield* WorktreeAdmission.reject(
+        new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" }),
+      ) // kilocode_change
+      // kilocode_change end
     })
 
     const makeWorktreeInfo = Effect.fn("Worktree.makeWorktreeInfo")(function* (input?: {
@@ -211,9 +252,11 @@ const layer: Layer.Layer<
       }
 
       const root = pathSvc.join(Global.Path.data, "worktree", ctx.project.id)
-      yield* fs.makeDirectory(root, { recursive: true }).pipe(Effect.orDie)
-
-      return yield* candidate({ root, name: input?.name ? slugify(input.name) : "", detached: input?.detached })
+      // kilocode_change start - name validation is read-only and cannot poison retirement before mkdir
+      const info = yield* candidate({ root, name: input?.name ? slugify(input.name) : "", detached: input?.detached })
+      yield* fs.makeDirectory(root, { recursive: true }).pipe(Effect.orDie, WorktreeAdmission.mutate)
+      return info
+      // kilocode_change end
     })
 
     const setup = Effect.fnUntraced(function* (info: Info, baseCommit?: string) {
@@ -223,14 +266,19 @@ const layer: Layer.Layer<
           ? ["worktree", "add", "--no-checkout", "-b", info.branch, info.directory, baseCommit ?? "HEAD"] // kilocode_change
           : ["worktree", "add", "--no-checkout", "--detach", info.directory, baseCommit ?? "HEAD"], // kilocode_change
         { cwd: ctx.worktree },
-      )
+      ).pipe(WorktreeAdmission.mutate) // kilocode_change
       if (created.code !== 0) {
         return yield* new CreateFailedError({
           message: created.stderr || created.text || "Failed to create git worktree",
         })
       }
 
-      yield* project.addSandbox(ctx.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
+      // kilocode_change start - retain publication failure before compatibility fallback
+      yield* project.addSandbox(ctx.project.id, info.directory).pipe(
+        Effect.tapError(WorktreeAdmission.failed),
+        Effect.catch(() => Effect.void),
+      ) // kilocode_change - retain publication failure before compatibility fallback
+      // kilocode_change end
     })
 
     const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
@@ -253,16 +301,17 @@ const layer: Layer.Layer<
         })
       // kilocode_change end
 
-      const populated = yield* git(["reset", "--hard"], { cwd: info.directory })
+      const populated = yield* git(["reset", "--hard"], { cwd: info.directory }).pipe(WorktreeAdmission.mutate) // kilocode_change
       if (populated.code !== 0) {
         const message = populated.stderr || populated.text || "Failed to populate worktree"
         return yield* fail(new CreateFailedError({ message })) // kilocode_change
       }
 
       // kilocode_change start - do not report readiness after failed bootstrap
-      yield* store
-        .load({ directory: info.directory })
-        .pipe(Effect.catch((error) => fail(new CreateFailedError({ message: errorMessage(error) }))))
+      yield* store.load({ directory: info.directory }).pipe(
+        Effect.tapError(WorktreeAdmission.failed),
+        Effect.catch((error) => fail(new CreateFailedError({ message: errorMessage(error) }))),
+      )
       // kilocode_change end
 
       GlobalBus.emit("event", {
@@ -294,11 +343,17 @@ const layer: Layer.Layer<
     })
 
     const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (info: Info, startCommand?: string) {
-      yield* setup(info)
-      yield* boot(info, startCommand).pipe(
-        Effect.catchCause((cause) => Effect.logError("worktree bootstrap failed", { cause })),
-        Effect.forkIn(scope),
+      yield* owned(info.directory, setup(info), true) // kilocode_change
+      // kilocode_change start - accepted child retains leases and sticky failure after public return
+      yield* WorktreeAdmission.background(
+        owned(info.directory, boot(info, startCommand)).pipe(
+          Effect.onExit((exit) =>
+            Exit.isFailure(exit) ? Effect.logError("worktree bootstrap failed", { cause: exit.cause }) : Effect.void,
+          ),
+        ),
+        scope,
       )
+      // kilocode_change end
     })
 
     const create = Effect.fn("Worktree.create")(function* (input?: CreateInput) {
@@ -314,8 +369,8 @@ const layer: Layer.Layer<
       startCommand?: string,
       baseCommit?: string,
     ) {
-      yield* setup(info, baseCommit)
-      yield* boot(info, startCommand)
+      yield* owned(info.directory, setup(info, baseCommit), true)
+      yield* owned(info.directory, boot(info, startCommand))
     })
     const createReady = Effect.fn("Worktree.createReady")(function* (input?: CreateInput) {
       const info = yield* plan({ name: input?.name })
@@ -489,10 +544,13 @@ const layer: Layer.Layer<
 
     const runStartCommand = Effect.fnUntraced(
       function* (directory: string, cmd: string) {
-        const [shell, args] = process.platform === "win32" ? ["cmd", ["/c", cmd]] : ["bash", ["-lc", cmd]]
-        const result = yield* appProcess.run(
-          ChildProcess.make(shell, args as string[], { cwd: directory, extendEnv: true, stdin: "ignore" }),
-        )
+        // kilocode_change start - preserve quoted Windows commands through the actual process spawner
+        const command =
+          process.platform === "win32"
+            ? ChildProcess.make(cmd, [], { shell: true, cwd: directory, extendEnv: true, stdin: "ignore" })
+            : ChildProcess.make("bash", ["-lc", cmd], { cwd: directory, extendEnv: true, stdin: "ignore" })
+        // kilocode_change end
+        const result = yield* appProcess.run(command).pipe(Effect.tapError(WorktreeAdmission.failed)) // kilocode_change - retain original startup process failure
         return { code: result.exitCode, stderr: result.stderr.toString("utf8") }
       },
       Effect.catch(() => Effect.succeed({ code: 1, stderr: "" })),
@@ -533,7 +591,7 @@ const layer: Layer.Layer<
             const target = yield* canonical(pathSvc.resolve(root, entry))
             if (target === base) return
             if (!target.startsWith(`${base}${pathSvc.sep}`)) return
-            yield* fs.remove(target, { recursive: true }).pipe(Effect.ignore)
+            yield* fs.remove(target, { recursive: true }).pipe(Effect.tapError(WorktreeAdmission.failed), Effect.ignore) // kilocode_change - do not erase an observed removal failure
           }),
         { concurrency: "unbounded" },
       )
@@ -630,25 +688,34 @@ const layer: Layer.Layer<
         return yield* new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
       }
 
-      yield* runStartScripts(worktreePath, { projectID: ctx.project.id }).pipe(
-        Effect.catchCause((cause) => Effect.logError("worktree start task failed", { cause })),
-        Effect.forkIn(scope),
+      // kilocode_change start - keep asynchronous startup inside the accepted reset lifetime
+      yield* WorktreeAdmission.background(
+        runStartScripts(worktreePath, { projectID: ctx.project.id }).pipe(
+          Effect.flatMap((ok) =>
+            ok ? Effect.void : Effect.fail(new StartCommandFailedError({ message: "Worktree start command failed" })),
+          ),
+          Effect.onExit((exit) =>
+            Exit.isFailure(exit) ? Effect.logError("worktree start task failed", { cause: exit.cause }) : Effect.void,
+          ),
+        ),
+        scope,
       )
+      // kilocode_change end
 
       return true
     })
 
     // kilocode_change start
     return Service.of({
-      makeWorktreeInfo,
-      plan,
-      createFromInfo,
-      create,
-      createReadyFromInfo,
-      createReady,
+      makeWorktreeInfo: (input) => owned(undefined, makeWorktreeInfo(input)),
+      plan: (input) => owned(undefined, plan(input)),
+      createFromInfo: (info, start) => owned(info.directory, createFromInfo(info, start), true),
+      create: (input) => owned(undefined, create(input)),
+      createReadyFromInfo: (info, start, base) => owned(info.directory, createReadyFromInfo(info, start, base), true),
+      createReady: (input) => owned(undefined, createReady(input)),
       list,
-      remove,
-      reset,
+      remove: (input) => owned(input.directory, WorktreeAdmission.mutate(remove(input))),
+      reset: (input) => owned(input.directory, WorktreeAdmission.mutate(reset(input))),
     })
     // kilocode_change end
   }),

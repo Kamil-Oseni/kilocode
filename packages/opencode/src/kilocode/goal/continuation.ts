@@ -1,7 +1,7 @@
 import * as GoalMessage from "./message"
 import path from "node:path"
 // raya_change - Milestone A idle continuation with no-tool spin suppression
-import { Cause, Effect, Schema, Semaphore, Scope } from "effect"
+import { Cause, Effect, Fiber, Schema, Semaphore, Scope } from "effect"
 import type { Bus } from "@/bus"
 import type { Session } from "@/session/session"
 import { SessionID, type MessageID } from "@/session/schema"
@@ -24,9 +24,48 @@ import { ChiefBranches } from "@/kilocode/chief/branches"
 import { gate } from "@/kilocode/session/input-gate"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { ChiefNoteEvent } from "@/kilocode/chief/event"
+import { scheduler } from "@/kilocode/task/admission"
+import { RayaTask } from "@/kilocode/task"
+import { isDeepStrictEqual } from "node:util"
 
 const log = Log.create({ service: "raya-goal-continuation" })
 const recovery = Semaphore.makeUnsafe(2)
+const refuse = () => new RayaTask.GuardError({ kind: "unavailable", message: "Goal continuation intake is closing." })
+const known = (err: unknown) => err instanceof RayaTask.GuardError || err instanceof RayaTask.NotFoundError
+const intake = <A, E, R>(body: Effect.Effect<A, E, R>) => scheduler.track(scheduler.observe(body, known), refuse)
+function dispatch<A, E, R>(
+  body: Effect.Effect<A, E, R>,
+  scope: Scope.Scope,
+  fork: import("@/effect/bridge").Shape["fork"],
+) {
+  let fiber: Fiber.Fiber<Fiber.Fiber<A, E>, never> | undefined
+  scheduler.dispatch(body, scope, (body) => (fiber = fork(body)))
+  // Existing callback callers may join the actual body, not only its scheduling.
+  return fiber ? fork(Fiber.join(fiber).pipe(Effect.flatMap(Fiber.join))) : undefined
+}
+
+/** Terminal callback bookkeeping may read existing authority, never acquire a new execution. */
+function authority(
+  input: { storage: Storage.Interface; database?: Database.Interface },
+  session: { id: string; metadata?: Record<string, unknown> },
+) {
+  return Effect.gen(function* () {
+    if (session.metadata?.rayaRoutine === undefined) return true
+    const identity = yield* Schema.decodeUnknownEffect(record)(session.metadata.rayaRoutine).pipe(
+      Effect.orElseSucceed(() => undefined),
+    )
+    if (!identity) return false
+    if (
+      !(yield* RayaTaskExecution.make(input.storage).authorized({
+        id: identity.runID,
+        agentID: identity.agentID,
+        sessionID: session.id,
+      }))
+    )
+      return false
+    return yield* continuation({ ...input, session })
+  })
+}
 
 const identifier = /^[A-Za-z0-9_:-]{1,128}$/
 const inspect =
@@ -329,6 +368,7 @@ function invoke(input: {
       ),
     catch: (err) => err,
   }).pipe(
+    (body) => scheduler.observe(body, known),
     Effect.tap(() => input.complete?.() ?? Effect.void),
     Effect.catch((err) =>
       input.goals
@@ -502,6 +542,7 @@ function uncertain(input: {
 export namespace RayaGoalContinuation {
   export const limit = RayaGoal.retryLimit
   export const expected = prompt
+  export const matches = intact
 
   export function restore(input: {
     database?: Database.Interface
@@ -556,7 +597,7 @@ export namespace RayaGoalContinuation {
           }).pipe(recovery.withPermits(1)),
         { concurrency: 2, discard: true },
       )
-    })
+    }).pipe(intake)
   }
 
   /** A note event is only a hint; durable prepared and goal dispatch state decide whether one turn may start. */
@@ -645,7 +686,7 @@ export namespace RayaGoalContinuation {
         return next?.dispatch?.attention?.batchID === batch.id && next.dispatch.phase === "queued"
       }).pipe(gate.withLock(input.sessionID))
       if (!selected) return false
-      yield* resume({
+      yield* resumption({
         ...input,
         permitted: () =>
           Effect.gen(function* () {
@@ -657,7 +698,7 @@ export namespace RayaGoalContinuation {
           }),
       })
       return true
-    })
+    }).pipe(intake)
   }
 
   export function subscribeAttention(input: {
@@ -671,6 +712,7 @@ export namespace RayaGoalContinuation {
   }) {
     return Effect.gen(function* () {
       const bridge = yield* EffectBridge.make()
+      const scope = yield* Scope.Scope
       const listener = (event: GlobalEvent) => {
         if (
           event.directory !== input.directory ||
@@ -680,14 +722,17 @@ export namespace RayaGoalContinuation {
           return
         const data = event.payload?.properties
         if (!data || data.version !== 1 || typeof data.sessionID !== "string") return
-        bridge.fork(
+        dispatch(
           wake({ ...input, sessionID: SessionID.make(data.sessionID) }).pipe(
+            (body) => scheduler.observe(body, known),
             Effect.catchCause((cause) =>
               Cause.hasInterrupts(cause)
                 ? Effect.interrupt
                 : Effect.sync(() => log.warn("Chief note wake skipped", { err: Cause.squash(cause) })),
             ),
           ),
+          scope,
+          bridge.fork,
         )
       }
       GlobalBus.on("event", listener)
@@ -797,6 +842,7 @@ export namespace RayaGoalContinuation {
                   try: (signal) => (input.loop ?? continueTurn)(input.sessionID, session.directory, signal),
                   catch: (err) => err,
                 }).pipe(
+                  (body) => scheduler.observe(body, known),
                   Effect.as(true),
                   Effect.catch((err) =>
                     goals
@@ -859,9 +905,34 @@ export namespace RayaGoalContinuation {
   }
 
   export function resume(input: ResumeInput) {
+    return resumption(input).pipe(intake)
+  }
+
+  function resumption(input: ResumeInput) {
     return Effect.gen(function* () {
       const session = yield* input.sessions.get(input.sessionID)
       return yield* owned({ database: input.database, storage: input.storage, session }, proceed(input))
+    })
+  }
+
+  /** Only the exact Routine dispatch reserved by its caller can use this lexical entry. */
+  export function accepted(input: ResumeInput, run: RayaTask.Run) {
+    return Effect.gen(function* () {
+      if (run.sessionID !== input.sessionID) return yield* refuse()
+      const session = yield* input.sessions.get(input.sessionID)
+      const identity = yield* Schema.decodeUnknownEffect(record)(session.metadata?.rayaRoutine).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (
+        !identity ||
+        identity.runID !== run.id ||
+        identity.agentID !== run.agentID ||
+        identity.scheduleVersion !== (run.scheduleVersion ?? 1) ||
+        !isDeepStrictEqual(identity.trigger, run.trigger) ||
+        !(yield* RayaTaskExecution.make(input.storage).authorized(run))
+      )
+        return yield* refuse()
+      return yield* resumption(input)
     })
   }
 
@@ -889,7 +960,7 @@ export namespace RayaGoalContinuation {
         const notification = `${raw.sessionID}:${raw.execution}`
         if (notifications.has(notification) || notifications.size >= 64) return
         notifications.add(notification)
-        bridge.fork(
+        dispatch(
           Effect.gen(function* () {
             const hint = raw
             const session = yield* input.sessions.get(hint.sessionID)
@@ -926,28 +997,31 @@ export namespace RayaGoalContinuation {
                 ? yield* RayaTaskInbox.make(input.database).stranded(hint.agentID)
                 : undefined
               if (pending?.sessionID !== hint.sessionID) return
-              yield* launch({
-                goals,
-                session,
-                sessionID: hint.sessionID,
-                directory: session.directory,
-                permitted: () => continuation({ ...input, session }),
-                run: input.run,
-                dispatch: goal.dispatch!.id,
-                database: input.database,
-                storage: input.storage,
-              })
+              yield* intake(
+                launch({
+                  goals,
+                  session,
+                  sessionID: hint.sessionID,
+                  directory: session.directory,
+                  permitted: () => continuation({ ...input, session }),
+                  run: input.run,
+                  dispatch: goal.dispatch!.id,
+                  database: input.database,
+                  storage: input.storage,
+                }),
+              )
             }).pipe(Effect.ensuring(Effect.sync(() => waiting.delete(key))))
           }).pipe(
             Effect.ensuring(Effect.sync(() => notifications.delete(notification))),
+            (body) => scheduler.observe(body, known),
             Effect.catchCause((cause) =>
               Cause.hasInterrupts(cause)
                 ? Effect.void
                 : Effect.sync(() => log.warn("Routine idle intake hint was refused", { cause: Cause.squash(cause) })),
             ),
-            Effect.forkIn(scope),
-            Effect.asVoid,
           ),
+          scope,
+          bridge.fork,
         )
       }
       GlobalBus.on("event", listener)
@@ -955,7 +1029,7 @@ export namespace RayaGoalContinuation {
       yield* input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {
         if (event.properties.parentID) return undefined
         const sid = event.properties.sessionID
-        return bridge.fork(
+        return dispatch(
           Effect.gen(function* () {
             if (event.properties.reason === "superseded") return
             if (event.properties.messageID)
@@ -978,7 +1052,7 @@ export namespace RayaGoalContinuation {
             const active = yield* goals.get(sid)
             if (!active || active.status !== "active") return
             const session = yield* input.sessions.get(sid)
-            if (!(yield* continuation({ ...input, session }))) return
+            if (!(yield* authority(input, session))) return
             if (event.properties.reason === "error") {
               const intent = event.properties.goalIntent
               if (intent !== undefined && intent !== (active.intent ?? "unset")) return
@@ -1001,19 +1075,23 @@ export namespace RayaGoalContinuation {
                   return
               }
               const err = last?.info.role === "assistant" ? last.info.error : undefined
-              const retry = yield* recover(goals.retried(sid, detail(err), event.id, active.intent), active.intent)
-              if (!retry?.dispatch || retry.status !== "active") return
-              yield* launch({
-                goals,
-                session,
-                sessionID: sid,
-                directory: session.directory,
-                permitted: () => continuation({ ...input, session }),
-                run: input.run,
-                dispatch: retry.dispatch.id,
-                database: input.database,
-                storage: input.storage,
-              })
+              yield* intake(
+                Effect.gen(function* () {
+                  const retry = yield* recover(goals.retried(sid, detail(err), event.id, active.intent), active.intent)
+                  if (!retry?.dispatch || retry.status !== "active") return
+                  yield* launch({
+                    goals,
+                    session,
+                    sessionID: sid,
+                    directory: session.directory,
+                    permitted: () => continuation({ ...input, session }),
+                    run: input.run,
+                    dispatch: retry.dispatch.id,
+                    database: input.database,
+                    storage: input.storage,
+                  })
+                }),
+              )
               return
             }
 
@@ -1035,19 +1113,23 @@ export namespace RayaGoalContinuation {
               active.dispatch.intent !== (active.intent ?? "unset") &&
               turn?.state.status === "active"
             ) {
-              const queued = yield* recover(goals.continued(sid, active.intent), active.intent)
-              if (!queued?.dispatch) return
-              yield* launch({
-                goals,
-                session,
-                sessionID: sid,
-                directory: session.directory,
-                permitted: () => continuation({ ...input, session }),
-                run: input.run,
-                dispatch: queued.dispatch.id,
-                database: input.database,
-                storage: input.storage,
-              })
+              yield* intake(
+                Effect.gen(function* () {
+                  const queued = yield* recover(goals.continued(sid, active.intent), active.intent)
+                  if (!queued?.dispatch) return
+                  yield* launch({
+                    goals,
+                    session,
+                    sessionID: sid,
+                    directory: session.directory,
+                    permitted: () => continuation({ ...input, session }),
+                    run: input.run,
+                    dispatch: queued.dispatch.id,
+                    database: input.database,
+                    storage: input.storage,
+                  })
+                }),
+              )
               return
             }
             if (
@@ -1069,20 +1151,25 @@ export namespace RayaGoalContinuation {
             if (KiloSessionPromptQueue.snapshot(sid).length > 0) return
             const current = yield* goals.get(sid)
             if (!current || current.status !== "active") return
-            const queued = yield* recover(goals.continued(sid, active.intent), active.intent)
-            if (!queued?.dispatch) return
-            yield* launch({
-              goals,
-              session,
-              sessionID: sid,
-              directory: session.directory,
-              permitted: () => continuation({ ...input, session }),
-              run: input.run,
-              dispatch: queued.dispatch.id,
-              database: input.database,
-              storage: input.storage,
-            })
+            yield* intake(
+              Effect.gen(function* () {
+                const queued = yield* recover(goals.continued(sid, active.intent), active.intent)
+                if (!queued?.dispatch) return
+                yield* launch({
+                  goals,
+                  session,
+                  sessionID: sid,
+                  directory: session.directory,
+                  permitted: () => continuation({ ...input, session }),
+                  run: input.run,
+                  dispatch: queued.dispatch.id,
+                  database: input.database,
+                  storage: input.storage,
+                })
+              }),
+            )
           }).pipe(
+            (body) => scheduler.observe(body, known),
             Effect.catchCause((cause) =>
               Effect.sync(() =>
                 log.error("goal turn-close subscriber failed", {
@@ -1092,6 +1179,8 @@ export namespace RayaGoalContinuation {
               ),
             ),
           ),
+          scope,
+          bridge.fork,
         )
       })
     })

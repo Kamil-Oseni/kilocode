@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { createHash } from "node:crypto"
+import { save as publish } from "./plan-sidecar"
 
 export namespace PlanArtifact {
   export const Step = Schema.Struct({
@@ -73,12 +74,14 @@ export namespace PlanArtifact {
     }
   }
 
-  export async function save(file: string, plan: Info) {
-    await Bun.write(sidecar(file), JSON.stringify(plan, null, 2))
+  export function save(file: string, plan: Info, digest: string, scope?: string) {
+    return publish(file, plan, digest, scope)
   }
 
   export async function load(file: string) {
-    const raw = await Bun.file(sidecar(file)).json().catch(() => undefined)
+    const raw = await Bun.file(sidecar(file))
+      .json()
+      .catch(() => undefined)
     if (!raw) return
     return Schema.decodeUnknownSync(Info)(raw)
   }

@@ -338,7 +338,7 @@ const layer = Layer.effect(
         KiloAgent.patchAgents(agents, defaults, user, cfg, kilo, ctx.worktree, whitelistedDirs)
         // kilocode_change start - retain configuration without making agent discovery depend on Auto model availability
         const small = cfg.small_model ? Provider.parseModel(cfg.small_model) : undefined
-        KiloAgent.addAuto(agents, defaults, small)
+        KiloAgent.addAuto(agents, defaults, small, user)
         // kilocode_change end
 
         const agentConfigs = KiloAgent.preprocessConfig(cfg.agent ?? {})

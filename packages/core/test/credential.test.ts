@@ -3,6 +3,7 @@ import { Database as SQLite } from "bun:sqlite" // kilocode_change
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm" // kilocode_change
 import { Effect, Layer } from "effect"
+import { Exit } from "effect" // kilocode_change
 import { Credential } from "@opencode-ai/core/credential"
 import { CredentialTable } from "@opencode-ai/core/credential/sql" // kilocode_change
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -310,14 +311,6 @@ describe("Credential", () => {
           )
 
           const file = path.join(tmp.path, "auth.json")
-          yield* Effect.promise(() => Bun.write(file, "{"))
-          yield* service.create({
-            integrationID: Integration.ID.make("malformed-reader"),
-            value: Credential.Key.make({ type: "key", key: "safe" }),
-          })
-          expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("{")
-
-          yield* Effect.promise(() => Bun.write(file, "{}"))
           yield* Effect.all(
             ["first-reader", "second-reader"].map((name) =>
               service.create({
@@ -331,6 +324,16 @@ describe("Credential", () => {
             "first-reader": { type: "api", key: "first-reader" },
             "second-reader": { type: "api", key: "second-reader" },
           })
+          yield* Effect.promise(() => Bun.write(file, "{"))
+          const refused = yield* Effect.exit(
+            service.create({
+              integrationID: Integration.ID.make("malformed-reader"),
+              value: Credential.Key.make({ type: "key", key: "safe" }),
+            }),
+          )
+          expect(Exit.isFailure(refused)).toBe(true)
+          expect(yield* Effect.promise(() => Bun.file(file + ".raya-intent.json").exists())).toBe(true)
+          expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("{")
         }).pipe(Effect.provide(localLayer(tmp.path)), Effect.scoped),
       ),
     ),

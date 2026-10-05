@@ -9,6 +9,7 @@ import { Repository } from "./repository"
 import { RepositoryCache } from "./repository-cache"
 import { AbsolutePath } from "./schema"
 import { State } from "./state"
+import { RepositoryAdmission } from "./kilocode/repository-admission" // kilocode_change
 
 export const LocalSource = Reference.LocalSource
 export type LocalSource = Reference.LocalSource
@@ -100,7 +101,7 @@ const layer = Layer.effect(
                   cause,
                 }),
               ),
-              Effect.forkIn(scope),
+              (body) => RepositoryAdmission.fork(body, scope), // kilocode_change - reserve before scheduling and join cleanup
             )
           }
           yield* events.publish(Event.Updated, {})

@@ -65,6 +65,7 @@ import { MemoryService } from "@kilocode/kilo-memory/effect/service" // kilocode
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
+import { Global } from "@opencode-ai/core/global" // kilocode_change - transferred-profile review reads the active graph's data root
 import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -142,6 +143,7 @@ import { errorLayer } from "./middleware/error"
 import { fenceLayer } from "./middleware/fence"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { layer as requestIDLayer } from "@/kilocode/server/httpapi/request-id" // kilocode_change
+import { retireHandler } from "@/kilocode/server/httpapi/retirement" // kilocode_change
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -243,6 +245,7 @@ const app = LayerNode.group([
   Npm.node,
   FSUtil.node,
   Database.node,
+  Global.node, // kilocode_change - transferred-profile review dependency
   Credential.node, // kilocode_change
   Auth.node,
   Account.node,
@@ -400,11 +403,11 @@ export function createListenerRoutes(corsOptions?: CorsOptions) {
 export const routes = createRoutes()
 
 export const webHandler = lazy(() =>
-  HttpRouter.toWebHandler(routes, {
+  retireHandler(HttpRouter.toWebHandler(routes, { // kilocode_change
     disableLogger: true,
     memoMap,
     middleware: disposeMiddleware,
-  }),
+  })), // kilocode_change
 )
 
 export * as HttpApiApp from "./server"

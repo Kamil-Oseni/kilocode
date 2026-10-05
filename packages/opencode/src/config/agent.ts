@@ -14,6 +14,7 @@ import { ConfigErrorV1 as ConfigError, FrontmatterError } from "@opencode-ai/cor
 import { KilocodeConfig } from "@/kilocode/config/config"
 import { report } from "@/kilocode/config/report"
 import type { Warning } from "./config"
+import { ConfigIntent, type Graph } from "@opencode-ai/core/kilocode/config-intent"
 // kilocode_change end
 
 const log = Log.create({ service: "config" })
@@ -25,6 +26,7 @@ export async function load(
   trusted = false,
   fileScope?: ConfigVariable.FileScope,
   sourceScope?: ConfigVariable.FileScope | readonly ConfigVariable.FileScope[],
+  intent?: Graph,
 ) {
   // kilocode_change end
   const result: Record<string, ConfigAgentV1.Info> = {}
@@ -35,11 +37,9 @@ export async function load(
     symlink: true,
   })) {
     // kilocode_change start
-    const md = await ConfigMarkdown.parse(item, { trusted, fileScope, sourceScope }).catch(async (err) => {
+    const md = await ConfigMarkdown.parse(item, { trusted, fileScope, sourceScope, intent }).catch(async (err) => {
       // kilocode_change end
-      const message = FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse agent ${item}`
+      const message = FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse agent ${item}` // kilocode_change
       // kilocode_change start
       if (warnings) warnings.push({ path: item, message })
       try {
@@ -87,6 +87,7 @@ export async function load(
     // kilocode_change start - use Effect schema (propertyOrder: original) + non-fatal handleInvalid
     try {
       result[config.name] = ConfigParse.schema(ConfigAgentV1.Info, config, item)
+      ConfigIntent.acceptMarkdown(intent, md, "agent", name, trusted)
     } catch (err) {
       if (ConfigError.InvalidError.isInstance(err)) {
         await KilocodeConfig.handleInvalid("agent", item, err.data.issues ?? [], err, warnings)
@@ -106,6 +107,7 @@ export async function loadMode(
   trusted = false,
   fileScope?: ConfigVariable.FileScope,
   sourceScope?: ConfigVariable.FileScope,
+  intent?: Graph,
 ) {
   // kilocode_change end
   const result: Record<string, ConfigAgentV1.Info> = {}
@@ -116,11 +118,9 @@ export async function loadMode(
     symlink: true,
   })) {
     // kilocode_change start
-    const md = await ConfigMarkdown.parse(item, { trusted, fileScope, sourceScope }).catch(async (err) => {
+    const md = await ConfigMarkdown.parse(item, { trusted, fileScope, sourceScope, intent }).catch(async (err) => {
       // kilocode_change end
-      const message = FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse mode ${item}`
+      const message = FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse mode ${item}` // kilocode_change
       // kilocode_change start
       if (warnings) warnings.push({ path: item, message })
       try {
@@ -147,6 +147,7 @@ export async function loadMode(
         ...ConfigParse.schema(ConfigAgentV1.Info, config, item),
         mode: "primary" as const,
       }
+      ConfigIntent.acceptMarkdown(intent, md, "mode", config.name, trusted)
     } catch (err) {
       if (ConfigError.InvalidError.isInstance(err)) {
         await KilocodeConfig.handleInvalid("agent", item, err.data.issues ?? [], err, warnings)

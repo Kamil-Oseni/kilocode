@@ -1,6 +1,8 @@
 import { expect } from "bun:test"
 import path from "node:path"
-import { Deferred, Effect, Exit, Fiber, Queue } from "effect"
+import { createHash } from "node:crypto"
+import { hostname } from "node:os"
+import { Cause, Deferred, Effect, Exit, Fiber, Queue, Scheduler } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -11,6 +13,7 @@ import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
 import { RayaTask } from "@/kilocode/task"
+import { admission } from "@/kilocode/task/admission"
 import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -31,6 +34,97 @@ const session = (id: SessionID) => ({
   version: "test",
   time: { created: Date.now(), updated: Date.now() },
 })
+
+it.live(
+  "revokes admission and joins an exact idle receipt removal before terminal finish returns",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const removing = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const observed = yield* Deferred.make<void>()
+        const state = { held: false }
+        const guarded = {
+          create: storage.create,
+          replace: storage.replace,
+          read: <T>(key: string[]) =>
+            storage
+              .read<T>(key)
+              .pipe(Effect.tap(() => (state.held ? Deferred.succeed(observed, undefined) : Effect.void))),
+          remove: (key: string[]) =>
+            Effect.gen(function* () {
+              if (key[1] === "agent-executions") {
+                state.held = true
+                yield* Deferred.succeed(removing, undefined)
+                yield* Deferred.await(release)
+              }
+              yield* storage.remove(key)
+            }),
+        }
+        const execution = RayaTaskExecution.make(guarded)
+        const owner = identity()
+        expect(yield* execution.enter(owner, Effect.succeed("idle"))).toBe("idle")
+        const first = yield* execution.finish(owner).pipe(Effect.forkChild)
+        yield* Effect.gen(function* () {
+          yield* Deferred.await(removing)
+          expect(yield* execution.authorized(owner)).toBe(false)
+          const done = yield* Deferred.make<void>()
+          const second = yield* execution
+            .finish(owner)
+            .pipe(Effect.andThen(Deferred.succeed(done, undefined)), Effect.forkChild)
+          yield* Deferred.await(observed)
+          yield* Effect.yieldNow
+          expect(yield* Deferred.isDone(done)).toBe(false)
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(first)
+          yield* Fiber.join(second)
+          expect(yield* execution.receipt(owner)).toBeUndefined()
+          expect(yield* execution.enter(owner, Effect.succeed("fresh"))).toBe("fresh")
+          yield* execution.finish(owner)
+        }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  30_000,
+)
+
+it.live(
+  "consumes a terminal finish racing the durable idle handoff without leaving its exact receipt",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const execution = RayaTaskExecution.make(storage)
+        for (const _ of Array.from({ length: 32 })) {
+          const owner = identity()
+          const child = yield* execution.enter(owner, Effect.succeed("finished")).pipe(Effect.forkChild)
+          const prior = yield* Effect.gen(function* () {
+            while (true) {
+              const row = yield* execution.receipt(owner)
+              if (row?.state === "idle") return row
+              yield* Effect.yieldNow
+            }
+          }).pipe(Effect.timeout("5 seconds"))
+          expect(prior.state).toBe("idle")
+          yield* execution.finish(owner)
+          expect(yield* Fiber.join(child)).toBe("finished")
+          expect(yield* execution.receipt(owner)).toBeUndefined()
+          const next = yield* execution.acquire(owner)
+          if (!next) throw new Error("Finished execution did not permit a fresh generation")
+          expect(next.record.token).not.toBe(prior?.token)
+          expect(yield* execution.enter(owner, Effect.succeed("new generation"))).toBe("new generation")
+          yield* execution.finish(owner)
+          expect(yield* execution.receipt(owner)).toBeUndefined()
+        }
+      }).pipe(
+        Effect.provide(Storage.layerFromDir(path.join(root, "storage"))),
+        Effect.provideService(Scheduler.MaxOpsBeforeYield, 16),
+      )
+    }),
+  30_000,
+)
 
 function idle(storage: Storage.Interface, run: RayaTask.Run) {
   const execution = RayaTaskExecution.make(storage)
@@ -371,3 +465,156 @@ it.live(
     }),
   30_000,
 )
+
+if (process.platform === "win32")
+  it.live(
+    "retries exact local idle removal after a real Windows reader denied deletion",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        yield* Effect.gen(function* () {
+          const storage = yield* Storage.Service
+          const execution = RayaTaskExecution.make(storage)
+          const owner = identity()
+          expect(yield* execution.enter(owner, Effect.succeed("idle"))).toBe("idle")
+          const prior = yield* execution.receipt(owner)
+          if (!prior) throw new Error("Missing actual idle receipt")
+          const file = path.join(
+            root,
+            "storage/raya/agent-executions",
+            createHash("sha256").update(owner.id).digest("hex") + ".json",
+          )
+          const script =
+            '$ErrorActionPreference="Stop";$p=[Console]::In.ReadLine();$f=[IO.File]::Open($p,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::Read -bor [IO.FileShare]::Write));try{[Console]::Out.WriteLine("held");[Console]::Out.Flush();[void][Console]::In.ReadLine()}finally{$f.Dispose()}'
+          const child = Bun.spawn(["powershell", "-NoProfile", "-Command", script], {
+            stdin: "pipe",
+            stdout: "pipe",
+            stderr: "pipe",
+            windowsHide: true,
+          })
+          const reader = child.stdout.getReader()
+          try {
+            yield* Effect.promise(async () => child.stdin.write(file + "\n"))
+            const ready = yield* Effect.promise(() => reader.read())
+            expect(new TextDecoder().decode(ready.value).trim()).toBe("held")
+            const intake = admission()
+            const failed = yield* intake
+              .track(execution.finish(owner), () => new Error("Admission closed"))
+              .pipe(Effect.exit)
+            expect(Exit.isFailure(failed)).toBe(true)
+            expect((yield* execution.receipt(owner))?.token).toBe(prior.token)
+            expect(yield* execution.authorized(owner)).toBe(false)
+          } finally {
+            yield* Effect.promise(async () => {
+              await child.stdin.write("\n")
+              await child.stdin.end()
+            })
+            expect(yield* Effect.promise(() => child.exited)).toBe(0)
+            reader.releaseLock()
+          }
+          expect(yield* execution.finish(owner).pipe(Effect.exit)).toMatchObject({ _tag: "Success" })
+          expect(yield* execution.receipt(owner)).toBeUndefined()
+        }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }),
+    30000,
+  )
+
+it.live(
+  "retains a newer durable generation when an old body finalizes",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const execution = RayaTaskExecution.make(storage)
+        const owner = identity()
+        const permit = yield* execution.acquire(owner)
+        if (!permit) throw new Error("Missing execution permit")
+        const next = { ...permit.record, token: crypto.randomUUID(), state: "idle" as const }
+        const result = yield* execution
+          .enter(
+            owner,
+            storage.replace(["raya", "agent-executions", createHash("sha256").update(owner.id).digest("hex")], next),
+          )
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        expect((yield* execution.receipt(owner))?.token).toBe(next.token)
+        expect(yield* execution.authorized(owner)).toBe(false)
+        yield* storage.remove(["raya", "agent-executions", createHash("sha256").update(owner.id).digest("hex")])
+      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+    }),
+  30_000,
+)
+
+if (process.platform === "win32")
+  it.live(
+    "keeps a stopped foreign review retryable after a real deletion fault",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* tmpdirScoped()
+        yield* Effect.gen(function* () {
+          const storage = yield* Storage.Service
+          const execution = RayaTaskExecution.make(storage)
+          const run = identity()
+          yield* execution.enter(run, Effect.void)
+          const prior = yield* execution.receipt(run)
+          if (!prior) throw new Error("Missing original receipt")
+          const process = Bun.spawn(
+            [
+              "powershell",
+              "-NoProfile",
+              "-Command",
+              '[Console]::Out.WriteLine($PID);[Console]::Out.WriteLine((Get-Process -Id $PID).StartTime.ToUniversalTime().ToString("O",[Globalization.CultureInfo]::InvariantCulture))',
+            ],
+            { stdout: "pipe", stderr: "pipe", windowsHide: true },
+          )
+          const text = yield* Effect.promise(() => new Response(process.stdout).text())
+          expect(yield* Effect.promise(() => process.exited)).toBe(0)
+          const [pid, birth] = text.trim().split(/\r?\n/)
+          expect(Number.isSafeInteger(Number(pid))).toBe(true)
+          expect(birth).toMatch(/^\d{4}-.*Z$/)
+          const foreign = { ...prior, owner: { host: hostname(), pid: Number(pid), birth } }
+          const key = ["raya", "agent-executions", createHash("sha256").update(run.id).digest("hex")]
+          yield* storage.replace(key, foreign)
+          const file = path.join(root, "storage", ...key) + ".json"
+          const script =
+            '$ErrorActionPreference="Stop";$p=[Console]::In.ReadLine();$f=[IO.File]::Open($p,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::Read -bor [IO.FileShare]::Write));try{[Console]::Out.WriteLine("held");[Console]::Out.Flush();[void][Console]::In.ReadLine()}finally{$f.Dispose()}'
+          const holder = Bun.spawn(["powershell", "-NoProfile", "-Command", script], {
+            stdin: "pipe",
+            stdout: "pipe",
+            stderr: "pipe",
+            windowsHide: true,
+          })
+          const reader = holder.stdout.getReader()
+          try {
+            yield* Effect.promise(async () => holder.stdin.write(file + "\n"))
+            expect(new TextDecoder().decode((yield* Effect.promise(() => reader.read())).value).trim()).toBe("held")
+            const intake = admission()
+            const failed = yield* intake
+              .track(execution.review(run, prior.token), () => new Error("Admission closed"))
+              .pipe(Effect.exit)
+            expect(Exit.isFailure(failed)).toBe(true)
+            if (Exit.isFailure(failed)) {
+              expect(Cause.hasFails(failed.cause)).toBe(true)
+              expect(Cause.hasDies(failed.cause)).toBe(false)
+            }
+            yield* Effect.promise(intake.quiesce)
+            expect(intake.snapshot().failures).toBe(0)
+            expect(yield* execution.receipt(run)).toEqual(foreign)
+            const reviews = yield* storage.list(["raya", "agent-execution-reviews", key[2]])
+            expect(reviews.length).toBe(1)
+            expect((yield* storage.read<{ record: typeof foreign }>(reviews[0])).record).toEqual(foreign)
+          } finally {
+            yield* Effect.promise(async () => {
+              await holder.stdin.write("\n")
+              await holder.stdin.end()
+            })
+            expect(yield* Effect.promise(() => holder.exited)).toBe(0)
+            reader.releaseLock()
+          }
+          yield* execution.review(run, prior.token)
+          expect(yield* execution.receipt(run)).toBeUndefined()
+        }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }),
+    30000,
+  )

@@ -2,6 +2,8 @@ import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@op
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
+import type { Port } from "./kilocode/model-state" // kilocode_change
+import { settle } from "./kilocode/settlement" // kilocode_change
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -156,6 +158,7 @@ export type TuiInput = {
   events?: EventSource
   pluginHost: TuiPluginHost
   onExit?: (exit: Exit) => void // kilocode_change - expose the extracted TUI exit to the CLI worker bridge
+  model?: Port // kilocode_change - injected actual parent-side model producer
 }
 
 function errorMessage(error: unknown) {
@@ -193,7 +196,9 @@ function isVersionGreater(left: string, right: string) {
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const global = yield* Global.Service
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
-  const result = yield* Effect.scoped(
+  // kilocode_change start - retain original body plus renderer/plugin cleanup failures
+  const result = yield* settle(
+    // kilocode_change end
     Effect.gen(function* () {
       const keyboard = kitty() // kilocode_change
       const renderer = yield* Effect.acquireRelease(
@@ -227,10 +232,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       )
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
+          // kilocode_change - retain failed plugin disposal after diagnostic reporting
           try {
             await input.pluginHost.dispose()
           } catch (error) {
             console.error("Failed to dispose TUI plugins", error)
+            throw error // kilocode_change
           }
         }),
       )
@@ -270,6 +277,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                       cwd: process.cwd(),
                       home: global.home,
                       state: global.state,
+                      model: input.model, // kilocode_change
                       worktree: global.data + "/worktree",
                     }}
                   >

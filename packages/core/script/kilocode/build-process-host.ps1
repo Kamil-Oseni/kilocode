@@ -11,7 +11,7 @@ Remove-Item -LiteralPath $Output -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $symbol -Force -ErrorAction SilentlyContinue
 $ready = $false
 try {
-  $command = '"{0}" >nul && cl /nologo /std:c++20 /EHsc /O2 /Z7 /W4 /WX /Zc:__cplusplus /Fo:"{1}" /Fe:"{2}" "{3}" crypt32.lib bcrypt.lib /link /DEBUG:FULL /INCREMENTAL:NO /PDB:"{4}"' -f $vcvars, $object, $Output, $source, $symbol
+  $command = '"{0}" >nul && cl /nologo /std:c++20 /EHsc /O2 /Z7 /W4 /WX /Zc:__cplusplus /Fo:"{1}" /Fe:"{2}" "{3}" crypt32.lib bcrypt.lib advapi32.lib /link /DEBUG:FULL /INCREMENTAL:NO /PDB:"{4}"' -f $vcvars, $object, $Output, $source, $symbol
   & cmd.exe /s /c $command
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Output)) { throw 'Native process host compilation failed' }
   if (-not (Test-Path -LiteralPath $symbol)) { throw 'Native process host symbols were not produced' }

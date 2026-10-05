@@ -1,7 +1,6 @@
 import path from "path"
-import { pathToFileURL } from "url"
 import { existsSync } from "fs"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Exit, Schema, Semaphore } from "effect"
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { mergeDeep } from "remeda"
 import * as Log from "@opencode-ai/core/util/log"
@@ -19,9 +18,21 @@ import { RulesMigrator } from "../rules-migrator"
 import { WorkflowsMigrator } from "../workflows-migrator"
 import { McpMigrator } from "../mcp-migrator"
 import { IgnoreMigrator } from "../ignore-migrator"
+import { KiloShutdown } from "../cli/shutdown"
+import { ConfigPublication } from "./publication"
 
 export namespace KilocodeConfig {
   const log = Log.create({ service: "kilocode.config" })
+  const gate = Semaphore.makeUnsafe(1)
+  const pending = new Set<Promise<void>>()
+  const failures: unknown[] = []
+  let closing: Promise<void> | undefined
+
+  KiloShutdown.register(() => {
+    return (closing ??= Promise.all(pending).then(() => {
+      if (failures.length) throw new AggregateError(failures, "Project config retirement failed")
+    }))
+  })
 
   // ── Config schema extensions ─────────────────────────────────────────
 
@@ -65,7 +76,7 @@ export namespace KilocodeConfig {
     return [...dirs.flatMap((dir) => ALL_CONFIG_FILES.map((file) => path.join(dir, file))), ...roots]
   })
 
-  export const updateProjectConfig = Effect.fn("KilocodeConfig.updateProjectConfig")(function* (input: {
+  export const updateProjectConfig = Effect.fn("KilocodeConfig.updateProjectConfig")(function* (source: {
     fs: FSUtil.Interface
     directory: string
     worktree?: string
@@ -75,28 +86,64 @@ export namespace KilocodeConfig {
     patch: (input: string, config: Config.Info) => string
     writable: (config: Config.Info) => Config.Info
   }) {
-    const files = yield* projectConfigFiles(input)
-    const file = files.find((item) => existsSync(item)) ?? path.join(input.directory, ".kilo", "kilo.jsonc")
-    const source = yield* input.read(file)
-    const before = source ?? "{}"
-    const patch = input.writable(input.config)
-
-    if (file.endsWith(".jsonc")) {
-      if (!(source === undefined && Object.keys(mergeConfig({}, patch)).length === 0)) {
-        const updated = input.patch(before, patch)
-        yield* input.fs.writeWithDirs(file, updated).pipe(Effect.orDie)
-      }
-    } else {
-      const existing = input.parse(before, file)
-      const merged = mergeConfig(input.writable(existing), patch)
-      if (!(source === undefined && Object.keys(merged).length === 0)) {
-        yield* input.fs.writeWithDirs(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
-      }
+    if (closing) throw new Error("Project config is retired")
+    const input = { ...source, config: structuredClone(source.config) }
+    const config = input.config
+    const joined = Promise.withResolvers<void>()
+    pending.add(joined.promise)
+    const result = yield* gate
+      .withPermit(
+        Effect.gen(function* () {
+          const prior = yield* projectConfigFiles(input)
+          const target = prior.find((file) => existsSync(file)) ?? path.join(input.directory, ".kilo", "kilo.jsonc")
+          const parent = path.dirname(target)
+          const missing = !existsSync(parent)
+          const files = [
+            ...new Set(missing ? [...ALL_CONFIG_FILES.map((name) => path.join(parent, name)), ...prior] : prior),
+          ]
+          const targets = [...new Set([target, ...files.filter((file) => existsSync(file))])]
+          return yield* ConfigPublication.run(
+            {
+              files,
+              targets,
+              roots: [input.directory, input.worktree && input.worktree !== "/" ? input.worktree : input.directory],
+            },
+            (tx) =>
+              Effect.gen(function* () {
+                const current = yield* projectConfigFiles(input)
+                const selected =
+                  current.find((file) => existsSync(file)) ?? path.join(input.directory, ".kilo", "kilo.jsonc")
+                if (selected !== target || JSON.stringify([...new Set(current)]) !== JSON.stringify(files))
+                  throw new Error("Project config target changed during admission")
+                const source = yield* Effect.promise(() => tx.read(target))
+                const before = source ?? "{}"
+                const patch = input.writable(config)
+                if (target.endsWith(".jsonc")) {
+                  if (!(source === undefined && Object.keys(mergeConfig({}, patch)).length === 0)) {
+                    const updated = input.patch(before, patch)
+                    if (updated !== before) yield* Effect.promise(() => tx.write(target, before, updated))
+                  }
+                } else {
+                  const existing = input.parse(before, target)
+                  const merged = mergeConfig(input.writable(existing), patch)
+                  if (!(source === undefined && Object.keys(merged).length === 0)) {
+                    const updated = JSON.stringify(merged, null, 2)
+                    if (updated !== before) yield* Effect.promise(() => tx.write(target, before, updated))
+                  }
+                }
+                yield* propagateUnset({ fs: input.fs, files, exclude: target, patch, tx })
+                yield* Effect.promise(tx.check)
+              }),
+          )
+        }),
+      )
+      .pipe(Effect.uninterruptible, Effect.exit)
+    pending.delete(joined.promise)
+    joined.resolve()
+    if (Exit.isFailure(result)) {
+      if (!failures.length) failures.push(Cause.squash(result.cause))
+      yield* Effect.failCause(result.cause)
     }
-
-    // Reads merge every project config file, so a delete sentinel applied only
-    // to the update target leaves lower-precedence copies of the key visible.
-    yield* propagateUnset({ fs: input.fs, files, exclude: file, patch })
   })
 
   /** Collect the leaf paths of null delete sentinels in a config patch. */
@@ -143,13 +190,14 @@ export namespace KilocodeConfig {
     files: readonly string[]
     exclude: string
     patch: Config.Info
+    tx: ConfigPublication.Transaction
   }) {
     const paths = unsetPaths(input.patch)
     if (paths.length === 0) return false
     let changed = false
     for (const file of input.files) {
       if (file === input.exclude || !existsSync(file)) continue
-      const text = yield* input.fs.readFileStringSafe(file).pipe(Effect.orDie)
+      const text = yield* Effect.promise(() => input.tx.read(file))
       if (!text) continue
       const parsed = parseJsonc(text)
       const hits = paths.filter((parts) => has(parsed, parts))
@@ -161,7 +209,7 @@ export namespace KilocodeConfig {
           text,
         )
         if (updated === text) continue
-        yield* input.fs.writeFileString(file, updated).pipe(Effect.orDie)
+        yield* Effect.promise(() => input.tx.write(file, text, updated))
         changed = true
         continue
       }
@@ -173,7 +221,8 @@ export namespace KilocodeConfig {
         {} as Record<string, unknown>,
       )
       const next = mergeConfig(parsed as Config.Info, patch as Config.Info)
-      yield* input.fs.writeFileString(file, JSON.stringify(next, null, 2)).pipe(Effect.orDie)
+      const serialized = JSON.stringify(next, null, 2)
+      yield* Effect.promise(() => input.tx.write(file, text, serialized))
       changed = true
     }
     return changed
@@ -454,60 +503,62 @@ export namespace KilocodeConfig {
    * Migrate bash permission for existing users before config is consumed.
    *
    * Existing users (those with at least one global config file or the legacy TOML
-   * config) who have no explicit `permission.bash` setting get `bash: "allow"`
+   * config) who have no explicit `permission.bash` or wildcard setting get `bash: "allow"`
    * written to their highest-precedence config file. This preserves their current
    * behavior now that the new default is `bash: "ask"`.
    */
   export async function migrateBashPermission() {
     const files = READ_GLOBAL_CONFIG_FILES.map((f) => path.join(Global.Path.config, f))
     const legacy = path.join(Global.Path.config, "config")
-    const existing = files.filter((f) => existsSync(f))
-    const writable = GLOBAL_CONFIG_FILES.map((f) => path.join(Global.Path.config, f)).filter((f) => existsSync(f))
-    const hasLegacy = existsSync(legacy)
-
-    // no global config → new user, they'll get the new bash:ask default
-    if (writable.length === 0 && !hasLegacy) return
-
-    const configs: Array<{ file: string; data: Record<string, unknown> }> = []
-    // check if any config file already has an explicit bash permission
-    for (const file of existing) {
-      const text = await Bun.file(file)
-        .text()
-        .catch(() => "")
-      const data = parseJsonc(text) ?? {}
-      configs.push({ file, data })
-      if (typeof data.permission === "string" || (isRecord(data.permission) && data.permission.bash)) return
-    }
-
-    // A schema-only file is generated for editor completion. It does not mean
-    // the user predates the bash permission default.
-    if (!hasLegacy && configs.every((item) => Object.keys(item.data).every((key) => key === "$schema"))) return
-
-    // also check legacy TOML config for bash permission
-    if (hasLegacy) {
-      const toml = await import(pathToFileURL(legacy).href, { with: { type: "toml" } }).catch(() => undefined)
-      if (toml?.default?.permission?.bash) return
-    }
-
-    // existing user without bash permission → write bash:allow to highest-precedence file
-    const target = writable.length > 0 ? writable[writable.length - 1] : path.join(Global.Path.config, "config.json")
-    const text = await Bun.file(target)
-      .text()
-      .catch(() => "{}")
-
-    if (target.endsWith(".jsonc")) {
-      const edits = modify(text, ["permission", "bash"], "allow", {
-        formattingOptions: { insertSpaces: true, tabSize: 2 },
-      })
-      await Bun.write(target, applyEdits(text, edits))
-      log.info("migrated bash permission to allow for existing user", { path: target })
-      return
-    }
-
-    const data = parseJsonc(text) ?? {}
-    const merged = { ...data, permission: { ...data.permission, bash: "allow" } }
-    await Bun.write(target, JSON.stringify(merged, null, 2))
-    log.info("migrated bash permission to allow for existing user", { path: target })
+    const chosen = GLOBAL_CONFIG_FILES.map((name) => path.join(Global.Path.config, name)).filter((file) =>
+      existsSync(file),
+    )
+    if (!chosen.length && !existsSync(legacy)) return
+    return ConfigPublication.promise(
+      { files: [...files, legacy], targets: [...new Set([...chosen, path.join(Global.Path.config, "config.json")])] },
+      async (tx) => {
+        const existing = files.filter((file) => existsSync(file))
+        const writable = GLOBAL_CONFIG_FILES.map((name) => path.join(Global.Path.config, name)).filter((file) =>
+          existsSync(file),
+        )
+        if (JSON.stringify(chosen) !== JSON.stringify(writable))
+          throw new Error("Config migration target changed during admission")
+        const original = await tx.read(legacy)
+        const configs: Record<string, unknown>[] = []
+        for (const file of existing) {
+          const text = await tx.read(file)
+          if (text === undefined) throw new Error("Config migration source disappeared")
+          const data = parseJsonc(text) ?? {}
+          configs.push(data)
+          if (
+            typeof data.permission === "string" ||
+            (isRecord(data.permission) && (data.permission.bash || data.permission["*"]))
+          )
+            return
+        }
+        if (original === undefined && configs.every((data) => Object.keys(data).every((key) => key === "$schema")))
+          return
+        if (original !== undefined) {
+          const data = Bun.TOML.parse(original)
+          if (
+            isRecord(data) &&
+            (typeof data.permission === "string" ||
+              (isRecord(data.permission) && (data.permission.bash || data.permission["*"])))
+          )
+            return
+        }
+        const target = writable.length ? writable[writable.length - 1] : path.join(Global.Path.config, "config.json")
+        const text = (await tx.read(target)) ?? "{}"
+        const after = target.endsWith(".jsonc")
+          ? applyEdits(
+              text,
+              modify(text, ["permission", "bash"], "allow", { formattingOptions: { insertSpaces: true, tabSize: 2 } }),
+            )
+          : JSON.stringify(mergeConfig(parseJsonc(text) ?? {}, { permission: { bash: "allow" } }), null, 2)
+        if (after !== text) await tx.write(target, text, after)
+        log.info("migrated bash permission to allow for existing user", { path: target })
+      },
+    )
   }
 
   // ── Config merge utilities ───────────────────────────────────────────

@@ -14,6 +14,7 @@ import { Account } from "../../../src/account/account"
 import { Auth } from "../../../src/auth"
 import { GlobalBus } from "../../../src/bus/global"
 import { Config } from "../../../src/config/config"
+import { Permission } from "../../../src/permission"
 import { ConfigMarkdown } from "../../../src/config/markdown"
 import { ConfigParse } from "../../../src/config/parse"
 import { Env } from "../../../src/env"
@@ -968,8 +969,7 @@ describe("project plugin dependencies", () => {
       await writeConfig(path.join(dir, ".kilo"), { username: "kilo" })
       const calls: Array<{ dir: string; name?: string }> = []
       const npm = Layer.mock(Npm.Service)({
-        install: (dir, input) =>
-          Effect.sync(() => calls.push({ dir, name: input?.add[0]?.name })).pipe(Effect.asVoid),
+        install: (dir, input) => Effect.sync(() => calls.push({ dir, name: input?.add[0]?.name })).pipe(Effect.asVoid),
         add: () => Effect.die("not implemented"),
         which: () => Effect.succeed(undefined),
       })
@@ -1033,8 +1033,7 @@ describe("project plugin dependencies", () => {
       await Filesystem.write(path.join(config, "local.ts"), "export default {}")
       const calls: Array<{ dir: string; name?: string }> = []
       const npm = Layer.mock(Npm.Service)({
-        install: (dir, input) =>
-          Effect.sync(() => calls.push({ dir, name: input?.add[0]?.name })).pipe(Effect.asVoid),
+        install: (dir, input) => Effect.sync(() => calls.push({ dir, name: input?.add[0]?.name })).pipe(Effect.asVoid),
         add: () => Effect.die("not implemented"),
         which: () => Effect.succeed(undefined),
       })
@@ -1444,6 +1443,61 @@ describe("opencode config migration notice", () => {
 })
 
 describe("bash permission migration", () => {
+  for (const action of ["deny", "ask", "allow"] as const) {
+    for (const format of ["json", "jsonc", "toml", "scalar-toml", "layered"] as const) {
+      test(`preserves explicit wildcard ${action} permission in ${format}`, async () => {
+        const name =
+          format === "toml" || format === "scalar-toml"
+            ? "config"
+            : format === "json"
+              ? "kilo.json"
+              : format === "layered"
+                ? "raya.jsonc"
+                : "kilo.jsonc"
+        const input =
+          format === "toml"
+            ? `[permission]\n"*" = "${action}"\n`
+            : format === "scalar-toml"
+              ? `permission = "${action}"\n`
+              : format === "json"
+                ? JSON.stringify({ permission: { "*": action, read: "allow" } })
+                : `{\n  // Preserve this explicit policy and its comments.\n  "permission": { "*": "${action}", "read": "allow" }\n}\n`
+        const lower = '{"permission":{"read":"allow"}}'
+        await using tmp = await tmpdir({
+          init: async (dir) => {
+            await Filesystem.write(path.join(dir, name), input)
+            if (format === "layered") await Filesystem.write(path.join(dir, "kilo.json"), lower)
+          },
+        })
+        const prev = Global.Path.config
+        ;(Global.Path as { config: string }).config = tmp.path
+        await clear()
+        await disposeAllInstances()
+        try {
+          await KilocodeConfig.migrateBashPermission()
+          const file = path.join(tmp.path, name)
+          const text = await Filesystem.readText(file)
+          expect(text).toBe(input)
+          const data =
+            format === "toml" || format === "scalar-toml" ? Bun.TOML.parse(text) : ConfigParse.jsonc(text, file)
+          const parsed = ConfigParse.schema(Config.Info, data, file)
+          if (!parsed.permission) throw new Error("Explicit permission was lost during migration")
+          expect(parsed.permission?.["*"]).toBe(action)
+          expect(parsed.permission?.bash).toBeUndefined()
+          expect(Permission.evaluate("bash", "echo scoped", Permission.fromConfig(parsed.permission)).action).toBe(
+            action,
+          )
+          if (format === "layered") expect(await Filesystem.readText(path.join(tmp.path, "kilo.json"))).toBe(lower)
+          if (format === "toml" || format === "scalar-toml")
+            expect(await Bun.file(path.join(tmp.path, "config.json")).exists()).toBe(false)
+        } finally {
+          ;(Global.Path as { config: string }).config = prev
+          await clear()
+          await disposeAllInstances()
+        }
+      })
+    }
+  }
   for (const action of ["allow", "ask", "deny"] as const) {
     test(`preserves string-form ${action} permission in jsonc`, async () => {
       const input = `{

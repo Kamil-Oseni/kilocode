@@ -7,6 +7,10 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { createRoot } from "solid-js"
+import { make as port, scope } from "../../src/kilocode/cli/cmd/tui/model-state"
+import { ModelOwner } from "../../src/kilocode/config/model-owner"
+import { Effect } from "effect"
+import { coordinateProfileWriters } from "@opencode-ai/core/kilocode/profile-maintenance"
 import path from "path"
 import fs from "fs/promises"
 
@@ -178,6 +182,7 @@ mock.module("@tui/context/permission", () => ({
 // Import the real Global to get the state path (set by test preload via XDG_STATE_HOME)
 const { Global } = await import("@opencode-ai/core/global")
 const modelJsonPath = path.join(Global.Path.state, "model.json")
+let owned: ReturnType<typeof port> | undefined
 
 mock.module("@tui/context/runtime", () => ({
   ...realRuntime,
@@ -186,6 +191,7 @@ mock.module("@tui/context/runtime", () => ({
     home: Global.Path.home,
     state: Global.Path.state,
     worktree: process.cwd(),
+    model: owned,
   }),
 }))
 
@@ -196,6 +202,7 @@ await import("@tui/context/local")
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function resetMockState() {
+  owned = undefined
   mockAgents = [
     { name: "code", mode: "primary", hidden: false, model: undefined, color: undefined, permission: {} },
     { name: "plan", mode: "primary", hidden: false, model: undefined, color: undefined, permission: {} },
@@ -275,6 +282,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  await owned?.settle()
   await removeModelJson()
 })
 
@@ -652,4 +660,155 @@ describe("#9050: configured agent defaults beat stale persisted picks", () => {
       dispose()
     }
   })
+})
+
+describe("actual provider gestures with the real owned publication port", () => {
+  test("pre-ready compound selection, toggle parity and default variant span real gate and scope", async () => {
+    await fs.mkdir(Global.Path.state, { recursive: true })
+    await fs.writeFile(
+      modelJsonPath,
+      JSON.stringify({
+        model: { retained: SONNET },
+        favorite: [SONNET],
+        unknown: "exact",
+        variant: { retained: "none" },
+      }),
+    )
+    const owner = ModelOwner.make({ publish: () => undefined })
+    let entered!: () => void
+    let release!: () => void
+    const start = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const end = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = coordinateProfileWriters(
+      {
+        version: 1,
+        id: "actual-local-provider-model",
+        roots: [
+          { kind: "json", path: modelJsonPath },
+          { kind: "sqlite", path: path.join(Global.Path.state, "unused.db") },
+        ],
+      },
+      "cooperative-maintenance",
+      async () => {
+        entered()
+        await end
+      },
+    )
+    await start
+    let dispose: (() => void) | undefined
+    let closed = false
+    const running = Effect.runPromise(
+      scope(
+        Global.Path.state,
+        (current) =>
+          Effect.sync(() => {
+            owned = current
+            const result = runInRoot()
+            dispose = result.dispose
+            expect(result.local.model.ready).toBe(false)
+            result.local.model.set(OPUS, { recent: true })
+            result.local.model.toggleFavorite(OPUS)
+            result.local.model.toggleFavorite(OPUS)
+            result.local.model.variant.set(undefined)
+            expect(owner.snapshot().active).toBe(4)
+            expect(result.local.model.current()).toEqual(OPUS)
+          }),
+        owner,
+      ),
+    ).then(() => {
+      closed = true
+    })
+    try {
+      await Bun.sleep(60)
+      expect(closed).toBe(false)
+      expect(owner.snapshot().active).toBe(4)
+      release()
+      await held
+      await running
+      const data = await readModelJson()
+      expect(data.model).toEqual({ retained: SONNET, code: OPUS })
+      expect(data.recent).toEqual([OPUS])
+      expect(data.favorite).toEqual([SONNET])
+      expect(data.variant).toEqual({ retained: "none", "anthropic/claude-opus": "default" })
+      expect(data.unknown).toBe("exact")
+      expect(owner.snapshot().active).toBe(0)
+      await owner.drain()
+    } finally {
+      release()
+      await held
+      await running
+      dispose?.()
+    }
+  })
+})
+
+test("actual LocalProvider disposal suppresses late hydration while actual descriptor and publication are joined", async () => {
+  await fs.mkdir(Global.Path.state, { recursive: true })
+  await fs.writeFile(modelJsonPath, JSON.stringify({ favorite: [SONNET], unknown: "exact" }))
+  const owner = ModelOwner.make({ publish: () => undefined })
+  let entered!: () => void
+  let release!: () => void
+  const start = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const end = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let result: ReturnType<typeof runInRoot> | undefined
+  let descriptor = false
+  let settled = false
+  const work = Effect.runPromise(
+    scope(
+      Global.Path.state,
+      (current) =>
+        Effect.sync(() => {
+          owned = current
+          result = runInRoot()
+          result.local.model.set(OPUS, { recent: true })
+          expect(owner.snapshot().active).toBe(1)
+          expect(result.local.model.ready).toBe(false)
+          result.dispose()
+          expect(() => result!.local.model.toggleFavorite(OPUS)).toThrow("delivery is retired")
+        }),
+      owner,
+      async () => {
+        const handle = await fs.open(modelJsonPath, "r")
+        try {
+          const text = await handle.readFile("utf8")
+          entered()
+          await end
+          const data: unknown = JSON.parse(text)
+          const valid = (value: unknown): value is Record<string, unknown> =>
+            value !== null && typeof value === "object" && !Array.isArray(value)
+          if (!valid(data)) throw new Error("Invalid actual fixture")
+          return data
+        } finally {
+          await handle.close()
+          descriptor = true
+        }
+      },
+    ),
+  ).then(() => {
+    settled = true
+  })
+  await start
+  expect(settled).toBe(false)
+  expect(descriptor).toBe(false)
+  expect(owner.snapshot().active).toBe(1)
+  release()
+  await work
+  expect(descriptor).toBe(true)
+  expect(owner.snapshot().active).toBe(0)
+  if (!result) throw new Error("Provider not created")
+  expect(result.local.model.ready).toBe(false)
+  expect(result.local.model.favorite()).toEqual([])
+  const data = await readModelJson()
+  expect(data.favorite).toEqual([SONNET])
+  expect(data.model.code).toEqual(OPUS)
+  expect(data.unknown).toBe("exact")
+  await owner.drain()
 })

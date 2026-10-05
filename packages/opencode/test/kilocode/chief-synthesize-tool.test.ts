@@ -101,9 +101,10 @@ describe("Auto Chief branch synthesis", () => {
       ).toBe(true)
       const result = yield* def.execute(input, ctx)
       expect(result.output).toContain("Safety and UX findings are ready.")
-      expect(RayaChief.phase(parent.metadata)).toBe("goal")
+      expect(RayaChief.phase(parent.metadata)).toBe("verify")
       expect((yield* ledger.read(id))?.synthesis?.findings.map((item) => item.branchID)).toEqual(["safety", "design"])
       raw.dispatch.messageID = MessageID.make(`msg_${crypto.randomUUID()}`)
+      parent.metadata![RayaChief.phaseKey] = "goal"
       expect(yield* def.execute(input, ctx)).toEqual(result)
       parent.metadata![RayaChief.phaseKey] = "route"
       expect(Exit.isFailure(yield* def.execute(input, ctx).pipe(Effect.exit))).toBe(true)

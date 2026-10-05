@@ -8,6 +8,8 @@ import { Schema } from "effect"
 import { Glob } from "./glob"
 import { createStream } from "rotating-file-stream" // kilocode_change
 import { KILO_RUN_ID } from "./opencode-process" // kilocode_change
+import { LogOwner } from "../kilocode/log-owner" // kilocode_change
+import { logRoot } from "../kilocode/log-root" // kilocode_change
 
 export const Level = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
   identifier: "LogLevel",
@@ -67,29 +69,46 @@ const stderr = (msg: any) => {
 let write = stderr
 let stream: ReturnType<typeof createStream> | undefined // kilocode_change
 
-export async function init(options: Options) {
+// kilocode_change start - serialize admitted initialization and retain its cleanup failures
+export function drain(): Promise<void> {
+  return LogOwner.drain()
+}
+
+export function init(options: Options) {
+  return LogOwner.run((permit) => {
+    const root = logRoot(Global.Path.log)
+    return root.run(() => initialize(options, permit, root))
+  })
+}
+
+async function initialize(options: Options, permit: symbol, root: ReturnType<typeof logRoot>) {
+  // kilocode_change end
   if (options.level) level = options.level
-  void cleanup(Global.Path.log)
+  await cleanup(root.path) // kilocode_change - admitted canonical cleanup before retiring the logger
   // kilocode_change start - initialize one rotating stream and truncate dev.log once per Kilo run
   if (stream) {
     const active = stream
     stream = undefined
-    await new Promise<void>((resolve) => active.end(resolve))
+    write = stderr
+    await LogOwner.end(active)
   }
   if (options.print) {
     write = stderr
     return
   }
   logpath = path.join(
-    Global.Path.log,
+    root.path,
     options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
   )
   const run = process.env[KILO_RUN_ID]
   if (!options.dev || !run || process.env[initializedRunID] !== run) {
-    await fs.truncate(logpath).catch(() => {})
+    await fs.truncate(logpath).catch((err) => {
+      if (err.code !== "ENOENT") throw err
+    })
     if (options.dev && run) process.env[initializedRunID] = run
   }
   const dir = path.dirname(logpath)
+  root.opening()
   const active = createStream(path.basename(logpath), {
     size: "50M",
     maxFiles: 10,
@@ -97,6 +116,7 @@ export async function init(options: Options) {
     path: dir,
   })
   stream = active
+  LogOwner.own(active, permit, root)
   active.on("rotation", () => {
     if (!existsSync(dir)) return
 
@@ -107,6 +127,7 @@ export async function init(options: Options) {
     } catch (err) {
       if (typeof err === "object" && err && "code" in err && err.code === "EEXIST") return
 
+      LogOwner.fail(err)
       const msg = err instanceof Error ? err.message : String(err)
       process.stderr.write("log stream warning: " + msg + "\n")
     }
@@ -118,8 +139,7 @@ export async function init(options: Options) {
     process.stderr.write("log stream warning: " + err.message + "\n")
   })
   write = (msg: any) => {
-    active.write(msg)
-    return msg.length
+    return LogOwner.write(active, msg, stderr)
   }
   // kilocode_change end
 }
@@ -130,14 +150,23 @@ async function cleanup(dir: string) {
       cwd: dir,
       absolute: false,
       include: "file",
-    }).catch(() => [])
+      // kilocode_change start - retain unexpected cleanup failures
+    }).catch((err) => {
+      if (err.code === "ENOENT") return []
+      throw err
+    })
   )
+    // kilocode_change end
     .filter((file) => path.basename(file) === file)
     .sort()
   if (files.length <= keep) return
 
   const doomed = files.slice(0, -keep)
-  await Promise.all(doomed.map((file) => fs.unlink(path.join(dir, file)).catch(() => {})))
+  // kilocode_change start - join every deletion and report uncertainty
+  const results = await Promise.allSettled(doomed.map((file) => fs.unlink(path.join(dir, file))))
+  const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+  if (failures.length) throw new AggregateError(failures, "Log cleanup failed")
+  // kilocode_change end
 }
 
 function formatError(error: Error, depth = 0): string {

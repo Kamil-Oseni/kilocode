@@ -1,9 +1,11 @@
 import { Layer, ManagedRuntime } from "effect"
 import { attach } from "./run-service"
+import { runtimeOwner } from "@/kilocode/runtime-owner" // kilocode_change
 import * as Observability from "@opencode-ai/core/observability"
 
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Database } from "@opencode-ai/core/database/database"
+import { Global } from "@opencode-ai/core/global" // kilocode_change - expose the active profile root to destination review
 import { Credential } from "@opencode-ai/core/credential" // kilocode_change
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
@@ -77,6 +79,7 @@ import { PtyArchive } from "@/kilocode/pty/archive" // kilocode_change
 const memory = LayerNode.make({ service: MemoryService.Service, layer: MemoryService.layer, deps: [] })
 // raya_change start - Milestone F browser bridge
 const kilo = LayerNode.group([
+  Global.node,
   PtyArchive.node, // kilocode_change - listener handlers require the shared terminal archive service
   TaskWorker.node,
   Credential.node,
@@ -154,28 +157,36 @@ export const AppLayer = AppNodeBuilderV1.build(
   ]),
 ).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
 
-const rt = ManagedRuntime.make(AppLayer, { memoMap })
-type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">
+// kilocode_change start - outer retirement fences all app entrypoints without acquiring unused services
+const owner = runtimeOwner(
+  () => ManagedRuntime.make(AppLayer, { memoMap }),
+  // Every acquisition immediately dispatches an effect. Join that accepted build
+  // before parallel scope disposal can close its database beneath reconciliation.
+  (active) => active.context(),
+)
+type Managed = ReturnType<typeof owner.get>
+type Runtime = Pick<Managed, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">
 
 /** Services provided by AppRuntime — i.e. what an Effect run via AppRuntime.runPromise can yield. */
-export type AppServices = ManagedRuntime.ManagedRuntime.Services<typeof rt>
-const wrap = (effect: Parameters<typeof rt.runSync>[0]) => attach(effect as never) as never
+export type AppServices = ManagedRuntime.ManagedRuntime.Services<Managed>
+const wrap = (effect: Parameters<Managed["runSync"]>[0]) => attach(effect as never) as never
 
 export const AppRuntime: Runtime = {
   runSync(effect) {
-    return rt.runSync(wrap(effect))
+    return owner.get().runSync(wrap(effect))
   },
   runPromise(effect, options) {
-    return rt.runPromise(wrap(effect), options)
+    return owner.get().runPromise(wrap(effect), options)
   },
   runPromiseExit(effect, options) {
-    return rt.runPromiseExit(wrap(effect), options)
+    return owner.get().runPromiseExit(wrap(effect), options)
   },
   runFork(effect) {
-    return rt.runFork(wrap(effect))
+    return owner.get().runFork(wrap(effect))
   },
   runCallback(effect) {
-    return rt.runCallback(wrap(effect))
+    return owner.get().runCallback(wrap(effect))
   },
-  dispose: () => rt.dispose(),
+  dispose: owner.retire,
 }
+// kilocode_change end

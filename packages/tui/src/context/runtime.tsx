@@ -1,10 +1,12 @@
 import { createComponent, createContext, type JSX, useContext } from "solid-js"
+import type { Port } from "../kilocode/model-state" // kilocode_change
 
 export type TuiPaths = Readonly<{
   cwd: string
   home: string
   state: string
   worktree: string
+  model?: Port // kilocode_change - actual renderer-owned publication port
 }>
 
 export type TuiTerminalEnvironment = Readonly<{

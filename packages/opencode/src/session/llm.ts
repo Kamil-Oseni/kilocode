@@ -36,6 +36,8 @@ import { getActiveOrg } from "@/kilocode/session-export/eligibility"
 import { normalizeUsageForExport, observeFullStreamForExport } from "@/kilocode/session-export/llm"
 import { TurnTools } from "@/kilocode/capability/turn-tools"
 import { refuse, LocalNativeError } from "@/kilocode/provider/native-policy"
+import { lane, headers } from "@/kilocode/provider/inference-lane"
+import { Database } from "@opencode-ai/core/database/database"
 // kilocode_change end
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -87,6 +89,7 @@ const live: Layer.Layer<
   | EventV2Bridge.Service
   | LLMClientService
   | RuntimeFlags.Service
+  | Database.Service // kilocode_change - per-request local inference classification
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -98,6 +101,7 @@ const live: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
+    const database = yield* Database.Service // kilocode_change - immutable owning database for lane lookup
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log.clone().tag("providerID", input.model.providerID).tag("modelID", input.model.id) // kilocode_change
@@ -152,6 +156,7 @@ const live: Layer.Layer<
             messages: estimated,
             tools,
             reported: input.reportedContextTokens,
+            output: base.params.maxOutputTokens,
           })
         : undefined
       const usage = checked?.usage ?? (cap ? KiloSessionOverflow.measure({ messages: estimated, tools }) : undefined)
@@ -164,9 +169,11 @@ const live: Layer.Layer<
         reported: input.reportedContextTokens,
       })
       if (checked?.compact) {
-        return yield* Effect.fail(new KiloSessionOverflow.PreflightError())
+        return yield* Effect.fail(KiloSessionOverflow.error(checked, input.model))
       }
       const prepared = { ...base, tools, params: { ...base.params, maxOutputTokens } }
+      const selected = item.options.localInference === true ? yield* lane(input, database) : "interactive"
+      prepared.headers = headers(prepared.headers, selected, item.options.localInference === true)
       // kilocode_change end
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
@@ -340,7 +347,8 @@ const live: Layer.Layer<
             stream: native.stream,
           }
         }
-        if (refuse(item.options, LLMNativeRuntime.requiresNative(input.model))) // kilocode_change - local DSML requests require native tool execution
+        if (refuse(item.options, LLMNativeRuntime.requiresNative(input.model)))
+          // kilocode_change - local DSML requests require native tool execution
           return yield* Effect.fail(new LocalNativeError()) // kilocode_change - local DSML requests cannot silently lose tool execution through SDK fallback
         yield* Effect.logInfo("llm runtime selected", {
           "llm.runtime": "ai-sdk",
@@ -515,6 +523,7 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     llmClient,
     RuntimeFlags.node,
+    Database.node, // kilocode_change - classify actual persisted Routine ancestry per stream
   ],
 })
 

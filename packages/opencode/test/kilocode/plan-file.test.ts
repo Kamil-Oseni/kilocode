@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { describe, expect, test } from "bun:test"
 import { Effect, ManagedRuntime } from "effect"
 import path from "path"
@@ -17,7 +18,7 @@ import { Truncate } from "../../src/tool/truncate"
 import { tmpdir } from "../fixture/fixture"
 
 const rt = ManagedRuntime.make(
-  LayerNode.compile(LayerNode.group([Agent.node, Session.node, SessionProjector.node, Truncate.node])),
+  LayerNode.compile(LayerNode.group([Agent.node, Session.node, SessionProjector.node, Truncate.node, FSUtil.node])),
 )
 
 async function init() {

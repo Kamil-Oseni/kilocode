@@ -2,14 +2,17 @@ import path from "path"
 import os from "os"
 import { randomUUID } from "crypto"
 import { Context, Effect, Function, Layer, Option, Schedule, Schema } from "effect"
+import { Cause, Exit } from "effect" // kilocode_change
 import type { FileSystem, Scope } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { makeGlobalNode } from "../effect/app-node"
 import { Hash } from "./hash"
+import { RepositoryAdmission } from "../kilocode/repository-admission" // kilocode_change
 
 export namespace EffectFlock {
+  type Owned = { strict: true; failed?: (cause: Cause.Cause<unknown>) => Effect.Effect<void> } // kilocode_change
   // ---------------------------------------------------------------------------
   // Errors
   // ---------------------------------------------------------------------------
@@ -73,10 +76,23 @@ export namespace EffectFlock {
   // ---------------------------------------------------------------------------
 
   export interface Interface {
-    readonly acquire: (key: string, dir?: string) => Effect.Effect<void, LockError, Scope.Scope>
+    readonly acquire: (key: string, dir?: string, opts?: Owned) => Effect.Effect<void, LockError, Scope.Scope> // kilocode_change
     readonly withLock: {
-      (key: string, dir?: string): <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.Effect<A, E | LockError, R>
-      <A, E, R>(body: Effect.Effect<A, E, R>, key: string, dir?: string): Effect.Effect<A, E | LockError, R>
+      // kilocode_change start
+      (
+        key: string,
+        dir?: string,
+        opts?: Owned,
+        // kilocode_change end
+      ): <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.Effect<A, E | LockError, R> // kilocode_change
+      // kilocode_change start
+      <A, E, R>(
+        body: Effect.Effect<A, E, R>,
+        key: string,
+        dir?: string,
+        opts?: Owned,
+        // kilocode_change end
+      ): Effect.Effect<A, E | LockError, R> // kilocode_change
     }
   }
 
@@ -111,7 +127,12 @@ export namespace EffectFlock {
           Effect.orDie,
         )
 
-      const forceRemove = (target: string) => fs.remove(target, { recursive: true }).pipe(Effect.ignore)
+      // kilocode_change start
+      const forceRemove = (target: string, opts?: Owned) =>
+        // kilocode_change end
+        opts?.strict // kilocode_change
+          ? fs.remove(target, { recursive: true }).pipe(Effect.orDie) // kilocode_change
+          : fs.remove(target, { recursive: true }).pipe(Effect.ignore) // kilocode_change
 
       /** Atomic mkdir — returns true if created, false if already exists, dies on other errors. */
       const atomicMkdir = (dir: string) =>
@@ -124,20 +145,42 @@ export namespace EffectFlock {
           Effect.orDie,
         )
 
-      /** Write with exclusive create — compromised error if file already exists. */
-      const exclusiveWrite = (filePath: string, content: string, lockDir: string, detail: string) =>
-        fs.writeFileString(filePath, content, { flag: "wx" }).pipe(
-          Effect.catch(() =>
+      // kilocode_change - exclusive creation detects compromised locks.
+      // kilocode_change start - strict publication retains defects and partial cleanup failures; defaults keep typed recovery.
+      const exclusiveWrite = (filePath: string, content: string, lockDir: string, detail: string, opts?: Owned) => {
+        const write = fs.writeFileString(filePath, content, { flag: "wx" })
+        if (!opts?.strict)
+          return write.pipe(
+            Effect.catch(() =>
+              Effect.gen(function* () {
+                yield* forceRemove(lockDir)
+                return yield* new LockCompromisedError({ detail })
+              }),
+            ),
+          )
+        return write.pipe(
+          Effect.catchCause((cause) =>
             Effect.gen(function* () {
-              yield* forceRemove(lockDir)
-              return yield* new LockCompromisedError({ detail })
+              const cleanup = yield* Effect.exit(forceRemove(lockDir, opts))
+              if (Exit.isFailure(cleanup))
+                return yield* Effect.die(
+                  new AggregateError(
+                    [Cause.squash(cause), Cause.squash(cleanup.cause)],
+                    "Lock publication and cleanup failed",
+                  ),
+                )
+              return yield* Effect.die(Cause.squash(cause))
             }),
           ),
         )
+      }
+      // kilocode_change end
 
-      const cleanStaleBreaker = Effect.fnUntraced(function* (breakerPath: string) {
+      // kilocode_change start
+      const cleanStaleBreaker = Effect.fnUntraced(function* (breakerPath: string, opts?: Owned) {
+        // kilocode_change end
         const bs = yield* safeStat(breakerPath)
-        if (bs && wall() - mtimeMs(bs) > STALE_MS) yield* forceRemove(breakerPath)
+        if (bs && wall() - mtimeMs(bs) > STALE_MS) yield* forceRemove(breakerPath, opts) // kilocode_change
         return false
       })
 
@@ -166,7 +209,9 @@ export namespace EffectFlock {
 
       type Handle = { token: string; metaPath: string; heartbeatPath: string; lockDir: string }
 
-      const tryAcquireLockDir = (lockDir: string, key: string) =>
+      // kilocode_change start
+      const tryAcquireLockDir = (lockDir: string, key: string, opts?: Owned) =>
+        // kilocode_change end
         Effect.gen(function* () {
           const token = randomUUID()
           const metaPath = path.join(lockDir, "meta.json")
@@ -185,7 +230,7 @@ export namespace EffectFlock {
               Effect.as(true),
               Effect.catchIf(
                 (e) => e.reason._tag === "AlreadyExists",
-                () => cleanStaleBreaker(breakerPath),
+                () => cleanStaleBreaker(breakerPath, opts), // kilocode_change
               ),
               Effect.catchIf(isPathGone, () => Effect.succeed(false)),
               Effect.orDie,
@@ -196,18 +241,18 @@ export namespace EffectFlock {
             // We own the breaker — double-check staleness, nuke, recreate
             const recreated = yield* Effect.gen(function* () {
               if (!(yield* isStale(lockDir, heartbeatPath, metaPath))) return false
-              yield* forceRemove(lockDir)
+              yield* forceRemove(lockDir, opts) // kilocode_change
               return yield* atomicMkdir(lockDir)
-            }).pipe(Effect.ensuring(forceRemove(breakerPath)))
+            }).pipe(Effect.ensuring(forceRemove(breakerPath, opts))) // kilocode_change
 
             if (!recreated) return yield* new NotAcquired()
           }
 
           // We own the lock dir — write heartbeat + meta with exclusive create
-          yield* exclusiveWrite(heartbeatPath, "", lockDir, "heartbeat already existed")
+          yield* exclusiveWrite(heartbeatPath, "", lockDir, "heartbeat already existed", opts) // kilocode_change
 
           const metaJson = encodeMeta({ token, pid: process.pid, hostname, createdAt: new Date().toISOString() })
-          yield* exclusiveWrite(metaPath, metaJson, lockDir, "meta.json already existed")
+          yield* exclusiveWrite(metaPath, metaJson, lockDir, "meta.json already existed", opts) // kilocode_change
 
           return { token, metaPath, heartbeatPath, lockDir } satisfies Handle
         }).pipe(
@@ -218,8 +263,17 @@ export namespace EffectFlock {
 
       // -- retry wrapper (preserves Handle type) --
 
-      const acquireHandle = (lockfile: string, key: string): Effect.Effect<Handle, LockError> =>
-        tryAcquireLockDir(lockfile, key).pipe(
+      // kilocode_change start
+      const acquireHandle = (
+        lockfile: string,
+        key: string,
+        opts?: Owned,
+        // kilocode_change end
+      ): Effect.Effect<Handle, LockError> => // kilocode_change
+        // kilocode_change start
+        tryAcquireLockDir(lockfile, key, opts).pipe(
+          // kilocode_change end
+          // kilocode_change
           Effect.retry({
             while: (err) => err._tag === "NotAcquired",
             schedule: retrySchedule,
@@ -229,7 +283,9 @@ export namespace EffectFlock {
 
       // -- release --
 
-      const release = (handle: Handle) =>
+      // kilocode_change start
+      const release = (handle: Handle, opts?: Owned) =>
+        // kilocode_change end
         Effect.gen(function* () {
           const raw = yield* fs.readFileString(handle.metaPath).pipe(
             Effect.catch((err) => {
@@ -245,32 +301,57 @@ export namespace EffectFlock {
 
           if (parsed.token !== handle.token) return yield* Effect.die(new ReleaseError({ detail: "token mismatch" }))
 
-          yield* forceRemove(handle.lockDir)
+          // kilocode_change start
+          yield* opts?.strict
+            ? fs.remove(handle.lockDir, { recursive: true }).pipe(Effect.orDie)
+            : // kilocode_change end
+              forceRemove(handle.lockDir) // kilocode_change
         })
 
       // -- build service --
 
-      const acquire = Effect.fn("EffectFlock.acquire")(function* (key: string, dir?: string) {
+      // kilocode_change start
+      const acquire = Effect.fn("EffectFlock.acquire")(function* (key: string, dir?: string, opts?: Owned) {
+        // kilocode_change end
+        opts ??= yield* RepositoryAdmission.cleanup // kilocode_change - inherit only the authentic accepted repository lifetime
         const lockDir = dir ?? lockRoot
         yield* ensureDir(lockDir)
 
         const lockfile = path.join(lockDir, Hash.fast(key) + ".lock")
 
         // acquireRelease: acquire is uninterruptible, release is guaranteed
-        const handle = yield* Effect.acquireRelease(acquireHandle(lockfile, key), (handle) => release(handle))
+        // kilocode_change start
+        const handle = yield* Effect.acquireRelease(
+          acquireHandle(lockfile, key, opts),
+          (handle) => release(handle, opts),
+          // kilocode_change end
+        ) // kilocode_change
 
         // Heartbeat fiber — scoped, so it's interrupted before release runs
-        yield* fs
-          .utimes(handle.heartbeatPath, new Date(), new Date())
-          .pipe(Effect.ignore, Effect.repeat(Schedule.spaced(HEARTBEAT_MS)), Effect.forkScoped)
+        // kilocode_change start
+        const heartbeat = fs.utimes(handle.heartbeatPath, new Date(), new Date())
+        yield* (opts?.strict ? Effect.uninterruptible(heartbeat) : heartbeat).pipe(
+          Effect.tapCause((cause) => (opts?.failed ? opts.failed(cause) : Effect.void)),
+          Effect.ignore,
+          Effect.repeat(Schedule.spaced(HEARTBEAT_MS)),
+          Effect.forkScoped,
+          // kilocode_change end
+        ) // kilocode_change - retain hosted heartbeat failure
       })
 
       const withLock: Interface["withLock"] = Function.dual(
         (args) => Effect.isEffect(args[0]),
-        <A, E, R>(body: Effect.Effect<A, E, R>, key: string, dir?: string): Effect.Effect<A, E | LockError, R> =>
+        // kilocode_change start
+        <A, E, R>(
+          body: Effect.Effect<A, E, R>,
+          key: string,
+          dir?: string,
+          opts?: Owned,
+          // kilocode_change end
+        ): Effect.Effect<A, E | LockError, R> => // kilocode_change
           Effect.scoped(
             Effect.gen(function* () {
-              yield* acquire(key, dir)
+              yield* acquire(key, dir, opts) // kilocode_change
               return yield* body
             }),
           ),

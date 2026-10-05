@@ -26,6 +26,7 @@ import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
 import { ConfigV1 } from "./v1/config/config"
 import { ConfigMigrateV1 } from "./v1/config/migrate"
+import { ConfigIntent } from "./kilocode/config-intent" // kilocode_change
 
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: Schema.optional(Schema.String).annotate({
@@ -140,6 +141,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
+    const intent = ConfigIntent.graph("v2", global, location.directory) // kilocode_change
     const names = ["config.json", "kilo.json", "kilo.jsonc", "opencode.json", "opencode.jsonc"] // kilocode_change
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
@@ -159,7 +161,9 @@ const layer = Layer.effect(
           : decodeInfo(input),
       )
       if (!info) return
-      return new Document({ type: "document", path: filepath, info })
+      const document = new Document({ type: "document", path: filepath, info }) // kilocode_change
+      yield* Effect.promise(() => ConfigIntent.loaded(intent, document, filepath, text)) // kilocode_change
+      return document // kilocode_change
     })
 
     const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
@@ -204,6 +208,7 @@ const layer = Layer.effect(
     // Apply general settings first and more specific settings last:
     // global config, project files, then Kilo config-directory files. // kilocode_change
     const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
+    ConfigIntent.ordered(intent, configs) // kilocode_change
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
     yield* policy.load(

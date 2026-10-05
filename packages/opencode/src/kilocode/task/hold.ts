@@ -9,7 +9,9 @@ const record = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)),
   state: Schema.Literals(["held", "released"]),
   createdAt: Schema.Finite,
-  review: Schema.optional(Schema.Struct({ at: Schema.Finite, by: Schema.Literal("user") })),
+  review: Schema.optional(
+    Schema.Struct({ at: Schema.Finite, by: Schema.Literal("user"), revision: Schema.optional(Schema.String) }),
+  ),
 })
 type Store = Pick<Storage.Interface, "read" | "replace" | "create" | "remove" | "list">
 
@@ -66,7 +68,11 @@ export function hold(storage: Store) {
     )
   // Caller must be the explicit destination-review flow, never a worker or a
   // startup recovery hook. Exact generation matching rejects obsolete review.
-  const release = (id: string, review: { reviewed: boolean }) =>
+  const release = (
+    id: string,
+    review: { reviewed: boolean; revision?: string },
+    check?: () => Effect.Effect<void, RayaTask.GuardError>,
+  ) =>
     mutate(
       storage,
       Effect.gen(function* () {
@@ -77,8 +83,21 @@ export function hold(storage: Store) {
             field: "restore-hold",
             message: "Review this exact transferred profile before activating it on this computer.",
           })
-        if (prior.state === "released") return prior
-        const value = { ...prior, state: "released" as const, review: { at: Date.now(), by: "user" as const } }
+        if (prior.state === "released") {
+          if (review.revision !== undefined && review.revision !== prior.review?.revision)
+            return yield* new RayaTask.GuardError({
+              kind: "conflict",
+              field: "restore-hold",
+              message: "This profile was reviewed with different evidence. Reload its current review.",
+            })
+          return prior
+        }
+        if (check) yield* check()
+        const value = {
+          ...prior,
+          state: "released" as const,
+          review: { at: Date.now(), by: "user" as const, ...(review.revision ? { revision: review.revision } : {}) },
+        }
         yield* storage.replace(key, value).pipe(Effect.orDie)
         return value
       }),

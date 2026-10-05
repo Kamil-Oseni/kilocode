@@ -22,7 +22,7 @@ import { Bus } from "../../src/bus" // kilocode_change
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { raw, reply, TestLLMServer } from "../lib/llm-server"
+import { httpError, raw, reply, TestLLMServer } from "../lib/llm-server" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -509,18 +509,20 @@ it.live("session.processor effect tests stop after token overflow requests compa
         const database = yield* Database.Service
         const { processors, session, provider } = yield* boot()
 
-        yield* llm.text("after", { usage: { input: 100, output: 0 } })
+        yield* llm.text("after", { usage: { input: 10_000, output: 0 } }) // kilocode_change - overflow provider usage after a valid request
 
         const chat = yield* session.create({})
+        expect((yield* session.get(chat.id)).id).toBe(chat.id) // kilocode_change - require a genuinely persisted processor fixture
         const parent = yield* user(chat.id, "compact")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
         const base = yield* provider.getModel(ref.providerID, ref.modelID)
-        const mdl = { ...base, limit: { context: 20, output: 10 } }
+        const mdl = { ...base, limit: { context: 8192, output: 10 } } // kilocode_change - leave room for the actual fixed system prompt
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
         })
+        expect((yield* session.get(chat.id)).id).toBe(chat.id) // kilocode_change - establish the row before processor admission
 
         const value = yield* handle.process({
           user: {
@@ -742,7 +744,11 @@ it.live("session.processor effect tests retry recognized structured json errors"
       Effect.gen(function* () {
         const { processors, session, provider } = yield* boot()
 
-        yield* llm.error(429, { type: "error", error: { type: "too_many_requests" } })
+        // kilocode_change start - exercise the real retry hint instead of the default sixty-second TPM window
+        yield* llm.push(
+          httpError(429, { type: "error", error: { type: "too_many_requests" } }, { "retry-after-ms": "10" }),
+        )
+        // kilocode_change end
         yield* llm.text("after")
 
         const chat = yield* session.create({})
@@ -783,59 +789,64 @@ it.live("session.processor effect tests retry recognized structured json errors"
   ),
 )
 
-it.live("session.processor effect tests publish retry status updates", () =>
-  provideTmpdirServer(
-    ({ dir, llm }) =>
-      Effect.gen(function* () {
-        const { processors, session, provider } = yield* boot()
-        const events = yield* EventV2Bridge.Service
+// kilocode_change start - account for the real retry deadline and require complete retry output
+it.live(
+  "session.processor effect tests publish retry status updates",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+          const events = yield* EventV2Bridge.Service
 
-        yield* llm.error(503, { error: "boom" })
-        yield* llm.text("")
+          yield* llm.error(503, { error: "boom" })
+          yield* llm.text("recovered") // kilocode_change - finish the provider retry with a complete response
 
-        const chat = yield* session.create({})
-        const parent = yield* user(chat.id, "retry")
-        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
-        const states: number[] = []
-        const off = yield* events.listen((evt) => {
-          if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
-          const data = evt.data as typeof SessionStatus.Event.Status.data.Type
-          if (data.sessionID === chat.id && data.status.type === "retry") states.push(data.status.attempt)
-          return Effect.void
-        })
-        const handle = yield* processors.create({
-          assistantMessage: msg,
-          sessionID: chat.id,
-          model: mdl,
-        })
-
-        const value = yield* handle.process({
-          user: {
-            id: parent.id,
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "retry")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const states: number[] = []
+          const off = yield* events.listen((evt) => {
+            if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+            const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+            if (data.sessionID === chat.id && data.status.type === "retry") states.push(data.status.attempt)
+            return Effect.void
+          })
+          const handle = yield* processors.create({
+            assistantMessage: msg,
             sessionID: chat.id,
-            role: "user",
-            time: parent.time,
-            agent: parent.agent,
-            model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionV1.User,
-          sessionID: chat.id,
-          model: mdl,
-          agent: agent(),
-          system: [],
-          messages: [{ role: "user", content: "retry" }],
-          tools: {},
-        })
+            model: mdl,
+          })
 
-        yield* off
+          const value = yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "retry" }],
+            tools: {},
+          })
 
-        expect(value).toBe("continue")
-        expect(yield* llm.calls).toBe(2)
-        expect(states).toStrictEqual([1])
-      }),
-    { config: (url) => providerCfg(url) },
-  ),
+          yield* off
+
+          expect(value).toBe("continue")
+          expect(yield* llm.calls).toBe(2)
+          expect(states).toStrictEqual([1])
+        }),
+      { config: (url) => providerCfg(url) },
+    ),
+  10_000, // kilocode_change - include the genuine two-second retry and live graph/snapshot setup
 )
+// kilocode_change end
 
 it.live("session.processor effect tests compact on structured context overflow", () =>
   provideTmpdirServer(

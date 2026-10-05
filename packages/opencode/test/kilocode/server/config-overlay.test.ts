@@ -8,6 +8,7 @@ import { Config } from "../../../src/config/config"
 import { ConfigParse } from "../../../src/config/parse"
 import { KilocodeConfigOverlay } from "../../../src/kilocode/config/overlay"
 import { KilocodeConfigWriter } from "../../../src/kilocode/config/writer"
+import { ConfigPublication } from "../../../src/kilocode/config/publication"
 import { Permission } from "../../../src/permission"
 import { PtyPaths } from "../../../src/server/routes/instance/httpapi/groups/pty"
 import { SessionPaths } from "../../../src/server/routes/instance/httpapi/groups/session"
@@ -121,6 +122,21 @@ describe("config overlay routes", () => {
     expect(await Bun.file(path.join(project.path, ".kilo", "kilo.jsonc")).exists()).toBe(false)
   })
 
+  test("records an overlay replacement of a loaded project origin", async () => {
+    await using project = await tmpdir()
+    const file = path.join(project.path, ".kilo", "kilo.jsonc")
+    await Filesystem.write(file, '{"model":"test/before"}')
+    const loaded = await json<Overlay>(await req(project.path, "/config/overlay?scope=project"))
+    const result = await KilocodeConfigWriter.write({
+      scope: "project",
+      directory: project.path,
+      expected: loaded.targets.project,
+      set: { model: "test/after" },
+    })
+    expect(result.ok).toBe(true)
+    expect(await Bun.file(file).json()).toEqual({ ...loaded.targets.project.raw, model: "test/after" })
+  })
+
   test("removes an existing nested unset path", async () => {
     await using project = await tmpdir()
     const file = path.join(project.path, ".kilo", "kilo.jsonc")
@@ -134,7 +150,7 @@ describe("config overlay routes", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ scope: "project", unset: [["indexing", "enabled"]] }),
     })
-    expect(response.status).toBe(200)
+    expect(response.status, response.status === 200 ? undefined : await response.text()).toBe(200)
 
     const saved = (await Bun.file(file).json()) as {
       indexing: { enabled?: boolean; provider: string; ollama: { baseUrl: string } }
@@ -256,17 +272,38 @@ describe("config overlay routes", () => {
     const target = await KilocodeConfigOverlay.target({ scope: "project", directory: project.path })
 
     await expect(
-      KilocodeConfigWriter.write({
-        scope: "project",
-        directory: project.path,
-        expected: target,
-        set: { model: "test/after" },
-        write: async () => {
-          throw new Error("simulated replacement failure")
-        },
-      }),
+      ConfigPublication.using(project.path, () =>
+        KilocodeConfigWriter.write({
+          scope: "project",
+          directory: project.path,
+          expected: target,
+          set: { model: "test/after" },
+          beforeWrite: async () => {
+            throw new Error("simulated replacement failure")
+          },
+        }),
+      ),
     ).rejects.toThrow("simulated replacement failure")
     expect(await Bun.file(file).text()).toContain("test/before")
+  })
+
+  test("does not accept a successful foreign replacement callback as owned publication", async () => {
+    await using project = await tmpdir()
+    const file = path.join(project.path, "kilo.jsonc")
+    await Filesystem.write(file, '{"model":"test/before"}')
+    const target = await KilocodeConfigOverlay.target({ scope: "project", directory: project.path })
+    await expect(
+      ConfigPublication.using(project.path, () =>
+        KilocodeConfigWriter.write({
+          scope: "project",
+          directory: project.path,
+          expected: target,
+          set: { model: "test/after" },
+          beforeWrite: async () => Filesystem.write(file, '{"model":"test/after"}'),
+        }),
+      ),
+    ).resolves.toMatchObject({ ok: false, code: "revision-conflict" })
+    expect(await Bun.file(file).text()).toContain("test/after")
   })
 
   test("rechecks missing target parents before replacement", async () => {
@@ -700,16 +737,15 @@ describe("config overlay routes", () => {
     const edit = body.effective.permission.edit
     const after = await json<Agent[]>(await req(project.path, "/agent"))
 
-      expect(typeof edit === "string" ? edit : edit?.["*"]).toBe("ask")
-      expect(
-        Permission.evaluate("edit", "*", after.find((item) => item.name === "code")?.permission ?? []).action,
-      ).toBe("ask")
-      expect(body.collections.permission.find((item) => item.key === "edit")).toMatchObject({
-        source: "project",
-        overridden: true,
-      })
-    },
-  )
+    expect(typeof edit === "string" ? edit : edit?.["*"]).toBe("ask")
+    expect(Permission.evaluate("edit", "*", after.find((item) => item.name === "code")?.permission ?? []).action).toBe(
+      "ask",
+    )
+    expect(body.collections.permission.find((item) => item.key === "edit")).toMatchObject({
+      source: "project",
+      overridden: true,
+    })
+  })
 
   test.serial("refreshes agent permissions after global permission update", async () => {
     await using global = await tmpdir()

@@ -10,9 +10,14 @@ import { checkBufferCap } from "./worker/buffer-cap"
 import { resolveEndpoint } from "./worker/endpoint"
 import { parseMessage } from "./worker/validate"
 import path from "node:path"
+import * as Identity from "./worker-identity"
+import { observation } from "../cli/profile-retirement"
+import type { WorkerIdentity, ShutdownRequest, ToWorker } from "./worker/ipc"
+import { closeProcessProfile, registerProcessProfile } from "@opencode-ai/core/kilocode/process-profile"
+import { drainFileLoggers } from "@opencode-ai/core/kilocode/file-logger"
 
 type Scope = {
-  onmessage: (event: MessageEvent<unknown>) => void
+  onmessage: ((event: MessageEvent<unknown>) => void) | null
   postMessage: (message: FromWorker | { kind: "test_event_count"; count: number }) => void
 }
 
@@ -30,6 +35,8 @@ let tripped = false
 let stopping = false
 let failed = false
 let shutdown: Promise<ShutdownReply> | undefined
+let owner: WorkerIdentity | undefined
+let requested: string | undefined
 
 function drain(): Promise<void> {
   if (active) return active
@@ -75,26 +82,45 @@ function drain(): Promise<void> {
   return task
 }
 
-async function stop(requestID: string): Promise<ShutdownReply> {
+async function stop(request: ShutdownRequest): Promise<ShutdownReply> {
   stopping = true
-  try {
-    uploader?.dispose()
-    await drain()
-    if (failed) return { kind: "shutdown_refused", requestID, reason: "event-persistence-failed" }
-    await uploader?.flush("shutdown")
-    uploader?.dispose()
-    storage?.close()
-    clearInterval(cap)
-    storage = undefined
-    chunker = undefined
-    scrubber = undefined
-    inbox = undefined
-    uploader = undefined
-    return { kind: "shutdown_done", requestID, status: "confirmed" }
-  } catch (err) {
-    scope.postMessage({ kind: "telemetry", name: "session_export.shutdown_error", props: { message: String(err) } })
-    return { kind: "shutdown_refused", requestID, reason: "shutdown-failed" }
+  clearInterval(cap)
+  const errors: unknown[] = []
+  const attempt = async (work: () => void | Promise<void>) => {
+    try {
+      await work()
+    } catch (err) {
+      errors.push(err)
+    }
   }
+  await attempt(() => uploader?.dispose())
+  await attempt(drain)
+  if (failed) errors.push(new Error("Session export event persistence failed"))
+  await attempt(() => uploader?.flush("shutdown"))
+  await attempt(() => uploader?.dispose())
+  await attempt(() => storage?.close())
+  await attempt(drainFileLoggers)
+  if (!errors.length) await attempt(closeProcessProfile)
+  if (errors.length) {
+    const failures = errors.map((err) => (err instanceof Error ? err.message : String(err)))
+    scope.postMessage({
+      kind: "telemetry",
+      name: "session_export.shutdown_error",
+      props: { message: "Session export worker cleanup failed", failures },
+    })
+    return {
+      kind: "shutdown_refused",
+      ...request,
+      reason: failed ? "event-persistence-failed" : "shutdown-failed",
+      failures,
+    }
+  }
+  storage = undefined
+  chunker = undefined
+  scrubber = undefined
+  inbox = undefined
+  uploader = undefined
+  return Identity.acknowledge(request, observation())
 }
 
 scope.onmessage = (event) => {
@@ -106,6 +132,14 @@ scope.onmessage = (event) => {
   switch (msg.kind) {
     case "init":
       if (stopping) return
+      if (owner) {
+        scope.postMessage({ kind: "telemetry", name: "session_export.init_identity_already_pinned" })
+        return
+      }
+      owner = msg.identity
+      // This graph has no legacy logger. Declare its actual native/telemetry directory
+      // without realizing Global asynchronously before the worker's init handler.
+      registerProcessProfile([path.dirname(msg.dbPath)])
       storage = new Storage(msg.dbPath)
       storage.migrate()
       chunker = new Chunker(storage, { chunkBytes: Config.chunkBytes })
@@ -146,15 +180,32 @@ scope.onmessage = (event) => {
       })()
       return
     case "shutdown":
-      stopping = true
-      shutdown ??= stop(msg.requestID)
-      void shutdown.then((reply) => scope.postMessage(reply))
-      return
+      return close(msg)
     case "network_reconnect":
       if (stopping) return
       uploader?.scheduleFlush("network_reconnect")
       return
   }
+}
+
+function close(msg: Extract<ToWorker, { kind: "shutdown" }>) {
+  try {
+    if (!owner) throw new Error("Session export init identity is unavailable")
+    const request = Identity.accept(msg, owner)
+    if (shutdown && requested !== request.requestID)
+      throw new Error("Session export shutdown request is already pinned")
+    if (shutdown) return
+    requested = request.requestID
+    shutdown = stop(request)
+  } catch (err) {
+    scope.postMessage({ ...msg, kind: "shutdown_refused", reason: "identity-mismatch", failures: [String(err)] })
+    return
+  }
+  stopping = true
+  void shutdown.then((reply) => {
+    scope.postMessage(reply)
+    if (reply.kind === "shutdown_done") scope.onmessage = null
+  })
 }
 
 const cap = setInterval(() => {

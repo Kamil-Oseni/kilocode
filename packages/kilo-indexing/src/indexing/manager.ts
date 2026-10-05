@@ -56,6 +56,29 @@ export class CodeIndexManager {
   private _retryMaxAttempts = MAX_MANAGER_RECOVERY_ATTEMPTS
   private _retryInitialDelayMs = INITIAL_MANAGER_RECOVERY_DELAY_MS
   private _disposed = false
+  private readonly tasks = new Set<Promise<unknown>>()
+  private readonly failures: unknown[] = []
+  private closing: Promise<void> | undefined
+
+  private admit<T>(work: () => Promise<T>): Promise<T> {
+    if (this._disposed) return Promise.reject(new Error("Index manager admission is closed"))
+    const ticket = Promise.withResolvers<T>()
+    const task = ticket.promise
+    this.tasks.add(task)
+    void task.then(
+      () => this.tasks.delete(task),
+      (err) => {
+        this.tasks.delete(task)
+        if (this._disposed) this.failures.push(err)
+      },
+    )
+    try {
+      ticket.resolve(work())
+    } catch (err) {
+      ticket.reject(err)
+    }
+    return task
+  }
 
   constructor(
     public readonly workspacePath: string,
@@ -148,6 +171,7 @@ export class CodeIndexManager {
   }
 
   private handleTelemetry(event: IndexingTelemetryEvent): void {
+    if (this._disposed) return
     this._telemetry.fire(event)
 
     if (event.type === "completed") {
@@ -207,7 +231,7 @@ export class CodeIndexManager {
       await this._orchestrator!.startIndexing(trigger)
       if (this._disposed) return
     } catch (err) {
-      if (this._disposed) return
+      if (this._disposed) throw err
       log.error("indexing recovery attempt failed", {
         err,
         attempt,
@@ -276,7 +300,11 @@ export class CodeIndexManager {
     }
   }
 
-  public async initialize(input: IndexingConfigInput): Promise<{ requiresRestart: boolean }> {
+  public initialize(input: IndexingConfigInput): Promise<{ requiresRestart: boolean }> {
+    return this.admit(() => this.init(input))
+  }
+
+  private async init(input: IndexingConfigInput): Promise<{ requiresRestart: boolean }> {
     if (this._disposed) return { requiresRestart: false }
 
     if (!this._configManager) {
@@ -375,7 +403,11 @@ export class CodeIndexManager {
     return { requiresRestart }
   }
 
-  public async startIndexing(): Promise<void> {
+  public startIndexing(): Promise<void> {
+    return this.admit(() => this.start())
+  }
+
+  private async start(): Promise<void> {
     if (this._disposed) return
     if (!this.isFeatureEnabled) return
 
@@ -415,7 +447,11 @@ export class CodeIndexManager {
     this._orchestrator?.updateBatchSegmentThreshold(newThreshold)
   }
 
-  public async recoverFromError(trigger: IndexingTelemetryTrigger = "background"): Promise<void> {
+  public recoverFromError(trigger: IndexingTelemetryTrigger = "background"): Promise<void> {
+    return this.admit(() => this.recover(trigger))
+  }
+
+  private async recover(trigger: IndexingTelemetryTrigger): Promise<void> {
     if (this._disposed) return
     if (this._retryTask) {
       await this._retryTask
@@ -441,18 +477,41 @@ export class CodeIndexManager {
     await task
   }
 
-  public async dispose(): Promise<void> {
-    if (this._disposed) return
+  public dispose(): Promise<void> {
+    if (this.closing) return this.closing
     this._disposed = true
     this.clearRetryTimer()
-    this._retryTask = undefined
-    await this._orchestrator?.shutdown?.()
-    await this._baselineStore?.close?.()
-    this._stateManager.dispose()
-    this._telemetry.dispose()
+    const accepted = [
+      ...this.tasks,
+      ...(this._retryTask ? [this._retryTask] : []),
+      ...(this._baselineRefresh ? [this._baselineRefresh] : []),
+    ]
+    this.closing = (async () => {
+      await Promise.allSettled(accepted)
+      const stages = [
+        () => this._orchestrator?.shutdown?.(),
+        () => this._baselineStore?.close?.(),
+        () => this._cacheManager?.dispose(),
+        () => this._stateManager.dispose(),
+        () => this._telemetry.dispose(),
+      ]
+      for (const stage of stages) {
+        try {
+          await stage()
+        } catch (err) {
+          this.failures.push(err)
+        }
+      }
+      if (this.failures.length) throw new AggregateError(this.failures, "Index manager cleanup remains unconfirmed")
+    })()
+    return this.closing
   }
 
-  public async clearIndexData(): Promise<void> {
+  public clearIndexData(): Promise<void> {
+    return this.admit(() => this.clear())
+  }
+
+  private async clear(): Promise<void> {
     if (!this.isFeatureEnabled) return
     this.assertInitialized()
     await this._orchestrator!.clearIndexData()
@@ -468,7 +527,11 @@ export class CodeIndexManager {
     return { ...status, workspacePath: this.workspacePath }
   }
 
-  public async searchIndex(query: string, directoryPrefix?: string): Promise<VectorStoreSearchResult[]> {
+  public searchIndex(query: string, directoryPrefix?: string): Promise<VectorStoreSearchResult[]> {
+    return this.admit(() => this.search(query, directoryPrefix))
+  }
+
+  private async search(query: string, directoryPrefix?: string): Promise<VectorStoreSearchResult[]> {
     if (!this.isFeatureEnabled) return []
     await this.refreshBaseline()
     if (this.waiting()) return []
@@ -587,6 +650,12 @@ export class CodeIndexManager {
       if (!validationResult.valid) {
         const errorMessage = validationResult.error || "Embedder configuration validation failed"
         this._stateManager.setSystemState("Error", errorMessage)
+        const cleanup = await Promise.allSettled([
+          fileWatcher.shutdown ? fileWatcher.shutdown() : Promise.resolve(fileWatcher.dispose()),
+          vectorStore.close?.(),
+          baseline?.store?.close?.(),
+        ])
+        for (const result of cleanup) if (result.status === "rejected") this.failures.push(result.reason)
         throw new Error(errorMessage)
       }
       log.info("embedder configuration validated", {
@@ -634,7 +703,11 @@ export class CodeIndexManager {
     log.info("indexing services are ready", { workspacePath: this.workspacePath })
   }
 
-  public async handleSettingsChange(input: IndexingConfigInput): Promise<void> {
+  public handleSettingsChange(input: IndexingConfigInput): Promise<void> {
+    return this.admit(() => this.settings(input))
+  }
+
+  private async settings(input: IndexingConfigInput): Promise<void> {
     if (!this._configManager) return
 
     const { requiresRestart } = this._configManager.loadConfiguration(input)

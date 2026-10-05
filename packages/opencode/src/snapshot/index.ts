@@ -8,7 +8,6 @@ import path from "path"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Hash } from "@opencode-ai/core/util/hash"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock" // kilocode_change
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
@@ -17,6 +16,11 @@ import { Info } from "@opencode-ai/schema/file-diff"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { DiffFull } from "../kilocode/snapshot/diff-full"
 import { KiloSnapshotTrack } from "../kilocode/snapshot/track"
+import { SnapshotRuntime } from "../kilocode/snapshot/runtime"
+import { SnapshotPin } from "../kilocode/snapshot/pin"
+import { ProfileWriterLive } from "../kilocode/migration/writer-live"
+import { SnapshotWorkspace } from "../kilocode/snapshot/workspace"
+import * as SnapshotScope from "../kilocode/snapshot/scope"
 import { KiloSnapshotSeed } from "../kilocode/snapshot/seed"
 import { KiloSnapshotMaterialize } from "../kilocode/snapshot/materialize"
 import { KiloSnapshotTiming } from "../kilocode/snapshot/timing"
@@ -94,6 +98,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
       const appProcess = yield* AppProcess.Service
       const config = yield* Config.Service
       const flock = yield* EffectFlock.Service // kilocode_change
+      const ownership = SnapshotRuntime.install(ProfileWriterLive.snapshots()) // kilocode_change - count actual registry admission through finalizers
       const locks = new Map<string, Semaphore.Semaphore>()
 
       const lock = (key: string) => {
@@ -113,16 +118,15 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           // drive-stripped paths break `git checkout -- <file>` (Undo) and make diff patch matching
           // return empty text (no per-hunk lenses). Fall back to the real directory like every other
           // subsystem does, and key the private git-dir on it so each folder stays isolated.
-          const worktree =
-            ctx.worktree === "/" || ctx.worktree === "global" || !path.isAbsolute(ctx.worktree)
-              ? ctx.directory
-              : ctx.worktree
+          const bound = SnapshotScope.scope(ctx)
+          const worktree = bound.worktree
           const state = {
             directory: ctx.directory,
             worktree,
-            gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(worktree)),
+            gitdir: bound.gitdir,
             vcs: ctx.project.vcs,
           }
+          const pin = SnapshotPin.make(state.gitdir)
           // kilocode_change end
 
           // kilocode_change start - never snapshot runtime stores contained by a parent workspace
@@ -139,14 +143,19 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           const literal = (list: string[]) => feed(list.map((file) => `:(top,literal)${file}`))
 
           const git = Effect.fnUntraced(
-            function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
+            function* (
+              cmd: string[],
+              opts?: { cwd?: string; env?: Record<string, string>; stdin?: string; write?: boolean },
+            ) {
+              // kilocode_change
               const start = performance.now() // kilocode_change - measure only slow Git calls
               // kilocode_change start
-              const result = yield* appProcess
+              const work = appProcess
                 .run(ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }), {
                   stdin: opts?.stdin,
                 })
                 .pipe(Effect.ensuring(Effect.suspend(() => KiloSnapshotTiming.git(cmd, state.gitdir, start))))
+              const result = yield* opts?.write ? ownership.observe(work) : work
               // kilocode_change end
               return {
                 code: ChildProcessSpawner.ExitCode(result.exitCode),
@@ -162,6 +171,16 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               }),
             ),
           )
+
+          // kilocode_change start - observe mutations before the query runner's compatibility catch
+          const mutate = (cmd: string[], opts?: Parameters<typeof git>[1]) => git(cmd, { ...opts, write: true })
+          const write = (cmd: string[], opts?: Parameters<typeof git>[1]) =>
+            mutate(cmd, opts).pipe(
+              Effect.tap((result) =>
+                result.code !== 0 ? ownership.failed(new Error("Snapshot Git mutation refused")) : Effect.void,
+              ),
+            )
+          // kilocode_change end
 
           const ignore = Effect.fnUntraced(function* (files: string[]) {
             if (!files.length) return new Set<string>()
@@ -200,7 +219,8 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const drop = Effect.fnUntraced(function* (files: string[]) {
             if (!files.length) return
-            yield* git(
+            yield* write(
+              // kilocode_change
               [
                 ...cfg,
                 ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
@@ -227,7 +247,8 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               ? ["add", "--all", "--sparse", "--", "."]
               : ["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"]
 
-            const result = yield* git([...cfg, ...args(cmd)], {
+            const result = yield* write([...cfg, ...args(cmd)], {
+              // kilocode_change
               cwd: state.directory,
               env: opts?.env,
               stdin: opts?.root ? undefined : literal(files),
@@ -243,7 +264,23 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           // kilocode_change end
           // kilocode_change start - serialize snapshot repositories across CLI and extension processes
           const locked = <A, R>(op: string, fx: Effect.Effect<A, never, R>) =>
-            KiloSnapshotTiming.lock({ op, gitdir: state.gitdir, sem: lock(state.gitdir), flock, effect: fx })
+            ownership
+              .run(
+                SnapshotScope.input(ctx),
+                Effect.gen(function* () {
+                  const work = KiloSnapshotTiming.lock({
+                    op,
+                    gitdir: state.gitdir,
+                    sem: lock(state.gitdir),
+                    flock,
+                    effect: fx,
+                  })
+                  if (yield* exists(state.gitdir)) return yield* pin.run(ownership, work)
+                  if (op === "track" || op === "cleanup" || op === "materialize") return yield* work
+                  return yield* pin.run(ownership, work)
+                }),
+              )
+              .pipe(Effect.orDie)
 
           // kilocode_change end
 
@@ -290,7 +327,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             yield* sync()
             // kilocode_change start - remove legacy runtime entries without deleting runtime files
             if (stores.paths.length) {
-              const result = yield* git(
+              const result = yield* write(
                 [
                   ...cfg,
                   ...args([
@@ -312,6 +349,14 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               if (result.code !== 0)
                 return yield* Effect.die(new Error("Could not exclude runtime stores from snapshot"))
             }
+            // kilocode_change end
+            // kilocode_change start - legacy cached records can be unchanged and absent from diff-files
+            const cached = yield* git([...quote, ...args(["ls-files", "--cached", "--full-name", "-z"])], {
+              cwd: state.worktree,
+            })
+            if (cached.code !== 0)
+              return yield* Effect.die(new Error("Could not inspect protected snapshot index entries"))
+            yield* drop(cached.text.split("\0").filter(Boolean).filter(stores.contains))
             // kilocode_change end
             const [diff, other] = yield* Effect.all(
               [
@@ -406,17 +451,25 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           })
 
           const materialize = Effect.fnUntraced(function* () {
-            yield* locked(
-              "materialize",
-              KiloSnapshotMaterialize.run({ gitdir: state.gitdir, git, fs }).pipe(Effect.orDie),
-            ).pipe(
-              Effect.timeout("5 minutes"),
-              Effect.catchCause((cause) =>
-                Effect.logError("snapshot materialization failed", { cause: Cause.pretty(cause) }),
-              ),
-              Effect.forkDetach,
-              Effect.asVoid,
-            )
+            yield* ownership
+              .launch(
+                { namespaces: [Global.Path.data], targets: [state.gitdir] },
+                ownership
+                  .observe(
+                    locked(
+                      "materialize",
+                      KiloSnapshotMaterialize.run({ gitdir: state.gitdir, git, fs, ownership, write: mutate }).pipe(
+                        Effect.orDie,
+                      ),
+                    ).pipe(Effect.timeout("5 minutes")),
+                  )
+                  .pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.logError("snapshot materialization failed", { cause: Cause.pretty(cause) }),
+                    ),
+                  ),
+              )
+              .pipe(Effect.orDie, Effect.asVoid)
           })
           // kilocode_change end
 
@@ -428,9 +481,12 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                 if (!(yield* exists(state.gitdir))) return
                 if (!(yield* exists(state.worktree))) return // kilocode_change - skip gc when worktree is missing
                 // kilocode_change start - retain snapshots for the same seven-day window as object pruning
-                yield* KiloSnapshotMaterialize.prune({ gitdir: state.gitdir, git, fs }, Date.now() - retention)
+                yield* KiloSnapshotMaterialize.prune(
+                  { gitdir: state.gitdir, git, fs, ownership, write: mutate },
+                  Date.now() - retention,
+                )
                 // kilocode_change end
-                const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
+                const result = yield* write(args(["gc", `--prune=${prune}`]), { cwd: state.directory }) // kilocode_change
                 if (result.code !== 0) {
                   yield* Effect.logWarning("cleanup failed", {
                     exitCode: result.code,
@@ -452,64 +508,86 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                 if (!(yield* enabled())) return
                 const existed = yield* exists(state.gitdir)
                 const seeded: { value?: KiloSnapshotSeed.Output } = {} // kilocode_change
-                yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
-                if (!existed) {
-                  yield* git(["init"], {
-                    env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
-                  })
-                  yield* git(["--git-dir", state.gitdir, "config", "core.autocrlf", "false"])
-                  yield* git(["--git-dir", state.gitdir, "config", "core.longpaths", "true"])
-                  yield* git(["--git-dir", state.gitdir, "config", "core.symlinks", "true"])
-                  yield* git(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"])
-                  // kilocode_change start - seed all eligible new snapshots from the worktree index
-                  seeded.value = yield* KiloSnapshotSeed.seed({
-                    dir: state.directory,
-                    worktree: state.worktree,
-                    gitdir: state.gitdir,
-                    limit,
-                    git,
-                    fs,
-                  })
-                  // kilocode_change end
-                  yield* Effect.logInfo("initialized")
-                }
-                // kilocode_change start - pin every snapshot before background materialization
-                const seed = seeded.value?.source
-                const env = seed
-                  ? {
-                      GIT_OBJECT_DIRECTORY: seed.staging,
-                      GIT_ALTERNATE_OBJECT_DIRECTORIES: path.join(seed.gitdir, "objects"),
-                    }
-                  : undefined
-                yield* add({ env, root: !existed && state.directory === state.worktree })
-                if (
-                  seed &&
-                  !(yield* KiloSnapshotMaterialize.localize({
-                    gitdir: state.gitdir,
-                    git,
-                    fs,
-                    staging: seed.staging,
-                    seed: seed.hash,
-                  }))
-                )
-                  return
-                const result = yield* git(args(["write-tree"]), { cwd: state.directory })
-                const hash = result.text.trim()
-                if (result.code !== 0 || !hash) return
-                if (
-                  seed &&
-                  !(yield* KiloSnapshotMaterialize.localizeTrees(
-                    { gitdir: state.gitdir, git, fs, staging: seed.staging },
-                    hash,
-                  ))
-                )
-                  return
-                if (!(yield* KiloSnapshotMaterialize.pin({ gitdir: state.gitdir, git, fs }, hash))) return
+                // kilocode_change start - enter the exact created repository generation before first Git mutation
+                const hash = yield* pin
+                  .bootstrap(
+                    ownership,
+                    Effect.gen(function* () {
+                      // kilocode_change end
+                      if (!existed) {
+                        yield* write(["init"], {
+                          // kilocode_change
+                          env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
+                        })
+                        yield* write(["--git-dir", state.gitdir, "config", "core.autocrlf", "false"]) // kilocode_change
+                        yield* write(["--git-dir", state.gitdir, "config", "core.longpaths", "true"]) // kilocode_change
+                        yield* write(["--git-dir", state.gitdir, "config", "core.symlinks", "true"]) // kilocode_change
+                        yield* write(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"]) // kilocode_change
+                        // kilocode_change start - seed all eligible new snapshots from the worktree index
+                        seeded.value = yield* KiloSnapshotSeed.seed({
+                          dir: state.directory,
+                          worktree: state.worktree,
+                          gitdir: state.gitdir,
+                          limit,
+                          git,
+                          fs,
+                          ownership,
+                          write: mutate,
+                        })
+                        // kilocode_change end
+                        yield* Effect.logInfo("initialized")
+                      }
+                      // kilocode_change start - pin every snapshot before background materialization
+                      const seed = seeded.value?.source
+                      const env = seed
+                        ? {
+                            GIT_OBJECT_DIRECTORY: seed.staging,
+                            GIT_ALTERNATE_OBJECT_DIRECTORIES: path.join(seed.gitdir, "objects"),
+                          }
+                        : undefined
+                      yield* add({ env, root: !existed && state.directory === state.worktree })
+                      if (
+                        seed &&
+                        !(yield* KiloSnapshotMaterialize.localize({
+                          gitdir: state.gitdir,
+                          git,
+                          fs,
+                          staging: seed.staging,
+                          seed: seed.hash,
+                          ownership,
+                          write: mutate,
+                        }))
+                      )
+                        return
+                      const result = yield* write(args(["write-tree"]), { cwd: state.directory })
+                      const hash = result.text.trim()
+                      if (result.code !== 0 || !hash) return
+                      if (
+                        seed &&
+                        !(yield* KiloSnapshotMaterialize.localizeTrees(
+                          { gitdir: state.gitdir, git, fs, staging: seed.staging, ownership, write: mutate },
+                          hash,
+                        ))
+                      )
+                        return
+                      if (
+                        !(yield* KiloSnapshotMaterialize.pin(
+                          { gitdir: state.gitdir, git, fs, ownership, write: mutate },
+                          hash,
+                        ))
+                      )
+                        return
+                      // kilocode_change end
+                      yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
+                      return hash
+                    }),
+                  )
+                  .pipe(Effect.orDie) // kilocode_change
+                // kilocode_change start - launch outside bootstrap so its parent joins after Timing releases the Git lock
                 const alt = path.join(state.gitdir, "objects", "info", "alternates")
                 if (yield* exists(alt)) yield* materialize()
-                // kilocode_change end
-                yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
                 return hash
+                // kilocode_change end
               }),
             )
           })
@@ -565,34 +643,48 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               "restore", // kilocode_change
               Effect.gen(function* () {
                 // kilocode_change start - contaminated legacy snapshots must not overwrite live runtime data
-                if (stores.paths.length) {
-                  const tree = yield* git([...core, ...args(["ls-tree", "-r", "--name-only", "-z", snapshot])], {
-                    cwd: state.worktree,
-                  })
-                  if (tree.code !== 0 || tree.text.split("\0").filter(Boolean).some(stores.contains))
-                    return yield* Effect.die(new Error("Snapshot is unavailable or contains protected runtime data"))
-                }
-                // kilocode_change end
-                yield* Effect.logInfo("restore", { commit: snapshot })
-                const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
-                if (result.code === 0) {
-                  const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
-                    cwd: state.worktree,
-                  })
-                  if (checkout.code === 0) return
-                  yield* Effect.logError("failed to restore snapshot", {
-                    snapshot,
-                    exitCode: checkout.code,
-                    stderr: checkout.stderr,
-                  })
-                  return yield* Effect.die(new Error(`Failed to restore snapshot ${snapshot}`)) // kilocode_change
-                }
-                yield* Effect.logError("failed to restore snapshot", {
-                  snapshot,
-                  exitCode: result.code,
-                  stderr: result.stderr,
+                const resolved = yield* git([...core, ...args(["rev-parse", "--verify", `${snapshot}^{tree}`])], {
+                  cwd: state.worktree,
                 })
-                return yield* Effect.die(new Error(`Failed to restore snapshot ${snapshot}`)) // kilocode_change
+                const hash = resolved.text.trim()
+                if (resolved.code !== 0 || !/^[a-f0-9]{40,64}$/i.test(hash))
+                  yield* Effect.die(new Error("Snapshot tree is unavailable"))
+                const tree = yield* git([...core, ...args(["ls-tree", "-r", "--name-only", "-z", hash])], {
+                  cwd: state.worktree,
+                })
+                if (tree.code !== 0 || tree.text.split("\0").filter(Boolean).some(stores.contains))
+                  return yield* Effect.die(new Error("Snapshot is unavailable or contains protected runtime data"))
+                return yield* SnapshotWorkspace.run(
+                  { worktree: state.worktree, files: tree.text.split("\0").filter(Boolean) },
+                  (check) =>
+                    Effect.gen(function* () {
+                      yield* check
+                      // kilocode_change end
+                      yield* Effect.logInfo("restore", { commit: snapshot })
+                      const result = yield* write([...core, ...args(["read-tree", hash])], { cwd: state.worktree }) // kilocode_change
+                      if (result.code === 0) {
+                        yield* check // kilocode_change
+                        const checkout = yield* write([...core, ...args(["checkout-index", "-a", "-f"])], {
+                          // kilocode_change
+                          cwd: state.worktree,
+                        })
+                        if (checkout.code === 0) return
+                        yield* Effect.logError("failed to restore snapshot", {
+                          snapshot,
+                          exitCode: checkout.code,
+                          stderr: checkout.stderr,
+                        })
+                        return yield* Effect.die(new Error(`Failed to restore snapshot ${snapshot}`)) // kilocode_change
+                      }
+                      yield* Effect.logError("failed to restore snapshot", {
+                        snapshot,
+                        exitCode: result.code,
+                        stderr: result.stderr,
+                      })
+                      return yield* Effect.die(new Error(`Failed to restore snapshot ${snapshot}`)) // kilocode_change
+                    }), // kilocode_change
+                  ownership, // kilocode_change
+                ).pipe(Effect.orDie) // kilocode_change
               }),
             )
           })
@@ -626,151 +718,175 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               }),
             ) // kilocode_change
           // kilocode_change end
-          const revert = Effect.fnUntraced(function* (patches: Patch[], expected?: readonly Patch[]) {
+          const revert = Effect.fnUntraced(function* (input: Patch[], baseline?: readonly Patch[]) {
             // kilocode_change
+            // kilocode_change
+            // kilocode_change start - reserve the exact immutable targets before an admitted gate can suspend
+            const patches = input.map((item) => ({ hash: item.hash, files: [...item.files] }))
+            const expected = baseline?.map((item) => ({ hash: item.hash, files: [...item.files] }))
+            // kilocode_change end
             return yield* locked(
               "revert", // kilocode_change
               Effect.gen(function* () {
                 // kilocode_change start - validate every checkpoint before mutating workspace files
-                if (patches.some((item) => item.files.some(stores.contains)))
-                  return yield* Effect.die(new Error("Cannot restore protected runtime data from a snapshot"))
-                if (expected && !(yield* current(expected))) yield* Effect.die(new WorkspaceConflict())
-                for (const hash of new Set(patches.filter((item) => item.files.length > 0).map((item) => item.hash))) {
-                  const tree = yield* git([...core, ...args(["cat-file", "-e", `${hash}^{tree}`])], {
-                    cwd: state.worktree,
-                  })
-                  if (tree.code !== 0) return yield* Effect.die(new Error(`Snapshot ${hash} is unavailable`))
-                }
-                // kilocode_change end
-                const ops: { hash: string; file: string; rel: string }[] = []
-                const seen = new Set<string>()
-                for (const item of patches) {
-                  for (const file of item.files) {
-                    if (seen.has(file)) continue
-                    seen.add(file)
-                    ops.push({
-                      hash: item.hash,
-                      file,
-                      rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
-                    })
-                  }
-                }
-
-                const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
-                  yield* Effect.logInfo("reverting", { file: op.file, hash: op.hash })
-                  // kilocode_change start - check out via the worktree-relative pathspec, not the
-                  // absolute file. On Windows non-git folders the stored path is drive-stripped
-                  // ("/Users/.../file"), which git rejects as "outside repository at 'C:/'" (exit 128)
-                  // and turns Undo into a silent no-op. `op.rel` is already relative to state.worktree.
-                  const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.rel])], {
-                    cwd: state.worktree,
-                  })
-                  // kilocode_change end
-                  if (result.code === 0) return
-                  const tree = yield* git([...core, ...args(["ls-tree", op.hash, "--", op.rel])], {
-                    cwd: state.worktree,
-                  })
-                  // kilocode_change start - never report success for a file that Git could not restore
-                  if (tree.code !== 0) {
-                    return yield* Effect.die(new Error(`Snapshot ${op.hash} is unavailable`))
-                  }
-                  if (tree.text.trim()) {
-                    yield* Effect.logError("file existed in snapshot but checkout failed", {
-                      file: op.file,
-                      hash: op.hash,
-                      exitCode: result.code,
-                      stderr: result.stderr,
-                    })
-                    return yield* Effect.die(new Error(`Failed to restore ${op.file} from snapshot ${op.hash}`))
-                  }
-                  // kilocode_change end
-                  yield* Effect.logInfo("file did not exist in snapshot, deleting", {
-                    file: op.file,
-                    hash: op.hash,
-                  })
-                  yield* remove(op.file)
-                })
-
-                const clash = (a: string, b: string) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)
-
-                for (let i = 0; i < ops.length; ) {
-                  const first = ops[i]!
-                  const run = [first]
-                  let j = i + 1
-                  // Only batch adjacent files when their paths cannot affect each other.
-                  while (j < ops.length && run.length < 100) {
-                    const next = ops[j]!
-                    if (next.hash !== first.hash) break
-                    if (run.some((item) => clash(item.rel, next.rel))) break
-                    run.push(next)
-                    j += 1
-                  }
-
-                  if (run.length === 1) {
-                    yield* single(first)
-                    i = j
-                    continue
-                  }
-
-                  const tree = yield* git(
-                    [...core, ...args(["ls-tree", "--name-only", first.hash, "--", ...run.map((item) => item.rel)])],
-                    {
-                      cwd: state.worktree,
-                    },
-                  )
-
-                  if (tree.code !== 0) {
-                    yield* Effect.logInfo("batched ls-tree failed, falling back to single-file revert", {
-                      hash: first.hash,
-                      files: run.length,
-                    })
-                    for (const op of run) {
-                      yield* single(op)
-                    }
-                    i = j
-                    continue
-                  }
-
-                  const have = new Set(
-                    tree.text
-                      .trim()
-                      .split("\n")
-                      .map((item) => item.trim())
-                      .filter(Boolean),
-                  )
-                  const list = run.filter((item) => have.has(item.rel))
-                  if (list.length) {
-                    yield* Effect.logInfo("reverting", { hash: first.hash, files: list.length })
-                    const result = yield* git(
-                      [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
-                      {
-                        cwd: state.worktree,
-                      },
-                    )
-                    if (result.code !== 0) {
-                      yield* Effect.logInfo("batched checkout failed, falling back to single-file revert", {
-                        hash: first.hash,
-                        files: list.length,
-                      })
-                      for (const op of run) {
-                        yield* single(op)
+                return yield* SnapshotWorkspace.run(
+                  { worktree: state.worktree, files: [...patches, ...(expected ?? [])].flatMap((item) => item.files) },
+                  (check) =>
+                    Effect.gen(function* () {
+                      yield* check
+                      if (patches.some((item) => item.files.some(stores.contains)))
+                        return yield* Effect.die(new Error("Cannot restore protected runtime data from a snapshot"))
+                      if (expected && !(yield* current(expected))) yield* Effect.die(new WorkspaceConflict())
+                      for (const hash of new Set(
+                        patches.filter((item) => item.files.length > 0).map((item) => item.hash),
+                      )) {
+                        const tree = yield* git([...core, ...args(["cat-file", "-e", `${hash}^{tree}`])], {
+                          cwd: state.worktree,
+                        })
+                        if (tree.code !== 0) return yield* Effect.die(new Error(`Snapshot ${hash} is unavailable`))
                       }
-                      i = j
-                      continue
-                    }
-                  }
+                      // kilocode_change end
+                      const ops: { hash: string; file: string; rel: string }[] = []
+                      const seen = new Set<string>()
+                      for (const item of patches) {
+                        for (const file of item.files) {
+                          if (seen.has(file)) continue
+                          seen.add(file)
+                          ops.push({
+                            hash: item.hash,
+                            file,
+                            rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
+                          })
+                        }
+                      }
 
-                  for (const op of run) {
-                    if (have.has(op.rel)) continue
-                    yield* Effect.logInfo("file did not exist in snapshot, deleting", {
-                      file: op.file,
-                      hash: op.hash,
-                    })
-                    yield* remove(op.file)
-                  }
+                      const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
+                        yield* Effect.logInfo("reverting", { file: op.file, hash: op.hash })
+                        // kilocode_change start - check out via the worktree-relative pathspec, not the
+                        // absolute file. On Windows non-git folders the stored path is drive-stripped
+                        // ("/Users/.../file"), which git rejects as "outside repository at 'C:/'" (exit 128)
+                        // and turns Undo into a silent no-op. `op.rel` is already relative to state.worktree.
+                        yield* check
+                        const result = yield* mutate([...core, ...args(["checkout", op.hash, "--", op.rel])], {
+                          cwd: state.worktree,
+                        })
+                        // kilocode_change end
+                        if (result.code === 0) return
+                        const tree = yield* git([...core, ...args(["ls-tree", op.hash, "--", op.rel])], {
+                          cwd: state.worktree,
+                        })
+                        // kilocode_change start - never report success for a file that Git could not restore
+                        if (tree.code !== 0) {
+                          return yield* Effect.die(new Error(`Snapshot ${op.hash} is unavailable`))
+                        }
+                        if (tree.text.trim()) {
+                          yield* ownership.failed(new Error("Snapshot Git mutation refused"))
+                          yield* Effect.logError("file existed in snapshot but checkout failed", {
+                            file: op.file,
+                            hash: op.hash,
+                            exitCode: result.code,
+                            stderr: result.stderr,
+                          })
+                          return yield* Effect.die(new Error(`Failed to restore ${op.file} from snapshot ${op.hash}`))
+                        }
+                        // kilocode_change end
+                        yield* Effect.logInfo("file did not exist in snapshot, deleting", {
+                          file: op.file,
+                          hash: op.hash,
+                        })
+                        yield* check // kilocode_change
+                        yield* remove(op.file)
+                      })
 
-                  i = j
-                }
+                      const clash = (a: string, b: string) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)
+
+                      for (let i = 0; i < ops.length; ) {
+                        const first = ops[i]!
+                        const run = [first]
+                        let j = i + 1
+                        // Only batch adjacent files when their paths cannot affect each other.
+                        while (j < ops.length && run.length < 100) {
+                          const next = ops[j]!
+                          if (next.hash !== first.hash) break
+                          if (run.some((item) => clash(item.rel, next.rel))) break
+                          run.push(next)
+                          j += 1
+                        }
+
+                        if (run.length === 1) {
+                          yield* single(first)
+                          i = j
+                          continue
+                        }
+
+                        const tree = yield* git(
+                          [
+                            ...core,
+                            ...args(["ls-tree", "--name-only", first.hash, "--", ...run.map((item) => item.rel)]),
+                          ],
+                          {
+                            cwd: state.worktree,
+                          },
+                        )
+
+                        if (tree.code !== 0) {
+                          yield* Effect.logInfo("batched ls-tree failed, falling back to single-file revert", {
+                            hash: first.hash,
+                            files: run.length,
+                          })
+                          for (const op of run) {
+                            yield* single(op)
+                          }
+                          i = j
+                          continue
+                        }
+
+                        const have = new Set(
+                          tree.text
+                            .trim()
+                            .split("\n")
+                            .map((item) => item.trim())
+                            .filter(Boolean),
+                        )
+                        const list = run.filter((item) => have.has(item.rel))
+                        if (list.length) {
+                          yield* Effect.logInfo("reverting", { hash: first.hash, files: list.length })
+                          yield* check // kilocode_change
+                          const result = yield* write(
+                            // kilocode_change
+                            [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
+                            {
+                              cwd: state.worktree,
+                            },
+                          )
+                          if (result.code !== 0) {
+                            yield* Effect.logInfo("batched checkout failed, falling back to single-file revert", {
+                              hash: first.hash,
+                              files: list.length,
+                            })
+                            for (const op of run) {
+                              yield* single(op)
+                            }
+                            i = j
+                            continue
+                          }
+                        }
+
+                        for (const op of run) {
+                          if (have.has(op.rel)) continue
+                          yield* Effect.logInfo("file did not exist in snapshot, deleting", {
+                            file: op.file,
+                            hash: op.hash,
+                          })
+                          yield* check // kilocode_change
+                          yield* remove(op.file)
+                        }
+
+                        i = j
+                      }
+                    }), // kilocode_change
+                  ownership, // kilocode_change
+                ).pipe(Effect.orDie) // kilocode_change
               }),
             )
           })
@@ -1037,12 +1153,16 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           yield* materialize() // kilocode_change - resume interrupted snapshot object materialization
 
-          yield* cleanup().pipe(
-            Effect.catchCause((cause) => Effect.logError("cleanup loop failed", { cause: Cause.pretty(cause) })),
-            Effect.repeat(Schedule.spaced(Duration.hours(1))),
-            Effect.delay(Duration.minutes(1)),
-            Effect.forkScoped,
+          // kilocode_change start - retain periodic writes through actual Exit and join this instance's loop
+          const loop = yield* ownership.periodic(
+            ownership.run(SnapshotScope.input(ctx), ownership.observe(cleanup())).pipe(
+              Effect.catchCause((cause) => Effect.logError("cleanup loop failed", { cause: Cause.pretty(cause) })),
+              Effect.repeat(Schedule.spaced(Duration.hours(1))),
+              Effect.delay(Duration.minutes(1)),
+            ),
           )
+          yield* Effect.addFinalizer(() => ownership.stop(loop).pipe(Effect.orDie))
+          // kilocode_change end
 
           // kilocode_change start - authoritative full-content detail for editor diff tabs
           const diffFile = Effect.fnUntraced(function* (from: string, to: string, file: string) {
@@ -1086,7 +1206,11 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           // plain folder (dropping patch parts -> Undo no-op and no in-editor lenses).
           const guard = trackState(KiloSnapshotTrack.key(ctx))
           return yield* KiloSnapshotTrack.protect({
+            ownership,
+            input: SnapshotScope.input(ctx),
             inner: KiloSnapshotTrack.wrap({
+              ownership,
+              input: SnapshotScope.input(ctx),
               inner: InstanceState.useEffect(state, (s) => s.track(opts)),
               state: guard,
               snapshotInitialization: opts?.snapshotInitialization,
@@ -1102,6 +1226,8 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           const ctx = yield* InstanceState.context
           const guard = trackState(KiloSnapshotTrack.key(ctx)) // kilocode_change - non-git directories must not share a patch guard
           return yield* KiloSnapshotTrack.protect({
+            ownership,
+            input: SnapshotScope.input(ctx),
             inner: InstanceState.useEffect(state, (s) => s.patch(hash, to)), // kilocode_change
             state: guard,
             fallback: { hash, files: [] },
@@ -1138,12 +1264,18 @@ export const layer: Layer.Layer<Service, never, Requirements> =
             if (first) cache.delete(first)
           }
           const ctx = yield* Effect.context()
-          const pending = Effect.runPromiseWith(ctx)(InstanceState.useEffect(state, (s) => s.diffFull(from, to))).catch(
-            (err) => {
-              cache.delete(key)
-              throw err
-            },
-          )
+          const instance = yield* InstanceState.context
+          const pending = Effect.runPromiseWith(ctx)(
+            ownership
+              .run(
+                SnapshotScope.input(instance),
+                InstanceState.useEffect(state, (s) => s.diffFull(from, to)),
+              )
+              .pipe(Effect.orDie),
+          ).catch((err) => {
+            cache.delete(key)
+            throw err
+          })
           cache.set(key, pending)
           return yield* Effect.promise(() => pending)
           // kilocode_change end

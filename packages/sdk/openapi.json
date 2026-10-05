@@ -8002,6 +8002,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "ServiceUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_ServiceUnavailable"
+                }
+              }
+            }
           }
         },
         "description": "Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.",
@@ -21528,25 +21538,83 @@
                                   "type": "boolean"
                                 },
                                 "check": {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": ["command"]
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["command"]
+                                        },
+                                        "command": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 4000
+                                        },
+                                        "directory": {
+                                          "type": "string",
+                                          "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": ["kind", "command", "directory"],
+                                      "additionalProperties": false
                                     },
-                                    "command": {
-                                      "type": "string",
-                                      "pattern": "\\S",
-                                      "maxLength": 4000
-                                    },
-                                    "directory": {
-                                      "type": "string",
-                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                      "maxLength": 4000
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["byte-equality"]
+                                        },
+                                        "source": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            },
+                                            "bytes": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": ["path", "canonical", "sha256", "bytes"],
+                                          "additionalProperties": false
+                                        },
+                                        "target": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            }
+                                          },
+                                          "required": ["path", "canonical"],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": ["kind", "source", "target"],
+                                      "additionalProperties": false
                                     }
-                                  },
-                                  "required": ["kind", "command", "directory"],
-                                  "additionalProperties": false
+                                  ]
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -22504,25 +22572,83 @@
                             "type": "boolean"
                           },
                           "check": {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": ["command"]
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["command"]
+                                  },
+                                  "command": {
+                                    "type": "string",
+                                    "pattern": "\\S",
+                                    "maxLength": 4000
+                                  },
+                                  "directory": {
+                                    "type": "string",
+                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                    "maxLength": 4000
+                                  }
+                                },
+                                "required": ["kind", "command", "directory"],
+                                "additionalProperties": false
                               },
-                              "command": {
-                                "type": "string",
-                                "pattern": "\\S",
-                                "maxLength": 4000
-                              },
-                              "directory": {
-                                "type": "string",
-                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                "maxLength": 4000
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["byte-equality"]
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "canonical": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "bytes": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": ["path", "canonical", "sha256", "bytes"],
+                                    "additionalProperties": false
+                                  },
+                                  "target": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "canonical": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      }
+                                    },
+                                    "required": ["path", "canonical"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["kind", "source", "target"],
+                                "additionalProperties": false
                               }
-                            },
-                            "required": ["kind", "command", "directory"],
-                            "additionalProperties": false
+                            ]
                           }
                         },
                         "required": ["id", "description", "verification"],
@@ -23563,25 +23689,83 @@
                                         "type": "boolean"
                                       },
                                       "check": {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["command"]
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": ["command"]
+                                              },
+                                              "command": {
+                                                "type": "string",
+                                                "pattern": "\\S",
+                                                "maxLength": 4000
+                                              },
+                                              "directory": {
+                                                "type": "string",
+                                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                "maxLength": 4000
+                                              }
+                                            },
+                                            "required": ["kind", "command", "directory"],
+                                            "additionalProperties": false
                                           },
-                                          "command": {
-                                            "type": "string",
-                                            "pattern": "\\S",
-                                            "maxLength": 4000
-                                          },
-                                          "directory": {
-                                            "type": "string",
-                                            "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                            "maxLength": 4000
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": ["byte-equality"]
+                                              },
+                                              "source": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "path": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "canonical": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "sha256": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-f0-9]{64}$"
+                                                  },
+                                                  "bytes": {
+                                                    "type": "integer",
+                                                    "minimum": 0,
+                                                    "maximum": 9007199254740991
+                                                  }
+                                                },
+                                                "required": ["path", "canonical", "sha256", "bytes"],
+                                                "additionalProperties": false
+                                              },
+                                              "target": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "path": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "canonical": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  }
+                                                },
+                                                "required": ["path", "canonical"],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": ["kind", "source", "target"],
+                                            "additionalProperties": false
                                           }
-                                        },
-                                        "required": ["kind", "command", "directory"],
-                                        "additionalProperties": false
+                                        ]
                                       }
                                     },
                                     "required": ["id", "description", "verification"],
@@ -24635,25 +24819,83 @@
                                   "type": "boolean"
                                 },
                                 "check": {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": ["command"]
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["command"]
+                                        },
+                                        "command": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 4000
+                                        },
+                                        "directory": {
+                                          "type": "string",
+                                          "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": ["kind", "command", "directory"],
+                                      "additionalProperties": false
                                     },
-                                    "command": {
-                                      "type": "string",
-                                      "pattern": "\\S",
-                                      "maxLength": 4000
-                                    },
-                                    "directory": {
-                                      "type": "string",
-                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                      "maxLength": 4000
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["byte-equality"]
+                                        },
+                                        "source": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            },
+                                            "bytes": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": ["path", "canonical", "sha256", "bytes"],
+                                          "additionalProperties": false
+                                        },
+                                        "target": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            }
+                                          },
+                                          "required": ["path", "canonical"],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": ["kind", "source", "target"],
+                                      "additionalProperties": false
                                     }
-                                  },
-                                  "required": ["kind", "command", "directory"],
-                                  "additionalProperties": false
+                                  ]
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -25497,25 +25739,83 @@
                                   "type": "boolean"
                                 },
                                 "check": {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": ["command"]
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["command"]
+                                        },
+                                        "command": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 4000
+                                        },
+                                        "directory": {
+                                          "type": "string",
+                                          "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": ["kind", "command", "directory"],
+                                      "additionalProperties": false
                                     },
-                                    "command": {
-                                      "type": "string",
-                                      "pattern": "\\S",
-                                      "maxLength": 4000
-                                    },
-                                    "directory": {
-                                      "type": "string",
-                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                      "maxLength": 4000
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["byte-equality"]
+                                        },
+                                        "source": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            },
+                                            "bytes": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": ["path", "canonical", "sha256", "bytes"],
+                                          "additionalProperties": false
+                                        },
+                                        "target": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            }
+                                          },
+                                          "required": ["path", "canonical"],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": ["kind", "source", "target"],
+                                      "additionalProperties": false
                                     }
-                                  },
-                                  "required": ["kind", "command", "directory"],
-                                  "additionalProperties": false
+                                  ]
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -26473,25 +26773,83 @@
                             "type": "boolean"
                           },
                           "check": {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": ["command"]
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["command"]
+                                  },
+                                  "command": {
+                                    "type": "string",
+                                    "pattern": "\\S",
+                                    "maxLength": 4000
+                                  },
+                                  "directory": {
+                                    "type": "string",
+                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                    "maxLength": 4000
+                                  }
+                                },
+                                "required": ["kind", "command", "directory"],
+                                "additionalProperties": false
                               },
-                              "command": {
-                                "type": "string",
-                                "pattern": "\\S",
-                                "maxLength": 4000
-                              },
-                              "directory": {
-                                "type": "string",
-                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                "maxLength": 4000
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["byte-equality"]
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "canonical": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "bytes": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": ["path", "canonical", "sha256", "bytes"],
+                                    "additionalProperties": false
+                                  },
+                                  "target": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "canonical": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      }
+                                    },
+                                    "required": ["path", "canonical"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["kind", "source", "target"],
+                                "additionalProperties": false
                               }
-                            },
-                            "required": ["kind", "command", "directory"],
-                            "additionalProperties": false
+                            ]
                           }
                         },
                         "required": ["id", "description", "verification"],
@@ -27532,25 +27890,83 @@
                                         "type": "boolean"
                                       },
                                       "check": {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["command"]
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": ["command"]
+                                              },
+                                              "command": {
+                                                "type": "string",
+                                                "pattern": "\\S",
+                                                "maxLength": 4000
+                                              },
+                                              "directory": {
+                                                "type": "string",
+                                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                "maxLength": 4000
+                                              }
+                                            },
+                                            "required": ["kind", "command", "directory"],
+                                            "additionalProperties": false
                                           },
-                                          "command": {
-                                            "type": "string",
-                                            "pattern": "\\S",
-                                            "maxLength": 4000
-                                          },
-                                          "directory": {
-                                            "type": "string",
-                                            "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                            "maxLength": 4000
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": ["byte-equality"]
+                                              },
+                                              "source": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "path": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "canonical": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "sha256": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-f0-9]{64}$"
+                                                  },
+                                                  "bytes": {
+                                                    "type": "integer",
+                                                    "minimum": 0,
+                                                    "maximum": 9007199254740991
+                                                  }
+                                                },
+                                                "required": ["path", "canonical", "sha256", "bytes"],
+                                                "additionalProperties": false
+                                              },
+                                              "target": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "path": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "canonical": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  }
+                                                },
+                                                "required": ["path", "canonical"],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": ["kind", "source", "target"],
+                                            "additionalProperties": false
                                           }
-                                        },
-                                        "required": ["kind", "command", "directory"],
-                                        "additionalProperties": false
+                                        ]
                                       }
                                     },
                                     "required": ["id", "description", "verification"],
@@ -28604,25 +29020,83 @@
                                   "type": "boolean"
                                 },
                                 "check": {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": ["command"]
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["command"]
+                                        },
+                                        "command": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 4000
+                                        },
+                                        "directory": {
+                                          "type": "string",
+                                          "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": ["kind", "command", "directory"],
+                                      "additionalProperties": false
                                     },
-                                    "command": {
-                                      "type": "string",
-                                      "pattern": "\\S",
-                                      "maxLength": 4000
-                                    },
-                                    "directory": {
-                                      "type": "string",
-                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                      "maxLength": 4000
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["byte-equality"]
+                                        },
+                                        "source": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            },
+                                            "bytes": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": ["path", "canonical", "sha256", "bytes"],
+                                          "additionalProperties": false
+                                        },
+                                        "target": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            }
+                                          },
+                                          "required": ["path", "canonical"],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": ["kind", "source", "target"],
+                                      "additionalProperties": false
                                     }
-                                  },
-                                  "required": ["kind", "command", "directory"],
-                                  "additionalProperties": false
+                                  ]
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -29384,25 +29858,83 @@
                                   "type": "boolean"
                                 },
                                 "check": {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": ["command"]
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["command"]
+                                        },
+                                        "command": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 4000
+                                        },
+                                        "directory": {
+                                          "type": "string",
+                                          "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": ["kind", "command", "directory"],
+                                      "additionalProperties": false
                                     },
-                                    "command": {
-                                      "type": "string",
-                                      "pattern": "\\S",
-                                      "maxLength": 4000
-                                    },
-                                    "directory": {
-                                      "type": "string",
-                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                      "maxLength": 4000
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["byte-equality"]
+                                        },
+                                        "source": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            },
+                                            "bytes": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": ["path", "canonical", "sha256", "bytes"],
+                                          "additionalProperties": false
+                                        },
+                                        "target": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            }
+                                          },
+                                          "required": ["path", "canonical"],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": ["kind", "source", "target"],
+                                      "additionalProperties": false
                                     }
-                                  },
-                                  "required": ["kind", "command", "directory"],
-                                  "additionalProperties": false
+                                  ]
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -30360,25 +30892,83 @@
                             "type": "boolean"
                           },
                           "check": {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": ["command"]
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["command"]
+                                  },
+                                  "command": {
+                                    "type": "string",
+                                    "pattern": "\\S",
+                                    "maxLength": 4000
+                                  },
+                                  "directory": {
+                                    "type": "string",
+                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                    "maxLength": 4000
+                                  }
+                                },
+                                "required": ["kind", "command", "directory"],
+                                "additionalProperties": false
                               },
-                              "command": {
-                                "type": "string",
-                                "pattern": "\\S",
-                                "maxLength": 4000
-                              },
-                              "directory": {
-                                "type": "string",
-                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                "maxLength": 4000
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["byte-equality"]
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "canonical": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "bytes": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": ["path", "canonical", "sha256", "bytes"],
+                                    "additionalProperties": false
+                                  },
+                                  "target": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      },
+                                      "canonical": {
+                                        "type": "string",
+                                        "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                        "maxLength": 4000
+                                      }
+                                    },
+                                    "required": ["path", "canonical"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["kind", "source", "target"],
+                                "additionalProperties": false
                               }
-                            },
-                            "required": ["kind", "command", "directory"],
-                            "additionalProperties": false
+                            ]
                           }
                         },
                         "required": ["id", "description", "verification"],
@@ -31419,25 +32009,83 @@
                                         "type": "boolean"
                                       },
                                       "check": {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["command"]
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": ["command"]
+                                              },
+                                              "command": {
+                                                "type": "string",
+                                                "pattern": "\\S",
+                                                "maxLength": 4000
+                                              },
+                                              "directory": {
+                                                "type": "string",
+                                                "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                "maxLength": 4000
+                                              }
+                                            },
+                                            "required": ["kind", "command", "directory"],
+                                            "additionalProperties": false
                                           },
-                                          "command": {
-                                            "type": "string",
-                                            "pattern": "\\S",
-                                            "maxLength": 4000
-                                          },
-                                          "directory": {
-                                            "type": "string",
-                                            "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                            "maxLength": 4000
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": ["byte-equality"]
+                                              },
+                                              "source": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "path": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "canonical": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "sha256": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-f0-9]{64}$"
+                                                  },
+                                                  "bytes": {
+                                                    "type": "integer",
+                                                    "minimum": 0,
+                                                    "maximum": 9007199254740991
+                                                  }
+                                                },
+                                                "required": ["path", "canonical", "sha256", "bytes"],
+                                                "additionalProperties": false
+                                              },
+                                              "target": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "path": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  },
+                                                  "canonical": {
+                                                    "type": "string",
+                                                    "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                                    "maxLength": 4000
+                                                  }
+                                                },
+                                                "required": ["path", "canonical"],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": ["kind", "source", "target"],
+                                            "additionalProperties": false
                                           }
-                                        },
-                                        "required": ["kind", "command", "directory"],
-                                        "additionalProperties": false
+                                        ]
                                       }
                                     },
                                     "required": ["id", "description", "verification"],
@@ -32491,25 +33139,83 @@
                                   "type": "boolean"
                                 },
                                 "check": {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": ["command"]
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["command"]
+                                        },
+                                        "command": {
+                                          "type": "string",
+                                          "pattern": "\\S",
+                                          "maxLength": 4000
+                                        },
+                                        "directory": {
+                                          "type": "string",
+                                          "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": ["kind", "command", "directory"],
+                                      "additionalProperties": false
                                     },
-                                    "command": {
-                                      "type": "string",
-                                      "pattern": "\\S",
-                                      "maxLength": 4000
-                                    },
-                                    "directory": {
-                                      "type": "string",
-                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                                      "maxLength": 4000
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["byte-equality"]
+                                        },
+                                        "source": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            },
+                                            "bytes": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": ["path", "canonical", "sha256", "bytes"],
+                                          "additionalProperties": false
+                                        },
+                                        "target": {
+                                          "type": "object",
+                                          "properties": {
+                                            "path": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            },
+                                            "canonical": {
+                                              "type": "string",
+                                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                              "maxLength": 4000
+                                            }
+                                          },
+                                          "required": ["path", "canonical"],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": ["kind", "source", "target"],
+                                      "additionalProperties": false
                                     }
-                                  },
-                                  "required": ["kind", "command", "directory"],
-                                  "additionalProperties": false
+                                  ]
                                 }
                               },
                               "required": ["id", "description", "verification"],
@@ -32903,25 +33609,83 @@
                           "type": "boolean"
                         },
                         "check": {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": ["command"]
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["command"]
+                                },
+                                "command": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 4000
+                                },
+                                "directory": {
+                                  "type": "string",
+                                  "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": ["kind", "command", "directory"],
+                              "additionalProperties": false
                             },
-                            "command": {
-                              "type": "string",
-                              "pattern": "\\S",
-                              "maxLength": 4000
-                            },
-                            "directory": {
-                              "type": "string",
-                              "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
-                              "maxLength": 4000
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["byte-equality"]
+                                },
+                                "source": {
+                                  "type": "object",
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    },
+                                    "canonical": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    },
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": ["path", "canonical", "sha256", "bytes"],
+                                  "additionalProperties": false
+                                },
+                                "target": {
+                                  "type": "object",
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    },
+                                    "canonical": {
+                                      "type": "string",
+                                      "pattern": "^(?:[a-zA-Z]:[\\\\/]|\\/|\\\\\\\\)",
+                                      "maxLength": 4000
+                                    }
+                                  },
+                                  "required": ["path", "canonical"],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["kind", "source", "target"],
+                              "additionalProperties": false
                             }
-                          },
-                          "required": ["kind", "command", "directory"],
-                          "additionalProperties": false
+                          ]
                         }
                       },
                       "required": ["id", "description", "verification"],
@@ -33377,6 +34141,178 @@
                           }
                         ]
                       }
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "sessionDigest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "agentID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "sessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "executionDigest": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "at": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "scheduleVersion": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "trigger": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["manual"]
+                                      }
+                                    },
+                                    "required": ["kind"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["timer"]
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "scheduledAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      },
+                                      "observedAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      },
+                                      "tz": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["kind", "id", "scheduledAt", "observedAt"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["event"]
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "filter": {
+                                        "type": "string"
+                                      },
+                                      "receivedAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["kind", "source", "receivedAt"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["id", "agentID", "sessionID", "at", "scheduleVersion"],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 1
+                        }
+                      },
+                      "required": ["version", "sessionDigest", "runs"],
+                      "additionalProperties": false
                     }
                   },
                   "required": ["sessionID", "intent", "phase", "at"],
@@ -33694,6 +34630,178 @@
                           }
                         ]
                       }
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "sessionDigest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "agentID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "sessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "executionDigest": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "at": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "scheduleVersion": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "trigger": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["manual"]
+                                      }
+                                    },
+                                    "required": ["kind"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["timer"]
+                                      },
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "scheduledAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      },
+                                      "observedAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      },
+                                      "tz": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["kind", "id", "scheduledAt", "observedAt"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["event"]
+                                      },
+                                      "source": {
+                                        "type": "string"
+                                      },
+                                      "filter": {
+                                        "type": "string"
+                                      },
+                                      "receivedAt": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": ["kind", "source", "receivedAt"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "required": ["id", "agentID", "sessionID", "at", "scheduleVersion"],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 1
+                        }
+                      },
+                      "required": ["version", "sessionDigest", "runs"],
+                      "additionalProperties": false
                     }
                   },
                   "required": ["sessionID", "intent", "phase", "at"],
@@ -34515,6 +35623,352 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.forecast({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/profile/restore-review": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.profile.restoreReview",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": ["absent", "held", "released"]
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "review": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "number"
+                        },
+                        "by": {
+                          "type": "string",
+                          "enum": ["user"]
+                        },
+                        "revision": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["at", "by"],
+                      "additionalProperties": false
+                    },
+                    "reconnectCredentials": {
+                      "type": "boolean"
+                    },
+                    "uncertainWork": {
+                      "type": "string",
+                      "enum": ["held-no-replay"]
+                    },
+                    "workspaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "destination": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          }
+                        },
+                        "required": ["source", "destination"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "workers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "enabled"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["state", "reconnectCredentials", "uncertainWork", "workspaces", "workers"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read the exact transfer hold, mapped workspaces and paused worker summary. Display evidence grants no path or execution authority.",
+        "summary": "Read transferred profile review",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.profile.restoreReview({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.profile.restoreApprove",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": ["absent", "held", "released"]
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "review": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "number"
+                        },
+                        "by": {
+                          "type": "string",
+                          "enum": ["user"]
+                        },
+                        "revision": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["at", "by"],
+                      "additionalProperties": false
+                    },
+                    "reconnectCredentials": {
+                      "type": "boolean"
+                    },
+                    "uncertainWork": {
+                      "type": "string",
+                      "enum": ["held-no-replay"]
+                    },
+                    "workspaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "destination": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          }
+                        },
+                        "required": ["source", "destination"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "workers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "enabled"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["state", "reconnectCredentials", "uncertainWork", "workspaces", "workers"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Explicitly review this hold generation and current workspace/worker revision. Imported workers remain individually disabled; no work is enqueued, enabled, resumed or replayed.",
+        "summary": "Approve an exact transferred profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                    "format": "uuid"
+                  },
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "reviewed": {
+                    "type": "boolean",
+                    "enum": [true]
+                  },
+                  "workspacesAcknowledged": {
+                    "type": "boolean",
+                    "enum": [true]
+                  },
+                  "reconnectAcknowledged": {
+                    "type": "boolean",
+                    "enum": [true]
+                  }
+                },
+                "required": ["id", "revision", "reviewed", "workspacesAcknowledged", "reconnectAcknowledged"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.profile.restoreApprove({\n  ...\n})"
           }
         ]
       }
@@ -73290,9 +74744,6 @@
             "$ref": "#/components/schemas/EventGlobalConfigUpdated1"
           },
           {
-            "$ref": "#/components/schemas/EventServerInstanceDisposed"
-          },
-          {
             "$ref": "#/components/schemas/EventSessionTurnOpen"
           },
           {
@@ -73302,10 +74753,16 @@
             "$ref": "#/components/schemas/EventSessionQueueChanged"
           },
           {
-            "$ref": "#/components/schemas/EventRayaRoutineRunChanged1"
+            "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
           },
           {
-            "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
+            "$ref": "#/components/schemas/EventSandboxStatusChanged"
+          },
+          {
+            "$ref": "#/components/schemas/EventServerInstanceDisposed"
+          },
+          {
+            "$ref": "#/components/schemas/EventRayaRoutineRunChanged1"
           },
           {
             "$ref": "#/components/schemas/EventSessionNetworkAsked"
@@ -73333,9 +74790,6 @@
           },
           {
             "$ref": "#/components/schemas/EventInteractive_terminalDeleted"
-          },
-          {
-            "$ref": "#/components/schemas/EventSandboxStatusChanged"
           },
           {
             "$ref": "#/components/schemas/EventLspClientDiagnostics"
@@ -81380,9 +82834,6 @@
           "payload": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EventServerInstanceDisposed"
-              },
-              {
                 "$ref": "#/components/schemas/EventSessionTurnOpen"
               },
               {
@@ -81392,10 +82843,16 @@
                 "$ref": "#/components/schemas/EventSessionQueueChanged"
               },
               {
-                "$ref": "#/components/schemas/EventRayaRoutineRunChanged"
+                "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
               },
               {
-                "$ref": "#/components/schemas/EventRayaRoutineExecutionIdle"
+                "$ref": "#/components/schemas/EventSandboxStatusChanged"
+              },
+              {
+                "$ref": "#/components/schemas/EventServerInstanceDisposed"
+              },
+              {
+                "$ref": "#/components/schemas/EventRayaRoutineRunChanged"
               },
               {
                 "$ref": "#/components/schemas/EventSessionNetworkAsked"
@@ -81423,9 +82880,6 @@
               },
               {
                 "$ref": "#/components/schemas/EventInteractive_terminalDeleted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSandboxStatusChanged"
               },
               {
                 "$ref": "#/components/schemas/EventLspClientDiagnostics"
@@ -85396,6 +86850,10 @@
               },
               "baseURL": {
                 "type": "string"
+              },
+              "localInferenceAPI": {
+                "type": "string",
+                "enum": ["ollama"]
               },
               "enterpriseUrl": {
                 "type": "string"
@@ -89562,6 +91020,17 @@
         "required": ["type", "prompt", "description", "agent"],
         "additionalProperties": false
       },
+      "effect_HttpApiError_ServiceUnavailable": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ServiceUnavailable"]
+          }
+        },
+        "required": ["_tag"],
+        "additionalProperties": false
+      },
       "SessionBusyError": {
         "type": "object",
         "properties": {
@@ -91287,17 +92756,6 @@
           "_tag": {
             "type": "string",
             "enum": ["Conflict"]
-          }
-        },
-        "required": ["_tag"],
-        "additionalProperties": false
-      },
-      "effect_HttpApiError_ServiceUnavailable": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ServiceUnavailable"]
           }
         },
         "required": ["_tag"],
@@ -95449,6 +96907,11 @@
                             "enum": ["Infinity", "-Infinity", "NaN"]
                           }
                         ]
+                      },
+                      "bytes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": ["version", "status", "path", "canonical", "sha256", "mode"],
@@ -95748,6 +97211,23 @@
             "additionalProperties": false
           }
         ]
+      },
+      "ServiceUnavailableError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ServiceUnavailableError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
       },
       "UnknownError1": {
         "type": "object",
@@ -97118,23 +98598,6 @@
           }
         },
         "required": ["text"],
-        "additionalProperties": false
-      },
-      "ServiceUnavailableError": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ServiceUnavailableError"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "service": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "message"],
         "additionalProperties": false
       },
       "MessageNotFoundError": {
@@ -100196,30 +101659,6 @@
         "required": ["directory"],
         "additionalProperties": false
       },
-      "EventServerInstanceDisposed": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["server.instance.disposed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "directory": {
-                "type": "string"
-              }
-            },
-            "required": ["directory"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventSessionTurnOpen": {
         "type": "object",
         "properties": {
@@ -100311,6 +101750,109 @@
               }
             },
             "required": ["sessionID", "queued"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventRayaRoutineExecutionIdle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.routine.execution.idle"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "number",
+                "enum": [1]
+              },
+              "runID": {
+                "type": "string"
+              },
+              "agentID": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "execution": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": ["version", "runID", "agentID", "sessionID", "execution"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSandboxStatusChanged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["sandbox.status.changed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["sessionID", "directory", "enabled", "available", "version"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventServerInstanceDisposed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["server.instance.disposed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "directory": {
+                "type": "string"
+              }
+            },
+            "required": ["directory"],
             "additionalProperties": false
           }
         },
@@ -100415,45 +101957,6 @@
               }
             },
             "required": ["event"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventRayaRoutineExecutionIdle": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["raya.routine.execution.idle"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "number",
-                "enum": [1]
-              },
-              "runID": {
-                "type": "string"
-              },
-              "agentID": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "execution": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              }
-            },
-            "required": ["version", "runID", "agentID", "sessionID", "execution"],
             "additionalProperties": false
           }
         },
@@ -100706,46 +102209,6 @@
               }
             },
             "required": ["terminalID", "sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSandboxStatusChanged": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["sandbox.status.changed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "directory": {
-                "type": "string"
-              },
-              "enabled": {
-                "type": "boolean"
-              },
-              "available": {
-                "type": "boolean"
-              },
-              "reason": {
-                "type": "string"
-              },
-              "version": {
-                "type": "integer"
-              }
-            },
-            "required": ["sessionID", "directory", "enabled", "available", "version"],
             "additionalProperties": false
           }
         },

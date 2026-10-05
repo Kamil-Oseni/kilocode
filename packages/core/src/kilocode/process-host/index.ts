@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { createHash } from "node:crypto"
 import { request } from "./request"
+import { admission } from "./identity"
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { open, stat } from "node:fs/promises"
 import path from "node:path"
@@ -9,7 +10,7 @@ import { fileURLToPath } from "node:url"
 export function resolveProcessHostLocation(meta: string, exe: string, exists = existsSync) {
   const bin = path.dirname(exe)
   if (exists(path.join(bin, "raya-process-mode.json"))) return { directory: bin, bundled: true }
-  if (meta.includes("$bunfs") || /[\\/]~BUN[\\/]/.test(meta) || !meta.startsWith("file:"))
+  if (!meta || meta.includes("$bunfs") || /[\\/]~BUN[\\/]/.test(meta) || !meta.startsWith("file:"))
     return { directory: bin, bundled: true }
   const source = fileURLToPath(meta)
   // Bun's Windows executable can report a virtual B:\ source URL without its
@@ -49,33 +50,32 @@ export function readProcessMode(directory: string): "native" | "legacy" {
   return value.mode
 }
 
-function host() {
+function host(candidate = executable) {
   if (process.platform !== "win32" || process.arch !== "x64")
     throw new Error("Native process host platform unsupported")
-  const file = statSync(executable)
+  if (!path.isAbsolute(candidate) || path.basename(candidate).toLowerCase() !== "raya-process-host.exe")
+    throw new Error("Native process host path invalid")
+  const file = statSync(candidate)
   if (!file.isFile() || file.size <= 0 || file.size > 16 * 1024 * 1024)
     throw new Error("Native process host executable invalid")
-  const identity = [file.dev, file.ino, file.size, file.mtimeMs, file.ctimeMs].join(":")
-  return { file: executable, identity }
+  return { file: candidate }
 }
 
-async function ready() {
-  const candidate = host()
-  if (verified?.identity !== candidate.identity) {
-    verified = {
-      identity: candidate.identity,
-      pending: request(candidate.file, ["--protocol"], 4096).then((value) => {
-        compatible(value)
-        if (host().identity !== candidate.identity) throw new Error("Native process host changed during admission")
-        return candidate.file
-      }),
+async function ready(file?: string) {
+  const candidate = host(file)
+  return admission(candidate.file, async (identity) => {
+    if (verified?.identity !== identity) {
+      verified = {
+        identity,
+        pending: request(candidate.file, ["--protocol"], 4096).then((value) => {
+          compatible(value)
+          return candidate.file
+        }),
+      }
     }
-  }
-  const file = await verified.pending
-  if (host().identity !== candidate.identity) throw new Error("Native process host changed during admission")
-  return file
+    return verified.pending
+  })
 }
-
 function compatible(value: unknown) {
   if (
     typeof value !== "object" ||
@@ -101,12 +101,12 @@ function birth(value: string) {
   return value
 }
 
-async function call(args: string[]) {
-  return request(await ready(), args)
+async function call(args: string[], file?: string) {
+  return request(await ready(file), args)
 }
 
-export function inspect(value: number) {
-  return call(["inspect", pid(value)])
+export function inspect(value: number, file?: string) {
+  return call(["inspect", pid(value)], file)
 }
 
 export function terminate(value: number, expected: string) {
@@ -162,8 +162,8 @@ function location(file: string) {
 }
 
 /** Private metadata snapshots never enter model context or telemetry. */
-export async function receipt(file: string): Promise<Receipt | undefined> {
-  const value = await request(await ready(), ["file-receipt-v1", location(file)], 196_608)
+export async function receipt(file: string, helper?: string): Promise<Receipt | undefined> {
+  const value = await request(await ready(helper), ["file-receipt-v1", location(file)], 196_608)
   if (typeof value === "object" && value !== null && "state" in value) {
     const row = record(value, ["version", "state"], "Native file receipt response invalid")
     if (row.version !== 1 || row.state !== "absent") throw new Error("Native file receipt response invalid")
@@ -186,10 +186,10 @@ export async function remove(file: string, expected: Receipt): Promise<void> {
 }
 
 /** Publish private metadata without replacing a destination or following a changed source. */
-export async function move(file: string, expected: Receipt, target: string): Promise<void> {
+export async function move(file: string, expected: Receipt, target: string, helper?: string): Promise<void> {
   const saved = snapshot(expected)
   const value = await request(
-    await ready(),
+    await ready(helper),
     ["file-move-v1", location(file), saved.volume, saved.index, saved.digest, location(target)],
     4096,
   )
@@ -201,6 +201,35 @@ export async function move(file: string, expected: Receipt, target: string): Pro
 export async function check() {
   if (mode() === "legacy") return
   await ready()
+}
+
+/** Full source launch uses a separate protocol from controller-cancelled PTYs. */
+export async function source(file?: string) {
+  if (!file && mode() !== "native") throw new Error("Source launch requires the native process host")
+  const value = record(
+    await call(["--source-protocol"], file),
+    ["version", "operation", "proof", "suspended", "broker"],
+    "Native source launch protocol unavailable",
+  )
+  if (
+    value.version !== 1 ||
+    value.operation !== "source-launch" ||
+    value.proof !== "windows-job" ||
+    value.suspended !== true ||
+    value.broker !== true
+  )
+    throw new Error("Native source launch protocol invalid")
+  return ready(file)
+}
+
+export async function policy(file?: string) {
+  const value = record(
+    await call(["--source-policy-protocol"], file),
+    ["version", "operation", "proof", "launch"],
+    "Native source policy protocol unavailable",
+  )
+  if (value.version !== 1 || value.operation !== "source-policy" || value.proof !== "windows-job" || value.launch !== 2)
+    throw new Error("Native source policy protocol invalid")
 }
 
 export async function guard(input: {
@@ -398,6 +427,54 @@ export async function resume(
   const saved = await receipt(temp)
   if (!saved) throw new Error("Native resume publication disappeared")
   await move(temp, saved, `${control}.go`)
+}
+
+/** Checks actual current caller membership by duplicating the exact guardian Job handle. */
+export async function member(input: {
+  source: { pid: number; birth: string; executable: string; digest: string }
+  helper: { pid: number; birth: string; executable: string; digest: string }
+  job: number
+  pid: number
+  birth: string
+}) {
+  return call(
+    [
+      "source-member",
+      String(input.source.pid),
+      input.source.birth,
+      String(input.helper.pid),
+      input.helper.birth,
+      String(input.job),
+      String(input.pid),
+      input.birth,
+      input.source.executable,
+      input.source.digest,
+      input.helper.executable,
+      input.helper.digest,
+    ],
+    input.helper.executable,
+  )
+}
+
+/** Verifies an exact pinned successor outside the original guardian's sealed Job. */
+export async function receiver(input: Parameters<typeof member>[0]) {
+  return call(
+    [
+      "source-successor",
+      String(input.source.pid),
+      input.source.birth,
+      String(input.helper.pid),
+      input.helper.birth,
+      String(input.job),
+      String(input.pid),
+      input.birth,
+      input.source.executable,
+      input.source.digest,
+      input.helper.executable,
+      input.helper.digest,
+    ],
+    input.helper.executable,
+  )
 }
 
 export * as NativeProcess from "./index"

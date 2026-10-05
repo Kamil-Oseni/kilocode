@@ -275,6 +275,10 @@ import type {
   KilocodeNotebookRejectResponses,
   KilocodeNotebookReplyErrors,
   KilocodeNotebookReplyResponses,
+  KilocodeProfileRestoreApproveErrors,
+  KilocodeProfileRestoreApproveResponses,
+  KilocodeProfileRestoreReviewErrors,
+  KilocodeProfileRestoreReviewResponses,
   KilocodeProjectUsageErrors,
   KilocodeProjectUsageResponses,
   KilocodeProviderUsageGetErrors,
@@ -9309,11 +9313,25 @@ export class Goal extends HeyApiClient {
         verification: string
         required?: boolean
         review?: boolean
-        check?: {
-          kind: "command"
-          command: string
-          directory: string
-        }
+        check?:
+          | {
+              kind: "command"
+              command: string
+              directory: string
+            }
+          | {
+              kind: "byte-equality"
+              source: {
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
+              target: {
+                path: string
+                canonical: string
+              }
+            }
       }>
       status?: "active" | "paused"
       objective?: string
@@ -11347,6 +11365,91 @@ export class Routine extends HeyApiClient {
   private _delegate?: Delegate
   get delegate(): Delegate {
     return (this._delegate ??= new Delegate({ client: this.client }))
+  }
+}
+
+export class Profile extends HeyApiClient {
+  /**
+   * Read transferred profile review
+   *
+   * Read the exact transfer hold, mapped workspaces and paused worker summary. Display evidence grants no path or execution authority.
+   */
+  public restoreReview<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeProfileRestoreReviewResponses,
+      KilocodeProfileRestoreReviewErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/profile/restore-review",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Approve an exact transferred profile
+   *
+   * Explicitly review this hold generation and current workspace/worker revision. Imported workers remain individually disabled; no work is enqueued, enabled, resumed or replayed.
+   */
+  public restoreApprove<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      id?: string
+      revision?: string
+      reviewed?: true
+      workspacesAcknowledged?: true
+      reconnectAcknowledged?: true
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "id" },
+            { in: "body", key: "revision" },
+            { in: "body", key: "reviewed" },
+            { in: "body", key: "workspacesAcknowledged" },
+            { in: "body", key: "reconnectAcknowledged" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeProfileRestoreApproveResponses,
+      KilocodeProfileRestoreApproveErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/profile/restore-review",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 }
 
@@ -14152,6 +14255,11 @@ export class Kilocode extends HeyApiClient {
   private _routine?: Routine
   get routine(): Routine {
     return (this._routine ??= new Routine({ client: this.client }))
+  }
+
+  private _profile?: Profile
+  get profile(): Profile {
+    return (this._profile ??= new Profile({ client: this.client }))
   }
 
   private _designSystem?: DesignSystem

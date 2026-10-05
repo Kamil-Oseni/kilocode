@@ -5,7 +5,7 @@ import { Config } from "@/config/config"
 import type { Provider } from "@/provider/provider"
 import { KiloLLM } from "@/kilocode/session/llm"
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
-import type { MessageV2 } from "@/session/message-v2"
+import { MessageV2 } from "@/session/message-v2"
 import { isOverflow, usable } from "@/session/overflow"
 
 function cfg(compaction?: Config.Info["compaction"]): Config.Info {
@@ -48,6 +48,69 @@ function tokens(count: number): MessageV2.Assistant["tokens"] {
 }
 
 describe("Kilo post-step compaction safety", () => {
+  test("refuses irreducible system and tool payload without a history compaction signal", () => {
+    const mdl = model({ context: 8192, output: 1024 })
+    const checked = KiloSessionOverflow.preflight({
+      cfg: cfg(),
+      model: mdl,
+      usable: usable({ cfg: cfg(), model: mdl }),
+      messages: [
+        { role: "system", content: "policy ".repeat(3000) },
+        { role: "user", content: "Hello" },
+      ],
+      tools: { inspect: { description: "Inspect saved state. ".repeat(300), inputSchema: { type: "object" } } },
+    })
+    expect(checked.compact).toBe(true)
+    expect(checked.irreducible).toBe(true)
+    expect(checked.fixed).toBeGreaterThanOrEqual(8192)
+    const error = KiloSessionOverflow.error(checked, mdl)
+    expect(error).toBeInstanceOf(KiloSessionOverflow.FixedContextError)
+    expect(error).not.toBeInstanceOf(KiloSessionOverflow.PreflightError)
+    expect(error.message).toContain("compacting conversation history cannot resolve")
+    const serialized = MessageV2.fromError(error, { providerID: mdl.providerID })
+    expect(serialized.name).toBe("UnknownError")
+    expect("message" in serialized.data && serialized.data.message).toBe(error.message)
+  })
+
+  test("keeps oversized removable history eligible for compaction", () => {
+    const mdl = model({ context: 8192, output: 1024 })
+    const checked = KiloSessionOverflow.preflight({
+      cfg: cfg(),
+      model: mdl,
+      usable: usable({ cfg: cfg(), model: mdl }),
+      messages: [
+        { role: "system", content: "Answer helpfully." },
+        { role: "user", content: "historical text ".repeat(3000) },
+      ],
+      tools: {},
+    })
+    expect(checked.compact).toBe(true)
+    expect(checked.irreducible).toBe(false)
+    expect(checked.fixed).toBeLessThan(8192)
+    expect(KiloSessionOverflow.error(checked, mdl)).toBeInstanceOf(KiloSessionOverflow.PreflightError)
+  })
+
+  test("reserves bounded output without counting it against an independent input limit", () => {
+    const messages: ModelMessage[] = [{ role: "system", content: "policy".repeat(3750) }]
+    const check = (mdl: Provider.Model) =>
+      KiloSessionOverflow.preflight({
+        cfg: cfg(),
+        model: mdl,
+        usable: usable({ cfg: cfg(), model: mdl }),
+        messages,
+        tools: {},
+        output: 1024,
+      })
+    const shared = check(model({ context: 8192, output: 1024 }))
+    expect(shared.fixed).toBeLessThan(8192)
+    expect(shared.irreducible).toBe(true)
+    expect(shared.output).toBe(1024)
+    const separate = check(model({ context: 16384, input: 8192, output: 1024 }))
+    expect(separate.irreducible).toBe(false)
+    expect(separate.compact).toBe(false)
+    expect(separate.output).toBe(0)
+  })
+
   test("ignores the configured threshold after a provider step", () => {
     const conf = cfg({ threshold_percent: 75 })
     const mdl = model({ context: 200_000, output: 32_000 })

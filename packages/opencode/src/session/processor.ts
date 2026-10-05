@@ -19,6 +19,8 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
+import { SessionRetirement } from "@/kilocode/session/retirement" // kilocode_change
+import { completed as toolCompleted } from "@/kilocode/session/tool-outcome" // kilocode_change
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 // kilocode_change start
@@ -331,6 +333,7 @@ const layer = Layer.effect(
           ctx.blocked = ctx.shouldBreak
         }
         yield* settleToolCall(toolCallID)
+        toolCompleted(ctx.sessionID, toolCallID, error) // kilocode_change - acknowledge only successfully published canonical tool refusals
         return true
       })
 
@@ -725,7 +728,7 @@ const layer = Layer.effect(
                 sessionID: ctx.sessionID,
                 messageID: ctx.assistantMessage.parentID,
               })
-              .pipe(Effect.ignore, Effect.forkIn(scope))
+              .pipe((body) => SessionRetirement.scoped(body, scope, () => Effect.void)) // kilocode_change - retain true Exit before availability fallback
             if (
               !ctx.assistantMessage.summary &&
               // kilocode_change start
@@ -1049,7 +1052,7 @@ const layer = Layer.effect(
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
           return "continue"
         })
-      })
+      }, SessionRetirement.entry) // kilocode_change - track direct processing and tool finalizers
 
       return {
         get message() {

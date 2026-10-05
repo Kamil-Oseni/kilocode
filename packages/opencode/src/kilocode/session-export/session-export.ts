@@ -4,6 +4,10 @@ import { Config } from "./config"
 import { setKillSwitch } from "./eligibility"
 import { createSequencer } from "./sequence"
 import { SyncSubscriber } from "./sync-subscriber"
+import { closeExportOwners, exportFailure } from "./cleanup"
+import { stopExportWorker } from "./worker-stop"
+import * as Identity from "./worker-identity"
+import type { WorkerIdentity, ShutdownReply } from "./worker/ipc"
 
 declare global {
   const KILO_SESSION_EXPORT_WORKER_PATH: string
@@ -32,10 +36,17 @@ let closing: Promise<void> | undefined
 let stopping = false
 let refused = false
 const instances = new Map<string, Instance>()
+const sequences = new Map<string, ReturnType<typeof createSequencer>>()
+const identities = new WeakMap<Worker, WorkerIdentity>()
+const historical = new Map<string, ShutdownReply>()
+const run = process.env.KILO_RUN_ID ?? crypto.randomUUID()
 
 const maxRespawns = 3
 
 export const enabled = false
+
+/** Loaded confirmed children only; this never starts a worker or initializes a profile. */
+export const receipts = () => Object.freeze([...historical.values()])
 
 export const init = (opts: {
   agentVersion: string
@@ -50,15 +61,16 @@ export const init = (opts: {
   createWorker?: (url: WorkerTarget) => Worker
 }): void => {
   if (stopping || refused) throw new Error("Session export shutdown is not confirmed")
+  closing = undefined
   if (shared && shared.dbPath !== opts.dbPath) throw new Error("Session export database identity changed")
   const key = opts.workspaceKey ?? "default"
   if (instances.get(key)?.capture.busy()) throw new Error("Session export workspace capture is still active")
   const url = target()
   try {
     const previous = instances.get(key)
-    previous?.unsubscribe()
-    previous?.options.sequencer?.close()
+    forget(previous)
     const sequencer = opts.syncSeq ? undefined : createSequencer(opts.dbPath)
+    if (sequencer) sequences.set(`${key}:${crypto.randomUUID()}`, sequencer)
     const syncSeq = opts.syncSeq ?? ((sessionId: string) => sequencer!.next(sessionId))
     const next: Opts = {
       agentVersion: opts.agentVersion,
@@ -81,16 +93,7 @@ export const init = (opts: {
     shared = next
     spawn(url)
   } catch (err) {
-    const current = worker as unknown as Worker | undefined
-    if (current) current.terminate()
-    worker = undefined
-    for (const item of instances.values()) {
-      item.unsubscribe()
-      item.options.sequencer?.close()
-    }
-    instances.clear()
-    shared = undefined
-    throw err
+    fail(err)
   }
 }
 
@@ -129,19 +132,27 @@ export const onSessionClose = async (sessionId: string, workspaceKey?: string): 
   await captureFor(workspaceKey)?.onSessionClose(sessionId)
 }
 
-export const shutdown = async (): Promise<void> => {
+export const shutdown = (): Promise<void> => {
   if (closing) return closing
-  if (refused) throw new Error("Session export shutdown is not confirmed")
-  if (!worker) return
+  if (refused) return Promise.reject(new Error("Session export shutdown is not confirmed"))
+  if (!worker && sequences.size === 0 && instances.size === 0) return Promise.resolve()
   const current = worker
   stopping = true
-  const captures = [...instances.values()].map((item) => {
-    item.unsubscribe()
-    return item.capture
-  })
-  const requestID = crypto.randomUUID()
-  const task = (async () => {
+  const captures = [...instances.values()].map((item) => item.capture)
+  const owner = current ? identities.get(current) : undefined
+  const request = owner ? Identity.request(owner) : undefined
+  const task = Promise.resolve().then(async () => {
+    const errors: unknown[] = []
+    let drained = false
+    let exited = false
     try {
+      for (const item of instances.values()) {
+        try {
+          item.unsubscribe()
+        } catch (err) {
+          errors.push(err)
+        }
+      }
       const deadline = Date.now() + Config.shutdownFlushTimeoutMs + 500
       const bounded = <T>(work: Promise<T>, phase: string): Promise<T> => {
         const timer: { value?: ReturnType<typeof setTimeout> } = {}
@@ -155,47 +166,92 @@ export const shutdown = async (): Promise<void> => {
           }),
         ]).finally(() => clearTimeout(timer.value))
       }
-      await bounded(Promise.all(captures.map((capture) => capture.settle())), "capture drain")
-      await bounded(
-        new Promise<void>((resolve, reject) => {
-          current.onmessage = (event: MessageEvent) => {
-            const msg: unknown = event.data
-            if (!msg || typeof msg !== "object" || !("requestID" in msg) || msg.requestID !== requestID) return
-            if ("kind" in msg && msg.kind === "shutdown_refused") {
-              const reason = "reason" in msg && typeof msg.reason === "string" ? msg.reason : "unknown"
-              reject(new Error(`Session export shutdown refused: ${reason}`))
-            }
-            if ("kind" in msg && msg.kind === "shutdown_done" && "status" in msg && msg.status === "confirmed")
-              resolve()
-          }
-          current.onerror = (event: ErrorEvent) => reject(new Error(`Session export worker failed: ${event.message}`))
-          try {
-            current.postMessage({ kind: "shutdown", timeoutMs: Config.shutdownFlushTimeoutMs, requestID })
-          } catch (err) {
-            reject(err)
-          }
-        }),
-        "worker acknowledgement",
-      )
+      const settled = await bounded(Promise.allSettled(captures.map((capture) => capture.settle())), "capture drain")
+      drained = true
+      const failed = settled.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+      errors.push(...failed)
+      if (current) {
+        const remaining = Math.floor(deadline - Date.now())
+        if (remaining <= 0) throw new Error("Session export shutdown timed out before worker shutdown")
+        if (!request) throw new Error("Session export worker identity is unavailable")
+        const reply = await stopExportWorker(current, request, remaining)
+        historical.set(reply.generation, reply)
+      }
+      exited = true
     } catch (err) {
-      for (const capture of captures) capture.abort()
-      refused = true
-      setKillSwitch(true, "session_export_shutdown_unconfirmed")
-      throw err
+      errors.push(err)
+      for (const capture of captures) {
+        try {
+          capture.abort()
+        } catch (err) {
+          errors.push(err)
+        }
+      }
     } finally {
-      current.terminate()
-      if (worker === current) worker = undefined
-      for (const item of instances.values()) item.options.sequencer?.close()
-      instances.clear()
-      shared = undefined
-      attempts = 0
+      try {
+        if (!exited) current?.terminate()
+        if (worker === current) worker = undefined
+      } catch (err) {
+        errors.push(err)
+      }
+      if (drained) errors.push(...closeExportOwners(sequences))
+      if (!drained && sequences.size)
+        errors.push(new Error("Session export sequencers retained because capture bodies have not settled"))
+      if (errors.length) {
+        refused = true
+        setKillSwitch(true, "session_export_shutdown_unconfirmed")
+      }
+      if (errors.length === 0) {
+        instances.clear()
+        shared = undefined
+        attempts = 0
+      }
       stopping = false
     }
-  })()
-  closing = task.finally(() => {
-    closing = undefined
+    if (errors.length) throw exportFailure(errors)
   })
+  closing = task
   return closing
+}
+
+function forget(previous: Instance | undefined): void {
+  if (!previous) return
+  previous.unsubscribe()
+  previous.options.sequencer?.close()
+  for (const [id, owner] of sequences) if (owner === previous.options.sequencer) sequences.delete(id)
+}
+
+function fail(err: unknown): never {
+  const errors: unknown[] = [err]
+  try {
+    worker?.terminate()
+    worker = undefined
+  } catch (err) {
+    errors.push(err)
+  }
+  for (const item of instances.values()) {
+    try {
+      item.unsubscribe()
+    } catch (err) {
+      errors.push(err)
+    }
+    try {
+      item.capture.abort()
+    } catch (err) {
+      errors.push(err)
+    }
+  }
+  if ([...instances.values()].some((item) => item.capture.busy()))
+    errors.push(new Error("Session export sequencers retained because capture bodies have not settled"))
+  else errors.push(...closeExportOwners(sequences))
+  if (errors.length > 1) {
+    refused = true
+    setKillSwitch(true, "session_export_shutdown_unconfirmed")
+    throw exportFailure(errors)
+  }
+  instances.clear()
+  shared = undefined
+  throw err
 }
 
 function target(): WorkerTarget {
@@ -206,6 +262,8 @@ function target(): WorkerTarget {
 function spawn(url = target()): void {
   if (!shared) return
   worker = shared.createWorker(url)
+  const identity = Identity.spawn(run)
+  identities.set(worker, identity)
   worker.postMessage({
     kind: "init",
     dbPath: shared.dbPath,
@@ -213,6 +271,7 @@ function spawn(url = target()): void {
     endpoint: shared.endpoint,
     surface: shared.surface,
     anonId: shared.anonId,
+    identity,
   })
   for (const item of [...instances.values()]) configure(item.options)
   if (instances.size === 0) configure(shared)

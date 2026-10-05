@@ -1,3 +1,4 @@
+import { Artifacts as Data } from "./schemas"
 import { randomUUID } from "node:crypto"
 import * as fs from "node:fs/promises"
 import path from "node:path"
@@ -11,86 +12,16 @@ import { materialize, unchanged } from "./snapshot"
 import { Build, hash, identity } from "./build-input"
 import { inspect } from "./artifact-inspect"
 
-const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))
-const Bytes = Schema.Struct({ digest: Hash, size: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) })
-export const Receipt = Schema.Struct({
-  version: Schema.Literal(1),
-  id: Schema.String,
-  itemID: Schema.String,
-  attemptID: Schema.String,
-  sessionID: SessionID,
-  messageID: MessageID,
-  callID: Schema.String,
-  completion: Hash,
-  checks: Schema.Array(Schema.String),
-  source: Hash,
-  head: Schema.String,
-  target: Build.fields.target,
-  extension: Build.fields.extension,
-  cli: Build.fields.cli,
-  contract: Schema.String,
-  status: Schema.Literal("ready-for-review"),
-  output: Schema.String,
-  artifact: Bytes,
-  binary: Bytes,
-  at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-}).annotate({ identifier: "Raya.SelfHealArtifact" })
-
-const Pointer = Schema.Struct({
-  version: Schema.Literal(1),
-  itemID: Schema.String,
-  attemptID: Schema.String,
-  sessionID: SessionID,
-  messageID: MessageID,
-  callID: Schema.String,
-  completion: Hash,
-  at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-})
-
-export const Review = Schema.Struct({
-  artifactID: Schema.String,
-  digest: Hash,
-  extension: Build.fields.extension,
-})
-
-export const Approval = Schema.Struct({
-  ...Pointer.fields,
-  id: Schema.String,
-  artifactID: Schema.String,
-  source: Hash,
-  head: Schema.String,
-  extension: Build.fields.extension,
-  artifact: Bytes,
-  binary: Bytes,
-  status: Schema.Literal("install-ready"),
-  at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-}).annotate({ identifier: "Raya.SelfHealArtifactApproval" })
-
+export const Receipt = Data.Receipt
+export const Pointer = Data.Pointer
+export const Review = Data.Review
+export const Approval = Data.Approval
 export class ReviewConflict extends Schema.TaggedErrorClass<ReviewConflict>()("SelfHeal.ReviewConflict", {
   message: Schema.String,
 }) {}
 
-const Terminal = Schema.Struct({
-  status: Schema.Literals(["failed", "interrupted"]),
-  reason: Schema.String,
-  at: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-})
-
-export const Delivery = Schema.Struct({
-  ...Pointer.fields,
-  status: Schema.Literals([
-    "preparing",
-    "building",
-    "ready-for-review",
-    "install-ready",
-    "artifact-unavailable",
-    "failed",
-    "interrupted",
-  ]),
-  artifact: Schema.optional(Receipt),
-  approval: Schema.optional(Approval),
-  reason: Schema.optional(Schema.String),
-}).annotate({ identifier: "Raya.SelfHealDelivery" })
+export const Terminal = Data.Terminal
+export const Delivery = Data.Delivery
 
 export function artifacts(storage: Pick<Storage.Interface, "list" | "read" | "create">, root?: string) {
   const completion = completions(storage, repairs(storage))

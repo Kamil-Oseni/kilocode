@@ -1,6 +1,17 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
+import { internal } from "../../src/kilocode/snapshot/internal"
+
+test("coordination path reservations protect only exact worktree descendants", () => {
+  const root = path.resolve("snapshot-workspace")
+  const stores = internal(root, [])
+  expect(stores.contains("nested/.raya-profile-locks/owner.json")).toBe(true)
+  expect(stores.contains(".raya-profile-locks")).toBe(true)
+  expect(stores.contains("nested/.raya-profile-locks-user/keep.txt")).toBe(false)
+  expect(stores.contains(path.join(path.dirname(root), ".raya-profile-locks", "owner.json"))).toBe(false)
+  expect(stores.patterns).toContain("**/.raya-profile-locks/")
+})
 
 test("snapshots exclude nested runtime stores and protect them from legacy restoration", async () => {
   await using tmp = await tmpdir()
@@ -43,7 +54,7 @@ test("snapshots exclude nested runtime stores and protect them from legacy resto
     ])
     expect(code, out + err).toBe(0)
   } finally {
-    proc.kill()
+    if (proc.exitCode === null) proc.kill()
     await proc.exited
   }
 }, 60_000)

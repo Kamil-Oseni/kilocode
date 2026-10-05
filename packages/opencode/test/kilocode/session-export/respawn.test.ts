@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { SessionExport } from "@/kilocode/session-export"
 import { getKillSwitchReason, resetEligibility } from "@/kilocode/session-export/eligibility"
+import * as Identity from "@/kilocode/session-export/worker-identity"
+import { observation } from "@/kilocode/cli/profile-retirement"
 
 describe("SessionExport worker respawn", () => {
   let feature: string | undefined
@@ -79,7 +81,7 @@ describe("SessionExport worker respawn", () => {
     const closed = worker.messages.findIndex((msg) => msg.kind === "shutdown")
     expect(baseline).toBeGreaterThanOrEqual(0)
     expect(closed).toBeGreaterThan(baseline)
-    expect(worker.terminated).toBe(true)
+    expect(worker.terminated).toBe(false)
   })
 
   test("refuses same-workspace replacement while its baseline is pending", async () => {
@@ -102,7 +104,7 @@ describe("SessionExport worker respawn", () => {
     expect(worker.terminated).toBe(false)
     pending.resolve({ snapshotId: "snapshot-a", files: [] })
     await SessionExport.shutdown()
-    expect(worker.terminated).toBe(true)
+    expect(worker.terminated).toBe(false)
   })
 
   test("respawns once when worker postMessage fails", () => {
@@ -234,14 +236,16 @@ describe("SessionExport worker respawn", () => {
   })
 })
 
-class FakeWorker {
+class FakeWorker extends EventTarget {
   onmessage: ((event: MessageEvent) => void) | null = null
   onerror: ((event: ErrorEvent) => void) | null = null
   terminated = false
   messages: Array<{ kind?: string; surface?: string; envelope?: { type?: string; files?: Array<{ path?: string }> } }> =
     []
 
-  constructor(private failures: number) {}
+  constructor(private failures: number) {
+    super()
+  }
 
   postMessage(msg: { kind?: string; requestID?: string }): void {
     this.messages.push(msg)
@@ -250,9 +254,12 @@ class FakeWorker {
       throw new Error("post failed")
     }
     if (msg.kind === "shutdown") {
-      this.onmessage?.({
-        data: { kind: "shutdown_done", requestID: msg.requestID, status: "confirmed" },
-      } as MessageEvent)
+      const event = new MessageEvent("message", {
+        data: Identity.acknowledge(Identity.accept(msg, Identity.identity(msg)), observation()),
+      })
+      this.onmessage?.(event)
+      this.dispatchEvent(event)
+      this.dispatchEvent(new CloseEvent("close", { code: 0, wasClean: true }))
     }
   }
 

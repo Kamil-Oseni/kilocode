@@ -1,4 +1,4 @@
-import { readdir, unlink } from "fs/promises"
+import { readdir } from "fs/promises"
 import path from "path"
 import { MemoryFs } from "./fs"
 import { MemoryPaths } from "./paths"
@@ -45,7 +45,7 @@ export namespace MemorySessions {
   }
 
   async function drop(file: string) {
-    await unlink(file).catch((error: unknown) => {
+    await MemoryFs.remove(file).catch((error: unknown) => {
       if (MemoryFs.miss(error)) return
       throw error
     })

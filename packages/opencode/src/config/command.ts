@@ -14,6 +14,7 @@ import { KilocodeConfig } from "@/kilocode/config/config"
 import { report } from "@/kilocode/config/report"
 import type { Warning } from "./config"
 import type { ConfigVariable } from "./variable"
+import { ConfigIntent, type Graph } from "@opencode-ai/core/kilocode/config-intent"
 // kilocode_change end
 
 const log = Log.create({ service: "config" })
@@ -26,6 +27,7 @@ export async function load(
   trusted = false,
   fileScope?: ConfigVariable.FileScope,
   sourceScope?: ConfigVariable.FileScope | readonly ConfigVariable.FileScope[],
+  intent?: Graph,
 ) {
   // kilocode_change end
   const result: Record<string, ConfigCommandV1.Info> = {}
@@ -36,11 +38,9 @@ export async function load(
     symlink: true,
   })) {
     // kilocode_change start
-    const md = await ConfigMarkdown.parse(item, { trusted, fileScope, sourceScope }).catch(async (err) => {
+    const md = await ConfigMarkdown.parse(item, { trusted, fileScope, sourceScope, intent }).catch(async (err) => {
       // kilocode_change end
-      const message = FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse command ${item}`
+      const message = FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse command ${item}` // kilocode_change
       // kilocode_change start
       if (warnings) warnings.push({ path: item, message })
       try {
@@ -66,6 +66,7 @@ export async function load(
     const parsed = decodeInfo(config, { errors: "all", propertyOrder: "original" })
     if (Exit.isSuccess(parsed)) {
       result[config.name] = parsed.value
+      ConfigIntent.acceptMarkdown(intent, md, "command", name, trusted) // kilocode_change
       continue
     }
     // kilocode_change start

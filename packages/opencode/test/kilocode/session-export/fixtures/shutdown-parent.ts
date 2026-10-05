@@ -7,7 +7,7 @@ const mode = process.argv.at(-1)
 assert.ok(mode === "wrong" || mode === "timeout" || mode === "capture")
 if (mode === "timeout" || mode === "capture") Object.assign(Config, { shutdownFlushTimeoutMs: 20 })
 
-class WorkerFixture {
+class WorkerFixture extends EventTarget {
   onmessage: ((event: MessageEvent) => void) | null = null
   onerror: ((event: ErrorEvent) => void) | null = null
   terminated = false
@@ -20,9 +20,11 @@ class WorkerFixture {
       data: { kind: "shutdown_done", requestID: crypto.randomUUID(), status: "confirmed" },
     } as MessageEvent)
     if (mode === "wrong")
-      this.onmessage?.({
-        data: { kind: "shutdown_refused", requestID: msg.requestID, reason: "held drain" },
-      } as MessageEvent)
+      this.dispatchEvent(
+        new MessageEvent("message", {
+          data: { ...msg, kind: "shutdown_refused", reason: "held drain" },
+        }),
+      )
   }
 
   terminate() {
@@ -63,6 +65,7 @@ if (mode === "capture")
   })
 const first = SessionExport.shutdown()
 const second = SessionExport.shutdown()
+assert.equal(first, second)
 const results = await Promise.allSettled([first, second])
 assert.equal(results[0].status, "rejected")
 assert.equal(results[1].status, "rejected")
@@ -74,6 +77,7 @@ assert.equal(fixture.posts, mode === "capture" ? 0 : 1)
 assert.equal(fixture.terminated, true)
 assert.equal(getKillSwitchReason(), "session_export_shutdown_unconfirmed")
 await assert.rejects(SessionExport.shutdown(), /shutdown is not confirmed/)
+assert.equal(SessionExport.shutdown(), first)
 assert.throws(
   () =>
     SessionExport.init({

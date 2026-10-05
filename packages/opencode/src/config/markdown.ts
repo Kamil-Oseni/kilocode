@@ -1,7 +1,7 @@
 import matter from "gray-matter"
-import { Filesystem } from "@/util/filesystem"
 import { FrontmatterError } from "@opencode-ai/core/v1/config/error"
 import { KilocodeMarkdown } from "../kilocode/config/markdown" // kilocode_change
+import { ConfigIntent } from "@opencode-ai/core/kilocode/config-intent" // kilocode_change
 
 export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 export const SHELL_REGEX = /!`([^`]+)`/g
@@ -69,20 +69,23 @@ export function fallbackSanitization(content: string): string {
 
 // kilocode_change start - accept source trust and confine untrusted markdown source reads
 export async function parse(filePath: string, options: KilocodeMarkdown.Options) {
-  const template = options.trusted
-    ? await Filesystem.readText(filePath)
-    : await KilocodeMarkdown.read(filePath, options)
+  const origin = await ConfigIntent.readMarkdown(options.intent, filePath, () =>
+    KilocodeMarkdown.read(filePath, options),
+  )
+  const template = origin.text
   // kilocode_change end
 
   // kilocode_change start - substitute content and retry invalid frontmatter with permissive sanitization
   try {
     const md = matter(template)
     md.content = await KilocodeMarkdown.substitute(md.content, filePath, options) // kilocode_change
+    ConfigIntent.bindMarkdown(origin.token, md) // kilocode_change
     return md
   } catch {
     try {
       const md = matter(fallbackSanitization(template))
       md.content = await KilocodeMarkdown.substitute(md.content, filePath, options) // kilocode_change
+      ConfigIntent.bindMarkdown(origin.token, md) // kilocode_change
       return md
     } catch (err) {
       throw new FrontmatterError(

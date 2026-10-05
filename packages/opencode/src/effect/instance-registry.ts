@@ -6,13 +6,21 @@ const disposers = new Set<(directory: string, workspaceID?: WorkspaceV2.ID) => P
 export function registerDisposer(
   disposer: (directory: string, workspaceID?: WorkspaceV2.ID) => Promise<void>, // kilocode_change
 ) {
-  disposers.add(disposer)
+  let live = true
+  const entry: typeof disposer = (...args) => (live ? disposer(...args) : Promise.resolve())
+  disposers.add(entry)
   return () => {
-    disposers.delete(disposer)
+    live = false
+    disposers.delete(entry)
   }
 }
 
 export async function disposeInstance(directory: string, workspaceID?: WorkspaceV2.ID) {
-  await Promise.allSettled([...disposers].map((disposer) => disposer(directory, workspaceID)))
+  const results = await Promise.allSettled(
+    [...disposers].map((disposer) => Promise.resolve().then(() => disposer(directory, workspaceID))),
+  )
+  const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+  if (failures.length === 1) throw failures[0]
+  if (failures.length) throw new AggregateError(failures, "Instance cleanup failed")
 }
 // kilocode_change end

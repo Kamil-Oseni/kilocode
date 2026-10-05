@@ -17,9 +17,73 @@ test("validates actual native-shaped child replies without returning private fai
   await expect(run('process.stdout.write("x".repeat(1000))', 32)).rejects.toThrow(/exceeded bound/)
 }, 30_000)
 
-test("kills only a timed-out child and permits a fresh independent request", async () => {
-  await expect(run('setTimeout(()=>process.stdout.write("{}"),10000)', 4096, 100)).rejects.toThrow(/timed out/)
-  expect(await run("process.stdout.write(JSON.stringify({fresh:true}))")).toEqual({ fresh: true })
+test("retains timeout failure until the original child naturally finishes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "raya-request-owned-"))
+  const file = join(dir, "closed")
+  try {
+    const result = await run(
+      `setTimeout(async()=>{await Bun.write(${JSON.stringify(file)}, "original");process.stdout.write("{}");process.stderr.write("drained")},400)`,
+      4096,
+      200,
+    ).catch((err: unknown) => err)
+    expect(result).toBeInstanceOf(Error)
+    if (!(result instanceof Error)) throw new Error("Original request did not refuse")
+    expect(result.message).toMatch(/timed out/)
+    expect(await readFile(file, "utf8")).toBe("original")
+    expect(await run("process.stdout.write(JSON.stringify({fresh:true}))")).toEqual({ fresh: true })
+  } finally {
+    expect(dir.startsWith(join(tmpdir(), "raya-request-owned-"))).toBe(true)
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("drains oversized original output through natural exit without replay", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "raya-request-overflow-"))
+  const file = join(dir, "closed")
+  try {
+    const result = await run(
+      `process.stdout.write("x".repeat(100000));setTimeout(async()=>{process.stderr.write("drained");await Bun.write(${JSON.stringify(file)}, "once")},100)`,
+      32,
+    ).catch((err: unknown) => err)
+    expect(result).toBeInstanceOf(Error)
+    if (!(result instanceof Error)) throw new Error("Original request did not refuse")
+    expect(result.message).toMatch(/exceeded bound/)
+    expect(await readFile(file, "utf8")).toBe("once")
+  } finally {
+    expect(dir.startsWith(join(tmpdir(), "raya-request-overflow-"))).toBe(true)
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("bounds and drains the original stderr without publishing its contents", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "raya-request-stderr-"))
+  const file = join(dir, "closed")
+  try {
+    const result = await run(
+      `process.stderr.write("private".repeat(10000));setTimeout(async()=>{await Bun.write(${JSON.stringify(file)}, "original");process.stdout.write("{}")},100)`,
+      32,
+    ).catch((err: unknown) => err)
+    expect(result).toBeInstanceOf(Error)
+    if (!(result instanceof Error)) throw new Error("Original request did not refuse")
+    expect(result.message).toMatch(/exceeded bound/)
+    expect(result.message).not.toContain("private")
+    expect(await readFile(file, "utf8")).toBe("original")
+  } finally {
+    expect(dir.startsWith(join(tmpdir(), "raya-request-stderr-"))).toBe(true)
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("retains timeout and original exit failures together after actual EOF", async () => {
+  const result = await run('process.stderr.write("private");setTimeout(()=>process.exit(7),400)', 4096, 200).catch(
+    (err: unknown) => err,
+  )
+  expect(result).toBeInstanceOf(AggregateError)
+  if (!(result instanceof AggregateError)) throw new Error("Original failures were not aggregated")
+  const errors: unknown[] = result.errors
+  expect(errors.some((err) => err instanceof Error && /timed out/.test(err.message))).toBe(true)
+  expect(errors.some((err) => err instanceof Error && /could not be verified/.test(err.message))).toBe(true)
+  expect(errors.every((err) => err instanceof Error && !err.message.includes("private"))).toBe(true)
 })
 
 test("does not start native work queued beyond its monotonic deadline", async () => {

@@ -5,6 +5,7 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { mockTuiRuntime } from "../../fixture/tui-runtime"
+import { plugin } from "../../kilocode/tui-plugin-child" // kilocode_change
 
 const { TuiPluginRuntime } = await import("../../../src/plugin/tui/runtime")
 
@@ -59,62 +60,11 @@ test("runs onDispose callbacks with aborted signal and is idempotent", async () 
   }
 })
 
-test("rolls back failed plugin and continues loading next", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const bad = path.join(dir, "bad-plugin.ts")
-      const good = path.join(dir, "good-plugin.ts")
-      const badSpec = pathToFileURL(bad).href
-      const goodSpec = pathToFileURL(good).href
-      const badMarker = path.join(dir, "bad-cleanup.txt")
-      const goodMarker = path.join(dir, "good-called.txt")
-
-      await Bun.write(
-        bad,
-        `export default {
-  id: "demo.bad",
-  tui: async (api, options) => {
-    api.route.register([{ name: "bad.route", render: () => null }])
-    api.lifecycle.onDispose(async () => {
-      await Bun.write(options.bad_marker, "cleaned")
-    })
-    throw new Error("bad plugin")
-  },
-}
-`,
-      )
-
-      await Bun.write(
-        good,
-        `export default {
-  id: "demo.good",
-  tui: async (_api, options) => {
-    await Bun.write(options.good_marker, "called")
-  },
-}
-`,
-      )
-
-      return { badSpec, goodSpec, badMarker, goodMarker }
-    },
-  })
-
-  const { config, restore } = mockTuiRuntime(tmp.path, [
-    [tmp.extra.badSpec, { bad_marker: tmp.extra.badMarker }],
-    [tmp.extra.goodSpec, { good_marker: tmp.extra.goodMarker }],
-  ])
-
-  try {
-    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
-    // bad plugin's onDispose ran during rollback
-    await expect(fs.readFile(tmp.extra.badMarker, "utf8")).resolves.toBe("cleaned")
-    // good plugin still loaded
-    await expect(fs.readFile(tmp.extra.goodMarker, "utf8")).resolves.toBe("called")
-  } finally {
-    await TuiPluginRuntime.dispose()
-    restore()
-  }
-})
+test(
+  "rolls back failed plugin, loads the next, and retains initializer refusal",
+  () => plugin("initial-failure"),
+  25000,
+) // kilocode_change
 
 test("assigns sequential slot ids scoped to plugin", async () => {
   await using tmp = await tmpdir({
@@ -179,47 +129,4 @@ export default {
   }
 })
 
-// kilocode_change - skipped flaky test on Windows #9496
-test.skipIf(process.platform === "win32")(
-  "times out hanging plugin cleanup on dispose",
-  async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const file = path.join(dir, "timeout-plugin.ts")
-        const spec = pathToFileURL(file).href
-
-        await Bun.write(
-          file,
-          `export default {
-  id: "demo.timeout",
-  tui: async (api) => {
-    api.lifecycle.onDispose(() => new Promise(() => {}))
-  },
-}
-`,
-        )
-
-        return { spec }
-      },
-    })
-
-    const { config, restore } = mockTuiRuntime(tmp.path, [tmp.extra.spec])
-
-    try {
-      await TuiPluginRuntime.init({ api: createTuiPluginApi(), config, disposeTimeoutMs: 25 })
-
-      const done = await new Promise<string>((resolve) => {
-        const timer = setTimeout(() => resolve("timeout"), 500)
-        void TuiPluginRuntime.dispose().then(() => {
-          clearTimeout(timer)
-          resolve("done")
-        })
-      })
-      expect(done).toBe("done")
-    } finally {
-      await TuiPluginRuntime.dispose()
-      restore()
-    }
-  },
-  { timeout: 15000 },
-)
+test("joins timed-out cleanup before retaining refusal", () => plugin("held"), 25000) // kilocode_change

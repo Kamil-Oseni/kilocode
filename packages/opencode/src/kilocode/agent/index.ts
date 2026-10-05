@@ -12,6 +12,8 @@ import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser"
 import { KilocodeConfigSources } from "../config/sources"
+import { HomeAssistant } from "../home-assistant/tools"
+import { CodePrompt } from "./code-prompt"
 import { RayaChief } from "../chief" // raya_change - Milestone B intelligent auto-routing
 
 import PROMPT_DEBUG from "../../agent/prompt/debug.txt"
@@ -34,15 +36,21 @@ const BROWSER_GUIDANCE =
 const BROWSER_TEST_GUIDANCE =
   'Treat requests to "test like a real user", run a walkthrough, smoke test, end-to-end test, UX test, usability check, or verify a browser flow as browser-testing intent without requiring the user to name tools. Inspect the live page, derive realistic steps and expected outcomes from the request and visible UI, then call browser_smoke_test in exploratory mode with concrete visible-state assertions plus network or console assertions. Reuse the target name consistently; the first smoke run captures the current authenticated browser state automatically when none exists. If authentication is absent, navigate the login flow and only ask for user input when credentials or an external confirmation genuinely require it. Return the structured result, failing step, report path, and screenshot paths.'
 const CANVAS_GUIDANCE =
-  "Treat requests for a standalone dashboard, chart, table, interactive analysis, calculator, or visual report as canvas intent without requiring the user to name a tool. Call create_canvas with a focused default-exported React TSX component and useful initial data; call update_canvas to refine source or data. Use JSX without imports, read values from the component data prop, and repair any returned compile or runtime error on the next turn."
+  "Treat requests for a standalone dashboard, chart, table, interactive analysis, calculator, or visual report as canvas intent without requiring the user to name a tool. When the complete designer doctrine is absent, first call skill with name=designer and wait for its result. Then call create_canvas with a focused default-exported React TSX component and useful initial data; call update_canvas to refine source or data. Use JSX without imports, read values from the component data prop, and repair any returned compile or runtime error on the next turn."
 // raya_change start - keep Raya's designer away from recognizable generated-UI defaults
 const DESIGN_GUIDANCE =
   "Design with explicit hierarchy and product meaning, never the statistical-average AI aesthetic. Treat tinted section, panel, card, message, and page backgrounds as AI slop when they are decorative rather than required to communicate hierarchy or state; prefer the shared surface, spacing, typography, and thin dividers. Do not add decorative side rails or side-tab accent borders, pulsing status dots for static state, faux activity timelines, ornamental pills, floating cards, cards nested inside cards, uniform oversized radii, glassmorphism, gradient text, purple-blue glows, emoji-as-icons, or motion that does not explain a state change. Do not wrap content merely to make it look designed. Prefer typography, spacing, restrained tonal shifts, and thin dividers; reserve one accent for genuine state or primary action. Every icon, border, container, status marker, and animation must earn its place. Audit the combined cluster of patterns, not only each motif in isolation." // raya_change - decorative tinted backgrounds are AI slop
 // raya_change end
 
+const design =
+  "For UI design, design systems, or canvas artifacts, load the bundled designer skill with skill(name=designer) before producing the design unless its complete doctrine is already present. Wait for the skill result before drafting design code or calling create_canvas/update_canvas. The designer specialist already carries the complete doctrine. Tool and skill permissions still apply; discover the skill tool when needed and never bypass a denial."
+const direct =
+  "Reply directly to greetings, casual small talk, and simple calculations. Do not search memory or call an action tool merely because one is available. Retrieve saved context only when it is relevant to the user's request. For authorized action requests, make the appropriate tool call and verify its result instead of merely promising to act."
+
 function choices(prompt?: string) {
   return [
     prompt,
+    direct,
     GOAL_INTENT_GUIDANCE,
     ASK_OPTIONS_GUIDANCE,
     ROUTINE_GUIDANCE,
@@ -51,19 +59,19 @@ function choices(prompt?: string) {
     BROWSER_TEST_GUIDANCE,
     CANVAS_GUIDANCE,
     DESIGN_GUIDANCE,
-    PROMPT_DESIGNER,
+    design,
   ]
     .filter(Boolean)
     .join("\n\n")
 }
 
 function walkthrough(prompt: string) {
-  return `${prompt}\n\n${DELEGATION_GUIDANCE}\n\n${BROWSER_GUIDANCE}\n\n${BROWSER_TEST_GUIDANCE}\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${PROMPT_DESIGNER}`
+  return `${prompt}\n\n${direct}\n\n${DELEGATION_GUIDANCE}\n\n${BROWSER_GUIDANCE}\n\n${BROWSER_TEST_GUIDANCE}\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${design}`
 }
 
 export function designerPrompt() {
   return `${walkthrough(
-    `${CANVAS_GUIDANCE}\n\nAct as Raya's design specialist. For a live beside-chat artifact, call create_canvas first — never write a standalone .html file or open the browser to preview it.\n\nProduce or implement a coherent UI/UX solution and verify it visually when possible.\n\n${DESIGN_GUIDANCE}`,
+    "Act as Raya's design specialist. For a live beside-chat artifact, call create_canvas first — never write a standalone .html file or open the browser to preview it.\n\nProduce or implement a coherent UI/UX solution and verify it visually when possible.",
   )}\n\nCanvas work wins over browser work. If the user used /canvas or asked for a live beside-chat artifact, call create_canvas first and do not write HTML or open the browser.\n\n${PROMPT_DESIGNER}`
 }
 
@@ -647,6 +655,7 @@ export function patchAgents(
 ) {
   // Rename "build" → "code" for backward compatibility
   if (agents.build) {
+    const prompt = agents.build.prompt
     agents.code = {
       ...agents.build,
       name: "code",
@@ -671,6 +680,8 @@ export function patchAgents(
         }),
       ),
     }
+    if (!prompt && cfg.agent?.code?.prompt === undefined && cfg.agent?.build?.prompt === undefined)
+      CodePrompt.register(agents.code)
     delete agents.build
   }
 
@@ -876,7 +887,7 @@ export function patchAgents(
       name: "accountant",
       description:
         "Accounting specialist for ledgers, reconciliation, invoices, statements, tax, and financial analysis.",
-      prompt: `Act as Raya's accounting specialist. Show auditable calculations, assumptions, and source evidence.\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${PROMPT_DESIGNER}`,
+      prompt: `Act as Raya's accounting specialist. Show auditable calculations, assumptions, and source evidence.\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${design}`,
       mode: "subagent",
       native: true,
     }
@@ -885,7 +896,7 @@ export function patchAgents(
       name: "reasoner",
       description:
         "Hard-reasoning specialist for architecture, algorithms, proofs, security, concurrency, and trade-offs.",
-      prompt: `Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${PROMPT_DESIGNER}`,
+      prompt: `Act as Raya's hard-reasoning specialist. Analyze constraints and alternatives before reaching a defensible conclusion.\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${design}`,
       mode: "subagent",
       native: true,
     }
@@ -948,6 +959,7 @@ export function addAuto(
   agents: Parameters<typeof patchAgents>[0],
   defaults: Permission.Ruleset,
   model?: { providerID: string; modelID: string },
+  user: Permission.Ruleset = [],
 ) {
   const specialists = Object.values(agents).filter(
     (item) => item.mode !== "primary" && !item.hidden && !item.deprecated,
@@ -1001,6 +1013,7 @@ export function addAuto(
         notebook_execute: "allow",
         // raya_change end
       }),
+      HomeAssistant.rules(Permission.merge(defaults, user)),
     ),
     model,
     steps: 40, // raya_change - route, delegate remaining work, audit, close or block, then synthesize
@@ -1116,27 +1129,29 @@ export async function remove(input: {
 }
 
 async function removeConfigAgent(name: string, sources: KilocodeConfigSources.Source[]) {
+  const { ConfigPublication } = await import("../config/publication")
   const files = sources
     .filter((source) => source.exists && source.editable && source.path && source.kind.endsWith("-file"))
     .map((source) => source.path!)
   let found = false
+  if (!files.length) return false
 
-  for (const file of new Set(files)) {
-    const cfg = Bun.file(file)
-    if (!(await cfg.exists())) continue
+  return ConfigPublication.promise({ files: [...new Set(files)], targets: [...new Set(files)] }, async (tx) => {
+    for (const file of new Set(files)) {
+      const text = await tx.read(file)
+      if (text === undefined) continue
+      const root = parseJsonc(text)
+      if (!root?.agent || !Object.hasOwn(root.agent, name)) continue
 
-    const text = await cfg.text()
-    const root = parseJsonc(text)
-    if (!root?.agent || !Object.hasOwn(root.agent, name)) continue
+      const opts = { formattingOptions: { insertSpaces: true, tabSize: 2 } }
+      const next = applyEdits(text, modify(text, ["agent", name], undefined, opts))
+      const parsed = parseJsonc(next)
+      const final =
+        parsed.default_agent === name ? applyEdits(next, modify(next, ["default_agent"], undefined, opts)) : next
+      await tx.write(file, text, final)
+      found = true
+    }
 
-    const opts = { formattingOptions: { insertSpaces: true, tabSize: 2 } }
-    const next = applyEdits(text, modify(text, ["agent", name], undefined, opts))
-    const parsed = parseJsonc(next)
-    const final =
-      parsed.default_agent === name ? applyEdits(next, modify(next, ["default_agent"], undefined, opts)) : next
-    await Bun.write(file, final)
-    found = true
-  }
-
-  return found
+    return found
+  })
 }

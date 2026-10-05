@@ -3,6 +3,7 @@ import { InvalidError } from "@opencode-ai/core/v1/config/error"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigVariableGuard } from "./variable"
 import path from "node:path"
+import type { Graph } from "@opencode-ai/core/kilocode/config-intent"
 
 export namespace KilocodeMarkdown {
   export type Source = {
@@ -15,6 +16,7 @@ export namespace KilocodeMarkdown {
     trusted: boolean
     fileScope?: ConfigVariable.FileScope
     sourceScope?: ConfigVariable.FileScope | readonly ConfigVariable.FileScope[]
+    intent?: Graph
   }
 
   export function read(item: string, options: Options) {

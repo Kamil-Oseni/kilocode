@@ -32,6 +32,7 @@ export type Listener = {
   }
   // kilocode_change end
   stop: (close?: boolean) => Promise<void>
+  quiesce: () => Promise<void> // kilocode_change - fence new HTTP dispatch before persistence cleanup
 }
 
 type ServerApp = {
@@ -87,13 +88,15 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
     port: listener.port,
     url: listener.url,
     urls: listener.urls, // kilocode_change
-    stop: (close?: boolean) => Effect.runPromiseExit(listener.stop(close)).then(() => undefined),
+    stop: (close?: boolean) => Effect.runPromise(listener.stop(close)), // kilocode_change
+    quiesce: listener.quiesce, // kilocode_change
   }
 }
 
 const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unknown> = Effect.fn("Server.listen")(
   function* (opts: ListenOptions) {
-    const state = yield* startWithPortFallback(opts)
+    const admission = KiloListener.admission() // kilocode_change
+    const state = yield* startWithPortFallback(opts, admission.middleware) // kilocode_change
     const address = yield* tcpAddress(state)
     const listenerUrl = makeURL(opts.hostname, address.port)
     const unpublishMdns = yield* setupMdns(opts, address.port, state.scope)
@@ -105,14 +108,16 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
       url: listenerUrl,
       urls: serverUrls(opts.hostname, address.port), // kilocode_change
       stop: yield* makeStop(state, unpublishMdns, listenerUrl),
+      quiesce: admission.quiesce, // kilocode_change
     }
   },
 )
 
-function listenerLayer(opts: ListenOptions, port: number) {
+function listenerLayer(opts: ListenOptions, port: number, middleware: typeof disposeMiddleware) {
+  // kilocode_change
   return HttpRouter.serve(HttpApiApp.createListenerRoutes(opts), {
     // kilocode_change
-    middleware: disposeMiddleware,
+    middleware: (effect) => middleware(disposeMiddleware(effect)),
     disableLogger: true,
     disableListenLog: true,
   }).pipe(
@@ -127,16 +132,19 @@ function listenerLayer(opts: ListenOptions, port: number) {
   )
 }
 
-function startWithPortFallback(opts: ListenOptions) {
-  if (opts.port !== 0) return startListener(opts, opts.port)
+function startWithPortFallback(opts: ListenOptions, middleware: typeof disposeMiddleware) {
+  // kilocode_change
+  if (opts.port !== 0) return startListener(opts, opts.port, middleware) // kilocode_change
   // Match the legacy listener port-resolution behavior: explicit `0` prefers
   // 4096 first, then any free port.
-  return startListener(opts, 4096).pipe(Effect.catch(() => startListener(opts, 0)))
+  return startListener(opts, 4096, middleware).pipe(Effect.catch(() => startListener(opts, 0, middleware))) // kilocode_change
 }
 
-function startListener(opts: ListenOptions, port: number) {
+function startListener(opts: ListenOptions, port: number, middleware: typeof disposeMiddleware) {
+  // kilocode_change
   const scope = Scope.makeUnsafe()
-  return KiloListener.build(listenerLayer(opts, port), scope).pipe(
+  return KiloListener.build(listenerLayer(opts, port, middleware), scope).pipe(
+    // kilocode_change
     // kilocode_change
     Effect.provide(HttpApiApp.context),
     Effect.onError(() => Scope.close(scope, Exit.void).pipe(Effect.ignore)),
@@ -184,31 +192,17 @@ function setupMdns(opts: ListenOptions, port: number, scope: Scope.Scope) {
 }
 
 function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>, listenerUrl: URL) {
-  return Effect.gen(function* () {
-    const forceCloseOnce = yield* Effect.cached(forceClose(state).pipe(Effect.ignore))
-    const closeScopeOnce = yield* Effect.cached(
-      Scope.close(state.scope, Exit.void).pipe(
-        Effect.ignore,
-        Effect.ensuring(
-          Effect.sync(() => {
-            if (url === listenerUrl) url = undefined
-          }),
-        ),
-      ),
-    )
-
-    return (close?: boolean) =>
-      Effect.gen(function* () {
-        yield* unpublishMdns
-        if (close) yield* forceCloseOnce
-        if (close) yield* Effect.promise(() => Pty.shutdown()) // kilocode_change
-        yield* closeScopeOnce
-      })
+  // kilocode_change start
+  return KiloListener.stop({
+    scope: state.scope,
+    unpublish: unpublishMdns,
+    force: [state.http.closeAll, state.websockets.closeAll],
+    pty: Effect.promise(() => Pty.shutdown()),
+    clear: Effect.sync(() => {
+      if (url === listenerUrl) url = undefined
+    }),
   })
-}
-
-function forceClose(state: ListenerState) {
-  return Effect.all([state.http.closeAll, state.websockets.closeAll], { concurrency: "unbounded", discard: true })
+  // kilocode_change end
 }
 
 function serverLayer(opts: { port: number; hostname: string }) {

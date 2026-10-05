@@ -125,11 +125,13 @@ export const layer = Layer.effect(
       yield* approve(wait, input.sessionID)
       // kilocode_change end
 
-      pending.set(id, { info, deferred })
-      yield* events.publish(Event.Asked, info)
-
       return yield* Effect.ensuring(
-        Deferred.await(deferred),
+        // kilocode_change start - install cleanup before admitting or publishing a pending question
+        Effect.sync(() => pending.set(id, { info, deferred })).pipe(
+          Effect.andThen(events.publish(Event.Asked, info)),
+          Effect.andThen(Deferred.await(deferred)),
+        ),
+        // kilocode_change end
         // kilocode_change start - every asked question gets a terminal event when its waiter is interrupted
         KiloQuestion.finalize({
           pending,

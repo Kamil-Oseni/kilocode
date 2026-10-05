@@ -15,6 +15,8 @@ import { TsClient } from "../kilocode/ts-client" // kilocode_change
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LspEvent } from "@opencode-ai/schema/lsp-event"
+import { startups } from "@/kilocode/lsp-startup" // kilocode_change
+import { RuntimeRegistry } from "@opencode-ai/core/kilocode/runtime-registry" // kilocode_change
 
 export const Event = LspEvent
 
@@ -111,6 +113,7 @@ const filterExperimentalServers = (servers: Record<string, LSPServer.Info>, flag
 type LocInput = { file: string; line: number; character: number }
 
 interface State {
+  startup: ReturnType<typeof startups> // kilocode_change
   clients: LSPClient.Info[]
   servers: Record<string, LSPServer.Info>
   broken: Set<string>
@@ -190,6 +193,7 @@ const layer = Layer.effect(
         }
 
         const s: State = {
+          startup: startups(() => s.clients.map((client) => () => client.shutdown()), RuntimeRegistry), // kilocode_change - retain realized owner failure across cache invalidation
           clients: [],
           servers,
           broken: new Set(),
@@ -198,7 +202,7 @@ const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.promise(async () => {
-            await Promise.all(s.clients.map((client) => client.shutdown()))
+            await s.startup.close() // kilocode_change - join install/spawn/create before the client snapshot
           }),
         )
 
@@ -210,7 +214,9 @@ const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
       const s = yield* InstanceState.get(state)
-      const clients = yield* Effect.promise(async () => {
+      // kilocode_change start - defer full startup until its lifetime has been reserved
+      const startup = async () => {
+        // kilocode_change end
         const extension = path.parse(file).ext || file
         const result: LSPClient.Info[] = []
         let updated = 0
@@ -222,7 +228,10 @@ const layer = Layer.effect(
               if (!value) s.broken.add(key)
               return value
             })
-            .catch(() => {
+            // kilocode_change start
+            .catch((err: unknown) => {
+              s.startup.fail(err) // kilocode_change - retain startup failure even when the server is marked broken
+              // kilocode_change end
               s.broken.add(key)
               return undefined
             })
@@ -234,9 +243,21 @@ const layer = Layer.effect(
             root,
             directory: ctx.directory,
             instance: ctx,
-          }).catch(async () => {
+            // kilocode_change start
+          }).catch(async (err: unknown) => {
+            s.startup.fail(err) // kilocode_change - retain initialization failure while still closing the child
+            // kilocode_change end
             s.broken.add(key)
-            await Process.stop(handle.process)
+            // kilocode_change start - preserve initialize and owned cleanup failures together
+            try {
+              if (handle.owner) await handle.owner.close()
+              else await Process.stop(handle.process)
+            } catch (cleanup) {
+              throw new AggregateError([err, cleanup], "Language-server initialize and cleanup failed", {
+                cause: cleanup,
+              })
+            }
+            // kilocode_change end
             return undefined
           })
 
@@ -244,7 +265,7 @@ const layer = Layer.effect(
 
           const existing = s.clients.find((x) => x.root === root && x.serverID === server.id)
           if (existing) {
-            await Process.stop(handle.process)
+            await client.shutdown() // kilocode_change - retire the unused connection and managed child, not only its PID
             return existing
           }
 
@@ -291,11 +312,14 @@ const layer = Layer.effect(
           const task = schedule(server, root, root + server.id)
           s.spawning.set(root + server.id, task)
 
-          task.finally(() => {
+          // kilocode_change start - cleanup without creating an unobserved rejected finally promise
+          const cleanup = () => {
             if (s.spawning.get(root + server.id) === task) {
               s.spawning.delete(root + server.id)
             }
-          })
+          }
+          void task.then(cleanup, cleanup)
+          // kilocode_change end
 
           const client = await task
           if (!client) continue
@@ -305,7 +329,8 @@ const layer = Layer.effect(
         }
 
         return { result, updated }
-      })
+      } // kilocode_change
+      const clients = yield* Effect.promise(() => s.startup.run(startup)) // kilocode_change
       yield* Effect.forEach(Array.from({ length: clients.updated }), () => events.publish(Event.Updated, {}), {
         discard: true,
       })

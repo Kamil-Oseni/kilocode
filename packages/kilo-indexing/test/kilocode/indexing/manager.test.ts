@@ -509,9 +509,7 @@ describe("CodeIndexManager", () => {
     let cancel = 0
     let start = 0
 
-    data._cacheManager = {
-      async clearCacheFile() {},
-    }
+    data._cacheManager = new CacheManager(await mkdtemp(join(tmpdir(), "index-dispose-cache-")), "/tmp/ws")
     data._recreateServices = async () => {
       await gate.promise
       data._orchestrator = {
@@ -528,9 +526,9 @@ describe("CodeIndexManager", () => {
 
     const init = mgr.initialize(createInput({ openAiKey: "sk-test" }))
     await new Promise((resolve) => setTimeout(resolve, 0))
-    await mgr.dispose()
+    const closed = mgr.dispose()
     gate.resolve()
-    await init
+    await Promise.all([init, closed])
 
     expect(cancel).toBe(1)
     expect(start).toBe(0)
@@ -539,6 +537,7 @@ describe("CodeIndexManager", () => {
   test("dispose during recovery prevents restart after service recreation", async () => {
     const mgr = new CodeIndexManager("/tmp/ws", "/tmp/cache")
     const data = createData(mgr)
+    data._cacheManager = new CacheManager(await mkdtemp(join(tmpdir(), "index-recovery-cache-")), "/tmp/ws")
     const gate = Promise.withResolvers<void>()
     let start = 0
 
@@ -556,9 +555,9 @@ describe("CodeIndexManager", () => {
 
     const task = data.handleTelemetry(createStartError())
     await new Promise((resolve) => setTimeout(resolve, 0))
-    await mgr.dispose()
+    const closed = mgr.dispose()
     gate.resolve()
-    await data._retryTask
+    await Promise.all([data._retryTask, closed])
 
     expect(task).toBeUndefined()
     expect(start).toBe(0)

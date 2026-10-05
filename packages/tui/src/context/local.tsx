@@ -1,6 +1,6 @@
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store" // kilocode_change
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js" // kilocode_change
 import { useSync } from "./sync"
 import { useEvent } from "./event"
 import path from "path"
@@ -14,6 +14,7 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import { make, legacy, view } from "../kilocode/model-state" // kilocode_change
 
 export type LocalTheme = {
   secondary: RGBA
@@ -183,10 +184,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const filePath = path.join(paths.state, "model.json")
-      const state = {
-        pending: false,
-        writer: Promise.resolve() as Promise<unknown>, // kilocode_change - serialize writes
-      }
+      // kilocode_change start - production always supplies the parent-owned port; standalone compatibility stays unowned.
+      const load = () =>
+        readJson<unknown>(filePath).catch((err: unknown) => {
+          if (err instanceof SyntaxError) return {}
+          if (err !== null && typeof err === "object" && "code" in err && err.code === "ENOENT") return {}
+          throw err
+        })
+      const writer = make(
+        paths.model ?? legacy(load, (data) => writeJsonAtomic(filePath, data)),
+        (data) => {
+          const value = view(data)
+          setModelStore("model", reconcile(value.model))
+          setModelStore("variant", reconcile(value.variant))
+          setModelStore("recent", value.recent)
+          setModelStore("favorite", value.favorite)
+        },
+        () => setModelStore("ready", true),
+      )
+      onCleanup(() => writer.close())
+      // kilocode_change end
 
       // kilocode_change start - keep configured-agent selections process-local
       const scope = createMemo(() => project.workspace.current() ?? project.instance.directory())
@@ -208,40 +225,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         clear(name)
       }
       // kilocode_change end
-
-      function save() {
-        if (!modelStore.ready) {
-          state.pending = true
-          return
-        }
-        state.pending = false
-        // kilocode_change start - serialize writes so a slow first write cannot overwrite a later one
-        const data = {
-          model: modelStore.model,
-          recent: modelStore.recent,
-          favorite: modelStore.favorite,
-          variant: modelStore.variant,
-        }
-        state.writer = state.writer.then(() => writeJsonAtomic(filePath, data)).catch((err) => console.error(err))
-        // kilocode_change end
-      }
-
-      readJson<unknown>(filePath)
-        .then((x) => {
-          if (!x || typeof x !== "object") return
-          const value = x as Record<string, unknown>
-          if (Array.isArray(value.recent)) setModelStore("recent", value.recent)
-          if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
-          if (typeof value.variant === "object" && value.variant !== null)
-            setModelStore("variant", value.variant as Record<string, string | undefined>)
-          if (typeof value.model === "object" && value.model !== null)
-            setModelStore("model", value.model as Record<string, { providerID: string; modelID: string } | undefined>) // kilocode_change
-        })
-        .catch(() => {})
-        .finally(() => {
-          setModelStore("ready", true)
-          if (state.pending) save()
-        })
 
       const fallbackModel = createMemo(() => {
         if (args.model) {
@@ -310,11 +293,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         // kilocode_change start - resolve once all queued writes (atomic write+rename) have settled.
         // Used by tests to deterministically await the writer chain instead of sleeping for a fixed
         // duration, which is too slow on Windows CI where temp-file rename can exceed 50ms under AV.
-        async flush() {
-          const deadline = Date.now() + 5000
-          while (state.pending && Date.now() < deadline) await new Promise((r) => setTimeout(r, 0))
-          await state.writer
-        },
+        flush: () => writer.flush(),
         // kilocode_change end
         recent() {
           return modelStore.recent
@@ -352,8 +331,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!val) return
           const a = agent.current()
           if (!a) return
+          writer.change({ kind: "pick", agent: a.name, model: a.model ? undefined : val }) // kilocode_change
           apply(a.name, val, !a.model) // kilocode_change
-          save() // kilocode_change
         },
         cycleFavorite(direction: 1 | -1) {
           const favorites = modelStore.favorite.filter((item) => isModelValid(item))
@@ -381,9 +360,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!next) return
           const a = agent.current()
           if (!a) return
+          writer.change({ kind: "pick", agent: a.name, model: a.model ? undefined : next, recent: next }) // kilocode_change
           apply(a.name, next, !a.model) // kilocode_change
-          setModelStore("recent", recentModels(next, modelStore.recent))
-          save()
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
@@ -397,12 +375,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             const a = agent.current()
             if (!a) return
+            writer.change({
+              kind: "pick",
+              agent: a.name,
+              model: a.model ? undefined : model,
+              recent: options?.recent ? model : undefined,
+            }) // kilocode_change
             apply(a.name, model, !a.model) // kilocode_change
-            if (options?.recent) {
-              setModelStore("recent", recentModels(model, modelStore.recent))
-              save()
-            }
-            save() // kilocode_change
           })
         },
         toggleFavorite(model: { providerID: string; modelID: string }) {
@@ -415,17 +394,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-            const exists = modelStore.favorite.some(
-              (x) => x.providerID === model.providerID && x.modelID === model.modelID,
-            )
-            const next = exists
-              ? modelStore.favorite.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID)
-              : [model, ...modelStore.favorite]
-            setModelStore(
-              "favorite",
-              next.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
-            )
-            save()
+            writer.change({ kind: "favorite", model }) // kilocode_change
           })
         },
         variant: {
@@ -453,8 +422,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const m = currentModel()
             if (!m) return
             const key = `${m.providerID}/${m.modelID}`
-            setModelStore("variant", key, value ?? "default")
-            save()
+            writer.change({ kind: "variant", key, value: value ?? "default" }) // kilocode_change
           },
           cycle() {
             const variants = this.list()

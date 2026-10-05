@@ -1,11 +1,10 @@
 import { applyEdits, findNodeAtLocation, modify, parseTree } from "jsonc-parser"
-import { mkdir, stat } from "fs/promises"
-import path from "path"
+import { stat } from "fs/promises"
 import { Config } from "@/config/config"
 import { ConfigParse } from "@/config/parse"
-import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
 import { KilocodeConfigOverlay } from "./overlay"
+import { ConfigPublication } from "./publication"
 
 export namespace KilocodeConfigWriter {
   export type Conflict = {
@@ -15,12 +14,14 @@ export namespace KilocodeConfigWriter {
     target: KilocodeConfigOverlay.Target
   }
 
-  export type Result = {
-    ok: true
-    target: KilocodeConfigOverlay.Target
-    changed: boolean
-    sandboxChanged: boolean
-  } | Conflict
+  export type Result =
+    | {
+        ok: true
+        target: KilocodeConfigOverlay.Target
+        changed: boolean
+        sandboxChanged: boolean
+      }
+    | Conflict
 
   export async function write(input: {
     directory: string
@@ -29,7 +30,6 @@ export namespace KilocodeConfigWriter {
     expected?: { path: string; revision: string }
     set?: Record<string, unknown>
     unset?: string[][]
-    write?: typeof Filesystem.write
     beforeWrite?: () => Promise<void>
   }): Promise<Result> {
     const target = await KilocodeConfigOverlay.target(input)
@@ -51,43 +51,50 @@ export namespace KilocodeConfigWriter {
 
     const patch = KilocodeConfigOverlay.patch({ scope: input.scope, set: input.set, unset: input.unset })
     if (Object.keys(patch).length === 0) return { ok: true, target, changed: false, sandboxChanged: false }
-    await mkdir(path.dirname(target.path), { recursive: true })
-    await input.beforeWrite?.()
-    const checked = await KilocodeConfigOverlay.target(input)
-    if ((expected && checked.path !== expected.path) || !checked.writable) {
-      return {
-        ok: false,
-        code: "target-not-writable",
-        message: "The config target changed or escaped its allowed root.",
-        target: checked,
-      }
-    }
-    const before = checked.exists ? await Bun.file(checked.path).text() : "{}"
-    if (
-      expected &&
-      KilocodeConfigOverlay.revision(checked.path, checked.exists, checked.exists ? before : "") !== expected.revision
-    ) {
-      return {
-        ok: false,
-        code: "revision-conflict",
-        message: "The config file changed since it was read.",
-        target: checked,
-      }
-    }
-    const updated = patchJsonc(before, patch)
-    ConfigParse.schema(Config.Info, ConfigParse.jsonc(updated, checked.path), checked.path)
-    const mode = checked.exists
-      ? await stat(checked.path).then((info) => info.mode & 0o777)
-      : checked.scope === "global"
-        ? 0o600
-        : undefined
-    if (updated !== before) await (input.write ?? Filesystem.write)(checked.path, updated, mode)
-    return {
-      ok: true,
-      target: await KilocodeConfigOverlay.target(input),
-      changed: updated !== before,
-      sandboxChanged: updated !== before && Object.hasOwn(patch, "sandbox"),
-    }
+    return ConfigPublication.promise(
+      { files: [target.path], roots: [input.directory], targets: [target.path] },
+      async (tx) => {
+        await input.beforeWrite?.()
+        const checked = await KilocodeConfigOverlay.target(input)
+        if (checked.path !== target.path || (expected && checked.path !== expected.path) || !checked.writable) {
+          return {
+            ok: false,
+            code: "target-not-writable",
+            message: "The config target changed or escaped its allowed root.",
+            target: checked,
+          }
+        }
+        const before = (await tx.read(checked.path)) ?? "{}"
+        if (
+          expected &&
+          KilocodeConfigOverlay.revision(checked.path, checked.exists, checked.exists ? before : "") !==
+            expected.revision
+        ) {
+          return {
+            ok: false,
+            code: "revision-conflict",
+            message: "The config file changed since it was read.",
+            target: checked,
+          }
+        }
+        const updated = patchJsonc(before, patch)
+        ConfigParse.schema(Config.Info, ConfigParse.jsonc(updated, checked.path), checked.path)
+        const mode = checked.exists
+          ? await stat(checked.path).then((info) => info.mode & 0o777)
+          : checked.scope === "global"
+            ? 0o600
+            : undefined
+        if (updated !== before) {
+          await tx.write(checked.path, before, updated, mode ?? 0o666)
+        }
+        return {
+          ok: true,
+          target: await KilocodeConfigOverlay.target(input),
+          changed: updated !== before,
+          sandboxChanged: updated !== before && Object.hasOwn(patch, "sandbox"),
+        }
+      },
+    )
   }
 
   function patchJsonc(input: string, patch: unknown, parts: string[] = []): string {

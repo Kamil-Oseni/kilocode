@@ -2,7 +2,7 @@ export * as Credential from "./credential"
 
 import { asc, desc, eq } from "drizzle-orm" // kilocode_change
 // kilocode_change start
-import { Context, Effect, Layer, Option, Schema, Semaphore } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 // kilocode_change end
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -18,6 +18,7 @@ import { parse as parseKiloAccounts } from "./kilocode/credential-migration"
 import { isBusy } from "./kilocode/sqlite-error"
 import { NonNegativeInt } from "./schema"
 import { EnvAlias } from "./kilocode/env-alias"
+import { CredentialPublication } from "./kilocode/credential-publication"
 // kilocode_change end
 
 export const ID = Credential.ID
@@ -113,103 +114,112 @@ export const legacyImportLayer = Layer.effectDiscard(
     const { db } = yield* Database.Service
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
-    // v3 repairs the active-only v2 import while remaining safe for users who already ran it.
-    const kiloName = "credential.kilo-account-json-v3"
-    if (!(yield* db.select().from(DataMigrationTable).where(eq(DataMigrationTable.name, kiloName)).get())) {
-      const current = yield* fs.readJson(path.join(global.data, "account.json")).pipe(Effect.option)
-      const prior = yield* fs.readJson(path.join(global.data, "auth-v2.json")).pipe(Effect.option)
-      const raw = Option.isSome(current) ? current.value : Option.getOrUndefined(prior)
-      const values = parseKiloAccounts(raw).toSorted(
-        (a, b) => a.connectorID.localeCompare(b.connectorID) || Number(a.active) - Number(b.active),
-      )
-      if (values.length > 0) {
+    yield* CredentialPublication.run(path.join(global.data, "auth.json"), (channel) =>
+      Effect.gen(function* () {
+        // v3 repairs the active-only v2 import while remaining safe for users who already ran it.
+        const kiloName = "credential.kilo-account-json-v3"
+        if (!(yield* db.select().from(DataMigrationTable).where(eq(DataMigrationTable.name, kiloName)).get())) {
+          const current = yield* fs.readJson(path.join(global.data, "account.json")).pipe(Effect.option)
+          const prior = yield* fs.readJson(path.join(global.data, "auth-v2.json")).pipe(Effect.option)
+          const raw = Option.isSome(current) ? current.value : Option.getOrUndefined(prior)
+          const values = parseKiloAccounts(raw).toSorted(
+            (a, b) => a.connectorID.localeCompare(b.connectorID) || Number(a.active) - Number(b.active),
+          )
+          if (values.length > 0) {
+            yield* db.transaction((tx) =>
+              Effect.gen(function* () {
+                const existing = yield* tx.select().from(CredentialTable).all()
+                const used = new Set<ID>()
+                const created = Date.now()
+                for (const [index, item] of values.entries()) {
+                  const integration = Integration.ID.make(item.connectorID.replace(/\/+$/, ""))
+                  const value = legacyValue(integration, item.credential)
+                  const current = existing.find(
+                    (row) =>
+                      !used.has(row.id) &&
+                      row.integration_id === integration &&
+                      row.label === item.label &&
+                      JSON.stringify(row.value) === JSON.stringify(value),
+                  )
+                  const time = created + index
+                  if (current) {
+                    used.add(current.id)
+                    yield* tx
+                      .update(CredentialTable)
+                      .set({ time_created: time, time_updated: time })
+                      .where(eq(CredentialTable.id, current.id))
+                      .run()
+                    continue
+                  }
+                  yield* tx.insert(CredentialTable).values({
+                    id: ID.make(`cred_kilo_${Buffer.from(item.id).toString("base64url")}`),
+                    integration_id: integration,
+                    label: item.label,
+                    value,
+                    time_created: time,
+                    time_updated: time,
+                  })
+                }
+                yield* tx.insert(DataMigrationTable).values({ name: kiloName, time_completed: Date.now() }).run()
+              }),
+            )
+          }
+        }
+        const name = "credential.auth-json"
+        const raw = yield* fs.readJson(channel.file).pipe(Effect.option)
+        if (Option.isNone(raw) || typeof raw.value !== "object" || raw.value === null || Array.isArray(raw.value))
+          return
+        const decode = Schema.decodeUnknownOption(LegacyValue)
+        const values = Object.entries(raw.value).flatMap(([integrationID, value]) => {
+          const decoded = decode(value)
+          if (Option.isNone(decoded)) return []
+          const integration = Integration.ID.make(integrationID.replace(/\/+$/, ""))
+          return [{ integration, value: legacyValue(integration, decoded.value) }]
+        })
+        const migrated = yield* db.select().from(DataMigrationTable).where(eq(DataMigrationTable.name, name)).get()
+        const existing = yield* db.select().from(CredentialTable).orderBy(desc(CredentialTable.time_created)).all()
+        const same = (left: Value, right: Value) => JSON.stringify(left) === JSON.stringify(right)
+        if (
+          migrated &&
+          values.every((item) => {
+            const current = existing.find((row) => row.integration_id === item.integration)
+            return current !== undefined && same(current.value, item.value)
+          })
+        )
+          return
         yield* db.transaction((tx) =>
           Effect.gen(function* () {
-            const existing = yield* tx.select().from(CredentialTable).all()
-            const used = new Set<ID>()
-            const created = Date.now()
-            for (const [index, item] of values.entries()) {
-              const integration = Integration.ID.make(item.connectorID.replace(/\/+$/, ""))
-              const value = legacyValue(integration, item.credential)
-              const current = existing.find(
-                (row) =>
-                  !used.has(row.id) &&
-                  row.integration_id === integration &&
-                  row.label === item.label &&
-                  JSON.stringify(row.value) === JSON.stringify(value),
-              )
-              const time = created + index
+            for (const item of values) {
+              // reconcile on every startup so a released client can update auth.json after import.
+              const current = yield* tx
+                .select()
+                .from(CredentialTable)
+                .where(eq(CredentialTable.integration_id, item.integration))
+                .orderBy(desc(CredentialTable.time_created)) // kilocode_change - reconcile the active imported account
+                .get()
               if (current) {
-                used.add(current.id)
-                yield* tx
-                  .update(CredentialTable)
-                  .set({ time_created: time, time_updated: time })
-                  .where(eq(CredentialTable.id, current.id))
-                  .run()
+                if (!same(current.value, item.value))
+                  yield* tx
+                    .update(CredentialTable)
+                    .set({ value: item.value })
+                    .where(eq(CredentialTable.id, current.id))
+                    .run()
                 continue
               }
               yield* tx.insert(CredentialTable).values({
-                id: ID.make(`cred_kilo_${Buffer.from(item.id).toString("base64url")}`),
-                integration_id: integration,
-                label: item.label,
-                value,
-                time_created: time,
-                time_updated: time,
+                id: ID.create(),
+                integration_id: item.integration,
+                label: "Imported",
+                value: item.value,
               })
             }
-            yield* tx.insert(DataMigrationTable).values({ name: kiloName, time_completed: Date.now() }).run()
+            yield* tx
+              .insert(DataMigrationTable)
+              .values({ name, time_completed: Date.now() })
+              .onConflictDoNothing()
+              .run()
           }),
         )
-      }
-    }
-    const name = "credential.auth-json"
-    const raw = yield* fs.readJson(path.join(global.data, "auth.json")).pipe(Effect.option)
-    if (Option.isNone(raw) || typeof raw.value !== "object" || raw.value === null || Array.isArray(raw.value)) return
-    const decode = Schema.decodeUnknownOption(LegacyValue)
-    const values = Object.entries(raw.value).flatMap(([integrationID, value]) => {
-      const decoded = decode(value)
-      if (Option.isNone(decoded)) return []
-      const integration = Integration.ID.make(integrationID.replace(/\/+$/, ""))
-      return [{ integration, value: legacyValue(integration, decoded.value) }]
-    })
-    const migrated = yield* db.select().from(DataMigrationTable).where(eq(DataMigrationTable.name, name)).get()
-    const existing = yield* db.select().from(CredentialTable).orderBy(desc(CredentialTable.time_created)).all()
-    const same = (left: Value, right: Value) => JSON.stringify(left) === JSON.stringify(right)
-    if (
-      migrated &&
-      values.every((item) => {
-        const current = existing.find((row) => row.integration_id === item.integration)
-        return current !== undefined && same(current.value, item.value)
-      })
-    )
-      return
-    yield* db.transaction((tx) =>
-      Effect.gen(function* () {
-        for (const item of values) {
-          // reconcile on every startup so a released client can update auth.json after import.
-          const current = yield* tx
-            .select()
-            .from(CredentialTable)
-            .where(eq(CredentialTable.integration_id, item.integration))
-            .orderBy(desc(CredentialTable.time_created)) // kilocode_change - reconcile the active imported account
-            .get()
-          if (current) {
-            if (!same(current.value, item.value))
-              yield* tx
-                .update(CredentialTable)
-                .set({ value: item.value })
-                .where(eq(CredentialTable.id, current.id))
-                .run()
-            continue
-          }
-          yield* tx.insert(CredentialTable).values({
-            id: ID.create(),
-            integration_id: item.integration,
-            label: "Imported",
-            value: item.value,
-          })
-        }
-        yield* tx.insert(DataMigrationTable).values({ name, time_completed: Date.now() }).onConflictDoNothing().run()
       }),
     )
   }).pipe(
@@ -286,51 +296,53 @@ export const layer = Layer.effect(
     const local = new Map(injected)
     const find = (id: ID) => [...local.values()].find((credential) => credential.id === id)
 
-    const lock = Semaphore.makeUnsafe(1)
-    const writeLegacy = (integration: Integration.ID) =>
-      lock.withPermit(
-        Effect.gen(function* () {
-          if (!fs || !global || isolated) return
-          const file = path.join(global.data, "auth.json")
-          const raw = yield* fs.readJson(file).pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed({})),
-            Effect.catch((cause) =>
-              Effect.logWarning("failed to read legacy auth.json; preserving existing file", { cause }).pipe(
-                Effect.as(undefined),
-              ),
-            ),
+    const writeLegacy = (integration: Integration.ID, write: (data: unknown) => Effect.Effect<void>, file: string) =>
+      Effect.gen(function* () {
+        if (!fs || !global || isolated) return
+        const raw = yield* fs.readJson(file).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed({})),
+          Effect.orDie,
+        )
+        const data: Record<string, unknown> =
+          typeof raw === "object" && raw !== null && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {}
+        const row = yield* db
+          .select()
+          .from(CredentialTable)
+          .where(eq(CredentialTable.integration_id, integration))
+          .orderBy(desc(CredentialTable.time_created)) // kilocode_change - persist the active imported account
+          .get()
+          .pipe(Effect.orDie)
+        delete data[integration + "/"]
+        if (!row) delete data[integration]
+        else {
+          const value = decode(row.value)
+          data[integration] =
+            value.type === "key"
+              ? { type: "api", key: value.key, metadata: value.metadata }
+              : {
+                  type: "oauth",
+                  refresh: value.refresh,
+                  access: value.access,
+                  expires: value.expires,
+                  accountId: value.metadata?.accountID,
+                  enterpriseUrl: value.metadata?.enterpriseURL,
+                }
+        }
+        yield* write(data)
+      })
+    const mutation = <A, E, R>(
+      body: (mirror: (integration: Integration.ID) => Effect.Effect<void>) => Effect.Effect<A, E, R>,
+    ) =>
+      !fs || !global || isolated
+        ? body(() => Effect.void)
+        : CredentialPublication.run(path.join(global.data, "auth.json"), (channel) =>
+            Effect.gen(function* () {
+              yield* channel.begin
+              const result = yield* body((integration) => writeLegacy(integration, channel.write, channel.file))
+              yield* channel.clear
+              return result
+            }),
           )
-          if (raw === undefined) return
-          const data: Record<string, unknown> =
-            typeof raw === "object" && raw !== null && !Array.isArray(raw)
-              ? { ...(raw as Record<string, unknown>) }
-              : {}
-          const row = yield* db
-            .select()
-            .from(CredentialTable)
-            .where(eq(CredentialTable.integration_id, integration))
-            .orderBy(desc(CredentialTable.time_created)) // kilocode_change - persist the active imported account
-            .get()
-            .pipe(Effect.orDie)
-          delete data[integration + "/"]
-          if (!row) delete data[integration]
-          else {
-            const value = decode(row.value)
-            data[integration] =
-              value.type === "key"
-                ? { type: "api", key: value.key, metadata: value.metadata }
-                : {
-                    type: "oauth",
-                    refresh: value.refresh,
-                    access: value.access,
-                    expires: value.expires,
-                    accountId: value.metadata?.accountID,
-                    enterpriseUrl: value.metadata?.enterpriseURL,
-                  }
-          }
-          yield* fs.writeJson(file, data, 0o600).pipe(Effect.orDie)
-        }),
-      )
     // kilocode_change end
 
     return Service.of({
@@ -382,26 +394,32 @@ export const layer = Layer.effect(
           return credential
         }
         // kilocode_change end
-        yield* db
-          .transaction((tx) =>
-            Effect.gen(function* () {
-              yield* tx
-                .delete(CredentialTable)
-                .where(eq(CredentialTable.integration_id, credential.integrationID))
-                .run()
-              yield* tx
-                .insert(CredentialTable)
-                .values({
-                  id: credential.id,
-                  integration_id: credential.integrationID,
-                  label: credential.label,
-                  value: credential.value,
-                })
-                .run()
-            }),
-          )
-          .pipe(Effect.orDie)
-        yield* writeLegacy(credential.integrationID) // kilocode_change
+        // kilocode_change start - lock and durable nonsecret intent precede SQL mutation
+        yield* mutation((mirror) =>
+          Effect.gen(function* () {
+            yield* db
+              .transaction((tx) =>
+                Effect.gen(function* () {
+                  yield* tx
+                    .delete(CredentialTable)
+                    .where(eq(CredentialTable.integration_id, credential.integrationID))
+                    .run()
+                  yield* tx
+                    .insert(CredentialTable)
+                    .values({
+                      id: credential.id,
+                      integration_id: credential.integrationID,
+                      label: credential.label,
+                      value: credential.value,
+                    })
+                    .run()
+                }),
+              )
+              .pipe(Effect.orDie)
+            yield* mirror(credential.integrationID)
+          }),
+        )
+        // kilocode_change end
         return credential
       }),
       update: Effect.fn("Credential.update")(function* (id, updates) {
@@ -420,15 +438,24 @@ export const layer = Layer.effect(
           )
           return
         }
-        const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
+        yield* mutation((mirror) =>
+          Effect.gen(function* () {
+            const row = yield* db
+              .select()
+              .from(CredentialTable)
+              .where(eq(CredentialTable.id, id))
+              .get()
+              .pipe(Effect.orDie)
+            yield* db
+              .update(CredentialTable)
+              .set({ label: updates.label, value: updates.value })
+              .where(eq(CredentialTable.id, id))
+              .run()
+              .pipe(Effect.orDie)
+            if (row?.integration_id) yield* mirror(row.integration_id)
+          }),
+        )
         // kilocode_change end
-        yield* db
-          .update(CredentialTable)
-          .set({ label: updates.label, value: updates.value })
-          .where(eq(CredentialTable.id, id))
-          .run()
-          .pipe(Effect.orDie)
-        if (row?.integration_id) yield* writeLegacy(row.integration_id) // kilocode_change
       }),
       remove: Effect.fn("Credential.remove")(function* (id) {
         // kilocode_change start - isolated removals remain process-local
@@ -437,10 +464,19 @@ export const layer = Layer.effect(
           if (credential) local.delete(credential.integrationID)
           return
         }
-        const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
-        // kilocode_change end
-        yield* db.delete(CredentialTable).where(eq(CredentialTable.id, id)).run().pipe(Effect.orDie)
-        if (row?.integration_id) yield* writeLegacy(row.integration_id) // kilocode_change
+        yield* mutation((mirror) =>
+          Effect.gen(function* () {
+            const row = yield* db
+              .select()
+              .from(CredentialTable)
+              .where(eq(CredentialTable.id, id))
+              .get()
+              .pipe(Effect.orDie)
+            // kilocode_change end
+            yield* db.delete(CredentialTable).where(eq(CredentialTable.id, id)).run().pipe(Effect.orDie)
+            if (row?.integration_id) yield* mirror(row.integration_id)
+          }),
+        ) // kilocode_change - join mirror publication before clearing intent
       }),
     })
   }),

@@ -1,5 +1,6 @@
 import * as GoalMessage from "@/kilocode/goal/message" // kilocode_change
 import * as GoalTurn from "@/kilocode/goal/turn" // kilocode_change
+import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - final synthesis for the original dispatch
 import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
@@ -9,6 +10,7 @@ import fs from "node:fs" // kilocode_change
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import os from "os"
 import { KiloSessionPrompt } from "@/kilocode/session/prompt" // kilocode_change
+import { SessionRetirement } from "@/kilocode/session/retirement" // kilocode_change
 import { SKILL_SHELL_DISABLED, SKILL_SHELL_UNTRUSTED } from "@/kilocode/skills/display" // kilocode_change
 import { KiloSessionMessageOrder } from "@/kilocode/session/message-order" // kilocode_change
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue" // kilocode_change
@@ -22,6 +24,7 @@ import { KiloSessionOverflow } from "@/kilocode/session/overflow" // kilocode_ch
 import { KiloReference } from "@/kilocode/reference/contains" // kilocode_change
 import { KiloReadObject } from "@/kilocode/tool/read-object" // kilocode_change
 import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_change - Milestone D child step ceiling
+import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
 import { RayaToolModel } from "@/kilocode/chief/tool-model" // kilocode_change
 import { isInterrupted } from "@/kilocode/effect/cause" // kilocode_change
@@ -775,7 +778,7 @@ export const layer = Layer.effect(
           return { info: msg, parts: [part] }
         }),
       )
-    })
+    }, SessionRetirement.entry) // kilocode_change - retain the actual shell runner fiber
 
     const getModel = Effect.fn("SessionPrompt.getModel")(function* (
       providerID: ProviderV2.ID,
@@ -1542,6 +1545,7 @@ export const layer = Layer.effect(
         // kilocode_change end
       },
       Effect.catchTag("NotFoundError", Effect.die),
+      SessionRetirement.entry, // kilocode_change - own accepted input and runner cleanup before any write
     )
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1694,14 +1698,15 @@ export const layer = Layer.effect(
         if (step === 1)
           // kilocode_change start - log auto-title failures instead of silently ignoring them; a
           // swallowed failure here is why a chat can stay stuck on its "New session" default.
-          yield* title({
-            session,
-            modelID: lastUser.model.modelID,
-            providerID: lastUser.model.providerID,
-            history: msgs,
-          }).pipe(
-            Effect.catchCause((cause) => Effect.logWarning("auto-title generation failed", { cause })),
-            Effect.forkIn(scope),
+          yield* SessionRetirement.scoped(
+            title({
+              session,
+              modelID: lastUser.model.modelID,
+              providerID: lastUser.model.providerID,
+              history: msgs,
+            }),
+            scope,
+            (cause) => Effect.logWarning("auto-title generation failed", { cause }),
           )
         // kilocode_change end
 
@@ -1850,12 +1855,23 @@ export const layer = Layer.effect(
           // kilocode_change start
           // raya_change start - Auto exposes its bounded workflow until goal handling releases synthesis
           const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
-          const tools = agent.name === "auto" ? RayaChief.tools(resolved, current.metadata) : resolved
+          const complete = yield* GoalGate.closed(resolved) // kilocode_change - current original dispatch only
+          const tools = complete
+            ? {}
+            : agent.name === "auto"
+              ? RayaChief.tools(resolved, current.metadata, { session: sessionID, user: lastUser.id })
+              : resolved
           const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
+          const direct =
+            agent.name === "auto" &&
+            phase === "route" &&
+            HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
+            (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id)) // kilocode_change - only the exact selected device request can release synthesis
           // raya_change end
           // kilocode_change end
 
-          if (lastUser.format?.type === "json_schema") {
+          if (!complete && lastUser.format?.type === "json_schema") {
+            // kilocode_change - completed dispatch has no further tool callbacks
             tools["StructuredOutput"] = createStructuredOutputTool({
               schema: lastUser.format.schema,
               onSuccess(output) {
@@ -1865,7 +1881,13 @@ export const layer = Layer.effect(
           }
 
           if (step === 1)
-            yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
+            // kilocode_change start - retain actual failure before availability fallback
+            yield* SessionRetirement.scoped(
+              summary.summarize({ sessionID, messageID: lastUser.id }),
+              scope,
+              () => Effect.void,
+            )
+          // kilocode_change end
 
           yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
@@ -1935,7 +1957,8 @@ export const layer = Layer.effect(
                 ? [
                     {
                       role: "user" as const,
-                      content: agent.name === "auto" && phase !== "done" ? RayaChief.lastStep : MAX_STEPS_PROMPT, // kilocode_change - raya_change: Auto's last step must still close the goal
+                      content:
+                        agent.name === "auto" && phase !== "done" && !direct ? RayaChief.lastStep : MAX_STEPS_PROMPT, // kilocode_change - raya_change: Auto's last step must still close the goal
                     },
                   ]
                 : []),
@@ -1944,13 +1967,16 @@ export const layer = Layer.effect(
             model,
             // kilocode_change start
             // raya_change - require orchestration until goal handling deterministically releases synthesis
-            toolChoice:
-              format.type === "json_schema"
+            toolChoice: complete
+              ? "none"
+              : format.type === "json_schema"
                 ? "required"
                 : agent.name === "auto"
-                  ? phase === "done"
+                  ? phase === "done" || (direct && isLastStep)
                     ? "none"
-                    : "required"
+                    : direct
+                      ? "auto"
+                      : "required"
                   : undefined,
             // kilocode_change end
             // kilocode_change start - feed the provider-reported context size from the last finished
@@ -2071,9 +2097,9 @@ export const layer = Layer.effect(
         continue
       }
 
-      yield* compaction.prune({ sessionID, reason: "normal" }).pipe(Effect.ignore, Effect.forkIn(scope))
+      yield* SessionRetirement.scoped(compaction.prune({ sessionID, reason: "normal" }), scope, () => Effect.void) // kilocode_change - retain accepted pruning and its true Exit
       return yield* lastAssistant(sessionID)
-    })
+    }, SessionRetirement.entry) // kilocode_change - the actual runner fiber retains its producer ticket
 
     const loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts, NotFoundError> = Effect.fn(
       "SessionPrompt.loop",
@@ -2108,7 +2134,7 @@ export const layer = Layer.effect(
         }),
       )
       // kilocode_change end
-    })
+    }, SessionRetirement.entry) // kilocode_change
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
       "SessionPrompt.shell",
@@ -2120,7 +2146,7 @@ export const layer = Layer.effect(
         shellImpl(input, ready),
         ready,
       )
-    })
+    }, SessionRetirement.entry) // kilocode_change
 
     // kilocode_change start - resume command handler
     const isResumeCommand = (name: string): SessionResume.Format | undefined => {
@@ -2653,7 +2679,7 @@ export const layer = Layer.effect(
         messageID: result.info.id,
       })
       return result
-    })
+    }, SessionRetirement.entry) // kilocode_change - command expansion and its actual downstream work
 
     return Service.of({
       cancel,

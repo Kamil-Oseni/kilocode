@@ -283,7 +283,18 @@ export namespace KiloSessionPrompt {
     const outcome = yield* input.permission.ask({
       ...input.request,
       ruleset,
-      hardRuleset: Permission.merge(hardPermissions({ agent }) ?? [], ceiling),
+      hardRuleset: Permission.merge(
+        hardPermissions({ agent }) ?? [],
+        ceiling,
+        TaskAuthority.hard(session.metadata, input.request.permission, input.request.patterns),
+        TaskAuthority.ceilings(session.metadata).length
+          ? input.request.patterns.flatMap((pattern) =>
+              Permission.evaluate(input.request.permission, pattern, agent.permission).action === "deny"
+                ? [{ permission: input.request.permission, pattern, action: "deny" as const }]
+                : [],
+            )
+          : [],
+      ),
     })
     if (outcome.manual) return { source: "manual" } satisfies PermissionProvenance.Approval
     return PermissionProvenance.classify({ rule: outcome.rule, agent: agent.name, origins: input.origins })

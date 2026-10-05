@@ -10,6 +10,9 @@ const Revision = Schema.Struct({
   canonical: Schema.String,
   sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
   mode: Schema.Number,
+  bytes: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+  ),
 })
 
 const Absent = Schema.Struct({
@@ -113,6 +116,7 @@ export const capture = (fs: FSUtil.Interface, file: string, expected?: string) =
         canonical,
         sha256: hash.digest("hex"),
         mode: before.mode,
+        bytes: Number(before.size),
       }
     }),
   ).pipe(
@@ -134,7 +138,13 @@ export const current = (value: unknown) =>
         continue
       }
       const now = yield* capture(fs.value, entry.path, entry.canonical)
-      if (now.status !== "captured" || now.sha256 !== entry.sha256 || now.mode !== entry.mode) return false
+      if (
+        now.status !== "captured" ||
+        now.sha256 !== entry.sha256 ||
+        now.mode !== entry.mode ||
+        (entry.bytes !== undefined && now.bytes !== entry.bytes)
+      )
+        return false
     }
     return true
   }).pipe(Effect.catchCause((cause) => (Cause.hasInterrupts(cause) ? Effect.interrupt : Effect.succeed(false))))

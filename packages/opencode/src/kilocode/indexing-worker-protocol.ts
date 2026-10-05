@@ -5,6 +5,7 @@ import type {
 } from "@kilocode/kilo-indexing/engine"
 import type { IndexingStatus } from "@kilocode/kilo-indexing/status"
 import type { IndexingWarning } from "./indexing-warning"
+import type { Request as Shutdown, Receipt } from "./indexing-retirement"
 
 export type InitInput = {
   directory: string
@@ -24,11 +25,13 @@ export type Request =
       input: { query: string; directoryPrefix?: string }
     }
   | { type: "request"; id: number; key: string; method: "dispose"; input: undefined }
+  | { type: "request"; id: number; key: string; method: "shutdown"; input: Shutdown }
 
 export type Result =
   | { type: "result"; id: number; method: "init"; ok: true; value: IndexingStatus }
   | { type: "result"; id: number; method: "search"; ok: true; value: VectorStoreSearchResult[] }
   | { type: "result"; id: number; method: "dispose"; ok: true; value: undefined }
+  | { type: "result"; id: number; method: "shutdown"; ok: true; value: Receipt }
   | { type: "result"; id: number; method: Request["method"]; ok: false; error: string }
 
 export type Log = {

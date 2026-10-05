@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { endpoints as composerDrafts } from "./composer-drafts"
+import { Approval as RestoreApproval, Summary as RestoreSummary } from "@/kilocode/migration/destination-review"
 import { UploadChunk } from "@/kilocode/browser/upload-schema"
 import {
   Proof as BrowserProof,
@@ -17,7 +18,12 @@ import {
   WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
-import { InvalidRequestError, UnknownError } from "@/server/routes/instance/httpapi/errors"
+import {
+  ConflictError,
+  InvalidRequestError,
+  ServiceUnavailableError,
+  UnknownError,
+} from "@/server/routes/instance/httpapi/errors"
 import { ProviderUsage } from "@opencode-ai/schema/kilocode/provider-usage"
 import { AnacondaDesktopApi } from "./anaconda-desktop"
 import { ChildSteerApi } from "./child-steer"
@@ -249,6 +255,7 @@ export const AssignmentProposal = Schema.Struct({
 })
 
 export const KilocodePaths = {
+  restoreReview: `${root}/profile/restore-review`,
   heapSnapshot: `${root}/heap/snapshot`,
   commandFiles: `${root}/command/files`,
   removeCommand: `${root}/command/remove`,
@@ -851,6 +858,31 @@ export const KilocodeApi = HttpApi.make("kilocode")
             summary: "Preview a routine schedule",
             description:
               "Validate a schedule and calculate up to three upcoming occurrences without creating a routine.",
+          }),
+        ),
+        HttpApiEndpoint.get("profileRestoreReview", KilocodePaths.restoreReview, {
+          query: WorkspaceRoutingQuery,
+          success: RestoreSummary,
+          error: [ConflictError, ServiceUnavailableError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.profile.restoreReview",
+            summary: "Read transferred profile review",
+            description:
+              "Read the exact transfer hold, mapped workspaces and paused worker summary. Display evidence grants no path or execution authority.",
+          }),
+        ),
+        HttpApiEndpoint.post("profileRestoreApprove", KilocodePaths.restoreReview, {
+          query: WorkspaceRoutingQuery,
+          payload: RestoreApproval,
+          success: RestoreSummary,
+          error: [ConflictError, ServiceUnavailableError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.profile.restoreApprove",
+            summary: "Approve an exact transferred profile",
+            description:
+              "Explicitly review this hold generation and current workspace/worker revision. Imported workers remain individually disabled; no work is enqueued, enabled, resumed or replayed.",
           }),
         ),
         HttpApiEndpoint.get("agentList", KilocodePaths.agents, {

@@ -30,13 +30,15 @@ export namespace MemoryRedact {
     //     unquoted spaceless run with entropy (>=6 chars with a digit/special, or >=16 letters). This
     //     keeps prose clean — `auth_mode=none`, "token expiry is 1h" don't trip it (see (b) for the
     //     stricter low-entropy check on the strong keyword subset).
-    /["']?[\w.-]*(?<![a-z0-9])(?:password|passphrase|api[_ -]?key|secret|token|credential|authorization|auth|private[_ -]?key|access[_ -]?key)s?(?![a-z0-9])[\w.-]*["']?\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|(?=[^\s,}\r\n]{6})[^\s,}\r\n]*[^A-Za-z\s,}\r\n][^\s,}\r\n]*|[A-Za-z]{16,}[^\s,}\r\n]*)/i,
+    // Start at the complete key, and require its assignment delimiter before scanning keyword parts.
+    // This prevents retrying an unbounded prefix at every character or every embedded keyword.
+    /["']?(?<![\w.-])(?=[\w.-]+(?: [\w.-]+)?["']?\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|(?=[^\s,}\r\n]{6})[^\s,}\r\n]*[^A-Za-z\s,}\r\n][^\s,}\r\n]*|[A-Za-z]{16,}[^\s,}\r\n]*))[\w.-]*(?<![a-z0-9])(?:password|passphrase|api[_ -]?key|secret|token|credential|authorization|auth|private[_ -]?key|access[_ -]?key)s?(?![a-z0-9])[\w.-]*["']?\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|(?=[^\s,}\r\n]{6})[^\s,}\r\n]*[^A-Za-z\s,}\r\n][^\s,}\r\n]*|[A-Za-z]{16,}[^\s,}\r\n]*)/i,
     // (b) A STRONG keyword assigned with `:` or `=` redacts ANY non-empty value, catching low-entropy
     //     secrets like `password=hunterx` / `password: hunterx`. This deliberately also redacts prose
     //     like `secret: enabled` / `password: required` — favoring catching a real low-entropy
     //     colon-separated secret over avoiding that false positive. `auth` stays excluded as too
     //     ambiguous (would trip on ordinary "auth: none"-style config far more often).
-    /["']?[\w.-]*(?<![a-z0-9])(?:password|passphrase|api[_ -]?key|secret|token|credential|private[_ -]?key|access[_ -]?key)s?(?![a-z0-9])[\w.-]*["']?\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,}\r\n]+)/i,
+    /["']?(?<![\w.-])(?=[\w.-]+(?: [\w.-]+)?["']?\s*[:=])[\w.-]*(?<![a-z0-9])(?:password|passphrase|api[_ -]?key|secret|token|credential|private[_ -]?key|access[_ -]?key)s?(?![a-z0-9])[\w.-]*["']?\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,}\r\n]+)/i,
   ]
   // Loosely find URL-like spans; the parser (not this pattern) decides whether they carry credentials.
   const candidate = /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi

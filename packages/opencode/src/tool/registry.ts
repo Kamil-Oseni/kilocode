@@ -63,6 +63,7 @@ import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
+import { visible as pathVisible } from "@/kilocode/tool/path-catalog" // kilocode_change
 import { SessionStatus } from "@/session/status" // kilocode_change
 import { KiloSessions } from "@/kilo-sessions/kilo-sessions" // kilocode_change - provide KiloSessions.Service so the notify_user tool's init resolves
 import { Git } from "@/git" // kilocode_change
@@ -386,7 +387,7 @@ const layer = Layer.effect(
       const authority = input.trustedOnly ? Permission.merge(input.agent.permission, input.permission ?? []) : undefined // kilocode_change
       const filtered = (yield* all()).filter((tool) => {
         if (input.trustedOnly && !ToolNetwork.isBuiltin(tool) && !ToolTrust.check(tool)) return false // kilocode_change
-        if (authority && Permission.evaluate(tool.id, "*", authority).action === "deny") return false // kilocode_change
+        if (authority && !pathVisible(tool.id, authority)) return false // kilocode_change - retain path-granted file tools in discovery
         if (!KiloToolRegistry.available(tool, input.agent)) return false // kilocode_change
         if (tool.id === WebSearchTool.id) {
           if (cfg.web_search === true) return true // kilocode_change

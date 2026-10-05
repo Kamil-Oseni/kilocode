@@ -6,6 +6,7 @@ import { SessionID } from "@/session/schema"
 import { RayaAdminLog } from "@/kilocode/admin/log"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { Conflict, type Destination, type Enqueue, Message, RayaContactOutbox } from "./outbox"
+import { scheduler } from "@/kilocode/task/admission"
 
 const Limit = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100))
 
@@ -111,7 +112,7 @@ export namespace RayaContactMessenger {
     const reconcile = Effect.fn("RayaContactMessenger.reconcile")(function* (now: number) {
       const rows = yield* outbox.expired("raya", now)
       if (rows.length) yield* report("delivery.recovered", { source: "routines", count: rows.length })
-      for (const row of rows) yield* publish(row, now)
+      for (const row of rows) yield* scheduler.observe(publish(row, now))
       return rows.length
     })
 
@@ -127,7 +128,7 @@ export namespace RayaContactMessenger {
         ...(id ? { id } : {}),
       })
       if (!delivery) return "idle" as const
-      return yield* publish(delivery.message, now)
+      return yield* scheduler.observe(publish(delivery.message, now))
     })
 
     const drain = Effect.fn("RayaContactMessenger.drain")(function* (limit = 50) {
@@ -154,6 +155,13 @@ export namespace RayaContactMessenger {
       return yield* outbox.get(item.id)
     })
 
-    return { once, drain, reconcile, send }
+    const intake = <A, E, R>(body: Effect.Effect<A, E, R>) =>
+      scheduler.track(body, () => new Conflict({ message: "Raya Messenger scheduler admission is closed." }))
+    return {
+      once: (...args: Parameters<typeof once>) => intake(once(...args)),
+      drain: (...args: Parameters<typeof drain>) => intake(drain(...args)),
+      reconcile: (...args: Parameters<typeof reconcile>) => intake(reconcile(...args)),
+      send: (...args: Parameters<typeof send>) => intake(send(...args)),
+    }
   }
 }

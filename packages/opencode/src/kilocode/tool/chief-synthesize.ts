@@ -1,11 +1,14 @@
 import { Effect, Schema } from "effect"
 import { RayaChief } from "@/kilocode/chief"
+import { ChiefVerification } from "@/kilocode/chief/verification"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
 import { ChiefRequestReview } from "@/kilocode/chief/request-review"
 import type { RayaGoal } from "@/kilocode/goal"
 import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
+import { mutation } from "@/kilocode/goal/mutation"
+import { gate } from "@/kilocode/session/input-gate"
 import * as Tool from "@/tool/tool"
 
 type Metadata = { requestID: string; goalCreatedAt?: number; requestRevision?: string }
@@ -19,14 +22,47 @@ export function chiefSynthesizeTool(deps: {
     summary: Schema.String,
     findings: Schema.Array(Schema.Struct({ branch_id: Schema.String, conclusion: Schema.String })),
   })
-  const finish = Effect.fn("ChiefSynthesize.finish")(function* (sessionID: Parameters<typeof deps.goals.get>[0]) {
-    const goal = yield* deps.goals.get(sessionID)
+  const finish = Effect.fn("ChiefSynthesize.finish")(function* (ctx: Tool.Context) {
+    const sessionID = ctx.sessionID
     const session = yield* deps.sessions.get(sessionID)
     if (RayaChief.phase(session.metadata) !== "task" && RayaChief.phase(session.metadata) !== "goal") return
-    yield* deps.sessions.setMetadata({
+    const request = RayaChief.request(session.metadata)
+    if (ctx.callID && request) {
+      yield* ChiefVerification.synthesis({
+        storage: deps.storage,
+        sessions: deps.sessions,
+        goals: deps.goals,
+        sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        request,
+      })
+      return
+    }
+    // Unbound legacy callers cannot mint a runtime observation or release synthesis.
+    const user = (yield* deps.sessions.messages({ sessionID })).findLast(
+      (row) => row.info.role === "user" && !!RayaChief.requestText(row.parts),
+    )
+    yield* mutation(
+      deps.storage,
       sessionID,
-      metadata: { ...session.metadata, [RayaChief.phaseKey]: goal?.status === "active" ? "goal" : "done" },
-    })
+      Effect.gen(function* () {
+        const current = yield* deps.sessions.get(sessionID)
+        const latest = (yield* deps.sessions.messages({ sessionID })).findLast(
+          (row) => row.info.role === "user" && !!RayaChief.requestText(row.parts),
+        )
+        if (
+          RayaChief.phase(current.metadata) !== RayaChief.phase(session.metadata) ||
+          RayaChief.request(current.metadata) !== request ||
+          latest?.info.id !== user?.info.id
+        )
+          throw new Error("Chief synthesis generation changed")
+        yield* deps.sessions.setMetadata({
+          sessionID,
+          metadata: { ...current.metadata, [RayaChief.phaseKey]: "verify" },
+        })
+      }),
+    ).pipe(gate.withLock(sessionID))
   })
   return Tool.define<typeof parameters, Metadata, never>(
     "chief_synthesize",
@@ -49,7 +85,7 @@ export function chiefSynthesizeTool(deps: {
               summary: input.summary,
               findings: input.findings.map((item) => ({ branchID: item.branch_id, conclusion: item.conclusion })),
             })
-            yield* finish(ctx.sessionID)
+            yield* finish(ctx)
             return {
               title: "Chief branch synthesis saved",
               output: JSON.stringify({ summary: saved.summary, findings: saved.findings }, null, 2),
@@ -67,7 +103,7 @@ export function chiefSynthesizeTool(deps: {
             summary: input.summary,
             findings: input.findings.map((item) => ({ branchID: item.branch_id, conclusion: item.conclusion })),
           })
-          yield* finish(ctx.sessionID)
+          yield* finish(ctx)
           return {
             title: "Chief branch synthesis saved",
             output: JSON.stringify({ summary: saved.summary, findings: saved.findings }, null, 2),

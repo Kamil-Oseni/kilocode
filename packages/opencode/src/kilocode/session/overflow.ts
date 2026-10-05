@@ -22,10 +22,20 @@ function continued(messages: ModelMessage[]) {
 }
 
 export namespace KiloSessionOverflow {
+  export const OUTPUT_MIN = 1024
   export class PreflightError extends Error {
     constructor() {
       super("Outgoing context reached the automatic compaction threshold")
       this.name = "PreflightCompactionError"
+    }
+  }
+
+  export class FixedContextError extends Error {
+    constructor(input: { context: number; required: number; output?: number }) {
+      super(
+        `The fixed system prompt and tool schemas require an estimated ${input.required} input tokens plus ${input.output ?? 0} output tokens, exceeding the model's ${input.context}-token context. Increase the configured model context or reduce the fixed prompt and tool catalog; compacting conversation history cannot resolve this limit.`,
+      )
+      this.name = "ModelContextTooSmallError"
     }
   }
 
@@ -98,15 +108,25 @@ export namespace KiloSessionOverflow {
     messages: ModelMessage[]
     tools: Payload["tools"]
     reported?: number
+    output?: number
   }) {
     const usage = measure(input)
     const tokens = Math.max(usage.normalized, input.reported ?? 0)
     const hard = input.model.limit.input || input.model.limit.context
+    const output = input.model.limit.input ? 0 : Math.min(input.output ?? 0, OUTPUT_MIN)
+    const fixed =
+      hard > 0 && tokens + output >= hard
+        ? measure({ messages: input.messages.filter((message) => message.role === "system"), tools: input.tools })
+            .normalized
+        : 0
     return {
       usage,
       tokens,
+      fixed,
+      output,
+      irreducible: hard > 0 && fixed + output >= hard,
       compact:
-        (hard > 0 && tokens >= hard) ||
+        (hard > 0 && tokens + output >= hard) ||
         shouldCompact({
           cfg: input.cfg,
           model: input.model,
@@ -131,5 +151,16 @@ export namespace KiloSessionOverflow {
     if (stats.continuation) return false
     if (!enabled(input)) return false
     return tokens >= limit(input)
+  }
+
+  export function error(input: ReturnType<typeof preflight>, model: Provider.Model) {
+    if (input.irreducible) {
+      return new FixedContextError({
+        context: model.limit.input || model.limit.context,
+        required: input.fixed,
+        output: input.output,
+      })
+    }
+    return new PreflightError()
   }
 }

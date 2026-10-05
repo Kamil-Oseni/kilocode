@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import type { AppServices } from "@/effect/app-runtime"
 import type { InstanceStore } from "@/project/instance-store"
 import { Instance } from "@/kilocode/instance" // kilocode_change
+import { retireCommand } from "@/kilocode/cli/command-retirement" // kilocode_change
 import { cmd, type WithDoubleDash } from "./cmd/cmd"
 
 /**
@@ -95,7 +96,7 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
         )
         // kilocode_change end
       } finally {
-        await AppRuntime.runPromise(store.dispose(ctx))
+        await retireCommand(() => AppRuntime.runPromise(store.dispose(ctx))) // kilocode_change - join callbacks before cancelling their owning instance scopes
       }
     },
   })

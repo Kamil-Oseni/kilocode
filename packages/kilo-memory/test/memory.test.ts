@@ -129,7 +129,7 @@ describe("memory facade", () => {
       const target = path.join(t.dir, "target")
       const link = path.join(t.dir, "link")
       await Memory.enable({ root: target })
-      await symlink(target, link)
+      await symlink(target, link, process.platform === "win32" ? "junction" : "dir")
 
       await expect(Memory.enable({ root: link })).rejects.toThrow("memory path rejects symlink")
     } finally {

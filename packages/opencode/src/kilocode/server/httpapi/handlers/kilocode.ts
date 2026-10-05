@@ -2,6 +2,7 @@ import { Cause, Effect, Result, Schema } from "effect"
 import { composerHandlers } from "./composer-drafts"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { Database } from "@opencode-ai/core/database/database"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import * as KiloAgent from "@/kilocode/agent"
 import { CommandFiles } from "@/kilocode/command-files"
@@ -24,7 +25,12 @@ import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
-import { InvalidRequestError, UnknownError } from "@/server/routes/instance/httpapi/errors"
+import {
+  ConflictError,
+  InvalidRequestError,
+  ServiceUnavailableError,
+  UnknownError,
+} from "@/server/routes/instance/httpapi/errors"
 import { Skill } from "@/skill"
 import { BackgroundJob } from "@/background/job"
 import { SessionRunState } from "@/session/run-state"
@@ -37,6 +43,8 @@ import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal ope
 import { RayaTask } from "@/kilocode/task"
 import { MissingRoster } from "@/kilocode/task/roster"
 import { hold } from "@/kilocode/task/hold"
+import { Global } from "@opencode-ai/core/global"
+import { destinationReview, Approval as RestoreApproval } from "@/kilocode/migration/destination-review"
 import { propose, validate } from "@/kilocode/task/assignment-proposal"
 import { RayaTaskAuthority } from "@/kilocode/task/authority"
 import { MCP } from "@/mcp"
@@ -137,7 +145,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const mcp = yield* MCP.Service
     const goals = RayaGoal.make({ storage, sessions, background }) // raya_change - Chief completion sees live child jobs
     const database = yield* Database.Service
-    const drafts = composerHandlers(storage, sessions, database)
+    const drafts = composerHandlers(storage, sessions, database, yield* ProjectV2.Service)
     const pty = yield* PtyArchive.Service
     const runner = RayaTaskRunner.make({
       storage,
@@ -147,6 +155,8 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       halt: (sessionID) => runState.cancel(sessionID),
     })
     const inbox = RayaTaskInbox.make(database)
+    const global = yield* Global.Service
+    const restore = destinationReview({ storage, data: global.data, workers: () => runner.tasks.list() })
     const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
     const info = RayaTaskInfo.make(database)
     const errands = RayaTaskDelegation.make(database)
@@ -585,7 +595,14 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         (prior.status === "paused" ||
           prior.status === "blocked" ||
           ctx.payload.objective !== undefined ||
-          ctx.payload.criteria !== undefined)
+          ctx.payload.criteria !== undefined) &&
+        (prior.status === "paused" ||
+          prior.status === "blocked" ||
+          (yield* sessions
+            .messages({ sessionID: ctx.params.sessionID })
+            .pipe(Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))).some(
+            (item) => item.info.role === "user",
+          ))
       ) {
         // Steer persists immediately. Resume only when idle so we do not collide
         // with the current model turn (that collision aborted task JSON).
@@ -604,24 +621,37 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       return goal
     })
 
+    const stopGoal = (sessionID: SessionID, intent: string) =>
+      runner
+        .stopGoal((tasks) =>
+          goals.stop(sessionID, intent, runState, background, workers, {
+            prepare: (sessionID) =>
+              tasks
+                .prepare(sessionID)
+                .pipe(Effect.mapError((err) => new RayaGoal.AuditError({ conflict: true, message: err.message }))),
+            finish: (sessionID, pin, finished) =>
+              tasks
+                .finish(sessionID, pin, finished)
+                .pipe(Effect.mapError((err) => new RayaGoal.AuditError({ conflict: true, message: err.message }))),
+          }),
+        )
+        .pipe(
+          Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.Conflict({}))),
+          Effect.catchTag("RayaTask.GuardError", () => Effect.fail(new HttpApiError.Conflict({}))),
+        )
+
     const goalClear = Effect.fn("KilocodeHttpApi.goalClear")(function* (ctx: {
       params: { sessionID: SessionID }
       query: { expectedIntent?: string }
     }) {
-      yield* (
-        ctx.query.expectedIntent === undefined
-          ? goals.clear(ctx.params.sessionID)
-          : goals
-              .stop(ctx.params.sessionID, ctx.query.expectedIntent, runState, background, workers)
-              .pipe(Effect.asVoid)
-      ).pipe(Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.Conflict({}))))
+      yield* ctx.query.expectedIntent === undefined
+        ? goals.clear(ctx.params.sessionID)
+        : stopGoal(ctx.params.sessionID, ctx.query.expectedIntent).pipe(Effect.asVoid)
       return true
     })
 
     const goalStop = (ctx: { params: { sessionID: SessionID }; payload: { expectedIntent: string } }) =>
-      goals
-        .stop(ctx.params.sessionID, ctx.payload.expectedIntent, runState, background, workers)
-        .pipe(Effect.catchTag("RayaGoal.AuditError", () => Effect.fail(new HttpApiError.Conflict({}))))
+      stopGoal(ctx.params.sessionID, ctx.payload.expectedIntent)
 
     const goalStopResult = Effect.fn("KilocodeHttpApi.goalStopResult")(function* (ctx: {
       params: { sessionID: SessionID }
@@ -682,6 +712,13 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         ),
       )
     })
+    const reviewError = (err: RayaTask.GuardError) =>
+      err.kind === "conflict"
+        ? new ConflictError({ message: err.message, resource: "restore-review" })
+        : new ServiceUnavailableError({ message: err.message, service: "restore-review" })
+    const profileRestoreReview = () => restore.summary().pipe(Effect.mapError(reviewError))
+    const profileRestoreApprove = (ctx: { payload: typeof RestoreApproval.Type }) =>
+      restore.approve(ctx.payload).pipe(Effect.mapError(reviewError))
     const agentList = Effect.fn("KilocodeHttpApi.agentList")(function* () {
       return yield* roster(runner.preview(Date.now()))
     })
@@ -952,14 +989,17 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           ),
         )
       const admitted = yield* inbox
-        .admit({
-          agentID: ctx.params.agentID,
-          source: ctx.payload.source,
-          kind: "user",
-          body: ctx.payload.body,
-          attachments: ctx.payload.attachments,
-          attachmentIDs: ctx.payload.attachmentIDs,
-        }, ctx.payload)
+        .admit(
+          {
+            agentID: ctx.params.agentID,
+            source: ctx.payload.source,
+            kind: "user",
+            body: ctx.payload.body,
+            attachments: ctx.payload.attachments,
+            attachmentIDs: ctx.payload.attachmentIDs,
+          },
+          ctx.payload,
+        )
         .pipe(
           Effect.catchTag("RayaTaskInbox.Invalid", (err) =>
             Effect.fail(new InvalidRequestError({ message: err.message })),
@@ -1256,6 +1296,8 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("checkpointJump", checkpointJump)
         .handle("checkpointRemove", checkpointRemove)
         .handle("agentForecast", agentForecast)
+        .handle("profileRestoreReview", profileRestoreReview)
+        .handle("profileRestoreApprove", profileRestoreApprove)
         .handle("agentList", agentList)
         .handle("agentAuthorityServices", agentAuthorityServices)
         .handle("agentArchive", (ctx) =>

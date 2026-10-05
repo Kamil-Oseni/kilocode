@@ -5,6 +5,11 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Session } from "@/session/session"
+import { InstanceStore } from "@/project/instance-store"
+import { InstanceBootstrap } from "@/project/bootstrap-service"
 import { Bus } from "@/bus"
 import { Git } from "@/git"
 import { GlobalBus } from "@/bus/global"
@@ -156,9 +161,26 @@ it.instance("a restarted Routine lifecycle drains retained and newly due Raya Me
   }),
 )
 
-it.instance("a Routine permission decision leaves one attributable inbox receipt", () =>
+testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Bus.node,
+      Database.node,
+      Session.node,
+      SessionProjector.node,
+      Storage.node,
+      CrossSpawnSpawner.node,
+      InstanceStore.node,
+    ]),
+    [
+      [
+        InstanceStore.bootstrapNode,
+        Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+      ],
+    ],
+  ),
+).instance("a Routine permission decision leaves one attributable inbox receipt", () =>
   Effect.gen(function* () {
-    const root = yield* tmpdirScoped()
     const bus = yield* Bus.Service
     yield* Effect.gen(function* () {
       const storage = yield* Storage.Service
@@ -171,7 +193,14 @@ it.instance("a Routine permission decision leaves one attributable inbox receipt
         schedule: { kind: "manual" },
         access: "full",
       })
-      const sid = SessionID.make("ses_authority_receipt")
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Authority receipt",
+        metadata: {
+          rayaRoutine: { version: 1, agentID: agent.id, runID: "run_authority_receipt", scheduleVersion: 1 },
+        },
+      })
+      const sid = session.id
       yield* tasks.record({
         id: "run_authority_receipt",
         agentID: agent.id,
@@ -186,12 +215,7 @@ it.instance("a Routine permission decision leaves one attributable inbox receipt
             bus,
             database,
             storage,
-            sessions: {
-              create: () => Effect.die("unexpected session creation"),
-              get: () => Effect.die("unexpected session read"),
-              messages: () => Effect.succeed([]),
-              children: () => Effect.succeed([]),
-            },
+            sessions,
           })
           GlobalBus.emit("event", {
             payload: {
@@ -241,14 +265,7 @@ it.instance("a Routine permission decision leaves one attributable inbox receipt
           expect((yield* inbox.page(agent.id)).messages.filter((message) => message.kind === "system")).toHaveLength(1)
         }),
       )
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          Storage.layerFromDir(path.join(root, "storage")),
-          Database.layerFromPath(path.join(root, "routines.sqlite")),
-        ),
-      ),
-    )
+    })
   }),
 )
 

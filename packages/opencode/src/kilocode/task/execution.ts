@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { Context, Effect, Exit, Schema } from "effect"
+import { Context, Deferred, Effect, Exit, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { GlobalBus } from "@/bus/global"
@@ -40,6 +40,7 @@ const Current = Context.Reference<Capability | undefined>("@raya/RoutineExecutio
 const active = new Set<string>()
 const busy = new Set<string>()
 const closing = new Set<string>()
+const joining = new Map<string, Deferred.Deferred<void>>()
 const recovering = new Set<string>()
 const hash = (id: string) => createHash("sha256").update(id).digest("hex")
 const key = (id: string) => ["raya", "agent-executions", hash(id)]
@@ -182,7 +183,18 @@ export namespace RayaTaskExecution {
             return yield* new RayaTask.GuardError({
               message: "This routine's execution ownership changed before release.",
             })
-          yield* storage.remove(key(current.runID)).pipe(Effect.orDie)
+          yield* storage.remove(key(current.runID)).pipe(
+            Effect.mapError((err) =>
+              Object.assign(
+                new RayaTask.GuardError({
+                  kind: "unavailable",
+                  message:
+                    "This routine's execution receipt could not be removed. Retry after the file becomes available.",
+                }),
+                { cause: err },
+              ),
+            ),
+          )
         }),
         "Routine execution release",
       )
@@ -205,6 +217,8 @@ export namespace RayaTaskExecution {
       Effect.gen(function* () {
         if (!active.has(permit.record.token) || busy.has(permit.record.token))
           return yield* new RayaTask.GuardError({ message: "This routine's continuing execution is already active." })
+        const joined = Deferred.makeUnsafe<void>()
+        joining.set(permit.record.token, joined)
         busy.add(permit.record.token)
         const work = Effect.withFiber((fiber) =>
           Effect.provideService(body, Current, {
@@ -218,7 +232,12 @@ export namespace RayaTaskExecution {
         return yield* mark(permit, "active").pipe(
           Effect.andThen(heartbeat(permit)),
           Effect.andThen(
-            Effect.raceFirst(work, Effect.forever(Effect.sleep("30 seconds").pipe(Effect.andThen(heartbeat(permit))))),
+            // A protected recovery tick must still cancel its actual model wait;
+            // ownership publication and the onExit bookkeeping remain protected.
+            Effect.raceFirst(
+              work,
+              Effect.forever(Effect.sleep("30 seconds").pipe(Effect.andThen(heartbeat(permit)))),
+            ).pipe(Effect.interruptible),
           ),
           Effect.onExit((exit) =>
             Effect.gen(function* () {
@@ -228,7 +247,10 @@ export namespace RayaTaskExecution {
                 return
               }
               yield* mark(permit, "idle")
+              // Finish must see an idle body or leave a close request consumed by this same handoff.
+              busy.delete(permit.record.token)
               if (!closing.delete(permit.record.token)) return
+              active.delete(permit.record.token)
               yield* release(permit).pipe(
                 Effect.onExit(() =>
                   Effect.sync(() => {
@@ -245,8 +267,11 @@ export namespace RayaTaskExecution {
               ),
               Effect.onExit((settled) =>
                 Effect.gen(function* () {
-                  busy.delete(permit.record.token)
-                  if (!Exit.isSuccess(exit) || !Exit.isSuccess(settled) || !active.has(permit.record.token)) return
+                  if (!Exit.isSuccess(exit) || !Exit.isSuccess(settled)) {
+                    busy.delete(permit.record.token)
+                    return
+                  }
+                  if (!active.has(permit.record.token) || busy.has(permit.record.token)) return
                   yield* Effect.try({
                     try: () =>
                       GlobalBus.emit("event", {
@@ -272,6 +297,12 @@ export namespace RayaTaskExecution {
                 }),
               ),
             ),
+          ),
+          Effect.ensuring(
+            Effect.gen(function* () {
+              if (joining.get(permit.record.token) === joined) joining.delete(permit.record.token)
+              yield* Deferred.succeed(joined, undefined)
+            }),
           ),
         )
       })
@@ -323,17 +354,46 @@ export namespace RayaTaskExecution {
           message: "This routine's execution identity changed before completion.",
         })
       const found = durable()
-      if (!found.birth || !same(current.owner, { ...found, birth: found.birth }) || !active.has(current.token)) return
+      if (!found.birth || !same(current.owner, { ...found, birth: found.birth })) return
+      const joined = joining.get(current.token)
+      const settled = Effect.gen(function* () {
+        if (!joined) return
+        yield* Deferred.await(joined)
+        if ((yield* load(current.runID))?.token === current.token)
+          yield* new RayaTask.GuardError({
+            message: "This routine's execution retirement needs recovery review.",
+          })
+      })
+      if (!active.has(current.token)) {
+        if (current.state !== "idle") return
+        if (joined) {
+          yield* settled
+          return
+        }
+        // A failed local removal leaves completed idle evidence but no admission.
+        // Retry only this exact generation once its prior finalizer has settled.
+        if (busy.has(current.token)) return
+      }
       if (busy.has(current.token)) {
         closing.add(current.token)
+        if (current.state === "idle") yield* settled
         return
       }
+      const retired = Deferred.makeUnsafe<void>()
+      joining.set(current.token, retired)
+      active.delete(current.token)
       yield* release({ record: current }).pipe(
         Effect.onExit(() =>
           Effect.sync(() => {
             active.delete(current.token)
             busy.delete(current.token)
             closing.delete(current.token)
+          }),
+        ),
+        Effect.ensuring(
+          Effect.gen(function* () {
+            if (joining.get(current.token) === retired) joining.delete(current.token)
+            yield* Deferred.succeed(retired, undefined)
           }),
         ),
       )
@@ -458,7 +518,18 @@ export namespace RayaTaskExecution {
             return yield* new RayaTask.GuardError({
               message: "This routine's recovery review changed before it was saved.",
             })
-          yield* storage.remove(key(run.id)).pipe(Effect.orDie)
+          yield* storage.remove(key(run.id)).pipe(
+            Effect.mapError((err) =>
+              Object.assign(
+                new RayaTask.GuardError({
+                  kind: "unavailable",
+                  message:
+                    "This routine's execution receipt could not be removed. Retry after the file becomes available.",
+                }),
+                { cause: err },
+              ),
+            ),
+          )
           active.delete(token)
           closing.delete(token)
         }),

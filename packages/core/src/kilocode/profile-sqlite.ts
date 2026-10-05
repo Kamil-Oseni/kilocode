@@ -1,5 +1,5 @@
-import path from "node:path"
-import { acquireProfileRoot, admitProfileOperation } from "./profile-maintenance"
+import { acquireProfileRoot, admitProfileOperation, registerProfileNative } from "./profile-maintenance"
+import { canonical } from "./database-filename"
 
 const closers = new WeakMap<object, () => Promise<void>>()
 function cursor(value: unknown): value is Iterator<unknown, unknown, unknown> {
@@ -17,9 +17,9 @@ export function closeProfileSqlite(native: object) {
 }
 
 /** Fence actual native execution, including raw Drizzle clients and SQL transaction statements. */
-export function profileSqlite<T extends object>(filename: string, open: () => T): T {
+export function profileSqlite<T extends object>(filename: string, open: (file: string) => T): T {
   if (filename === ":memory:") {
-    const native = open()
+    const native = open(filename)
     closers.set(native, async () => {
       const close: unknown = Reflect.get(native, "close")
       if (typeof close !== "function") throw new Error("SQLite client has no close method")
@@ -27,11 +27,20 @@ export function profileSqlite<T extends object>(filename: string, open: () => T)
     })
     return native
   }
-  const root = { kind: "sqlite" as const, path: path.resolve(filename) }
+  const root = { kind: "sqlite" as const, path: canonical(filename) }
   const opening = admitProfileOperation(root)
+  const owner = (() => {
+    try {
+      return registerProfileNative(root)
+    } catch (err) {
+      opening.release()
+      throw err
+    }
+  })()
   const native = (() => {
     try {
-      return open()
+      // If an opaque factory throws, native absence is unproven; retain its lifetime marker.
+      return open(root.path)
     } finally {
       opening.release()
     }
@@ -151,16 +160,20 @@ export function profileSqlite<T extends object>(filename: string, open: () => T)
           return result
         }
       if (key === "close" || key === Symbol.dispose)
-        return (...args: unknown[]) =>
-          run(() => {
+        return (...args: unknown[]) => {
+          if (closed) return owner.release()
+          return run(() => {
             const result = Reflect.apply(value, target, args)
             closed = true
+            owner.release()
             return result
           })
+        }
       return (...args: unknown[]) => run(() => Reflect.apply(value, target, args))
     },
   })
   closers.set(proxy, async () => {
+    if (closed) return owner.release()
     if (!lease) {
       const held = await acquireProfileRoot(root)
       lease = { release: held.finish }

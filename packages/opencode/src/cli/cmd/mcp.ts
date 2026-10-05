@@ -17,7 +17,6 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
-import { modify, applyEdits } from "jsonc-parser"
 // kilocode_change - KilocodeMcpConfig is dynamically imported in addMcpToConfig to keep startup fast
 import { Filesystem } from "@/util/filesystem"
 import { Effect } from "effect"
@@ -426,25 +425,12 @@ async function resolveConfigPath(baseDir: string, global = false) {
   // kilocode_change end
 }
 
-async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
-  let text = "{}"
-  if (await Filesystem.exists(configPath)) {
-    text = await Filesystem.readText(configPath)
-  }
-
-  // Use jsonc-parser to modify while preserving comments
-  const edits = modify(text, ["mcp", name], mcpConfig, {
-    formattingOptions: { tabSize: 2, insertSpaces: true },
-  })
-  // kilocode_change start - lazy import keeps the CLI startup graph light
+// kilocode_change start - one canonical transaction shared by every configuration writer
+async function addMcpToConfig(name: string, config: ConfigMCPV1.Info, file: string, base: string, global: boolean) {
   const { KilocodeMcpConfig } = await import("@/kilocode/cli/cmd/mcp")
-  const result = KilocodeMcpConfig.format(configPath, applyEdits(text, edits))
-  // kilocode_change end
-
-  await Filesystem.write(configPath, result)
-
-  return configPath
+  return KilocodeMcpConfig.add(file, name, config, base, global)
 }
+// kilocode_change end
 
 export const McpAddCommand = effectCmd({
   command: "add [name]",
@@ -516,7 +502,7 @@ export const McpAddCommand = effectCmd({
             }
 
         const configPath = await resolveConfigPath(global, true) // kilocode_change
-        await addMcpToConfig(args.name, mcpConfig, configPath)
+        await addMcpToConfig(args.name, mcpConfig, configPath, global, true) // kilocode_change
         prompts.log.success(`MCP server "${args.name}" added to ${configPath}`)
         return
       }
@@ -590,7 +576,13 @@ export const McpAddCommand = effectCmd({
           command: command.split(" "),
         }
 
-        await addMcpToConfig(name, mcpConfig, configPath)
+        await addMcpToConfig(
+          name,
+          mcpConfig,
+          configPath,
+          configPath === globalConfigPath ? global : ctx.worktree,
+          configPath === globalConfigPath,
+        ) // kilocode_change
         prompts.log.success(`MCP server "${name}" added to ${configPath}`)
         prompts.outro("MCP server added successfully")
         return
@@ -668,7 +660,13 @@ export const McpAddCommand = effectCmd({
           }
         }
 
-        await addMcpToConfig(name, mcpConfig, configPath)
+        await addMcpToConfig(
+          name,
+          mcpConfig,
+          configPath,
+          configPath === globalConfigPath ? global : ctx.worktree,
+          configPath === globalConfigPath,
+        ) // kilocode_change
         prompts.log.success(`MCP server "${name}" added to ${configPath}`)
       }
 

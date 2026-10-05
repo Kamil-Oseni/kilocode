@@ -43,6 +43,7 @@ import { createCommandShim } from "@opencode-ai/tui/plugin/command-shim"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect } from "effect"
 import { createPluginRuntime, type PluginRuntime, type TuiPluginHost } from "@opencode-ai/tui/plugin/runtime"
+import { cleanup, generation } from "@/kilocode/plugin-retirement" // kilocode_change
 
 ensureRuntimePluginSupport({ additional: keymapRuntimeModules })
 
@@ -108,6 +109,7 @@ const ScopedKeymapMethods = new Set<PropertyKey>([
 ])
 
 type RuntimeState = {
+  owner: ReturnType<typeof generation> // kilocode_change - preserve the admission of this exact host generation
   directory: string
   api: Api
   view: PluginRuntime
@@ -201,29 +203,7 @@ function createScopedMode(mode: TuiPluginApi["mode"], scope: PluginScope): TuiPl
   }
 }
 
-type CleanupResult = { type: "ok" } | { type: "error"; error: unknown } | { type: "timeout" }
-
-function runCleanup(fn: () => unknown, ms: number): Promise<CleanupResult> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      resolve({ type: "timeout" })
-    }, ms)
-
-    Promise.resolve()
-      .then(fn)
-      .then(
-        () => {
-          resolve({ type: "ok" })
-        },
-        (error) => {
-          resolve({ type: "error", error })
-        },
-      )
-      .finally(() => {
-        clearTimeout(timer)
-      })
-  })
-}
+// kilocode_change - cleanup deadlines are observed by the joined Kilo-owned retirement helper
 
 function isTheme(value: unknown) {
   if (!isRecord(value)) return false
@@ -394,7 +374,7 @@ function createPluginScope(load: PluginLoad, id: string, disposeTimeoutMs: numbe
   let done = false
 
   const onDispose = (fn: TuiDispose) => {
-    if (done) return () => {}
+    if (done) throw new Error("TUI plugin cleanup registration is closed") // kilocode_change
     const key = Symbol()
     list.push({ key, fn })
     let drop = false
@@ -424,44 +404,19 @@ function createPluginScope(load: PluginLoad, id: string, disposeTimeoutMs: numbe
     onDispose,
   }
 
-  const dispose = async () => {
-    if (done) return
-    done = true
-    ctrl.abort()
-    const queue = [...list].reverse()
-    list = []
-    const until = Date.now() + disposeTimeoutMs
-    for (const item of queue) {
-      const left = until - Date.now()
-      if (left <= 0) {
-        fail("timed out cleaning up tui plugin", {
-          path: load.spec,
-          id,
-          timeout: disposeTimeoutMs,
-        })
-        break
-      }
-
-      const out = await runCleanup(item.fn, left)
-      if (out.type === "ok") continue
-      if (out.type === "timeout") {
-        fail("timed out cleaning up tui plugin", {
-          path: load.spec,
-          id,
-          timeout: disposeTimeoutMs,
-        })
-        break
-      }
-
-      if (out.type === "error") {
-        fail("failed to clean up tui plugin", {
-          path: load.spec,
-          id,
-          error: out.error,
-        })
-      }
-    }
-  }
+  // kilocode_change start - cache refusal and join the actual callbacks even after their deadline
+  const dispose = cleanup(
+    () => {
+      done = true
+      ctrl.abort()
+      const queue = [...list].reverse().map((item) => item.fn)
+      list = []
+      return queue
+    },
+    disposeTimeoutMs,
+    (error) => fail("failed to clean up tui plugin", { path: load.spec, id, error }),
+  )
+  // kilocode_change end
 
   return {
     lifecycle,
@@ -525,6 +480,7 @@ async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, per
   }
 
   const scope = createPluginScope(plugin.load, plugin.id, state.dispose_timeout_ms)
+  state.owner.own(scope.dispose) // kilocode_change - retain pending and failed scopes before activation publishes them
   const api = pluginApi(state, plugin, scope, plugin.id)
   const ok = await Promise.resolve()
     .then(async () => {
@@ -533,6 +489,7 @@ async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, per
       return true
     })
     .catch((error) => {
+      state.owner.fail(error) // kilocode_change - an accepted initializer's raw failure survives rollback
       fail("failed to initialize tui plugin", {
         path: plugin.load.spec,
         id: plugin.id,
@@ -562,14 +519,14 @@ async function activatePluginById(state: RuntimeState | undefined, id: string, p
   if (!state) return false
   const plugin = state.plugins_by_id.get(id)
   if (!plugin) return false
-  return activatePluginEntry(state, plugin, persist)
+  return state.owner.run(() => activatePluginEntry(state, plugin, persist)) // kilocode_change
 }
 
 async function deactivatePluginById(state: RuntimeState | undefined, id: string, persist: boolean) {
   if (!state) return false
   const plugin = state.plugins_by_id.get(id)
   if (!plugin) return false
-  return deactivatePluginEntry(state, plugin, persist)
+  return state.owner.run(() => deactivatePluginEntry(state, plugin, persist)) // kilocode_change
 }
 
 function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScope, base: string): TuiPluginApi {
@@ -643,10 +600,10 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
         return deactivatePluginById(runtime, id, true)
       },
       add(spec) {
-        return addPluginBySpec(runtime, spec)
+        return runtime.owner.run(() => addPluginBySpec(runtime, spec)) // kilocode_change
       },
       install(spec, options) {
-        return installPluginBySpec(runtime, spec, options?.global)
+        return runtime.owner.run(() => installPluginBySpec(runtime, spec, options?.global)) // kilocode_change
       },
     },
     lifecycle: scope.lifecycle,
@@ -987,6 +944,10 @@ async function installPluginBySpec(
 let dir = ""
 let loaded: Promise<void> | undefined
 let runtime: RuntimeState | undefined
+// kilocode_change start - a failed generation remains terminal; explicit fresh initialization follows successful retirement
+let owner = generation()
+let retired = false
+// kilocode_change end
 
 export async function init(input: {
   api: HostPluginApi
@@ -995,6 +956,13 @@ export async function init(input: {
   dispose?: () => void
   disposeTimeoutMs?: number
 }) {
+  // kilocode_change start
+  if (retired) {
+    owner = generation()
+    retired = false
+  }
+  owner.check()
+  // kilocode_change end
   const cwd = process.cwd()
   if (loaded) {
     if (dir !== cwd) {
@@ -1004,7 +972,7 @@ export async function init(input: {
   }
 
   dir = cwd
-  loaded = load({ ...input, runtime: input.runtime ?? createPluginRuntime() })
+  loaded = owner.run(() => load({ ...input, runtime: input.runtime ?? createPluginRuntime() })) // kilocode_change
   return loaded
 }
 
@@ -1022,34 +990,39 @@ export async function deactivatePlugin(id: string) {
 }
 
 export async function addPlugin(spec: string) {
-  return addPluginBySpec(runtime, spec)
+  return owner.run(() => addPluginBySpec(runtime, spec)) // kilocode_change
 }
 
 export async function installPlugin(spec: string, options?: { global?: boolean }) {
-  return installPluginBySpec(runtime, spec, options?.global)
+  return owner.run(() => installPluginBySpec(runtime, spec, options?.global)) // kilocode_change
 }
 
-export async function dispose() {
-  const task = loaded
-  loaded = undefined
-  dir = ""
-  if (task) await task.catch((error) => fail("failed to finish loading tui plugins during disposal", { error }))
-  const state = runtime
-  runtime = undefined
-  if (!state) return
-  const queue = [...state.plugins].reverse()
-  for (const plugin of queue) {
-    await deactivatePluginEntry(state, plugin, false).catch((error) =>
-      fail("failed to dispose tui plugin", { id: plugin.id, error }),
-    )
-  }
-  try {
-    state.dispose?.()
-  } finally {
-    state.slots.dispose()
-    state.view.clear()
-  }
+// kilocode_change start - fence intake, join accepted activation and retain all scoped/host cleanup failures
+export function dispose(): Promise<void> {
+  const active = owner
+  const closing = active.drain(() => {
+    const state = runtime
+    if (!state) return []
+    return [
+      ...[...state.plugins].reverse().map((plugin) => () => deactivatePluginEntry(state, plugin, false)),
+      () => state.dispose?.(),
+      () => state.slots.dispose(),
+      () => state.view.clear(),
+    ]
+  })
+  void closing.then(
+    () => {
+      if (owner !== active) return
+      loaded = undefined
+      dir = ""
+      runtime = undefined
+      retired = true
+    },
+    (error) => fail("failed to dispose tui plugins", { error }),
+  )
+  return closing
 }
+// kilocode_change end
 
 async function load(input: {
   api: Api
@@ -1062,6 +1035,7 @@ async function load(input: {
   const cwd = process.cwd()
   const slots = input.runtime.setupSlots(api)
   const next: RuntimeState = {
+    owner, // kilocode_change
     directory: cwd,
     api,
     view: input.runtime,
@@ -1120,6 +1094,7 @@ async function load(input: {
     }
     next.view.update({ status: listPluginStatus(next) })
   } catch (error) {
+    next.owner.fail(error) // kilocode_change - retain accepted load failures before recovery logging
     fail("failed to load tui plugins", { directory: cwd, error })
   }
 }

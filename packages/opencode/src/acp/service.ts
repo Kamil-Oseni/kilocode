@@ -33,6 +33,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import type { AssistantMessage, Message, KiloClient, SessionMessageResponse } from "@kilocode/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
+import { runtimeOwner } from "@/kilocode/runtime-owner" // kilocode_change
 import * as ACPError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
 import { promptContentToParts } from "./content"
@@ -572,13 +573,14 @@ export function make(input: {
 }
 
 function makeSessionService() {
-  return ManagedRuntime.make(AppNodeBuilder.build(ACPSession.node)).runSync(
+  const create = () => ManagedRuntime.make(AppNodeBuilder.build(ACPSession.node)) // kilocode_change
+  return runtimeOwner(create).get().runSync( // kilocode_change
     ACPSession.Service.use((service) => Effect.succeed(service)),
   )
 }
 
 function makeDirectoryService(sdk: KiloClient) {
-  return ManagedRuntime.make(
+  const create = () => ManagedRuntime.make( // kilocode_change
     AppNodeBuilder.build(Directory.node, [
       [
         Directory.loaderNode,
@@ -590,7 +592,8 @@ function makeDirectoryService(sdk: KiloClient) {
         ),
       ],
     ]),
-  ).runSync(Directory.Service.use((service) => Effect.succeed(service)))
+  ) // kilocode_change
+  return runtimeOwner(create).get().runSync(Directory.Service.use((service) => Effect.succeed(service))) // kilocode_change
 }
 
 function makeUsageService(sdk: KiloClient) {

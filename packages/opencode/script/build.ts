@@ -338,7 +338,7 @@ for (const item of targets) {
     },
     // kilocode_change start - packages/app was removed; no embedded web UI
     files: { [treeSitterWorkerPath]: treeSitterWorker },
-    entrypoints: ["./src/index.ts", workerPath, treeSitterWorkerPath, sessionExportWorkerPath, indexingWorkerPath],
+    entrypoints: ["./src/kilocode/cli/entry.ts", workerPath, treeSitterWorkerPath, sessionExportWorkerPath, indexingWorkerPath],
     // kilocode_change end
     define: {
       FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),

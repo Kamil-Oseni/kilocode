@@ -49,7 +49,13 @@ test("a held HTTP follow-up refuses before persisting an inbox message or run", 
       const refused = await app.request(route, {
         method: "POST",
         headers,
-        body: JSON.stringify({ source: `held-follow-up-${restart}`, body: "This must not enter the inbox" }),
+        body: JSON.stringify({
+          owner: before.draftState.owner,
+          conversationID: before.draftState.conversationID,
+          expectedRevision: before.draftState.revision,
+          source: `held-follow-up-${restart}`,
+          body: "This must not enter the inbox",
+        }),
       })
       expect(refused.status).toBe(400)
       expect(await refused.json()).toEqual({

@@ -2,11 +2,14 @@ import type { Argv } from "yargs"
 import * as Log from "@opencode-ai/core/util/log"
 import { InstallationBuildKind, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { KiloShutdown } from "@/kilocode/cli/shutdown"
+import { schedulerQuiesce } from "@/kilocode/task/admission"
+import { lifecycle } from "./lifecycle"
 import { createHelpCommand } from "@/kilocode/help-command"
 import { KiloConsoleCommand } from "@/kilocode/cli/cmd/console"
 import { CloudCommand } from "@/kilocode/cli/cmd/cloud"
 import { RollCallCommand } from "@/kilocode/cli/cmd/roll-call"
 import { ProfileCommand } from "@/kilocode/cli/cmd/profile"
+import { ProfileImportCommand } from "./cmd/profile-import"
 import { DaemonCommand } from "@/kilocode/cli/cmd/daemon"
 import { DevSetupCommand, DevAliasCommand } from "@/kilocode/cli/dev-setup"
 import { RemoteCommand } from "@/cli/cmd/remote"
@@ -47,6 +50,37 @@ KiloShutdown.register(async () => {
 export namespace KiloCli {
   let info = false
   let active = false
+  const cleanup = lifecycle([
+    schedulerQuiesce,
+    async () => {
+      const { Telemetry } = await import("@kilocode/kilo-telemetry")
+      const code = typeof process.exitCode === "number" ? process.exitCode : undefined
+      Telemetry.trackCliExit(code)
+    },
+    async () => {
+      const { Effect } = await import("effect")
+      const { drain } = await import("./producer-retirement")
+      await Effect.runPromise(drain)
+    },
+    async () => {
+      const { SessionExport } = await import("@/kilocode/session-export")
+      await SessionExport.shutdown()
+    },
+    async () => {
+      const { Telemetry } = await import("@kilocode/kilo-telemetry")
+      // An offline telemetry endpoint must not hold local persistence cleanup open.
+      try {
+        await Telemetry.shutdown(2000)
+      } catch (err) {
+        log.warn("telemetry shutdown failed", { err })
+      }
+    },
+    () => KiloShutdown.run(),
+    async () => {
+      const { InstanceRuntime } = await import("@/project/instance-runtime")
+      await InstanceRuntime.disposeAllInstances()
+    },
+  ])
 
   // Register only the Kilo-specific commands. Upstream commands stay in index.ts's chain so
   // upstream merges that add or remove commands keep working without touching this file.
@@ -56,6 +90,7 @@ export namespace KiloCli {
       .command(CloudCommand)
       .command(RollCallCommand)
       .command(ProfileCommand)
+      .command(ProfileImportCommand)
       .command(RemoteCommand)
       .command(DaemonCommand)
       .command(ConfigCLICommand)
@@ -70,6 +105,37 @@ export namespace KiloCli {
   }
 
   export async function runner() {
+    if (process.argv[2] === "profile-import") {
+      const { run } = await import("../migration/profile-import")
+      await run(process.argv.slice(3))
+      return true
+    }
+    if (process.argv[2] === "__profile-source-successor") {
+      try {
+        const { successor } = await import("@/kilocode/migration/source-host")
+        await successor()
+      } catch {
+        process.exitCode = 1
+        process.stderr.write("Raya source handoff failed.\n")
+      } finally {
+        const { finish } = await import("./finish")
+        await finish([])
+      }
+      return true
+    }
+    if (process.argv[2] === "__profile-maintenance") {
+      try {
+        const { maintenance } = await import("@/kilocode/migration/maintenance-entry")
+        await maintenance()
+      } catch {
+        process.exitCode = 1
+        process.stderr.write("Raya maintenance request failed.\n")
+      } finally {
+        const { finish } = await import("./finish")
+        await finish([])
+      }
+      return true
+    }
     if (!process.argv.includes("__background-process-runner")) return false
     return (await import("@/kilocode/background-process/runner")).BackgroundProcessRunner.maybe()
   }
@@ -77,6 +143,7 @@ export namespace KiloCli {
   // Runs from the upstream `.middleware`, before any command handler. Env tagging is additive so
   // it never has to modify upstream's own env assignments.
   export async function bootstrap(opts: { [key: string]: unknown }): Promise<void> {
+    cleanup.check()
     info = opts.help === true || opts.version === true
     active = false
     if (info) return
@@ -141,26 +208,9 @@ export namespace KiloCli {
   }
 
   // Runs from the `finally` block on every exit path.
-  export async function shutdown(): Promise<void> {
-    if (info || !active) return
-    const { Telemetry } = await import("@kilocode/kilo-telemetry")
-    const code = typeof process.exitCode === "number" ? process.exitCode : undefined
-    Telemetry.trackCliExit(code)
-    const { SessionExport } = await import("@/kilocode/session-export")
-    try {
-      await SessionExport.shutdown()
-      // Bound telemetry shutdown so an unreachable endpoint (offline, firewall,
-      // DNS adblock resolving the host to 0.0.0.0) cannot block process exit on
-      // short-lived commands like `kilo --help` / `kilo --version` (#9788).
-      try {
-        await Telemetry.shutdown(2000)
-      } catch (err) {
-        log.warn("telemetry shutdown failed", { err })
-      }
-    } finally {
-      await KiloShutdown.run()
-      const { InstanceRuntime } = await import("@/project/instance-runtime")
-      await InstanceRuntime.disposeAllInstances() // safety net (no-op if already disposed)
-    }
+  export function shutdown(): Promise<void> {
+    if (cleanup.started) return cleanup.run()
+    if (info || !active) return Promise.resolve()
+    return cleanup.run()
   }
 }

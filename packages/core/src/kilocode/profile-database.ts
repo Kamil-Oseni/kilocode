@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto"
-import { existsSync, realpathSync } from "node:fs"
-import path from "node:path"
 import { closeProfileSqlite } from "./profile-sqlite"
+import { canonical } from "./database-filename"
 
 type Phase = "open" | "draining" | "closed" | "refused"
 type Owner = { id: string; root: Root; native?: object; closing?: Promise<void> }
@@ -18,15 +17,21 @@ type Receipt = {
 
 const roots = new Map<string, Root>()
 const owners = new WeakMap<object, Owner>()
+type Terminal = {
+  format: "raya.database-terminal"
+  version: 1
+  roots: { root: string; instances: 0 }[]
+  processLocal: true
+  portableCaptureAuthorized: false
+}
+let terminal: Promise<Terminal> | undefined
+
+function admission() {
+  if (terminal) throw new Error("Core native database admission is terminal")
+}
 
 function root(filename: string): Root {
-  const canonical = (file: string): string => {
-    if (existsSync(file)) return realpathSync(file)
-    const parent = path.dirname(file)
-    if (parent === file) return realpathSync(file)
-    return path.join(canonical(parent), path.basename(file))
-  }
-  const file = filename === ":memory:" ? filename : canonical(path.resolve(filename))
+  const file = canonical(filename)
   const key = process.platform === "win32" ? file.toLowerCase() : file
   const current = roots.get(key)
   if (current) return current
@@ -40,19 +45,22 @@ function check(state: Root) {
 }
 
 /** Fence preflight before it can repair or create files; no profile bootstrap occurs here. */
-export function prepareDatabase<A>(filename: string, body: () => A): A {
-  check(root(filename))
-  return body()
+export function prepareDatabase<A>(filename: string, body: (file: string) => A): A {
+  admission()
+  const state = root(filename)
+  check(state)
+  return body(state.path)
 }
 
 /** Register each native Core service instance before construction, independently of Layer memoization. */
-export function openDatabase<A extends object>(filename: string, body: () => A): A {
+export function openDatabase<A extends object>(filename: string, body: (file: string) => A): A {
+  admission()
   const state = root(filename)
   check(state)
   const owner: Owner = { id: randomUUID(), root: state }
   state.owners.set(owner.id, owner)
   try {
-    const native = body()
+    const native = body(state.path)
     owner.native = native
     owners.set(native, owner)
     return native
@@ -74,6 +82,7 @@ export function closeDatabase(native: object): Promise<void> {
 
 /** The caller must dispose all owning service scopes; this never closes an active transaction for them. */
 export function drainDatabase(filename: string, dispose: () => Promise<void>, timeout = 5_000): Promise<Receipt> {
+  admission()
   if (!Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 60_000)
     return Promise.reject(new Error("Database lifecycle deadline is invalid"))
   const state = root(filename)
@@ -93,7 +102,7 @@ export function drainDatabase(filename: string, dispose: () => Promise<void>, ti
   state.drain = Promise.race([pending, deadline])
     .then((): Receipt => {
       if (state.owners.size) throw new Error("Database service disposal left registered instances")
-      state.phase = "closed"
+      if (!terminal) state.phase = "closed"
       return {
         format: "raya.database-lifecycle",
         version: 1,
@@ -105,7 +114,7 @@ export function drainDatabase(filename: string, dispose: () => Promise<void>, ti
       }
     })
     .catch((err) => {
-      state.phase = "refused"
+      if (!terminal) state.phase = "refused"
       throw err
     })
     .finally(() => clearTimeout(timer.value))
@@ -114,10 +123,53 @@ export function drainDatabase(filename: string, dispose: () => Promise<void>, ti
 
 /** Only a confirmed, fully closed generation can accept new database service instances. */
 export function resumeDatabase(filename: string): void {
+  admission()
   const state = root(filename)
   if (state.phase !== "closed" || state.owners.size) throw new Error("Database lifecycle is not confirmed closed")
   state.drain = undefined
   state.phase = "open"
+}
+
+/** Fence known and future native roots before retiring owners; never resolve or realize another profile. */
+export function drainDatabases(retire: () => Promise<void>): Promise<Terminal> {
+  if (terminal) return terminal
+  const result = Promise.withResolvers<Terminal>()
+  terminal = result.promise
+  const states = [...roots.values()]
+  const failures: unknown[] = []
+  for (const state of states) {
+    if (state.phase === "refused") failures.push(new Error(`Database lifecycle already refused: ${state.path}`))
+    state.phase = "draining"
+  }
+  const pending = (() => {
+    try {
+      return Promise.resolve(retire())
+    } catch (err) {
+      return Promise.reject(err)
+    }
+  })()
+  void Promise.allSettled([pending, ...states.flatMap((state) => (state.drain ? [state.drain] : []))]).then(
+    (results) => {
+      failures.push(...results.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])))
+      for (const state of states) {
+        if (state.owners.size)
+          failures.push(new Error(`Database service disposal left registered instances: ${state.path}`))
+      }
+      for (const state of states) state.phase = failures.length ? "refused" : "closed"
+      if (failures.length) {
+        result.reject(new AggregateError(failures, "Core native database retirement failed"))
+        return
+      }
+      result.resolve({
+        format: "raya.database-terminal",
+        version: 1,
+        roots: states.map((state) => ({ root: state.path, instances: 0 })),
+        processLocal: true,
+        portableCaptureAuthorized: false,
+      })
+    },
+  )
+  return terminal
 }
 
 export function databaseSnapshot(filename: string) {

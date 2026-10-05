@@ -1,4 +1,4 @@
-import { readdir, rm } from "fs/promises"
+import { readdir } from "fs/promises"
 import path from "path"
 import { MemoryFs } from "./fs"
 import { MemoryMarkdown } from "./markdown"
@@ -7,6 +7,7 @@ import { MemorySchema } from "../schema"
 import { MemorySources } from "./sources"
 import { MemoryText } from "../text"
 import { MemoryTopics } from "../recall/topics"
+import { reviewed } from "./review"
 
 export namespace MemoryState {
   const CLEAN_LIMIT = 128
@@ -32,9 +33,9 @@ export namespace MemoryState {
       if (MemoryFs.parse(error)) return recover(root, file)
       throw error
     })
-    if (data === undefined) return MemorySchema.missing()
+    if (data === undefined) return reviewed(root, MemorySchema.missing())
     return Promise.resolve()
-      .then(() => MemorySchema.parse(data))
+      .then(() => reviewed(root, MemorySchema.parse(data)))
       .catch((error: unknown) => {
         if (MemoryFs.parse(error)) return recover(root, file)
         throw error
@@ -42,7 +43,10 @@ export namespace MemoryState {
   }
 
   export async function writeState(root: string, state: MemorySchema.State) {
-    await MemoryFs.write(MemoryPaths.files(root).state, `${JSON.stringify(MemorySchema.persist(state), null, 2)}\n`)
+    await MemoryFs.write(
+      MemoryPaths.files(root).state,
+      `${JSON.stringify(MemorySchema.persist(await reviewed(root, state)), null, 2)}\n`,
+    )
   }
 
   export async function writeManifest(root: string, id?: MemoryPaths.Identity) {
@@ -191,9 +195,12 @@ export namespace MemoryState {
     await MemoryFs.ensure(paths.corrections, seed["corrections.md"])
     await writeManifest(root, id)
     const present = await MemoryFs.exists(paths.state)
-    const state = present
-      ? { ...(await readState(root)), enabled: true, autoInject: true }
-      : { ...MemorySchema.create(), enabled: true }
+    const state = await reviewed(
+      root,
+      present
+        ? { ...(await readState(root)), enabled: true, autoInject: true }
+        : { ...MemorySchema.create(), enabled: true },
+    )
     await writeState(root, state)
     return state
   }
@@ -258,8 +265,11 @@ export namespace MemoryState {
     const info = await MemoryFs.guard(root)
     if (!info) return false
     if (!info.isDirectory()) throw new Error(`memory root is not a directory: ${root}`)
-    if (!(await owned(root))) throw new Error(`refusing to purge unowned memory root: ${root}`)
-    await rm(root, { recursive: true, force: true })
+    if (!(await owned(root))) {
+      if (MemoryFs.hosted() && (await MemoryFs.empty(root))) return false
+      throw new Error(`refusing to purge unowned memory root: ${root}`)
+    }
+    await MemoryFs.erase(root)
     return true
   }
 }

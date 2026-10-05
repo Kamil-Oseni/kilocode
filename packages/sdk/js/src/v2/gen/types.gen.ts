@@ -95,12 +95,13 @@ export type Event =
   | EventServerConnected1
   | EventGlobalDisposed1
   | EventGlobalConfigUpdated1
-  | EventServerInstanceDisposed
   | EventSessionTurnOpen
   | EventSessionTurnClose
   | EventSessionQueueChanged
-  | EventRayaRoutineRunChanged1
   | EventRayaRoutineExecutionIdle
+  | EventSandboxStatusChanged
+  | EventServerInstanceDisposed
+  | EventRayaRoutineRunChanged1
   | EventSessionNetworkAsked
   | EventSessionNetworkReplied
   | EventSessionNetworkRejected
@@ -110,7 +111,6 @@ export type Event =
   | EventInteractiveTerminalUpdated
   | EventInteractiveTerminalData
   | EventInteractiveTerminalDeleted
-  | EventSandboxStatusChanged
   | EventLspClientDiagnostics
   | EventSuggestionShown
   | EventSuggestionAccepted
@@ -2630,12 +2630,13 @@ export type GlobalEvent = {
   project?: string
   workspace?: string
   payload:
-    | EventServerInstanceDisposed
     | EventSessionTurnOpen
     | EventSessionTurnClose
     | EventSessionQueueChanged
-    | EventRayaRoutineRunChanged
     | EventRayaRoutineExecutionIdle
+    | EventSandboxStatusChanged
+    | EventServerInstanceDisposed
+    | EventRayaRoutineRunChanged
     | EventSessionNetworkAsked
     | EventSessionNetworkReplied
     | EventSessionNetworkRejected
@@ -2645,7 +2646,6 @@ export type GlobalEvent = {
     | EventInteractiveTerminalUpdated
     | EventInteractiveTerminalData
     | EventInteractiveTerminalDeleted
-    | EventSandboxStatusChanged
     | EventLspClientDiagnostics
     | EventSuggestionShown
     | EventSuggestionAccepted
@@ -3873,6 +3873,7 @@ export type ProviderConfig = {
   options?: {
     apiKey?: string
     baseURL?: string
+    localInferenceAPI?: "ollama"
     enterpriseUrl?: string
     setCacheKey?: boolean
     /**
@@ -3884,7 +3885,7 @@ export type ProviderConfig = {
      */
     headerTimeout?: number | false
     chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | false | number | undefined
+    [key: string]: unknown | string | "ollama" | boolean | number | false | number | false | number | undefined
   }
   models?: {
     [key: string]: {
@@ -5256,6 +5257,10 @@ export type SubtaskPartInput = {
   command?: string
 }
 
+export type EffectHttpApiErrorServiceUnavailable = {
+  _tag: "ServiceUnavailable"
+}
+
 export type SessionBusyError = {
   _tag: "SessionBusyError"
   sessionID: string
@@ -5801,10 +5806,6 @@ export type EffectHttpApiErrorUnauthorized = {
 
 export type EffectHttpApiErrorConflict = {
   _tag: "Conflict"
-}
-
-export type EffectHttpApiErrorServiceUnavailable = {
-  _tag: "ServiceUnavailable"
 }
 
 export type CloudSessionImportError = {
@@ -6990,6 +6991,7 @@ export type RayaGoalDeliverable =
             canonical: string
             sha256: string
             mode: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            bytes?: number
           }
         | {
             version: 1
@@ -7059,6 +7061,12 @@ export type RayaGoalDeliverable =
         }
       }
     }
+
+export type ServiceUnavailableError = {
+  _tag: "ServiceUnavailableError"
+  message: string
+  service?: string
+}
 
 export type UnknownError1 = {
   _tag: "UnknownError"
@@ -7366,12 +7374,6 @@ export type PromptInput = {
   text: string
   files?: Array<PromptInputFileAttachment>
   agents?: Array<PromptAgentAttachment>
-}
-
-export type ServiceUnavailableError = {
-  _tag: "ServiceUnavailableError"
-  message: string
-  service?: string
 }
 
 export type MessageNotFoundError = {
@@ -8322,14 +8324,6 @@ export type MoveSessionDestination = {
   directory: string
 }
 
-export type EventServerInstanceDisposed = {
-  id: string
-  type: "server.instance.disposed"
-  properties: {
-    directory: string
-  }
-}
-
 export type EventSessionTurnOpen = {
   id: string
   type: "session.turn.open"
@@ -8359,6 +8353,39 @@ export type EventSessionQueueChanged = {
   }
 }
 
+export type EventRayaRoutineExecutionIdle = {
+  id: string
+  type: "raya.routine.execution.idle"
+  properties: {
+    version: 1
+    runID: string
+    agentID: string
+    sessionID: string
+    execution: string
+  }
+}
+
+export type EventSandboxStatusChanged = {
+  id: string
+  type: "sandbox.status.changed"
+  properties: {
+    sessionID: string
+    directory: string
+    enabled: boolean
+    available: boolean
+    reason?: string
+    version: number
+  }
+}
+
+export type EventServerInstanceDisposed = {
+  id: string
+  type: "server.instance.disposed"
+  properties: {
+    directory: string
+  }
+}
+
 export type EventRayaRoutineRunChanged = {
   id: string
   type: "raya.routine.run.changed"
@@ -8377,18 +8404,6 @@ export type EventRayaRoutineRunChanged = {
       status: "running" | "complete" | "blocked" | "error"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
-  }
-}
-
-export type EventRayaRoutineExecutionIdle = {
-  id: string
-  type: "raya.routine.execution.idle"
-  properties: {
-    version: 1
-    runID: string
-    agentID: string
-    sessionID: string
-    execution: string
   }
 }
 
@@ -8470,19 +8485,6 @@ export type EventInteractiveTerminalDeleted = {
   properties: {
     terminalID: string
     sessionID: string
-  }
-}
-
-export type EventSandboxStatusChanged = {
-  id: string
-  type: "sandbox.status.changed"
-  properties: {
-    sessionID: string
-    directory: string
-    enabled: boolean
-    available: boolean
-    reason?: string
-    version: number
   }
 }
 
@@ -17600,6 +17602,10 @@ export type SessionPromptAsyncErrors = {
    * NotFoundError
    */
   404: NotFoundError
+  /**
+   * ServiceUnavailable
+   */
+  503: EffectHttpApiErrorServiceUnavailable
 }
 
 export type SessionPromptAsyncError = SessionPromptAsyncErrors[keyof SessionPromptAsyncErrors]
@@ -22523,11 +22529,25 @@ export type KilocodeGoalGetResponses = {
         verification: string
         required?: boolean
         review?: boolean
-        check?: {
-          kind: "command"
-          command: string
-          directory: string
-        }
+        check?:
+          | {
+              kind: "command"
+              command: string
+              directory: string
+            }
+          | {
+              kind: "byte-equality"
+              source: {
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
+              target: {
+                path: string
+                canonical: string
+              }
+            }
       }>
       plan?: {
         review?: boolean
@@ -22692,11 +22712,25 @@ export type KilocodeGoalGetResponses = {
       verification: string
       required?: boolean
       review?: boolean
-      check?: {
-        kind: "command"
-        command: string
-        directory: string
-      }
+      check?:
+        | {
+            kind: "command"
+            command: string
+            directory: string
+          }
+        | {
+            kind: "byte-equality"
+            source: {
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
+            target: {
+              path: string
+              canonical: string
+            }
+          }
     }>
     startMessageID?: string
     startSnapshot?: string
@@ -22862,11 +22896,25 @@ export type KilocodeGoalGetResponses = {
           verification: string
           required?: boolean
           review?: boolean
-          check?: {
-            kind: "command"
-            command: string
-            directory: string
-          }
+          check?:
+            | {
+                kind: "command"
+                command: string
+                directory: string
+              }
+            | {
+                kind: "byte-equality"
+                source: {
+                  path: string
+                  canonical: string
+                  sha256: string
+                  bytes: number
+                }
+                target: {
+                  path: string
+                  canonical: string
+                }
+              }
         }>
         plan?: {
           review?: boolean
@@ -23053,11 +23101,25 @@ export type KilocodeGoalGetResponses = {
         verification: string
         required?: boolean
         review?: boolean
-        check?: {
-          kind: "command"
-          command: string
-          directory: string
-        }
+        check?:
+          | {
+              kind: "command"
+              command: string
+              directory: string
+            }
+          | {
+              kind: "byte-equality"
+              source: {
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
+              target: {
+                path: string
+                canonical: string
+              }
+            }
       }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -23122,11 +23184,25 @@ export type KilocodeGoalUpdateData = {
       verification: string
       required?: boolean
       review?: boolean
-      check?: {
-        kind: "command"
-        command: string
-        directory: string
-      }
+      check?:
+        | {
+            kind: "command"
+            command: string
+            directory: string
+          }
+        | {
+            kind: "byte-equality"
+            source: {
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
+            target: {
+              path: string
+              canonical: string
+            }
+          }
     }>
     status?: "active" | "paused"
     objective?: string
@@ -23233,11 +23309,25 @@ export type KilocodeGoalUpdateResponses = {
         verification: string
         required?: boolean
         review?: boolean
-        check?: {
-          kind: "command"
-          command: string
-          directory: string
-        }
+        check?:
+          | {
+              kind: "command"
+              command: string
+              directory: string
+            }
+          | {
+              kind: "byte-equality"
+              source: {
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
+              target: {
+                path: string
+                canonical: string
+              }
+            }
       }>
       plan?: {
         review?: boolean
@@ -23402,11 +23492,25 @@ export type KilocodeGoalUpdateResponses = {
       verification: string
       required?: boolean
       review?: boolean
-      check?: {
-        kind: "command"
-        command: string
-        directory: string
-      }
+      check?:
+        | {
+            kind: "command"
+            command: string
+            directory: string
+          }
+        | {
+            kind: "byte-equality"
+            source: {
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
+            target: {
+              path: string
+              canonical: string
+            }
+          }
     }>
     startMessageID?: string
     startSnapshot?: string
@@ -23572,11 +23676,25 @@ export type KilocodeGoalUpdateResponses = {
           verification: string
           required?: boolean
           review?: boolean
-          check?: {
-            kind: "command"
-            command: string
-            directory: string
-          }
+          check?:
+            | {
+                kind: "command"
+                command: string
+                directory: string
+              }
+            | {
+                kind: "byte-equality"
+                source: {
+                  path: string
+                  canonical: string
+                  sha256: string
+                  bytes: number
+                }
+                target: {
+                  path: string
+                  canonical: string
+                }
+              }
         }>
         plan?: {
           review?: boolean
@@ -23763,11 +23881,25 @@ export type KilocodeGoalUpdateResponses = {
         verification: string
         required?: boolean
         review?: boolean
-        check?: {
-          kind: "command"
-          command: string
-          directory: string
-        }
+        check?:
+          | {
+              kind: "command"
+              command: string
+              directory: string
+            }
+          | {
+              kind: "byte-equality"
+              source: {
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
+              target: {
+                path: string
+                canonical: string
+              }
+            }
       }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -23924,11 +24056,25 @@ export type KilocodeGoalCreateResponses = {
         verification: string
         required?: boolean
         review?: boolean
-        check?: {
-          kind: "command"
-          command: string
-          directory: string
-        }
+        check?:
+          | {
+              kind: "command"
+              command: string
+              directory: string
+            }
+          | {
+              kind: "byte-equality"
+              source: {
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
+              target: {
+                path: string
+                canonical: string
+              }
+            }
       }>
       plan?: {
         review?: boolean
@@ -24093,11 +24239,25 @@ export type KilocodeGoalCreateResponses = {
       verification: string
       required?: boolean
       review?: boolean
-      check?: {
-        kind: "command"
-        command: string
-        directory: string
-      }
+      check?:
+        | {
+            kind: "command"
+            command: string
+            directory: string
+          }
+        | {
+            kind: "byte-equality"
+            source: {
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
+            target: {
+              path: string
+              canonical: string
+            }
+          }
     }>
     startMessageID?: string
     startSnapshot?: string
@@ -24263,11 +24423,25 @@ export type KilocodeGoalCreateResponses = {
           verification: string
           required?: boolean
           review?: boolean
-          check?: {
-            kind: "command"
-            command: string
-            directory: string
-          }
+          check?:
+            | {
+                kind: "command"
+                command: string
+                directory: string
+              }
+            | {
+                kind: "byte-equality"
+                source: {
+                  path: string
+                  canonical: string
+                  sha256: string
+                  bytes: number
+                }
+                target: {
+                  path: string
+                  canonical: string
+                }
+              }
         }>
         plan?: {
           review?: boolean
@@ -24454,11 +24628,25 @@ export type KilocodeGoalCreateResponses = {
         verification: string
         required?: boolean
         review?: boolean
-        check?: {
-          kind: "command"
-          command: string
-          directory: string
-        }
+        check?:
+          | {
+              kind: "command"
+              command: string
+              directory: string
+            }
+          | {
+              kind: "byte-equality"
+              source: {
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
+              target: {
+                path: string
+                canonical: string
+              }
+            }
       }>
       status: "active" | "paused" | "complete" | "blocked"
       createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -24579,6 +24767,35 @@ export type KilocodeGoalStopResultResponses = {
           result: "accepted" | "not-selected" | "cancelled" | "completed" | "error" | "running"
         }
     >
+    task?: {
+      version: 1
+      sessionDigest: string
+      runs: Array<{
+        id: string
+        agentID: string
+        sessionID: string
+        executionDigest?: string
+        at: number
+        scheduleVersion: number
+        trigger?:
+          | {
+              kind: "manual"
+            }
+          | {
+              kind: "timer"
+              id: string
+              scheduledAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              observedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              tz?: string
+            }
+          | {
+              kind: "event"
+              source: string
+              filter?: string
+              receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+      }>
+    }
   }
 }
 
@@ -24651,6 +24868,35 @@ export type KilocodeGoalStopResponses = {
           result: "accepted" | "not-selected" | "cancelled" | "completed" | "error" | "running"
         }
     >
+    task?: {
+      version: 1
+      sessionDigest: string
+      runs: Array<{
+        id: string
+        agentID: string
+        sessionID: string
+        executionDigest?: string
+        at: number
+        scheduleVersion: number
+        trigger?:
+          | {
+              kind: "manual"
+            }
+          | {
+              kind: "timer"
+              id: string
+              scheduledAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              observedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+              tz?: string
+            }
+          | {
+              kind: "event"
+              source: string
+              filter?: string
+              receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            }
+      }>
+    }
   }
 }
 
@@ -24902,6 +25148,128 @@ export type KilocodeRoutineForecastResponses = {
 }
 
 export type KilocodeRoutineForecastResponse = KilocodeRoutineForecastResponses[keyof KilocodeRoutineForecastResponses]
+
+export type KilocodeProfileRestoreReviewData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/profile/restore-review"
+}
+
+export type KilocodeProfileRestoreReviewErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
+}
+
+export type KilocodeProfileRestoreReviewError =
+  KilocodeProfileRestoreReviewErrors[keyof KilocodeProfileRestoreReviewErrors]
+
+export type KilocodeProfileRestoreReviewResponses = {
+  /**
+   * Success
+   */
+  200: {
+    state: "absent" | "held" | "released"
+    id?: string
+    revision?: string
+    review?: {
+      at: number
+      by: "user"
+      revision?: string
+    }
+    reconnectCredentials: boolean
+    uncertainWork: "held-no-replay"
+    workspaces: Array<{
+      source: string
+      destination: string
+    }>
+    workers: Array<{
+      id: string
+      name: string
+      enabled: boolean
+    }>
+  }
+}
+
+export type KilocodeProfileRestoreReviewResponse =
+  KilocodeProfileRestoreReviewResponses[keyof KilocodeProfileRestoreReviewResponses]
+
+export type KilocodeProfileRestoreApproveData = {
+  body?: {
+    id: string
+    revision: string
+    reviewed: true
+    workspacesAcknowledged: true
+    reconnectAcknowledged: true
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/profile/restore-review"
+}
+
+export type KilocodeProfileRestoreApproveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
+}
+
+export type KilocodeProfileRestoreApproveError =
+  KilocodeProfileRestoreApproveErrors[keyof KilocodeProfileRestoreApproveErrors]
+
+export type KilocodeProfileRestoreApproveResponses = {
+  /**
+   * Success
+   */
+  200: {
+    state: "absent" | "held" | "released"
+    id?: string
+    revision?: string
+    review?: {
+      at: number
+      by: "user"
+      revision?: string
+    }
+    reconnectCredentials: boolean
+    uncertainWork: "held-no-replay"
+    workspaces: Array<{
+      source: string
+      destination: string
+    }>
+    workers: Array<{
+      id: string
+      name: string
+      enabled: boolean
+    }>
+  }
+}
+
+export type KilocodeProfileRestoreApproveResponse =
+  KilocodeProfileRestoreApproveResponses[keyof KilocodeProfileRestoreApproveResponses]
 
 export type KilocodeRoutineListData = {
   body?: never

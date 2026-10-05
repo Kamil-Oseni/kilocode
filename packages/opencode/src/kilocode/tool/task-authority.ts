@@ -1,6 +1,7 @@
 import { Permission } from "@/permission"
 import { RayaAskOptions } from "@/kilocode/ask-options"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
+import { Refusal } from "../session/tool-refusal"
 
 /** A child session's durable ceiling. Missing metadata means a pre-existing legacy task. */
 export namespace TaskAuthority {
@@ -151,6 +152,100 @@ export namespace TaskAuthority {
     ])
   }
 
+  const ceiling = "raya.task.ceilings"
+  type Ceiling = { parentID: string; agent: Permission.Ruleset; session: Permission.Ruleset }
+
+  export function ceilings(metadata?: Record<string, unknown>): Ceiling[] {
+    const value = metadata?.[ceiling]
+    if (value === undefined) return []
+    if (!Array.isArray(value) || value.length > 64 || JSON.stringify(value).length > 1_048_576)
+      throw new Error("Invalid child permission ceilings")
+    return value.map((entry) => {
+      if (
+        !entry ||
+        typeof entry !== "object" ||
+        typeof entry.parentID !== "string" ||
+        !entry.parentID ||
+        entry.parentID.length > 256
+      )
+        throw new Error("Invalid child permission ceiling")
+      for (const rules of [entry.agent, entry.session]) {
+        if (
+          !Array.isArray(rules) ||
+          rules.length > 1024 ||
+          rules.some(
+            (rule) =>
+              !rule ||
+              typeof rule.permission !== "string" ||
+              typeof rule.pattern !== "string" ||
+              rule.pattern.length > 4096 ||
+              rule.permission.length > 256 ||
+              !["allow", "ask", "deny"].includes(rule.action),
+          )
+        )
+          throw new Error("Invalid child permission ceiling rules")
+      }
+      return { parentID: entry.parentID, agent: entry.agent, session: entry.session }
+    })
+  }
+
+  export function inherit(
+    metadata: Record<string, unknown> | undefined,
+    parent: {
+      id: string
+      metadata?: Record<string, unknown>
+      permission?: Permission.Ruleset
+    },
+    agent: Permission.Ruleset,
+  ) {
+    const chain = [
+      ...ceilings(metadata),
+      ...ceilings(parent.metadata),
+      {
+        parentID: parent.id,
+        agent: agent.map((rule) => ({ ...rule })),
+        session: (parent.permission ?? []).map((rule) => ({ ...rule })),
+      },
+    ]
+    const seen = new Set<string>()
+    if (chain.length > 64) throw new Error("Child permission ceiling chain is too deep")
+    const result = {
+      ...metadata,
+      [ceiling]: chain.filter((entry) => {
+        const key = JSON.stringify(entry)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      }),
+    }
+    ceilings(result)
+    return result
+  }
+
+  export function project(rules: Permission.Ruleset) {
+    return rules.filter(
+      (rule) =>
+        rule.action !== "deny" || !["read", "edit"].some((permission) => Wildcard.match(permission, rule.permission)),
+    )
+  }
+
+  export function hard(metadata: Record<string, unknown> | undefined, permission: string, patterns: readonly string[]) {
+    const access = read(metadata)
+    return patterns.flatMap((pattern) => {
+      const denied = ceilings(metadata).some((entry) => {
+        const rule = Permission.evaluate(permission, pattern, entry.agent)
+        // Delegator bash policies shape that agent; the child's bash policy and session ceiling remain authoritative.
+        const agent =
+          permission !== "bash" &&
+          !(access === "computer" && computer.includes(permission) && rule.permission === "*") &&
+          rule.action === "deny"
+        const session = Permission.evaluate(permission, pattern, entry.session).action === "deny"
+        return agent || session
+      })
+      return denied ? [{ permission, pattern, action: "deny" as const }] : []
+    })
+  }
+
   export function permits(access: Access | undefined, permission: string, pattern: string) {
     return (
       (access !== "read" && access !== "computer") ||
@@ -168,8 +263,15 @@ export namespace TaskAuthority {
     }
     const access = input.requested ?? input.saved
     if (access !== "edit" || input.requested !== "edit") return access
-    if (Permission.evaluate("edit", "*", input.parent).action !== "allow") {
-      throw new Error("The parent policy does not allow editing access for this child")
+    if (
+      !input.parent.some(
+        (rule) =>
+          rule.action === "allow" &&
+          Wildcard.match("edit", rule.permission) &&
+          Permission.evaluate("edit", rule.pattern, input.parent).action === "allow",
+      )
+    ) {
+      throw new Refusal("parent-edit-policy", "The parent policy does not allow editing access for this child")
     }
     return access
   }

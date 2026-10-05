@@ -46,6 +46,7 @@ type HttpError = {
   type: "http-error"
   status: number
   body: unknown
+  headers?: Record<string, string> // kilocode_change - real provider retry timing hints
 }
 
 export type Item = Sse | HttpError
@@ -446,6 +447,7 @@ function fail(item: HttpError) {
   return HttpServerResponse.text(JSON.stringify(item.body), {
     status: item.status,
     contentType: "application/json",
+    headers: item.headers, // kilocode_change
   })
 }
 
@@ -575,13 +577,16 @@ export function reply() {
   return new Reply()
 }
 
-export function httpError(status: number, body: unknown): Item {
+// kilocode_change start - carry provider retry hints through the actual HTTP fixture
+export function httpError(status: number, body: unknown, headers?: Record<string, string>): Item {
   return {
     type: "http-error",
     status,
     body,
+    headers, // kilocode_change
   }
 }
+// kilocode_change end
 
 export function raw(input: {
   chunks?: unknown[]

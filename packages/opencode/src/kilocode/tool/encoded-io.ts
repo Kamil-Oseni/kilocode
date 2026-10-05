@@ -15,6 +15,7 @@ import {
 import type { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Encoding from "../encoding"
 import * as Bom from "@/util/bom"
+import { PlanPublication } from "../plan-publication"
 
 /**
  * Encoding-aware file operations routed through the application's filesystem
@@ -51,29 +52,45 @@ export const validate = (path: string, proof: { readonly dev: string; readonly i
 export const encode = (text: string, encoding: string = Encoding.DEFAULT) => Encoding.encode(text, encoding)
 
 export const exclusive = (fs: FSUtil.Interface, path: string, text: string, encoding: string = Encoding.DEFAULT) =>
-  Effect.gen(function* () {
-    yield* ensureDirectory(fs, dirname(path))
-    yield* createFile(path, Encoding.encode(text, encoding))
-  }).pipe(Effect.mapError(wrap))
+  PlanPublication.run(
+    [path],
+    Effect.gen(function* () {
+      yield* PlanPublication.limit(Encoding.encode(text, encoding).byteLength)
+      yield* ensureDirectory(fs, dirname(path))
+      yield* PlanPublication.check
+      yield* createFile(path, Encoding.encode(text, encoding))
+    }),
+  ).pipe(Effect.mapError(wrap))
 
 export const anchored = (
   path: string,
   text: string,
   root: { path: string; identity: { dev: string; ino: string } },
   encoding: string = Encoding.DEFAULT,
-) => createAnchored(path, Encoding.encode(text, encoding), root.path, root.identity).pipe(Effect.mapError(wrap))
+) =>
+  PlanPublication.run(
+    [path],
+    PlanPublication.limit(Encoding.encode(text, encoding).byteLength).pipe(
+      Effect.andThen(createAnchored(path, Encoding.encode(text, encoding), root.path, root.identity)),
+    ),
+  ).pipe(Effect.mapError(wrap))
 
 export const write = (fs: FSUtil.Interface, path: string, text: string, encoding: string = Encoding.DEFAULT) =>
-  Effect.gen(function* () {
-    const data = Encoding.encode(text, encoding)
-    if (!(yield* enabled)) return yield* fs.writeWithDirs(path, data)
-    return yield* batchMutations(
-      Effect.gen(function* () {
-        yield* ensureDirectory(fs, dirname(path))
-        yield* fs.writeFile(path, data)
-      }),
-    )
-  }).pipe(Effect.mapError(wrap))
+  PlanPublication.run(
+    [path],
+    Effect.gen(function* () {
+      const data = Encoding.encode(text, encoding)
+      yield* PlanPublication.limit(data.byteLength)
+      if (!(yield* enabled)) return yield* PlanPublication.check.pipe(Effect.andThen(fs.writeWithDirs(path, data)))
+      return yield* batchMutations(
+        Effect.gen(function* () {
+          yield* ensureDirectory(fs, dirname(path))
+          yield* PlanPublication.check
+          yield* fs.writeFile(path, data)
+        }),
+      )
+    }),
+  ).pipe(Effect.mapError(wrap))
 
 export const checked = (
   path: string,
@@ -81,10 +98,16 @@ export const checked = (
   encoding: string,
   proof: { readonly dev: string; readonly ino: string },
   sha256: string,
-) => replaceChecked(path, Encoding.encode(text, encoding), proof, sha256).pipe(Effect.mapError(wrap))
+) =>
+  PlanPublication.run(
+    [path],
+    PlanPublication.limit(Encoding.encode(text, encoding).byteLength).pipe(
+      Effect.andThen(replaceChecked(path, Encoding.encode(text, encoding), proof, sha256)),
+    ),
+  ).pipe(Effect.mapError(wrap))
 
 export const remove = (path: string, proof: { readonly dev: string; readonly ino: string }, sha256: string) =>
-  removeChecked(path, proof, sha256).pipe(Effect.mapError(wrap))
+  PlanPublication.run([path], removeChecked(path, proof, sha256)).pipe(Effect.mapError(wrap))
 
 export const stage = (
   fs: FSUtil.Interface,

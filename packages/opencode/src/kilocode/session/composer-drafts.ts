@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { Effect } from "effect"
 import z from "zod"
@@ -6,134 +6,34 @@ import { Flock } from "@opencode-ai/core/util/flock"
 import { resolveProfileRoot } from "@opencode-ai/core/kilocode/profile-maintenance"
 import { Storage } from "@/storage/storage"
 
+import {
+  DraftSchemas,
+  DraftLegacy,
+  DraftError,
+  type DraftIdentity,
+  type DraftContent,
+  type DraftToken,
+  type DraftEntry,
+} from "./composer-codec"
+export {
+  DraftSchemas,
+  DraftLegacy,
+  DraftError,
+  type DraftIdentity,
+  type DraftContent,
+  type DraftToken,
+  type DraftEntry,
+} from "./composer-codec"
+
+const { identity, content, token } = DraftSchemas
+const { key, mark, hash, same, id, checked } = DraftLegacy
 const short = z.string().min(1).max(4096)
-const line = z.number().int().positive()
-const comment = z.discriminatedUnion("origin", [
-  z
-    .object({
-      origin: z.literal("pr"),
-      id: short,
-      author: short,
-      body: z.string().max(100_000),
-      file: short.optional(),
-      line: line.optional(),
-      diffHunk: z.string().max(200_000).optional(),
-      outdated: z.boolean().optional(),
-      replies: z
-        .array(z.object({ author: short, body: z.string().max(100_000) }).strict())
-        .max(20)
-        .optional(),
-    })
-    .strict(),
-  z
-    .object({
-      origin: z.undefined().optional(),
-      id: short,
-      file: short,
-      side: z.enum(["additions", "deletions"]),
-      line,
-      comment: z.string().max(100_000),
-      selectedText: z.string().max(200_000),
-    })
-    .strict(),
-])
-const identity = z
-  .object({
-    key: short,
-    box: short,
-    workspace: short,
-    projectID: short.optional(),
-    sessionID: short.optional(),
-    pendingID: short.optional(),
-  })
-  .strict()
-const content = z
-  .object({
-    text: z.string().max(1_000_000),
-    comments: z.array(comment).max(100),
-    images: z
-      .array(
-        z
-          .object({
-            id: short,
-            filename: short,
-            mime: z
-              .string()
-              .max(255)
-              .regex(/^[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*\/[A-Za-z0-9][A-Za-z0-9!#$%&'*+.^_`|~-]*$/),
-            dataUrl: z.string().max(12_000_000),
-          })
-          .strict(),
-      )
-      .max(16),
-    scroll: z.number().finite().min(0),
-    model: z.object({ providerID: short, modelID: short }).strict().optional(),
-    agent: short.optional(),
-    variant: short.optional(),
-    selection: z
-      .object({ start: z.number().int().min(0), end: z.number().int().min(0) })
-      .strict()
-      .optional(),
-  })
-  .strict()
-  .refine(
-    (value) =>
-      !value.selection || (value.selection.start <= value.selection.end && value.selection.end <= value.text.length),
-  )
-const token = z
-  .object({ generation: z.string().uuid(), revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) })
-  .strict()
-const entry = z
-  .object({
-    identity,
-    token,
-    content: content.nullable(),
-    mutation: short,
-    digest: z.string().regex(/^[a-f0-9]{64}$/),
-    receipt: z
-      .object({ request: z.string().regex(/^[a-f0-9]{64}$/) })
-      .strict()
-      .optional(),
-  })
-  .strict()
-const document = z.object({ version: z.literal(1), entries: z.array(entry).max(128) }).strict()
-
-export type DraftIdentity = z.infer<typeof identity>
-export type DraftContent = z.infer<typeof content>
-export type DraftToken = z.infer<typeof token>
-export type DraftEntry = z.infer<typeof entry>
-
-export const DraftSchemas = { identity, content, token, entry }
-
-/** Deliberately carries no draft text, attachment bytes, filenames or workspace paths. */
-export class DraftError extends Error {
-  constructor(readonly code: "invalid" | "corrupt" | "missing" | "conflict" | "capacity" | "admission") {
-    super(`Composer draft persistence: ${code}`)
-  }
-}
-
-const key = ["raya", "composer-drafts"]
-const mark = ["raya", "composer-drafts-initialized"]
-const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex")
-const same = (left: DraftToken | undefined, right: DraftToken | undefined) =>
-  left?.generation === right?.generation && left?.revision === right?.revision
-const id = (value: DraftIdentity) => hash(identity.parse(value))
+const document = z.object({ version: z.literal(1), entries: z.array(DraftSchemas.entry).max(128) }).strict()
 function parse<T>(schema: z.ZodType<T>, value: unknown, code: "invalid" | "corrupt" = "invalid"): T {
   const result = schema.safeParse(value)
   if (!result.success) throw new DraftError(code)
   return result.data
 }
-function checked(value: unknown) {
-  const data = parse(document, value, "corrupt")
-  if (Buffer.byteLength(JSON.stringify(data)) > 32 * 1024 * 1024) throw new DraftError("capacity")
-  const keys = data.entries.map((item) => id(item.identity))
-  if (new Set(keys).size !== keys.length || data.entries.some((item) => item.digest !== hash(item.content)))
-    throw new DraftError("corrupt")
-  return data
-}
-
-/** Shared validated v1 import boundary; the SQL store never loosens legacy validation. */
-export const DraftLegacy = { key, mark, hash, same, id, checked }
 
 /** Effect-native durable state only. The caller supplies the actual Storage root, never a project directory. */
 export function composerDrafts(store: Storage.Interface, dir: string) {

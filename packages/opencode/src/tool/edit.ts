@@ -25,6 +25,7 @@ import * as Encoding from "../kilocode/encoding" // kilocode_change
 import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilocode_change
 import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
+import { Refusal } from "@/kilocode/session/tool-refusal" // kilocode_change
 
 const MAX_DIFF_CONTENT = 500_000 // kilocode_change
 
@@ -774,7 +775,8 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   if (notFound) {
-    throw new Error(
+    throw new Refusal( // kilocode_change
+      "stale-edit", // kilocode_change
       "Could not find oldString in the file. The file may have changed since it was read. Re-read the narrow target region before retrying, then use the current exact text including whitespace and indentation. Do not retry the same stale oldString.", // kilocode_change
     )
   }

@@ -26,31 +26,9 @@ export const ServeCommand = effectCmd({
     if (urls.network) console.log(`  Network: ${urls.network}`)
     // kilocode_change end
 
-    // kilocode_change start - graceful signal shutdown
-    // yield* Effect.never
-    const { InstanceRuntime } = yield* Effect.promise(() => import("../../project/instance-runtime"))
-    const { startParentWatchdog } = yield* Effect.promise(() => import("../../kilocode/parent-watchdog"))
-    const { KiloSessions } = yield* Effect.promise(() => import("@/kilo-sessions/kilo-sessions"))
-    yield* Effect.promise(
-      () =>
-        new Promise<void>((resolve) => {
-          // Exit if the editor client that spawned us is hard-killed (no signal reaches us).
-          const stopWatchdog = startParentWatchdog(() => process.kill(process.pid, "SIGTERM"))
-          const shutdown = async () => {
-            stopWatchdog()
-            try {
-              await KiloSessions.drainIngestForShutdown() // kilocode_change
-              await InstanceRuntime.disposeAllInstances()
-              await server.stop(true)
-            } finally {
-              resolve()
-            }
-          }
-          process.once("SIGTERM", shutdown)
-          process.once("SIGINT", shutdown)
-          process.once("SIGHUP", shutdown)
-        }),
-    )
+    // kilocode_change start - joined signal shutdown retains cleanup refusal
+    const { waitForServe } = yield* Effect.promise(() => import("../../kilocode/cli/serve-shutdown"))
+    yield* Effect.promise(() => waitForServe(server))
     // kilocode_change end
   }),
 })

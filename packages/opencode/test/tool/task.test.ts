@@ -1940,8 +1940,8 @@ describe("tool.task", () => {
         chiefModel: "test/cheap-model",
         prompted: false,
       })
-      expect(result.metadata.decision.latency).toBeGreaterThanOrEqual(10)
-      expect(result.metadata.decision.latency).toBeLessThan(5_000)
+      expect(result.metadata.decision?.latency).toBeGreaterThanOrEqual(10) // kilocode_change - device workflow has no specialist decision
+      expect(result.metadata.decision?.latency).toBeLessThan(5_000) // kilocode_change - device workflow has no specialist decision
       expect(decisions).toEqual([result.metadata.decision])
       expect(RayaChief.pending(updated.metadata)?.agent).toBe("coder")
     }),
@@ -1972,7 +1972,7 @@ describe("tool.task", () => {
         },
       )
       const saved = yield* sessions.get(chat.id)
-      expect(routed.metadata.decision.direct).toBe(true)
+      expect(routed.metadata.decision?.direct).toBe(true) // kilocode_change - device workflow has no specialist decision
       expect(RayaChief.phase(saved.metadata)).toBe("done")
       expect(RayaChief.history(saved.metadata)[0]?.direct).toBe(true)
       let called = false
@@ -2049,7 +2049,7 @@ describe("tool.task", () => {
         metadata: { [RayaChief.modelKey]: ref, [RayaChief.requestKey]: "Write a greeting in a file" },
       })
       expect(
-        (yield* def.execute({ objective: "Write a greeting in a file" }, ctx)).metadata.decision.direct,
+        (yield* def.execute({ objective: "Write a greeting in a file" }, ctx)).metadata.decision?.direct,
       ).toBeUndefined()
       expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
 
@@ -2063,7 +2063,7 @@ describe("tool.task", () => {
         },
       })
       expect(
-        (yield* def.execute({ objective: "What does idempotency mean?" }, ctx)).metadata.decision.direct,
+        (yield* def.execute({ objective: "What does idempotency mean?" }, ctx)).metadata.decision?.direct,
       ).toBeUndefined()
       expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
     }),
@@ -2118,10 +2118,10 @@ describe("tool.task", () => {
       yield* questions.reply({ requestID: pending[0]!.id, answers: [["designer"]] })
       const result = yield* Fiber.join(fiber)
 
-      expect(result.metadata.decision.agent).toBe("designer")
-      expect(result.metadata.decision.request).toBe("Help me decide what to do with this project")
-      expect(result.metadata.decision.prompted).toBe(true)
-      expect(result.metadata.decision.reason).toContain("user selected designer")
+      expect(result.metadata.decision?.agent).toBe("designer") // kilocode_change - device workflow has no specialist decision
+      expect(result.metadata.decision?.request).toBe("Help me decide what to do with this project") // kilocode_change - device workflow has no specialist decision
+      expect(result.metadata.decision?.prompted).toBe(true) // kilocode_change - device workflow has no specialist decision
+      expect(result.metadata.decision?.reason).toContain("user selected designer") // kilocode_change - device workflow has no specialist decision
       expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
     }),
   )
@@ -2195,6 +2195,62 @@ describe("tool.task", () => {
         chiefModel: "test/cheap-model",
       })
       expect(result.output).toContain("done")
+      // kilocode_change start - a consumed Chief decision retains its authenticated objective for follow-up tasks
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: { ...updated.metadata, [RayaChief.phaseKey]: RayaChief.begin(updated.metadata, true) },
+      })
+      expect(RayaChief.follow((yield* sessions.get(chat.id)).metadata)?.request).toBe(pending.request)
+      let handoff: SessionPrompt.PromptInput | undefined
+      const followup = yield* def.execute(
+        { subagent_type: "designer" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (handoff = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      expect(followup.metadata.selectedAgent).toBe("coder")
+      expect(handoff?.agent).toBe("coder")
+      const part = handoff?.parts[0]
+      expect(part?.type).toBe("text")
+      if (part?.type !== "text") throw new Error("Expected actual follow-up handoff")
+      expect(part.text).toContain(`Objective: ${pending.request}`)
+      expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toHaveLength(1)
+      const canvas = { ...decisions[0]!, request: "/canvas Create an interactive comparison" }
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: {
+          ...(yield* sessions.get(chat.id)).metadata,
+          [RayaChief.phaseKey]: "task",
+          [RayaChief.requestKey]: canvas.request,
+          [RayaChief.logKey]: [canvas],
+        },
+      })
+      const capture: { input?: SessionPrompt.PromptInput } = {}
+      yield* def.execute(
+        {},
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (capture.input = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const content = capture.input?.parts[0]
+      if (content?.type !== "text") throw new Error("Expected actual canvas handoff")
+      expect(content.text).toContain(`Objective: ${canvas.request}`)
+      expect(content.text).toContain("You MUST call create_canvas as your first tool")
+      // kilocode_change end
     }),
   )
 
@@ -2434,7 +2490,7 @@ describe("tool.task", () => {
           description: "inspect bug",
           prompt: "continue from the fork",
           subagent_type: "general",
-          task_id: id,
+          task_id: SessionID.make(id), // kilocode_change - resumable IDs use the advertised session schema
         },
         {
           sessionID: forked.id,
@@ -2608,7 +2664,7 @@ describe("tool.task", () => {
           description: "inspect bug",
           prompt: "look into the cache key path",
           subagent_type: "general",
-          task_id: "ses_missing",
+          task_id: SessionID.make("ses_missing"), // kilocode_change - valid absent session retains fallback coverage
         },
         {
           sessionID: chat.id,

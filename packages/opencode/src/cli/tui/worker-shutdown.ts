@@ -1,16 +1,6 @@
 // kilocode_change - new file
-// Pure shutdown sequence for the embedded TUI worker. Extracted so unit tests can
-// assert drain → dispose → stopServer ordering without loading worker.ts side effects.
-export function createWorkerShutdown(input: {
-  drain: () => Promise<void>
-  stopHeap: () => Promise<void>
-  dispose: () => Promise<void>
-  stopServer: () => Promise<void>
-}) {
-  return async () => {
-    await input.drain()
-    await input.stopHeap()
-    await input.dispose()
-    await input.stopServer()
-  }
+import { shutdown } from "@/kilocode/cli/cmd/tui/worker-shutdown"
+
+export function createWorkerShutdown(input: Parameters<typeof shutdown>[0]) {
+  return shutdown(input)
 }

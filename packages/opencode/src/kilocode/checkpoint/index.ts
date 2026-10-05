@@ -1,3 +1,4 @@
+import { Codec } from "./schema"
 // raya_change - named workspace checkpoints the user can label and jump between
 import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
@@ -5,15 +6,9 @@ import type { Snapshot } from "@/snapshot"
 import { SessionID } from "@/session/schema"
 
 export namespace RayaCheckpoint {
-  export const Info = Schema.Struct({
-    id: Schema.String,
-    name: Schema.String,
-    hash: Schema.String,
-    createdAt: Schema.Number,
-  })
+  export const Info = Codec.Info
   export type Info = typeof Info.Type
-
-  export const List = Schema.Array(Info)
+  export const List = Codec.List
 
   export const CreatePayload = Schema.Struct({ name: Schema.optional(Schema.String) })
 
@@ -60,10 +55,12 @@ export namespace RayaCheckpoint {
 
     const remove = Effect.fn("RayaCheckpoint.remove")(function* (sessionID: SessionID, id: string) {
       const items = yield* read(sessionID)
-      yield* deps.storage.write(
-        key(sessionID),
-        items.filter((item) => item.id !== id),
-      ).pipe(Effect.orDie)
+      yield* deps.storage
+        .write(
+          key(sessionID),
+          items.filter((item) => item.id !== id),
+        )
+        .pipe(Effect.orDie)
       return true
     })
 

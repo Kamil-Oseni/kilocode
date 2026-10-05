@@ -6,6 +6,7 @@ import { Global } from "@opencode-ai/core/global"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Telemetry } from "@kilocode/kilo-telemetry" // kilocode_change
 import { EnvAlias } from "@opencode-ai/core/kilocode/env-alias" // kilocode_change
+import { CredentialPublication } from "@opencode-ai/core/kilocode/credential-publication" // kilocode_change - shared canonical auth publication
 import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode_change - profile migration admission
 
 export const OAUTH_DUMMY_KEY = "kilo-oauth-dummy-key" // kilocode_change
@@ -60,14 +61,21 @@ const make = (
     const decode = Schema.decodeUnknownOption(Info)
 
     // kilocode_change start - late-bound path and Raya environment compatibility
-    const load = Effect.fn("Auth.load")(function* (target: string) {
+    const load = Effect.fn("Auth.load")(function* (target: string, strict = false) {
       const content = EnvAlias.read("RAYA_AUTH_CONTENT", "KILO_AUTH_CONTENT")
       if (content) {
         try {
           return JSON.parse(content)
-        } catch (err) {}
+        } catch {
+          yield* Effect.logWarning("Invalid inline auth JSON; falling back to the existing auth store")
+        }
       }
-      const data = (yield* fsys.readJson(target).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
+      const data = (yield* strict
+        ? fsys.readJson(target).pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed({})),
+            Effect.mapError(fail("Failed to read auth data")),
+          )
+        : fsys.readJson(target).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
       return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
     })
     // kilocode_change end
@@ -80,29 +88,39 @@ const make = (
 
     const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
       yield* admission.run(
-        Effect.gen(function* () {
-          const target = filepath() // kilocode_change - select the profile only after admission
-          const norm = key.replace(/\/+$/, "")
-          const data = yield* load(target)
-          if (norm !== key) delete data[key]
-          delete data[norm + "/"]
-          yield* fsys
-            .writeJson(target, { ...data, [norm]: info }, 0o600)
-            .pipe(Effect.mapError(fail("Failed to write auth data")))
-        }),
+        Effect.suspend(
+          () =>
+            CredentialPublication.run(filepath(), (channel) =>
+              Effect.gen(function* () {
+                // kilocode_change - common lock before reads and publication
+                const target = channel.file // kilocode_change - selected canonical auth path
+                const norm = key.replace(/\/+$/, "")
+                const data = yield* load(target, true)
+                if (norm !== key) delete data[key]
+                delete data[norm + "/"]
+                yield* channel.write({ ...data, [norm]: info }) // kilocode_change - retain raw native failure before typed mapping
+              }),
+            ).pipe(Effect.catchDefect((cause) => Effect.fail(fail("Failed to write auth data")(cause)))), // kilocode_change - map only after publication retained its raw defect
+        ), // kilocode_change - native atomic write remains joined
       ) // kilocode_change - admit the complete read-modify-write
     })
 
     const remove = Effect.fn("Auth.remove")(function* (key: string) {
       yield* admission.run(
-        Effect.gen(function* () {
-          const target = filepath() // kilocode_change - select the profile only after admission
-          const norm = key.replace(/\/+$/, "")
-          const data = yield* load(target)
-          delete data[key]
-          delete data[norm]
-          yield* fsys.writeJson(target, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
-        }),
+        Effect.suspend(
+          () =>
+            CredentialPublication.run(filepath(), (channel) =>
+              Effect.gen(function* () {
+                // kilocode_change - common lock before reads and publication
+                const target = channel.file // kilocode_change - selected canonical auth path
+                const norm = key.replace(/\/+$/, "")
+                const data = yield* load(target, true)
+                delete data[key]
+                delete data[norm]
+                yield* channel.write(data) // kilocode_change - retain raw native failure before typed mapping
+              }),
+            ).pipe(Effect.catchDefect((cause) => Effect.fail(fail("Failed to write auth data")(cause)))), // kilocode_change - map only after publication retained its raw defect
+        ), // kilocode_change - native atomic write remains joined
       ) // kilocode_change - admit the complete read-modify-write
 
       // kilocode_change start - Track logout and reset telemetry identity for Kilo after the durable mutation

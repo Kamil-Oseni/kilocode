@@ -49,6 +49,7 @@ import * as ModelsRefresh from "@/kilocode/provider/models-refresh"
 import * as Pricing from "@/kilocode/provider/pricing"
 import { bedrockAuth, providerKey, vertexAuth, vertexCredentials, vertexOptions } from "@/kilocode/provider/cloud-auth"
 import { localFetch } from "@/kilocode/provider/local-scheduler"
+import { context as ollamaContext } from "@/kilocode/provider/ollama-context"
 import { substitute } from "@/kilocode/provider/helper-policy"
 // kilocode_change end
 import { ProviderError } from "./error"
@@ -1818,26 +1819,42 @@ const layer = Layer.effect(
             ...model.headers,
           }
 
+        const cfg = ollamaContext(
+          {
+            localInference: options["localInference"],
+            localInferenceAPI: options["localInferenceAPI"],
+            localInferenceToolFormat: options["localInferenceToolFormat"],
+            localInferenceContext: options["localInferenceContext"], // kilocode_change - explicit context must agree with the configured model window
+            localInferenceKeepAlive: options["localInferenceKeepAlive"], // kilocode_change - explicit native residency budget
+          },
+          model,
+        ) // kilocode_change - bind local model context before SDK cache selection
         const key = Hash.fast(
           JSON.stringify({
             providerID: model.providerID,
             npm: model.api.npm,
             options,
+            localToolFormat: cfg.localInferenceToolFormat, // kilocode_change - isolate opt-in constrained transports
+            localContext: cfg.ollamaContext, // kilocode_change - distinct configured windows cannot share a transport
+            localModel: cfg.ollamaModel, // kilocode_change - bind the transport's exact native model
           }),
         )
         const existing = s.sdk.get(key)
         if (existing) return existing
 
         const customFetch = options["fetch"]
-        const local = options["localInference"] // kilocode_change - opt-in local resource admission
         delete options["localInference"] // kilocode_change - keep scheduler metadata out of provider transport options
+        delete options["localInferenceAPI"] // kilocode_change - keep bridge metadata out of SDK options
+        delete options["localInferenceToolFormat"] // kilocode_change - keep bridge capability out of SDK options
+        delete options["localInferenceContext"] // kilocode_change - keep native context metadata out of SDK options
+        delete options["localInferenceKeepAlive"] // kilocode_change - keep native residency metadata out of SDK options
         const chunkTimeout = options["chunkTimeout"]
         const headerTimeout = options["headerTimeout"]
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
         // kilocode_change start - admission precedes transport deadlines
-        options["fetch"] = localFetch({ localInference: local }, async (input: any, init?: BunFetchRequestInit) => {
+        options["fetch"] = localFetch(cfg, async (input: any, init?: BunFetchRequestInit) => {
           // kilocode_change end
           // kilocode_change - admission precedes transport deadlines
           const fetchFn = customFetch ?? fetch

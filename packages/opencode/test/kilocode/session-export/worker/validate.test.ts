@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { parseMessage } from "@/kilocode/session-export/worker/validate"
+import { spawn } from "@/kilocode/session-export/worker-identity"
 
 describe("session export worker validation", () => {
   test("rejects init messages without a database path", () => {
@@ -7,10 +8,12 @@ describe("session export worker validation", () => {
   })
 
   test("accepts init messages with custom endpoint opt-in", () => {
-    expect(parseMessage({ kind: "init", dbPath: ":memory:", allowCustomEndpoint: true })).toEqual({
+    const identity = spawn(crypto.randomUUID())
+    expect(parseMessage({ kind: "init", dbPath: ":memory:", allowCustomEndpoint: true, identity })).toEqual({
       kind: "init",
       dbPath: ":memory:",
       allowCustomEndpoint: true,
+      identity,
     })
   })
 

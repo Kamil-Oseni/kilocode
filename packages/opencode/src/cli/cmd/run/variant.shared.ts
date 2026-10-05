@@ -7,6 +7,7 @@
 // so your last-used variant sticks. Cycling (ctrl+t) updates both the active
 // variant and the persisted file.
 import path from "path"
+import { ModelOwner } from "@/kilocode/config/model-owner" // kilocode_change
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Context, Effect, Layer } from "effect"
@@ -171,26 +172,15 @@ function createLayer(fs = AppNodeBuilder.build(FSUtil.node)) {
             return
           }
 
-          const target = modelFile()
-          const current = yield* read(target)
-          const next = {
-            ...current.variant,
-          }
-          const key = variantKey(model)
-          if (variant) {
-            next[key] = variant
-          }
-
-          if (!variant) {
-            delete next[key]
-          }
-
-          yield* file
-            .writeJson(target, {
-              ...current,
-              variant: next,
-            })
-            .pipe(Effect.orElseSucceed(() => undefined))
+          // kilocode_change start - merge the actual locked generation inside the reserved producer.
+          yield* ModelOwner.process.update((current) => {
+            const next = { ...state(current).variant }
+            const key = variantKey(model)
+            if (variant) next[key] = variant
+            if (!variant) delete next[key]
+            return { ...current, variant: next }
+          })
+          // kilocode_change end
         })
         // kilocode_change end
 
@@ -205,10 +195,24 @@ function createLayer(fs = AppNodeBuilder.build(FSUtil.node)) {
 
 /** @internal Exported for testing. */
 export function createVariantRuntime(fs = AppNodeBuilder.build(FSUtil.node)): VariantRuntime {
-  const runtime = makeRuntime(Service, createLayer(fs))
+  const group = ModelOwner.process.group() // kilocode_change
+  const runtime = makeRuntime(Service, createLayer(fs), () => group.settle()) // kilocode_change
   return {
     resolveSavedVariant: (model) => runtime.runPromise((svc) => svc.resolveSavedVariant(model)).catch(() => undefined),
-    saveVariant: (model, variant) => runtime.runPromise((svc) => svc.saveVariant(model, variant)).catch(() => {}),
+    // kilocode_change start - reserve synchronously before lazy runtime scheduling; failures remain in owner history.
+    saveVariant: (model, variant) =>
+      !model
+        ? Promise.resolve()
+        : group
+            .launch(Global.Path.state, (ticket) =>
+              ModelOwner.process.result(
+                runtime.runPromiseExit((svc) => ModelOwner.process.effect(ticket, svc.saveVariant(model, variant))),
+              ),
+            )
+            .catch((err: unknown) => {
+              console.error("Model variant publication failed", err)
+            }),
+    // kilocode_change end
   }
 }
 

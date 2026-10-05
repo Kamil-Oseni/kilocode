@@ -692,8 +692,11 @@ export namespace RayaTaskDelegation {
       yield* publish(admission(record, sender, recipient))
       return { record, created: true }
     })
-    const accepted = Effect.fn("RayaTaskDelegation.accepted")(function* (recipientID: string) {
-      const row = yield* db
+    const accepted = Effect.fn("RayaTaskDelegation.accepted")(function* (
+      recipientID: string,
+      excluded?: ReadonlySet<string>,
+    ) {
+      const rows = yield* db
         .select()
         .from(Delegation)
         .where(
@@ -705,15 +708,16 @@ export namespace RayaTaskDelegation {
           ),
         )
         .orderBy(asc(Delegation.time_created), asc(Delegation.id))
-        .limit(1)
-        .get()
+        .limit((excluded?.size ?? 0) + 1)
+        .all()
         .pipe(Effect.orDie)
+      const row = rows.find((row) => !excluded?.has(row.id))
       return row ? decode(row) : undefined
     })
-    const take = Effect.fn("RayaTaskDelegation.take")(function* (recipientID: string) {
-      const held = yield* accepted(recipientID)
+    const take = Effect.fn("RayaTaskDelegation.take")(function* (recipientID: string, excluded?: ReadonlySet<string>) {
+      const held = yield* accepted(recipientID, excluded)
       if (held) return held
-      const row = yield* db
+      const rows = yield* db
         .select()
         .from(Delegation)
         .where(
@@ -724,9 +728,10 @@ export namespace RayaTaskDelegation {
           ),
         )
         .orderBy(asc(Delegation.time_created), asc(Delegation.id))
-        .limit(1)
-        .get()
+        .limit((excluded?.size ?? 0) + 1)
+        .all()
         .pipe(Effect.orDie)
+      const row = rows.find((row) => !excluded?.has(row.id))
       if (!row) return
       const now = Date.now()
       const runID = crypto.randomUUID()

@@ -34,6 +34,7 @@ const URL_RE = /https?:\/\/[^\s"'`)\]},;*\\<>]+/g
 const EXCLUDE_PATTERNS = [
   // Localhost and internal
   /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/,
+  /^http:\/\/192\.168\.100\.160\/?$/, // kilocode_change - Dedicated private Home Assistant API origin, not a public documentation link.
   /^https?:\/\/kilo\.internal/,
   /^https?:\/\/dev\.kilo\.ai/,
   /^https?:\/\/tauri\.localhost/,

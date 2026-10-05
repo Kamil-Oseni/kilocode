@@ -7,6 +7,9 @@ import type { IndexingStatus } from "@kilocode/kilo-indexing/status"
 import { withTimeout } from "@/util/timeout"
 import type { Event, Log, Message, Request, Result } from "./indexing-worker-protocol"
 import type { IndexingWarning } from "./indexing-warning"
+import * as Retirement from "./indexing-retirement"
+import { ProfileParticipants } from "./cli/profile-participants"
+import { KiloShutdown } from "./cli/shutdown"
 
 declare global {
   const KILO_INDEXING_WORKER_PATH: string
@@ -39,6 +42,7 @@ export namespace IndexingWorker {
     | Omit<Extract<Request, { method: "init" }>, "id">
     | Omit<Extract<Request, { method: "search" }>, "id">
     | Omit<Extract<Request, { method: "dispose" }>, "id">
+    | Omit<Extract<Request, { method: "shutdown" }>, "id">
 
   type Channel = {
     task: Worker
@@ -46,29 +50,60 @@ export namespace IndexingWorker {
     hosts: Map<string, Host>
     id: number
     stopped: boolean
+    retiring: boolean
+    request: Retirement.Request
+    exited: Promise<void>
   }
 
   const pool = new Map<string, Host>()
   let shared: Channel | undefined
+  const channels = new Set<Channel>()
+  const failures: unknown[] = []
+  let closing: Promise<readonly Retirement.Receipt[]> | undefined
+  let registered = false
 
   const channel = () => {
+    if (closing) throw new Error("Indexing admission is closed")
     if (shared && !shared.stopped) return shared
 
     const file =
       typeof KILO_INDEXING_WORKER_PATH !== "undefined"
         ? KILO_INDEXING_WORKER_PATH
         : new URL("./indexing-worker.ts", import.meta.url)
+    const request = {
+      runID: process.env.KILO_RUN_ID || crypto.randomUUID(),
+      generation: crypto.randomUUID(),
+      requestID: crypto.randomUUID(),
+    }
+    const exited = Promise.withResolvers<void>()
+    // The close event, not acknowledgment alone, confirms this exact Worker graph exited.
     const state: Channel = {
-      task: new Worker(file, { ref: false }),
+      task: new Worker(file, {
+        ref: false,
+        env: { ...process.env, [Retirement.GENERATION]: request.generation, [Retirement.RUN]: request.runID },
+      }),
       pending: new Map(),
       hosts: new Map(),
       id: 0,
       stopped: false,
+      retiring: false,
+      request,
+      exited: exited.promise,
+    }
+    void exited.promise.catch(() => undefined) // Retirement observes the retained rejection below.
+    channels.add(state)
+    if (!registered) {
+      registered = true
+      KiloShutdown.register(async () => {
+        await shutdown()
+      })
     }
 
     const fail = (err: unknown) => {
       if (state.stopped) return
       state.stopped = true
+      failures.push(err)
+      exited.reject(err)
       for (const item of state.pending.values()) item.reject(err)
       state.pending.clear()
       for (const host of state.hosts.values()) host.fail(err)
@@ -98,13 +133,28 @@ export namespace IndexingWorker {
       request.reject(new Error(message.error))
     }
     state.task.onerror = (event) => fail(event.error ?? new Error(event.message))
-    state.task.addEventListener("close", () => fail(new Error("Indexing worker exited.")))
+    state.task.addEventListener("close", (event) => {
+      if (
+        !state.retiring ||
+        !("code" in event) ||
+        event.code !== 0 ||
+        !("wasClean" in event) ||
+        event.wasClean !== true
+      ) {
+        fail(new Error("Indexing worker exited without clean retirement"))
+        return
+      }
+      state.stopped = true
+      exited.resolve()
+    })
     shared = state
     return state
   }
 
   const call = <T>(state: Channel, request: Outgoing, read: (message: Result) => T) => {
     if (state.stopped) return Promise.reject(new Error("Indexing worker is unavailable."))
+    if (state.retiring && request.method !== "shutdown")
+      return Promise.reject(new Error("Indexing admission is closed"))
     const id = state.id++
     const message: Request = { ...request, id }
     return new Promise<T>((resolve, reject) => {
@@ -190,7 +240,9 @@ export namespace IndexingWorker {
             "Indexing worker reset timed out",
           )
         } catch (err) {
+          failures.push(err)
           callbacks.failure(err)
+          throw err
         } finally {
           if (state.hosts.get(key) === host) state.hosts.delete(key)
           if (pool.get(key) === host) pool.delete(key)
@@ -204,6 +256,7 @@ export namespace IndexingWorker {
   let factory: Factory | undefined
 
   export function create(directory: string, root: string, hooks: Hooks) {
+    if (closing) throw new Error("Indexing admission is closed")
     if (factory) return factory(directory, root, hooks)
     const key = `${directory}\0${root}`
     const existing = pool.get(key)
@@ -218,5 +271,37 @@ export namespace IndexingWorker {
 
   export function override(next?: Factory) {
     factory = next
+  }
+
+  /** Terminal graph closure joins the exact ACK and clean close before publishing historical roots. */
+  export function shutdown(): Promise<readonly Retirement.Receipt[]> {
+    if (closing) return closing
+    for (const state of channels) state.retiring = true
+    closing = (async () => {
+      const receipts: Retirement.Receipt[] = []
+      const results = await Promise.allSettled(
+        [...channels].map(async (state) => {
+          const [reply] = await withTimeout(
+            Promise.all([
+              call(state, { type: "request", key: "", method: "shutdown", input: state.request }, (message) => {
+                if (message.ok && message.method === "shutdown")
+                  return Retirement.validate(message.value, state.request)
+                throw new Error("Unexpected indexing shutdown response")
+              }),
+              state.exited,
+            ]),
+            10000,
+            "Indexing cleanup/exit remains unconfirmed",
+          )
+          ProfileParticipants.remember(reply)
+          receipts.push(reply)
+        }),
+      )
+      for (const result of results) if (result.status === "rejected") failures.push(result.reason)
+      if (failures.length) throw new AggregateError(failures, "Indexing retirement remains unconfirmed")
+      pool.clear()
+      return Object.freeze(receipts)
+    })()
+    return closing
   }
 }

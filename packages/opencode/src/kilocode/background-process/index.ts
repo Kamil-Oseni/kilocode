@@ -31,6 +31,8 @@ import path from "path"
 import z from "zod"
 import * as Ports from "./ports"
 import * as Lifecycle from "./lifecycle"
+import * as Capture from "./capture"
+import { image } from "../daemon/ownership"
 
 export namespace BackgroundProcess {
   const log = Log.create({ service: "background-process" })
@@ -43,6 +45,42 @@ export namespace BackgroundProcess {
   const PORT_START_MS = 500
   const PORT_MS = 5_000
   const PORT_LIMIT_MS = 30_000
+  const accepted = new Set<Promise<unknown>>()
+  const known = new Set<Active>()
+  const failures: unknown[] = []
+  let fenced = false
+  let closing: Promise<readonly Awaited<ReturnType<typeof Capture.retire>>[]> | undefined
+
+  function intake<A>(work: () => Promise<A>): Promise<A> {
+    if (fenced) return Promise.reject(new Error("Background process capture admission is closed"))
+    const ticket = Promise.withResolvers<A>()
+    accepted.add(ticket.promise)
+    void ticket.promise.then(
+      () => accepted.delete(ticket.promise),
+      (err) => {
+        if (fenced) failures.push(err)
+        accepted.delete(ticket.promise)
+      },
+    )
+    try {
+      ticket.resolve(work())
+    } catch (err) {
+      ticket.reject(err)
+    }
+    return ticket.promise
+  }
+
+  function observe<A>(task: Promise<A>) {
+    accepted.add(task)
+    void task.then(
+      () => accepted.delete(task),
+      (err) => {
+        failures.push(err)
+        accepted.delete(task)
+      },
+    )
+    return task
+  }
 
   const idSchema = Schema.String.annotate({ [ZodOverride]: z.string().startsWith("bgp") }).pipe(
     Schema.brand("BackgroundProcessID"),
@@ -170,6 +208,7 @@ export namespace BackgroundProcess {
     drained?: boolean
     origin?: SessionID
     pending?: boolean
+    witness?: Capture.Witness
   }
 
   const Persisted = Schema.Struct({
@@ -180,6 +219,7 @@ export namespace BackgroundProcess {
     token: Schema.String,
     info: Info,
     start: StartInput,
+    witness: Schema.optional(Schema.Struct({ birth: Schema.String, executable: Schema.String, digest: Schema.String })),
   }).pipe(withStatics((s) => ({ zod: zod(s) })))
   type Persisted = Schema.Schema.Type<typeof Persisted>
 
@@ -309,6 +349,7 @@ export namespace BackgroundProcess {
           token,
           info,
           start: active.start,
+          witness: active.witness,
         } satisfies Persisted,
         0o600,
       )
@@ -317,6 +358,7 @@ export namespace BackgroundProcess {
     try {
       await next
     } catch (err) {
+      failures.push(err)
       if (opts?.create) active.saved = false
       throw err
     } finally {
@@ -347,9 +389,7 @@ export namespace BackgroundProcess {
   async function forget(shared: Shared, active: Active) {
     if (!(await drained(active))) throw new Error("Native process tree termination has no exact drain witness")
     active.saved = false
-    await active.saving?.catch((err) =>
-      log.warn("failed to finish persistent process metadata", { err, id: active.info.id }),
-    )
+    await active.saving
     const control = controlfile(shared, active.info.id)
     const files = BackgroundProcessRunner.sidecars(control)
     await Promise.all(
@@ -631,6 +671,10 @@ export namespace BackgroundProcess {
       ...(token ? { KILO_BACKGROUND_PROCESS_TOKEN: token } : {}),
     })
     delete result.KILO_BACKGROUND_PROCESS_PORTS
+    // A detached supervisor has its own native ownership; it cannot publish the launching daemon's ACK.
+    delete result.RAYA_DAEMON_GENERATION
+    delete result.RAYA_DAEMON_REQUEST
+    delete result.RAYA_DAEMON_RECEIPT
     return result
   }
 
@@ -900,21 +944,24 @@ export namespace BackgroundProcess {
     if (active.disposed || terminal(active.info.status) || active.watch) return
     active.watch = setTimeout(() => {
       active.watch = undefined
-      void output(active)
-        .then(async () => {
+      void observe(
+        output(active).then(async () => {
+          if (active.disposed) return
           const status = await probe(active)
+          if (active.disposed) return
           if (!(await drained(active))) {
             if (status === "unknown") log.warn("failed to verify persistent process", { id: active.info.id })
             watch(shared, active)
             return
           }
+          if (active.disposed) return
           exited(active, 0, null)
           await forget(shared, active)
-        })
-        .catch((err) => {
-          log.warn("failed to watch persistent process", { err, id: active.info.id })
-          watch(shared, active)
-        })
+        }),
+      ).catch((err) => {
+        log.warn("failed to watch persistent process", { err, id: active.info.id })
+        watch(shared, active)
+      })
     }, PUBLISH_MS)
   }
 
@@ -1047,6 +1094,7 @@ export namespace BackgroundProcess {
       shared: state.shared,
       offset: 0,
     }
+    known.add(active)
     const processes = owner(state, lifetime)
     processes.set(id, active)
     proc.stdout?.on("data", (chunk) => append(active, chunk.toString("utf-8")))
@@ -1054,18 +1102,21 @@ export namespace BackgroundProcess {
     proc.once("error", (err) => failed(active, err))
     proc.once("exit", (code, signal) => {
       if (processes.get(id) !== active || active.disposed) return
-      void output(active)
-        .then(async () => {
+      void observe(
+        output(active).then(async () => {
+          if (active.disposed) return
           if (!(await drained(active))) {
             watch(state.shared, active)
             return
           }
+          if (active.disposed) return
           exited(active, code, signal)
           await forget(state.shared, active)
-        })
-        .catch((err) => log.warn("failed to finalize persistent process", { err, id }))
+        }),
+      ).catch((err) => log.warn("failed to finalize persistent process", { err, id }))
     })
     try {
+      if (process.platform === "win32" && proc.pid) active.witness = await image(proc.pid)
       await verify(active)
       await save(state.shared, active, { create: true })
       if (lifetime === "persistent") proc.unref()
@@ -1073,6 +1124,10 @@ export namespace BackgroundProcess {
       watch(state.shared, active)
       publish(active)
       poll(active, PORT_START_MS)
+      if (fenced) {
+        active.disposed = true
+        for (const timer of [active.notify, active.poll, active.watch, active.retry]) if (timer) clearTimeout(timer)
+      }
       if (input.ready) await wait(active, input.ready)
       return clone(active.info)
     } catch (err) {
@@ -1150,6 +1205,7 @@ export namespace BackgroundProcess {
         shared,
         offset: 0,
         saved: true,
+        witness: record.witness,
       }
       active.info.output = ""
       active.info.ports = []
@@ -1168,6 +1224,7 @@ export namespace BackgroundProcess {
         await Promise.all([chmod(file, 0o600), chmod(logfile(shared, active.info.id), 0o600).catch(() => undefined)])
       }
       shared.processes.set(active.info.id, active)
+      known.add(active)
       await output(active)
       watch(shared, active)
       poll(active, PORT_START_MS)
@@ -1264,7 +1321,102 @@ export namespace BackgroundProcess {
     return runtime.dispose()
   }
 
-  export async function start(input: StartInput) {
+  /** Explicit capture fences launch/adoption and preserves every uncertain durable reference. */
+  export function closeForCapture() {
+    if (closing) return closing
+    fenced = true
+    for (const active of known) {
+      active.disposed = true
+      for (const timer of [active.notify, active.poll, active.watch, active.retry]) if (timer) clearTimeout(timer)
+      active.resolve?.(false)
+      active.resolve = undefined
+    }
+    closing = (async () => {
+      await Promise.allSettled([...accepted])
+      const pending = [...known].flatMap((active) =>
+        [active.saving, active.scan, active.identity].filter((task) => task !== undefined),
+      )
+      const settled = await Promise.allSettled(pending)
+      for (const result of settled) if (result.status === "rejected") throw result.reason
+      if (failures.length) throw new AggregateError(failures, "Background accepted work could not be confirmed settled")
+      const directory = path.join(Global.Path.state, "background-process")
+      const scopes = await readdir(directory, { withFileTypes: true }).catch((err: unknown) => {
+        if (code(err) === "ENOENT") return []
+        throw err
+      })
+      const receipts: Awaited<ReturnType<typeof Capture.retire>>[] = []
+      for (const scope of scopes) {
+        if (scope.name === "locks" || scope.name === "lifecycle") continue
+        if (!scope.isDirectory() || !/^scope-[a-f0-9]+$/.test(scope.name))
+          throw new Error("Background durable scope is unowned or ambiguous")
+        const key = `scope:${scope.name.slice(6)}`
+        const current = [...known].find((active) => active.shared?.key === key)?.shared
+        const shared: Shared = current ?? { key, dir: scope.name, processes: new Map() }
+        if (!(await claim(shared))) throw new Error("Background durable scope is owned by another live controller")
+        try {
+          for (const name of await readdir(root(shared))) {
+            if (!name.endsWith(".json")) continue
+            const record = Schema.decodeUnknownSync(Persisted)(
+              JSON.parse(await readFile(path.join(root(shared), name), "utf8")),
+            )
+            if (
+              name !== `${record.info.id}.json` ||
+              record.scope !== shared.key ||
+              record.dispatch === "starting" ||
+              !record.info.pid ||
+              !record.witness
+            )
+              throw new Error("Background durable participant lacks exact retirement ownership")
+            const active = [...known].find((item) => item.info.id === record.info.id && item.token === record.token)
+            if (active?.saving) await active.saving
+            if (active?.proc && stopped(active.proc))
+              throw new Error("Background supervisor exited before exact capture observation")
+            const control = controlfile(shared, record.info.id)
+            if (await Bun.file(`${control}.capture-uncertain`).exists())
+              throw new Error("Background previous capture uncertainty remains retained")
+            const receipt = await Capture.retire({
+              pid: record.info.pid,
+              token: record.token,
+              control,
+              witness: record.witness,
+            })
+            receipts.push(receipt)
+            const now = Date.now()
+            await Filesystem.writeJson(
+              path.join(root(shared), name),
+              {
+                ...record,
+                info: {
+                  ...record.info,
+                  status: "stopped",
+                  exitCode: 0,
+                  ports: [],
+                  time: { ...record.info.time, updated: now, ended: now },
+                },
+              },
+              0o600,
+            )
+            if (active) {
+              active.info.status = "stopped"
+              active.info.exitCode = 0
+              active.info.time.ended = now
+              active.info.time.updated = now
+            }
+          }
+        } finally {
+          if (!current) await shared.lease?.release()
+        }
+      }
+      return Object.freeze(receipts)
+    })()
+    return closing
+  }
+
+  export function start(input: StartInput) {
+    return intake(() => startRequest(input))
+  }
+
+  async function startRequest(input: StartInput) {
     const ctx = Instance.current
     return Lifecycle.locked(() =>
       Instance.restore(ctx, async () => {
@@ -1274,7 +1426,11 @@ export namespace BackgroundProcess {
     )
   }
 
-  export async function list(input?: { sessionID?: SessionID }) {
+  export function list(input?: { sessionID?: SessionID }) {
+    return intake(() => listRequest(input))
+  }
+
+  async function listRequest(input?: { sessionID?: SessionID }) {
     const current = await state()
     await adopt(current)
     return values(current)
@@ -1283,14 +1439,22 @@ export namespace BackgroundProcess {
       .toSorted((a, b) => a.time.started - b.time.started || a.id.localeCompare(b.id))
   }
 
-  export async function get(id: ID) {
+  export function get(id: ID) {
+    return intake(() => getRequest(id))
+  }
+
+  async function getRequest(id: ID) {
     const current = await state()
     if (!find(current, id)) await adopt(current)
     const active = find(current, id)
     return active ? clone(active.info) : undefined
   }
 
-  export async function logs(id: ID): Promise<Logs | undefined> {
+  export function logs(id: ID): Promise<Logs | undefined> {
+    return intake(() => logsRequest(id))
+  }
+
+  async function logsRequest(id: ID): Promise<Logs | undefined> {
     const current = await state()
     if (!find(current, id)) await adopt(current)
     const active = find(current, id)
@@ -1298,7 +1462,11 @@ export namespace BackgroundProcess {
     return { id: active.info.id, sessionID: active.info.sessionID, output: active.info.output }
   }
 
-  export async function stop(id: ID) {
+  export function stop(id: ID) {
+    return intake(() => stopRequest(id))
+  }
+
+  async function stopRequest(id: ID) {
     const current = await state()
     if (!find(current, id)) await adopt(current)
     const active = find(current, id)
@@ -1307,7 +1475,11 @@ export namespace BackgroundProcess {
     return clone(active.info)
   }
 
-  export async function restart(id: ID) {
+  export function restart(id: ID) {
+    return intake(() => restartRequest(id))
+  }
+
+  async function restartRequest(id: ID) {
     const ctx = Instance.current
     return Lifecycle.locked(() =>
       Instance.restore(ctx, async () => {
@@ -1354,7 +1526,11 @@ export namespace BackgroundProcess {
   }
 
   /** Archive alone revokes every lifetime, including durable processes from completed worker sessions. */
-  export async function archive(organization: string, sessions: readonly SessionID[], members: readonly string[] = []) {
+  export function archive(organization: string, sessions: readonly SessionID[], members: readonly string[] = []) {
+    return intake(() => archiveRequest(organization, sessions, members))
+  }
+
+  async function archiveRequest(organization: string, sessions: readonly SessionID[], members: readonly string[] = []) {
     const ctx = capture()
     return Lifecycle.locked(async () => {
       const lineage = await Lifecycle.expand(members, sessions)
@@ -1444,7 +1620,11 @@ export namespace BackgroundProcess {
   }
 
   /** Stable lifecycle evidence for review/archive callers; private commands, logs, and control tokens stay local. */
-  export async function occupancy(sessions: readonly SessionID[]) {
+  export function occupancy(sessions: readonly SessionID[]) {
+    return intake(() => occupancyRequest(sessions))
+  }
+
+  async function occupancyRequest(sessions: readonly SessionID[]) {
     const ctx = Instance.current
     const ids = new Set(sessions)
     const base = path.join(Global.Path.state, "background-process")
@@ -1499,7 +1679,11 @@ export namespace BackgroundProcess {
     return result
   }
 
-  export async function stopSession(sessionID: SessionID) {
+  export function stopSession(sessionID: SessionID) {
+    return intake(() => stopRequestSession(sessionID))
+  }
+
+  async function stopRequestSession(sessionID: SessionID) {
     const current = await state()
     const list = Array.from(current.processes.values()).filter((active) => active.info.sessionID === sessionID)
     await Promise.all(

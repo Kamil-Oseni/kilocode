@@ -3,9 +3,14 @@ import { copyFile, mkdir, open, rm } from "node:fs/promises"
 import path from "node:path"
 
 const core = path.resolve(import.meta.dirname, "../../../core")
+const script = path.join(core, "script/kilocode/build-process-host.ps1")
 const inputs = [
   path.join(core, "native/kilocode/process-host.cpp"),
-  path.join(core, "script/kilocode/build-process-host.ps1"),
+  path.join(core, "native/kilocode/source-host.inc"),
+  path.join(core, "native/kilocode/source-diagnostic.inc"),
+  path.join(core, "native/kilocode/source-pipe.inc"),
+  path.join(core, "native/kilocode/profile-offline.inc"),
+  script,
 ]
 const sha = (data: Uint8Array) => createHash("sha256").update(data).digest("hex")
 async function bytes(file: string, max: number) {
@@ -24,7 +29,7 @@ async function bytes(file: string, max: number) {
     await handle.close()
   }
 }
-async function recipe() {
+export async function recipe() {
   const parts = await Promise.all(inputs.map((file) => bytes(file, 2 * 1024 * 1024)))
   const hash = createHash("sha256")
   for (const [index, part] of parts.entries())
@@ -232,7 +237,7 @@ export namespace ProcessHost {
           "-ExecutionPolicy",
           "Bypass",
           "-File",
-          inputs[1],
+          script,
           "-Output",
           path.join(directory, files[0]),
         ],

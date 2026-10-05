@@ -102,54 +102,6 @@ function userMessage(
 
 const it = testEffect(Layer.mergeAll(LayerNode.compile(FSUtil.node), NodeFileSystem.layer))
 
-function remap(root: string, file: string) {
-  if (file === Global.Path.state) {
-    return root
-  }
-
-  if (file.startsWith(Global.Path.state + path.sep)) {
-    return path.join(root, path.relative(Global.Path.state, file))
-  }
-
-  return file
-}
-
-function remappedFs(root: string) {
-  return Layer.effect(
-    FSUtil.Service,
-    Effect.gen(function* () {
-      const fs = yield* FSUtil.Service
-      return FSUtil.Service.of({
-        ...fs,
-        readJson: (file) => fs.readJson(remap(root, file)),
-        writeJson: (file, data, mode) => fs.writeJson(remap(root, file), data, mode),
-      })
-    }),
-  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
-}
-
-// kilocode_change start
-function capturedFs(root: string, seen: string[]) {
-  return Layer.effect(
-    FSUtil.Service,
-    Effect.gen(function* () {
-      const fs = yield* FSUtil.Service
-      return FSUtil.Service.of({
-        ...fs,
-        readJson: (file) => {
-          seen.push(file)
-          return fs.readJson(path.join(root, path.basename(file)))
-        },
-        writeJson: (file, data, mode) => {
-          seen.push(file)
-          return fs.writeJson(path.join(root, path.basename(file)), data, mode)
-        },
-      })
-    }),
-  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
-}
-// kilocode_change end
-
 describe("run variant shared", () => {
   test("prefers cli then session then saved variants", () => {
     expect(resolveVariant("max", "high", "low", ["low", "high"])).toBe("max")
@@ -195,7 +147,16 @@ describe("run variant shared", () => {
         },
       })
 
-      const svc = createVariantRuntime(remappedFs(root))
+      // kilocode_change start - ownership fixtures name the actual physical state directory.
+      const previous = Global.Path.state
+      Global.Path.state = root
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Global.Path.state = previous
+        }),
+      )
+      const svc = createVariantRuntime()
+      // kilocode_change end
 
       yield* Effect.promise(() => svc.saveVariant(model, "high"))
       expect(yield* Effect.promise(() => svc.resolveSavedVariant(model))).toBe("high")
@@ -227,7 +188,16 @@ describe("run variant shared", () => {
 
       yield* filesys.writeFileString(file, "{")
 
-      const svc = createVariantRuntime(remappedFs(root))
+      // kilocode_change start - ownership fixtures name the actual physical state directory.
+      const previous = Global.Path.state
+      Global.Path.state = root
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Global.Path.state = previous
+        }),
+      )
+      const svc = createVariantRuntime()
+      // kilocode_change end
 
       yield* Effect.promise(() => svc.saveVariant(model, "high"))
       expect(yield* Effect.promise(() => svc.resolveSavedVariant(model))).toBe("high")
@@ -244,19 +214,20 @@ describe("run variant shared", () => {
     await using tmp = await tmpdir()
     const original = Global.Path.state
     const current = path.join(tmp.path, "current")
-    const seen: string[] = []
 
     try {
-      const svc = createVariantRuntime(capturedFs(tmp.path, seen))
+      const svc = createVariantRuntime()
       Global.Path.state = current
-
       await svc.saveVariant(model, "high")
-      expect(await Bun.file(path.join(tmp.path, "model.json")).json()).toEqual({
-        variant: {
-          "openai/gpt-5": "high",
-        },
+      expect(await Bun.file(path.join(current, "model.json")).json()).toEqual({
+        variant: { "openai/gpt-5": "high" },
       })
-      expect(seen).toEqual([path.join(current, "model.json"), path.join(current, "model.json")])
+      Global.Path.state = tmp.path
+      await svc.saveVariant(model, "low")
+      expect(await Bun.file(path.join(tmp.path, "model.json")).json()).toEqual({
+        variant: { "openai/gpt-5": "low" },
+      })
+      expect(await svc.resolveSavedVariant(model)).toBe("low")
     } finally {
       Global.Path.state = original
     }

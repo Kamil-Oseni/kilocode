@@ -158,11 +158,11 @@ const nativeLayer = (config: Config) =>
     Sqlite.Native,
     Effect.gen(function* () {
       // kilocode_change start - native profile writer admission
-      const native = openDatabase(config.filename, () =>
+      const native = openDatabase(config.filename, (file) =>
         profileSqlite(
-          config.filename,
-          () =>
-            new Database(config.filename, {
+          file,
+          (file) =>
+            new Database(file, {
               readonly: config.readonly,
               readwrite: config.readwrite ?? true,
               create: config.create ?? true,

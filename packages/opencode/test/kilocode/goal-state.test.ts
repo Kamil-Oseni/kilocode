@@ -1,14 +1,21 @@
 // raya_change - Milestone A goal persistence, audit, and continuation eligibility
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
+import { createRequire } from "node:module"
+import { writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
-import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema, Scope } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { RayaGoal } from "@/kilocode/goal"
+import { goalTools } from "@/kilocode/tool/goal"
+import { prepare as goalSchema } from "@/kilocode/goal/completion-schema"
+import { Agent } from "@/agent/agent"
+import { Truncate } from "@/tool/truncate"
 import { mutation } from "@/kilocode/goal/mutation"
 import { gate } from "@/kilocode/session/input-gate"
 import { receipts } from "@/kilocode/goal/stop-receipt"
@@ -36,6 +43,12 @@ import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
+
+const guide = testEffect(
+  LayerNode.compile(
+    LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node]),
+  ),
+)
 
 const model = {
   providerID: ProviderV2.ID.make("test"),
@@ -133,6 +146,65 @@ function setup(
 }
 
 describe("RayaGoal", () => {
+  guide.live("completion guidance names saved criterion IDs while missing-ID audits remain denied", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_criterion_guidance_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(id))
+      yield* goals.create(id, "Verify the result", undefined, undefined, undefined, [
+        { id: "verified", description: "Verify the result", verification: "Successful command evidence" },
+      ])
+      const data = transcript({ sessionID: id, tool: "bash", exit: 0 })
+      rows.push(...data.rows)
+      const audit = {
+        summary: "Result verified",
+        requirements: [
+          {
+            requirement: "Verify the result",
+            passed: true,
+            evidence: [{ callID: data.part!.callID, summary: "Command passed" }],
+          },
+        ],
+      }
+      const denied = yield* goals.update(id, { status: "complete", audit }).pipe(Effect.flip)
+      expect(denied.message).toContain('criterionID "verified"')
+      const active = yield* goals.get(id)
+      expect(active?.status).toBe("active")
+      expect(active?.auditAttempt?.accepted).toBe(false)
+      const info = yield* goalTools(goals).update
+      const tool = yield* info.init()
+      const match = tool.description.match(/Shape: (\{.+\}) —/)
+      expect(match).not.toBeNull()
+      const example = Schema.decodeUnknownSync(RayaGoal.ModelUpdate)(JSON.parse(match![1]))
+      expect(example.audit).toBeUndefined()
+      expect(example.requirements?.[0].criterionID).toBe("<saved criterion ID>")
+      expect(tool.description).toContain("Read get_goal again after verification")
+      expect(tool.description).toContain("eligibleEvidence.callID")
+      expect(tool.description).toContain("never a JSON-encoded string")
+      expect(() =>
+        Schema.decodeUnknownSync(RayaGoal.ModelUpdate)({
+          ...example,
+          audit: JSON.stringify({ requirements: example.requirements }),
+        }),
+      ).toThrow()
+      expect(
+        Schema.decodeUnknownSync(RayaGoal.ModelUpdate)({
+          status: "complete",
+          audit: { summary: "Result verified", requirements: example.requirements },
+        }).audit?.requirements[0].criterionID,
+      ).toBe("<saved criterion ID>")
+      expect(tool.description).toContain("Read get_goal first")
+      const accepted = yield* goals.update(id, {
+        status: "complete",
+        audit: { ...audit, requirements: audit.requirements.map((item) => ({ ...item, criterionID: "verified" })) },
+      })
+      expect(accepted.status).toBe("complete")
+      expect(accepted.audit?.requirements[0].criterionID).toBe("verified")
+    }),
+  )
+
   it.live(
     "refuses valid prior completion evidence until interrupted full-goal recovery is explicitly reviewed",
     () =>
@@ -2252,7 +2324,8 @@ describe("RayaGoal", () => {
           fault = false
           const receipt = yield* goals.stop(sessionID, initial.intent!, runs)
           expect(receipt.phase).toBe(phase === "requested" ? "finished" : "cleared")
-          expect(receipt.interrupted).toBe(phase === "requested" ? true : undefined)
+          // Keep an already observed cancellation even if its final receipt publication failed.
+          expect(receipt.interrupted).toBe(phase === "cleared" ? undefined : true)
           if (phase !== "requested") expect(observe(runner)).toEqual(before)
           expect(yield* goals.stop(sessionID, initial.intent!, runs)).toEqual(receipt)
           yield* runner.cancel
@@ -2626,6 +2699,265 @@ describe("RayaGoal", () => {
       expect(results.filter(Exit.isSuccess)).toHaveLength(1)
       expect(results.filter(Exit.isFailure)).toHaveLength(1)
       expect(yield* goals.get(sessionID)).toBeUndefined()
+    }),
+  )
+
+  guide.instance("advertises a mandatory native completion audit without changing control or evidence authority", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_completion_schema_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(id))
+      yield* goals.create(id, "Verify the result", undefined, undefined, undefined, [
+        { id: "verified", description: "Verify the result", verification: "Successful command evidence" },
+      ])
+      const data = transcript({ sessionID: id, tool: "bash", exit: 0 })
+      rows.push(...data.rows)
+      const info = yield* goalTools(goals).update
+      const tool = yield* info.init()
+      type Validator = { compile(schema: unknown): (value: unknown) => boolean }
+      const require = createRequire(import.meta.url)
+      const Constructor = createRequire(require.resolve("effect/package.json"))("ajv/dist/2020") as new (options: {
+        strict: boolean
+      }) => Validator
+      const validator = new Constructor({ strict: false })
+      const before = validator.compile(ToolJsonSchema.fromSchema(RayaGoal.ModelUpdate))
+      const advertised = validator.compile(ToolJsonSchema.fromTool({ ...tool, id: info.id }))
+      expect(before({ status: "complete" })).toBe(true)
+      expect(advertised({ status: "complete" })).toBe(false)
+      expect(tool.parameters).toBe(RayaGoal.ModelUpdate)
+      for (const status of ["active", "paused", "blocked"]) expect(advertised({ status })).toBe(true)
+      const requirement = {
+        criterionID: "verified",
+        requirement: "Verify the result",
+        passed: true,
+        evidence: [{ callID: data.part!.callID, summary: "Command passed" }],
+      }
+      const base = ToolJsonSchema.fromTool({ ...tool, id: info.id })
+      const request = yield* goalSchema(info.id, base, id)
+      const output = process.env.RAYA_GOAL_REQUEST_SCHEMA_OUTPUT
+      if (output) {
+        const saved = yield* goals.get(id)
+        expect(path.isAbsolute(output)).toBe(true)
+        const format = {
+          anyOf: [
+            {
+              type: "object",
+              additionalProperties: false,
+              properties: { kind: { const: "tool" }, name: { const: "update_goal" }, arguments: request },
+              required: ["kind", "name", "arguments"],
+            },
+            {
+              type: "object",
+              additionalProperties: false,
+              properties: { kind: { const: "text" }, content: { type: "string" } },
+              required: ["kind", "content"],
+            },
+          ],
+        }
+        yield* Effect.promise(() =>
+          writeFile(
+            output,
+            JSON.stringify(
+              {
+                format: "raya.goal.actual-owner.request-schema",
+                parameters: request,
+                schema: format,
+                schemaSHA: createHash("sha256").update(JSON.stringify(format)).digest("hex"),
+                syntheticSession: id,
+                criteria: saved?.criteria?.map((item) => item.id),
+                originalGoalOwner: true,
+                noInference: true,
+              },
+              null,
+              2,
+            ) + "\n",
+            { flag: "wx" },
+          ),
+        )
+      }
+      const scoped = validator.compile(request)
+      const missing = { requirement: requirement.requirement, passed: true, evidence: requirement.evidence }
+      expect(scoped({ status: "complete", requirements: [missing] })).toBe(false)
+      expect(scoped({ status: "complete", audit: { requirements: [missing] } })).toBe(false)
+      expect(scoped({ status: "complete", requirements: [{ ...requirement, criterionID: "invented" }] })).toBe(false)
+      expect(scoped({ status: "complete", requirements: [requirement] })).toBe(true)
+      expect(scoped({ status: "complete", audit: { requirements: [requirement] } })).toBe(true)
+      for (const requirements of [
+        [],
+        [requirement, requirement],
+        [requirement, { ...requirement, evidence: [{ callID: data.part!.callID, summary: "Same criterion again" }] }],
+      ]) {
+        expect(scoped({ status: "complete", requirements })).toBe(false)
+        expect(scoped({ status: "complete", audit: { requirements } })).toBe(false)
+      }
+      expect(scoped({ status: "paused" })).toBe(true)
+      for (const status of ["active", "paused", "blocked"])
+        expect(scoped({ status, audit: { requirements: [missing] } })).toBe(true)
+      expect(yield* goalSchema("read", base, id)).toBe(base)
+      const other = SessionID.make(`ses_unscoped_${crypto.randomUUID()}`)
+      yield* Effect.addFinalizer(() => goals.clear(other))
+      yield* goals.create(other, "No explicit criteria")
+      expect(
+        validator.compile(yield* goalSchema(info.id, base, other))({ status: "complete", requirements: [missing] }),
+      ).toBe(true)
+      yield* goals.clear(other)
+      expect(yield* goalSchema(info.id, base, other)).toBe(base)
+      yield* goals.create(other, "Changed criteria", undefined, undefined, undefined, [
+        { id: "changed", description: "Different criterion", verification: "Command evidence" },
+      ])
+      const changed = validator.compile(yield* goalSchema(info.id, base, other))
+      expect(changed({ status: "complete", requirements: [requirement] })).toBe(false)
+      expect(changed({ status: "complete", requirements: [{ ...requirement, criterionID: "changed" }] })).toBe(false)
+      expect(
+        changed({
+          status: "complete",
+          requirements: [{ ...requirement, criterionID: "changed", requirement: "Different criterion" }],
+        }),
+      ).toBe(true)
+      expect(validator.compile(base)({ status: "complete", requirements: [missing] })).toBe(true)
+      const flat = { status: "complete" as const, requirements: [requirement] }
+      const nested = { status: "complete" as const, audit: { requirements: [requirement] } }
+      expect(advertised(flat)).toBe(true)
+      expect(advertised(nested)).toBe(true)
+      expect(advertised({ ...flat, audit: nested.audit })).toBe(true)
+      expect(advertised({ status: "complete", requirements: [] })).toBe(false)
+      expect(advertised({ status: "complete", audit: { requirements: [] } })).toBe(false)
+      expect(advertised({ status: "complete", audit: JSON.stringify(nested.audit) })).toBe(false)
+      expect(
+        advertised({
+          status: "complete",
+          requirements: [
+            { criterionID: "verified", evidence: requirement.evidence },
+            { requirement: requirement.requirement },
+          ],
+        }),
+      ).toBe(false)
+      expect(advertised({ ...flat, requirements: [{ ...requirement, passed: "true" }] })).toBe(false)
+      expect(advertised({ ...flat, requirements: [{ ...requirement, evidence: "read" }] })).toBe(false)
+      const fabricated = {
+        ...flat,
+        requirements: [{ ...requirement, evidence: [{ callID: "1", summary: "Invented" }] }],
+      }
+      expect(advertised(fabricated)).toBe(true)
+      const refused = yield* goals.update(id, fabricated).pipe(Effect.flip)
+      expect(refused.message).toContain("not a completed post-goal")
+      expect((yield* goals.get(id))?.status).toBe("active")
+      expect((yield* goals.update(id, flat)).status).toBe("complete")
+      expect((yield* goals.get(id))?.audit?.requirements[0].evidence[0].callID).toBe(data.part!.callID)
+    }),
+  )
+
+  guide.instance("request completion schema preserves exact Windows Unicode criterion pairs", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_criterion_pairs_${crypto.randomUUID()}`)
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(id))
+      const description = "Read C:\\Users\\fixture\\café 日本語 🙂\\result.txt"
+      yield* goals.create(id, "Verify saved criteria", undefined, undefined, undefined, [
+        { id: "read", description, verification: "Actual successful evidence" },
+        { id: "check", description: "Check the result", verification: "Actual successful evidence" },
+      ])
+      const data = transcript({ sessionID: id, tool: "bash", exit: 0 })
+      rows.push(...data.rows)
+      const info = yield* goalTools(goals).update
+      const tool = yield* info.init()
+      const base = ToolJsonSchema.fromTool({ ...tool, id: info.id })
+      const request = yield* goalSchema(info.id, base, id)
+      type Validator = { compile(schema: unknown): (value: unknown) => boolean }
+      const require = createRequire(import.meta.url)
+      const Constructor = createRequire(require.resolve("effect/package.json"))("ajv/dist/2020") as new (options: {
+        strict: boolean
+      }) => Validator
+      const validate = new Constructor({ strict: false }).compile(JSON.parse(JSON.stringify(request)))
+      const requirement = {
+        criterionID: "read",
+        requirement: description,
+        passed: true,
+        evidence: [{ callID: data.part!.callID, summary: "Command passed" }],
+      }
+      // A grammar union can lower each alternative independently of its parent's siblings.
+      for (const branch of request.anyOf ?? []) {
+        if (typeof branch !== "object" || branch.properties?.status === undefined) continue
+        const status = branch.properties.status
+        if (typeof status !== "object" || status.const !== "complete") continue
+        const audit = branch.properties.audit
+        const arrays = [
+          branch.properties.requirements,
+          typeof audit === "object" ? audit.properties?.requirements : undefined,
+        ]
+        for (const array of arrays) {
+          if (!array || typeof array !== "object") throw new Error("Missing actual completion requirements")
+          const item = array.items
+          if (!item || typeof item !== "object" || Array.isArray(item))
+            throw new Error("Missing actual requirement item")
+          expect(item.oneOf?.length).toBe(2)
+          for (const choice of item.oneOf ?? []) {
+            if (typeof choice !== "object") throw new Error("Missing actual criterion alternative")
+            expect(choice.type).toBe(item.type)
+            expect(choice.additionalProperties).toEqual(item.additionalProperties)
+            expect(Object.keys(choice.properties ?? {}).toSorted()).toEqual(
+              Object.keys(item.properties ?? {}).toSorted(),
+            )
+            expect(choice.properties?.passed).toEqual(item.properties?.passed)
+            expect(choice.properties?.evidence).toEqual(item.properties?.evidence)
+            expect(choice.required).toContain("passed")
+            expect(choice.required).toContain("evidence")
+            const criterion = choice.properties?.criterionID
+            const description = choice.properties?.requirement
+            if (typeof criterion !== "object" || typeof description !== "object") throw new Error("Missing exact pair")
+            const valid = { ...requirement, criterionID: criterion.const, requirement: description.const }
+            const isolated = new Constructor({ strict: false }).compile(JSON.parse(JSON.stringify(choice)))
+            expect(isolated(valid)).toBe(true)
+            expect(isolated({ criterionID: valid.criterionID, requirement: valid.requirement })).toBe(false)
+            expect(isolated({ ...valid, passed: undefined })).toBe(false)
+            expect(isolated({ ...valid, evidence: undefined })).toBe(false)
+            expect(isolated({ ...valid, criterionID: "invented" })).toBe(false)
+            expect(isolated({ ...valid, requirement: "Wrong saved description" })).toBe(false)
+          }
+        }
+      }
+      const check = { ...requirement, criterionID: "check", requirement: "Check the result" }
+      for (const requirements of [
+        [requirement, check],
+        [check, requirement],
+      ]) {
+        expect(validate({ status: "complete", requirements })).toBe(true)
+        expect(validate({ status: "complete", audit: { requirements } })).toBe(true)
+      }
+      for (const requirements of [
+        [],
+        [requirement],
+        [check],
+        [requirement, requirement],
+        [requirement, check, check],
+      ]) {
+        expect(validate({ status: "complete", requirements })).toBe(false)
+        expect(validate({ status: "complete", audit: { requirements } })).toBe(false)
+      }
+      for (const item of [
+        { ...requirement, requirement: description.replaceAll("\\", "\\\\") },
+        { ...requirement, requirement: "Check the result" },
+        { ...requirement, criterionID: "check" },
+      ]) {
+        expect(validate({ status: "complete", requirements: [item, check] })).toBe(false)
+        expect(validate({ status: "complete", audit: { requirements: [item, check] } })).toBe(false)
+      }
+      for (const status of ["active", "paused", "blocked"])
+        expect(
+          validate({ status, requirements: [{ ...requirement, criterionID: "legacy", requirement: "Legacy" }] }),
+        ).toBe(true)
+      const rejected = yield* goals
+        .update(id, {
+          status: "complete",
+          requirements: [{ ...requirement, requirement: description.replaceAll("\\", "\\\\") }],
+        })
+        .pipe(Effect.flip)
+      expect(rejected.message).toContain("Preserve the saved requirement")
+      expect((yield* goals.get(id))?.status).toBe("active")
     }),
   )
 

@@ -24,8 +24,15 @@ export namespace KilocodeSystemPrompt {
         `You are powered by the model named ${input.model.api.id}. The exact model ID is ${input.model.providerID}/${input.model.api.id}`,
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
+        `  Working directory: ${input.ctx.directory}`,
+        `  Worktree root: ${input.ctx.worktree}`,
         `  Is directory a git repo: ${input.ctx.project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
+        ...(process.platform === "win32"
+          ? [
+              "  Relative file paths resolve under the working directory. Do not invent a /workspace mount on Windows. Preserve explicit requested paths and their permission boundaries.",
+            ]
+          : []),
         `  Today's date: ${new Date().toDateString()}`,
         `  Project config: .kilo/command/*.md, .kilo/agent/*.md, kilo.json, AGENTS.md. Put new commands and agents in .kilo/. Do not use .kilocode/ or .opencode/.`,
         `  Global config: ${Global.Path.config}/ (same structure)`,

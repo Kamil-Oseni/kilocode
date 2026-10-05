@@ -1,3 +1,4 @@
+import { Backlogs as Data } from "./schemas"
 // raya_change - durable global self-healing feedback backlog
 import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
@@ -24,69 +25,15 @@ export namespace RayaSelfHeal {
   export const VerificationPublish = Publish
   export const VerificationPublication = PublicationReceipt
 
-  export const Category = Schema.Literals([
-    "ui",
-    "chat",
-    "routing",
-    "goal",
-    "browser",
-    "settings",
-    "build",
-    "test",
-    "docs",
-    "other",
-  ])
+  export const Category = Data.Category
+  export const Status = Data.Status
+  export const Severity = Data.Severity
+  export const Evidence = Data.Evidence
+  export const Item = Data.Item
   export type Category = typeof Category.Type
-
-  export const Status = Schema.Literals([
-    "triaged",
-    "queued",
-    "in_progress",
-    "verified",
-    "blocked",
-    "duplicate",
-    "cancelled",
-  ])
-  export type Status = typeof Status.Type
-
-  export const Severity = Schema.Literals(["low", "medium", "high"])
   export type Severity = typeof Severity.Type
-
-  export const Evidence = Schema.Struct({
-    summary: Schema.String,
-    command: Schema.optional(Schema.String),
-    artifact: Schema.optional(Schema.String),
-    at: Schema.Number,
-  })
-
-  export const Item = Schema.Struct({
-    repair: Schema.optional(Outcome),
-    completion: Schema.optional(Completion),
-    artifact: Schema.optional(Delivery),
-    legacyVerification: Schema.optional(Schema.Boolean),
-    id: Schema.String,
-    fingerprint: Schema.String,
-    title: Schema.String,
-    description: Schema.String,
-    category: Category,
-    severity: Severity,
-    explanation: Schema.String,
-    approach: Schema.String,
-    status: Status,
-    createdAt: Schema.Number,
-    updatedAt: Schema.Number,
-    reports: Schema.Number,
-    reporterSessionID: Schema.optional(SessionID),
-    workSessionID: Schema.optional(SessionID),
-    blockedReason: Schema.optional(Schema.String),
-    evidence: Schema.Array(Evidence),
-    reloadRequired: Schema.Boolean,
-    notifiedAt: Schema.optional(Schema.Number),
-    duplicateOf: Schema.optional(Schema.String), // raya_change - canonical item this report duplicates
-    classifiedBy: Schema.optional(Schema.Literals(["keyword", "model"])), // raya_change - who set the current category/severity
-  })
+  export type Status = typeof Status.Type
   export type Item = typeof Item.Type
-
   export const Create = Schema.Struct({
     description: Schema.String,
     reporterSessionID: Schema.optional(SessionID),

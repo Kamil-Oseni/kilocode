@@ -38,6 +38,7 @@ import { BackgroundProcess } from "@/kilocode/background-process"
 import * as SandboxInheritance from "@/kilocode/sandbox/inheritance"
 import { InteractiveTerminal } from "@/kilocode/interactive-terminal"
 import { KiloSession } from "@/kilocode/session"
+import { directoryQuery } from "@/kilocode/session/directory-query" // kilocode_change - recognize global directory views across legacy path representations
 import { kiloSessionFork } from "@/kilocode/session/fork-command"
 import { KiloSessionEvent } from "@/kilocode/session/event"
 import { SessionExport } from "@/kilocode/session-export"
@@ -691,10 +692,12 @@ export const layer: Layer.Layer<
 
     const list = Effect.fn("Session.list")(function* (input?: ListInput) {
       const ctx = yield* InstanceState.context
+      const query = directoryQuery(input, ctx.project) // kilocode_change - global directory display-path compatibility
       return yield* listByProject(db, {
         projectID: ctx.project.id,
         experimentalWorkspaces: flags.experimentalWorkspaces,
-        ...input,
+        ...query, // kilocode_change - keep global directory lists independent of backend cwd volume
+        descendants: query !== input, // kilocode_change - preserve the current-directory view's child folders
       })
     })
 
@@ -1165,6 +1168,7 @@ function listByProject(
   input: ListInput & {
     projectID: ProjectV2.ID
     experimentalWorkspaces: boolean
+    descendants?: boolean // kilocode_change - canonical global directory view
   },
 ) {
   // kilocode_change start - KiloSession.filters keeps sessions visible across project_id changes
@@ -1173,7 +1177,7 @@ function listByProject(
   const conditions =
     input.path !== undefined
       ? [eq(SessionTable.project_id, input.projectID)]
-      : KiloSession.filters({ projectID: input.projectID, directory: input.directory })
+      : KiloSession.filters({ projectID: input.projectID, directory: input.directory, descendants: input.descendants })
   // kilocode_change end
 
   if (input.workspaceID) {

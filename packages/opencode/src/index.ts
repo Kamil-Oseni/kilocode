@@ -33,6 +33,7 @@ import { KiloCli } from "@/kilocode/cli/setup" // kilocode_change
 import * as Log from "@opencode-ai/core/util/log" // kilocode_change
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process" // kilocode_change
 import { PureEnv } from "@/kilocode/cli/pure" // kilocode_change
+import { finish } from "@/kilocode/cli/finish" // kilocode_change
 
 const args = hideBin(process.argv)
 const metadata = ensureProcessMetadata("main") // kilocode_change - correlate logs across the CLI and TUI worker
@@ -153,12 +154,9 @@ try {
   }
   process.exitCode = 1
 } finally {
-  await Heap.stop() // kilocode_change - stop and await the admitted automatic diagnostics writer
-  await KiloCli.shutdown() // kilocode_change - telemetry/session-export shutdown + instance disposal
-
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
-  process.exit()
+  await finish([() => Heap.stop(), () => KiloCli.shutdown()]) // kilocode_change - join all cleanup and retire runtime owners after command settlement
 }

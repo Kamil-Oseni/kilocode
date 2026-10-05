@@ -99,6 +99,7 @@ export const Info = Schema.Struct({
       Schema.Struct({
         apiKey: Schema.optional(Schema.String),
         baseURL: Schema.optional(Schema.String),
+        localInferenceAPI: Schema.optional(Schema.Literal("ollama")), // kilocode_change - explicit native local protocol bridge
         enterpriseUrl: Schema.optional(Schema.String).annotate({
           description: "GitHub Enterprise URL for copilot authentication",
         }),

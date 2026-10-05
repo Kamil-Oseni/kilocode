@@ -367,6 +367,28 @@ test("availability verifies a retained archive and CLI without state changes", a
   }
 })
 
+test.skipIf(process.platform !== "win32")(
+  "availability accepts VS Code drive-letter casing without changing receipts",
+  async () => {
+    const cfg = await availability()
+    try {
+      const before = await readFile(cfg.file)
+      const root = cfg.root.replace(/^[A-Z]:/, (drive) => drive.toLowerCase())
+      expect(root).not.toBe(cfg.root)
+      expect(await new PackageVault(root).availability(cfg.input)).toMatchObject({
+        status: "available",
+        artifact: cfg.old.artifact,
+        binary: cfg.old.binary,
+      })
+      expect(await readFile(cfg.file)).toEqual(before)
+      await writeFile(cfg.old.package, "damaged archive")
+      expect((await new PackageVault(root).availability(cfg.input)).status).toBe("invalid")
+    } finally {
+      await dispose(cfg.run.root)
+    }
+  },
+)
+
 test("availability rejects damaged, missing and foreign retained packages", async () => {
   const cfg = await availability()
   try {

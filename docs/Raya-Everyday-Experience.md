@@ -32,3 +32,16 @@ The proposal interface requires the matching native/backend contract; do not ins
 - The maintained SDK generator cancellation repair passed four independent actual-stream tests with 12 assertions. It joins cancellation without losing a distinct read or validation failure.
 
 No microphone capture, audible playback, physical light change or automatic memory capture was performed by these checks.
+
+## Installed observation on 2026-10-05
+
+The normal VS Code window reported extension `7.4.23-snapshot+a5aca91bf3.local.1791237757513`, connected on port 4096. Activity and health displayed backend PID 25828, RSS 0.72 GiB, heap 0.27/0.43 GiB, host available/total RAM 15.20/31.38 GiB and an idle inference queue. The six navigation destinations were present, and the Conversation view retained model and voice controls. This observation does not prove task execution, cancellation or speech continuity.
+
+Two installed presentation failures were reproduced and repaired in source:
+
+- Rollback verification rejected the lowercase drive letter supplied by VS Code `fsPath`. The verifier now normalizes only the Windows drive letter; archive, binary, canonical-path, link and race checks remain. The same real retained vault changed from invalid to available in the read-only source check, identifying the prior b560 build and its verified receipts. No package or vault record was changed.
+- Backend identity was absent because the connection service published only its port. It now observes the connected backend's authenticated health response with a three-second deadline, validates its identity and publishes the returned version only for the current connection generation. It does not substitute the extension version.
+
+The repair passed 17 tests with 64 assertions, including actual Windows archives, journal immutability, corrupted receipts and real SDK HTTP identity responses. Extension types, lint, Knip and bundling passed. A matching reinstall and installed-interface recheck remain pending.
+
+Voice's attention status was referred to the integration owner: retained failed voice sessions can degrade its registry status even when the speech service is ready. Historical failures must remain visible without implying an unobserved current service outage.

@@ -4,6 +4,7 @@ import { Card } from "@kilocode/kilo-ui/card"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { useVSCode } from "../../context/vscode"
 import type { BrainState, BrainRequest } from "../../../../src/shared/second-brain"
+import { BrainProposals } from "./BrainProposals"
 
 const labels: Record<string, string> = {
   namespace_changed: "Memory folder changed. Trusted re-admission is required.",
@@ -119,6 +120,7 @@ export function SecondBrain() {
         Review and sync require separate native confirmations. Disconnect joins local transport only. Capture is
         disabled.
       </p>
+      <BrainProposals configured={state().configured} />
     </Card>
   )
 }

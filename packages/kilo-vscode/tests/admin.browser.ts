@@ -10,6 +10,43 @@ const audit = async (page: import("@playwright/test").Page) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 }
 
+test("proposal transport reviews an exact revision, preserves source hashes and clears on project change", async ({
+  page,
+}) => {
+  await page.goto("/?state=proposals")
+  await page.getByRole("button", { name: "Refresh proposals" }).click()
+  await page.getByRole("button", { name: /aaaaaaaa.*pending/ }).click()
+  await expect(page.getByRole("heading", { name: "Proposed memory changes" })).toBeVisible()
+  await page.getByRole("button", { name: "Edit proposed changes" }).click()
+  await page.getByLabel("Proposed text: Preferences/lights.md", { exact: true }).fill("Prefer calm amber")
+  await page.getByRole("button", { name: "Save proposal revision" }).click()
+  await expect(page.getByText("Prefer calm amber", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Open full review and apply" }).click()
+  await expect(page.getByText("applied · Automatic capture is off", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Open full review and apply" })).toBeDisabled()
+  const requests = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]").filter(
+    (message: { type: string; action: string }) => message.type === "secondBrain" && message.action === "proposal",
+  )
+  expect(requests.at(-1).command).toEqual({
+    action: "apply",
+    project: "C:\\work\\raya-feature",
+    id: "a".repeat(32),
+    digest: "d".repeat(64),
+  })
+  expect(requests.some((message: { command: Record<string, unknown> }) => "approved" in message.command)).toBe(false)
+  await page.getByRole("button", { name: "Switch fixture workspace" }).click()
+  await expect(page.getByRole("heading", { name: "Proposed memory changes" })).toHaveCount(0)
+})
+
+test("dismissed native review settles the UI without claiming an applied note", async ({ page }) => {
+  await page.goto("/?state=proposals-dismiss")
+  await page.getByRole("button", { name: "Refresh proposals" }).click()
+  await page.getByRole("button", { name: /aaaaaaaa.*pending/ }).click()
+  await page.getByRole("button", { name: "Open full review and apply" }).click()
+  await expect(page.getByText("pending · Automatic capture is off", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Refresh proposals" })).toBeEnabled()
+})
+
 for (const theme of ["light", "dark", "contrast"])
   for (const width of [320, 760]) {
     test(`${theme} System Health at ${width}px`, async ({ page }, info) => {

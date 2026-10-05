@@ -42,6 +42,7 @@ import { TerminalTab } from "../agent-manager/terminal/TerminalTab"
 import { Card } from "@kilocode/kilo-ui/card"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Navigation } from "../src/components/chat/Navigation"
+import { BrainProposalView } from "../src/components/settings/BrainProposalView"
 import { GoalBannerView } from "../src/components/chat/GoalBanner"
 import type { GoalBannerProps } from "../src/components/chat/GoalBanner"
 import type { GoalState, GoalStatus } from "../../src/shared/goal"
@@ -456,6 +457,33 @@ function ContextPreview() {
       <Card>
         <MemoryActions memory={memory} />
       </Card>
+      <BrainProposalView
+        proposal={{
+          id: "review-fixture",
+          project: root(),
+          digest: "a".repeat(64),
+          status: "pending",
+          capture_enabled: false,
+          provenance: "Proposed from the reviewed lighting preference source.",
+          sources: [
+            { path: "C:/work/raya-feature/preferences.md", sha256: "b".repeat(64), kind: "markdown", event_time: null },
+          ],
+          changes: [
+            {
+              path: "Preferences/lighting.md",
+              expected: "c".repeat(64),
+              before: "Slow warm lights",
+              content: "Use a one-minute staggered colour cycle",
+            },
+          ],
+        }}
+        pending={false}
+        apply={() => setOutcome("Native review requested; no note was applied by this preview")}
+        cancel={() => setOutcome("Proposal discarded")}
+        edit={(changes) =>
+          setOutcome(`Proposal edited: ${changes[0].content === null ? "delete" : changes[0].content}`)
+        }
+      />
       <p aria-live="polite" data-testid="context-outcome">
         {outcome()}
       </p>

@@ -1015,3 +1015,19 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.raya-brain-change {
+  margin-block: 12px;
+  overflow-wrap: anywhere;
+}
+
+.raya-brain-change pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.raya-brain-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

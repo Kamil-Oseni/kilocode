@@ -5,10 +5,25 @@ import "../../webview-ui/preview/preview.css"
 import { render } from "solid-js/web"
 import { StoryProviders } from "../../webview-ui/src/stories/StoryProviders"
 import { AdminView } from "../../webview-ui/src/components/admin/AdminView"
+import { BrainProposals } from "../../webview-ui/src/components/settings/BrainProposals"
+import { ServerContext, useServer } from "../../webview-ui/src/context/server"
+import { createSignal } from "solid-js"
+import { Button } from "@kilocode/kilo-ui/button"
 
 const params = new URLSearchParams(location.search)
 const state = params.get("state") ?? "healthy"
 const messages = []
+let proposal = {
+  format: "raya.memory.proposal.v1",
+  id: "a".repeat(32),
+  project: "C:\\work\\raya-feature",
+  digest: "b".repeat(64),
+  status: "pending",
+  capture_enabled: false,
+  provenance: "Synthetic reviewed source",
+  sources: [{ path: "C:/work/raya-feature/preference.md", sha256: "c".repeat(64), kind: "markdown", event_time: null }],
+  changes: [{ path: "Preferences/lights.md", expected: null, before: null, content: "Use a slow one-minute cycle." }],
+}
 let attempts = 0
 const ids = [
   "runtime",
@@ -70,6 +85,24 @@ window.acquireVsCodeApi = () => ({
   setState: () => {},
   postMessage: (message) => {
     record(message)
+    if (message.type === "secondBrain" && message.action === "proposal") {
+      if (message.command.action === "edit")
+        proposal = {
+          ...proposal,
+          digest: "d".repeat(64),
+          changes: message.command.request.changes.map((item) => ({ ...item, before: null })),
+        }
+      if (message.command.action === "apply" && state !== "proposals-dismiss")
+        proposal = { ...proposal, status: "applied" }
+      if (message.command.action === "cancel") proposal = { ...proposal, status: "cancelled" }
+      const result = message.command.action === "list" ? { capture_enabled: false, proposals: [proposal] } : proposal
+      emit({
+        type: "secondBrainState",
+        id: message.id,
+        state: { configured: true, status: "ready", results: [], proposals: result },
+      })
+      return
+    }
     if (message.type !== "requestAdmin") return
     attempts += 1
     if (state === "loading") return
@@ -166,10 +199,21 @@ for (const [key, value] of Object.entries({
 document.body.style.background = colors.background
 document.body.style.color = colors.foreground
 
+function ProposalFixture() {
+  const server = useServer()
+  const [root, setRoot] = createSignal("C:/work/raya-feature")
+  return (
+    <ServerContext.Provider value={{ ...server, workspaceDirectory: root }}>
+      <BrainProposals configured />
+      <Button onClick={() => setRoot("C:/work/other")}>Switch fixture workspace</Button>
+    </ServerContext.Provider>
+  )
+}
+
 render(
   () => (
     <StoryProviders noPadding config={{}}>
-      <AdminView onBack={() => record({ type: "back" })} />
+      {state.startsWith("proposals") ? <ProposalFixture /> : <AdminView onBack={() => record({ type: "back" })} />}
       <output data-messages hidden>
         {JSON.stringify(messages)}
       </output>

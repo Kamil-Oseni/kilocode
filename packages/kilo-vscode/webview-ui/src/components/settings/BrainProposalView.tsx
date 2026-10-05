@@ -1,0 +1,148 @@
+import { For, Index, Show, createEffect, createSignal } from "solid-js"
+import { Button } from "@kilocode/kilo-ui/button"
+import { Card } from "@kilocode/kilo-ui/card"
+import { TextField } from "@kilocode/kilo-ui/text-field"
+import { Switch } from "@kilocode/kilo-ui/switch"
+
+/** Presentation contract only; the native host owns project/source and apply authority. */
+type Proposal = {
+  id: string
+  project: string
+  digest: string
+  status: string
+  provenance: string
+  capture_enabled: false
+  sources: readonly { path: string; sha256: string; kind: string; event_time: string | null }[]
+  changes: readonly { path: string; expected: string | null; content: string | null; before: string | null }[]
+}
+
+export function BrainProposalView(props: {
+  proposal: Proposal
+  pending: boolean
+  apply: () => void
+  cancel: () => void
+  edit: (changes: { path: string; expected: string | null; content: string | null }[]) => void
+}) {
+  const [editing, setEditing] = createSignal(false)
+  const [draft, setDraft] = createSignal<Proposal["changes"]>([])
+  createEffect(() => {
+    const proposal = props.proposal
+    setDraft(proposal.changes.map((item) => ({ ...item })))
+    setEditing(false)
+  })
+  const update = (path: string, content: string | null) =>
+    setDraft((items) => items.map((item) => (item.path === path ? { ...item, content } : item)))
+  const writable = () => !props.pending && props.proposal.status === "pending"
+  const invalid = () => draft().some((item) => item.content !== null && !item.content.trim())
+  const clipped = (text: string | null) =>
+    text === null
+      ? "No note"
+      : text.length > 8192
+        ? `${text.slice(0, 8192)}\n[Preview shortened; complete text opens during native review.]`
+        : text
+  return (
+    <Card>
+      <h3>Proposed memory changes</h3>
+      <p>Project: {props.proposal.project}</p>
+      <p role="status">{props.proposal.status} · Automatic capture is off</p>
+      <p>{props.proposal.provenance}</p>
+      <details>
+        <summary>Sources and revision</summary>
+        <p>Proposal revision: {props.proposal.digest}</p>
+        <For each={props.proposal.sources}>
+          {(source) => (
+            <p>
+              {source.path} · {source.kind} · SHA-256 {source.sha256}
+            </p>
+          )}
+        </For>
+      </details>
+      <Index each={draft()}>
+        {(item) => (
+          <section class="raya-brain-change">
+            <h4>{item().path}</h4>
+            <details>
+              <summary>Before</summary>
+              <pre>{clipped(item().before)}</pre>
+            </details>
+            <Show
+              when={editing()}
+              fallback={
+                <>
+                  <h5>Proposed result</h5>
+                  <pre>{item().content === null ? "Delete this note" : clipped(item().content)}</pre>
+                </>
+              }
+            >
+              <Switch
+                checked={item().content === null}
+                disabled={!writable()}
+                onChange={(checked) =>
+                  update(
+                    item().path,
+                    checked
+                      ? null
+                      : (props.proposal.changes.find((change) => change.path === item().path)?.content ??
+                          item().before ??
+                          ""),
+                  )
+                }
+              >
+                Delete note: {item().path}
+              </Switch>
+              <Show when={item().content !== null}>
+                <TextField
+                  multiline
+                  label={`Proposed text: ${item().path}`}
+                  value={item().content ?? ""}
+                  onChange={(value) => update(item().path, value)}
+                  disabled={!writable()}
+                />
+              </Show>
+            </Show>
+          </section>
+        )}
+      </Index>
+      <Show
+        when={editing()}
+        fallback={
+          <div class="raya-brain-actions">
+            <Button disabled={!writable()} onClick={() => setEditing(true)}>
+              Edit proposed changes
+            </Button>
+            <Button disabled={!writable()} onClick={props.apply}>
+              Open full review and apply
+            </Button>
+            <Button disabled={!writable()} onClick={props.cancel}>
+              Discard proposal
+            </Button>
+          </div>
+        }
+      >
+        <div class="raya-brain-actions">
+          <Button
+            disabled={!writable() || invalid()}
+            onClick={() =>
+              props.edit(draft().map((item) => ({ path: item.path, expected: item.expected, content: item.content })))
+            }
+          >
+            Save proposal revision
+          </Button>
+          <Button
+            disabled={props.pending}
+            onClick={() => {
+              setDraft(props.proposal.changes.map((item) => ({ ...item })))
+              setEditing(false)
+            }}
+          >
+            Cancel editing
+          </Button>
+        </div>
+      </Show>
+      <p>
+        Applying opens the complete changes in VS Code for a separate confirmation. Changed sources or notes invalidate
+        this proposal.
+      </p>
+    </Card>
+  )
+}

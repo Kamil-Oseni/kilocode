@@ -64,6 +64,64 @@ async function until(check: () => boolean) {
 }
 
 describe("local inference scheduler with real HTTP streams", () => {
+  for (const row of [
+    { name: "a waiting slot", limits: { count: 3 }, bodies: ["", ""], denied: "", chat: "" },
+    {
+      name: "retained bytes",
+      limits: { bytes: 2048 },
+      bodies: ["w".repeat(1000)],
+      denied: "w".repeat(250),
+      chat: "c".repeat(200),
+    },
+  ]) {
+    test(`background saturation reserves ${row.name} for conversation`, async () => {
+      const host = fixture()
+      const queue = createLocalScheduler({ ...row.limits, age: 1500 })
+      const abort = new AbortController()
+      const pending: Promise<Response>[] = []
+      const first = await queue.fetch(fetch, host.url("/first"), { signal: abort.signal })
+      try {
+        for (const [id, body] of row.bodies.entries()) {
+          const worker = queue.fetch(
+            fetch,
+            host.url(`/worker${id}`),
+            { method: "POST", body, signal: abort.signal },
+            "background",
+          )
+          void worker.catch(() => undefined)
+          pending.push(worker)
+        }
+        const refused = await queue
+          .fetch(fetch, host.url("/refused"), { method: "POST", body: row.denied, signal: abort.signal }, "background")
+          .catch((err: unknown) => err)
+        expect(refused).toBeInstanceOf(LocalInferenceError)
+        expect(refused).toMatchObject({ code: "queue-full", isRetryable: false })
+        const chat = queue.fetch(fetch, host.url("/chat"), { method: "POST", body: row.chat, signal: abort.signal })
+        void chat.catch(() => undefined)
+        pending.push(chat)
+        host.end("/first")
+        await first.text()
+        const reply = await chat
+        expect(host.starts.at(-1)).toBe("/chat")
+        host.end("/chat")
+        await reply.text()
+        for (const [id] of row.bodies.entries()) {
+          const worker = await pending[id]
+          host.end(`/worker${id}`)
+          await worker.text()
+        }
+        expect(host.starts).not.toContain("/refused")
+        expect(host.requests.find((item) => item.path === "/chat")?.body).toBe(row.chat)
+        expect(queue.snapshot()).toEqual({ active: 0, queued: 0, bytes: 0 })
+      } finally {
+        abort.abort()
+        await Promise.allSettled(pending)
+        await first.body?.cancel().catch(() => undefined)
+        await host.close()
+      }
+    })
+  }
+
   test("interactive requests overtake background work with a three-request fairness limit", async () => {
     const host = fixture()
     const queue = createLocalScheduler()

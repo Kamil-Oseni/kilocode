@@ -20,6 +20,76 @@ import { Parameters } from "@/kilocode/tool/chief-route"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { asSchema } from "ai"
 import { Schema } from "effect"
+import { createRequire } from "node:module"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Agent as AgentService } from "@/agent/agent"
+import { Session } from "@/session/session"
+import { Permission } from "@/permission"
+import { ToolRegistry } from "@/tool/registry"
+import { Parameters as TaskParameters } from "@/tool/task"
+import { TaskSchema } from "@/kilocode/tool/task-schema"
+import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
+import { testEffect } from "../lib/effect"
+
+const it = testEffect(
+  LayerNode.compile(
+    LayerNode.group([AgentService.node, Session.node, Permission.node, SessionProjector.node, ToolRegistry.node]),
+  ),
+)
+
+it.instance("actual Task advertisement requires fresh objectives through native and Ollama envelope preparation", () =>
+  Effect.gen(function* () {
+    const registry = yield* ToolRegistry.Service
+    const task = (yield* registry.named()).task
+    const schema = ToolJsonSchema.fromTool(task)
+    const tools = { task: aiTool({ inputSchema: jsonSchema(schema), execute: async () => "ok" }) }
+    const native = yield* Effect.promise(() => prepare("auto", false, tools))
+    const oauth = yield* Effect.promise(() => prepare("auto", true, tools))
+    const require = createRequire(import.meta.url)
+    type Validator = { compile(schema: unknown): (value: unknown) => boolean }
+    const Constructor = createRequire(require.resolve("effect/package.json"))("ajv/dist/2020") as new (options: {
+      strict: boolean
+    }) => Validator
+    const validator = new Constructor({ strict: false })
+    // The original model advertisement was the unchanged optional runtime schema.
+    expect(validator.compile(ToolJsonSchema.fromSchema(TaskParameters))({ access: "edit" })).toBe(true)
+    const shapes = [
+      schema,
+      asSchema(native.tools.task.inputSchema).jsonSchema,
+      asSchema(oauth.tools.task.inputSchema).jsonSchema,
+    ]
+    const invalid = [
+      {},
+      { description: "Label only", access: "edit" },
+      { prompt: " \n\t" },
+      { brief: { objective: " " } },
+      { task_id: "" },
+      { branch_id: "" },
+    ]
+    const valid = [
+      { prompt: "Read the source" },
+      { brief: { objective: "Write and verify the result" }, access: "edit" },
+      { task_id: "ses_saved" },
+      { branch_id: "saved-branch" },
+    ]
+    for (const shape of shapes) {
+      const check = validator.compile(shape)
+      for (const value of invalid) expect(check(value)).toBe(false)
+      for (const value of valid) expect(check(value)).toBe(true)
+      const envelope = validator.compile(
+        ToolEnvelope.schema([{ function: { name: "task", parameters: { ...shape } } }], "required"),
+      )
+      for (const value of invalid) expect(envelope({ kind: "tool", name: "task", arguments: value })).toBe(false)
+      for (const value of valid) expect(envelope({ kind: "tool", name: "task", arguments: value })).toBe(true)
+    }
+    expect(task.parameters).toBe(TaskParameters)
+    expect(Schema.decodeUnknownSync(TaskParameters)({})).toEqual({})
+    const background = validator.compile(TaskSchema.objective(ToolJsonSchema.fromSchema(TaskParameters)))
+    expect(background({ background: true })).toBe(false)
+    expect(background({ background: true, brief: { objective: "Complete the assigned subwork" } })).toBe(true)
+  }),
+)
 
 const model: Provider.Model = {
   id: ModelV2.ID.make("test-model"),

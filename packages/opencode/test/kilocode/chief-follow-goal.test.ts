@@ -42,6 +42,7 @@ import { Question } from "@/question"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
 import { ProviderTest } from "../fake/provider"
+import { TaskSchema } from "@/kilocode/tool/task-schema"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -162,6 +163,7 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
   }
 }
 
+// prettier-ignore
 planned.instance("reserves verification for an authenticated Chief follow from goal", () =>
   Effect.gen(function* () {
     for (const mode of [
@@ -466,6 +468,35 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           }),
       }
       const def = yield* (yield* TaskTool).init()
+      if (
+        [
+          "current",
+          "continuation",
+          "compaction",
+          "compaction-absent",
+          "compaction-forged",
+          "compaction-failed",
+          "compaction-manual",
+          "compaction-parent",
+          "compaction-newer",
+          "compaction-paused",
+          "stale-contract",
+          "forged",
+          "stale-dispatch",
+          "changed-intent",
+          "foreign-intake",
+          "newer-input",
+        ].includes(mode)
+      ) {
+        if (!def.jsonSchema) throw new Error("Actual Task advertisement required")
+        const projected = yield* TaskSchema.prepare("task", def.jsonSchema, chat.id, assistant.id, "auto")
+        const valid = ["current", "continuation", "compaction", "compaction-absent"].includes(mode)
+        expect(projected === def.jsonSchema).toBe(!valid)
+        expect(projected.anyOf).toBe(valid ? undefined : def.jsonSchema.anyOf)
+        expect(yield* TaskSchema.prepare("task", def.jsonSchema, chat.id, assistant.id, "general")).toBe(def.jsonSchema)
+        const foreign = { ...def.jsonSchema }
+        expect(yield* TaskSchema.prepare("task", foreign, chat.id, assistant.id, "auto")).toBe(foreign)
+      }
       const before = (yield* sessions.children(chat.id)).length
       const result = yield* Effect.exit(
         def.execute(
@@ -775,4 +806,5 @@ planned.instance("reserves verification for an authenticated Chief follow from g
       })
     }
   }),
+  30_000,
 )

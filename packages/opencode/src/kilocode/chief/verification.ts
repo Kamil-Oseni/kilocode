@@ -151,6 +151,30 @@ export namespace ChiefVerification {
     )
   }
 
+  /** Read-only advertisement: execution still reserves the current invocation under its original gate. */
+  export function saved(input: Omit<Input, "storage" | "callID" | "request"> & { storage?: Storage.Interface }) {
+    return Effect.gen(function* () {
+      const parent = yield* input.sessions.get(input.sessionID)
+      const request = RayaChief.request(parent.metadata)
+      const contract = RayaChief.follow(parent.metadata)
+      if (!request || !(contract || RayaChief.continuation(parent.metadata))) return false
+      const rows = yield* input.sessions.messages({ sessionID: input.sessionID })
+      const user = rows.findLast((row) => row.info.role === "user" && !!RayaChief.requestText(row.parts))
+      const message = rows.find((row) => row.info.id === input.messageID)
+      if (
+        user?.info.role !== "user" ||
+        (contract?.userID !== undefined && contract.userID !== user.info.id) ||
+        RayaChief.requestText(user.parts) !== request ||
+        message?.info.role !== "assistant" ||
+        message.info.agent !== "auto" ||
+        message.info.sessionID !== input.sessionID
+      )
+        return false
+      const goal = message.info.parentID !== user.info.id ? yield* state(input.storage, input.sessionID) : undefined
+      return dispatch(rows, user, message, goal)
+    })
+  }
+
   /** Reserve verification only for the still-current admitted parent invocation. */
   export function reserve(
     input: Omit<Input, "storage" | "callID"> & {

@@ -21,7 +21,7 @@ let proposal = {
   status: "pending",
   capture_enabled: false,
   provenance: "Synthetic reviewed source",
-  sources: [{ path: "C:/work/raya-feature/preference.md", sha256: "c".repeat(64), kind: "markdown", event_time: null }],
+  sources: [{ path: "C:/work/raya-feature/preference.md", sha256: "c".repeat(64), kind: "document", event_time: null }],
   changes: [{ path: "Preferences/lights.md", expected: null, before: null, content: "Use a slow one-minute cycle." }],
 }
 let attempts = 0

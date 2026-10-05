@@ -16,13 +16,19 @@ function proposal(value: unknown): value is BrainProposal {
   if (
     !Array.isArray(value.sources) ||
     !Array.isArray(value.changes) ||
+    value.sources.length === 0 ||
+    value.changes.length === 0 ||
     value.sources.length > 8 ||
     value.changes.length > 16
   )
     return false
   return (
     value.sources.every(
-      (source) => record(source) && ["path", "sha256", "kind"].every((key) => typeof source[key] === "string"),
+      (source) =>
+        record(source) &&
+        ["path", "sha256", "kind"].every((key) => typeof source[key] === "string") &&
+        ["user_statement", "tool_observation", "document", "assistant_interpretation"].includes(String(source.kind)) &&
+        (source.event_time === null || typeof source.event_time === "string"),
     ) &&
     value.changes.every(
       (change) =>

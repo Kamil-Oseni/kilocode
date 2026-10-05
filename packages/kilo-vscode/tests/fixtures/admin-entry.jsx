@@ -67,7 +67,21 @@ const health = (items = healthy) => ({
       : state === "rollback-progress"
         ? { recovery: { status: "in-progress", reason: "installation-retained" } }
         : {}),
-  items,
+  items: state.startsWith("voice-")
+    ? items.map((row) =>
+        row.id === "voice"
+          ? {
+              ...row,
+              status: "degraded",
+              reason: "voice-failed",
+              metrics:
+                state === "voice-invalid"
+                  ? { active: -1, failed: "unknown", incomplete: 0 }
+                  : { active: 0, failed: 1, incomplete: 0 },
+            }
+          : row,
+      )
+    : items,
   ...(state === "resources"
     ? {
         resources: {

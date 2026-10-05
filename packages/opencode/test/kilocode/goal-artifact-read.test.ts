@@ -1,5 +1,10 @@
 import { expect } from "bun:test"
 import path from "node:path"
+import { createHash } from "node:crypto"
+import { MessageV2 } from "@/session/message-v2"
+import type { Provider } from "@/provider/provider"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Cause, Effect, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -13,9 +18,35 @@ import { LSP } from "@/lsp/lsp"
 import { Truncate } from "@/tool/truncate"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { MessageID, SessionID } from "@/session/schema"
+import { MessageID, SessionID, PartID } from "@/session/schema"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+
+const model: Provider.Model = {
+  id: ModelV2.ID.make("test-model"),
+  providerID: ProviderV2.ID.make("test"),
+  api: {
+    id: "test-model",
+    url: "https://example.com/v1",
+    npm: "@ai-sdk/openai",
+  },
+  name: "Test model",
+  capabilities: {
+    temperature: true,
+    reasoning: false,
+    attachment: false,
+    toolcall: true,
+    input: { text: true, audio: false, image: false, video: false, pdf: false },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: false,
+  },
+  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+  limit: { context: 128_000, output: 32_000 },
+  status: "active",
+  options: {},
+  headers: {},
+  release_date: "2026-01-01",
+}
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, CrossSpawnSpawner.node])))
 
@@ -124,7 +155,7 @@ it.live("binds read evidence to the inspected object and detects changes during 
 )
 
 tool.instance(
-  "real text reads report exact source format independently of numbered display lines",
+  "real text reads expose authorized format and SHA in model history independently of numbered display lines",
   () =>
     Effect.gen(function* () {
       const instance = yield* TestInstance
@@ -158,8 +189,56 @@ tool.instance(
         yield* fs.writeFileString(file, row.text)
         const result = yield* reader.execute({ filePath: file }, ctx)
         expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(true)
+        const history = yield* MessageV2.toModelMessagesEffect(
+          [
+            {
+              info: {
+                id: ctx.messageID,
+                sessionID: ctx.sessionID,
+                role: "assistant",
+                parentID: MessageID.make("msg_format_user"),
+                time: { created: 0 },
+                modelID: model.id,
+                providerID: model.providerID,
+                agent: "code",
+                mode: "code",
+                path: { cwd: instance.directory, root: instance.directory },
+                cost: 0,
+                tokens: { total: 0, input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              },
+              parts: [
+                {
+                  id: PartID.make("prt_format_read"),
+                  messageID: ctx.messageID,
+                  sessionID: ctx.sessionID,
+                  type: "tool",
+                  callID: ctx.callID,
+                  tool: "read",
+                  state: {
+                    status: "completed",
+                    input: { filePath: file },
+                    output: result.output,
+                    title: result.title,
+                    metadata: result.metadata,
+                    time: { start: 0, end: 1 },
+                  },
+                },
+              ],
+            },
+          ],
+          model,
+        )
+        const output = history.find((message) => message.role === "tool")
+        expect(output?.content).toEqual([
+          {
+            type: "tool-result",
+            toolCallId: ctx.callID,
+            toolName: "read",
+            output: { type: "text", value: result.output },
+          },
+        ])
         expect(result.output).toContain(
-          `<file-format encoding="UTF-8" bom="${row.bom}" line-endings="${row.endings}" final-newline="${row.newline}" bytes="${Buffer.byteLength(row.text)}" />`,
+          `<file-format encoding="UTF-8" bom="${row.bom}" line-endings="${row.endings}" final-newline="${row.newline}" bytes="${Buffer.byteLength(row.text)}" sha256="${createHash("sha256").update(row.text).digest("hex")}" />`,
         )
       }
     }),

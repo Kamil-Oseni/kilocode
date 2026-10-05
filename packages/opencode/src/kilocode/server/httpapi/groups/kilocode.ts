@@ -103,6 +103,13 @@ import {
 } from "@/kilocode/canvas/protocol"
 // raya_change end
 
+import {
+  Failure as SecondBrainFailure,
+  Request as SecondBrainRequest,
+  RequestID as SecondBrainRequestID,
+  Result as SecondBrainResult,
+} from "@/kilocode/second-brain/protocol"
+
 const root = "/kilocode"
 const Scope = Schema.Literals(["global", "project"])
 
@@ -238,6 +245,8 @@ const BrowserConfirmationStatus = Schema.Struct({
 })
 export const DesktopReplyPayload = Schema.Struct({ result: DesktopResult })
 export const DesktopRejectPayload = Schema.Struct({ error: DesktopFailure })
+export const SecondBrainReplyPayload = Schema.Struct({ result: SecondBrainResult })
+export const SecondBrainRejectPayload = Schema.Struct({ error: SecondBrainFailure })
 export const CanvasReplyPayload = Schema.Struct({ result: CanvasResult }) // raya_change - Milestone E
 export const CanvasRejectPayload = Schema.Struct({ error: CanvasFailure }) // raya_change - Milestone E
 export const AssignmentProposalPayload = Schema.Struct({
@@ -293,6 +302,9 @@ export const KilocodePaths = {
   desktopList: `${root}/desktop`,
   desktopReply: `${root}/desktop/:requestID/reply`,
   desktopReject: `${root}/desktop/:requestID/reject`,
+  secondBrainList: `${root}/second-brain`,
+  secondBrainReply: `${root}/second-brain/:requestID/reply`,
+  secondBrainReject: `${root}/second-brain/:requestID/reject`,
   canvasList: `${root}/canvas`, // raya_change - Milestone E canvas host API
   canvasReply: `${root}/canvas/:requestID/reply`, // raya_change - Milestone E canvas host API
   canvasReject: `${root}/canvas/:requestID/reject`, // raya_change - Milestone E canvas host API
@@ -594,6 +606,39 @@ export const KilocodeApi = HttpApi.make("kilocode")
           OpenApi.annotations({ identifier: "kilocode.desktop.reject", summary: "Reject a desktop request" }),
         ),
         // raya_change start - Milestone E canvas host API
+        HttpApiEndpoint.get("secondBrainList", KilocodePaths.secondBrainList, {
+          query: WorkspaceRoutingQuery,
+          success: Schema.Array(SecondBrainRequest),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.secondBrain.list",
+            summary: "List pending Second Brain host requests",
+          }),
+        ),
+        HttpApiEndpoint.post("secondBrainReply", KilocodePaths.secondBrainReply, {
+          params: { requestID: SecondBrainRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: SecondBrainReplyPayload,
+          success: Schema.Boolean,
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.secondBrain.reply",
+            summary: "Reply with pending Second Brain proposals",
+          }),
+        ),
+        HttpApiEndpoint.post("secondBrainReject", KilocodePaths.secondBrainReject, {
+          params: { requestID: SecondBrainRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: SecondBrainRejectPayload,
+          success: Schema.Boolean,
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.secondBrain.reject",
+            summary: "Reject a Second Brain host request",
+          }),
+        ),
         HttpApiEndpoint.get("canvasList", KilocodePaths.canvasList, {
           query: WorkspaceRoutingQuery,
           success: described(Schema.Array(CanvasRequest), "Pending canvas host requests"),

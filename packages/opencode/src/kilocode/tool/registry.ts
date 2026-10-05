@@ -48,6 +48,8 @@ import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone 
 import { DesktopTools } from "./desktop-host"
 import { Desktop } from "@/kilocode/desktop/service"
 import { CanvasTools } from "./canvas-host" // raya_change - Milestone E canvas tools
+import { SecondBrain } from "@/kilocode/second-brain/service"
+import { SecondBrainTool } from "./second-brain"
 import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas bridge
 import { DiscoverCapabilitiesTool } from "./discover-capabilities"
 import { CreateSpreadsheetTool } from "./create-spreadsheet"
@@ -112,6 +114,11 @@ export namespace KiloToolRegistry {
     canvas?: Canvas.Interface, // raya_change - Milestone E canvas bridge
   ) {
     return Effect.gen(function* () {
+      const brain = yield* Effect.serviceOption(SecondBrain.Service)
+      const proposal =
+        brain._tag === "Some"
+          ? yield* SecondBrainTool.pipe(Effect.provideService(SecondBrain.Service, brain.value))
+          : undefined
       const recall = yield* RecallTool
       const managerModels = yield* AgentManagerModelsTool
       const memory = yield* MemoryRecallTool
@@ -205,6 +212,7 @@ export namespace KiloToolRegistry {
       // raya_change end
       if (!notebook)
         return {
+          proposal,
           recall,
           managerModels,
           memory,
@@ -245,6 +253,7 @@ export namespace KiloToolRegistry {
         notebookExecute: NotebookExecuteTool,
       }).pipe(Effect.provideService(Notebook.Service, notebook))
       return {
+        proposal,
         recall,
         managerModels,
         memory,
@@ -287,6 +296,7 @@ export namespace KiloToolRegistry {
    * it has no Service deps beyond what Tool.init itself needs. */
   export function build(
     tools: {
+      proposal?: Tool.Info
       recall: Tool.Info
       managerModels: Tool.Info
       memory: Tool.Info
@@ -338,6 +348,7 @@ export namespace KiloToolRegistry {
   ) {
     return Effect.gen(function* () {
       const base = yield* Effect.all({
+        proposal: tools.proposal ? Tool.init(tools.proposal) : Effect.succeed(undefined),
         recall: Tool.init(tools.recall),
         managerModels: Tool.init(tools.managerModels),
         memory: Tool.init(tools.memory),
@@ -504,6 +515,7 @@ export namespace KiloToolRegistry {
   export function extra(
     tools: {
       semantic?: Tool.Def
+      proposal?: Tool.Def
       recall: Tool.Def
       managerModels: Tool.Def
       memory: Tool.Def
@@ -599,6 +611,7 @@ export namespace KiloToolRegistry {
       ...(tools.updateRoutine ? [tools.updateRoutine] : []),
       ...(tools.updateOrganization ? [tools.updateOrganization] : []),
       ...(tools.personalTodo ? [tools.personalTodo] : []),
+      ...(Flag.KILO_CLIENT === "vscode" && tools.proposal ? [tools.proposal] : []),
       tools.notify,
       tools.send,
       ...(tools.facts ? [tools.facts] : []),

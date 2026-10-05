@@ -128,6 +128,8 @@ export type Event =
   | EventKilocodeDesktopCancelled
   | EventKilocodeCanvasRequested
   | EventKilocodeCanvasCancelled
+  | EventKilocodeSecondBrainRequested
+  | EventKilocodeSecondBrainCancelled
   | EventMemoryStatus1
   | EventMemoryUpdated1
   | EventMemoryError1
@@ -1936,6 +1938,41 @@ export type CanvasRequest =
       }
     }
 
+export type SecondBrainRequestId = string
+
+export type SecondBrainCommand =
+  | {
+      action: "list"
+    }
+  | {
+      action: "read"
+      id: string
+    }
+  | {
+      action: "propose"
+      id: string
+      request: {
+        changes: Array<{
+          path: string
+          expected: string | null
+          content: string | null
+        }>
+        sources: Array<{
+          path: string
+          sha256: string
+          kind: "user_statement" | "tool_observation" | "document" | "assistant_interpretation"
+          event_time: string | null
+        }>
+      }
+    }
+
+export type SecondBrainRequest = {
+  id: SecondBrainRequestId
+  sessionID: string
+  project: string
+  command: SecondBrainCommand
+}
+
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
 
 export type IndexingStatus = {
@@ -2663,6 +2700,8 @@ export type GlobalEvent = {
     | EventKilocodeDesktopCancelled
     | EventKilocodeCanvasRequested
     | EventKilocodeCanvasCancelled
+    | EventKilocodeSecondBrainRequested
+    | EventKilocodeSecondBrainCancelled
     | EventMemoryStatus
     | EventMemoryUpdated
     | EventMemoryError
@@ -6792,6 +6831,37 @@ export type DesktopFailure = {
   receipt?: ComputerUseReceipt
 }
 
+export type SecondBrainResult = {
+  action: "list" | "read" | "propose"
+  project: string
+  proposals: Array<{
+    format: "raya.memory.proposal.v1"
+    id: string
+    project: string
+    digest: string
+    status: "pending" | "cancelled" | "applying" | "applied"
+    capture_enabled: false
+    sources: Array<{
+      path: string
+      sha256: string
+      kind: "user_statement" | "tool_observation" | "document" | "assistant_interpretation"
+      event_time: string | null
+    }>
+    changes: Array<{
+      path: string
+      expected: string | null
+      content: string | null
+      before: string | null
+    }>
+    provenance: string
+  }>
+}
+
+export type SecondBrainFailure = {
+  code: "cancelled" | "disconnected" | "invalid_request" | "not_found" | "timeout" | "unsupported" | "conflict"
+  message: string
+}
+
 export type CanvasResult = {
   operation: "create" | "update"
   name: string
@@ -8652,6 +8722,22 @@ export type EventKilocodeCanvasCancelled = {
   type: "kilocode.canvas.cancelled"
   properties: {
     requestID: CanvasRequestId
+    sessionID: string
+    reason: "cancelled" | "disposed" | "timeout"
+  }
+}
+
+export type EventKilocodeSecondBrainRequested = {
+  id: string
+  type: "kilocode.second_brain.requested"
+  properties: SecondBrainRequest
+}
+
+export type EventKilocodeSecondBrainCancelled = {
+  id: string
+  type: "kilocode.second_brain.cancelled"
+  properties: {
+    requestID: SecondBrainRequestId
     sessionID: string
     reason: "cancelled" | "disposed" | "timeout"
   }
@@ -22026,6 +22112,108 @@ export type KilocodeDesktopRejectResponses = {
 
 export type KilocodeDesktopRejectResponse = KilocodeDesktopRejectResponses[keyof KilocodeDesktopRejectResponses]
 
+export type KilocodeSecondBrainListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/second-brain"
+}
+
+export type KilocodeSecondBrainListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type KilocodeSecondBrainListError = KilocodeSecondBrainListErrors[keyof KilocodeSecondBrainListErrors]
+
+export type KilocodeSecondBrainListResponses = {
+  /**
+   * Success
+   */
+  200: Array<SecondBrainRequest>
+}
+
+export type KilocodeSecondBrainListResponse = KilocodeSecondBrainListResponses[keyof KilocodeSecondBrainListResponses]
+
+export type KilocodeSecondBrainReplyData = {
+  body?: {
+    result: SecondBrainResult
+  }
+  path: {
+    requestID: SecondBrainRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/second-brain/{requestID}/reply"
+}
+
+export type KilocodeSecondBrainReplyErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeSecondBrainReplyError = KilocodeSecondBrainReplyErrors[keyof KilocodeSecondBrainReplyErrors]
+
+export type KilocodeSecondBrainReplyResponses = {
+  /**
+   * Success
+   */
+  200: boolean
+}
+
+export type KilocodeSecondBrainReplyResponse =
+  KilocodeSecondBrainReplyResponses[keyof KilocodeSecondBrainReplyResponses]
+
+export type KilocodeSecondBrainRejectData = {
+  body?: {
+    error: SecondBrainFailure
+  }
+  path: {
+    requestID: SecondBrainRequestId
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/kilocode/second-brain/{requestID}/reject"
+}
+
+export type KilocodeSecondBrainRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeSecondBrainRejectError = KilocodeSecondBrainRejectErrors[keyof KilocodeSecondBrainRejectErrors]
+
+export type KilocodeSecondBrainRejectResponses = {
+  /**
+   * Success
+   */
+  200: boolean
+}
+
+export type KilocodeSecondBrainRejectResponse =
+  KilocodeSecondBrainRejectResponses[keyof KilocodeSecondBrainRejectResponses]
+
 export type KilocodeCanvasListData = {
   body?: never
   path?: never
@@ -33781,6 +33969,24 @@ export type RayaAdminHealthResponses = {
     format: "raya.admin-health"
     version: 2
     generatedAt: number
+    resources?: {
+      observedAt: number
+      process: {
+        pid: number
+        rss: number
+        heapUsed: number
+        heapTotal: number
+      }
+      host: {
+        free: number
+        total: number
+      }
+      inference: {
+        active: number
+        queued: number
+        bytes: number
+      }
+    }
     items: Array<{
       id:
         | "runtime"

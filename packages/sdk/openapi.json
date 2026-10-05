@@ -20093,6 +20093,243 @@
         ]
       }
     },
+    "/kilocode/second-brain": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.secondBrain.list",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SecondBrainRequest"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List pending Second Brain host requests",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.secondBrain.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/second-brain/{requestID}/reply": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.secondBrain.reply",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/SecondBrainRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reply with pending Second Brain proposals",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "$ref": "#/components/schemas/SecondBrainResult"
+                  }
+                },
+                "required": ["result"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.secondBrain.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/second-brain/{requestID}/reject": {
+      "post": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.secondBrain.reject",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/SecondBrainRequestID"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reject a Second Brain host request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "$ref": "#/components/schemas/SecondBrainFailure"
+                  }
+                },
+                "required": ["error"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.secondBrain.reject({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/canvas": {
       "get": {
         "tags": ["kilocode"],
@@ -66165,6 +66402,76 @@
                       "type": "number",
                       "minimum": 0
                     },
+                    "resources": {
+                      "type": "object",
+                      "properties": {
+                        "observedAt": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "process": {
+                          "type": "object",
+                          "properties": {
+                            "pid": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            "rss": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "heapUsed": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "heapTotal": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["pid", "rss", "heapUsed", "heapTotal"],
+                          "additionalProperties": false
+                        },
+                        "host": {
+                          "type": "object",
+                          "properties": {
+                            "free": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "total": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["free", "total"],
+                          "additionalProperties": false
+                        },
+                        "inference": {
+                          "type": "object",
+                          "properties": {
+                            "active": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 1000000
+                            },
+                            "queued": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 1000000
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["active", "queued", "bytes"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["observedAt", "process", "host", "inference"],
+                      "additionalProperties": false
+                    },
                     "items": {
                       "type": "array",
                       "items": {
@@ -74843,6 +75150,12 @@
             "$ref": "#/components/schemas/EventKilocodeCanvasCancelled"
           },
           {
+            "$ref": "#/components/schemas/EventKilocodeSecond_brainRequested"
+          },
+          {
+            "$ref": "#/components/schemas/EventKilocodeSecond_brainCancelled"
+          },
+          {
             "$ref": "#/components/schemas/EventMemoryStatus1"
           },
           {
@@ -80788,6 +81101,158 @@
           }
         ]
       },
+      "SecondBrainRequestID": {
+        "type": "string"
+      },
+      "SecondBrainCommand": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["list"]
+              }
+            },
+            "required": ["action"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["read"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              }
+            },
+            "required": ["action", "id"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["propose"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "request": {
+                "type": "object",
+                "properties": {
+                  "changes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        "expected": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 250000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["path", "expected", "content"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 16
+                  },
+                  "sources": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": ["user_statement", "tool_observation", "document", "assistant_interpretation"]
+                        },
+                        "event_time": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["path", "sha256", "kind", "event_time"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 8
+                  }
+                },
+                "required": ["changes", "sources"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["action", "id", "request"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SecondBrainRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SecondBrainRequestID"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "command": {
+            "$ref": "#/components/schemas/SecondBrainCommand"
+          }
+        },
+        "required": ["id", "sessionID", "project", "command"],
+        "additionalProperties": false
+      },
       "IndexingStatusState": {
         "type": "string",
         "enum": ["Disabled", "In Progress", "Complete", "Error", "Standby"]
@@ -82931,6 +83396,12 @@
               },
               {
                 "$ref": "#/components/schemas/EventKilocodeCanvasCancelled"
+              },
+              {
+                "$ref": "#/components/schemas/EventKilocodeSecond_brainRequested"
+              },
+              {
+                "$ref": "#/components/schemas/EventKilocodeSecond_brainCancelled"
               },
               {
                 "$ref": "#/components/schemas/EventMemoryStatus"
@@ -96116,6 +96587,174 @@
         "required": ["code", "message"],
         "additionalProperties": false
       },
+      "SecondBrainResult": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["list", "read", "propose"]
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "proposals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "format": {
+                  "type": "string",
+                  "enum": ["raya.memory.proposal.v1"]
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                },
+                "project": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["pending", "cancelled", "applying", "applied"]
+                },
+                "capture_enabled": {
+                  "type": "boolean",
+                  "enum": [false]
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["user_statement", "tool_observation", "document", "assistant_interpretation"]
+                      },
+                      "event_time": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 80
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["path", "sha256", "kind", "event_time"],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 8
+                },
+                "changes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "expected": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "content": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 250000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "before": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 256000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["path", "expected", "content", "before"],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 16
+                },
+                "provenance": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "format",
+                "id",
+                "project",
+                "digest",
+                "status",
+                "capture_enabled",
+                "sources",
+                "changes",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 128
+          }
+        },
+        "required": ["action", "project", "proposals"],
+        "additionalProperties": false
+      },
+      "SecondBrainFailure": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["cancelled", "disconnected", "invalid_request", "not_found", "timeout", "unsupported", "conflict"]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
       "CanvasResult": {
         "type": "object",
         "properties": {
@@ -102729,6 +103368,55 @@
             "properties": {
               "requestID": {
                 "$ref": "#/components/schemas/CanvasRequestID"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["cancelled", "disposed", "timeout"]
+              }
+            },
+            "required": ["requestID", "sessionID", "reason"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventKilocodeSecond_brainRequested": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["kilocode.second_brain.requested"]
+          },
+          "properties": {
+            "$ref": "#/components/schemas/SecondBrainRequest"
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventKilocodeSecond_brainCancelled": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["kilocode.second_brain.cancelled"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "$ref": "#/components/schemas/SecondBrainRequestID"
               },
               "sessionID": {
                 "type": "string",

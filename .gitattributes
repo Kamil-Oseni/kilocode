@@ -3,6 +3,7 @@
 
 # Preserve the exact reviewed bytes of the hash-pinned managed Retrieval release.
 packages/kilo-vscode/script/memory/retrieval/*.py -text
+packages/kilo-vscode/script/memory/service/*.py -text
 
 # Git LFS tracking for binary/media files
 *.gif filter=lfs diff=lfs merge=lfs -text

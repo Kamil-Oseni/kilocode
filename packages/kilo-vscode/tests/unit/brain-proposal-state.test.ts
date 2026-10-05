@@ -22,7 +22,7 @@ test("review accepts the complete bounded ledger and refuses overflow or a malfo
     status: "pending",
     capture_enabled: false,
     provenance: "Source-backed fixture",
-    sources: [{ path: "C:/work/raya/source.md", sha256: "b".repeat(64), kind: "markdown", event_time: null }],
+    sources: [{ path: "C:/work/raya/source.md", sha256: "b".repeat(64), kind: "document", event_time: null }],
     changes: [{ path: "Preferences/lights.md", expected: null, before: null, content: "Use a slow cycle." }],
   }))
   expect(reviewed({ capture_enabled: false, proposals: rows })).toEqual({ capture_enabled: false, proposals: rows })
@@ -30,4 +30,7 @@ test("review accepts the complete bounded ledger and refuses overflow or a malfo
   expect(
     reviewed({ capture_enabled: false, proposals: [...rows.slice(0, 127), { ...rows[127], changes: null }] }),
   ).toBeUndefined()
+  expect(reviewed({ ...rows[0], sources: [{ ...rows[0].sources[0], kind: "unvalidated" }] })).toBeUndefined()
+  expect(reviewed({ ...rows[0], sources: [{ ...rows[0].sources[0], event_time: 4 }] })).toBeUndefined()
+  expect(reviewed({ ...rows[0], sources: [] })).toBeUndefined()
 })

@@ -466,7 +466,7 @@ function ContextPreview() {
           capture_enabled: false,
           provenance: "Proposed from the reviewed lighting preference source.",
           sources: [
-            { path: "C:/work/raya-feature/preferences.md", sha256: "b".repeat(64), kind: "markdown", event_time: null },
+            { path: "C:/work/raya-feature/preferences.md", sha256: "b".repeat(64), kind: "document", event_time: null },
           ],
           changes: [
             {

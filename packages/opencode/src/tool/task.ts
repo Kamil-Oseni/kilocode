@@ -1,6 +1,7 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
 import { ToolJsonSchema } from "./json-schema"
+import { TaskSchema } from "@/kilocode/tool/task-schema" // kilocode_change - advertise a fresh delegation objective
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
@@ -1076,7 +1077,11 @@ export const TaskTool = Tool.define(
         ? [DESCRIPTION, BACKGROUND_DESCRIPTION].join("\n\n")
         : DESCRIPTION,
       parameters: Parameters,
-      jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
+      // kilocode_change start - fresh model objectives; saved task/branch execution remains authoritative
+      jsonSchema: TaskSchema.objective(
+        ToolJsonSchema.fromSchema(flags.experimentalBackgroundSubagents ? Parameters : BaseParameters),
+      ),
+      // kilocode_change end
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         run(params, ctx).pipe(Effect.scoped, Effect.orDie), // kilocode_change - close per-execution bridge resources
     }

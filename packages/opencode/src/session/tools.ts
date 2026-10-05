@@ -11,6 +11,7 @@ import { Permission } from "@/permission"
 import { visible as pathVisible } from "@/kilocode/tool/path-catalog" // kilocode_change
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
+import { TaskSchema } from "@/kilocode/tool/task-schema" // kilocode_change - preserve only authenticated saved Task objectives
 import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - fence the original completed goal dispatch
 import { prepare as goalSchema } from "@/kilocode/goal/completion-schema" // kilocode_change - bind saved goal criteria before model schema transformation
 import { ToolRegistry } from "@/tool/registry"
@@ -195,7 +196,16 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   for (const item of items) {
     // kilocode_change
     if (!visible(item.id)) continue // kilocode_change - the model must not see tools outside child authority
-    const base = yield* goalSchema(item.id, ToolJsonSchema.fromTool(item), input.session.id) // kilocode_change - actual original goal owner supplies fresh criterion IDs
+    // kilocode_change start - project fresh Task objectives against the original saved request before provider conversion
+    const advertised = yield* TaskSchema.prepare(
+      item.id,
+      ToolJsonSchema.fromTool(item),
+      input.session.id,
+      input.processor.message.id,
+      input.agent.name,
+    )
+    // kilocode_change end
+    const base = yield* goalSchema(item.id, advertised, input.session.id) // kilocode_change - actual original goal owner supplies fresh criterion IDs
     const schema = ProviderTransform.schema(input.model, base)
     tools[item.id] = tool({
       description: item.description,

@@ -7,6 +7,7 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Cause, Context, Effect, Exit, Layer, Scope } from "effect"
+import { warm as warming } from "./cli/bootstrap-mode"
 
 const log = Log.create({ service: "kilocode-watcher" })
 
@@ -57,6 +58,7 @@ export namespace KilocodeWatcher {
 
       return Service.of({
         init: Effect.fn("KilocodeWatcher.init")(function* () {
+          if (!warming()) return
           const ctx = yield* InstanceState.context
           if (ctx.project.vcs !== "git" || active.has(ctx.directory)) return
 

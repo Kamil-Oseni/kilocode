@@ -6,6 +6,7 @@ import { parse } from "./settings"
 import { sources } from "./setup-v2"
 import { raw } from "./raw-response"
 import { search } from "./search-results"
+import type { BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 
 type Selection = Parameters<typeof operation>[1]
 type Options = {
@@ -65,6 +66,28 @@ export class ClientV2 {
       throw new Error("Explicit v2 Memory setup required")
     this.#setup = setup
     this.#token = token
+  }
+
+  async proposal(body: BrainProposalCommand, signal: AbortSignal): Promise<BrainProposalResult> {
+    const selected = await this.health(signal)
+    const response = await fetch(this.#setup.origin + "/v1/memory/proposals", {
+      method: "POST",
+      redirect: "error",
+      signal,
+      headers: {
+        Authorization: `Bearer ${this.#token}`,
+        "Content-Type": "application/json",
+        "X-Raya-Memory-Owner-Epoch": selected.epoch,
+      },
+      body: JSON.stringify(body),
+    })
+    const bytes = await raw(response, signal, 3000000)
+    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+    if (!response.ok)
+      throw new Failure("proposal_conflict", "Review the original proposal; do not retry a write.", response.status)
+    if (!value || typeof value !== "object" || !("capture_enabled" in value) || value.capture_enabled !== false)
+      throw new Failure("invalid_response", "Proposal response is invalid.", response.status)
+    return value as BrainProposalResult
   }
 
   private async request(path: string, signal: AbortSignal, method = "GET", selected?: Selection, body?: object) {

@@ -3,7 +3,9 @@ import { manifest, metadata } from "./manifest"
 import { BrainSettings } from "./settings"
 import { BrainService } from "./service"
 import { Failure } from "./client"
-import type { BrainRequest, BrainResponse } from "../shared/second-brain"
+import type { BrainRequest, BrainResponse, BrainProposalCommand, BrainProposal } from "../shared/second-brain"
+import { isDeepStrictEqual } from "node:util"
+import * as path from "node:path"
 import { BrainControl, type Review } from "./control"
 import { BrainClient } from "./client"
 import { join } from "./join"
@@ -59,6 +61,10 @@ export class BrainHost {
   async accept(message: Record<string, unknown>, post: (value: BrainResponse) => void) {
     if (message.type !== "secondBrain") return false
     if (typeof message.id !== "string") return true
+    if (message.action === "proposal") {
+      await this.proposal(message, post)
+      return true
+    }
     if (message.action === "search" && typeof message.query === "string")
       await this.handle({ type: "secondBrain", action: "search", id: message.id, query: message.query }, post)
     if (message.action === "cancel" && typeof message.target === "string")
@@ -71,12 +77,114 @@ export class BrainHost {
       await this.handle(
         {
           type: "secondBrain",
-          action: message.action as Exclude<BrainRequest["action"], "search" | "cancel">,
+          action: message.action as Exclude<BrainRequest["action"], "search" | "cancel" | "proposal">,
           id: message.id,
         },
         post,
       )
     return true
+  }
+
+  /** Model requests can prepare proposals, never authorize their application. */
+  async model(request: { project: string; command: unknown }, directory: string, signal: AbortSignal) {
+    signal.throwIfAborted()
+    const project = path.resolve(directory)
+    if (project.toLowerCase() !== path.resolve(request.project).toLowerCase() || !vscode.workspace.isTrusted)
+      throw new Error("Authenticated trusted project required")
+    const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project))
+    if (!folder || path.resolve(folder.uri.fsPath).toLowerCase() !== project.toLowerCase())
+      throw new Error("Select an exact trusted workspace folder")
+    if (!request.command || typeof request.command !== "object" || Array.isArray(request.command))
+      throw new Error("Proposal command required")
+    const row = request.command as Record<string, unknown>
+    if ("project" in row || !["list", "read", "propose"].includes(String(row.action)))
+      throw new Error("Model requests cannot edit, cancel or apply proposals")
+    const command = { ...row, project } as BrainProposalCommand
+    const result = await this.service.proposal(command, signal)
+    signal.throwIfAborted()
+    const proposals = ("proposals" in result ? result.proposals : [result]).map((value) => ({
+      ...value,
+      sources: value.sources.map((source) => ({ ...source })),
+      changes: value.changes.map((change) => ({ ...change })),
+    }))
+    if (row.action !== "list" && (proposals.length !== 1 || proposals[0].id !== row.id))
+      throw new Error("Original proposal is unavailable")
+    if (row.action === "propose" && proposals[0]?.status !== "pending")
+      throw new Error("Original proposal creation is unconfirmed")
+    return { action: row.action as "list" | "read" | "propose", project, proposals }
+  }
+
+  private async proposal(message: Record<string, unknown>, post: (value: BrainResponse) => void) {
+    if (typeof message.id !== "string") return
+    if (!/^[a-z0-9-]{1,80}$/i.test(message.id)) return
+    try {
+      const command = message.command
+      if (!command || typeof command !== "object" || Array.isArray(command))
+        throw new Error("Proposal command required")
+      const row = command as Record<string, unknown>
+      if (typeof row.project !== "string" || !path.isAbsolute(row.project) || !vscode.workspace.isTrusted)
+        throw new Error("Select a trusted project")
+      const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(row.project))
+      if (!folder || path.resolve(folder.uri.fsPath).toLowerCase() !== path.resolve(row.project).toLowerCase())
+        throw new Error("Proposal project must match an open trusted workspace folder")
+      if (!["list", "read", "propose", "edit", "cancel", "apply"].includes(String(row.action)))
+        throw new Error("Unknown proposal action")
+      const body = command as BrainProposalCommand
+      if (body.action === "apply") {
+        const review = await this.approve(body, folder)
+        if (!review.accepted) {
+          post({
+            type: "secondBrainState",
+            id: message.id,
+            state: { ...(await this.service.status()), proposals: review.selected },
+          })
+          return
+        }
+      }
+      const proposals = await this.service.proposal(body)
+      post({ type: "secondBrainState", id: message.id, state: { ...(await this.service.status()), proposals } })
+    } catch {
+      post({
+        type: "secondBrainState",
+        id: message.id,
+        state: { configured: true, status: "unavailable", code: "proposal_review_required", results: [] },
+      })
+    }
+  }
+
+  private async approve(
+    body: Extract<BrainProposalCommand, { action: "cancel" | "apply" }>,
+    folder: vscode.WorkspaceFolder,
+  ) {
+    const cfg = await this.settings.load()
+    if (!cfg || cfg.setup.version !== 2) throw new Error("Reviewed Memory setup required")
+    const selected = await this.service.proposal({ action: "read", project: body.project, id: body.id })
+    if (!("digest" in selected) || selected.digest !== body.digest || selected.status !== "pending")
+      throw new Error("Proposal changed before review")
+    const text = JSON.stringify(selected, null, 2)
+    const uri = vscode.Uri.from({ scheme: "raya-memory-proposal", path: "/" + crypto.randomUUID() + ".txt" })
+    const provider = vscode.workspace.registerTextDocumentContentProvider("raya-memory-proposal", {
+      provideTextDocumentContent: (requested) => (requested.toString() === uri.toString() ? text : ""),
+    })
+    try {
+      const document = await vscode.workspace.openTextDocument(uri)
+      await vscode.window.showTextDocument(document, { preview: false })
+      const answer = await vscode.window.showWarningMessage(
+        `Apply the exact Second Brain changes shown for ${body.project}? Review SHA-256: ${body.digest}. Capture stays disabled.`,
+        { modal: true },
+        "Apply reviewed changes",
+      )
+      if (answer !== "Apply reviewed changes" || document.isClosed || document.getText() !== text)
+        return { accepted: false, selected }
+      if (!vscode.workspace.isTrusted || !vscode.workspace.getWorkspaceFolder(folder.uri))
+        throw new Error("Workspace trust changed during review")
+      const current = await this.service.proposal({ action: "read", project: body.project, id: body.id })
+      if (!isDeepStrictEqual(current, selected)) throw new Error("Proposal changed during review")
+      if (!this.settings.current(cfg.setup)) throw new Error("Memory setup changed during review")
+    } finally {
+      provider.dispose()
+    }
+    return { accepted: true, selected }
   }
 
   private async handle(message: BrainRequest, post: (value: BrainResponse) => void) {

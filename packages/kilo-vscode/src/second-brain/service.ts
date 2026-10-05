@@ -1,5 +1,6 @@
 import { BrainClient, Failure } from "./client"
-import type { BrainState } from "../shared/second-brain"
+import type { BrainState, BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
+import { ClientV2 } from "./client-v2"
 import type { BrainSettings } from "./settings"
 import { join } from "./join"
 import { OperationOwner } from "./operation-owner"
@@ -34,6 +35,20 @@ export class BrainService {
       }
     const cfg = await this.settings.load()
     return { ...this.state, configured: !!cfg, results: [] }
+  }
+
+  async proposal(body: BrainProposalCommand, parent?: AbortSignal): Promise<BrainProposalResult> {
+    const signal = parent ? AbortSignal.any([parent, AbortSignal.timeout(35000)]) : AbortSignal.timeout(35000)
+    const result: { value?: BrainProposalResult } = {}
+    await this.configure(async () => {
+      const cfg = await this.prepare(signal)
+      if (!cfg || cfg.setup.version !== 2) throw new Error("Reviewed v2 Memory setup required")
+      const client = new ClientV2(cfg.key, cfg.setup)
+      result.value = await client.proposal(body, signal)
+      if (this.managed && !this.managed.valid()) throw new Error("Original managed generation is unavailable")
+    }, false)
+    if (!result.value) throw new Error("Proposal publication was not observed")
+    return result.value
   }
 
   async stop(owner?: object) {

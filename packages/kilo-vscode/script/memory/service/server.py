@@ -14,6 +14,7 @@ from index import Index, execute, Cancelled
 from admission import Retirement, failures
 from operations import Journal
 from dispatch import prepare, submit
+from proposals import Proposals
 from retirement import decode, canonical, fingerprint, hex
 
 ROOT = Path(__file__).parent
@@ -29,7 +30,7 @@ if not KEY:
     raise ValueError('An existing token is required.')
 SOURCE = {name: hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in
           ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
-           'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py')}
+           'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py')}
 RELEASE = fingerprint(SOURCE)
 EPOCH = secrets.token_hex(16)
 JOURNAL = Journal(os.environ['RAYA_MEMORY_OPERATION_ROOT'],
@@ -45,6 +46,9 @@ STORAGE = ThreadPoolExecutor(max_workers=1, thread_name_prefix='memory-receipts'
 SLOTS = threading.BoundedSemaphore(1)
 GUARD = threading.Lock()
 RECORDS = {}
+PROPOSALS = Proposals(NOTES)
+REVIEWS = set()
+REVIEW_ERRORS = []
 ACTIVE = 0
 UNCERTAIN = False
 DRAIN = {'id': None, 'until': 0}
@@ -93,7 +97,7 @@ def integrity():
     JOURNAL.namespace.check()
     if any(hashlib.sha256((ROOT/name).read_bytes()).hexdigest() != digest for name, digest in SOURCE.items()):
         raise ValueError('Selected Memory source changed.')
-    return INDEX.store.pending()
+    return INDEX.store.pending() or PROPOSALS.pending()
 
 
 def finish(record, future):
@@ -160,6 +164,61 @@ async def handle(request: Request, path: str):
         return JSONResponse(value, headers={'Cache-Control': 'no-store'})
     if request.headers.get('x-raya-memory-owner-epoch') != EPOCH:
         return fail('owner_epoch_changed', 'Select the original Memory owner epoch.', 409)
+    if request.method == 'POST' and path == 'v1/memory/proposals':
+        if request.headers.get('content-type', '').split(';')[0] != 'application/json':
+            return fail('unsupported_media', 'Use application/json.', 415)
+        with GUARD:
+            if UNCERTAIN or ACTIVE or DRAIN['until'] > time.monotonic() or not SLOTS.acquire(blocking=False):
+                return fail('admission_closed', 'Memory is busy or requires reconciliation.', 409)
+        try:
+            async def read():
+                raw = bytearray()
+                async for part in request.stream():
+                    raw.extend(part)
+                    if len(raw) > 2100000:
+                        raise ValueError('Proposal exceeds the bounded review size.')
+                return decode(bytes(raw), 2100000)
+            body = await asyncio.wait_for(read(), 15)
+        except (ValueError, UnicodeDecodeError):
+            SLOTS.release()
+            return fail('invalid_proposal', 'Proposal input is invalid.', 422)
+        except asyncio.TimeoutError:
+            SLOTS.release()
+            return fail('request_timeout', 'Proposal body timed out before submission.', 408)
+        except BaseException:
+            SLOTS.release()
+            raise
+        def work():
+            if integrity():
+                raise Retirement('Memory has pending retirement.')
+            return PROPOSALS.execute(body)
+        try:
+            future = STORAGE.submit(work)
+        except BaseException:
+            SLOTS.release()
+            raise
+        with GUARD:
+            REVIEWS.add(future)
+            ACTIVE += 1
+        def complete(value):
+            global ACTIVE, UNCERTAIN
+            with GUARD:
+                ACTIVE -= 1
+                # Business validation errors are closed; interrupted writes remain sticky.
+                if not value.cancelled() and value.exception() is not None and not isinstance(value.exception(), ValueError):
+                    UNCERTAIN = True
+                    REVIEW_ERRORS.append(value.exception())
+                REVIEWS.discard(value)
+            SLOTS.release()
+        future.add_done_callback(complete)
+        try:
+            value = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), 30)
+            return JSONResponse(value, headers={'Cache-Control': 'no-store'})
+        except ValueError:
+            return fail('proposal_conflict', 'Proposal or source changed; review the current proposal.', 409)
+        except BaseException:
+            # Never cancel or retry the original write on lost transport.
+            return fail('proposal_unconfirmed', 'Inspect the original proposal before any further write.', 503)
     if path.startswith('v1/memory/requests/') and request.method in ('GET', 'DELETE'):
         key = path.removeprefix('v1/memory/requests/')
         if not hex(key, 32):
@@ -282,7 +341,14 @@ if __name__ == '__main__':
         uvicorn.run(app, host='127.0.0.1', port=PORT, access_log=False)
     finally:
         POOL.shutdown(wait=True, cancel_futures=True)
+        with GUARD:
+            reviews = tuple(REVIEWS)
         STORAGE.shutdown(wait=True, cancel_futures=False)
+        for future in reviews:
+            if future.exception() is not None and not isinstance(future.exception(), ValueError):
+                raise Retirement('Proposal storage publication remains unconfirmed.') from future.exception()
+        if REVIEW_ERRORS:
+            raise BaseExceptionGroup('Proposal storage publication remains unconfirmed.', REVIEW_ERRORS)
         errors = [error for record in RECORDS.values() for error in record['faults']]
         for record in RECORDS.values():
             for name in ('reservation', 'publication'):

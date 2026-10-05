@@ -27,6 +27,8 @@ import { mentions } from "./kilo-provider/file-picker"
 import { registerDesignSystemLock } from "./kilo-provider/design-system-lock" // raya_change - owner design-system lock
 import { registerCheckpointCommands } from "./kilo-provider/checkpoint-commands" // raya_change - named checkpoints
 import { CanvasPanel, CanvasService, registerCanvasCommand } from "./services/canvas" // raya_change - Milestone E
+import { BrainBridge } from "./second-brain/bridge"
+import { BrainHost } from "./second-brain/host"
 import { TelemetryEventName, TelemetryProxy } from "./services/telemetry"
 import { registerCommitMessageService } from "./services/commit-message"
 import { registerCodeActions, registerTerminalActions, KiloCodeActionProvider } from "./services/code-actions"
@@ -140,6 +142,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // raya_change start - Milestone E live React canvas panel and host bridge
   const canvasService = new CanvasService(connectionService, context)
+  context.subscriptions.push(new BrainBridge(connectionService, new BrainHost(context)))
   context.subscriptions.push(
     registerCanvasCommand(canvasService),
     vscode.window.registerWebviewPanelSerializer(CanvasPanel.viewType, {

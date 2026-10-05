@@ -9,7 +9,7 @@ import re
 import stat
 import sys
 
-FILES = ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'dispatch.py', 'historical.py')
+FILES = ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'dispatch.py', 'historical.py', 'proposals.py')
 
 
 def directory(path):

@@ -18,7 +18,7 @@ class Tests(NamespaceTests):
     def operation(self, outcome='completed', kind='search'):
         self.folder.rmdir()
         names = ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py',
-                 'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py')
+                 'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py')
         self.source = {name: hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest() for name in names}
         self.journal = Journal(str(self.root), self.sid,
                                {name: MODULE.generation(self.root if name == 'root' else self.root / name) for name in ('root', 'Runs', 'Requests')},

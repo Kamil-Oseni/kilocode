@@ -11,6 +11,7 @@ export const sources = [
   "namespace.py",
   "historical.py",
   "dispatch.py",
+  "proposals.py",
 ] as const
 
 export function setup(value: Record<string, unknown>, url: string) {
@@ -34,7 +35,7 @@ export function setup(value: Record<string, unknown>, url: string) {
         !/^[a-f0-9]{64}$/.test(rows[name] as string),
     )
   )
-    throw new Error("Memory requires exactly eleven reviewed source pins")
+    throw new Error("Memory requires exactly twelve reviewed source pins")
   return Object.freeze({
     format: "raya.memory.setup" as const,
     version: 2 as const,

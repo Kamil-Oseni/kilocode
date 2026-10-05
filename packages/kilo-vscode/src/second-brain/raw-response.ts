@@ -1,7 +1,7 @@
 import { Failure } from "./client"
 
 /** Join the original response reader; preserve primary and cleanup failures. */
-export async function raw(response: Response, signal: AbortSignal) {
+export async function raw(response: Response, signal: AbortSignal, limit = 262144) {
   const reader = response.body?.getReader()
   const result = await (async () => {
     if (!reader || response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json")
@@ -12,7 +12,7 @@ export async function raw(response: Response, signal: AbortSignal) {
       const item = await reader.read()
       if (item.done) break
       size += item.value.length
-      if (size > 262144)
+      if (size > limit)
         throw new Failure("invalid_response", "Memory response exceeded its size limit.", response.status)
       parts.push(item.value)
     }

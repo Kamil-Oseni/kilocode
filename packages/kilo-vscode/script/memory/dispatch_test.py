@@ -21,7 +21,7 @@ class Tests(Base):
     def journal(self):
         self.folder.rmdir()
         names = ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py',
-                 'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py')
+                 'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py')
         self.source = {name: hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest() for name in names}
         self.generations = {name: MODULE.generation(self.root if name == 'root' else self.root / name) for name in ('root', 'Runs', 'Requests')}
         return Journal(str(self.root), self.sid, self.generations, 'e' * 32, fingerprint(self.source))
@@ -104,7 +104,7 @@ from operations import Journal
 from dispatch import dispatch
 from retirement import fingerprint
 root=Path(sys.argv[2]); mode=sys.argv[4]; generations=json.loads(sys.argv[5])
-source={name:hashlib.sha256((Path(sys.argv[1])/name).read_bytes()).hexdigest() for name in ('server.py','index.py','notes.py','policy.py','admission.py','host.py','operations.py','retirement.py','namespace.py','historical.py','dispatch.py')}
+source={name:hashlib.sha256((Path(sys.argv[1])/name).read_bytes()).hexdigest() for name in ('server.py','index.py','notes.py','policy.py','admission.py','host.py','operations.py','retirement.py','namespace.py','historical.py','dispatch.py','proposals.py')}
 journal=Journal(str(root),sys.argv[3],generations,'e'*32,fingerprint(source))
 original=os.fsync; count=0
 def boundary(fd):

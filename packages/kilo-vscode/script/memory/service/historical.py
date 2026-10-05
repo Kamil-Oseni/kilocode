@@ -16,7 +16,7 @@ from retirement import canonical, certificate, decode, fingerprint, hex
 KEYS = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns', 'st_nlink')
 ISSUER = object()
 SOURCES = ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py',
-           'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py')
+           'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py')
 FIELDS = {'format', 'request', 'owner_epoch', 'selected_release_sha256', 'kind', 'request_sha256', 'status'}
 
 

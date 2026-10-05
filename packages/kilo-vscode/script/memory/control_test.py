@@ -17,8 +17,8 @@ class Control(unittest.TestCase):
         self.source = HERE/'service'
         self.pins = {name: hashlib.sha256((self.source/name).read_bytes()).hexdigest() for name in CONTROL.FILES}
 
-    def test_exact_eleven_release_and_catalog_bridge_binding(self):
-        self.assertEqual(len(CONTROL.FILES), 11)
+    def test_exact_twelve_release_and_catalog_bridge_binding(self):
+        self.assertEqual(len(CONTROL.FILES), 12)
         self.assertIn('dispatch.py', CONTROL.FILES)
         self.assertIn('historical.py', CONTROL.FILES)
         catalog = (HERE.parents[1]/'src/second-brain/control/catalog-v2.ts').read_text()
@@ -45,7 +45,7 @@ class Control(unittest.TestCase):
         owner.pins = dict(self.pins)
         owner.modules = {}
         owner.check()
-        for name in ('dispatch.py', 'historical.py'):
+        for name in ('dispatch.py', 'historical.py', 'proposals.py'):
             with self.subTest(name=name):
                 digest = owner.pins[name]
                 owner.pins[name] = '0'*64

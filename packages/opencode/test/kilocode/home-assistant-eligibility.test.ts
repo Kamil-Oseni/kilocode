@@ -1,4 +1,4 @@
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { z } from "zod"
 import { KiloToolSchema } from "@/kilocode/session/tool-schema"
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
@@ -79,6 +79,31 @@ const cfg = {
     },
   },
 } satisfies Partial<Config.Info>
+
+test("selected home workflow admits bounded mood tools and theme research without arbitrary device transport", () => {
+  const available = {
+    raya_home_assistant_moods_list: {},
+    raya_home_assistant_moods_save: {},
+    raya_home_assistant_moods_start: {},
+    raya_home_assistant_moods_stop: {},
+    websearch: {},
+    webfetch: {},
+    arbitrary_http: {},
+    bash: {},
+    task: {},
+  }
+  expect(Object.keys(HomeAssistant.tools(available)).sort()).toEqual([
+    "raya_home_assistant_moods_list",
+    "raya_home_assistant_moods_save",
+    "raya_home_assistant_moods_start",
+    "raya_home_assistant_moods_stop",
+    "webfetch",
+    "websearch",
+  ])
+  const denied = Permission.fromConfig({ raya_home_assistant_moods_start: "deny" })
+  expect(Permission.evaluate("raya_home_assistant_moods_start", "*", HomeAssistant.rules(denied)).action).toBe("deny")
+  expect(Permission.evaluate("raya_home_assistant_moods_save", "*", HomeAssistant.rules([])).action).toBe("ask")
+})
 
 it.live(
   "Auto exposes only registered home tools and retains child ceilings",

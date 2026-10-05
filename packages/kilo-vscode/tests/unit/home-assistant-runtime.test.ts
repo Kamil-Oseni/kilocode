@@ -14,6 +14,7 @@ import { response } from "../../src/home-assistant/response"
 import { selection } from "../../src/home-assistant/policy"
 import { Coordinator } from "../../src/home-assistant/coordinator"
 import { Settings } from "../../src/home-assistant/settings"
+import { Moods, parse as mood, frame } from "../../src/home-assistant/moods"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { Client } from "../../../opencode/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js"
 import { StreamableHTTPClientTransport } from "../../../opencode/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js"
@@ -859,3 +860,158 @@ test.each([false, true])(
   },
   15000,
 )
+
+const palette = {
+  name: "cinema",
+  theme: "Amber and forest green inspired by the requested show",
+  sources: ["https://www.netflix.com/title/81437051"],
+  palette: [
+    [255, 120, 0],
+    [0, 80, 20],
+  ],
+  seconds: 60,
+  duration: 60,
+  lights: [{ entity, brightness: 64, phase: 0 }],
+}
+
+test("dynamic mood validates bounds, source metadata and staggered interpolation", () => {
+  const value = mood(palette, [entity])
+  expect(frame(value, 0)[0].rgb_color).toEqual([255, 120, 0])
+  expect(frame(value, 15)[0].rgb_color).toEqual([128, 100, 10])
+  expect(frame(value, 60)[0].rgb_color).toEqual([255, 120, 0])
+  for (const input of [
+    { ...palette, duration: 10801 },
+    { ...palette, seconds: 1 },
+    { ...palette, sources: ["file:///private"] },
+    { ...palette, lights: [{ entity: "light.unrelated", brightness: 64, phase: 0 }] },
+    { ...palette, lights: [palette.lights[0], palette.lights[0]] },
+    {
+      ...palette,
+      palette: [
+        [256, 0, 0],
+        [0, 0, 0],
+      ],
+    },
+  ])
+    expect(() => mood(input, [entity])).toThrow()
+})
+
+test("saved moods read back metadata and remain idle after reopening; overwrite is explicit", async () => {
+  const f = await fixture()
+  const owner = new Moods(f.lights, f.storage)
+  try {
+    const result = await owner.save(palette)
+    expect(result.outcome).toBe("saved")
+    expect(result.digest).toMatch(/^[a-f0-9]{64}$/)
+    expect(f.state.posts).toBe(0)
+    await expect(owner.save(palette)).rejects.toThrow("mood_exists")
+    await owner.save({ ...palette, theme: "Revised inspiration" }, true)
+    const reopened = new Moods(f.lights, f.storage)
+    expect(reopened.list().activity.state).toBe("idle")
+    expect(reopened.list().moods[0].theme).toBe("Revised inspiration")
+    await reopened.dispose()
+  } finally {
+    await owner.dispose()
+    await f.lights.dispose()
+    await f.close()
+  }
+})
+
+test("dynamic mood confirms the first real HTTP frame and joins cancellation without subsequent writes", async () => {
+  const f = await fixture()
+  const owner = new Moods(f.lights, f.storage)
+  try {
+    f.rgb.modes = ["rgb"]
+    await owner.save(palette)
+    expect((await owner.start("cinema", new AbortController().signal)).outcome).toBe("started")
+    expect(f.rgb.value).toEqual([255, 120, 0])
+    expect(f.state.brightness).toBe(64)
+    expect(owner.list().activity.state).toBe("running")
+    await owner.stop()
+    const posts = f.state.posts
+    await Bun.sleep(30)
+    expect(f.state.posts).toBe(posts)
+    expect(owner.list().activity.state).toBe("stopped")
+    expect(f.journal.pending()).toBeUndefined()
+  } finally {
+    await owner.dispose()
+    await f.lights.dispose()
+    await f.close()
+  }
+})
+
+test("an external colour override retires the mood instead of overwriting the new colour", async () => {
+  const f = await fixture()
+  const owner = new Moods(f.lights, f.storage)
+  try {
+    f.rgb.modes = ["rgb"]
+    await owner.save(palette)
+    await owner.start("cinema", new AbortController().signal)
+    f.rgb.value = [255, 0, 0]
+    const posts = f.state.posts
+    await Bun.sleep(2200)
+    expect(owner.list().activity).toEqual({ name: "cinema", state: "failed", code: "mood_external_change" })
+    expect(f.state.posts).toBe(posts)
+    expect(f.rgb.value).toEqual([255, 0, 0])
+  } finally {
+    await owner.dispose()
+    await f.lights.dispose()
+    await f.close()
+  }
+}, 10000)
+
+test("mood MCP save/start/stop uses the real adapter and a manual command retires its cycle", async () => {
+  const f = await fixture()
+  const owner = new Moods(f.lights, f.storage)
+  const bridge = new Bridge(f.lights, () => true, false, owner)
+  const client = new Client({ name: "synthetic-mood-client", version: "1" })
+  try {
+    f.rgb.modes = ["rgb"]
+    const endpoint = await bridge.open()
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(endpoint.url), { requestInit: { headers: endpoint.headers } }),
+    )
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toContain("moods_start")
+    expect((await client.callTool({ name: "moods_save", arguments: { mood: palette } })).isError).not.toBe(true)
+    expect(f.state.posts).toBe(0)
+    expect((await client.callTool({ name: "moods_start", arguments: { name: "cinema" } })).isError).not.toBe(true)
+    expect((await client.callTool({ name: "lights_set", arguments: { entity, state: "off" } })).isError).not.toBe(true)
+    expect(owner.list().activity.state).toBe("stopped")
+    expect(f.state.value).toBe("off")
+  } finally {
+    await client.close()
+    await bridge.dispose()
+    await owner.dispose()
+    await f.lights.dispose()
+    await f.close()
+  }
+}, 15000)
+
+test("stop during the first held HTTP action joins startup and preserves uncertainty without replay", async () => {
+  const f = await fixture()
+  const owner = new Moods(f.lights, f.storage)
+  try {
+    f.rgb.modes = ["rgb"]
+    f.state.held = true
+    await owner.save(palette)
+    const starting = owner.start("cinema", new AbortController().signal)
+    const failed = starting.then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    await f.ready.promise
+    const stopping = owner.stop()
+    f.gate.resolve()
+    expect(await failed).toBeInstanceOf(Error)
+    await stopping
+    expect(f.state.posts).toBe(1)
+    expect(f.journal.pending()).toBeDefined()
+    expect(owner.list().activity.state).toBe("failed")
+    await expect(owner.start("cinema", new AbortController().signal)).rejects.toThrow("prior_action_uncertain")
+    expect(f.state.posts).toBe(1)
+  } finally {
+    await owner.dispose()
+    await Promise.allSettled([f.lights.dispose()])
+    await f.close()
+  }
+}, 15000)

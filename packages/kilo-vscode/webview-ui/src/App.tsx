@@ -13,6 +13,8 @@ import { ChatView, SubagentViewer, type SubagentTarget } from "./components/chat
 import { SidebarEmptyState } from "./components/chat/SidebarEmptyState"
 import { KiloLogo } from "./components/chat/WelcomeEmptyState"
 import { SidebarTopBar } from "./components/chat/SidebarTopBar"
+import { Navigation } from "./components/chat/Navigation"
+import { MemoryView } from "./components/settings/MemoryView"
 import { registerExpandedTaskTool } from "./components/chat/TaskToolExpanded"
 import { registerVscodeToolOverrides } from "./components/chat/VscodeToolOverrides"
 import { routineDestination } from "./components/chat/routine-result"
@@ -35,7 +37,16 @@ import type { Message as SDKMessage, Part as SDKPart } from "@kilocode/sdk/v2"
 import { cycleAgent as cycle } from "./context/session-agent"
 import "./styles/chat.css"
 
-type ViewType = "newTask" | "history" | "routines" | "todo" | "admin" | "profile" | "settings" | "subAgentViewer"
+type ViewType =
+  | "newTask"
+  | "history"
+  | "routines"
+  | "todo"
+  | "memory"
+  | "admin"
+  | "profile"
+  | "settings"
+  | "subAgentViewer"
 type RoutineTarget = { nonce: string; organizationID?: string; agentID?: string }
 type TodoTarget = { nonce: string; id: string; digest: string }
 const VALID_VIEWS = new Set<string>([
@@ -43,6 +54,7 @@ const VALID_VIEWS = new Set<string>([
   "history",
   "routines",
   "todo",
+  "memory",
   "admin",
   "profile",
   "settings",
@@ -463,6 +475,7 @@ const AppContent: Component = () => {
     KILO_TOP_BAR?: boolean
     KILO_TOP_BAR_SURFACE?: string
     KILO_AGENT_MANAGER_SETTINGS?: boolean
+    RAYA_NAVIGATION?: boolean
   }
   const showTopBar = host.KILO_TOP_BAR !== false
   const topBarSurface = host.KILO_TOP_BAR_SURFACE ?? "sidebar_title"
@@ -486,6 +499,15 @@ const AppContent: Component = () => {
           onAdmin={() => handleViewAction("adminButtonClicked")}
           surface={topBarSurface}
         />
+      </Show>
+      <Show
+        when={
+          currentView() !== "subAgentViewer" &&
+          host.KILO_AGENT_MANAGER_SETTINGS !== true &&
+          host.RAYA_NAVIGATION !== false
+        }
+      >
+        <Navigation current={currentView()} select={setCurrentView} />
       </Show>
       {/* legacy-migration start — state-driven overlay, independent of currentView */}
       <Show
@@ -542,6 +564,14 @@ const AppContent: Component = () => {
             </Match>
             <Match when={currentView() === "admin"}>
               <AdminView onBack={() => setCurrentView("newTask")} />
+            </Match>
+            <Match when={currentView() === "memory"}>
+              <MemoryView
+                settings={() => {
+                  setSettingsTab("context")
+                  setCurrentView("settings")
+                }}
+              />
             </Match>
             <Match when={currentView() === "profile"}>
               <ProfileView

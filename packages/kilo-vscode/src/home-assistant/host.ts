@@ -7,7 +7,12 @@ import { register as setup } from "./setup"
 
 export function register(context: vscode.ExtensionContext, connection: KiloConnectionService) {
   const journal = new Journal(context.globalState)
-  const owner = new Coordinator(connection, new Settings(context.globalState, context.secrets), journal)
+  const owner = new Coordinator(
+    connection,
+    new Settings(context.globalState, context.secrets),
+    journal,
+    context.globalState,
+  )
   const command = setup(context, (config, token) => owner.configure(config, token))
   void owner.initialize().catch(() => {
     void vscode.window.showErrorMessage(

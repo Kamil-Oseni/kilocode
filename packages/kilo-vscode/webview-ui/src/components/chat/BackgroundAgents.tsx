@@ -37,6 +37,7 @@ import {
 import { openSubagent } from "./open-subagent"
 import { loadAgentView, saveAgentView } from "./background-agent-state"
 import { agentIcon } from "./task-tool-state"
+import { model } from "./activity-status"
 
 export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const session = useSession()
@@ -254,6 +255,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                 })
                 const elapsed = createMemo(() => backgroundAgentElapsed(agent, now()))
                 const usage = createMemo(() => backgroundAgentUsage(session.modelUsage()?.sessionUsage, agent.id))
+                const executed = createMemo(() => model(session.allMessages()[agent.id] ?? []))
                 const cost = createMemo(() => {
                   const item = usage()
                   if (!item) return undefined
@@ -287,6 +289,16 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                         </span>
                       </span>
                       <span data-slot="task-header-agent-secondary">
+                        <Show when={executed()}>
+                          {(value) => (
+                            <span
+                              data-slot="task-header-agent-model"
+                              title="Model reported by the worker's latest assistant message"
+                            >
+                              {value()}
+                            </span>
+                          )}
+                        </Show>
                         <Show when={identity(agent).task}>
                           {(task) => (
                             <span data-slot="task-header-agent-activity" dir="auto">

@@ -40,6 +40,8 @@ import { VSCodeProvider } from "../src/context/vscode"
 import { LanguageProvider } from "../src/context/language"
 import { TerminalTab } from "../agent-manager/terminal/TerminalTab"
 import { Card } from "@kilocode/kilo-ui/card"
+import { Button } from "@kilocode/kilo-ui/button"
+import { Navigation } from "../src/components/chat/Navigation"
 import { GoalBannerView } from "../src/components/chat/GoalBanner"
 import type { GoalBannerProps } from "../src/components/chat/GoalBanner"
 import type { GoalState, GoalStatus } from "../../src/shared/goal"
@@ -378,8 +380,52 @@ const banners = new Set<PvState>([
 
 function ContextPreview() {
   const [outcome, setOutcome] = createSignal("No context change submitted")
+  const [root, setRoot] = createSignal("C:\\work\\raya-feature\\.kilo\\memory")
+  const [view, setView] = createSignal("memory")
   const memory = {
-    status: () => undefined,
+    status: () => ({
+      root: root(),
+      state: {
+        version: 1,
+        enabled: true,
+        scope: "project",
+        autoInject: true,
+        autoConsolidate: false,
+        verbose: false,
+        capture: {
+          mode: "selective",
+          turnClose: false,
+          explicit: true,
+          maxOpsPerRun: 10,
+          minIntervalMs: 1000,
+          timeoutMs: 5000,
+        },
+        limits: {
+          maxProjectIndexBytes: 10000,
+          maxSessionFiles: 10,
+          maxRecentSessions: 5,
+          maxConsolidationInputBytes: 10000,
+          maxLineChars: 1000,
+          maxSessionLineChars: 1000,
+        },
+        stats: {
+          lastInjectedAt: 0,
+          lastInjectedBytes: 0,
+          lastInjectedTokens: 0,
+          lastInjectedSessionID: "",
+          lastTypedConsolidationAt: 0,
+          lastSessionSavedAt: 0,
+          lastConsolidationCost: 0,
+          lastConsolidationTokens: 0,
+          lastOperationCount: 0,
+          lastRecallAt: 0,
+          lastRecallCount: 0,
+          lastRecallSessionID: "",
+        },
+      },
+      exists: { state: true, index: true },
+      index: { bytes: 1600, estimatedTokens: 420, preview: "Reviewed fixture facts" },
+    }),
     loading: () => false,
     pending: () => false,
     error: () => undefined,
@@ -395,6 +441,7 @@ function ContextPreview() {
   } satisfies MemoryContextValue
   return (
     <section aria-label="Context provenance">
+      <Navigation current={view()} select={setView} />
       <WorkLocation
         directory="C:\\work\\raya-feature"
         root="C:\\work\\raya-feature\\.kilo\\memory"
@@ -412,6 +459,7 @@ function ContextPreview() {
       <p aria-live="polite" data-testid="context-outcome">
         {outcome()}
       </p>
+      <Button onClick={() => setRoot("C:\\work\\other-project\\.kilo\\memory")}>Switch fixture project</Button>
     </section>
   )
 }

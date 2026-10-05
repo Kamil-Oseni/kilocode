@@ -1,4 +1,5 @@
 import { Button } from "@kilocode/kilo-ui/button"
+import { Card } from "@kilocode/kilo-ui/card"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useServer } from "../../context/server"
@@ -227,6 +228,14 @@ export function AdminView(props: { onBack: () => void }) {
         <p>Read-only status from Raya's local services.</p>
         <strong>{summary()}</strong>
       </section>
+
+      <Card>
+        <h2>Current installation</h2>
+        <p>Extension build: {server.extensionVersion() ?? "Not reported by the host"}</p>
+        <p>Backend build: {server.serverInfo()?.version ?? "Not reported by the connected backend"}</p>
+        <p>Connection: {server.connectionState()}</p>
+        <p>Service checks below report observed health. A connection alone does not confirm task readiness.</p>
+      </Card>
 
       <Show when={error()}>
         <div class="admin-notice" data-kind={kind()} role={kind() === "error" ? "alert" : "status"}>

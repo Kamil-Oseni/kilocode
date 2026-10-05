@@ -33,7 +33,7 @@ import { createHandoff } from "./voice-handoff"
 import { useSession } from "./session"
 import { voiceFallback } from "../../../src/speech/fallback"
 
-type VoiceStatus = "off" | "connecting" | "listening" | "thinking" | "speaking" | "degraded"
+export type VoiceStatus = "off" | "connecting" | "listening" | "thinking" | "speaking" | "degraded"
 
 type VoiceContextValue = {
   settings: Accessor<SpeechState>

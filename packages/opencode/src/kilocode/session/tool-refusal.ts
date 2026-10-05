@@ -6,6 +6,7 @@ export class Refusal extends Error {
     "The requested task session does not exist. Omit task_id for a fresh delegation; refine an incompatible Chief decision with chief_route before retrying Task."
   constructor(
     readonly reason:
+      | "edit-no-change"
       | "stale-edit"
       | "parent-edit-policy"
       | "task-objective"
@@ -15,6 +16,7 @@ export class Refusal extends Error {
     message: string,
   ) {
     if (
+      reason !== "edit-no-change" &&
       reason !== "stale-edit" &&
       reason !== "parent-edit-policy" &&
       reason !== "task-objective" &&

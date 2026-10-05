@@ -103,7 +103,7 @@ export const EditTool = Tool.define(
           }
 
           if (params.oldString === params.newString) {
-            throw new Error("No changes to apply: oldString and newString are identical.")
+            throw new Refusal("edit-no-change", "No changes to apply: oldString and newString are identical.") // kilocode_change
           }
 
           const instance = yield* InstanceState.context
@@ -744,7 +744,7 @@ export function trimDiff(diff: string): string {
 
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
-    throw new Error("No changes to apply: oldString and newString are identical.")
+    throw new Refusal("edit-no-change", "No changes to apply: oldString and newString are identical.") // kilocode_change
   }
   if (oldString === "") {
     throw new Error(

@@ -38,7 +38,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import * as CrossSpawnSpawner from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirProject } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { EditTool } from "../../src/tool/edit"
+import { EditTool, replace } from "../../src/tool/edit"
 import { TaskTool } from "../../src/tool/task"
 import { LSP } from "../../src/lsp/lsp"
 import { Format } from "../../src/format"
@@ -237,7 +237,7 @@ it.effect("durable processor handling settles actual permission and schema refus
           Effect.succeed({
             description: "Exercise a generic failure with the same business refusal wording",
             parameters: Schema.Struct({ value: Schema.String }),
-            execute: () => Effect.die(new Error("The parent policy does not allow editing access for this child")),
+            execute: () => Effect.die(new Error("No changes to apply: oldString and newString are identical.")),
           }),
         ).pipe(Effect.flatMap(Tool.init))
         const file = path.join(dir, "stale.txt")
@@ -255,6 +255,18 @@ it.effect("durable processor handling settles actual permission and schema refus
           sticky?: boolean
         }[] = [
           { call: "permission", spec, args: { value: "valid" } },
+          {
+            call: "no-change",
+            spec: edit,
+            args: { filePath: file, oldString: "", newString: "" },
+            reason: "edit-no-change",
+          },
+          {
+            call: "same-text",
+            spec: edit,
+            args: { filePath: file, oldString: "unchanged actual file", newString: "unchanged actual file" },
+            reason: "edit-no-change",
+          },
           { call: "schema", spec, args: { value: 7 } },
           {
             call: "stale",
@@ -398,9 +410,10 @@ test("unpublished, foreign, mixed finalizer and owner failures remain sticky", a
 
 test("closed business refusal kinds do not acknowledge generic lookalikes or mixed finalizers", async () => {
   expect(() => Reflect.construct(Refusal, ["unknown", "synthetic"])).toThrow("Invalid tool refusal reason")
-  const generic = new Error("Could not find oldString in the file")
+  expect(() => replace("unchanged", "unchanged", "unchanged")).toThrow(Refusal)
+  const generic = new Error("No changes to apply: oldString and newString are identical.")
   expect(completed("session", "call", generic)).toBe(false)
-  const error = new Refusal("stale-edit", generic.message)
+  const error = new Refusal("edit-no-change", "No changes to apply: oldString and newString are identical.")
   const owner = SessionRetirement.make()
   await Effect.runPromiseExit(owner.tool("session", "call", Effect.die(error)))
   expect(owner.completed("session", "call", new Refusal("stale-edit", error.message))).toBe(false)

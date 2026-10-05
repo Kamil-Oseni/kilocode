@@ -103,7 +103,7 @@ it.live(
             })
             const schemas = yield* Effect.promise(() => KiloToolSchema.sanitize(base.tools))
             expect(Object.keys(schemas).sort()).toEqual(
-              ["discover_tools", "read", "glob", "grep", "question", "ask_options"].sort(),
+              ["discover_tools", "read", "glob", "grep", "question", "ask_options", "webfetch"].sort(),
             )
             const large = yield* LLMRequestPrep.prepare({
               user: {

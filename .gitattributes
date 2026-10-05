@@ -1,6 +1,9 @@
 # Enforce LF line endings for all text files
 * text=auto eol=lf
 
+# Preserve the exact reviewed bytes of the hash-pinned managed Retrieval release.
+packages/kilo-vscode/script/memory/retrieval/*.py -text
+
 # Git LFS tracking for binary/media files
 *.gif filter=lfs diff=lfs merge=lfs -text
 *.mp4 filter=lfs diff=lfs merge=lfs -text

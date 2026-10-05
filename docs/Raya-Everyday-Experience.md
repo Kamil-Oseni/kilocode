@@ -30,6 +30,7 @@ The proposal interface requires the matching native/backend contract; do not ins
 - The complete focused admin/browser suite passed all 18 cases, including proposal transport, pending and lost Stop receipts, resources, rollback, narrow layouts, keyboard access, service failures and retry.
 - Six real artifact read/patch tests passed with 72 assertions. The subsequent saved-byte confirmation repair closes the unavailable-readback success-message gap. Independent checks in this worktree passed all 11 write/edit/patch cases with 102 assertions, including changed/missing readback and a recreated deleted path. These checks establish source behavior, not installed or local-model task acceptance.
 - The maintained SDK generator cancellation repair passed four independent actual-stream tests with 12 assertions. It joins cancellation without losing a distinct read or validation failure.
+- A one-minute real-time mood expiry check passed with 156 assertions against the actual HTTP adapter. The cycle completes, stops further writes, preserves the last reported colour, clears its action journal and reopens idle without playback. This is a local fixture check, not physical light acceptance.
 
 No microphone capture, audible playback, physical light change or automatic memory capture was performed by these checks.
 

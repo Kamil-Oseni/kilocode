@@ -960,6 +960,34 @@ test("an external colour override retires the mood instead of overwriting the ne
   }
 }, 10000)
 
+test("a real timed mood expires without another write and preserves the last reported colour", async () => {
+  const f = await fixture()
+  const owner = new Moods(f.lights, f.storage)
+  try {
+    f.rgb.modes = ["rgb"]
+    await owner.save(palette)
+    await owner.start("cinema", new AbortController().signal)
+    const deadline = performance.now() + 65000
+    while (owner.list().activity.state === "running" && performance.now() < deadline) await Bun.sleep(1000)
+    expect(owner.list().activity).toEqual({ name: "cinema", state: "completed" })
+    expect(f.state.posts).toBeGreaterThan(1)
+    expect(f.journal.pending()).toBeUndefined()
+    const posts = f.state.posts
+    const colour = f.rgb.value
+    await Bun.sleep(2200)
+    expect(f.state.posts).toBe(posts)
+    expect(f.rgb.value).toEqual(colour)
+    const reopened = new Moods(f.lights, f.storage)
+    expect(reopened.list().activity.state).toBe("idle")
+    expect(reopened.list().moods[0].name).toBe("cinema")
+    await reopened.dispose()
+  } finally {
+    await owner.dispose()
+    await f.lights.dispose()
+    await f.close()
+  }
+}, 75000)
+
 test("mood MCP save/start/stop uses the real adapter and a manual command retires its cycle", async () => {
   const f = await fixture()
   const owner = new Moods(f.lights, f.storage)

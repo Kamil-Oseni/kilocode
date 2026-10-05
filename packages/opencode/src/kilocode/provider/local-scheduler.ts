@@ -280,11 +280,15 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     const signal = init?.signal !== undefined ? init.signal : input instanceof Request ? input.signal : undefined
     if (signal?.aborted) return Promise.reject(signal.reason)
     const waiting = active >= limits.active || queue.length > 0
-    if (waiting && queue.length >= limits.count)
+    // Leave one waiting slot and a quarter of the retained byte budget for conversation.
+    // This does not interrupt an active worker or change the three-request fairness limit.
+    const count = lane === "background" ? limits.count - 1 : limits.count
+    const capacity = (lane === "background" ? limits.bytes - Math.ceil(limits.bytes / 4) : limits.bytes) - bytes
+    if (waiting && queue.length >= count)
       return Promise.reject(
         new LocalInferenceError("queue-full", "The local model queue is full. Try again when a request finishes."),
       )
-    const retained = waiting ? retain(input, init, limits.bytes - bytes) : undefined
+    const retained = waiting ? retain(input, init, capacity) : undefined
     if (retained === "body-unknown")
       return Promise.reject(
         new LocalInferenceError(

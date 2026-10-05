@@ -383,6 +383,8 @@ it.effect("durable processor handling settles actual permission and schema refus
       }),
     { git: true },
   ),
+  // Cold Windows processor setup and the real durable refusal cases exceed Bun's default five seconds.
+  30_000,
 )
 
 test("unpublished, foreign, mixed finalizer and owner failures remain sticky", async () => {

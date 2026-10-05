@@ -8,6 +8,7 @@ import { $ } from "bun"
 import path from "path"
 
 import { createClient } from "@hey-api/openapi-ts"
+import { sse } from "./sse"
 
 const opencode = path.resolve(dir, "../../opencode")
 
@@ -111,6 +112,9 @@ if (sseTypesPatched === sseTypesSource) {
   throw new Error(`SseFn patch did not apply; @hey-api/openapi-ts output may have changed (${sseTypesPath})`)
 }
 await Bun.write(sseTypesPath, sseTypesPatched)
+
+const stream = "./src/v2/gen/core/serverSentEvents.gen.ts"
+await Bun.write(stream, sse(await Bun.file(stream).text()))
 
 // The legacy SDK generator is retired, but this public Config type remains exported.
 // Keep Kilo's released sandbox settings aligned with the current generated client.

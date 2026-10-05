@@ -2572,6 +2572,28 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).toBe(child.id)
       expect(result.metadata.displayName).toBe("Existing child") // kilocode_change - raya_change
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
+      // kilocode_change start - completed results expose their own resumable ID
+      expect(result.output).toContain(`task_id="${child.id}"`)
+      expect(result.output).toContain("Keep the same authorized access")
+      const id = result.output.match(/task_id="([^"]+)"/)?.[1]
+      expect(id).toBe(child.id)
+      if (!id) throw new Error("completed task did not expose its resumable session")
+      const continued = yield* def.execute(
+        { prompt: "verify the assigned work", task_id: SessionID.make(id) },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      expect(continued.metadata.sessionId).toBe(child.id)
+      expect((yield* sessions.children(chat.id)).map((row) => row.id)).toEqual([child.id])
+      // kilocode_change end
       expect(seen?.sessionID).toBe(child.id)
       expect(seen?.variant).toBe("xhigh")
     }),
@@ -3242,6 +3264,13 @@ describe("tool.task", () => {
       const job = yield* jobs.get(result.metadata.sessionId)
       expect(result.metadata.background).toBe(true)
       expect(result.output).toContain(`state="running"`)
+      // kilocode_change start - running results expose the actual retained child ID
+      expect(result.output).toContain(`task_id="${result.metadata.sessionId}"`)
+      expect(result.output).toContain("Keep the same authorized access")
+      expect(result.output).toContain("after the child finishes")
+      expect(result.output).toContain("do not poll, nudge, or resume")
+      expect(result.output).not.toContain("can be resumed: call the task tool again")
+      // kilocode_change end
       expect(job?.status).toBe("running")
     }),
   )

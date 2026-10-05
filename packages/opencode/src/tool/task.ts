@@ -138,9 +138,9 @@ function renderOutput(input: {
   text: string
 }) {
   const tag = input.state === "error" ? "task_error" : "task_result"
-  // kilocode_change start - surface the resumable task_id when a background subagent fails (#11620)
-  const hint = resumeHint(input.sessionID)
-  const body = input.state === "error" && !input.text.includes(hint) ? `${input.text}\n${hint}` : input.text
+  // kilocode_change start - expose the retained task_id for every task result
+  const hint = resumeHint(input.sessionID, input.state === "running" ? "running" : undefined)
+  const body = !input.text.includes(hint) ? `${input.text}\n${hint}` : input.text
   // kilocode_change end
   return [
     `<task id="${input.sessionID}" state="${input.state}">`,

@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import type { ProfileInfo } from "@/kilocode/browser/profile-schema"
 import type { Session } from "@/session/session"
 import { RayaTask } from "@/kilocode/task"
@@ -7,6 +7,7 @@ import type { RayaAdminLog } from "./log"
 import type { RayaGoalHealth } from "@/kilocode/goal/health"
 import type { RayaTaskHealth } from "@/kilocode/task/health"
 import { RayaAdmin } from "./registry"
+import { resources } from "./resources"
 
 export namespace RayaAdminService {
   type State = "connecting" | "connected" | "disconnected" | "error"
@@ -169,7 +170,22 @@ export namespace RayaAdminService {
             return RayaAdmin.voice(signal.available, signal.states, at)
           },
         })
-      return RayaAdmin.collect(probes.map(probe), deps.clock)
+      const [health, measured] = await Promise.all([
+        RayaAdmin.collect(probes.map(probe), deps.clock),
+        Promise.resolve()
+          .then(resources)
+          .then(Schema.decodeUnknownSync(RayaAdmin.Resources))
+          .catch(async () => {
+            await report({
+              subsystem: "runtime",
+              severity: "warning",
+              code: "probe.failed",
+              fields: { source: "runtime", reason: "probe-failed" },
+            })
+            return undefined
+          }),
+      ])
+      return { ...health, ...(measured ? { resources: measured } : {}) }
     }
     return { snapshot }
   }

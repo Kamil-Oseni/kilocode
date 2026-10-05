@@ -14,6 +14,10 @@ test("the production listener starts with the shared Canvas service and serves A
     })
     expect(response.status).toBe(200)
     const snapshot = Schema.decodeUnknownSync(RayaAdmin.Snapshot)(await response.json())
+    expect(snapshot.resources?.process.pid).toBe(process.pid)
+    expect(snapshot.resources?.process.rss).toBeGreaterThan(0)
+    expect(snapshot.resources?.host.total).toBeGreaterThanOrEqual(snapshot.resources!.host.free)
+    expect(snapshot.resources?.inference.queued).toBeGreaterThanOrEqual(0)
     expect(snapshot.items.find((row) => row.id === "canvas")).toMatchObject({
       status: "healthy",
       reason: "ready",

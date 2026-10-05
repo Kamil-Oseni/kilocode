@@ -12,8 +12,8 @@ Conversation, coding, delegated jobs, routines and goals remain first-class work
 | Dynamic moods | Save named palettes and optional research sources, with bounded duration and staggered movement. Existing device approvals and allowlists remain effective. Each mutation uses observed-state verification; external light changes retire the cycle. Saved moods do not autoplay after restart. | Explicit user-requested physical playback and interruption test. |
 | Background capacity | The shared inference queue reserves waiting count and bytes for conversation and retains fairness for background work. Routine ancestry selects the background lane. | Integrated installed conversation while a job is active. |
 | Context | Ask, Code and Voice fixed prompts fit a 32K configuration with bounded catalogs; recall uses the transcript index and active-turn exclusion. | Long conversation and selected-memory acceptance on the installed build. |
-| Jobs and routines | Existing task progress, tool detail, elapsed time, report and Cancel controls remain available. | Real permitted file-writing delegation with readback, routine periods, pause/stop, and no replay. |
-| Recovery | Activity and health displays installed extension/backend identity and existing service states. | Local model resource/queue telemetry, verified rollback availability, and matching-build recovery evidence. |
+| Jobs and routines | Activity and health includes current-conversation workers, tool detail, elapsed time, reports and Stop. In-flight Stop is not repeated; missing receipts trigger a status read, not another cancellation. | Real permitted file-writing delegation with readback, routine periods, pause/stop, and no replay. |
+| Resources and recovery | Activity and health displays installed extension/backend identity, existing service states, shared backend RSS/heap, host free/total RAM and observed local queue activity. Separate model/speech and GPU memory are not attributed to workers. | Integrate the generated resource contract and verified rollback availability; matching-build recovery evidence. |
 
 The proposal interface requires the matching native/backend contract; do not install the UI commit alone. Runtime health does not establish microphone, model adherence, physical-device or recovery acceptance. The broader readiness checklist remains version-scoped and independent of these source checks.
 
@@ -24,5 +24,6 @@ The proposal interface requires the matching native/backend contract; do not ins
 - Seventeen voice dispatch, draft, mounted-session, Stop and playback-correlation tests passed (63 assertions). Mounted checks use Playwright's bundled browser because installed Edge refused test-profile launches before application code.
 - Nineteen actual HTTP scheduler and persisted-lane checks passed (118 assertions), including background saturation, queued/active cancellation, stream failures and ordinary slot release.
 - Ask, Code, routing and indexed recall checks passed. The Voice catalog expectation was corrected to include its read-only web-fetch tool; the Voice budget and Home Assistant eligibility checks then passed all 11 cases (143 assertions).
+- Resource collection passed 11 service/registry/real-stream cases (65 assertions) and the production HTTP listener check (six assertions). Narrow-layout checks passed; worker Stop tests verify pending confirmation, status recovery after a lost receipt and one cancellation command.
 
 No microphone capture, audible playback, physical light change or automatic memory capture was performed by these checks.

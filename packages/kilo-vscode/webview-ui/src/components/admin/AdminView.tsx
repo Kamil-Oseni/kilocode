@@ -6,6 +6,8 @@ import { useServer } from "../../context/server"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import type { AdminEntry, AdminRow } from "../../../../src/shared/admin"
+import { Resources } from "./Resources"
+import { BackgroundAgents } from "../chat/BackgroundAgents"
 
 const ids = [
   "runtime",
@@ -236,6 +238,13 @@ export function AdminView(props: { onBack: () => void }) {
         <p>Connection: {server.connectionState()}</p>
         <p>Service checks below report observed health. A connection alone does not confirm task readiness.</p>
       </Card>
+
+      <Resources value={health()?.resources} />
+
+      <section aria-labelledby="admin-workers-title">
+        <h2 id="admin-workers-title">Current conversation workers</h2>
+        <BackgroundAgents />
+      </section>
 
       <Show when={error()}>
         <div class="admin-notice" data-kind={kind()} role={kind() === "error" ? "alert" : "status"}>

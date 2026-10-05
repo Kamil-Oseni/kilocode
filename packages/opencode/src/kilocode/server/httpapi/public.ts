@@ -39,6 +39,19 @@ type Spec = {
 export function matchLegacyKiloOpenApi(input: Record<string, unknown>) {
   rebrand(input)
   const spec = input as Spec
+  // Effect's OpenAPI conversion drops null alternatives; retain the actual proposal wire contract.
+  const proposals = spec.components?.schemas
+  const command = proposals?.SecondBrainCommand?.anyOf?.find((row) => row.properties?.request)
+  const draft = command?.properties?.request
+  const result = proposals?.SecondBrainResult?.properties?.proposals?.items
+  for (const view of [draft, result]) {
+    const changes = view?.properties?.changes?.items?.properties
+    for (const field of ["expected", "content", "before"]) {
+      if (changes?.[field]) changes[field] = nullable(changes[field])
+    }
+    const sources = view?.properties?.sources?.items?.properties
+    if (sources?.event_time) sources.event_time = nullable(sources.event_time)
+  }
   const rules = spec.paths?.["/config/rules"]?.get?.parameters?.find(
     (param) => param.in === "query" && param.name === "scope",
   )

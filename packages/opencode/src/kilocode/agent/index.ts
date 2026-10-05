@@ -490,6 +490,7 @@ export function prepare(cfg: Config.Info): KiloData {
         }
       : {}),
     // raya_change end
+    second_brain_proposal: "ask",
     kilo_memory_recall: "ask",
     kilo_memory_save: "ask",
   })

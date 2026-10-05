@@ -66,7 +66,7 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
       revision.status === "captured" && format && display.display?.type === "file" && typeof result.output === "string"
         ? {
             ...result,
-            output: `${result.output}\n<file-format encoding="${format.encoding}" bom="${format.bom ? "UTF-8" : "none"}" line-endings="${format.endings}" final-newline="${format.newline}" bytes="${format.bytes}" />`,
+            output: `${result.output}\n<file-format encoding="${format.encoding}" bom="${format.bom ? "UTF-8" : "none"}" line-endings="${format.endings}" final-newline="${format.newline}" bytes="${format.bytes}" sha256="${revision.sha256}" />`,
           }
         : result
     return { ...output, metadata: { ...result.metadata, rayaRevision: revision } }

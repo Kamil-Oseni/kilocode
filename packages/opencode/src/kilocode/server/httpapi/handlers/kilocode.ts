@@ -71,6 +71,8 @@ import { Browser } from "@/kilocode/browser/service" // raya_change - Milestone 
 import type { RequestID as DesktopRequestID } from "@/kilocode/desktop/protocol"
 import { Desktop } from "@/kilocode/desktop/service"
 import type { RequestID as CanvasRequestID } from "@/kilocode/canvas/protocol" // raya_change - Milestone E
+import { SecondBrain } from "@/kilocode/second-brain/service"
+import type { RequestID as SecondBrainRequestID } from "@/kilocode/second-brain/protocol"
 import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas bridge
 import {
   AgentManagerRejectPayload,
@@ -103,6 +105,8 @@ import {
   BrowserAcknowledgePayload,
   DesktopReplyPayload,
   DesktopRejectPayload,
+  SecondBrainReplyPayload,
+  SecondBrainRejectPayload,
   CanvasReplyPayload, // raya_change - Milestone E canvas API
   CanvasRejectPayload, // raya_change - Milestone E canvas API
 } from "../groups/kilocode"
@@ -134,6 +138,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const notebook = yield* Notebook.Service
     const browser = yield* Browser.Service // raya_change - Milestone F browser bridge
     const desktop = yield* Desktop.Service
+    const brain = yield* SecondBrain.Service
     const canvas = yield* Canvas.Service // raya_change - Milestone E canvas bridge
     const background = yield* BackgroundJob.Service
     const runState = yield* SessionRunState.Service
@@ -408,6 +413,28 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
 
     // raya_change start - Milestone E canvas host API
+    const secondBrainList = Effect.fn("KilocodeHttpApi.secondBrainList")(function* () {
+      return yield* brain.list()
+    })
+    const secondBrainReply = Effect.fn("KilocodeHttpApi.secondBrainReply")(function* (ctx: {
+      params: { requestID: SecondBrainRequestID }
+      payload: typeof SecondBrainReplyPayload.Type
+    }) {
+      yield* brain.reply({ requestID: ctx.params.requestID, result: ctx.payload.result }).pipe(
+        Effect.catchTag("SecondBrain.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchTag("SecondBrain.InvalidReplyError", () => Effect.fail(new HttpApiError.BadRequest({}))),
+      )
+      return true
+    })
+    const secondBrainReject = Effect.fn("KilocodeHttpApi.secondBrainReject")(function* (ctx: {
+      params: { requestID: SecondBrainRequestID }
+      payload: typeof SecondBrainRejectPayload.Type
+    }) {
+      yield* brain
+        .reject({ requestID: ctx.params.requestID, error: ctx.payload.error })
+        .pipe(Effect.catchTag("SecondBrain.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      return true
+    })
     const canvasList = Effect.fn("KilocodeHttpApi.canvasList")(function* () {
       return yield* canvas.list()
     })
@@ -1273,6 +1300,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("desktopReject", desktopReject)
         // raya_change end
         // raya_change start - Milestone E canvas host API
+        .handle("secondBrainList", secondBrainList)
+        .handle("secondBrainReply", secondBrainReply)
+        .handle("secondBrainReject", secondBrainReject)
         .handle("canvasList", canvasList)
         .handle("canvasReply", canvasReply)
         .handle("canvasReject", canvasReject)

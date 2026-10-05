@@ -83,6 +83,7 @@ import { InstanceRef } from "@/effect/instance-ref" // kilocode_change
 import { Storage } from "@/storage/storage" // kilocode_change // raya_change - Milestone A goal storage
 import { Browser } from "@/kilocode/browser/service" // kilocode_change // raya_change - Milestone F browser bridge
 import { Desktop } from "@/kilocode/desktop/service" // kilocode_change // raya_change - native desktop host
+import { SecondBrain } from "@/kilocode/second-brain/service" // kilocode_change
 import { Canvas } from "@/kilocode/canvas/service" // kilocode_change // raya_change - Milestone E canvas bridge
 import { ToolTrust } from "@/kilocode/tool/trust" // kilocode_change
 
@@ -570,6 +571,7 @@ export const node = LayerNode.suspend(() =>
       Notebook.node,
       Browser.node, // kilocode_change // raya_change - Milestone F browser bridge
       Desktop.node, // kilocode_change // raya_change - native desktop host
+      SecondBrain.node, // kilocode_change
       Canvas.node, // kilocode_change // raya_change - Milestone E canvas bridge
       RepositoryCache.node,
       KiloSessions.node,

@@ -359,6 +359,12 @@ import type {
   KilocodeRoutineTemplatesResponses,
   KilocodeRoutineUpdateErrors,
   KilocodeRoutineUpdateResponses,
+  KilocodeSecondBrainListErrors,
+  KilocodeSecondBrainListResponses,
+  KilocodeSecondBrainRejectErrors,
+  KilocodeSecondBrainRejectResponses,
+  KilocodeSecondBrainReplyErrors,
+  KilocodeSecondBrainReplyResponses,
   KilocodeSelfHealAdmitErrors,
   KilocodeSelfHealAdmitResponses,
   KilocodeSelfHealAdvanceErrors,
@@ -668,6 +674,9 @@ import type {
   SandboxSupportResponses,
   SandboxToggleErrors,
   SandboxToggleResponses,
+  SecondBrainFailure,
+  SecondBrainRequestId,
+  SecondBrainResult,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -8953,6 +8962,122 @@ export class Desktop extends HeyApiClient {
   }
 }
 
+export class SecondBrain extends HeyApiClient {
+  /**
+   * List pending Second Brain host requests
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeSecondBrainListResponses,
+      KilocodeSecondBrainListErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/second-brain",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply with pending Second Brain proposals
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: SecondBrainRequestId
+      directory?: string
+      workspace?: string
+      result?: SecondBrainResult
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "result" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSecondBrainReplyResponses,
+      KilocodeSecondBrainReplyErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/second-brain/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject a Second Brain host request
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: SecondBrainRequestId
+      directory?: string
+      workspace?: string
+      error?: SecondBrainFailure
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "error" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      KilocodeSecondBrainRejectResponses,
+      KilocodeSecondBrainRejectErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/second-brain/{requestID}/reject",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Canvas extends HeyApiClient {
   /**
    * List pending canvas requests
@@ -14225,6 +14350,11 @@ export class Kilocode extends HeyApiClient {
   private _desktop?: Desktop
   get desktop(): Desktop {
     return (this._desktop ??= new Desktop({ client: this.client }))
+  }
+
+  private _secondBrain?: SecondBrain
+  get secondBrain(): SecondBrain {
+    return (this._secondBrain ??= new SecondBrain({ client: this.client }))
   }
 
   private _canvas?: Canvas

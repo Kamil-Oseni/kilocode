@@ -1136,7 +1136,265 @@ try {
     sent.slice(cutoff).some((msg) => msg.type === "routineInboxDraft"),
     false,
   )
-  console.log("routine-inbox-view: conversation, whitespace, late hydration, and worker-switch assertions passed")
+  dispose()
+  const interval = globalThis.setInterval
+  const cancel = globalThis.clearInterval
+  const now = Date.now
+  const clocks = new Map()
+  let clock = 0
+  let sequence = 0
+  globalThis.setInterval = (fn, delay) => {
+    if (delay !== 4000) return interval(fn, delay)
+    const id = ++sequence
+    clocks.set(id, fn)
+    return id
+  }
+  globalThis.clearInterval = (id) => {
+    if (clocks.delete(id)) return
+    cancel(id)
+  }
+  Date.now = () => clock
+  try {
+    const [connection, setConnection] = createSignal("connected")
+    dispose = mount("C:/Projects/Books", {
+      agentID: "paused-reply",
+      box: {
+        agentID: "paused-reply",
+        owner: "owner-paused",
+        conversationID: "rcv-paused",
+        state: "waiting",
+        draftRevision: 0,
+      },
+      name: "Paused worker",
+      role: "Briefer",
+      workspace: "C:/Projects/Books",
+      objective: "Reply",
+      schedule: "When you ask",
+      manual: true,
+      access: "Read only",
+      output: "Reply",
+      enabled: false,
+      get connection() {
+        return connection()
+      },
+      onEdit() {},
+      onAccess() {},
+      onOutput() {},
+      onInspect() {},
+      onToggle() {},
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    const user = {
+      id: "waiting-user",
+      agentID: "paused-reply",
+      kind: "user",
+      source: "user:one",
+      body: "Reply exactly LOCAL_REPLY",
+      sessionID: "ses-private",
+      time: 1,
+    }
+    const count = () => sent.filter((msg) => msg.type === "routineInboxPage" && msg.agentID === "paused-reply").length
+    const page = (rows) =>
+      emit({
+        type: "routineInboxPage",
+        requestID: sent.findLast((msg) => msg.type === "routineInboxPage").requestID,
+        agentID: "paused-reply",
+        messages: rows,
+      })
+    const previous = {
+      ...user,
+      id: "previous-report",
+      kind: "report",
+      source: "report:earlier",
+      body: "Earlier retained history",
+      time: 0,
+    }
+    page([previous])
+    assert.match(root.textContent, /Paused/)
+    assert.equal(clocks.size, 1, "selected idle conversations check for unsolicited reports")
+    const draft = root.querySelector("textarea[aria-label='Message this worker']")
+    draft.value = user.body
+    draft.dispatchEvent(new window.Event("input", { bubbles: true }))
+    workerSend().click()
+    const question = sent.findLast((msg) => msg.type === "routineInboxSend")
+    assert.equal(question.agentID, "paused-reply")
+    user.source = question.source
+    emit({
+      type: "routineInboxSent",
+      requestID: question.requestID,
+      agentID: "paused-reply",
+      message: user,
+      draftState: { owner: "owner-paused", conversationID: "rcv-paused", revision: 1, draft: null, attachments: [] },
+    })
+    assert.equal(clocks.size, 1, "paused manual worker send starts bounded reply checks")
+    draft.value = "Unsent café 日本語 😀"
+    draft.dispatchEvent(new window.Event("input", { bubbles: true }))
+    const reader = root.querySelector(".routines-thread-body")
+    Object.defineProperty(reader, "scrollHeight", { configurable: true, value: 1000 })
+    Object.defineProperty(reader, "clientHeight", { configurable: true, value: 200 })
+    reader.scrollTop = 42
+    reader.dispatchEvent(new window.Event("scroll"))
+    const before = count()
+    emit({ type: "routineRuns", agentID: "unrelated", runs: [{ status: "complete" }] })
+    assert.equal(count(), before)
+    // The completion event precedes the durable inbox reply. A single refresh is insufficient.
+    emit({ type: "routineRuns", agentID: "paused-reply", runs: [{ status: "complete" }] })
+    assert.equal(count(), before + 1)
+    for (const tick of [...clocks.values()]) tick()
+    assert.equal(count(), before + 1, "in-flight conversation reads coalesce")
+    page([user])
+    clock = 170_000
+    for (const tick of [...clocks.values()]) tick()
+    assert.equal(count(), before + 2, "reply refresh survives an early completion event")
+    page([user])
+    clock = 180_000
+    for (const tick of [...clocks.values()]) tick()
+    assert.equal(clocks.size, 0)
+    assert.match(root.textContent, /Automatic reply checks are paused/)
+    button("Refresh reply").click()
+    assert.equal(clocks.size, 1)
+    const reply = {
+      id: "waiting-reply",
+      agentID: "paused-reply",
+      kind: "worker",
+      source: "reply:run-one",
+      body: "LOCAL_REPLY",
+      sessionID: "ses-private",
+      time: 2,
+    }
+    page([user, reply])
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(reader.scrollTop, 42, "live reply preserves the reader position")
+    assert.equal(
+      root.querySelectorAll('[data-routine-message="previous-report"]').length,
+      1,
+      "live latest page retains older loaded history",
+    )
+    assert.equal(root.querySelectorAll('[data-routine-message="waiting-user"]').length, 1)
+    assert.equal(root.querySelectorAll('[data-routine-message="waiting-reply"]').length, 1)
+    assert.match(root.querySelector('[data-routine-message="waiting-reply"]').textContent, /LOCAL_REPLY/)
+    assert.equal(draft.value, "Unsent café 日本語 😀")
+    assert.equal(clocks.size, 1, "delivered reply returns to idle report refresh")
+    const latest = sent.length
+    emit({ type: "routineRuns", agentID: "paused-reply", runs: [{ status: "complete" }] })
+    assert.equal(sent.length, latest, "duplicate completion does not refetch delivered reply")
+    const pending = { ...user, id: "next-user", source: "user:two", time: 3 }
+    emit({ type: "sessionTurnClosed", sessionID: "ses-private", reason: "interrupted" })
+    page([user, reply, pending])
+    assert.equal(clocks.size, 1)
+    emit({ type: "routineRuns", agentID: "paused-reply", runs: [{ status: "complete" }] })
+    page([user, pending, { ...reply, time: 4 }])
+    assert.equal(
+      clocks.size,
+      1,
+      "an old run reply arriving after another question cannot settle it in a reused session",
+    )
+    setConnection("disconnected")
+    assert.equal(clocks.size, 0)
+    setConnection("connected")
+    assert.equal(clocks.size, 1)
+    dispose()
+    assert.equal(clocks.size, 0, "unmount stops conversation refresh")
+
+    dispose = mount("C:/Projects/Books", {
+      agentID: "scheduled-report",
+      box: {
+        agentID: "scheduled-report",
+        owner: "owner-scheduled",
+        conversationID: "rcv-scheduled",
+        state: "waiting",
+        draftRevision: 0,
+      },
+      name: "Paused manual reports",
+      role: "Briefer",
+      workspace: "C:/Projects/Books",
+      objective: "Read private evidence",
+      schedule: "When you ask",
+      manual: true,
+      access: "Read only",
+      output: "Verified evidence",
+      enabled: false,
+      get connection() {
+        return connection()
+      },
+      onEdit() {},
+      onAccess() {},
+      onOutput() {},
+      onInspect() {},
+      onToggle() {},
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    const scheduled = (rows) =>
+      emit({
+        type: "routineInboxPage",
+        requestID: sent.findLast((msg) => msg.type === "routineInboxPage").requestID,
+        agentID: "scheduled-report",
+        messages: rows,
+      })
+    scheduled([])
+    assert.equal(clocks.size, 1, "paused manual worker listens for unsolicited reports without user messages")
+    const composer = root.querySelector("textarea[aria-label='Message this worker']")
+    composer.value = "TIMER_DRAFT — café 日本語 😀. Keep this unsent."
+    composer.dispatchEvent(new window.Event("input", { bubbles: true }))
+    const requests = () =>
+      sent.filter((msg) => msg.type === "routineInboxPage" && msg.agentID === "scheduled-report").length
+    const baseline = requests()
+    for (const tick of [...clocks.values()]) tick()
+    assert.equal(requests(), baseline + 1)
+    for (const tick of [...clocks.values()]) tick()
+    assert.equal(requests(), baseline + 1, "timer page requests coalesce while in flight")
+    scheduled([])
+    // A run can settle before its durable report is published, with no tracked session event.
+    emit({ type: "routineRuns", agentID: "scheduled-report", runs: [{ status: "complete" }] })
+    for (const tick of [...clocks.values()]) tick()
+    const report = {
+      id: "timer-report",
+      agentID: "scheduled-report",
+      kind: "report",
+      source: "report:timer-one",
+      body: "TIMER_EVIDENCE_VERIFIED",
+      time: 4,
+    }
+    scheduled([report])
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(root.querySelectorAll('[data-routine-message="timer-report"]').length, 1)
+    assert.match(root.querySelector('[data-routine-message="timer-report"]').textContent, /TIMER_EVIDENCE_VERIFIED/)
+    assert.equal(composer.value, "TIMER_DRAFT — café 日本語 😀. Keep this unsent.")
+    assert.equal(
+      sent.some((msg) => msg.type === "routineInboxSend" && msg.agentID === "scheduled-report"),
+      false,
+    )
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" })
+    document.dispatchEvent(new window.Event("visibilitychange"))
+    assert.equal(clocks.size, 0, "hidden conversation stops refreshing")
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" })
+    document.dispatchEvent(new window.Event("visibilitychange"))
+    assert.equal(clocks.size, 1)
+    setConnection("disconnected")
+    assert.equal(clocks.size, 0, "offline timer stops refreshing")
+    setConnection("connected")
+    assert.equal(clocks.size, 1)
+    const mounted = sent.findLast((msg) => msg.type === "routineInboxMount" && msg.agentID === "scheduled-report")
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.ok(mounted, "capture uses an actually registered view identity")
+    const final = "Final Unicode café 日本語 😀"
+    composer.value = final
+    composer.dispatchEvent(new window.Event("input", { bubbles: true }))
+    emit({ ...mounted, type: "routineInboxCapture", requestID: "capture-exact", deadline: Date.now() + 5000 })
+    const cutoff = sent.findLast((msg) => msg.type === "routineInboxFlush" && msg.requestID === "capture-exact")
+    assert.equal(cutoff?.draft, final, "capture sends current unsent text rather than cached backend text")
+    assert.equal(cutoff?.owner, "owner-scheduled")
+    assert.equal(cutoff?.conversationID, "rcv-scheduled")
+    assert.equal(composer.value, final, "capture never clears the visible draft")
+    dispose()
+    assert.equal(clocks.size, 0, "scheduled conversation unmount stops refreshing")
+  } finally {
+    dispose()
+    globalThis.setInterval = interval
+    globalThis.clearInterval = cancel
+    Date.now = now
+  }
+  console.log("routine-inbox-view: conversation, draft recovery, and paused live-reply assertions passed")
 } finally {
   dispose()
   root.remove()

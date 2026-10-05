@@ -123,6 +123,20 @@ async function fixture() {
 }
 
 describe("durable composer host bridge", () => {
+  it("does not read retired project scope generation after actual composer capture closure", async () => {
+    const f = await fixture()
+    await f.controller.captureClose()
+    const posts = f.posts.length
+    const requests = f.requests.length
+    f.ctx.generation = () => {
+      throw new Error("Project scope is retired for capture")
+    }
+    expect(() => f.controller.state()).not.toThrow()
+    expect(f.posts).toHaveLength(posts)
+    expect(f.requests).toHaveLength(requests)
+    await expect(f.controller.reconcile()).rejects.toThrow("intake is retired")
+    await expect(f.controller.captureClose()).resolves.toBeUndefined()
+  })
   it("refuses old owner requests before transport when a reused box changes project", async () => {
     const f = await fixture()
     f.state.owner = "other-owner"
@@ -372,7 +386,12 @@ describe("durable composer host bridge", () => {
     try {
       await expect(
         composerIdentity(
-          { box: "private", key: "private-content-must-not-be-logged", sessionID: "private-session" },
+          {
+            box: "private",
+            key: "private-content-must-not-be-logged",
+            sessionID: "private-session",
+            projectID: "expected-project",
+          },
           {
             scopes: () => [{ box: "private", directory: root }],
             current: () => true,
@@ -382,9 +401,40 @@ describe("durable composer host bridge", () => {
           },
         ),
       ).rejects.toMatchObject({ code: "stale" })
-      expect(warning.mock.calls).toEqual([["[Raya] Composer draft scope changed", { reason: "session-project" }]])
+      expect(warning.mock.calls).toEqual([["[Raya] Composer draft scope changed", { reason: "project" }]])
     } finally {
       warning.mockRestore()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+  it("binds a restored session to its persisted logical project only in the exact selected physical directory", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "raya-restored-composer-scope-"))
+    const foreign = path.join(root, "foreign")
+    await mkdir(foreign)
+    try {
+      const target = { box: "private", key: "retained", sessionID: "restored-session" }
+      const ctx = {
+        scopes: () => [{ box: "private", directory: root }],
+        current: () => true,
+        ambiguous: () => false,
+        project: async () => "global",
+        session: async () => ({ projectID: "original-git-project", directory: root }),
+      }
+      expect(await composerIdentity(target, ctx)).toMatchObject({
+        ...target,
+        workspace: root,
+        projectID: "original-git-project",
+      })
+      await expect(
+        composerIdentity(target, {
+          ...ctx,
+          session: async () => ({ projectID: "original-git-project", directory: foreign }),
+        }),
+      ).rejects.toMatchObject({ code: "stale" })
+      await expect(composerIdentity({ ...target, projectID: "unrelated" }, ctx)).rejects.toMatchObject({
+        code: "stale",
+      })
+    } finally {
       await rm(root, { recursive: true, force: true })
     }
   })

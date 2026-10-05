@@ -11,6 +11,7 @@ import { useMemory, type MemoryContextValue } from "../../context/memory"
 import { useIndexing } from "../../context/indexing"
 import { useServer } from "../../context/server"
 import SettingsRow from "./SettingsRow"
+import { SecondBrain } from "./SecondBrain"
 
 export function MemoryActions(props: { memory: MemoryContextValue }) {
   const [correction, setCorrection] = createSignal("")
@@ -175,6 +176,7 @@ const ContextTab: Component = () => {
 
   return (
     <div>
+      <SecondBrain />
       <h4 style={{ "margin-top": "0", "margin-bottom": "8px" }}>{language.t("settings.context.memory.title")}</h4>
       <Card>
         <SettingsRow title={language.t("settings.context.memory.project.title")} description={memoryStats()}>

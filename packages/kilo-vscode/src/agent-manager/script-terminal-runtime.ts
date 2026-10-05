@@ -5,7 +5,7 @@ import { buildScriptTerminalWsUrl } from "./script-terminal-url"
 import { readTerminalFont } from "./terminal-font"
 import type { AgentManagerOutMessage } from "./types"
 import type { WorktreeStateManager } from "./WorktreeStateManager"
-import { RunController } from "./run/controller"
+import { RunController, type StartTask } from "./run/controller"
 import { pickRunStart } from "./run/destination"
 import { startVscodeRunTask } from "./run/task"
 
@@ -73,17 +73,27 @@ export async function clearScriptTerminals(
 }
 
 export function createRunController(input: RunInput) {
+  const start =
+    (reservation?: ReturnType<ScriptTerminalManager["reserve"]>): StartTask =>
+    async (config, done) => {
+      if (!input.trusted()) throw new Error("Trust the workspace before running scripts")
+      return pickRunStart(
+        config.destination,
+        (cfg, cb) =>
+          reservation
+            ? reservation.start("run", { ...cfg, projectId: input.project?.(cfg.worktreeId) }, cb)
+            : input.manager.start("run", { ...cfg, projectId: input.project?.(cfg.worktreeId) }, cb),
+        startVscodeRunTask,
+      )(config, done)
+    }
   return new RunController({
     root: input.root,
     state: input.state,
     open: input.open,
-    start: async (config, done) => {
-      if (!input.trusted()) throw new Error("Trust the workspace before running scripts")
-      return pickRunStart(
-        config.destination,
-        (cfg, cb) => input.manager.start("run", { ...cfg, projectId: input.project?.(cfg.worktreeId) }, cb),
-        startVscodeRunTask,
-      )(config, done)
+    start: start(),
+    reserve: () => {
+      const reservation = input.manager.reserve()
+      return { start: start(reservation), release: reservation.release }
     },
     post: (status) => input.post({ type: "agentManager.runStatus", ...status }),
     error: (message) => input.post({ type: "error", message }),

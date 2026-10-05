@@ -43,6 +43,9 @@ import { registerUpdateChecker } from "./services/update-checker" // raya_change
 import { recover as recoverSelfHealInstallation } from "./self-heal/recovery"
 import { isCursorHost } from "./utils"
 import { PersonalTodoReminderCoordinator } from "./services/personal-todo-reminders"
+import { drainBrain } from "./second-brain/host"
+import { register as registerHomeAssistant } from "./home-assistant/host"
+import { retire } from "./home-assistant/retirement"
 
 let agentManager: AgentManagerProvider | undefined
 let shuttingDown = false
@@ -74,6 +77,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Create shared connection service (one server for all webviews)
   const connectionService = new KiloConnectionService(context)
+  const homeAssistant = registerHomeAssistant(context, connectionService)
   context.subscriptions.push(new PersonalTodoReminderCoordinator(connectionService))
   context.subscriptions.push(registerDiagnostics(context, connectionService))
   context.subscriptions.push(registerGrantAllPermissions(connectionService)) // raya_change - global all-tools toggle
@@ -210,22 +214,34 @@ export function activate(context: vscode.ExtensionContext) {
   })
   let cleanup: Promise<void> | undefined
   const disposeRaya = () => {
-    cleanup ??= (async () => {
-      shuttingDown = true
-      const deadline = Date.now() + 5000
-      const results = await Promise.allSettled(
-        [provider, ...tabPanels.values()].map((pane) => pane.flushRoutineDrafts(deadline)),
-      )
-      if (results.some((result) => result.status === "rejected" || !result.value))
-        console.warn("[Raya] One or more mounted Routine drafts could not be confirmed before shutdown.")
-      unsubscribeStateChange()
-      attention.dispose()
-      browserAutomationService.dispose()
-      canvasService.dispose() // raya_change - Milestone E
-      provider.dispose()
-      notebookBridge.dispose()
-      connectionService.dispose()
-    })()
+    cleanup ??= retire(
+      () => homeAssistant.dispose(),
+      async () => {
+        shuttingDown = true
+        const deadline = Date.now() + 5000
+        const results = await Promise.allSettled(
+          [provider, ...tabPanels.values()].map((pane) =>
+            Promise.resolve().then(() => pane.flushRoutineDrafts(deadline)),
+          ),
+        )
+        if (results.some((result) => result.status === "rejected" || !result.value))
+          console.warn("[Raya] One or more mounted Routine drafts could not be confirmed before shutdown.")
+        const retired = await Promise.allSettled(
+          [
+            () => unsubscribeStateChange(),
+            () => attention.dispose(),
+            () => browserAutomationService.dispose(),
+            () => canvasService.dispose(), // raya_change - Milestone E
+            () => provider.dispose(),
+            () => notebookBridge.dispose(),
+          ].map((action) => Promise.resolve().then(action)),
+        )
+        const errors = [...results, ...retired].flatMap((value) => (value.status === "rejected" ? [value.reason] : []))
+        if (errors.length === 1) throw errors[0]
+        if (errors.length) throw new AggregateError(errors, "Extension provider cleanup failures retained")
+      },
+      () => connectionService.dispose(),
+    )
     return cleanup
   }
   drainRoutine = disposeRaya
@@ -781,13 +797,24 @@ export function activate(context: vscode.ExtensionContext) {
       void disposeRaya()
     },
   })
+
+  return Object.freeze({
+    exportProfile: (input: Parameters<KiloConnectionService["exportProfile"]>[0], deadline: number) =>
+      connectionService.exportProfile(input, deadline),
+  })
 }
 
 export async function deactivate() {
   shuttingDown = true
-  await agentManager?.shutdown()
-  await drainRoutine?.()
-  TelemetryProxy.getInstance().shutdown()
+  const results = await Promise.allSettled([
+    Promise.resolve().then(() => agentManager?.shutdown()),
+    Promise.resolve().then(() => drainRoutine?.()),
+    drainBrain(),
+    Promise.resolve().then(() => TelemetryProxy.getInstance().shutdown()),
+  ])
+  const errors = results.flatMap((value) => (value.status === "rejected" ? [value.reason] : []))
+  if (errors.length === 1) throw errors[0]
+  if (errors.length) throw new AggregateError(errors, "Extension retirement failures retained")
 }
 
 function openKiloInNewTab(

@@ -1,5 +1,6 @@
 import type { InstallMarketplaceItemOptions, MarketplaceFilters, MarketplaceItem } from "../marketplace"
 import type { Output } from "../../../../src/shared/routine-output"
+import type { BrainRequest } from "../../../../src/shared/second-brain"
 import type { HandoffEvent } from "../../../../src/shared/voice-handoff"
 import type { FileAttachment } from "./parts"
 import type { MessageLoadMode } from "./sessions"
@@ -20,6 +21,7 @@ import type {
   StartMigrationMessage,
 } from "./migration"
 import type { MemoryShowMessage, MemoryOperationMessage, RequestMemoryMessage } from "./memory"
+import type { RestoreRequest } from "../../../../src/shared/restore-review"
 
 // ============================================
 // Messages FROM webview TO extension
@@ -521,6 +523,7 @@ export interface PermissionResponseRequest {
 
 export interface CreateSessionRequest {
   type: "createSession"
+  draftID?: string
 }
 
 export interface ClearSessionRequest {
@@ -912,6 +915,8 @@ export interface SpeechToTextStopMessage {
 // raya_change - Milestone H marks the next backend turn for extension-host TTS
 export interface SpeechVoiceTurnMessage {
   type: "speechVoiceTurn"
+  requestId: string
+  sessionID: string
 }
 
 export interface SpeechToTextCancelMessage {
@@ -933,6 +938,9 @@ export interface SpeechToTextSubmitMessage {
 
 export interface SpeechSettingsRequestMessage {
   type: "speechSettingsRequest"
+}
+export interface SpeechLocalSetupMessage {
+  type: "speechLocalSetup"
 }
 
 export interface SpeechSettingsUpdateMessage {
@@ -2134,6 +2142,8 @@ export interface FocusTimerActionMessage {
 }
 
 export type WebviewMessage =
+  | BrainRequest
+  | RestoreRequest
   | ComposerDraftWebviewMessage
   | HandoffEvent
   | import("../../../../src/shared/chief-notes-messages").ChiefNotesRequest
@@ -2276,6 +2286,7 @@ export type WebviewMessage =
   | SpeechVoiceTurnMessage // raya_change - Milestone H
   | SpeechToTextSubmitMessage // raya_change - Milestone H
   | SpeechSettingsRequestMessage // raya_change - Milestone H
+  | SpeechLocalSetupMessage
   | SpeechSettingsUpdateMessage // raya_change - Milestone H
   | SpeechKeyUpdateMessage // raya_change - Milestone H
   | SpeechPlaybackStartMessage // raya_change - Milestone H

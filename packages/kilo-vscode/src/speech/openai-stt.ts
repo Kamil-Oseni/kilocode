@@ -8,6 +8,7 @@ export type SttInput = {
   data: string
   format: string
   language?: string
+  local?: boolean
 }
 
 export type SttResult = { ok: true; text: string } | { ok: false; error: string; code?: string }
@@ -16,41 +17,86 @@ export async function transcribe(input: SttInput, signal?: AbortSignal): Promise
   if (!input.endpoint)
     return { ok: false, error: "Configure an STT endpoint in Speech settings.", code: "not_configured" }
   if (!input.key) return { ok: false, error: "Add the STT API key in Speech settings.", code: "not_authenticated" }
+  if (input.local && !loopback(input)) return { ok: false, error: "Invalid local transcription request." }
   const chat = /\/chat\/completions\/?(?:\?|$)/.test(input.endpoint)
   const payload = chat ? JSON.stringify(qwen(input)) : multipart(input)
 
   try {
     const response = await fetch(input.endpoint, {
       method: "POST",
-      signal,
+      signal: scope(input.local, signal),
+      redirect: input.local ? "error" : "follow",
       headers: {
         Authorization: `Bearer ${input.key}`,
         ...(chat ? { "Content-Type": "application/json" } : {}),
       },
       body: payload,
     })
-    const raw = await response.text()
+    const raw = input.local ? await bounded(response) : await response.text()
     const body = parse(raw)
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: message(body, raw) ?? `Speech transcription failed with status ${response.status}.`,
-        code: response.status === 401 || response.status === 403 ? "not_authenticated" : undefined,
-      }
-    }
+    if (!response.ok) return rejected(input.local, response.status, body, raw)
     const text = transcript(body)
     if (!text) return { ok: false, error: "No speech was detected.", code: "empty_transcript" }
     return { ok: true, text }
   } catch (err) {
     if (signal?.aborted) return { ok: false, error: "Speech transcription cancelled.", code: "cancelled" }
-    return { ok: false, error: getErrorMessage(err) || "Speech transcription request failed." }
+    return {
+      ok: false,
+      error: input.local
+        ? "Local transcription request failed."
+        : getErrorMessage(err) || "Speech transcription request failed.",
+    }
+  }
+}
+
+function loopback(input: SttInput) {
+  try {
+    const url = new URL(input.endpoint)
+    return (
+      url.protocol === "http:" &&
+      url.hostname === "127.0.0.1" &&
+      url.pathname === "/v1/audio/transcriptions" &&
+      !url.search &&
+      !url.hash &&
+      !url.username &&
+      !url.password &&
+      input.model === "whisper-small.en" &&
+      input.data.length <= 16_000_000
+    )
+  } catch {
+    return false
+  }
+}
+
+function scope(local: boolean | undefined, signal?: AbortSignal) {
+  if (!local) return signal
+  return AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(180_000)])
+}
+
+async function bounded(response: Response) {
+  if (!response.body) throw new Error("Empty local transcription response.")
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const row = await reader.read()
+      if (row.done) break
+      size += row.value.length
+      if (size > 262_144) throw new Error("Local transcription response exceeds its bound.")
+      chunks.push(row.value)
+    }
+    return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))
+  } finally {
+    await reader.cancel()
+    reader.releaseLock()
   }
 }
 
 function multipart(input: SttInput) {
   const form = new FormData()
   const bytes = Buffer.from(input.data, "base64")
-  form.append("file", new Blob([bytes]), `speech.${extension(input.format)}`)
+  form.append("file", new Blob([bytes], { type: mime(input.format) }), `speech.${extension(input.format)}`)
   form.append("model", input.model)
   if (input.language) form.append("language", input.language)
   form.append(
@@ -125,4 +171,38 @@ function message(body: Record<string, unknown> | undefined, raw: string): string
   }
   if (typeof body?.message === "string") return body.message
   return raw.trim() || undefined
+}
+
+function rejected(
+  local: boolean | undefined,
+  status: number,
+  body: Record<string, unknown> | undefined,
+  raw: string,
+): SttResult {
+  const auth = status === 401 || status === 403
+  const failure = local && !auth && body ? localError(body) : undefined
+  if (failure) return failure
+  return {
+    ok: false,
+    error: local
+      ? `Local transcription failed with status ${status}.`
+      : (message(body, raw) ?? `Speech transcription failed with status ${status}.`),
+    code: auth ? "not_authenticated" : undefined,
+  }
+}
+
+function localError(body: Record<string, unknown>): SttResult | undefined {
+  const error = body.error
+  if (!error || typeof error !== "object" || Array.isArray(error)) return
+  const code = (error as Record<string, unknown>).code
+  if (typeof code !== "string") return
+  const messages: Record<string, string> = {
+    empty_transcript: "No speech was detected.",
+    invalid_audio: "The recording could not be read. Record again.",
+    audio_too_long: "The recording is too long. Record a shorter message.",
+    unsupported_model: "The configured local transcription model is unavailable.",
+    inference_failed: "Local transcription failed. Try recording again.",
+  }
+  if (!Object.hasOwn(messages, code)) return
+  return { ok: false, error: messages[code], code }
 }

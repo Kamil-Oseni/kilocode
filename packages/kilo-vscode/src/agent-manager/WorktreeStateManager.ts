@@ -13,6 +13,7 @@ import * as path from "path"
 import * as fs from "fs"
 import { normalizePath } from "./git-import"
 import type { SidebarTarget } from "./project/route"
+import { StatePublication } from "./state-publication"
 
 /** Accept a persisted sidebar target only when its shape matches a known kind. */
 function validTarget(value: unknown): SidebarTarget | undefined {
@@ -116,6 +117,7 @@ function generateId(prefix: string): string {
 
 export class WorktreeStateManager {
   private readonly file: string
+  private readonly publication: StatePublication
   private worktrees = new Map<string, Worktree>()
   private sessions = new Map<string, ManagedSession>()
   private sections = new Map<string, Section>()
@@ -130,6 +132,10 @@ export class WorktreeStateManager {
   private saving: Promise<void> | undefined
   private dirty = false
   private failed = false
+  private closed = false
+  private retirement: Promise<void> | undefined
+  private readonly jobs = new Set<Promise<unknown>>()
+  private readonly errors: unknown[] = []
 
   private readonly root: string
   private migrated = false
@@ -138,6 +144,7 @@ export class WorktreeStateManager {
   constructor(root: string, log: (msg: string) => void) {
     this.root = root
     this.file = path.join(root, KILO_DIR, STATE_FILE)
+    this.publication = new StatePublication(this.file)
     this.log = log
   }
 
@@ -201,6 +208,7 @@ export class WorktreeStateManager {
     label?: string
     branchOwned?: boolean
   }): Worktree {
+    this.admit()
     const id = generateId("wt")
     const wt: Worktree = {
       id,
@@ -229,6 +237,7 @@ export class WorktreeStateManager {
     remote?: string
     createdAt: string
   }): Worktree {
+    this.admit()
     const existing = this.findWorktreeByPath(params.path)
     if (existing) return existing
     const id = generateId("wt")
@@ -248,6 +257,7 @@ export class WorktreeStateManager {
   }
 
   updateWorktreeBranch(id: string, branch: string): boolean {
+    this.admit()
     const wt = this.worktrees.get(id)
     if (!wt || wt.branch === branch) return false
     if (!wt.originalBranch && wt.branchOwned !== false) wt.originalBranch = wt.branch
@@ -260,6 +270,7 @@ export class WorktreeStateManager {
   }
 
   armAutoName(id: string, sessionId: string): void {
+    this.admit()
     const wt = this.worktrees.get(id)
     if (!wt || wt.branchOwned !== true) return
     wt.autoNameSessionId = sessionId
@@ -268,6 +279,7 @@ export class WorktreeStateManager {
   }
 
   clearAutoName(id: string): void {
+    this.admit()
     const wt = this.worktrees.get(id)
     if (!wt?.autoNameSessionId) return
     wt.autoNameSessionId = undefined
@@ -278,6 +290,7 @@ export class WorktreeStateManager {
   /** Increment the prompt counter for an armed worktree and return the new
    *  count, or undefined when the worktree is no longer armed. */
   incrementAutoNameCount(id: string): number | undefined {
+    this.admit()
     const wt = this.worktrees.get(id)
     if (!wt?.autoNameSessionId) return undefined
     wt.autoNamePromptCount = (wt.autoNamePromptCount ?? 0) + 1
@@ -286,6 +299,7 @@ export class WorktreeStateManager {
   }
 
   renameOwnedBranch(id: string, current: string, branch: string): boolean {
+    this.admit()
     const wt = this.worktrees.get(id)
     if (!wt || wt.branch !== current || wt.branchOwned !== true) return false
     wt.branch = branch
@@ -298,6 +312,7 @@ export class WorktreeStateManager {
   }
 
   updateWorktreeLabel(id: string, label: string): void {
+    this.admit()
     const wt = this.worktrees.get(id)
     if (!wt) return
     wt.label = label || undefined
@@ -306,6 +321,7 @@ export class WorktreeStateManager {
   }
 
   updateWorktreePR(id: string, prNumber?: number, prUrl?: string, prState?: string): void {
+    this.admit()
     const wt = this.worktrees.get(id)
     if (!wt) return
     if (wt.prNumber === prNumber && wt.prUrl === prUrl && wt.prState === prState) return
@@ -316,6 +332,7 @@ export class WorktreeStateManager {
   }
 
   removeWorktree(id: string): ManagedSession[] {
+    this.admit()
     const removed = this.worktrees.delete(id)
     if (!removed) return []
 
@@ -339,6 +356,7 @@ export class WorktreeStateManager {
   }
 
   addSession(sessionId: string, worktreeId: string | null): ManagedSession {
+    this.admit()
     const session: ManagedSession = { id: sessionId, worktreeId, createdAt: new Date().toISOString() }
     this.sessions.set(sessionId, session)
     const worktree = worktreeId ? this.worktrees.get(worktreeId) : undefined
@@ -353,6 +371,7 @@ export class WorktreeStateManager {
 
   /** Move an existing session to a worktree (or back to local when null). */
   moveSession(sessionId: string, worktreeId: string | null): void {
+    this.admit()
     const session = this.sessions.get(sessionId)
     if (!session) return
     const previous = session.worktreeId ? this.worktrees.get(session.worktreeId) : undefined
@@ -371,6 +390,7 @@ export class WorktreeStateManager {
   }
 
   removeSession(id: string): void {
+    this.admit()
     this.sessions.delete(id)
 
     // Remove this session from any tab order arrays
@@ -394,11 +414,13 @@ export class WorktreeStateManager {
   }
 
   setTabOrder(key: string, order: string[]): void {
+    this.admit()
     this.tabOrder[key] = order
     void this.save()
   }
 
   removeTabOrder(key: string): void {
+    this.admit()
     delete this.tabOrder[key]
     void this.save()
   }
@@ -409,6 +431,7 @@ export class WorktreeStateManager {
   }
 
   setActiveTarget(target: SidebarTarget | undefined): void {
+    this.admit()
     const cur = this.activeTarget
     const same =
       cur?.kind === target?.kind &&
@@ -429,6 +452,7 @@ export class WorktreeStateManager {
   }
 
   setWorktreeOrder(order: string[]): void {
+    this.admit()
     this.setNormalizedWorktreeOrder(order)
     void this.save()
   }
@@ -507,6 +531,7 @@ export class WorktreeStateManager {
   }
 
   addSection(name: string, color: string | null, worktreeIds?: string[]): Section {
+    this.admit()
     this.setNormalizedWorktreeOrder(this.worktreeOrder)
     const id = generateId("sec")
     const order = this.worktreeOrder.filter((item) => {
@@ -530,6 +555,7 @@ export class WorktreeStateManager {
   }
 
   renameSection(id: string, name: string): void {
+    this.admit()
     const sec = this.sections.get(id)
     if (!sec || !name) return
     sec.name = name
@@ -538,6 +564,7 @@ export class WorktreeStateManager {
   }
 
   setSectionColor(id: string, color: string | null): void {
+    this.admit()
     const sec = this.sections.get(id)
     if (!sec) return
     sec.color = color
@@ -545,6 +572,7 @@ export class WorktreeStateManager {
   }
 
   toggleSection(id: string): void {
+    this.admit()
     const sec = this.sections.get(id)
     if (!sec) return
     sec.collapsed = !sec.collapsed
@@ -552,6 +580,7 @@ export class WorktreeStateManager {
   }
 
   deleteSection(id: string): void {
+    this.admit()
     if (!this.sections.delete(id)) return
     // Ungroup all worktrees in this section — do NOT delete them
     for (const wt of this.worktrees.values()) {
@@ -563,6 +592,7 @@ export class WorktreeStateManager {
   }
 
   moveSection(id: string, dir: -1 | 1): void {
+    this.admit()
     const repaired = this.setNormalizedWorktreeOrder(this.worktreeOrder)
     const top = this.worktreeOrder.filter((item) => {
       if (this.sections.has(item)) return true
@@ -590,6 +620,7 @@ export class WorktreeStateManager {
   }
 
   moveToSection(worktreeIds: string[], sectionId: string | null): void {
+    this.admit()
     // Expand to include all multi-version siblings (same groupId)
     const expanded = new Set(worktreeIds)
     for (const wtId of worktreeIds) {
@@ -617,6 +648,7 @@ export class WorktreeStateManager {
   }
 
   setSessionsCollapsed(value: boolean): void {
+    this.admit()
     this.collapsed = value
     void this.save()
   }
@@ -630,6 +662,7 @@ export class WorktreeStateManager {
   }
 
   setSidebarCollapsed(value: boolean): void {
+    this.admit()
     this.sidebar = value
     void this.save()
   }
@@ -643,6 +676,7 @@ export class WorktreeStateManager {
   }
 
   setReviewDiffStyle(value: "unified" | "split"): void {
+    this.admit()
     this.reviewDiffStyle = value
     void this.save()
   }
@@ -656,6 +690,7 @@ export class WorktreeStateManager {
   }
 
   setDefaultBaseBranch(value: string | undefined): void {
+    this.admit()
     this.defaultBase = value
     void this.save()
   }
@@ -665,41 +700,54 @@ export class WorktreeStateManager {
   // ---------------------------------------------------------------------------
 
   async load(): Promise<StateLoadResult> {
+    return this.track(() => this.read())
+  }
+
+  private async read(): Promise<StateLoadResult> {
     // Migrate Agent Manager data from .kilocode → .kilo before first read
     let migration: MigrationResult = { refsFixed: 0 }
     if (!this.migrated) {
       this.migrated = true
       migration = await migrateAgentManagerData(this.root, this.log)
     }
-    try {
-      const content = await fs.promises.readFile(this.file, "utf-8")
-      this.apply(content)
-      this.loadFailed = false
-      return { ...migration, status: "loaded" }
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      if (code === "ENOENT") {
+    return this.publication.run(async (file) => {
+      try {
+        const content = await fs.promises.readFile(file, "utf-8")
+        this.apply(content)
         this.loadFailed = false
-        return { ...migration, status: "missing" }
+        return { ...migration, status: "loaded" }
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === "ENOENT") {
+          this.loadFailed = false
+          return { ...migration, status: "missing" }
+        }
+        if (code !== "ENOENT") {
+          this.errors.push(error)
+          this.log(`Failed to load state: ${error}`)
+          this.loadFailed = true
+        }
       }
-      if (code !== "ENOENT") {
-        this.log(`Failed to load state: ${error}`)
-        this.loadFailed = true
-      }
-    }
-    return { ...migration, status: "failed" }
+      return { ...migration, status: "failed" as const }
+    })
   }
 
   async prepareRecovery(): Promise<boolean> {
+    return this.track(() => this.publication.run((file) => this.recover(file)))
+  }
+
+  private async recover(file: string): Promise<boolean> {
     if (!this.loadFailed) return true
     const stamp = new Date().toISOString().replace(/[:.]/g, "-")
-    const backup = `${this.file}.corrupt-${stamp}`
+    const backup = `${file}.corrupt-${stamp}`
     try {
-      await fs.promises.rename(this.file, backup)
+      await this.publication.check(file)
+      await fs.promises.rename(file, backup)
       this.loadFailed = false
       this.log(`Backed up unreadable state to ${backup}`)
       return true
     } catch (error) {
+      this.errors.push(error)
       this.log(`Failed to back up unreadable state: ${error}`)
       return false
     }
@@ -758,12 +806,16 @@ export class WorktreeStateManager {
     this.log(`Loaded state: ${this.worktrees.size} worktrees, ${this.sessions.size} sessions`)
     if (pruned > 0 || repaired) {
       if (pruned > 0) this.log(`Pruned ${pruned} orphaned sessions`)
-      void this.save()
+      void this.persist()
     }
   }
 
   /** Remove worktrees whose directories no longer exist on disk and prune orphaned sessions. */
   async validate(root: string): Promise<void> {
+    return this.track(() => this.inspect(root))
+  }
+
+  private async inspect(root: string): Promise<void> {
     let changed = false
     for (const wt of [...this.worktrees.values()]) {
       const resolved = path.isAbsolute(wt.path) ? wt.path : path.join(root, wt.path)
@@ -796,6 +848,11 @@ export class WorktreeStateManager {
   }
 
   async save(): Promise<void> {
+    this.admit()
+    await this.persist()
+  }
+
+  private async persist(): Promise<void> {
     if (this.loadFailed) {
       this.log("Skipping save because state failed to load")
       return
@@ -822,6 +879,7 @@ export class WorktreeStateManager {
       try {
         await this.writeToDisk()
       } catch (error) {
+        this.errors.push(error)
         this.dirty = true
         this.failed = true
         this.log(`Failed to save state: ${error}`)
@@ -867,21 +925,67 @@ export class WorktreeStateManager {
       data.activeTarget = this.activeTarget
     }
 
-    const tmp = `${this.file}.${process.pid}.${Date.now()}.tmp`
+    await this.publication.run((file) => this.publish(file, data))
+  }
+
+  private async publish(file: string, data: StateFile): Promise<void> {
+    const tmp = `${file}.${process.pid}.${Date.now()}.tmp`
     try {
-      const dir = path.dirname(this.file)
+      const dir = path.dirname(file)
       if (!fs.existsSync(dir)) await fs.promises.mkdir(dir, { recursive: true })
       const content = JSON.stringify(data, null, 2)
       await fs.promises.writeFile(tmp, content, "utf-8")
-      await fs.promises.rename(tmp, this.file)
+      await this.publication.check(file)
+      await fs.promises.rename(tmp, file)
     } catch (error) {
-      await fs.promises.rm(tmp, { force: true }).catch((err) => this.log(`Failed to remove temp state file: ${err}`))
+      await fs.promises.rm(tmp, { force: true }).catch((err) => {
+        this.errors.push(err)
+        this.log(`Failed to remove temp state file: ${err}`)
+      })
       const code = (error as NodeJS.ErrnoException).code
       if (code === "ENOENT") {
+        this.errors.push(error)
         this.log("State directory was removed, skipping save")
         return
       }
       throw error
     }
+  }
+
+  private admit(): void {
+    if (this.closed) throw new Error("Agent Manager state publication is retired")
+  }
+
+  private track<T>(body: () => Promise<T>): Promise<T> {
+    this.admit()
+    const job = body()
+    this.jobs.add(job)
+    void job.then(
+      () => this.jobs.delete(job),
+      (err) => {
+        this.errors.push(err)
+        this.jobs.delete(job)
+      },
+    )
+    return job
+  }
+
+  /** Terminal for this realized writer; ordinary flush keeps its retry behavior. */
+  retire(): Promise<void> {
+    if (this.retirement) return this.retirement
+    this.closed = true
+    this.retirement = (async () => {
+      await Promise.allSettled([...this.jobs])
+      await this.saving
+      if (this.dirty && !this.failed) await this.persist()
+      await this.publication.retire().catch((err: unknown) => this.errors.push(err))
+      if (this.errors.length) throw new AggregateError([...this.errors], "Agent Manager state publication failed")
+    })()
+    return this.retirement
+  }
+
+  /** Loaded metadata only; reads no file and admits no operation. */
+  publications() {
+    return this.publication.snapshot()
   }
 }

@@ -54,6 +54,7 @@ export class SetupScriptRunner {
     private readonly service: SetupScriptService,
     private readonly run: RunTask,
     private readonly failed: (message: string) => void = () => undefined,
+    private readonly failure: (err: unknown) => void = () => undefined,
   ) {}
 
   /**
@@ -83,6 +84,7 @@ export class SetupScriptRunner {
         },
       })
       if (code === undefined) {
+        this.failure(new Error("Setup script native completion was not confirmed"))
         this.log("Setup script finished without a valid exit code — assuming success")
         return true
       }
@@ -92,6 +94,7 @@ export class SetupScriptRunner {
       this.log("Setup script completed")
       return true
     } catch (error) {
+      this.failure(error)
       const msg = error instanceof Error ? error.message : String(error)
       this.log(`Setup script execution failed: ${msg}`)
       this.failed(msg)

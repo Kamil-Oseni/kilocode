@@ -1,4 +1,5 @@
 import type { LiveUsage } from "../../../../src/shared/live-usage"
+import type { BrainResponse } from "../../../../src/shared/second-brain"
 import type { HandoffCommand } from "../../../../src/shared/voice-handoff"
 import type { VoiceUsage } from "../../../../src/shared/voice-usage"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
@@ -23,6 +24,7 @@ import type { PermissionRequest } from "./permissions"
 import type { AnacondaDesktopExtensionMessage } from "../../../../src/shared/anaconda-desktop-messages"
 import type { ChiefNotesAvailable, ChiefNotesResult } from "../../../../src/shared/chief-notes-messages"
 import type { ProvidersLoadStateMessage } from "./providers"
+import type { RestoreResult } from "../../../../src/shared/restore-review"
 
 export interface BackgroundJobsLoadedMessage {
   type: "backgroundJobsLoaded"
@@ -470,6 +472,16 @@ export interface RoutineInboxFlushedMessage {
   conversationID?: string
   revision?: number
   error?: string
+}
+
+export interface RoutineInboxCaptureMessage {
+  type: "routineInboxCapture"
+  requestID: string
+  paneID: string
+  agentID: string
+  owner: string
+  conversationID: string
+  deadline: number
 }
 
 export interface RoutineDelegatedMessage {
@@ -1018,6 +1030,14 @@ export interface SpeechPlaybackChunkMessage {
   data: string
   mime: string
   text?: string // raya_change - echo-reference text for residual self-transcription rejection
+}
+export interface SpeechPlaybackVoiceMessage {
+  type: "speechPlaybackVoice"
+  requestId: string
+  model: string
+  voice: string
+  fallback: boolean
+  reason?: string
 }
 
 export interface SpeechPlaybackDoneMessage {
@@ -2043,6 +2063,8 @@ export interface FocusTimerResultMessage {
 }
 
 export type ExtensionMessage =
+  | BrainResponse
+  | RestoreResult
   | import("../../../../src/shared/composer-drafts-messages").ComposerDraftExtensionMessage
   | HandoffCommand
   | ChiefNotesResult
@@ -2102,6 +2124,7 @@ export type ExtensionMessage =
   | RoutineInboxDraftResultMessage
   | RoutineInboxMountedMessage
   | RoutineInboxFlushedMessage
+  | RoutineInboxCaptureMessage
   | RoutineDelegatedMessage
   | RoutineDelegateStoppedMessage
   | RoutineDelegateChainResultMessage
@@ -2168,6 +2191,7 @@ export type ExtensionMessage =
   | SpeechToTextErrorMessage
   | SpeechSettingsLoadedMessage // raya_change - Milestone H
   | SpeechPlaybackChunkMessage // raya_change - Milestone H
+  | SpeechPlaybackVoiceMessage
   | SpeechPlaybackDoneMessage // raya_change - Milestone H
   | SpeechPlaybackErrorMessage // raya_change - Milestone H
   | SpeechRealtimeReadyMessage // raya_change - realtime voice

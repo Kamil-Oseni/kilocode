@@ -67,17 +67,55 @@ export class TerminalRouter {
    *  concurrent creates from grabbing the same "Terminal N" title. */
   private readonly reserved = new Map<string, Set<number>>()
   private generation = 0
+  private closed = false
+  private readonly managers = new Set<TerminalManager>()
+  private readonly operations = new Set<Promise<unknown>>()
+  private readonly failures: unknown[] = []
+  private retirement: Promise<void> | undefined
+  private cleanup: KiloClient | undefined
 
   constructor(private readonly deps: TerminalRoutingDeps) {
     this.manager = this.createManager()
   }
 
   private createManager(): TerminalManager {
-    return new TerminalManager({
-      getClient: () => this.deps.getClient(),
+    const manager = new TerminalManager({
+      getClient: () => (this.closed && this.cleanup ? this.cleanup : this.deps.getClient()),
       buildWsUrl: (ptyID, cwd) => this.buildWsUrl(ptyID, cwd),
       log: this.deps.log,
     })
+    this.managers.add(manager)
+    return manager
+  }
+
+  private join(task: Promise<unknown>) {
+    this.operations.add(task)
+    void task.then(
+      () => this.operations.delete(task),
+      (err: unknown) => {
+        this.failures.push(err)
+        this.operations.delete(task)
+      },
+    )
+  }
+
+  fence(client?: KiloClient) {
+    if (!this.closed && client) this.cleanup = client
+    this.closed = true
+    this.generation++
+  }
+
+  capture(): Promise<void> {
+    this.fence()
+    return (this.retirement ??= (async () => {
+      while (this.operations.size) await Promise.allSettled([...this.operations])
+      const results = await Promise.allSettled([...this.managers].map((manager) => manager.dispose()))
+      const errors = [
+        ...this.failures,
+        ...results.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
+      ]
+      if (errors.length) throw new AggregateError(errors, "Terminal routing retirement failed")
+    })())
   }
 
   /**
@@ -87,42 +125,49 @@ export class TerminalRouter {
    */
   handle(m: AgentManagerInMessage): boolean {
     if (!isTerminalMessage(m)) return false
+    if (this.closed) throw new Error("Terminal routing intake is retired")
     if (m.type === "agentManager.terminal.create") {
-      void this.handleCreate(m.createId, m.placement, m.worktreeId, m.cols, m.rows)
+      this.join(this.handleCreate(m.createId, m.placement, m.worktreeId, m.cols, m.rows))
       return true
     }
     if (m.type === "agentManager.terminal.close") {
-      void this.manager.close(m.terminalId).then((closed) => {
-        this.deps.post(
-          closed
-            ? { type: "agentManager.terminal.closed", terminalId: m.terminalId }
-            : {
-                type: "agentManager.terminal.error",
-                terminalId: m.terminalId,
-                message: "Failed to close terminal; it remains available for retry",
-              },
-        )
-      })
+      this.join(
+        this.manager.close(m.terminalId).then((closed) => {
+          this.deps.post(
+            closed
+              ? { type: "agentManager.terminal.closed", terminalId: m.terminalId }
+              : {
+                  type: "agentManager.terminal.error",
+                  terminalId: m.terminalId,
+                  message: "Failed to close terminal; it remains available for retry",
+                },
+          )
+          if (!closed) throw new Error("Terminal close was not confirmed")
+        }),
+      )
       return true
     }
     if (m.type === "agentManager.terminal.restart") {
-      void this.manager
-        .restart(m.terminalId, m.cols, m.rows)
-        .then((wsUrl) => {
-          if (!wsUrl) return
-          this.deps.post({ type: "agentManager.terminal.restarted", terminalId: m.terminalId, wsUrl })
-        })
-        .catch((error: unknown) => {
-          this.deps.post({
-            type: "agentManager.terminal.error",
-            terminalId: m.terminalId,
-            message: error instanceof Error ? error.message : String(error),
+      this.join(
+        this.manager
+          .restart(m.terminalId, m.cols, m.rows)
+          .then((wsUrl) => {
+            if (!wsUrl) return
+            this.deps.post({ type: "agentManager.terminal.restarted", terminalId: m.terminalId, wsUrl })
           })
-        })
+          .catch((error: unknown) => {
+            this.failures.push(error)
+            this.deps.post({
+              type: "agentManager.terminal.error",
+              terminalId: m.terminalId,
+              message: error instanceof Error ? error.message : String(error),
+            })
+          }),
+      )
       return true
     }
     // resize
-    void this.manager.resize(m.terminalId, m.cols, m.rows)
+    this.join(this.manager.resize(m.terminalId, m.cols, m.rows))
     return true
   }
 
@@ -133,11 +178,14 @@ export class TerminalRouter {
    * no longer tracks.
    */
   dispose(): Promise<void> {
+    if (this.closed) return this.capture()
     this.generation++
     const manager = this.manager
     this.manager = this.createManager()
     this.reserved.clear()
-    return manager.dispose()
+    const task = manager.dispose()
+    this.join(task)
+    return task
   }
 
   blockDirectory(directory: string): Promise<() => void> {
@@ -177,9 +225,12 @@ export class TerminalRouter {
       // Join the shared backend connection instead of racing its synchronous
       // client accessor when this is the first Kilo action in the window.
       await this.deps.getClientAsync()
+      // A panel reset may retire this manager before the connection completes.
+      // Final capture, however, joins its already accepted operation.
+      if (generation !== this.generation && !this.closed) return
       const created = await manager.create({ terminalId: createId, worktreeId, cwd, title, cols, rows })
       if (generation !== this.generation) {
-        await manager.close(created.terminalId)
+        if (!(await manager.close(created.terminalId))) throw new Error("Retired terminal close was not confirmed")
         return
       }
       this.deps.post({
@@ -194,6 +245,7 @@ export class TerminalRouter {
         font: this.deps.getTerminalFont(),
       })
     } catch (err) {
+      this.failures.push(err)
       if (generation !== this.generation) return
       const message = err instanceof Error ? err.message : String(err)
       this.deps.log(`Terminal create failed: ${message}`)

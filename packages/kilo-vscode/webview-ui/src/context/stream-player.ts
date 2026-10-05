@@ -1,5 +1,23 @@
 // raya_change - Testable webview sink for streamed MiniMax PCM and encoded speech.
+type Diagnostic = {
+  event: string
+  request?: string
+  state?: string
+  bytes?: number
+  count?: number
+  peak?: number
+  rate?: number
+  output?: "direct" | "bridge"
+  elapsed?: number
+  at?: number
+  start?: number
+  remaining?: number
+  duration?: number
+}
+
 export class StreamPlayer {
+  private budget = 0
+  private request: string | undefined
   private audio: HTMLAudioElement | undefined
   private source: MediaSource | undefined
   private buffer: SourceBuffer | undefined
@@ -19,29 +37,67 @@ export class StreamPlayer {
   private next = 0
   private began: number | undefined
   private ending = false
+  private pending: AudioBuffer[] = []
+  private duration = 0
+  private bytes = 0
+  private timer: number | undefined
+  private clock: number | undefined
 
   constructor(
     private readonly done: () => void,
     private readonly fail: (error: string) => void,
+    private readonly diagnostic?: (row: Diagnostic) => void,
   ) {}
+
+  private trace(row: Diagnostic) {
+    if (this.budget++ >= 24) return
+    const request = row.request ?? this.request
+    try {
+      this.diagnostic?.({
+        ...row,
+        elapsed: this.clock === undefined ? 0 : Math.max(0, Math.round(performance.now() - this.clock)),
+        request:
+          request && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request)
+            ? request
+            : undefined,
+      })
+    } catch {
+      console.warn("[Raya Voice playback] Diagnostic observer failed.")
+    }
+  }
 
   unlock() {
     const context = this.context ?? new AudioContext()
     this.context = context
     this.output ??= context.destination
+    this.trace({
+      event: "context",
+      state: context.state,
+      output: this.bridge && this.output === this.bridge.sink ? "bridge" : "direct",
+    })
     if (!this.bridging && !this.bridge)
       void this.connect(context).catch((err: unknown) => {
+        if (this.context !== context) return
         this.closeBridge()
         this.output = context.destination
+        this.trace({ event: "bridge-fallback", state: context.state, output: "direct" })
         console.warn("[Raya Voice] WebRTC echo reference unavailable; using direct audio output.", err)
       })
-    void context.resume().catch((err: unknown) => this.fail(err instanceof Error ? err.message : String(err)))
+    void context
+      .resume()
+      .then(() => {
+        if (this.context === context) this.trace({ event: "resumed", state: context.state })
+      })
+      .catch((err: unknown) => {
+        if (this.context === context) this.fail(err instanceof Error ? err.message : String(err))
+      })
   }
 
-  push(data: string, mime: string) {
+  push(data: string, mime: string, request?: string) {
+    this.request = request
     const bytes = decode(data)
     if (mime.startsWith("audio/pcm")) {
-      this.pcm(bytes, Number(mime.match(/rate=(\d+)/)?.[1]) || 16_000)
+      this.pcm(bytes, Number(mime.match(/rate=(\d+)/)?.[1]) || 16_000, request)
       return
     }
     this.queue.push(bytes)
@@ -51,6 +107,7 @@ export class StreamPlayer {
 
   finish() {
     this.ending = true
+    this.drain()
     if (this.context && this.nodes.size === 0) {
       this.settle()
       return
@@ -67,13 +124,28 @@ export class StreamPlayer {
     this.reset()
     this.closeBridge()
     this.output = undefined
-    void this.context?.close()
+    const context = this.context
     this.context = undefined
+    if (context) {
+      try {
+        void context.close().catch((err: unknown) => this.fail(err instanceof Error ? err.message : String(err)))
+      } catch (err) {
+        this.fail(err instanceof Error ? err.message : String(err))
+      }
+    }
     if (notify) this.done()
   }
 
   // raya_change - preserve the user-gesture-unlocked AudioContext between streamed voice turns
   reset() {
+    if (this.timer !== undefined) window.clearTimeout(this.timer)
+    this.timer = undefined
+    this.pending = []
+    this.duration = 0
+    this.bytes = 0
+    this.clock = undefined
+    this.budget = 0
+    this.request = undefined
     this.ending = false
     for (const node of this.nodes) node.stop()
     this.nodes.clear()
@@ -87,16 +159,63 @@ export class StreamPlayer {
     this.queue = []
   }
 
-  private pcm(bytes: Uint8Array, rate: number) {
+  private pcm(bytes: Uint8Array, rate: number, request?: string) {
     this.unlock()
     const context = this.context
     if (!context) return
     const count = Math.floor(bytes.byteLength / 2)
     if (count === 0) return
+    if (this.pending.length >= 64 || this.bytes + bytes.length > 67_108_864 || this.duration + count / rate > 180) {
+      this.fail("Voice playback buffer exceeds its bound.")
+      this.stop(false)
+      return
+    }
+    this.clock ??= performance.now()
     const audio = context.createBuffer(1, count, rate)
     const channel = audio.getChannelData(0)
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    for (let index = 0; index < count; index++) channel[index] = view.getInt16(index * 2, true) / 32_768
+    let peak = 0
+    for (let index = 0; index < count; index++) {
+      channel[index] = view.getInt16(index * 2, true) / 32_768
+      peak = Math.max(peak, Math.abs(channel[index]))
+    }
+    this.trace({
+      event: "pcm",
+      request,
+      bytes: bytes.length,
+      count,
+      rate,
+      peak: Math.round(peak * 1000) / 1000,
+      state: context.state,
+    })
+    this.pending.push(audio)
+    this.duration += audio.duration
+    this.bytes += bytes.length
+    this.trace({ event: "buffered", request, count: this.pending.length, duration: Math.round(this.duration * 1000) })
+    if (this.nodes.size > 0 || this.duration >= 2 || this.ending) {
+      this.drain()
+      return
+    }
+    // A bounded two-second reserve absorbs sentence-generation gaps. Completed
+    // short replies bypass this wait; Stop retires both this timer and the PCM.
+    this.timer ??= window.setTimeout(() => this.drain(), 2500)
+  }
+
+  private drain() {
+    if (this.timer !== undefined) window.clearTimeout(this.timer)
+    this.timer = undefined
+    const pending = this.pending
+    this.pending = []
+    this.duration = 0
+    this.bytes = 0
+    for (const audio of pending) this.schedule(audio)
+  }
+
+  private schedule(audio: AudioBuffer) {
+    const context = this.context
+    if (!context) return
+    const request = this.request
+    const count = audio.length
     const node = context.createBufferSource()
     node.buffer = audio
     node.connect(this.output ?? context.destination)
@@ -107,12 +226,30 @@ export class StreamPlayer {
     node.addEventListener(
       "ended",
       () => {
+        if (this.context !== context || this.request !== request || !this.nodes.has(node)) return
         this.nodes.delete(node)
-        if (this.ending && this.nodes.size === 0) this.settle()
+        this.trace({ event: "ended", request, state: context.state, count })
+        if (this.nodes.size !== 0) return
+        if (this.ending && this.pending.length === 0) {
+          this.settle()
+          return
+        }
+        this.trace({ event: "underrun", request, at: Math.round(context.currentTime * 1000) })
       },
       { once: true },
     )
     node.start(start)
+    this.trace({
+      event: "scheduled",
+      request,
+      state: context.state,
+      count,
+      at: Math.round(context.currentTime * 1000),
+      start: Math.round(start * 1000),
+      remaining: Math.max(0, Math.round((this.next - context.currentTime) * 1000)),
+      duration: Math.round(audio.duration * 1000),
+      output: this.bridge && this.output === this.bridge.sink ? "bridge" : "direct",
+    })
   }
 
   // raya_change start - present local MiniMax PCM as remote WebRTC playout so Chromium AEC has a reference
@@ -124,8 +261,10 @@ export class StreamPlayer {
     const receive = new RTCPeerConnection()
     const audio = new Audio()
     audio.autoplay = true
-    this.bridge = { sink, audio, send, receive }
+    const bridge = { sink, audio, send, receive }
+    this.bridge = bridge
     receive.ontrack = (event) => {
+      if (this.context !== context || this.bridge !== bridge) return
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track])
     }
     const track = sink.stream.getAudioTracks()[0]
@@ -146,11 +285,9 @@ export class StreamPlayer {
     await send.setRemoteDescription(receive.localDescription)
     await connected(send, receive)
     await audio.play()
-    if (this.context !== context) {
-      this.closeBridge()
-      return
-    }
+    if (this.context !== context || this.bridge !== bridge) return
     this.output = sink
+    this.trace({ event: "bridge-ready", state: context.state, output: "bridge" })
     this.bridging = false
   }
 

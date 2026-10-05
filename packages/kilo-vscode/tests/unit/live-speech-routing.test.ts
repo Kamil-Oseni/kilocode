@@ -186,9 +186,17 @@ test("openai-live CLI mirror does not write the OpenAI key and native Live skips
   const mirrored = JSON.parse(await readFile(join(root, ".raya/speech.local.json"), "utf8"))
   expect(JSON.stringify(mirrored)).not.toContain("sk-live-secret")
   expect(mirrored.stt.key).toBe("stt-only")
-  await send({ type: "speechVoiceTurn" })
-  speech.trackMessage("session_1", "assistant", "msg_1")
-  speech.trackPart("session_1", { id: "p1", messageID: "msg_1", type: "text", text: "hello" })
+  const requestId = "a7d5c6ad-6a21-4521-a1a1-fc7f7d64810c"
+  await send({ type: "speechVoiceTurn", requestId, sessionID: "session_1" })
+  expect(speech.bindVoiceTurn("session_1", "user_1", requestId)).toBe(true)
+  speech.trackMessage("session_1", "assistant", "msg_1", "user_1", true)
+  speech.trackPart("session_1", {
+    id: "p1",
+    messageID: "msg_1",
+    type: "text",
+    text: "hello",
+    time: { start: 1, end: 2 },
+  })
   await speech.speakOnIdle("session_1", (msg) => posts.push(msg as Record<string, unknown>))
   expect(posts).toEqual([])
   speech.dispose()

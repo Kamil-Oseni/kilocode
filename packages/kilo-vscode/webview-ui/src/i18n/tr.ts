@@ -210,7 +210,7 @@ export const dict = {
 
   "speechToText.tooltip.start": "Raya Gateway ile sesli girişi başlatın",
   "speechToText.tooltip.shortcut":
-    "Kaydı başlatmak veya durdurmak için dokunun ya da Cmd/Ctrl+K tuşlarına basın; konuşurken basılı tutun, ardından metne dönüştürüp göndermek için bırakın.",
+    "Kaydı başlatmak veya durdurmak için dokunun ya da Cmd/Ctrl+Alt+K tuşlarına basın; konuşurken basılı tutun, ardından metne dönüştürüp göndermek için bırakın.",
   "speechToText.tooltip.starting": "Mikrofon başlatılıyor... Henüz konuşmayın.",
   "speechToText.tooltip.stop": "Ses yakalamayı durdur",
   "speechToText.tooltip.transcribing": "Metne dönüştürülüyor... İptal etmek için tıklayın.",

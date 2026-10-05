@@ -7,10 +7,14 @@ function fixture() {
   const events: string[] = []
   const messages: WebviewMessage[] = []
   const scopes: Array<string | undefined> = []
+  const choices: Array<string | undefined> = []
   const send = createMessageSender({
     connected: () => true,
     current: () => "different-current-chat",
-    selected: () => ({ providerID: "local", modelID: "qwen" }),
+    selected: (id) => {
+      choices.push(id)
+      return { providerID: "local", modelID: "qwen" }
+    },
     usage: () => events.push("usage"),
     preview: () => null,
     continuation: () => undefined,
@@ -32,7 +36,7 @@ function fixture() {
     activate: () => events.push("activate"),
     draft: () => "pending-A",
   })
-  return { send, events, messages, scopes }
+  return { send, events, messages, scopes, choices }
 }
 
 function receipt(): DraftCapture {
@@ -55,6 +59,8 @@ describe("actual session message sender", () => {
     if (message.type !== "sendMessage") throw new Error("Expected actual fresh message dispatch")
     expect(message.sessionID).toBeUndefined()
     expect(message.draftID).toMatch(/^[a-f0-9-]{36}$/)
+    expect(message.providerID).toBe("local")
+    expect(message.modelID).toBe("qwen")
     expect(f.scopes).toEqual([message.draftID])
     expect(f.events).toEqual(["usage", "seed", "prepare", "activate", "post"])
   })
@@ -96,7 +102,20 @@ describe("actual session message sender", () => {
     expect(message.sessionID).toBeUndefined()
     expect(message.draftID).toBe("pending-A")
     expect(message.capture).toBe(capture)
+    expect(message.providerID).toBe("local")
+    expect(message.modelID).toBe("qwen")
     expect(f.scopes).toEqual(["pending-A"])
+    expect(f.choices).toEqual(["pending-A"])
     expect(f.events).toEqual(["usage", "prepare", "activate", "post"])
+  })
+  it("posts the resolved exact model for a cloud continuation without explicit model arguments", () => {
+    const f = fixture()
+    f.send("Cloud transcript", undefined, undefined, undefined, undefined, undefined, undefined, "cloud:original")
+    const message = f.messages[0]
+    if (message.type !== "importAndSend") throw new Error("Expected actual cloud message dispatch")
+    expect(message.providerID).toBe("local")
+    expect(message.modelID).toBe("qwen")
+    expect(message.cloudSessionId).toBe("original")
+    expect(f.choices).toEqual(["cloud:original"])
   })
 })

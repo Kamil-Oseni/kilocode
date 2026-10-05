@@ -65,15 +65,19 @@ export function unregisterProjectRoutes(ctx: ProjectContext, sessions: ProjectSe
 export async function initContextState(
   ctx: ProjectContext,
   log: (...args: unknown[]) => void,
+  failure?: (err: unknown) => void,
 ): Promise<ProjectInitResult> {
   return ctx.ensureReady(async (generation) => {
     const manager = ctx.worktreeManager()
     const state = ctx.stateManager()
-    await manager.ensureGitExclude().catch((err) => log("Failed to update git exclude:", err))
+    await manager.ensureGitExclude().catch((err) => {
+      failure?.(err)
+      log("Failed to update git exclude:", err)
+    })
     if (!ctx.isCurrent(generation)) return { ok: false, refsFixed: 0 }
     const loaded = await state.load()
     if (!ctx.isCurrent(generation)) return { ok: false, refsFixed: 0 }
-    manager.cleanupOrphanedTempDirs()
+    await manager.cleanupOrphanedTempDirs()
 
     if (loaded.status === "failed" && !(await state.prepareRecovery())) {
       return { ok: false, refsFixed: 0 }
@@ -81,6 +85,7 @@ export async function initContextState(
     if (!ctx.isCurrent(generation)) return { ok: false, refsFixed: 0 }
 
     const infos = await manager.discoverWorktrees().catch((err) => {
+      failure?.(err)
       log("Failed to discover worktrees during state recovery:", err)
       return []
     })

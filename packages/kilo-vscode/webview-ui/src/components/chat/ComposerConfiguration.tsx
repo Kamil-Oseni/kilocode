@@ -1,6 +1,7 @@
 import { Collapsible } from "@kilocode/kilo-ui/collapsible"
 import { Icon } from "@kilocode/kilo-ui/icon"
-import { createSignal, onCleanup, onMount, type Accessor, type ParentComponent } from "solid-js"
+import { Button } from "@kilocode/kilo-ui/button"
+import { createSignal, onCleanup, onMount, Show, type Accessor, type ParentComponent } from "solid-js"
 import { useSession } from "../../context/session"
 import { useProvider } from "../../context/provider"
 import { useLanguage } from "../../context/language"
@@ -17,6 +18,15 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
   const [inline, setInline] = createSignal(false)
   const selection = () => session.selected(props.sessionID())
   const model = () => provider.findModel(selection())
+  const warning = () => {
+    const status = provider.status()
+    if (status === "loading") return language.t("settings.providers.loading")
+    if (status === "disconnected") return language.t("settings.providers.disconnected")
+    if (status === "error") return language.t("settings.providers.failed")
+    if (provider.isModelValid(selection())) return
+    return language.t(selection() ? "composer.configuration.unavailable" : "composer.configuration.choose")
+  }
+  const retry = () => provider.status() === "error" || provider.status() === "disconnected"
   const mode = () => {
     const name = session.selectedAgent(props.sessionID())
     return session.agents().find((agent) => agent.name === name)?.displayName ?? name
@@ -74,11 +84,6 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
             <span>
               {mode()} · {identity()}
             </span>
-            {!provider.isModelValid(selection()) && (
-              <span class="composer-configuration-warning">
-                {language.t(selection() ? "composer.configuration.unavailable" : "composer.configuration.choose")}
-              </span>
-            )}
           </span>
           <Icon name="chevron-down" size="small" aria-hidden="true" />
         </Collapsible.Trigger>
@@ -86,6 +91,16 @@ export const ComposerConfiguration: ParentComponent<{ sessionID: Accessor<string
           <div class="composer-configuration-controls">{props.children}</div>
         </Collapsible.Content>
       </Collapsible>
+      <Show when={warning()}>
+        <div class="composer-configuration-notice">
+          <span role="status">{warning()}</span>
+          <Show when={retry()}>
+            <Button size="small" variant="secondary" onClick={provider.retry}>
+              {language.t("common.retry")}
+            </Button>
+          </Show>
+        </div>
+      </Show>
     </div>
   )
 }

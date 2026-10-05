@@ -13,7 +13,7 @@ const ENGINES: Array<{ value: VoiceEngine; label: string }> = [
   { value: "openai-live", label: "OpenAI GPT-Live 1" },
   { value: "openai-realtime", label: "OpenAI Realtime (compatibility)" },
   { value: "qwen-realtime", label: "Legacy Qwen Realtime (experimental)" },
-  { value: "cascade-v1", label: "Configured STT → Raya → MiniMax (cascade-v1)" },
+  { value: "cascade-v1", label: "Configured STT → Raya → speech output (cascade-v1)" },
 ]
 
 const SpeechTab: Component = () => {
@@ -28,10 +28,59 @@ const SpeechTab: Component = () => {
     <div class="speech-settings" style={{ display: "flex", "flex-direction": "column", gap: "16px" }}>
       <p style={{ margin: 0, color: "var(--vscode-descriptionForeground)", "font-size": "var(--kilo-font-size-12)" }}>
         GPT-Live 1 is the default for new voice setups and connects over the OpenAI Live API when you start a call. Work
-        stays in the current conversation. Ending voice releases audio; admitted work continues until you stop it in
-        the conversation. Dictation remains a separate draft-entry action. OpenAI failures never silently switch to another
+        stays in the current conversation. Ending voice releases audio; admitted work continues until you stop it in the
+        conversation. Dictation remains a separate draft-entry action. OpenAI failures never silently switch to another
         provider.
       </p>
+      <Card>
+        <SettingsRow
+          title="Local speech services"
+          description="Use the installed Whisper and Nano services. Import their existing local credential securely; microphone capture and playback start only when requested."
+        >
+          <Button size="small" onClick={voice.setupLocal}>
+            Set up local speech
+          </Button>
+        </SettingsRow>
+        <SettingsRow
+          title="Speech output provider"
+          description="Keep MiniMax or use the installed local speech jobs service."
+        >
+          <Select
+            options={[
+              { value: "minimax", label: "MiniMax" },
+              { value: "local-jobs", label: "Local speech jobs" },
+            ]}
+            current={{
+              value: settings().ttsEngine ?? "minimax",
+              label: settings().ttsEngine === "local-jobs" ? "Local speech jobs" : "MiniMax",
+            }}
+            value={(item) => item.value}
+            label={(item) => item.label}
+            onSelect={(item) => item && voice.update({ ttsEngine: item.value as "minimax" | "local-jobs" })}
+          />
+        </SettingsRow>
+        <Show when={settings().ttsEngine === "local-jobs"}>
+          <SettingsRow
+            title="Local voice"
+            description={`${settings().localTtsModel ?? "chatterbox-nano"} · ${settings().localTtsVoice ?? "freeman-reference-c-AI"}. ${settings().hasLocalKey ? "Credential stored securely." : "Set up local speech to import the credential."}`}
+          >
+            <span>{settings().localTtsEndpoint}</span>
+          </SettingsRow>
+          <SettingsRow
+            title="Allow local fallback"
+            description="Permit the service to choose a fallback voice if Nano is unavailable. The actual voice is shown during playback."
+          >
+            <Switch
+              checked={settings().localTtsFallback ?? false}
+              onChange={(localTtsFallback) => voice.update({ localTtsFallback })}
+              hideLabel
+            >
+              Allow fallback
+            </Switch>
+          </SettingsRow>
+          <Show when={voice.output()}>{(output) => <p role="status">{output()}</p>}</Show>
+        </Show>
+      </Card>
       <Card>
         <SettingsRow
           title="Voice engine"
@@ -203,7 +252,7 @@ const SpeechTab: Component = () => {
             aria-label="STT endpoint"
             value={settings().sttEndpoint}
             placeholder="https://…/v1/audio/transcriptions"
-            onChange={(sttEndpoint) => voice.update({ sttEndpoint })}
+            onChange={(sttEndpoint) => voice.update({ sttEndpoint, sttEngine: "http" })}
           />
         </SettingsRow>
         <SettingsRow title="STT model" description="SenseVoice, Paraformer, Nano, Qwen-ASR, or another endpoint model.">
@@ -239,10 +288,17 @@ const SpeechTab: Component = () => {
         <Show when={!["openai-realtime", "openai-live"].includes(settings().voiceEngine)}>
           <SettingsRow
             title="Test voice output"
-            description="Play a short phrase through the configured MiniMax stream."
+            description="Play a short phrase through the selected speech provider."
           >
             <div style={{ display: "flex", gap: "8px", "align-items": "center", "flex-wrap": "wrap" }}>
-              <Button size="small" disabled={!settings().hasTtsKey || voice.playing()} onClick={voice.test}>
+              <Button
+                size="small"
+                disabled={
+                  !(settings().ttsEngine === "local-jobs" ? settings().hasLocalKey : settings().hasTtsKey) ||
+                  voice.playing()
+                }
+                onClick={voice.test}
+              >
                 {voice.playing() ? "Playing…" : "Test voice"}
               </Button>
               <Show when={voice.error()}>

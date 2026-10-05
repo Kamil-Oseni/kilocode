@@ -107,6 +107,10 @@ async function routeSpeechMessage(message: Msg, ctx: Ctx): Promise<boolean> {
     await ctx.speech?.state(ctx.post)
     return true
   }
+  if (message.type === "speechLocalSetup") {
+    await ctx.speech?.local(ctx.dir, ctx.post)
+    return true
+  }
   if (message.type === "speechSettingsUpdate") {
     if (message.settings) await ctx.speech?.update(message.settings, ctx.dir, ctx.post)
     return true
@@ -138,7 +142,7 @@ async function routeKey(message: Msg, ctx: Ctx) {
   if (message.type !== "speechKeyUpdate") return false
   if (
     message.kind &&
-    ["openai", "realtime", "stt", "tts"].includes(message.kind) &&
+    ["openai", "realtime", "stt", "tts", "local"].includes(message.kind) &&
     (message.key === undefined || typeof message.key === "string")
   )
     await ctx.speech?.key(message.kind, message.key, ctx.dir, ctx.post)
@@ -250,7 +254,22 @@ function offer(value: unknown): value is string {
 
 function routeSpeechPlayback(message: Msg, ctx: Ctx) {
   if (message.type === "speechVoiceTurn") {
-    ctx.speech?.markVoiceTurn()
+    if (
+      !message.requestId ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(message.requestId)
+    )
+      return true
+    const sessionID = message.sessionID
+    const scope = token(sessionID) ? ctx.voiceScope?.(sessionID) : undefined
+    if (!token(sessionID) || !scope?.current()) {
+      ctx.post({
+        type: "speechPlaybackError",
+        requestId: message.requestId,
+        error: "The voice task changed before submission.",
+      })
+      return true
+    }
+    ctx.speech?.markVoiceTurn({ requestId: message.requestId, sessionID, current: scope.current })
     return true
   }
   if (message.type === "speechPlaybackStart") {

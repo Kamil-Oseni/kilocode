@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test"
+import { createRoot, createSignal, createEffect } from "solid-js"
+import { isServer } from "solid-js/web"
+import { dispatch } from "../../webview-ui/src/utils/message-dispatch"
 import { DurableDrafts } from "../../webview-ui/src/utils/durable-drafts"
 import { draftNotice } from "../../webview-ui/src/utils/draft-notice"
 import { draftStorage } from "../fixtures/durable-draft-storage"
@@ -29,6 +32,66 @@ function gate() {
   const state = Promise.withResolvers<void>()
   return { wait: state.promise, open: () => state.resolve() }
 }
+
+test("pending creation preserves the exact unowned context cache during session promotion", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage, 1000, undefined, false)
+  view.controller.context(identity.box, "workspace-A")
+  view.controller.edit(identity, rich)
+  const next = { box: identity.box, key: `${identity.box}:session:voice-created`, sessionID: "voice-created" }
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  expect(view.controller.view(next).content).toEqual(rich)
+  expect(view.controller.view(next).loaded).toBe(false)
+  expect(view.requests).toHaveLength(0)
+})
+
+test("pending creation cannot adopt an unowned draft from a previous workspace context", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage, 1000, undefined, false)
+  view.controller.context(identity.box, "workspace-A")
+  view.controller.edit(identity, rich)
+  view.controller.context(identity.box, "workspace-B")
+  const next = { box: identity.box, key: `${identity.box}:session:voice-created`, sessionID: "voice-created" }
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  expect(view.controller.view(next).content.text).toBe("")
+  view.controller.context(identity.box, "workspace-A")
+  expect(view.controller.view(next).content.text).toBe("")
+  expect(view.controller.view(identity).content).toEqual(rich)
+  expect(view.requests).toHaveLength(0)
+})
+
+test("same authoritative owner retains pending promotion after workspace context re-admission", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  view.controller.context(identity.box, "workspace-A")
+  await view.controller.hydrate(identity)
+  view.controller.edit(identity, rich)
+  expect(await view.controller.retry(identity)).toBe(true)
+  view.controller.context(identity.box, "workspace-B")
+  await until(() => view.controller.owner(identity.box) === storage.root)
+  await view.controller.hydrate(identity)
+  const next = { box: identity.box, key: `${identity.box}:session:voice-owned`, sessionID: "voice-owned" }
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  expect(view.controller.view(next).content).toEqual(rich)
+  expect(await view.controller.retry(next)).toBe(true)
+  expect(view.controller.view(next).content).toEqual(rich)
+  const base = { owner: storage.root, epoch: view.controller.epoch, generation: 1 }
+  const saved = await storage.handle({
+    ...base,
+    type: "composerDraftLoad",
+    identity: next,
+    requestID: crypto.randomUUID(),
+  })
+  expect(saved.entry?.content).toEqual(rich)
+  const previous = await storage.handle({
+    ...base,
+    type: "composerDraftLoad",
+    identity,
+    requestID: crypto.randomUUID(),
+  })
+  expect(previous.entry?.content ?? null).toBeNull()
+})
 async function until(check: () => boolean) {
   const end = Date.now() + 5000
   while (!check()) {
@@ -50,6 +113,7 @@ function pane(
     load?: ReturnType<typeof gate>
     clear?: ReturnType<typeof gate>
     drop?: boolean
+    owner?: string
   } = {}
   const emit = (message: ComposerDraftExtensionMessage) => {
     for (const handler of handlers) handler(message)
@@ -68,7 +132,7 @@ function pane(
                 type: "composerDraftState",
                 epoch: message.epoch,
                 generation: 1,
-                owners: [{ box: identity.box, owner: storage.root }],
+                owners: [{ box: identity.box, owner: controls.owner ?? storage.root }],
                 connected: true,
               }),
             )
@@ -111,6 +175,37 @@ function pane(
     },
   }
 }
+
+test("capture distinguishes an untouched unscoped rendered composer from an unowned edit", async () => {
+  await using storage = await draftStorage()
+  using state = pane(storage)
+  await until(() => state.controller.ready())
+  const target = { box: "unobserved", key: "unobserved:pending:empty", pendingID: "empty" }
+  state.controller.view(target)
+  const flush = (requestID: string) =>
+    state.emit({
+      type: "composerDraftFlush",
+      requestID,
+      epoch: state.controller.epoch,
+      generation: 1,
+      deadline: Date.now() + 1000,
+    })
+  flush("empty")
+  await until(() => state.replies.some((reply) => reply.type === "composerDraftFlushed" && reply.requestID === "empty"))
+  expect(
+    state.replies.find((reply) => reply.type === "composerDraftFlushed" && reply.requestID === "empty"),
+  ).toMatchObject({ committed: true, entries: [] })
+  state.controller.edit(target, rich)
+  flush("edited")
+  await until(() =>
+    state.replies.some((reply) => reply.type === "composerDraftFlushed" && reply.requestID === "edited"),
+  )
+  expect(
+    state.replies.find((reply) => reply.type === "composerDraftFlushed" && reply.requestID === "edited"),
+  ).toMatchObject({ committed: false })
+  expect(state.requests).toHaveLength(0)
+  expect(state.controller.view(target).content).toEqual(rich)
+})
 
 test("timed out initial hydration retries on host readiness and retains typing", async () => {
   const handlers = new Set<(message: ComposerDraftExtensionMessage) => void>()
@@ -541,4 +636,240 @@ test("captured asynchronous attachment refuses flush and retains original owner 
   using restored = pane(a)
   await until(() => restored.controller.ready())
   expect((await restored.controller.hydrate(identity)).content).toEqual(rich)
+})
+
+test("context invalidation requests fresh authoritative ownership before loading a new pending draft", async () => {
+  await using a = await draftStorage()
+  await using b = await draftStorage()
+  using view = pane(
+    a,
+    1000,
+    new Map([
+      [a.root, a],
+      [b.root, b],
+    ]),
+  )
+  view.controller.context(identity.box, "A")
+  await until(() => view.controller.owner(identity.box) === a.root)
+  await view.controller.hydrate(identity)
+  view.controller.edit(identity, rich)
+  expect(await view.controller.retry(identity)).toBe(true)
+  view.controls.owner = b.root
+  view.controller.context(identity.box, "B")
+  expect(view.controller.owner(identity.box)).toBeUndefined()
+  await until(() => view.controller.owner(identity.box) === b.root)
+  await view.controller.hydrate(identity)
+  expect(view.controller.view(identity).loaded).toBe(true)
+  expect(view.controller.view(identity).content.text).toBe("")
+  expect(
+    view.requests.filter((request) => request.owner === b.root && request.type === "composerDraftSave"),
+  ).toHaveLength(0)
+  view.controller.edit(identity, { text: "B only", comments: [], images: [], scroll: 0 })
+  expect(await view.controller.retry(identity)).toBe(true)
+  view.controls.owner = a.root
+  view.controller.context(identity.box, "A")
+  await until(() => view.controller.owner(identity.box) === a.root)
+  await view.controller.hydrate(identity)
+  expect(view.controller.view(identity).content).toEqual(rich)
+})
+
+test("accepted pending Ask send clears consumed payload while preserving a post-send picker edit", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  const content = { ...rich, agent: "ask", model: { providerID: "qwen-local", modelID: "qwen3-raya-32k:latest" } }
+  view.controller.edit(identity, content)
+  const capture = (await view.controller.capture(identity))!
+  expect(capture).toBeDefined()
+  const next = { box: identity.box, key: `${identity.box}:session:ask-created`, sessionID: "ask-created" }
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  const base = { owner: storage.root, epoch: view.controller.epoch, generation: 1, requestID: crypto.randomUUID() }
+  const moved = await storage.handle({
+    ...base,
+    type: "composerDraftPromote",
+    from: identity,
+    to: next,
+    source: capture.token,
+    mutation: "send:ask-user",
+  })
+  expect(moved.target).toBeDefined()
+  view.emit({
+    type: "composerDraftPrepared",
+    epoch: view.controller.epoch,
+    generation: 1,
+    sessionID: next.sessionID,
+    messageID: "ask-user",
+    capture,
+    entry: moved.target!,
+  })
+  // A genuine picker edit after sending remains a local draft change.
+  view.controller.edit(next, { ...content, agent: "auto", model: { providerID: "kilo-auto", modelID: "free" } })
+  const cleared = await storage.handle({
+    ...base,
+    type: "composerDraftClear",
+    identity: next,
+    expected: moved.target!.token,
+    mutation: "accepted:ask-user",
+  })
+  view.emit({
+    type: "composerDraftAccepted",
+    epoch: view.controller.epoch,
+    generation: 1,
+    sessionID: next.sessionID,
+    messageID: "ask-user",
+    capture,
+    entry: cleared.entry ?? undefined,
+  })
+  const state = await view.controller.hydrate(next)
+  expect(state.content.text).toBe("")
+  expect(state.content.comments).toEqual([])
+  expect(state.content.images).toEqual([])
+  expect(state.content.agent).toBe("auto")
+  expect(state.content.model).toEqual({ providerID: "kilo-auto", modelID: "free" })
+  const saved = await storage.handle({ ...base, type: "composerDraftLoad", identity: next })
+  expect(saved.entry?.content?.text).toBe("")
+})
+test("message dispatch preserves captured Ask draft through reactive promotion into real storage", async () => {
+  if (isServer) {
+    const child = Bun.spawn(
+      [process.execPath, "--conditions=browser", "test", import.meta.path, "--test-name-pattern", "reactive promotion"],
+      { stdout: "pipe", stderr: "pipe", windowsHide: true },
+    )
+    const [code, out, err] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ])
+    expect(code, out + err).toBe(0)
+    return
+  }
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  const content = { ...rich, agent: "ask", model: { providerID: "qwen-local", modelID: "qwen3-raya-32k:latest" } }
+  view.controller.edit(identity, content)
+  const capture = (await view.controller.capture(identity))!
+  const next = { box: identity.box, key: `${identity.box}:session:batched-ask`, sessionID: "batched-ask" }
+  const base = { owner: storage.root, epoch: view.controller.epoch, generation: 1, requestID: crypto.randomUUID() }
+  const moved = await storage.handle({
+    ...base,
+    type: "composerDraftPromote",
+    from: identity,
+    to: next,
+    source: capture.token,
+    mutation: "send:batched-ask-user",
+  })
+  expect(moved.target).toBeDefined()
+  view.emit({
+    type: "composerDraftPrepared",
+    epoch: view.controller.epoch,
+    generation: 1,
+    sessionID: next.sessionID,
+    messageID: "batched-ask-user",
+    capture,
+    entry: moved.target!,
+  })
+  const reactive = createRoot((dispose) => {
+    const [choice, setChoice] = createSignal(content)
+    const seen: string[] = []
+    createEffect(() => {
+      const value = choice()
+      seen.push(value.agent)
+      view.controller.edit(next, value)
+    })
+    return { dispose, seen, setChoice }
+  })
+  await Bun.sleep(0)
+  const handlers = new Set<() => void>([
+    () => reactive.setChoice({ ...content, agent: "auto", model: { providerID: "kilo-auto", modelID: "free" } }),
+    () => reactive.setChoice(content),
+  ])
+  try {
+    expect(reactive.seen).toEqual(["ask"])
+    dispatch(handlers, undefined)
+    expect(reactive.seen).toEqual(["ask", "ask"])
+    const cleared = await storage.handle({
+      ...base,
+      type: "composerDraftClear",
+      identity: next,
+      expected: moved.target!.token,
+      mutation: "accepted:batched-ask-user",
+    })
+    view.emit({
+      type: "composerDraftAccepted",
+      epoch: view.controller.epoch,
+      generation: 1,
+      sessionID: next.sessionID,
+      messageID: "batched-ask-user",
+      capture,
+      entry: cleared.entry ?? undefined,
+    })
+    const state = await view.controller.hydrate(next)
+    expect(state.content.text).toBe("")
+    expect(state.content.comments).toEqual([])
+    expect(state.content.images).toEqual([])
+    const saved = await storage.handle({ ...base, type: "composerDraftLoad", identity: next })
+    expect(saved.entry?.content ?? null).toBeNull()
+  } finally {
+    reactive.dispose()
+  }
+})
+test("accepted speech send clears consumed text after caret-only changes", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  const content = { ...rich, agent: "ask", model: { providerID: "qwen-local", modelID: "qwen3-raya-32k:latest" } }
+  view.controller.edit(identity, content)
+  const capture = (await view.controller.capture(identity))!
+  expect(capture).toBeDefined()
+  const next = { box: identity.box, key: `${identity.box}:session:ask-created`, sessionID: "ask-created" }
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  const base = { owner: storage.root, epoch: view.controller.epoch, generation: 1, requestID: crypto.randomUUID() }
+  const moved = await storage.handle({
+    ...base,
+    type: "composerDraftPromote",
+    from: identity,
+    to: next,
+    source: capture.token,
+    mutation: "send:ask-user",
+  })
+  expect(moved.target).toBeDefined()
+  view.emit({
+    type: "composerDraftPrepared",
+    epoch: view.controller.epoch,
+    generation: 1,
+    sessionID: next.sessionID,
+    messageID: "ask-user",
+    capture,
+    entry: moved.target!,
+  })
+  // A genuine picker edit after sending remains a local draft change.
+  view.controller.edit(next, {
+    ...content,
+    selection: { start: content.text.length, end: content.text.length },
+    scroll: 0,
+  })
+  const cleared = await storage.handle({
+    ...base,
+    type: "composerDraftClear",
+    identity: next,
+    expected: moved.target!.token,
+    mutation: "accepted:ask-user",
+  })
+  view.emit({
+    type: "composerDraftAccepted",
+    epoch: view.controller.epoch,
+    generation: 1,
+    sessionID: next.sessionID,
+    messageID: "ask-user",
+    capture,
+    entry: cleared.entry ?? undefined,
+  })
+  const state = await view.controller.hydrate(next)
+  expect(state.content.text).toBe("")
+  expect(state.content.comments).toEqual([])
+  expect(state.content.images).toEqual([])
 })

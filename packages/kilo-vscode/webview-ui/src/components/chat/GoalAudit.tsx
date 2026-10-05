@@ -1,3 +1,4 @@
+import { GoalBinding } from "./GoalBinding"
 import { For, Show } from "solid-js"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import type { GoalState } from "../../../../src/shared/goal"
@@ -70,18 +71,7 @@ export function GoalAudit(props: {
                   {(criterion) => (
                     <>
                       <p>Requested verification: {criterion().verification}</p>
-                      <Show when={criterion().check}>
-                        {(check) => (
-                          <div aria-label="Required command binding">
-                            <p>
-                              Required command: <code>{check().command}</code>
-                            </p>
-                            <p>
-                              Working directory: <code>{check().directory}</code>
-                            </p>
-                          </div>
-                        )}
-                      </Show>
+                      <GoalBinding check={criterion().check} label="Required command binding" />
                     </>
                   )}
                 </Show>

@@ -6,7 +6,7 @@
 
 .routines-view .routines-title {
   font-family: var(--raya-font-display);
-  font-size: 21px;
+  font-size: var(--kilo-font-size-21);
   font-weight: 400;
 }
 .routines-view .routines-body[data-pane="inbox"] {
@@ -26,7 +26,7 @@
 
 .routines-hero-copy > span {
   color: var(--routine-muted);
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -39,7 +39,7 @@
   max-width: 48ch;
   margin: 0;
   color: var(--text-weak, var(--vscode-descriptionForeground));
-  font-size: 13px;
+  font-size: var(--kilo-font-size-13);
   line-height: 1.5;
 }
 .routines-hero-actions {
@@ -68,13 +68,13 @@
 }
 .routines-hero-stats strong {
   color: var(--text-base, var(--vscode-foreground));
-  font-size: 24px;
+  font-size: var(--kilo-font-size-24);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 .routines-hero-stats span {
   color: var(--routine-muted);
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
 }
 
 .routines-team-directory {
@@ -96,7 +96,7 @@
 .routines-team-directory-head span,
 .routines-team-directory-count {
   color: var(--routine-muted);
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
 }
 .routines-team-directory-list {
   display: grid;
@@ -127,14 +127,14 @@
 }
 .routines-team-directory-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--kilo-font-size-13);
 }
 .routines-team-directory-purpose {
   color: var(--routine-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 
 .routines-archived-directory {
@@ -164,7 +164,7 @@
 .routines-archived-detail p {
   margin: 0;
   color: var(--text-weak, var(--vscode-descriptionForeground));
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
   line-height: 1.5;
 }
 
@@ -180,7 +180,7 @@
 }
 
 .routines-archived-detail > strong {
-  font-size: 14px;
+  font-size: var(--kilo-font-size-14);
 }
 
 .routines-archived-detail ul {
@@ -198,7 +198,7 @@
   gap: 12px;
   min-height: 38px;
   border-top: 1px solid var(--routine-line);
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 
 .routines-retained-conversation {
@@ -345,7 +345,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
   border: 1px solid transparent;
   border-radius: var(--raya-radius-sm, 4px);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 
 .routines-view .routines-organization[aria-current="page"] {
@@ -463,7 +463,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
   display: inline-block;
   width: 10px;
   color: var(--routine-muted);
-  font-size: 17px;
+  font-size: var(--kilo-font-size-17);
   line-height: 1;
   transition: transform 160ms ease-out;
 }
@@ -493,7 +493,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-roster-actions > strong 
   min-width: 0;
   min-height: 32px;
   padding-inline: 6px;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
   white-space: nowrap;
 }
 
@@ -586,7 +586,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-thread-identity h3 {
   margin: 0;
   overflow: visible;
   color: var(--text-base, var(--vscode-foreground));
-  font-size: 13px;
+  font-size: var(--kilo-font-size-13);
   line-height: 1.55;
   -webkit-line-clamp: unset;
 }
@@ -641,7 +641,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
 .routines-view .routines-organization-work-head p {
   margin-top: 5px;
   color: var(--routine-muted);
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 
 .routines-view .routines-organization-work-list {
@@ -663,13 +663,13 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
 
 .routines-view .routines-organization-work-objective {
   margin: 10px 0;
-  font-size: 13px;
+  font-size: var(--kilo-font-size-13);
   line-height: 1.5;
 }
 
 .routines-view .routines-organization-work-meta {
   color: var(--routine-muted);
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
 }
 
 .routines-view .routines-organization-work-route button {
@@ -723,7 +723,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
 .routines-view .routines-field {
   gap: 8px;
   color: var(--text-base, var(--vscode-foreground));
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 
 .routines-view .routines-field :is(input, select, textarea) {
@@ -839,7 +839,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
 .routines-view .routines-organization-intro {
   margin: 0 0 24px;
   color: var(--routine-muted);
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
   line-height: 1.5;
 }
 
@@ -880,7 +880,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
 .routines-view .routines-disclosure-note {
   color: var(--routine-muted);
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
 }
 
 .routines-view .routines-organization-editor .routines-organization-disclosure-body,
@@ -895,7 +895,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
 
 .routines-view .routines-organization-editor .routines-organization-section-head h4 {
   color: var(--text-base, var(--vscode-foreground));
-  font-size: 13px;
+  font-size: var(--kilo-font-size-13);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -954,7 +954,7 @@ html[data-theme="kilo-vscode"] .routines-view .routines-organization-work-head h
 .routines-view .routines-organization-member-action {
   flex: 0 0 auto;
   color: var(--routine-muted);
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
 }
 
 .routines-view

@@ -22,6 +22,34 @@ describe("terminal", () => {
     expect(terminal({ messages: [message("stop")], todos: [] })).toBeUndefined()
   })
 
+  it("recovers a settled aborted turn from hydrated history without a live close event", () => {
+    const stopped = { ...message(undefined, { name: "MessageAbortedError" }), time: { created: 1, completed: 2 } }
+    expect(terminal({ messages: [stopped], todos: [todo("pending")] })).toEqual({
+      kind: "interrupted",
+      tone: "warning",
+      finish: undefined,
+      remaining: 1,
+    })
+  })
+
+  it("does not infer interruption from an unsettled or malformed aborted message", () => {
+    const stopped = message(undefined, { name: "MessageAbortedError" })
+    expect(terminal({ messages: [stopped], todos: [] })).toBeUndefined()
+    expect(terminal({ messages: [{ ...stopped, time: { created: 1, completed: NaN } }], todos: [] })).toBeUndefined()
+  })
+
+  it("retires recovered interruption when a newer prompt or reply replaces the aborted turn", () => {
+    const stopped = { ...message(undefined, { name: "MessageAbortedError" }), time: { created: 1, completed: 2 } }
+    const user: Message = { id: "u2", sessionID: "s1", role: "user", createdAt: new Date(3).toISOString() }
+    expect(terminal({ messages: [stopped, user], todos: [] })).toBeUndefined()
+    expect(terminal({ messages: [stopped, user, { ...message("stop"), id: "m2" }], todos: [] })).toBeUndefined()
+  })
+
+  it("preserves an explicit superseded handoff over historical interruption", () => {
+    const stopped = { ...message(undefined, { name: "MessageAbortedError" }), time: { created: 1, completed: 2 } }
+    expect(terminal({ reason: "superseded", messages: [stopped], todos: [] })).toBeUndefined()
+  })
+
   it("hides normal completed turns", () => {
     expect(terminal({ reason: "completed", messages: [message("stop")], todos: [] })).toBeUndefined()
   })

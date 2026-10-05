@@ -27,6 +27,7 @@ export interface CreateWorktreeOnDiskContext {
   capture: (event: string, properties?: Record<string, unknown>) => void
   pushState: () => void
   log: (...args: unknown[]) => void
+  failure?: (err: unknown) => void
 }
 
 /**
@@ -67,6 +68,7 @@ export async function createWorktreeOnDisk(
       existingBranch: opts?.existingBranch,
     })
   } catch (error) {
+    ctx.failure?.(error)
     const msg = error instanceof Error ? error.message : String(error)
     ctx.postToWebview({
       type: "agentManager.worktreeSetup",

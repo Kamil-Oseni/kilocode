@@ -212,7 +212,7 @@ export const dict = {
 
   "speechToText.tooltip.start": "Start stemmeinput med Raya Gateway",
   "speechToText.tooltip.shortcut":
-    "Tryk på knappen eller brug Cmd/Ctrl+K til at starte eller stoppe optagelsen; hold knappen nede, mens du taler, og slip den for at transskribere og sende.",
+    "Tryk på knappen eller brug Cmd/Ctrl+Alt+K til at starte eller stoppe optagelsen; hold knappen nede, mens du taler, og slip den for at transskribere og sende.",
   "speechToText.tooltip.starting": "Starter mikrofonen... Vent med at tale.",
   "speechToText.tooltip.stop": "Stop lydoptagelse",
   "speechToText.tooltip.transcribing": "Transskriberer... Klik for at annullere.",

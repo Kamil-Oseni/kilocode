@@ -126,6 +126,8 @@ import { routeEarlyMessage } from "./kilo-provider/early-message"
 import { childDirectory, steerChild, type ChildSteerMessage } from "./kilo-provider/child-steer"
 import * as ModelState from "./kilo-provider/model-state"
 import { handleModelUsageMessage } from "./kilo-provider/model-usage"
+import { hostPublications } from "./kilo-provider/host-publications"
+import { Hosts } from "./kilo-provider/host-capture"
 import { handleForkSession } from "./kilo-provider/fork-session"
 import { openConfig } from "./kilo-provider/open-config"
 import {
@@ -233,6 +235,7 @@ import {
 import { detail as selfHealRollbackDetail, rollback as rollbackSelfHeal } from "./self-heal/rollback"
 import { cleanup as cleanupSelfHeal, detail as selfHealCleanupDetail } from "./self-heal/cleanup"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
+import { BrainHost } from "./second-brain/host"
 import { VoiceOrigin } from "./speech/voice-origin"
 import {
   buildIndexingSettingsMessage,
@@ -383,7 +386,12 @@ type ContextRequestMessage =
 
 export class KiloProvider implements vscode.WebviewViewProvider, TelemetryPropertiesProvider {
   public static readonly viewType = "raya.SidebarProvider"
-  private readonly instanceId = crypto.randomUUID()
+  private readonly instanceId = (() => {
+    Hosts.check()
+    return crypto.randomUUID()
+  })()
+  private captureClient: KiloClient | null = null
+  private capturePreparing = false
 
   private webview: vscode.Webview | null = null
   private composerView?: vscode.Disposable
@@ -441,6 +449,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private storedProviderKeys: Record<string, StoredProviderKey> = {}
   private readonly providerSecrets: ProviderSecrets | undefined // raya_change - encrypted BYOK source
   private readonly speech: SpeechService | undefined // raya_change - Milestone H encrypted speech and streaming audio
+  private readonly brain: BrainHost | undefined
   private readonly cloudJournal: CloudContinuationJournal | undefined
   /** Coalesce provider refreshes — at most one follow-up rerun when a request lands mid-flight. */
   private providersRefresh: Promise<void> | null = null
@@ -610,10 +619,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     private readonly extensionContext?: vscode.ExtensionContext,
     private readonly opts: KiloProviderOptions = {},
   ) {
+    Hosts.register(this.instanceId, "view", {
+      prepare: (client, deadline) => this.prepareCapture(client, deadline),
+      close: () => this.capturePreparedMetadata(),
+    })
     this.projectDirectory = opts.projectDirectory
     this.slimEditMetadata = opts.slimEditMetadata ?? true
     this.providerSecrets = extensionContext ? new ProviderSecretStore(extensionContext.secrets) : undefined // raya_change
     this.speech = extensionContext ? new SpeechService(extensionContext) : undefined // raya_change - Milestone H
+    this.brain = extensionContext ? new BrainHost(extensionContext) : undefined
     this.cloudJournal = extensionContext
       ? new CloudContinuationJournal(path.join(extensionContext.globalStorageUri.fsPath, "cloud-continuations"))
       : undefined
@@ -739,6 +753,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Preserves the existing null-check pattern used throughout handler methods.
    */
   private get client(): KiloClient | null {
+    if (this.capturePreparing)
+      return this.captureClient && this.connectionService.isClientCurrent(this.captureClient)
+        ? this.captureClient
+        : null
     try {
       return this.connectionService.getClient()
     } catch {
@@ -1204,6 +1222,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private renew(webview: vscode.Webview): void {
+    this.speech?.drop()
     this.voiceCurrent = this.voicePage.bind(webview)
     void this.speech
       ?.openaiReset()
@@ -1211,6 +1230,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private setupWebviewMessageHandler(webview: vscode.Webview): void {
+    this.speech?.drop()
     this.composer.detach()
     const current = this.voiceOrigin.bind(webview)
     this.voiceCurrent = this.voicePage.bind(webview)
@@ -1233,6 +1253,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.telemetryStateDisposable?.dispose()
     this.telemetryStateDisposable = watchTelemetryState((msg) => this.postMessage(msg))
     this.webviewMessageDisposable = webview.onDidReceiveMessage(async (message) => {
+      if (
+        this.capturePreparing &&
+        !["composerDraftSave", "composerDraftFlushed", "routineInboxFlush"].includes(message.type)
+      ) {
+        this.postMessage({ type: "error", message: "Raya is preparing migration. New work is closed." })
+        return
+      }
       const voice = this.voiceCurrent
       const intercepted = await this.intercept(message, current)
       if (intercepted === null) return
@@ -1729,9 +1756,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           TelemetryProxy.capture(message.event, message.properties)
           break
         case "persistVariant": {
-          const stored = this.extensionContext?.globalState.get<Record<string, string>>("variantSelections") ?? {}
-          stored[message.key] = message.value
-          await this.extensionContext?.globalState.update("variantSelections", stored)
+          await hostPublications(this.extensionContext)?.mutate("variantSelections", (current) => ({
+            ...(current && typeof current === "object" ? current : {}),
+            [message.key]: message.value,
+          }))
           break
         }
         case "requestVariants": {
@@ -1740,7 +1768,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         }
         case "persistRecents":
-          await this.extensionContext?.globalState.update("recentModels", validateRecents(message.recents))
+          await hostPublications(this.extensionContext)?.write("recentModels", validateRecents(message.recents))
           break
         case "requestRecents": {
           const recents = validateRecents(this.extensionContext?.globalState.get("recentModels"))
@@ -1973,6 +2001,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           { cutoff: routine.cutoff, draft: routine.draft, attachmentIDs: routine.attachmentIDs },
           Date.now() + 5000,
         )
+        this.routineDrafts.confirmCapture(routine.requestID, routine.paneID, proof)
         this.postMessage({
           type: "routineInboxFlushed",
           requestID: routine.requestID,
@@ -2061,6 +2090,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       })
     } catch (err) {
       if (routine.type === "routineInboxMount" || routine.type === "routineInboxFlush") {
+        if (routine.type === "routineInboxFlush")
+          this.routineDrafts.confirmCapture(routine.requestID, routine.paneID, undefined, err)
         this.postMessage({
           type: routine.type === "routineInboxMount" ? "routineInboxMounted" : "routineInboxFlushed",
           requestID: routine.requestID,
@@ -2451,7 +2482,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async handleModelSelectorExpandedMessage(message: TypedWebviewMessage): Promise<boolean> {
     if (message.type === "persistModelSelectorExpanded") {
       if (typeof message.value !== "boolean") return true
-      await this.extensionContext?.globalState.update("modelSelectorExpanded", message.value)
+      await hostPublications(this.extensionContext)?.write("modelSelectorExpanded", message.value)
       this.connectionService.notifyModelSelectorExpandedChanged(message.value)
       return true
     }
@@ -2501,17 +2532,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     providerID: string
     modelID: string
   }): Promise<void> {
-    const current = validateFavorites(this.extensionContext?.globalState.get("favoriteModels"))
-    const key = `${message.providerID}/${message.modelID}`
-    const exists = current.some((f) => `${f.providerID}/${f.modelID}` === key)
-    const favorites =
-      message.action === "add" && !exists
+    const body = (raw: unknown) => {
+      const current = validateFavorites(raw)
+      const key = `${message.providerID}/${message.modelID}`
+      const exists = current.some((f) => `${f.providerID}/${f.modelID}` === key)
+      return message.action === "add" && !exists
         ? [...current, { providerID: message.providerID, modelID: message.modelID }]
         : message.action === "remove" && exists
           ? current.filter((f) => `${f.providerID}/${f.modelID}` !== key)
           : current
-    await this.extensionContext?.globalState.update("favoriteModels", favorites)
-    this.connectionService.notifyFavoritesChanged(favorites)
+    }
+    const owner = hostPublications(this.extensionContext)
+    const favorites = owner ? await owner.mutate("favoriteModels", body) : body(undefined)
+    this.connectionService.notifyFavoritesChanged(validateFavorites(favorites))
   }
 
   /**
@@ -2580,6 +2613,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     console.log("[Raya] Provider: 🔧 Starting initializeConnection...")
 
     this.connectionState = "connecting"
+    this.speech?.drop()
     this.routineRefresh.invalidate()
     this.routineEvents.invalidate()
     this.connectionGeneration++
@@ -2786,12 +2820,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     return sessionToWebview(session)
   }
 
-  private async handleCreateSession(): Promise<void> {
+  private async handleCreateSession(draftID?: string): Promise<void> {
     if (!this.client) {
-      this.postMessage({
-        type: "error",
-        message: "Not connected to CLI backend",
-      })
+      this.postMessage(
+        draftID
+          ? { type: "sendMessageFailed", error: "Not connected to CLI backend", text: "", draftID }
+          : { type: "error", message: "Not connected to CLI backend" },
+      )
       return
     }
 
@@ -2802,25 +2837,28 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         { directory: workspaceDir, platform: this.opts.platform, metadata },
         { throwOnError: true },
       )
-      this.stopCurrentSessionProcesses(session.id)
-      this.setCurrentSession(session)
-      this.contextSessionID = session.id
-      this.focusSession(session.id)
+      if (!draftID) {
+        this.stopCurrentSessionProcesses(session.id)
+        this.setCurrentSession(session)
+        this.contextSessionID = session.id
+        this.focusSession(session.id)
+      }
       this.trackDirectory(session.id, workspaceDir)
       this.trackedSessionIds.add(session.id)
 
       // Notify webview of the new session
       this.postMessage({
         type: "sessionCreated",
+        draftID,
         projectId: this.opts.projectQualifier?.()?.projectId,
-        session: this.sessionToWebview(this.currentSession!),
+        session: this.sessionToWebview(session),
       })
     } catch (error) {
       console.error("[Raya] Provider: Failed to create session:", error)
-      this.postMessage({
-        type: "error",
-        message: getErrorMessage(error) || "Failed to create session",
-      })
+      const message = getErrorMessage(error) || "Failed to create session"
+      this.postMessage(
+        draftID ? { type: "sendMessageFailed", error: message, text: "", draftID } : { type: "error", message },
+      )
     }
   }
 
@@ -3126,6 +3164,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    */
   private getSessionRefreshContext(revision: number): SessionRefreshContext {
     const client = this.client
+    const generation = this.connectionGeneration
+    const directory = this.getWorkspaceDirectory()
     return {
       pendingSessionRefresh: this.pendingSessionRefresh,
       connectionState: this.connectionState,
@@ -3135,8 +3175,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         : null,
       sessionDirectories: this.sessionDirectories,
       worktreeDirectories: this.opts.worktreeDirectories,
-      workspaceDirectory: this.getWorkspaceDirectory(),
-      isCurrent: () => revision === this.sessionRefreshRevision,
+      workspaceDirectory: directory,
+      isCurrent: () =>
+        revision === this.sessionRefreshRevision &&
+        generation === this.connectionGeneration &&
+        client === this.client &&
+        sameDirectory(directory, this.getWorkspaceDirectory()),
       postMessage: (msg: unknown) => this.postMessage(msg),
     }
   }
@@ -3157,7 +3201,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     } catch (error) {
       console.error("[Raya] Provider: Failed to flush session refresh:", error)
     }
-    this.pendingSessionRefresh = ctx.pendingSessionRefresh
+    if (revision === this.sessionRefreshRevision) this.pendingSessionRefresh = ctx.pendingSessionRefresh
   }
 
   /**
@@ -3178,7 +3222,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         message: getErrorMessage(error) || "Failed to load sessions",
       })
     }
-    this.pendingSessionRefresh = ctx.pendingSessionRefresh
+    if (revision === this.sessionRefreshRevision) this.pendingSessionRefresh = ctx.pendingSessionRefresh
   }
 
   private async handleContextRequest(message: ContextRequestMessage): Promise<void> {
@@ -3325,6 +3369,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private async handleSessionControl(message: {
     type: string
+    draftID?: unknown
     sessionID?: string
     source?: unknown
     messageID?: string
@@ -3352,7 +3397,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return true
     }
     if (message.type === "createSession") {
-      await this.handleCreateSession()
+      const draft = message.draftID
+      if (
+        draft !== undefined &&
+        (typeof draft !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(draft))
+      ) {
+        this.postMessage({ type: "error", message: "Invalid session creation request" })
+        return true
+      }
+      await this.handleCreateSession(draft)
       return true
     }
     if (message.type !== "clearSession") return false
@@ -3817,6 +3871,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async handleMemoryMessage(message: Record<string, unknown>): Promise<boolean> {
+    if (await this.brain?.accept(message, (value) => this.postMessage(value))) return true
     return this.memory.handle(message)
   }
 
@@ -5326,8 +5381,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (
       !identity.projectID ||
       this.composerGeneration() !== revision ||
-      this.composerOwners.find((item) => item.box === target.box)?.owner !==
-        composerOwner(identity.workspace, identity.projectID)
+      (!target.sessionID &&
+        this.composerOwners.find((item) => item.box === target.box)?.owner !==
+          composerOwner(identity.workspace, identity.projectID))
     ) {
       this.composerSignature = undefined
       this.composerGeneration()
@@ -5431,6 +5487,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     contextDirectory?: string,
     capture?: DraftCapture,
   ): Promise<void> {
+    const voice = agent === "voice" && sessionID ? this.speech?.captureVoiceTurn(sessionID) : undefined
     if (!this.client) {
       this.postMessage({
         type: "sendMessageFailed",
@@ -5535,6 +5592,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
               throw new Error(
                 "The goal's connection or workspace changed. Your task was not sent. Review the saved goal before retrying.",
               )
+            if (voice && messageID && current()) this.speech?.bindVoiceTurn(sid, messageID, voice)
             return this.client!.session.promptAsync({
               sessionID: sid,
               directory: dir,
@@ -6102,9 +6160,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
 
     // Clear globalState items that are not part of the configuration
-    await this.extensionContext?.globalState.update("variantSelections", undefined)
-    await this.extensionContext?.globalState.update("recentModels", undefined)
-    await this.extensionContext?.globalState.update("modelUsage", undefined)
+    await hostPublications(this.extensionContext)?.write("variantSelections", undefined)
+    await hostPublications(this.extensionContext)?.write("recentModels", undefined)
+    await hostPublications(this.extensionContext)?.write("modelUsage", undefined)
     await this.extensionContext?.globalState.update("kilo.dismissedNotificationIds", undefined)
     await this.extensionContext?.globalState.update("kilo.agentMigrationBannerDismissed", undefined)
     await this.extensionContext?.globalState.update("kilo.marketplace.dismissedSuggestions", undefined)
@@ -6118,7 +6176,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.postMessage(buildThroughputSettingMessage())
     this.postMessage(buildAutoApprovalReasonSettingMessage())
     this.sendWorkStyle()
-    await ModelState.reset(this.client, (msg) => this.postMessage(msg))
+    const client = this.client
+    await ModelState.reset(
+      client,
+      (msg) => this.postMessage(msg),
+      () => !!client && this.connectionService.isClientCurrent(client),
+    )
 
     // Re-send globalState items to the webview
     this.postMessage({ type: "variantsLoaded", variants: {} })
@@ -6320,6 +6383,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     void this.routineEvents.hint(props?.event)
   }
 
+  private terminal(info: import("@kilocode/sdk/v2").Message, kind: "success" | "failure") {
+    if (info.role !== "assistant") return false
+    if (kind === "success") return typeof info.time.completed === "number" && info.finish === "stop" && !info.error
+    return (
+      Boolean(info.error) ||
+      (typeof info.time.completed === "number" &&
+        ["error", "length", "content-filter", "unknown"].includes(info.finish ?? ""))
+    )
+  }
+
   private handleEvent(event: ProviderEvent, directory?: string): void {
     if ((event as { type: string }).type === "raya.chief.note.available") {
       const raw = (event as { properties?: unknown }).properties
@@ -6419,7 +6492,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         .accepted(event.properties.sessionID, event.properties.info.id, event.properties.info.role)
         .catch(() => console.error("[Raya] Saved composer acceptance could not be confirmed"))
       this.confirmations.confirm(event.properties.info.id)
-      this.speech?.trackMessage(event.properties.sessionID, event.properties.info.role, event.properties.info.id) // raya_change - extension-host Voice to MiniMax handoff
+      this.speech?.trackMessage(
+        event.properties.sessionID,
+        event.properties.info.role,
+        event.properties.info.id,
+        event.properties.info.role === "assistant" ? event.properties.info.parentID : undefined,
+        this.terminal(event.properties.info, "success"),
+        this.terminal(event.properties.info, "failure"),
+      ) // raya_change - extension-host Voice to MiniMax handoff
     }
 
     // session.status events pass the onEventFiltered pre-filter for all providers (see line 842),
@@ -6429,6 +6509,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     // busy-session warning on Save.
     if (event.type === "session.status") {
       const sid = event.properties.sessionID
+      this.speech?.busy(sid, event.properties.status.type)
       const prev = this.sessionStatusMap.get(sid)
       if ((prev === undefined || prev === "idle") && event.properties.status.type !== "idle") {
         this.costs.rearm(sid)
@@ -6555,11 +6636,6 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     if (event.type === "message.removed") {
       this.removeMessageCost(event.properties.messageID)
-    }
-    if (event.type === "session.created" && !this.currentSession) {
-      this.setCurrentSession(event.properties.info)
-      this.contextSessionID = event.properties.info.id
-      this.trackedSessionIds.add(event.properties.info.id)
     }
     if (
       event.type === "session.updated" &&
@@ -7294,8 +7370,105 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
    * Dispose of the provider and clean up subscriptions.
    * Does NOT kill the server — that's the connection service's job.
    */
+  private draftRetirement: Promise<void> | undefined
+  /** Terminal loaded draft controllers only; not profile capture authority. */
+  captureCloseDrafts(): Promise<void> {
+    if (this.draftRetirement) return this.draftRetirement
+    const jobs = [this.composer.captureClose(), this.routineDrafts.captureClose()]
+    this.draftRetirement = Promise.allSettled(jobs).then((results) => {
+      const errors = results.flatMap((item) => (item.status === "rejected" ? [item.reason] : []))
+      if (errors.length) throw new AggregateError(errors, "Raya draft capture closure failed")
+    })
+    return this.draftRetirement
+  }
+
   async flushRoutineDrafts(deadline: number): Promise<boolean> {
     return this.routineDrafts.drain(deadline)
+  }
+
+  /** Joined evidence for a future authenticated producer, never native capture authority. */
+  private metadata: ReturnType<KiloProvider["finishMetadata"]> | undefined
+  private metadataRevision = 0
+  private captureDeadline = 0
+  private preparation: Promise<() => void> | undefined
+  private readonly captureErrors: unknown[] = []
+  captureMetadata(deadline: number) {
+    if (this.metadata) return this.metadata
+    return this.prepareMetadata(deadline)
+  }
+
+  private async prepareMetadata(deadline: number) {
+    const client = this.client
+    if (!client) throw new Error("Host capture has no retained SDK client")
+    await this.prepareCapture(client, deadline).then(
+      (check) => check(),
+      () => undefined,
+    )
+    return this.capturePreparedMetadata()
+  }
+
+  private prepareCapture(client: KiloClient, deadline: number) {
+    if (this.preparation) return this.preparation
+    this.capturePreparing = true
+    this.captureClient = client
+    this.captureDeadline = deadline
+    this.preparation = this.prepareDraftProofs(deadline)
+    return this.preparation
+  }
+
+  private async prepareDraftProofs(deadline: number) {
+    if (!Number.isSafeInteger(deadline) || deadline <= Date.now() || deadline > Date.now() + 60_000)
+      throw new Error("Host capture deadline is invalid")
+    const results = await Promise.allSettled([
+      this.composer.prepareCapture(deadline),
+      this.routineDrafts.prepare(deadline, (msg) => this.postMessage(msg)),
+    ])
+    const errors = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+    this.captureErrors.push(...errors)
+    if (errors.length) throw new AggregateError(errors, "Host final draft flush failed")
+    return () => {
+      for (const result of results) {
+        if (result.status !== "fulfilled" || typeof result.value !== "function") continue
+        try {
+          result.value()
+        } catch (err) {
+          this.captureErrors.push(err)
+          throw err
+        }
+      }
+    }
+  }
+
+  private capturePreparedMetadata() {
+    return (this.metadata ??= this.finishMetadata())
+  }
+
+  private async finishMetadata() {
+    const errors = [...this.captureErrors]
+    const jobs = [
+      ComposerDrafts.captureCloseAll(),
+      this.captureCloseDrafts(),
+      ModelState.captureSnapshot(),
+      hostPublications(this.extensionContext, false)?.captureSnapshot(),
+    ] as const
+    const snapshots = await Promise.allSettled(jobs)
+    errors.push(...snapshots.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])))
+    if (Date.now() >= this.captureDeadline) errors.push(new Error("Host capture preparation deadline expired"))
+    if (errors.length) throw new AggregateError(errors, "Host capture preparation failed")
+    const models = snapshots[2]
+    const preferences = snapshots[3]
+    this.metadataRevision++
+    return Object.freeze({
+      format: "raya.host-root-snapshot",
+      version: 1,
+      generation: this.instanceId,
+      revision: this.metadataRevision,
+      reviewOnly: true,
+      authority: "evidence-only",
+      drafts: "durable-source-sql-after-final-flush",
+      models: models?.status === "fulfilled" ? models.value : undefined,
+      preferences: preferences?.status === "fulfilled" ? preferences.value : undefined,
+    })
   }
 
   dispose(): void {

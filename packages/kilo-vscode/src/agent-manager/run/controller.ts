@@ -29,6 +29,7 @@ interface Options {
   state: () => WorktreeStateManager | undefined
   open: (path: string) => Promise<void>
   start: StartTask
+  reserve?: () => { start: StartTask; release(): void }
   post: (status: RunStatus) => void
   error: (msg: string) => void
   log: (msg: string) => void
@@ -40,6 +41,10 @@ export class RunController {
   private service: RunScriptService | undefined
   private serviceRoot: string | undefined
   private readonly manager: RunScriptManager
+  private retired = false
+  private closing: Promise<void> | undefined
+  private readonly pending = new Set<Promise<void>>()
+  private readonly failures: unknown[] = []
 
   constructor(private readonly opts: Options) {
     this.manager = new RunScriptManager(opts.log, opts.post)
@@ -55,7 +60,11 @@ export class RunController {
     }
   }
 
-  async configure(): Promise<void> {
+  configure(): Promise<void> {
+    return this.accept(() => this.settings())
+  }
+
+  private async settings(): Promise<void> {
     const service = this.getService()
     if (!service) return
     if (!service.hasScript()) await service.createDefaultScript()
@@ -64,7 +73,15 @@ export class RunController {
     this.opts.refresh?.()
   }
 
-  async run(worktreeId: string, destination: RunTerminalDestination): Promise<void> {
+  run(worktreeId: string, destination: RunTerminalDestination): Promise<void> {
+    if (this.retired) return Promise.reject(new Error("Run controller intake is retired"))
+    const reservation = this.opts.reserve?.()
+    return this.accept(() => this.execute(worktreeId, destination, reservation?.start ?? this.opts.start)).finally(() =>
+      reservation?.release(),
+    )
+  }
+
+  private async execute(worktreeId: string, destination: RunTerminalDestination, launch: StartTask): Promise<void> {
     const status = this.manager.status(worktreeId)
     if (status.state !== "idle") {
       this.stop(worktreeId)
@@ -102,7 +119,7 @@ export class RunController {
 
     const script = service.resolveTask()
     if (!script) {
-      await this.configure()
+      await this.settings()
       return
     }
 
@@ -114,23 +131,53 @@ export class RunController {
     }
 
     const start = () =>
-      this.opts.start(
-        { destination, worktreeId, branch, command: script.command, args: script.args, cwd, env },
-        (exit) => this.manager.finish(worktreeId, exit),
+      launch({ destination, worktreeId, branch, command: script.command, args: script.args, cwd, env }, (exit) =>
+        this.manager.finish(worktreeId, exit),
       )
     await this.manager.start(worktreeId, start)
   }
 
   stop(worktreeId: string): void {
-    void this.manager.stop(worktreeId)
+    void this.manager.stop(worktreeId).catch((err: unknown) => {
+      this.failures.push(err)
+    })
   }
 
   remove(worktreeId: string): Promise<void> {
     return this.manager.remove(worktreeId)
   }
 
-  dispose(): void {
-    this.manager.dispose()
+  fence(): void {
+    this.retired = true
+  }
+
+  dispose(): Promise<void> {
+    if (this.closing) return this.closing
+    this.fence()
+    this.closing = (async () => {
+      while (this.pending.size) await Promise.all([...this.pending])
+      const result = await this.manager.dispose().then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      const errors = [...this.failures, ...(result ? [result] : [])]
+      if (errors.length) throw new AggregateError(errors, "Run controller retirement failed")
+    })()
+    return this.closing
+  }
+
+  private accept(body: () => Promise<void>): Promise<void> {
+    if (this.retired) return Promise.reject(new Error("Run controller intake is retired"))
+    const result = Promise.resolve().then(body)
+    const task = result.then(
+      () => undefined,
+      (err: unknown) => {
+        this.failures.push(err)
+      },
+    )
+    this.pending.add(task)
+    void task.then(() => this.pending.delete(task))
+    return result
   }
 
   private getService(): RunScriptService | undefined {

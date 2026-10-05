@@ -149,14 +149,16 @@ describe("native desktop capture host", () => {
   })
 
   it("calibrates source clocks through a real child pipe, retaining receipt stamps and bounded uncertainty", async () => {
+    // Bun may start its monotonic epoch near zero; keep the simulated earlier acquisition positive.
     const script = `
+      function tick() { return process.hrtime.bigint()+1000000000n; }
       function packet(value,image=Buffer.from([137,80,78,71,13,10,26,10,1])) {
         const json=Buffer.from(JSON.stringify(value)); const data=Buffer.alloc(8+json.length+image.length);
         data.writeUInt32LE(json.length,0); json.copy(data,4); data.writeUInt32LE(image.length,4+json.length); image.copy(data,8+json.length); process.stdout.write(data);
       }
-      function image(sequence) { const now=process.hrtime.bigint(); packet({v:3,type:"frame",epoch:1,sequence,windowID:"0x12AB",location:"pid:42;title:Private;bounds:0,0,1,1",width:1,height:1,mime:"image/png",acquisitionMs:10,preparationMs:10,clock:{version:1,acquisition:String(now-20000000n),prepared:String(now),frequency:"1000000000"}}); }
+      function image(sequence) { const now=tick(); packet({v:3,type:"frame",epoch:1,sequence,windowID:"0x12AB",location:"pid:42;title:Private;bounds:0,0,1,1",width:1,height:1,mime:"image/png",acquisitionMs:10,preparationMs:10,clock:{version:1,acquisition:String(now-20000000n),prepared:String(now),frequency:"1000000000"}}); }
       let buffer=Buffer.alloc(0);
-      process.stdin.on("data",chunk=>{ buffer=Buffer.concat([buffer,chunk]); while(buffer.length>=148) { const data=buffer.subarray(0,148);buffer=buffer.subarray(148); if(data.toString("ascii",0,4)!=="RCC1")process.exit(9); const request=data.toString("ascii",52,84);packet({v:3,type:"clock",request,tick:String(process.hrtime.bigint()),frequency:"1000000000"},Buffer.alloc(0));setTimeout(()=>image(2),20); } });
+      process.stdin.on("data",chunk=>{ buffer=Buffer.concat([buffer,chunk]); while(buffer.length>=148) { const data=buffer.subarray(0,148);buffer=buffer.subarray(148); if(data.toString("ascii",0,4)!=="RCC1")process.exit(9); const request=data.toString("ascii",52,84);packet({v:3,type:"clock",request,tick:String(tick()),frequency:"1000000000"},Buffer.alloc(0));setTimeout(()=>image(2),20); } });
       image(1);setInterval(()=>{},1000);
     `
     const errors: Error[] = []

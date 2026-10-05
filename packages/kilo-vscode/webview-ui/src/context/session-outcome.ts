@@ -39,18 +39,30 @@ function identifiers(
   return { vercelID: part?.vercelID ?? vercelID(message), generationID: part?.generationID }
 }
 
+function interrupted(message: Message | undefined) {
+  return (
+    message?.role === "assistant" &&
+    message.error?.name === "MessageAbortedError" &&
+    typeof message.time?.completed === "number" &&
+    Number.isFinite(message.time.completed)
+  )
+}
+
 export function terminal(input: Input): TerminalState | undefined {
-  if (!input.reason) return undefined
+  const last = input.messages[input.messages.length - 1]
+  // Reloaded history has no live close event. A settled aborted assistant
+  // retains the interruption until a newer message replaces that last turn.
+  const reason = input.reason ?? (interrupted(last) ? "interrupted" : undefined)
+  if (!reason) return undefined
   // A superseded turn handed off to a queued follow-up; it is not a premature
   // stop, and the follow-up turn closes with its own reason afterwards.
-  if (input.reason === "superseded") return undefined
-  const last = input.messages[input.messages.length - 1]
+  if (reason === "superseded") return undefined
   const finish = last?.role === "assistant" ? last.finish : undefined
   const ids = identifiers(last, input.parts)
   const remaining = input.todos.filter((item) => item.status !== "completed" && item.status !== "cancelled").length
 
-  if (input.reason === "interrupted") return { kind: "interrupted", tone: "warning", finish, remaining }
-  if (input.reason === "error") {
+  if (reason === "interrupted") return { kind: "interrupted", tone: "warning", finish, remaining }
+  if (reason === "error") {
     if (last?.role === "assistant" && last.error && !input.hidden?.(last.id)) return undefined
     return { kind: "error", tone: "critical", finish, remaining }
   }

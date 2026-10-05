@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 export type RoutineDraftProof = {
   owner: string
   conversationID: string
@@ -41,6 +43,16 @@ type Snapshot = {
   cutoff: number
   draft: string | null
   attachmentIDs: string[]
+}
+
+type Capture = {
+  type: "routineInboxCapture"
+  requestID: string
+  paneID: string
+  agentID: string
+  owner: string
+  conversationID: string
+  deadline: number
 }
 
 function same(a: readonly string[], b: readonly string[]) {
@@ -97,8 +109,103 @@ function proof(pane: Pane, ack: RoutineDraftProof | undefined, revision: number,
 
 export class RoutineDrafts {
   private readonly panes = new Map<string, Pane>()
+  private closed = false
+  private retirement: Promise<void> | undefined
+  private readonly jobs = new Set<Promise<unknown>>()
+  private readonly errors: unknown[] = []
+  private readonly captures = new Map<
+    string,
+    { pane: string; resolve: (proof: RoutineDraftProof) => void; reject: (err: unknown) => void }
+  >()
+
+  prepare(deadline: number, post: (msg: Capture) => void) {
+    this.admit()
+    return this.track(this.prepareOwned(deadline, post))
+  }
+
+  private async prepareOwned(deadline: number, post: (msg: Capture) => void) {
+    if (!Number.isSafeInteger(deadline) || deadline <= Date.now() || deadline > Date.now() + 60_000)
+      refused("Routine capture deadline is invalid")
+    const jobs = [...this.panes].map(([id, pane]) => {
+      const requestID = randomUUID()
+      let resolve!: (proof: RoutineDraftProof) => void
+      let reject!: (err: unknown) => void
+      const promise = new Promise<RoutineDraftProof>((yes, no) => {
+        resolve = yes
+        reject = no
+      })
+      const pending = { promise, resolve, reject }
+      this.captures.set(requestID, { pane: id, resolve: pending.resolve, reject: pending.reject })
+      const job = bounded(pending.promise, deadline).finally(() => this.captures.delete(requestID))
+      this.track(job)
+      try {
+        if (!pane.current() || pane.closed) refused("Routine capture source changed")
+        post({
+          type: "routineInboxCapture",
+          requestID,
+          paneID: id,
+          agentID: pane.agentID,
+          owner: pane.owner,
+          conversationID: pane.conversationID,
+          deadline,
+        })
+      } catch (err) {
+        pending.reject(err)
+      }
+      return job
+    })
+    const results = await Promise.allSettled(jobs)
+    const errors = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+    if (errors.length) throw new AggregateError(errors, "Routine final draft flush failed")
+    if (!(await this.drain(deadline))) refused("Routine final draft proof changed")
+  }
+
+  confirmCapture(requestID: string, paneID: string, proof?: RoutineDraftProof, err?: unknown) {
+    const capture = this.captures.get(requestID)
+    if (!capture || capture.pane !== paneID) return
+    const pane = this.panes.get(paneID)
+    if (
+      err ||
+      !proof ||
+      !pane ||
+      !pane.current() ||
+      pane.closed ||
+      proof.owner !== pane.owner ||
+      proof.conversationID !== pane.conversationID ||
+      proof.revision !== pane.revision
+    ) {
+      capture.reject(err ?? new Error("Routine final draft capture proof is invalid"))
+      return
+    }
+    capture.resolve(proof)
+  }
+  private admit() {
+    if (this.closed) refused("Routine draft intake is retired")
+  }
+  private track<T>(job: Promise<T>): Promise<T> {
+    this.jobs.add(job)
+    void job.then(
+      () => this.jobs.delete(job),
+      (err) => {
+        this.errors.push(err)
+        this.jobs.delete(job)
+      },
+    )
+    return job
+  }
+  /** Joins accepted bodies even after pane removal; supplies no capture authority. */
+  captureClose(): Promise<void> {
+    if (this.retirement) return this.retirement
+    this.closed = true
+    this.retirement = (async () => {
+      while (this.jobs.size) await Promise.allSettled([...this.jobs])
+      if (this.errors.length) throw new AggregateError([...this.errors], "Routine draft capture closure failed")
+    })()
+    return this.retirement
+  }
 
   mount(id: string, scope: Scope) {
+    this.admit()
     if (!valid(id) || !valid(scope.agentID) || !valid(scope.owner) || !valid(scope.conversationID))
       refused("Reload the conversation before saving its draft.")
     if (!number(scope.revision, 0) || !scope.current() || this.panes.has(id))
@@ -122,6 +229,7 @@ export class RoutineDrafts {
   }
 
   issue(edit: Edit) {
+    this.admit()
     const pane = this.panes.get(edit.paneID)
     if (!pane || pane.closed || !pane.current() || pane.agentID !== edit.agentID)
       refused("This worker conversation changed. Reload its draft before saving.")
@@ -142,7 +250,7 @@ export class RoutineDrafts {
       resolve = yes
       reject = no
     })
-    void pending.catch(() => undefined)
+    this.track(pending)
     pane.pending.set(edit.sequence, pending)
     let settled = false
     let files: string[] | undefined
@@ -233,7 +341,16 @@ export class RoutineDrafts {
       refused("The draft save was not confirmed.")
   }
 
-  async flush(
+  flush(
+    id: string,
+    identity: Pick<Scope, "agentID" | "owner" | "conversationID">,
+    snapshot: Snapshot,
+    deadline: number,
+  ): Promise<RoutineDraftProof> {
+    this.admit()
+    return this.track(this.flushOwned(id, identity, snapshot, deadline))
+  }
+  private async flushOwned(
     id: string,
     identity: Pick<Scope, "agentID" | "owner" | "conversationID">,
     snapshot: Snapshot,
@@ -243,11 +360,11 @@ export class RoutineDrafts {
     pane.flushing = true
     try {
       await this.join(pane, snapshot.cutoff, deadline)
-      const prior = proof(pane, await bounded(pane.read(), deadline), pane.revision, deadline)
+      const prior = proof(pane, await bounded(this.track(pane.read()), deadline), pane.revision, deadline)
       if (snapshot.cutoff > pane.sequence || !content(prior, snapshot)) {
         const ack = proof(
           pane,
-          await bounded(pane.write(snapshot.draft, snapshot.attachmentIDs, pane.revision), deadline),
+          await bounded(this.track(pane.write(snapshot.draft, snapshot.attachmentIDs, pane.revision)), deadline),
           pane.revision + 1,
           deadline,
         )
@@ -256,7 +373,7 @@ export class RoutineDrafts {
         pane.sequence = snapshot.cutoff
         pane.confirmed = snapshot.cutoff
       }
-      const ack = proof(pane, await bounded(pane.read(), deadline), pane.revision, deadline)
+      const ack = proof(pane, await bounded(this.track(pane.read()), deadline), pane.revision, deadline)
       if (!content(ack, snapshot)) refused("The saved conversation changed before confirmation.")
       pane.cutoff = snapshot.cutoff
       return ack
@@ -269,6 +386,7 @@ export class RoutineDrafts {
   }
 
   send(id: string, identity: Pick<Scope, "agentID" | "owner" | "conversationID">) {
+    this.admit()
     const pane = this.panes.get(id)
     if (
       !pane ||
@@ -291,7 +409,7 @@ export class RoutineDrafts {
       resolve = yes
       reject = no
     })
-    void pending.catch(() => undefined)
+    this.track(pending)
     pane.sending = pending
     let settled = false
     let confirmed = false
@@ -355,7 +473,7 @@ export class RoutineDrafts {
         const limit = new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error("Routine draft shutdown proof timed out.")), timeout)
         })
-        const ack = await Promise.race([pane.read(), limit]).finally(() => {
+        const ack = await Promise.race([this.track(pane.read()), limit]).finally(() => {
           if (timer) clearTimeout(timer)
         })
         if (

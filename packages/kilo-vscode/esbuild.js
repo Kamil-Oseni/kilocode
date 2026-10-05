@@ -261,6 +261,10 @@ function getExtensionConfig() {
     sourcemap: !production,
     sourcesContent: false,
     platform: "node",
+    // The UMD factory hides relative requires from esbuild; bundle the published ESM implementation.
+    alias: {
+      "jsonc-parser": path.join(path.dirname(require.resolve("jsonc-parser/package.json")), "lib/esm/main.js"),
+    },
     outfile: "dist/extension.js",
     external: ["vscode", "playwright-core", "esbuild-wasm"], // raya_change - ship host runtimes beside the extension
     logLevel: "silent",
@@ -408,7 +412,11 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+module.exports = { getExtensionConfig }
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
+}

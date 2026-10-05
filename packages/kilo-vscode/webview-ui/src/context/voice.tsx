@@ -31,6 +31,7 @@ import type { LiveUsage } from "../../../src/shared/live-usage"
 import { OpenAIVoice } from "./openai-voice"
 import { createHandoff } from "./voice-handoff"
 import { useSession } from "./session"
+import { voiceFallback } from "../../../src/speech/fallback"
 
 type VoiceStatus = "off" | "connecting" | "listening" | "thinking" | "speaking" | "degraded"
 
@@ -58,11 +59,15 @@ type VoiceContextValue = {
   error: Accessor<string | undefined>
   update: (settings: Partial<SpeechSettings>) => void
   setKey: (kind: SpeechKey, key?: string) => void
+  setupLocal: () => void
+  output: Accessor<string | undefined>
   setMode: (mode: VoiceMode) => void
   start: (sessionID: string) => void
+  prepare: () => (() => void) | undefined
   listen: () => void
   hear: () => void
-  wait: () => void
+  pause: (message: string) => void
+  wait: (sessionID: string) => void
   clean: (text: string) => string | undefined
   recover: () => boolean
   test: () => void
@@ -74,6 +79,11 @@ const Context = createContext<VoiceContextValue>()
 export const VoiceProvider: ParentComponent = (props) => {
   const vscode = useVSCode()
   const session = useSession()
+  const [loaded, setLoaded] = createSignal(false)
+  const loading: { attempts: number; timer?: ReturnType<typeof setTimeout>; closed: boolean } = {
+    attempts: 0,
+    closed: false,
+  }
   const usage = createVoiceUsage(session.currentSessionID)
   const [settings, setSettings] = createSignal<SpeechState>({
     ...DEFAULT_SPEECH_SETTINGS,
@@ -87,12 +97,29 @@ export const VoiceProvider: ParentComponent = (props) => {
   const [silenced, setSilenced] = createSignal(false)
   const [muted, setMuted] = createSignal(false)
   const [playing, setPlaying] = createSignal(false)
+  const [output, setOutput] = createSignal<string>()
+  const choice: { expected?: string } = {}
   const [status, setStatus] = createSignal<VoiceStatus>("off")
   const [transcript, setTranscript] = createSignal<RealtimeTranscript>()
   const [aec, setAec] = createSignal(false)
   const [error, setError] = createSignal<string | undefined>()
+  function available() {
+    if (loaded()) return true
+    setError("Loading saved Speech settings. Voice remains off until they are available.")
+    return false
+  }
   const [cascade, setCascade] = createSignal(false)
   const state = { request: "", generation: 0, terminal: false }
+  const diagnostics = { count: 0 }
+  const trace = (event: string, request: string) => {
+    if (diagnostics.count++ >= 24) return
+    console.info("[Raya Voice playback]", {
+      event,
+      request: /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request)
+        ? request
+        : undefined,
+    })
+  }
   let call: { id: string; session: string; engine: "live" | "realtime" } | undefined
   let pending: { id: string; resolve: (sdp: string) => void; reject: (error: Error) => void } | undefined
   let feed: ReturnType<typeof pump> | undefined
@@ -108,47 +135,54 @@ export const VoiceProvider: ParentComponent = (props) => {
     },
   )
   const legacy = () =>
-    !["openai-realtime", "openai-live"].includes(settings().voiceEngine) && !call && !recovery.blocked()
+    loaded() && !["openai-realtime", "openai-live"].includes(settings().voiceEngine) && !call && !recovery.blocked()
   const echo = new VoiceEcho()
   const player = new StreamPlayer(
     () => {
       if (!legacy()) return
       setPlaying(false)
       loop.done()
-      if (settings().mode === "hands-free" && cascade()) setStatus("listening")
+      if (settings().mode === "hands-free" && cascade() && !loop.paused()) setStatus("listening")
     },
     (message) => {
       if (legacy()) setError(message)
     },
+    (row) => console.info("[Raya Voice playback]", row),
   )
   const loop = new VoiceLoop({
-    listen: () => queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen"))),
+    listen: () =>
+      queueMicrotask(() => {
+        if (!loop.paused()) window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+      }),
     stop: () => {
+      delete choice.expected
       vscode.postMessage({ type: "speechPlaybackCancel", requestId: state.request || undefined })
+      state.request = ""
       if (playing()) echo.interrupt(player.elapsed())
       player.reset() // raya_change - interruption preserves the gesture-authorized sink for later turns
       setPlaying(false)
     },
   })
   function degrade(message: string) {
-    if (!legacy()) return
+    if (!legacy() || loop.paused()) return
     setCascade(true)
     setError(message)
     setStatus("degraded")
-    const fallback = settings().sttEndpoint && settings().hasSttKey && settings().hasTtsKey
-    if (!fallback) return
+    if (voiceFallback(settings()) !== "cascade-v1") return
     loop.set("hands-free")
-    queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))
+    queueMicrotask(() => {
+      if (!loop.paused()) window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+    })
   }
   const realtime = new RealtimeVoice({
     status: (value) => {
-      if (legacy()) setStatus(value)
+      if (legacy() && !loop.paused()) setStatus(value)
     },
     transcript: (value) => {
-      if (legacy()) setTranscript(value)
+      if (legacy() && !loop.paused()) setTranscript(value)
     },
     error: (message) => {
-      if (!legacy()) return
+      if (!legacy() || loop.paused()) return
       setError(message)
       if (!state.terminal) vscode.postMessage({ type: "speechRealtimeStop" })
       state.terminal = true
@@ -390,6 +424,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     return true
   }
   function demote(message: Extract<ExtensionMessage, { type: "speechRealtimeError" }>) {
+    if (loop.paused()) return
     if (message.code === "busy") {
       setError(message.error)
       return
@@ -400,30 +435,47 @@ export const VoiceProvider: ParentComponent = (props) => {
       setError(settings().voiceEngine === "cascade-v1" ? undefined : message.error)
       setStatus(settings().voiceEngine === "cascade-v1" ? "connecting" : "degraded")
       loop.set("hands-free")
-      queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))
+      queueMicrotask(() => {
+        if (!loop.paused()) window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+      })
       return
     }
     setError(message.error)
     setStatus("degraded")
   }
 
+  function selection(message: ExtensionMessage) {
+    if (message.type === "speechPlaybackVoice") {
+      if (loop.paused()) return true
+      const text = `${message.model} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${message.voice}${message.fallback ? ` (fallback${message.reason ? `: ${message.reason}` : ""})` : ""}`
+      if (message.requestId === state.request && choice.expected === message.requestId) setOutput(text)
+      return true
+    }
+    return false
+  }
+
   function playback(message: ExtensionMessage) {
+    if (loop.paused() && message.type.startsWith("speechPlayback")) {
+      if (message.type === "speechPlaybackChunk") trace("chunk-paused", message.requestId)
+      return true
+    }
     if (message.type === "speechPlaybackChunk") {
-      if (message.text) echo.set(message.text)
-      const starting = message.requestId !== state.request || !playing()
-      // raya_change - extension-host Voice completion owns its generated playback request
-      if (message.requestId !== state.request) {
-        if (settings().mode !== "hands-free") return true
-        player.reset()
-        state.request = message.requestId
+      if (message.requestId !== state.request || !state.request) {
+        trace("chunk-stale", message.requestId)
+        return true
       }
+      trace("chunk-received", message.requestId)
+      if (message.text) echo.set(message.text)
+      const starting = !playing()
       setPlaying(true)
       setError(undefined)
       loop.speak()
       if (settings().mode === "hands-free" && status() !== "off") setStatus("speaking")
-      player.push(message.data, message.mime)
+      player.push(message.data, message.mime, message.requestId)
       if (starting && settings().mode === "hands-free" && cascade()) {
-        queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))
+        queueMicrotask(() => {
+          if (!loop.paused()) window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+        })
       }
       return true
     }
@@ -436,10 +488,34 @@ export const VoiceProvider: ParentComponent = (props) => {
       if (message.requestId !== state.request) return true
       console.error("[Raya] Speech playback failed:", message.error)
       setError(message.error)
-      player.stop()
+      loop.pause()
+      window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
+      player.stop(false)
+      setPlaying(false)
+      setStatus("degraded")
       return true
     }
     return false
+  }
+
+  function receive(value: SpeechState) {
+    if (!valid(value)) return
+    if (!loaded()) setError(undefined)
+    setLoaded(true)
+    clearTimeout(loading.timer)
+    if (value.voiceEngine !== settings().voiceEngine) {
+      stop()
+      recovery.invalidate()
+      setCaptions(undefined)
+      setDuration(undefined)
+      setSilenced(false)
+    }
+    setSettings(value)
+    const mode = ["openai-realtime", "openai-live"].includes(value.voiceEngine) ? "off" : value.mode
+    if (loop.state().mode !== mode) {
+      if (mode !== "hands-free") window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
+      loop.sync(mode)
+    }
   }
 
   const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
@@ -455,25 +531,20 @@ export const VoiceProvider: ParentComponent = (props) => {
     }
     if (openaiMessage(message)) return
     if (message.type === "speechSettingsLoaded") {
-      if (message.settings.voiceEngine !== settings().voiceEngine) {
-        stop()
-        recovery.invalidate()
-        setCaptions(undefined)
-        setDuration(undefined)
-        setSilenced(false)
-      }
-      setSettings(message.settings)
-      loop.set(
-        ["openai-realtime", "openai-live"].includes(message.settings.voiceEngine) ? "off" : message.settings.mode,
-      )
+      receive(message.settings)
       return
     }
     if (!legacy() && (message.type.startsWith("speechRealtime") || message.type.startsWith("speechPlayback"))) {
       if (message.type === "speechRealtimeReady") vscode.postMessage({ type: "speechRealtimeStop" })
       return
     }
+    if (selection(message)) return
     if (playback(message)) return
     if (message.type === "speechRealtimeReady") {
+      if (loop.paused()) {
+        vscode.postMessage({ type: "speechRealtimeStop" })
+        return
+      }
       if (call) {
         vscode.postMessage({ type: "speechRealtimeStop" })
         return
@@ -504,13 +575,15 @@ export const VoiceProvider: ParentComponent = (props) => {
       return
     }
     if (message.type === "speechRealtimeStopped") {
-      if (call) return
+      if (call || loop.paused()) return
       setStatus(state.terminal ? "degraded" : "off")
       setTranscript(undefined)
     }
   })
 
   const speak = (text: string, preserve = false) => {
+    if (!available()) return
+    if (loop.paused()) loop.listen()
     if (preserve) player.reset()
     if (!preserve) {
       player.stop(false)
@@ -518,11 +591,23 @@ export const VoiceProvider: ParentComponent = (props) => {
     }
     setError(undefined)
     state.request = crypto.randomUUID()
+    choice.expected = state.request
     vscode.postMessage({ type: "speechPlaybackStart", requestId: state.request, text })
   }
 
-  vscode.postMessage({ type: "speechSettingsRequest" })
+  const request = () => {
+    if (loading.closed || loaded() || loading.attempts >= 30) return
+    loading.attempts++
+    if (loading.attempts < 30) loading.timer = setTimeout(request, 1000)
+    if (loading.attempts === 30) setError("Speech settings are unavailable. Reload Raya before starting voice.")
+    vscode.postMessage({ type: "speechSettingsRequest" })
+  }
+  request()
   onCleanup(() => {
+    window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
+    loop.pause()
+    loading.closed = true
+    clearTimeout(loading.timer)
     unsubscribe()
     stopOpenAI()
     state.generation++
@@ -533,6 +618,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   })
 
   const update = (patch: Partial<SpeechSettings>) => {
+    if (!available()) return
     if (patch.voiceEngine && patch.voiceEngine !== settings().voiceEngine) {
       stop()
       recovery.invalidate()
@@ -552,9 +638,15 @@ export const VoiceProvider: ParentComponent = (props) => {
         realtimeVoice: next.realtimeVoice,
         mediaFrontendURL: next.mediaFrontendURL,
         sttEndpoint: next.sttEndpoint,
+        sttEngine: next.sttEngine,
         sttModel: next.sttModel,
         ttsEndpoint: next.ttsEndpoint,
         ttsModel: next.ttsModel,
+        ttsEngine: next.ttsEngine,
+        localTtsEndpoint: next.localTtsEndpoint,
+        localTtsModel: next.localTtsModel,
+        localTtsVoice: next.localTtsVoice,
+        localTtsFallback: next.localTtsFallback,
         voice: next.voice,
         mode: next.mode,
         autoSpeak: next.autoSpeak,
@@ -565,6 +657,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     })
   }
   const stop = () => {
+    window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
     state.terminal = false
     setCascade(false)
     echo.clear()
@@ -580,11 +673,16 @@ export const VoiceProvider: ParentComponent = (props) => {
     setStatus("off")
   }
   const setMode = (mode: VoiceMode) => {
+    if (!available()) return
+    if (mode !== "hands-free") stop()
     update(mode === "hands-free" ? { mode, autoSpeak: true } : { mode }) // raya_change - the orb always implies spoken output
-    loop.set(["openai-realtime", "openai-live"].includes(settings().voiceEngine) ? "off" : mode)
+    const next = ["openai-realtime", "openai-live"].includes(settings().voiceEngine) ? "off" : mode
+    if (mode === "hands-free") loop.set(next)
+    if (mode !== "hands-free") loop.sync(next)
   }
 
   const start = (sessionID: string) => {
+    if (!available()) return
     if (call || recovery.blocked()) {
       setError("End the previous voice call and wait for cleanup before starting another.")
       return
@@ -601,6 +699,7 @@ export const VoiceProvider: ParentComponent = (props) => {
       startOpenAI(sessionID)
       return
     }
+    loop.set("hands-free")
     vscode.postMessage({ type: "speechRealtimeStart", sessionID })
   }
 
@@ -635,7 +734,7 @@ export const VoiceProvider: ParentComponent = (props) => {
       value={{
         settings,
         recovery: recovery.state,
-        startBlocked: recovery.blocked,
+        startBlocked: () => !loaded() || recovery.blocked(),
         restart: () => {
           const value = recovery.state()
           if (!value?.ready || value.session !== session.currentSessionID()) return
@@ -688,9 +787,31 @@ export const VoiceProvider: ParentComponent = (props) => {
         error,
         update,
         setKey: (kind, key) => vscode.postMessage({ type: "speechKeyUpdate", kind, key }),
+        setupLocal: () => vscode.postMessage({ type: "speechLocalSetup" }),
+        output,
         setMode,
         start,
+        prepare: () => {
+          if (!available()) return
+          const cleanup = () => {
+            try {
+              player.stop(false)
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Voice audio cleanup failed.")
+              setStatus("degraded")
+            }
+          }
+          try {
+            player.unlock()
+            return cleanup
+          } catch (err) {
+            cleanup()
+            setError(err instanceof Error ? err.message : "Voice audio preparation failed.")
+            setStatus("degraded")
+          }
+        },
         listen: () => {
+          if (!available()) return
           player.unlock()
           loop.listen()
           if (settings().mode === "hands-free" && cascade()) {
@@ -700,10 +821,22 @@ export const VoiceProvider: ParentComponent = (props) => {
         },
         hear: () => {
           loop.hear()
-          if (settings().mode === "hands-free" && cascade()) setStatus("listening")
+          if (settings().mode === "hands-free" && cascade() && !loop.paused()) setStatus("listening")
         },
-        wait: () => {
-          vscode.postMessage({ type: "speechVoiceTurn" }) // raya_change - extension host speaks authoritative final text
+        pause: (message) => {
+          loop.pause()
+          window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
+          setError(message)
+          setStatus("degraded")
+        },
+        wait: (sessionID) => {
+          if (!available() || !sessionID || session.currentSessionID() !== sessionID || loop.paused()) return
+          if (state.request) vscode.postMessage({ type: "speechPlaybackCancel", requestId: state.request })
+          player.reset()
+          setPlaying(false)
+          state.request = crypto.randomUUID()
+          choice.expected = state.request
+          vscode.postMessage({ type: "speechVoiceTurn", sessionID, requestId: state.request }) // raya_change - exact turn owns automatic output before the first chunk
           loop.wait()
           if (settings().mode === "hands-free") setStatus("thinking")
         },
@@ -727,4 +860,37 @@ export function useVoice() {
   const value = useContext(Context)
   if (!value) throw new Error("useVoice must be used within VoiceProvider")
   return value
+}
+
+function valid(value: SpeechState) {
+  if (!value || typeof value !== "object") return false
+  if (!["openai-live", "openai-realtime", "qwen-realtime", "cascade-v1"].includes(value.voiceEngine)) return false
+  if (!["off", "push-to-talk", "hands-free"].includes(value.mode)) return false
+  if (
+    ![
+      value.openaiVoice,
+      value.realtimeEndpoint,
+      value.realtimeModel,
+      value.realtimeVoice,
+      value.mediaFrontendURL,
+      value.sttEndpoint,
+      value.sttModel,
+      value.ttsEndpoint,
+      value.ttsModel,
+      value.voice,
+    ].every((item) => typeof item === "string")
+  )
+    return false
+  if (
+    ![
+      value.autoSpeak,
+      value.cliMirror,
+      value.hasOpenAIKey,
+      value.hasRealtimeKey,
+      value.hasSttKey,
+      value.hasTtsKey,
+    ].every((item) => typeof item === "boolean")
+  )
+    return false
+  return Number.isFinite(value.vadThreshold) && Number.isFinite(value.vadSilenceMs)
 }

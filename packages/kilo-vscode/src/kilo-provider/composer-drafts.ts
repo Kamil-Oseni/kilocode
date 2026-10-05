@@ -51,6 +51,9 @@ type Context = {
   ) => Promise<{ role: string; id: string; sessionID: string } | undefined>
 }
 const panes = new Set<ComposerDrafts>()
+const history = new Set<ComposerDrafts>()
+let closed = false
+let retirement: Promise<void> | undefined
 let registry = 0
 const same = (a: DraftToken, b: DraftToken) => a.generation === b.generation && a.revision === b.revision
 const codes = new Set<DraftCode>([
@@ -120,8 +123,11 @@ export async function composerIdentity(
   )
     refused("invalid")
   const directory = realpathSync.native(scope.directory)
-  const projectID = await ctx.project(directory)
+  const project = await ctx.project(directory)
   const session = target.sessionID ? await ctx.session(target.sessionID, directory) : undefined
+  // A restored chat retains its logical project ID even when its mapped directory is now non-Git.
+  // Its actual persisted session and canonical directory provide the binding, not a caller-supplied ID.
+  const projectID = session?.projectID ?? project
   const selected = ctx.scopes().find((item) => item.box === target.box)
   const reason = !ctx.current()
     ? "connection"
@@ -131,11 +137,9 @@ export async function composerIdentity(
         ? "directory"
         : target.projectID && target.projectID !== projectID
           ? "project"
-          : session && session.projectID !== projectID
-            ? "session-project"
-            : session && !samePath(realpathSync.native(session.directory), directory)
-              ? "session-directory"
-              : undefined
+          : session && !samePath(realpathSync.native(session.directory), directory)
+            ? "session-directory"
+            : undefined
   if (reason) {
     console.warn("[Raya] Composer draft scope changed", { reason })
     refused("stale")
@@ -158,14 +162,21 @@ export class ComposerDrafts {
   private sequence = 0
   private pending = 0
   private disposed = false
+  private closed = false
+  private readonly jobs = new Set<Promise<unknown>>()
+  private readonly errors: unknown[] = []
+  private retirement: Promise<void> | undefined
   private sending = new Map<string, Sending>()
   private flushes = new Map<string, { resolve: (value: ComposerDraftFlushed) => void; reject: (err: Error) => void }>()
-  constructor(private readonly ctx: Context) {}
+  constructor(private readonly ctx: Context) {
+    if (closed) throw new Error("Composer view registry is retired")
+    history.add(this)
+  }
   private current(epoch: string, generation: number) {
     return !this.disposed && this.epoch === epoch && this.ctx.generation() === generation && !!this.ctx.backend()
   }
   state() {
-    if (this.disposed) return
+    if (this.disposed || this.closed) return
     this.sequence++
     for (const item of this.flushes.values()) item.reject(new Error("Composer drafts changed connection"))
     this.flushes.clear()
@@ -182,7 +193,11 @@ export class ComposerDrafts {
     this.state()
     await this.reconcile()
   }
-  async reconcile() {
+  reconcile(): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("Composer draft intake is retired"))
+    return this.track(this.reconcileOwned())
+  }
+  private async reconcileOwned(): Promise<void> {
     for (const item of this.sending.values()) {
       const generation = this.ctx.generation()
       const epoch = this.epoch
@@ -200,10 +215,14 @@ export class ComposerDrafts {
         continue
       item.epoch = epoch
       item.generation = generation
-      await this.accepted(item.sessionID, item.messageID, info.role)
+      await this.acceptedOwned(item.sessionID, item.messageID, info.role)
     }
   }
-  async handle(message: ComposerDraftWebviewMessage) {
+  handle(message: ComposerDraftWebviewMessage): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("Composer draft intake is retired"))
+    return this.track(this.handleOwned(message))
+  }
+  private async handleOwned(message: ComposerDraftWebviewMessage): Promise<void> {
     if (message.type === "composerDraftPane") {
       if (this.disposed) return
       registry++
@@ -241,6 +260,7 @@ export class ComposerDrafts {
       if (!this.current(epoch, generation)) return
       this.reply(message, result)
     } catch (err) {
+      this.errors.push(err)
       if (this.current(epoch, generation)) this.reply(message, { error: code(err) })
     } finally {
       this.pending--
@@ -390,7 +410,11 @@ export class ComposerDrafts {
     check?.()
     return backend.clear(entry.identity, entry.token, `accepted:${messageID}`)
   }
-  async validate(capture: DraftCapture) {
+  validate(capture: DraftCapture): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("Composer draft intake is retired"))
+    return this.track(this.validateOwned(capture))
+  }
+  private async validateOwned(capture: DraftCapture): Promise<void> {
     if (this.ctx.owners().find((item) => item.box === capture.identity.box)?.owner !== capture.owner) refused("scope")
     if (!this.current(capture.epoch, capture.generation)) refused("stale")
     const backend = this.ctx.backend()
@@ -407,7 +431,11 @@ export class ComposerDrafts {
       refused("conflict")
     if (entry.mutation.startsWith("send:")) refused("uncertain")
   }
-  async prepare(capture: DraftCapture, sessionID: string, messageID: string): Promise<void> {
+  prepare(capture: DraftCapture, sessionID: string, messageID: string): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("Composer draft intake is retired"))
+    return this.track(this.prepareOwned(capture, sessionID, messageID))
+  }
+  private async prepareOwned(capture: DraftCapture, sessionID: string, messageID: string): Promise<void> {
     const backend = this.ctx.backend()
     const epoch = this.epoch
     const generation = this.ctx.generation()
@@ -449,7 +477,11 @@ export class ComposerDrafts {
       this.pending--
     }
   }
-  async accepted(sessionID: string, messageID: string, role: string): Promise<void> {
+  accepted(sessionID: string, messageID: string, role: string): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("Composer draft intake is retired"))
+    return this.track(this.acceptedOwned(sessionID, messageID, role))
+  }
+  private async acceptedOwned(sessionID: string, messageID: string, role: string): Promise<void> {
     const item = this.sending.get(messageID)
     if (!item || role !== "user" || item.sessionID !== sessionID || !this.current(item.epoch, item.generation)) return
     const backend = this.ctx.backend()
@@ -472,6 +504,7 @@ export class ComposerDrafts {
       this.sending.delete(messageID)
       this.ctx.post({ ...reply, entry })
     } catch (err) {
+      this.errors.push(err)
       if (this.current(item.epoch, item.generation)) {
         if (code(err) === "conflict") this.sending.delete(messageID)
         this.ctx.post({ ...reply, error: code(err) })
@@ -480,7 +513,11 @@ export class ComposerDrafts {
       this.pending--
     }
   }
-  async flush(deadline: number): Promise<() => void> {
+  flush(deadline: number): Promise<() => void> {
+    if (this.closed) return Promise.reject(new Error("Composer draft intake is retired"))
+    return this.track(this.flushOwned(deadline))
+  }
+  private async flushOwned(deadline: number): Promise<() => void> {
     const epoch = this.epoch
     const generation = this.ctx.generation()
     const backend = this.ctx.backend()
@@ -538,6 +575,28 @@ export class ComposerDrafts {
       refused("conflict")
     if (entry.content && entry.mutation.startsWith("send:")) refused("uncertain")
   }
+  private track<T>(job: Promise<T>): Promise<T> {
+    this.jobs.add(job)
+    void job.then(
+      () => this.jobs.delete(job),
+      (err) => {
+        this.errors.push(err)
+        this.jobs.delete(job)
+      },
+    )
+    return job
+  }
+  /** Terminal loaded-view intake and accepted publication join only; not capture authority. */
+  captureClose(): Promise<void> {
+    if (this.retirement) return this.retirement
+    this.closed = true
+    this.retirement = (async () => {
+      while (this.jobs.size) await Promise.allSettled([...this.jobs])
+      if (this.sending.size) this.errors.push(new Error("Composer send reconciliation remains uncertain"))
+      if (this.errors.length) throw new AggregateError([...this.errors], "Composer draft capture closure failed")
+    })()
+    return this.retirement
+  }
   dispose() {
     registry++
     this.disposed = true
@@ -553,6 +612,16 @@ export class ComposerDrafts {
     this.state()
   }
   /** This fences registered main composers only; it is not a profile writer drain or admission lease. */
+  static captureCloseAll(): Promise<void> {
+    if (retirement) return retirement
+    closed = true
+    const jobs = [...history].map((pane) => pane.captureClose())
+    retirement = Promise.allSettled(jobs).then((results) => {
+      const errors = results.flatMap((item) => (item.status === "rejected" ? [item.reason] : []))
+      if (errors.length) throw new AggregateError(errors, "Composer registry capture closure failed")
+    })
+    return retirement
+  }
   static async flushAll(deadline: number): Promise<() => void> {
     const revision = registry
     const checks = await Promise.all([...panes].map((pane) => pane.flush(deadline)))
@@ -562,5 +631,9 @@ export class ComposerDrafts {
     }
     check()
     return check
+  }
+
+  prepareCapture(deadline: number): Promise<() => void> {
+    return panes.has(this) ? this.flush(deadline) : Promise.resolve(() => undefined)
   }
 }

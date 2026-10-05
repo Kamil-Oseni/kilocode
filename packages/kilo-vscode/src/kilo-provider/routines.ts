@@ -10,6 +10,7 @@ import { normalizeRoutinePaths, RoutinePaths } from "../shared/routine-paths"
 import { recovery } from "../shared/routine-error"
 import { bundle, MAX_ROUTINE_FILE_BYTES, MAX_ROUTINE_FILES, type RoutineUpload } from "./routine-files"
 import { organization } from "./routine-refresh"
+import { restoreReview } from "./restore-review"
 
 type Msg = { type: string } & Record<string, unknown>
 type Kilo = KiloClient["kilocode"]["routine"]
@@ -1458,6 +1459,7 @@ async function stage(input: Input, type: "routineInboxFilesPick" | "routineInbox
 }
 
 export async function handleRoutineMessage(input: Input): Promise<boolean> {
+  if (await restoreReview(input)) return true
   const type = input.message.type
   if (!owned(type)) return false
   if (type === "routineInboxFilesPick" || type === "routineInboxFilesForget") return stage(input, type)

@@ -29,8 +29,13 @@ export interface UntrackedFile {
 
 const MAX_FILE = 10 * 1024 * 1024 // 10 MB
 
-function git(args: string[], cwd: string, stdin?: string): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
+function git(
+  args: string[],
+  cwd: string,
+  stdin?: string,
+  failure?: (err: unknown) => void,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
     if (stdin !== undefined) {
       // Use spawn for stdin piping — execFile doesn't reliably create a stdin pipe
       const child = cp.spawn("git", args, { cwd, windowsHide: true })
@@ -38,6 +43,7 @@ function git(args: string[], cwd: string, stdin?: string): Promise<{ code: numbe
       let stderr = ""
       child.stdout.on("data", (d: Buffer) => (stdout += d.toString()))
       child.stderr.on("data", (d: Buffer) => (stderr += d.toString()))
+      child.once("error", reject)
       child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }))
       child.stdin.end(stdin)
     } else {
@@ -55,11 +61,20 @@ function git(args: string[], cwd: string, stdin?: string): Promise<{ code: numbe
         },
       )
     }
-  })
+  }).then(
+    (result) => {
+      if (result.code !== 0) failure?.(new Error("Native worktree Git operation failed"))
+      return result
+    },
+    (err: unknown) => {
+      failure?.(err)
+      throw err
+    },
+  )
 }
 
-async function raw(args: string[], cwd: string): Promise<string> {
-  const result = await git(args, cwd)
+async function raw(args: string[], cwd: string, failure?: (err: unknown) => void): Promise<string> {
+  const result = await git(args, cwd, undefined, failure)
   return result.stdout.trim()
 }
 
@@ -67,22 +82,30 @@ async function raw(args: string[], cwd: string): Promise<string> {
  * Capture the current git state from `cwd` as a portable snapshot.
  * This is a read-only operation — the source directory is never modified.
  */
-export async function capture(cwd: string, log: (...args: unknown[]) => void): Promise<GitSnapshot> {
+export async function capture(
+  cwd: string,
+  log: (...args: unknown[]) => void,
+  failure?: (err: unknown) => void,
+): Promise<GitSnapshot> {
   const patch = (args: string[]) =>
-    git(args, cwd).then((r) => {
+    git(args, cwd, undefined, failure).then((r) => {
       const out = r.stdout
       return out.trim() ? out : null
     })
 
-  const [branch, head, unstaged, staged, untrackedRaw] = await Promise.all([
-    raw(["branch", "--show-current"], cwd),
-    raw(["rev-parse", "HEAD"], cwd),
+  const jobs = [
+    raw(["branch", "--show-current"], cwd, failure),
+    raw(["rev-parse", "HEAD"], cwd, failure),
     patch(["diff", "--binary"]),
     patch(["diff", "--cached", "--binary"]),
-    raw(["ls-files", "--others", "--exclude-standard"], cwd).then((s: string) =>
+    raw(["ls-files", "--others", "--exclude-standard"], cwd, failure).then((s: string) =>
       s.split("\n").filter((l: string) => l.length > 0),
     ),
-  ])
+  ] as const
+  const joined = await Promise.allSettled(jobs)
+  const errors = joined.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+  if (errors.length) throw new AggregateError(errors, "Native worktree Git capture failed")
+  const [branch, head, unstaged, staged, untrackedRaw] = await Promise.all(jobs)
 
   const untracked: UntrackedFile[] = []
   for (const rel of untrackedRaw) {
@@ -96,6 +119,7 @@ export async function capture(cwd: string, log: (...args: unknown[]) => void): P
       const content = await fs.readFile(full)
       untracked.push({ path: rel, content })
     } catch (err) {
+      failure?.(err)
       log(`Failed to read untracked file ${rel}:`, err)
     }
   }
@@ -111,10 +135,11 @@ export async function apply(
   snapshot: GitSnapshot,
   target: string,
   log: (...args: unknown[]) => void,
+  failure?: (err: unknown) => void,
 ): Promise<{ ok: boolean; error?: string }> {
   // Apply staged patch first, then re-stage those files
   if (snapshot.staged) {
-    const result = await git(["apply", "--whitespace=nowarn", "-"], target, snapshot.staged)
+    const result = await git(["apply", "--whitespace=nowarn", "-"], target, snapshot.staged, failure)
     if (result.code !== 0) {
       const msg = result.stderr.trim() || "Patch did not apply"
       log("Failed to apply staged patch:", msg)
@@ -122,13 +147,13 @@ export async function apply(
     }
     const files = parsePatchFiles(snapshot.staged)
     if (files.length > 0) {
-      await git(["add", "--", ...files], target)
+      await git(["add", "--", ...files], target, undefined, failure)
     }
   }
 
   // Apply unstaged patch (leave as unstaged working-tree changes)
   if (snapshot.unstaged) {
-    const result = await git(["apply", "--whitespace=nowarn", "-"], target, snapshot.unstaged)
+    const result = await git(["apply", "--whitespace=nowarn", "-"], target, snapshot.unstaged, failure)
     if (result.code !== 0) {
       const msg = result.stderr.trim() || "Patch did not apply"
       log("Failed to apply unstaged patch:", msg)
@@ -143,6 +168,7 @@ export async function apply(
       await fs.mkdir(nodePath.dirname(full), { recursive: true })
       await fs.writeFile(full, file.content)
     } catch (err) {
+      failure?.(err)
       log(`Failed to write untracked file ${file.path}:`, err)
     }
   }

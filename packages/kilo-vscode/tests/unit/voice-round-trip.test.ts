@@ -9,9 +9,10 @@ describe("voice round trip", () => {
   // raya_change - prove the backend event sequence reaches the exact text handed to MiniMax
   it("collects a Voice assistant stream exactly once when the session becomes idle", () => {
     const replies = new VoiceReplies()
-    replies.mark()
+    replies.mark({ requestId: "request-1", sessionID: "session-1" })
+    replies.bind("session-1", "user-1", "request-1")
     replies.message("session-1", "user", "user-1")
-    replies.message("session-1", "assistant", "assistant-1")
+    replies.message("session-1", "assistant", "assistant-1", "user-1", true)
     replies.part("session-1", { id: "reasoning", messageID: "assistant-1", type: "reasoning", text: "hidden" })
     replies.part("session-1", {
       id: "snapshot",
@@ -20,34 +21,69 @@ describe("voice round trip", () => {
       text: "⠋ Initializing snapshot…",
       synthetic: true,
     })
-    replies.part("session-1", { id: "removed", messageID: "assistant-1", type: "text", text: "Temporary status." })
+    replies.part("session-1", {
+      id: "removed",
+      messageID: "assistant-1",
+      type: "text",
+      text: "Temporary status.",
+      time: { start: 1, end: 2 },
+    })
     replies.remove("session-1", "removed")
-    replies.part("session-1", { id: "text-1", messageID: "assistant-1", type: "text", text: "Why did the robot " })
-    replies.part("session-1", { id: "text-2", messageID: "assistant-1", type: "text", text: "cross the road?" })
+    replies.part("session-1", {
+      id: "text-1",
+      messageID: "assistant-1",
+      type: "text",
+      text: "Why did the robot ",
+      time: { start: 1, end: 2 },
+    })
+    replies.part("session-1", {
+      id: "text-2",
+      messageID: "assistant-1",
+      type: "text",
+      text: "cross the road?",
+      time: { start: 1, end: 2 },
+    })
 
     expect(replies.complete("another-session")).toBeUndefined()
-    expect(replies.complete("session-1")).toBe("Why did the robot cross the road?")
+    expect(replies.complete("session-1")).toMatchObject({
+      requestId: "request-1",
+      text: "Why did the robot cross the road?",
+    })
     expect(replies.complete("session-1")).toBeUndefined()
   })
 
   // raya_change - backend status and synchronized part streams can settle a few milliseconds apart
   it("waits for final synchronized text that arrives just after idle", async () => {
     const replies = new VoiceReplies()
-    replies.mark()
-    const result = replies.wait("session-1", 500)
+    replies.mark({ requestId: "request-1", sessionID: "session-1" })
+    replies.bind("session-1", "user-1", "request-1")
+    const result = replies.wait("session-1")
     setTimeout(() => {
-      replies.message("session-1", "assistant", "assistant-1")
-      replies.part("session-1", { id: "text-1", messageID: "assistant-1", type: "text", text: "Late final text." })
+      replies.message("session-1", "assistant", "assistant-1", "user-1", true)
+      replies.part("session-1", {
+        id: "text-1",
+        messageID: "assistant-1",
+        type: "text",
+        text: "Late final text.",
+        time: { start: 1, end: 2 },
+      })
     }, 25)
 
-    expect(await result).toBe("Late final text.")
+    expect(await result).toMatchObject({ requestId: "request-1", text: "Late final text." })
   })
 
   it("cancels a pending spoken handoff when the orb stops", () => {
     const replies = new VoiceReplies()
-    replies.mark()
-    replies.message("session-1", "assistant", "assistant-1")
-    replies.part("session-1", { id: "text-1", messageID: "assistant-1", type: "text", text: "Do not speak." })
+    replies.mark({ requestId: "request-1", sessionID: "session-1" })
+    replies.bind("session-1", "user-1", "request-1")
+    replies.message("session-1", "assistant", "assistant-1", "user-1", true)
+    replies.part("session-1", {
+      id: "text-1",
+      messageID: "assistant-1",
+      type: "text",
+      text: "Do not speak.",
+      time: { start: 1, end: 2 },
+    })
     replies.cancel()
     expect(replies.complete("session-1")).toBeUndefined()
   })

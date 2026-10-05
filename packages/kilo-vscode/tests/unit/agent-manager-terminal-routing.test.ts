@@ -108,7 +108,8 @@ describe("Agent Manager terminal routing", () => {
       placement: "side",
       worktreeId: null,
     })
-    await router.dispose()
+    await wait()
+    const closing = router.dispose()
     router.handle({
       type: "agentManager.terminal.create",
       createId: "new",
@@ -116,6 +117,7 @@ describe("Agent Manager terminal routing", () => {
       worktreeId: null,
     })
     resolvers[0]?.({ data: { id: "pty-old", title: "Terminal 1" } })
+    await closing
     await wait()
 
     expect(messages).toHaveLength(1)
@@ -285,16 +287,21 @@ describe("Agent Manager terminal routing", () => {
     // free number. When A's late completion settles, its release must not
     // wipe B's reservation — otherwise create C would duplicate B's title.
     router.handle({ type: "agentManager.terminal.create", createId: "a", placement: "side", worktreeId: null })
-    await router.dispose()
+    await wait()
+    const closing = router.dispose()
     router.handle({ type: "agentManager.terminal.create", createId: "b", placement: "side", worktreeId: null })
     await wait()
     expect(titles).toEqual(["Terminal 1", "Terminal 1"])
     resolvers[0]?.({ data: { id: "pty-a", title: titles[0]! } })
+    await closing
     await wait()
     router.handle({ type: "agentManager.terminal.create", createId: "c", placement: "side", worktreeId: null })
     await wait()
     expect(titles).toEqual(["Terminal 1", "Terminal 1", "Terminal 2"])
-    await router.dispose()
+    const final = router.dispose()
+    resolvers[1]?.({ data: { id: "pty-b", title: titles[1]! } })
+    resolvers[2]?.({ data: { id: "pty-c", title: titles[2]! } })
+    await final
   })
 
   it("awaits the shared backend connection before creating a terminal", async () => {

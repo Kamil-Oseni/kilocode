@@ -10,11 +10,12 @@ export interface ForkContext {
   state: WorktreeStateManager | undefined
   directory: string | undefined
   postError: (message: string) => void
-  registerWorktreeSession: (sessionId: string, directory: string) => void
+  registerWorktreeSession: (sessionId: string, directory: string) => void | Promise<void>
   pushState: () => void
   notifyForked: (session: Session, forkedFromId: string, worktreeId?: string) => void
   registerSession: (session: Session) => void
   log: (...args: unknown[]) => void
+  failure?: (err: unknown) => void
 }
 
 /**
@@ -33,6 +34,7 @@ export async function forkSession(
   try {
     client = ctx.getClient()
   } catch (err) {
+    ctx.failure?.(err)
     ctx.log("forkSession: client not available:", err)
     ctx.postError("Not connected to CLI backend")
     return null
@@ -49,6 +51,7 @@ export async function forkSession(
     const { data } = await client.session.fork(input, { throwOnError: true })
     forked = data
   } catch (error) {
+    ctx.failure?.(error)
     const err = getErrorMessage(error)
     ctx.postError(`Failed to fork session: ${err}`)
     TelemetryProxy.capture(TelemetryEventName.AGENT_MANAGER_SESSION_ERROR, {
@@ -62,10 +65,11 @@ export async function forkSession(
 
   if (worktreeId && ctx.state) {
     ctx.state.addSession(forked.id, worktreeId)
-    if (directory) ctx.registerWorktreeSession(forked.id, directory)
+    if (directory) await ctx.registerWorktreeSession(forked.id, directory)
   }
 
   await recordForkHandoff({ client, sessionId: forked.id, directory }).catch((err) => {
+    ctx.failure?.(err)
     ctx.log("forkSession: failed to record fork handoff:", getErrorMessage(err))
   })
 

@@ -1,4 +1,4 @@
-import { Component, For, Show, createEffect, createSignal, onCleanup } from "solid-js"
+import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ConnectionState, ExtensionMessage } from "../../types/messages"
@@ -688,6 +688,10 @@ export const Inbox: Component<{
   const vscode = useVSCode()
   const ready = () => !!props.box
   const connected = () => props.connection === "connected"
+  const [visible, setVisible] = createSignal(document.visibilityState !== "hidden")
+  const visibility = () => setVisible(document.visibilityState !== "hidden")
+  document.addEventListener("visibilitychange", visibility)
+  onCleanup(() => document.removeEventListener("visibilitychange", visibility))
   const [thread, setThread] = createSignal<Note[]>([])
   const [cursor, setNext] = createSignal<string>()
   const [note, setNote] = createSignal("")
@@ -706,6 +710,8 @@ export const Inbox: Component<{
   const [loading, setLoading] = createSignal(true)
   const [mountReady, setMountReady] = createSignal(false)
   const [pageError, setPageError] = createSignal("")
+  const [delayed, setDelayed] = createSignal(false)
+  const [attempt, setAttempt] = createSignal(0)
   const [savedProof, setSavedProof] = createSignal<Box>()
   const [searching, setSearching] = createSignal(false)
   const [trees, setTrees] = createSignal<Record<string, Tree>>({})
@@ -748,6 +754,7 @@ export const Inbox: Component<{
   let haltID = ""
   let lookID = ""
   let older = false
+  let live = false
   let wait = false
   let stick = true
   let target: Anchor | undefined
@@ -869,10 +876,11 @@ export const Inbox: Component<{
     vscode.setState<InboxState>({ ...state, routineInbox: { ...inbox, drafts: Object.fromEntries(kept) } })
   }
 
-  const load = (after?: string, search?: string) => {
-    if (wait || !connected()) return
+  const load = (after?: string, search?: string, update = false) => {
+    if (closed || wait || !connected()) return
     wait = true
     older = !!after
+    live = update
     setLoading(true)
     setPageError("")
     setSavedProof()
@@ -895,6 +903,53 @@ export const Inbox: Component<{
     if (term || !missing(latest, thread())) return
     load()
   }
+
+  const awaiting = createMemo(() => {
+    const rows = thread()
+    const user = rows.findLast((item) => item.kind === "user")
+    if (!user) return
+    // A reused session alone cannot identify which question a delayed reply answers.
+    if (
+      !user.occurrenceID &&
+      (cursor() ||
+        !user.sessionID ||
+        rows.some((item) => item.kind === "user" && item.id !== user.id && item.sessionID === user.sessionID))
+    )
+      return user.id
+    return rows.some(
+      (item) =>
+        item.kind === "worker" &&
+        (user.occurrenceID ? item.source === `reply:${user.occurrenceID}` : item.source.startsWith("reply:")) &&
+        item.time >= user.time &&
+        (!user.sessionID || item.sessionID === user.sessionID),
+    )
+      ? undefined
+      : user.id
+  })
+
+  createEffect(() => {
+    const id = awaiting()
+    attempt()
+    setDelayed(false)
+    if (!id || !connected() || searching() || !visible()) return
+    const deadline = Date.now() + 180_000
+    const timer = setInterval(() => {
+      if (Date.now() >= deadline) {
+        clearInterval(timer)
+        setDelayed(true)
+        return
+      }
+      load(undefined, undefined, true)
+    }, 4000)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  createEffect(() => {
+    if (awaiting() || !connected() || searching() || !visible()) return
+    // Reports can arrive without a question or a tracked chat session event.
+    const timer = setInterval(() => load(undefined, undefined, true), 4000)
+    onCleanup(() => clearInterval(timer))
+  })
 
   const place = () => {
     if (!target || !pane) {
@@ -1136,8 +1191,14 @@ export const Inbox: Component<{
         draftRevision: msg.draftState.revision,
       })
     }
-    setThread((prior) => (older ? [...rows, ...prior] : rows))
-    setNext(msg.next)
+    setThread((prior) =>
+      older
+        ? [...rows, ...prior]
+        : live
+          ? [...new Map([...prior, ...rows].map((item) => [item.id, item])).values()].sort((a, b) => a.time - b.time)
+          : rows,
+    )
+    if (!live) setNext(msg.next)
     setPageError("")
     setError("")
     const last = rows.at(-1)
@@ -1407,7 +1468,35 @@ export const Inbox: Component<{
     if (closed && !flushes.size) unsub()
   }
 
+  const capture = (msg: ExtensionMessage) => {
+    if (msg.type !== "routineInboxCapture" || msg.paneID !== paneID || msg.agentID !== props.agentID) return false
+    if (
+      closed ||
+      !mounted ||
+      !connected() ||
+      blocked() ||
+      msg.owner !== owner ||
+      msg.conversationID !== conversationID ||
+      Date.now() >= msg.deadline
+    )
+      return true
+    setBlocked(true)
+    vscode.postMessage({
+      type: "routineInboxFlush",
+      requestID: msg.requestID,
+      paneID,
+      agentID: props.agentID,
+      owner,
+      conversationID,
+      cutoff: draftRevision,
+      draft: note() || null,
+      attachmentIDs: files().map((file) => file.id),
+    })
+    return true
+  }
+
   const receive = (msg: ExtensionMessage) => {
+    if (capture(msg)) return
     mountedResult(msg)
     flushedResult(msg)
     page(msg)
@@ -1416,6 +1505,8 @@ export const Inbox: Component<{
     saved(msg)
     halted(msg)
     chained(msg)
+    if (msg.type === "routineRuns" && msg.agentID === props.agentID && awaiting() && !term)
+      load(undefined, undefined, true)
     if (msg.type === "sessionTurnClosed" && connected()) {
       wait = false
       load(undefined, term || undefined)
@@ -1511,9 +1602,10 @@ export const Inbox: Component<{
 
   const retry = () => {
     if (!connected()) return
+    setAttempt((value) => value + 1)
     const after = older ? cursor() : undefined
     wait = false
-    load(after, term || undefined)
+    load(after, term || undefined, !after && !term && !!awaiting())
   }
 
   const submit = () => {
@@ -1849,6 +1941,17 @@ export const Inbox: Component<{
               <p>{pageError()}</p>
               <Button type="button" size="small" variant="ghost" disabled={!connected()} onClick={retry}>
                 Retry
+              </Button>
+            </div>
+          </Show>
+          <Show when={delayed()}>
+            <div class="routines-load-error" role="status">
+              <p>
+                Automatic reply checks are paused. Refresh to check for later worker messages; your sent question is
+                saved.
+              </p>
+              <Button type="button" size="small" variant="ghost" disabled={!connected()} onClick={retry}>
+                Refresh reply
               </Button>
             </div>
           </Show>

@@ -339,7 +339,17 @@ async function main() {
   }
   const send = async (id: string, source: string, body: string) => {
     assert.ok(host)
-    return await call(host, password, root, "POST", `/kilocode/agent/${id}/inbox`, { source, body })
+    // Resolve the current persisted ownership tuple before each admitted send or exact-source replay.
+    const page = (await call(host, password, root, "GET", `/kilocode/agent/${id}/inbox`)) as {
+      draftState: { owner: string; conversationID: string; revision: number }
+    }
+    return await call(host, password, root, "POST", `/kilocode/agent/${id}/inbox`, {
+      owner: page.draftState.owner,
+      conversationID: page.draftState.conversationID,
+      expectedRevision: page.draftState.revision,
+      source,
+      body,
+    })
   }
   const messages = async (sid: string) => {
     assert.ok(host)
@@ -642,6 +652,11 @@ async function main() {
   } finally {
     const cleanup = await Promise.allSettled(hosts.map(stop))
     fake.server.stop(true)
+    const retained = [
+      error !== undefined,
+      process.env.RAYA_RETAIN_PROFILE === "1",
+      cleanup.some((item) => item.status !== "fulfilled"),
+    ].includes(true)
     await mkdir(join(report, ".."), { recursive: true })
     await writeFile(
       report,
@@ -649,6 +664,7 @@ async function main() {
         {
           version: 1,
           app,
+          profile: { temp, root, home, retained },
           stages,
           model: fake.receipt(),
           error,
@@ -665,7 +681,7 @@ async function main() {
       ),
     )
     assert.ok(resolve(temp).startsWith(resolve(tmpdir()) + sep))
-    if (cleanup.every((item) => item.status === "fulfilled")) await rm(temp, { recursive: true, force: true })
+    if (!retained) await rm(temp, { recursive: true, force: true })
     assert.ok(
       cleanup.every((item) => item.status === "fulfilled"),
       "An owned backend did not join; isolated data retained",

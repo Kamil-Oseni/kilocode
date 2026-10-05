@@ -1269,7 +1269,7 @@ export const dict = {
   // Speech to Text tooltips and errors
   "speechToText.tooltip.start": "Avvia input vocale con Raya Gateway",
   "speechToText.tooltip.shortcut":
-    "Tocca o premi Cmd/Ctrl+K per avviare o interrompere la registrazione; tieni premuto mentre parli e rilascia per trascrivere e inviare.",
+    "Tocca o premi Cmd/Ctrl+Alt+K per avviare o interrompere la registrazione; tieni premuto mentre parli e rilascia per trascrivere e inviare.",
   "speechToText.tooltip.starting": "Avvio del microfono... Attendi prima di parlare.",
   "speechToText.tooltip.stop": "Interrompi acquisizione",
   "speechToText.tooltip.transcribing": "Trascrizione... Fai clic per annullare.",

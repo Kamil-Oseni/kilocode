@@ -7,15 +7,15 @@ export const SPEECH_HOLD_MS = 400
 
 export function isSpeechShortcut(event: Key, mac = isMac()): boolean {
   const mod = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
-  return event.key.toLowerCase() === "k" && mod && !event.altKey && !event.shiftKey
+  return event.key.toLowerCase() === "k" && mod && event.altKey && !event.shiftKey
 }
 
 export function speechShortcutLabel(mac = isMac()): string {
-  return mac ? "⌘K" : "Ctrl+K"
+  return mac ? "⌥⌘K" : "Ctrl+Alt+K"
 }
 
 export function speechShortcutValue(mac = isMac()): string {
-  return mac ? "Meta+K" : "Control+K"
+  return mac ? "Alt+Meta+K" : "Control+Alt+K"
 }
 
 export function toggleSpeech(speech: SpeechToText, disabled: boolean, start: () => void): boolean {
@@ -95,7 +95,7 @@ export function createSpeechShortcut(opts: ShortcutOptions) {
   const up = (event: Pick<KeyboardEvent, "key" | "timeStamp">): boolean => {
     if (!press) return false
     const key = event.key.toLowerCase()
-    const ended = key === "k" || (press.mac ? key === "meta" : key === "control")
+    const ended = key === "k" || key === "alt" || (press.mac ? key === "meta" : key === "control")
     if (!ended) return false
     const current = press
     press = undefined

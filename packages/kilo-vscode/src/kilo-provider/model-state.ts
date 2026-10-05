@@ -5,53 +5,12 @@
  * so per-mode model choices are shared between CLI and extension.
  */
 
-import * as fs from "fs"
-import * as path from "path"
 import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { validateModelSelections } from "../provider-actions"
+import { writer } from "./model-state-writer"
+export { retire, captureSnapshot } from "./model-state-writer"
 
 type PostMessage = (msg: unknown) => void
-
-let cached: string | undefined
-let queue: Promise<void> = Promise.resolve()
-
-async function resolve(client: KiloClient | null): Promise<string | undefined> {
-  if (cached) return cached
-  try {
-    const resp = await client?.path.get()
-    if (!resp?.data?.state) return undefined
-    cached = path.join(resp.data.state, "model.json")
-    return cached
-  } catch {
-    return undefined
-  }
-}
-
-async function read(client: KiloClient | null): Promise<Record<string, unknown>> {
-  const p = await resolve(client)
-  if (!p) return {}
-  try {
-    const raw = await fs.promises.readFile(p, "utf-8")
-    const parsed = JSON.parse(raw)
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {}
-  } catch {
-    return {}
-  }
-}
-
-function write(client: KiloClient | null, key: string, value: unknown): Promise<void> {
-  const op = queue.then(async () => {
-    const p = await resolve(client)
-    if (!p) return
-    const existing = await read(client)
-    existing[key] = value
-    await fs.promises.writeFile(p, JSON.stringify(existing, null, 2))
-  })
-  queue = op.catch(() => {})
-  return op
-}
 
 /**
  * Handle a model-state webview message. Returns true if handled.
@@ -61,26 +20,35 @@ export async function handleMessage(
   message: Record<string, unknown>,
   client: KiloClient | null,
   post: PostMessage,
+  current: () => boolean = () => true,
 ): Promise<boolean> {
   if (type === "persistModelSelection") {
-    const data = await read(client)
-    const model = validateModelSelections(data.model)
-    model[message.agent as string] = {
-      providerID: message.providerID as string,
-      modelID: message.modelID as string,
-    }
-    await write(client, "model", model)
+    const agent = message.agent
+    const selection = validateModelSelections({
+      selected: {
+        providerID: message.providerID as string,
+        modelID: message.modelID as string,
+      },
+    }).selected
+    if (typeof agent !== "string" || !agent || !selection) throw new Error("Invalid model preference selection")
+    await writer(client, current).run((data) => ({
+      ...data,
+      model: { ...validateModelSelections(data.model), [agent]: selection },
+    }))
     return true
   }
   if (type === "clearModelSelection") {
-    const data = await read(client)
-    const model = validateModelSelections(data.model)
-    delete model[message.agent as string]
-    await write(client, "model", model)
+    const agent = message.agent
+    if (typeof agent !== "string" || !agent) throw new Error("Invalid model preference agent")
+    await writer(client, current).run((data) => {
+      const model = validateModelSelections(data.model)
+      delete model[agent]
+      return { ...data, model }
+    })
     return true
   }
   if (type === "requestModelSelections") {
-    const data = await read(client)
+    const data = await writer(client, current).run()
     const selections = validateModelSelections(data.model)
     post({ type: "modelSelectionsLoaded", selections })
     return true
@@ -88,7 +56,11 @@ export async function handleMessage(
   return false
 }
 
-export async function reset(client: KiloClient | null, post: PostMessage): Promise<void> {
-  await write(client, "model", {})
+export async function reset(
+  client: KiloClient | null,
+  post: PostMessage,
+  current: () => boolean = () => true,
+): Promise<void> {
+  await writer(client, current).run((data) => ({ ...data, model: {} }))
   post({ type: "modelSelectionsLoaded", selections: {} })
 }

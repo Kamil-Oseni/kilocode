@@ -250,7 +250,7 @@ export interface SessionRefreshContext {
  */
 export async function loadSessions(ctx: SessionRefreshContext): Promise<string | undefined> {
   const list = ctx.listSessions
-  if (!list) {
+  if (!list || ctx.connectionState !== "connected") {
     ctx.pendingSessionRefresh = true
     if (ctx.connectionState !== "connecting") {
       ctx.postMessage({ type: "error", message: "Not connected to CLI backend" })
@@ -258,7 +258,9 @@ export async function loadSessions(ctx: SessionRefreshContext): Promise<string |
     return
   }
 
-  ctx.pendingSessionRefresh = false
+  // Keep the read pending until a current response succeeds. Transport failure
+  // during a backend replacement must remain eligible for reconnect recovery.
+  ctx.pendingSessionRefresh = true
 
   const sessions = await list(ctx.workspaceDirectory)
   const projectID = sessions[0]?.projectID
@@ -283,6 +285,7 @@ export async function loadSessions(ctx: SessionRefreshContext): Promise<string |
   }
 
   if (ctx.isCurrent && !ctx.isCurrent()) return
+  ctx.pendingSessionRefresh = false
 
   // Sessions whose worktree directories failed to list — the webview must
   // not delete these during reconciliation since the absence is transient.

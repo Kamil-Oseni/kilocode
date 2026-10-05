@@ -76,6 +76,7 @@ interface FlowInput extends PickInput {
   service: SetupScriptService | undefined
   branch?: string
   post(message: AgentManagerOutMessage): void
+  failure?: (err: unknown) => void
 }
 
 /** Run the configured setup script for a worktree and wait for it to finish. */
@@ -93,17 +94,23 @@ export async function runWorktreeSetupScript(
     branch: input.branch,
     worktreeId: input.worktreeId,
   })
-  const runner = new SetupScriptRunner(input.log, service, pickSetupTask(input), (message) => {
-    if (message === "Setup script was stopped") return
-    input.post({
-      type: "agentManager.worktreeSetup",
-      projectId: input.projectId,
-      status: "error",
-      message,
-      branch: input.branch,
-      worktreeId: input.worktreeId,
-    })
-  })
+  const runner = new SetupScriptRunner(
+    input.log,
+    service,
+    pickSetupTask(input),
+    (message) => {
+      if (message === "Setup script was stopped") return
+      input.post({
+        type: "agentManager.worktreeSetup",
+        projectId: input.projectId,
+        status: "error",
+        message,
+        branch: input.branch,
+        worktreeId: input.worktreeId,
+      })
+    },
+    input.failure,
+  )
   await runner.runIfConfigured(env)
 }
 

@@ -226,6 +226,26 @@ export function queuedUserMessageIDs(
   return users.slice(idx + 1).map((msg) => msg.id)
 }
 
+// A completed reply can arrive after an older queue snapshot. Reconcile only
+// its exact parent; idle alone does not establish that other queued work ran.
+export function reconcileQueued(messages: Message[], queued: string[]) {
+  const replies = new Map<string, Message>()
+  for (const msg of messages) {
+    if (msg.role === "assistant" && msg.parentID) replies.set(msg.parentID, msg)
+  }
+  const finished = new Set(
+    [...replies.values()]
+      .filter(
+        (msg) =>
+          msg.role === "assistant" &&
+          msg.parentID &&
+          (msg.error || (msg.finish && !["tool-calls", "unknown"].includes(msg.finish))),
+      )
+      .map((msg) => msg.parentID),
+  )
+  return queued.filter((id) => !finished.has(id))
+}
+
 export function partitionTurns(turns: MessageTurn[], ids: ReadonlySet<string>, queued: ReadonlySet<string>) {
   const visible = turns.filter((turn) => !queued.has(turn.user.id))
   const waiting = turns.filter((turn) => queued.has(turn.user.id))

@@ -9,6 +9,8 @@ export interface TerminalHandle {
   show(preserveFocus: boolean): void
   dispose(): void
   readonly exitStatus: { code?: number } | undefined
+  /** Joins exact native shell closure and the VS Code close event; no descendant claim. */
+  close?(): Promise<void>
 }
 
 export interface TerminalHost {
@@ -42,6 +44,28 @@ export class SessionTerminalManager {
   private commandHandlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
   private commandDisposables = new Map<string, Disposable>()
   private panelOpen = false
+  private closed = false
+  private readonly history = new Set<TerminalHandle>()
+  private retirement: Promise<void> | undefined
+
+  fence(): void {
+    this.closed = true
+  }
+
+  capture(): Promise<void> {
+    this.fence()
+    return (this.retirement ??= (async () => {
+      const results = await Promise.allSettled(
+        [...this.history].map((terminal) => {
+          if (!terminal.close) return Promise.reject(new Error("Terminal native closure is unavailable"))
+          return terminal.close()
+        }),
+      )
+      this.dispose()
+      const errors = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+      if (errors.length) throw new AggregateError(errors, "Session terminal closure was not confirmed")
+    })())
+  }
 
   constructor(
     private log: (msg: string) => void,
@@ -187,6 +211,7 @@ export class SessionTerminalManager {
   }
 
   private showExistingKey(key: string, preserveFocus = true): boolean {
+    if (this.closed) throw new Error("Session terminal intake is retired")
     const entry = this.terminals.get(key)
     if (!entry) return false
 
@@ -226,6 +251,7 @@ export class SessionTerminalManager {
   }
 
   dispose(): void {
+    this.fence()
     void this.host.setContext("kilo-code.agentTerminalFocus", false)
     for (const entry of this.terminals.values()) entry.terminal.dispose()
     this.terminals.clear()
@@ -259,7 +285,7 @@ export class SessionTerminalManager {
       return await this.host.executeCommand(id, ...args)
     } finally {
       const handler = this.commandHandlers.get(id)
-      if (handler) {
+      if (handler && !this.closed) {
         const replacement = this.tryRegisterCommand(id, handler)
         if (replacement) this.commandDisposables.set(id, replacement)
       }
@@ -291,6 +317,7 @@ export class SessionTerminalManager {
   }
 
   private showOrCreate(key: string, cwd: string, name: string): void {
+    if (this.closed) throw new Error("Session terminal intake is retired")
     let entry = this.terminals.get(key)
 
     // Clean up exited terminals
@@ -309,6 +336,7 @@ export class SessionTerminalManager {
 
     if (!entry) {
       const terminal = this.host.createTerminal({ cwd, name })
+      this.history.add(terminal)
       entry = { terminal, cwd }
       this.terminals.set(key, entry)
       this.log(`showTerminal: created terminal for ${key} (cwd=${cwd})`)

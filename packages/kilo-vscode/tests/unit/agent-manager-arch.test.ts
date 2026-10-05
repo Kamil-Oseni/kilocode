@@ -258,7 +258,10 @@ describe("Agent Manager Provider Messages", () => {
    * that later messages wait for.
    */
   it("handles project messages before state-gated dispatch", () => {
-    const body = getMethodBody("onMessage") + getMethodBody("dispatchMessage")
+    const entry = getMethodBody("onMessage")
+    expect(entry).toContain("admitWorktreeMessage")
+    expect(entry).toContain("Hosts.run(body)")
+    const body = entry + getMethodBody("message") + getMethodBody("dispatchMessage")
     const projects = body.indexOf("handleProjectMessage(m, this.projects)")
     const gate = body.indexOf("if (this.shouldWaitForState(m))")
 
@@ -299,7 +302,8 @@ describe("Agent Manager Provider Messages", () => {
 
   it("async shutdown waits for terminal router cleanup", () => {
     const body = getMethodBody("disposeAsync")
-    expect(body).toContain("await this.terminalRouter.dispose()")
+    expect(body).toContain("closeTerminals(this.terminalManager, this.terminalRouter)")
+    expect(body).toContain("await terminals")
     expect(body).not.toContain("void this.terminalRouter.dispose()")
   })
 
@@ -859,10 +863,10 @@ describe("KiloProvider — pending session refresh on reconnect", () => {
   it("loadSessions sets pendingSessionRefresh when client is null", () => {
     const start = utils.indexOf("export async function loadSessions")
     expect(start, "loadSessions must exist in kilo-provider-utils").toBeGreaterThan(-1)
-    const snippet = utils.slice(start, start + 700)
+    const snippet = utils.slice(start, utils.indexOf("export async function flushPendingSessionRefresh", start))
     expect(snippet, "must set pendingSessionRefresh when client missing").toContain("ctx.pendingSessionRefresh = true")
     expect(snippet, "must avoid noisy errors while still connecting").toContain('ctx.connectionState !== "connecting"')
-    expect(snippet, "must clear pendingSessionRefresh on successful entry").toContain(
+    expect(snippet, "must clear pendingSessionRefresh only after a current successful response").toContain(
       "ctx.pendingSessionRefresh = false",
     )
   })

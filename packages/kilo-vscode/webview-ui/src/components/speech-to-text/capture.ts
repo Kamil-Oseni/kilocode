@@ -23,11 +23,13 @@ export class SpeechCapture {
   private chunks: Blob[] = []
   private reject: ((error: Error) => void) | undefined
   private keep = false
+  private generation = 0
   private readonly gate = new EchoGate()
 
   async start(opts: Options): Promise<void> {
     if (this.recorder?.state !== "inactive") this.cancel()
     this.stopMonitor()
+    const generation = ++this.generation
     const strong = {
       echoCancellation: { ideal: "all" },
       noiseSuppression: { ideal: true },
@@ -44,9 +46,14 @@ export class SpeechCapture {
     const stream =
       this.stream?.active === true
         ? this.stream
-        : await navigator.mediaDevices
-            .getUserMedia({ audio: strong })
-            .catch(() => navigator.mediaDevices.getUserMedia({ audio: basic })) // raya_change - older Electron falls back from system-wide AEC
+        : await navigator.mediaDevices.getUserMedia({ audio: strong }).catch((err: unknown) => {
+            if (generation !== this.generation) throw err
+            return navigator.mediaDevices.getUserMedia({ audio: basic })
+          })
+    if (generation !== this.generation) {
+      if (stream !== this.stream) for (const track of stream.getTracks()) track.stop()
+      throw new Error("Microphone capture cancelled.")
+    }
     const mime = format()
     const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
     this.keep = opts.handsFree
@@ -54,9 +61,11 @@ export class SpeechCapture {
     this.recorder = recorder
     this.chunks = []
     recorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size > 0) this.chunks.push(event.data)
+      if (this.recorder === recorder && event.data.size > 0) this.chunks.push(event.data)
     })
-    recorder.addEventListener("error", () => this.reject?.(new Error("Microphone recording failed.")))
+    recorder.addEventListener("error", () => {
+      if (this.recorder === recorder) this.reject?.(new Error("Microphone recording failed."))
+    })
     recorder.start(200)
     if (opts.handsFree) this.monitor(stream, opts)
   }
@@ -65,19 +74,21 @@ export class SpeechCapture {
     const recorder = this.recorder
     if (!recorder) return Promise.reject(new Error("No active microphone recording."))
     this.stopMonitor()
+    const preserve = this.keep
+    const chunks = this.chunks
     return new Promise<CapturedAudio>((resolve, reject) => {
       this.reject = reject
       recorder.addEventListener(
         "stop",
         () => {
-          const blob = new Blob(this.chunks, { type: recorder.mimeType || "audio/webm" })
+          const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" })
           void encode(blob).then(
             (data) => {
-              this.cleanup(this.keep)
+              if (this.recorder === recorder) this.cleanup(preserve)
               resolve({ data, format: blob.type || "audio/webm" })
             },
             (err: unknown) => {
-              this.cleanup(this.keep)
+              if (this.recorder === recorder) this.cleanup(preserve)
               reject(err instanceof Error ? err : new Error(String(err)))
             },
           )
@@ -89,10 +100,12 @@ export class SpeechCapture {
   }
 
   cancel(): void {
+    this.generation++
     this.keep = false
     this.gate.reset()
     this.stopMonitor()
     if (this.recorder?.state !== "inactive") this.recorder?.stop()
+    this.reject?.(new Error("Microphone capture cancelled."))
     this.cleanup()
   }
 

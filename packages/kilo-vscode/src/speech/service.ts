@@ -1,9 +1,11 @@
 // raya_change - Milestone H extension-owned speech orchestration
 import type * as vscode from "vscode"
 import { MiniMaxTts } from "./minimax-tts"
+import { LocalTts } from "./local-tts"
 import { transcribe } from "./openai-stt"
 import { SpeechSettingsStore, type SpeechSettings } from "./settings"
 import { VoiceReplies } from "./replies"
+import { diagnostics, type PlaybackDiagnostic } from "./diagnostics"
 import { getErrorMessage } from "../kilo-provider-utils"
 import {
   cancelSpeechCapture,
@@ -30,8 +32,10 @@ type Health = "ready" | "failed" | "incomplete"
 export class SpeechService implements vscode.Disposable {
   readonly settings: SpeechSettingsStore
   private readonly tts = new MiniMaxTts()
+  private readonly localtts: LocalTts
+  private readonly diagnostic?: (row: PlaybackDiagnostic) => void
   private readonly aborts = new Map<string, AbortController>()
-  private readonly replies = new VoiceReplies() // raya_change - extension-host voice reply handoff
+  private readonly replies: VoiceReplies // raya_change - extension-host voice reply handoff
   private readonly realtime: RealtimeBroker
   private readonly openai: OpenAIBroker
   private readonly live: LiveBroker
@@ -43,11 +47,19 @@ export class SpeechService implements vscode.Disposable {
 
   constructor(
     context: vscode.ExtensionContext,
-    opts?: { live?: LiveBroker; openai?: OpenAIBroker; realtime?: RealtimeBroker },
+    opts?: {
+      live?: LiveBroker
+      openai?: OpenAIBroker
+      realtime?: RealtimeBroker
+      diagnostic?: (row: PlaybackDiagnostic) => void
+    },
   ) {
     this.store = context.globalState
     this.health = loadHealth(this.store.get<unknown>(healthKey))
     this.settings = new SpeechSettingsStore(context.globalState, context.secrets)
+    this.diagnostic = opts?.diagnostic
+    this.replies = new VoiceReplies(opts?.diagnostic)
+    this.localtts = new LocalTts({ diagnostic: opts?.diagnostic })
     this.live = opts?.live ?? new LiveBroker()
     this.openai = opts?.openai ?? new OpenAIBroker()
     this.realtime = opts?.realtime ?? new RealtimeBroker()
@@ -68,10 +80,15 @@ export class SpeechService implements vscode.Disposable {
     await cancelLiveCapture()
     const failures = await Promise.all([this.live.stop(), this.openai.stop(), this.realtime.stop()])
     if (failures.some(Boolean)) this.incomplete()
+    return !failures.some(Boolean)
   }
 
   drop() {
-    void this.enqueue(() => this.release())
+    this.replies.cancel()
+    this.cancel()
+    void this.enqueue(async () => {
+      await this.release()
+    })
   }
 
   private async admit(failed: (error: string) => void) {
@@ -155,6 +172,19 @@ export class SpeechService implements vscode.Disposable {
     const settings = await this.settings.setKey(kind, value)
     await this.settings.sync(root)
     post({ type: "speechSettingsLoaded", settings })
+  }
+
+  async local(root: string, post: Post): Promise<void> {
+    await this.enqueue(async () => {
+      if (this.closed) throw new Error("Voice is closed.")
+      if (!(await this.release())) throw new Error("Voice cleanup is unconfirmed; local setup was not applied.")
+      this.replies.cancel()
+      this.cancel()
+      await this.localtts.cancel()
+      const settings = await this.settings.local()
+      await this.settings.sync(root)
+      post({ type: "speechSettingsLoaded", settings })
+    })
   }
 
   // raya_change start - extension-host broker keeps Qwen and LiveKit service credentials out of the webview
@@ -252,7 +282,7 @@ export class SpeechService implements vscode.Disposable {
   }
 
   async realtimeStop(post: Post): Promise<void> {
-    this.replies.cancel()
+    this.cancel()
     const failure = await this.realtime.stop()
     if (failure) {
       this.degrade(failure.code)
@@ -525,7 +555,16 @@ export class SpeechService implements vscode.Disposable {
     post: Post,
   ): Promise<void> {
     const settings = await this.settings.load()
-    const key = (await this.settings.key("stt")) ?? ""
+    const local = settings.sttEngine === "local"
+    if (local && settings.sttEndpoint !== "http://127.0.0.1:8770/v1/audio/transcriptions") {
+      post({
+        type: "speechToTextError",
+        requestId: input.requestId,
+        error: "Local transcription requires the configured loopback service.",
+      })
+      return
+    }
+    const key = (await this.settings.key(local ? "local" : "stt")) ?? ""
     const ctrl = new AbortController()
     this.aborts.set(input.requestId, ctrl)
     const result = await transcribe(
@@ -536,6 +575,7 @@ export class SpeechService implements vscode.Disposable {
         data: input.data,
         format: input.format,
         language: input.language,
+        local,
       },
       ctrl.signal,
     )
@@ -559,6 +599,10 @@ export class SpeechService implements vscode.Disposable {
   // raya_change start - configured STT through extension-host capture and VAD
   async configured(): Promise<boolean> {
     const settings = await this.settings.load()
+    if (settings.sttEngine === "local")
+      return (
+        settings.sttEndpoint === "http://127.0.0.1:8770/v1/audio/transcriptions" && !!(await this.settings.key("local"))
+      )
     return !!settings.sttEndpoint && !!(await this.settings.key("stt"))
   }
 
@@ -605,18 +649,86 @@ export class SpeechService implements vscode.Disposable {
   }
   // raya_change end
 
-  async speak(input: { requestId: string; text: string }, post: Post): Promise<void> {
+  async speak(input: { requestId: string; text: string; current?: () => boolean }, post: Post): Promise<void> {
+    const trace = diagnostics(input.requestId, this.diagnostic)
+    const current = () => input.current?.() ?? true
+    if (!current()) return
+    const send: Post = (message) => {
+      const type = message && typeof message === "object" && "type" in message ? message.type : undefined
+      const kind =
+        type === "speechPlaybackChunk"
+          ? "chunk"
+          : type === "speechPlaybackVoice"
+            ? "voice"
+            : type === "speechPlaybackDone"
+              ? "done"
+              : type === "speechPlaybackError"
+                ? "error"
+                : undefined
+      const forwarded = !this.closed && current()
+      trace("callback", { kind, forwarded })
+      if (forwarded) post(message)
+    }
+    if (this.closed) {
+      post({ type: "speechPlaybackError", requestId: input.requestId, error: "Voice is closed." })
+      return
+    }
     const settings = await this.settings.load()
-    const key = await this.settings.key("tts")
+    if (!current()) return
+    const local = settings.ttsEngine === "local-jobs"
+    trace("start")
+    const key = await this.settings.key(local ? "local" : "tts")
+    if (!current()) return
     if (!key) {
-      post({
+      send({
         type: "speechPlaybackError",
         requestId: input.requestId,
-        error: "Add the MiniMax TTS key in Speech settings.",
+        error: local ? "Configure local speech in Speech settings." : "Add the MiniMax TTS key in Speech settings.",
       })
       return
     }
     const stream = { started: false } // raya_change - send echo reference once without duplicating text on every chunk
+    if (local) {
+      await this.localtts.speak(
+        {
+          id: input.requestId,
+          endpoint: settings.localTtsEndpoint ?? "http://127.0.0.1:8770",
+          key,
+          model: settings.localTtsModel ?? "chatterbox-nano",
+          voice: settings.localTtsVoice ?? "freeman-reference-c-AI",
+          text: input.text,
+          allowFallback: settings.localTtsFallback,
+        },
+        {
+          cleanup: (confirmed) => {
+            if (!confirmed) this.incomplete()
+          },
+          voice: (choice) =>
+            send({
+              type: "speechPlaybackVoice",
+              requestId: input.requestId,
+              model: choice.model,
+              voice: choice.voice,
+              fallback: !!choice.fallback,
+              reason: choice.fallback?.reason,
+            }),
+          chunk: (data, mime) => {
+            if (this.closed) return
+            send({
+              type: "speechPlaybackChunk",
+              requestId: input.requestId,
+              data,
+              mime,
+              text: stream.started ? undefined : input.text,
+            })
+            stream.started = true
+          },
+          done: (result) => send({ type: "speechPlaybackDone", requestId: input.requestId, ...result }),
+          error: (error) => send({ type: "speechPlaybackError", requestId: input.requestId, error }),
+        },
+      )
+      return
+    }
     this.tts.speak(
       {
         id: input.requestId,
@@ -628,7 +740,7 @@ export class SpeechService implements vscode.Disposable {
       },
       {
         chunk: (data, mime) => {
-          post({
+          send({
             type: "speechPlaybackChunk",
             requestId: input.requestId,
             data,
@@ -637,24 +749,48 @@ export class SpeechService implements vscode.Disposable {
           })
           stream.started = true
         },
-        done: (result) => post({ type: "speechPlaybackDone", requestId: input.requestId, ...result }),
-        error: (error) => post({ type: "speechPlaybackError", requestId: input.requestId, error }),
+        done: (result) => send({ type: "speechPlaybackDone", requestId: input.requestId, ...result }),
+        error: (error) => send({ type: "speechPlaybackError", requestId: input.requestId, error }),
       },
     )
   }
 
   // raya_change start - authoritative backend-event handoff from Voice response to MiniMax
-  markVoiceTurn(): void {
-    this.replies.mark()
+  markVoiceTurn(input: { requestId: string; sessionID: string; current?: () => boolean }): void {
+    const prior = this.replies.request()
+    if (!this.replies.mark(input)) return
+    if (prior) this.cancel(prior)
   }
 
-  trackMessage(sessionID: string, role: string, messageID: string): void {
-    this.replies.message(sessionID, role, messageID)
+  captureVoiceTurn(sessionID: string) {
+    return this.replies.capture(sessionID)
+  }
+
+  bindVoiceTurn(sessionID: string, messageID: string, requestId: string) {
+    return this.replies.bind(sessionID, messageID, requestId)
+  }
+
+  trackMessage(
+    sessionID: string,
+    role: string,
+    messageID: string,
+    parentID?: string,
+    ended = false,
+    failed = false,
+  ): void {
+    this.replies.message(sessionID, role, messageID, parentID, ended, failed)
   }
 
   trackPart(
     sessionID: string,
-    part: { id: string; messageID?: string; type: string; text?: string; synthetic?: boolean },
+    part: {
+      id: string
+      messageID?: string
+      type: string
+      text?: string
+      synthetic?: boolean
+      time?: { start?: number; end?: number; created?: number }
+    },
   ): void {
     this.replies.part(sessionID, part)
   }
@@ -663,22 +799,56 @@ export class SpeechService implements vscode.Disposable {
     this.replies.remove(sessionID, partID)
   }
 
+  busy(sessionID: string, status?: string): void {
+    if (status === "idle") return
+    this.replies.busy(sessionID)
+  }
+
   async speakOnIdle(sessionID: string, post: Post): Promise<void> {
-    const text = await this.replies.wait(sessionID)
-    if (!text) return
-    const settings = await this.settings.load()
-    if (
-      settings.mode === "off" ||
-      ["openai-realtime", "openai-live"].includes(settings.voiceEngine) ||
-      this.openai.active ||
-      this.live.active
-    )
+    const reply = await this.replies.wait(sessionID)
+    if (!reply || !reply.current()) return
+    const trace = diagnostics(reply.requestId, this.diagnostic)
+    trace("idle")
+    if (reply.failed) {
+      trace("error", { forwarded: !this.closed && reply.current() })
+      if (!this.closed && reply.current())
+        post({
+          type: "speechPlaybackError",
+          requestId: reply.requestId,
+          error: "The Voice reply did not complete. Check the chat error and retry.",
+        })
       return
-    await this.speak({ requestId: crypto.randomUUID(), text: speakable(text) }, post)
+    }
+    try {
+      const settings = await this.settings.load()
+      if (!reply.current() || this.closed) return
+      if (settings.mode === "off") {
+        trace("handoff", { boundary: "skip", reason: "off" })
+        return
+      }
+      if (["openai-realtime", "openai-live"].includes(settings.voiceEngine)) {
+        trace("handoff", { boundary: "skip", reason: "cloud-engine" })
+        return
+      }
+      if (this.openai.active || this.live.active) {
+        trace("handoff", { boundary: "skip", reason: "live-active" })
+        return
+      }
+      await this.speak({ requestId: reply.requestId, text: speakable(reply.text), current: reply.current }, post)
+    } catch {
+      trace("error", { forwarded: reply.current() && !this.closed })
+      if (reply.current() && !this.closed)
+        post({
+          type: "speechPlaybackError",
+          requestId: reply.requestId,
+          error: "Voice playback could not start. Check Speech settings and retry.",
+        })
+    }
   }
   // raya_change end
 
   cancel(requestId?: string): void {
+    this.replies.cancel(requestId)
     if (requestId) this.aborts.get(requestId)?.abort()
     if (requestId) void cancelSpeechCapture(requestId) // raya_change - extension-host microphone fallback
     if (requestId) void stopLiveCapture(requestId)
@@ -687,6 +857,10 @@ export class SpeechService implements vscode.Disposable {
       this.aborts.clear()
     }
     this.tts.cancel(requestId)
+    void this.localtts.cancel(requestId).catch((err) => {
+      this.incomplete()
+      console.error("[Raya] Local speech cancellation could not confirm service cleanup.", err)
+    })
   }
 
   dispose(): void {
@@ -701,6 +875,7 @@ export class SpeechService implements vscode.Disposable {
       const realtime = await this.realtime.dispose()
       if (realtime) console.error("[Raya] Voice disposal failed:", realtime.error)
       this.tts.dispose()
+      await this.localtts.dispose()
     })
   }
 }

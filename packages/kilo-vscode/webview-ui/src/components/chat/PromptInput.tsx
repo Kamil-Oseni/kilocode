@@ -104,6 +104,7 @@ import { useMemory } from "../../context/memory"
 import { parseGoalCommand } from "../../../../src/shared/goal" // raya_change - Milestone A /goal parser
 import { durableDrafts } from "../../utils/durable-drafts"
 import { draftNotice } from "../../utils/draft-notice"
+import { createVoiceSession } from "../../utils/voice-session"
 import type { DraftContent, DraftTarget } from "../../../../src/shared/composer-drafts-messages"
 
 function mergeReviewComments(current: ReviewCommentEntry[], incoming: ReviewCommentEntry[]): ReviewCommentEntry[] {
@@ -204,7 +205,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const { config, globalConfig, settings, features } = useConfig()
   const provider = useProvider()
   const voice = useVoice() // raya_change - Milestone H
-  const voicePending = { start: false } // raya_change - create a backend parent before native voice admission
   const language = useLanguage()
   const vscode = useVSCode()
   const durable = durableDrafts(vscode)
@@ -677,7 +677,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (JSON.stringify(reviewComments()) !== JSON.stringify(value.comments)) setReviewComments(value.comments)
       if (JSON.stringify(imageAttach.images()) !== JSON.stringify(value.images)) imageAttach.replace(value.images)
       saveDraft(target.key, value.text, value.comments, value.images, value.scroll)
-      if (textareaRef && hydrating()) {
+      if (textareaRef && (hydrating() || textareaRef.value !== value.text)) {
         textareaRef.value = value.text
         adjustHeight()
         textareaRef.scrollTop = value.scroll
@@ -1138,6 +1138,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (message.type === "sessionCreated") {
+      if (message.draftID && session.promoteCreation?.(message.draftID, message.session.id) === false) return
       if (message.draftID) durable.created(message.draftID, message.session.id, boxKey())
       const raw = createdDraftKey(message.draftID, sandboxRequest(undefined) !== undefined)
       if (raw) {
@@ -1149,13 +1150,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           source,
           target,
         )
-      }
-      if (
-        message.draftID &&
-        !session.currentSessionID() &&
-        (props.pendingSessionID ?? session.draftSessionID()) === message.draftID
-      ) {
-        session.setDraftSessionID(message.session.id)
       }
     }
 
@@ -1385,15 +1379,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       threshold: voice.settings().vadThreshold,
       silenceMs: voice.settings().vadSilenceMs,
       echoSuppression: voice.playing(), // raya_change - learn residual speaker energy once, then retain fast human barge-in
+      onError: voice.pause,
+      onEmpty: fallback ? () => window.dispatchEvent(new CustomEvent("rayaVoiceListen")) : undefined,
       onSpeech: voice.hear, // raya_change - Milestone H barge-in transition
       onSilence: fallback ? () => transcribeAndSend() : undefined,
     })
   }
 
   const transcribeAndSend = () => {
-    voice.wait() // raya_change - Milestone H wait for the agent before spoken playback
-    const key = draftKey()
     const id = sid()
+    const key = draftKey()
     const context = ctx()
     const value = text()
     const comments = reviewComments()
@@ -1437,7 +1432,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   onCleanup(shortcut.reset)
   // raya_change start - hands-free resumes listening after spoken playback completes
   const voiceListen = () => {
-    if (voice.settings().mode !== "hands-free" || !voice.cascade() || speech.active() || isDisabled()) return
+    if (
+      voice.settings().mode !== "hands-free" ||
+      voice.status() === "degraded" ||
+      !voice.cascade() ||
+      speech.active() ||
+      isDisabled()
+    )
+      return
     if (isBusy()) {
       setTimeout(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")), 100)
       return
@@ -1446,6 +1448,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
   window.addEventListener("rayaVoiceListen", voiceListen)
   onCleanup(() => window.removeEventListener("rayaVoiceListen", voiceListen))
+  const voiceCancel = () => {
+    voiceSession.cancel()
+    speech.cancel()
+  }
+  window.addEventListener("rayaVoiceCancel", voiceCancel)
+  onCleanup(() => window.removeEventListener("rayaVoiceCancel", voiceCancel))
   // raya_change end
 
   const handleSendClick = () => {
@@ -1457,25 +1465,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   // raya_change start - the orb opens a native media session and never submits composer text
-  const startVoice = () => {
-    const id = session.currentSessionID()
-    if (id) {
+  const voiceSession = createVoiceSession({
+    id: session.currentSessionID,
+    connected: server.isConnected,
+    create: session.createSession,
+    prepare: voice.prepare,
+    start: (id) => {
       voice.start(id)
-      if (!["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine)) session.selectAgent("voice", id)
-      return
-    }
-    voicePending.start = true
-    session.createSession()
-  }
-  createEffect(() => {
-    const id = session.currentSessionID()
-    if (!voicePending.start || !id) return
-    voicePending.start = false
-    voice.start(id)
-    if (!["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine)) session.selectAgent("voice", id)
+      if (
+        !["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) &&
+        session.selectedAgent(id) !== "voice"
+      )
+        session.setSessionAgent(id, "voice")
+    },
   })
-  const voiceActive = () => voice.status() !== "off"
+  const startVoice = voiceSession.start
+  const voiceActive = () => voiceSession.pending() || voice.status() !== "off"
   const voiceLabel = () => {
+    if (voiceSession.pending()) return "Cancel voice startup"
     if (!voiceActive())
       return ["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine)
         ? "Start voice"
@@ -1488,7 +1495,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       startVoice()
       return
     }
-    voicePending.start = false
+    voiceSession.cancel()
     speech.cancel() // raya_change - orb ownership includes its background microphone capture
     voice.stop()
     voice.setMode("off")
@@ -1618,6 +1625,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
+  const arm = (origin: string | undefined, id: string | undefined) => {
+    if (
+      origin &&
+      !origin.startsWith("cloud:") &&
+      session.selectedAgent(id) === "voice" &&
+      voice.cascade() &&
+      voice.settings().mode === "hands-free"
+    )
+      voice.wait(origin)
+  }
+
   const sendDraft = async (draft: string) => {
     if (consumeMemory(draft)) return
 
@@ -1730,6 +1748,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         capture,
       )
     } else {
+      arm(origin, id)
       session.sendMessage(
         message,
         sel?.providerID,
@@ -2192,14 +2211,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <SpeechToTextButton speech={speech} disabled={isDisabled()} start={startSpeech} label={language.t} />
           </Show>
           <Show
-            when={showStop()}
+            when={!voiceSession.pending() && showStop()}
             fallback={
               <Show
                 when={
-                  !hasInput() &&
-                  !voiceActive() &&
-                  !voice.recovery() &&
-                  (["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) || canUseSpeech())
+                  voiceActive() ||
+                  (!hasInput() &&
+                    !voiceActive() &&
+                    !voice.recovery() &&
+                    (["openai-realtime", "openai-live"].includes(voice.settings().voiceEngine) || canUseSpeech()))
                 }
                 fallback={
                   <Tooltip value={sendLabel()} placement="top" openDelay={0}>
@@ -2234,10 +2254,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     type="button"
                     class="prompt-voice-orb"
                     aria-label={voiceLabel()}
-                    disabled={isDisabled() || voice.startBlocked()}
+                    disabled={!voiceSession.pending() && (isDisabled() || voice.startBlocked())}
                     onClick={toggleVoice}
                   >
-                    <span class="prompt-voice-orb__core" aria-hidden="true" />
+                    <Show when={voiceActive()} fallback={<span class="prompt-voice-orb__core" aria-hidden="true" />}>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <rect x="3" y="3" width="10" height="10" rx="1" />
+                      </svg>
+                    </Show>
                     <span class="prompt-voice-orb__sheen" aria-hidden="true" />
                   </button>
                 </Tooltip>

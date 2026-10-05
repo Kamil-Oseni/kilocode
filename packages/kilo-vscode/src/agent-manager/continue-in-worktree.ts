@@ -9,6 +9,7 @@ import { logAbort } from "../kilo-provider/abort"
 
 export interface ContinueContext {
   root: string
+  failure?: (err: unknown) => void
   getClient: () => KiloClient
   createWorktreeOnDisk: (opts: { baseBranch: string; baseRef: string }) => Promise<{
     worktree: { id: string }
@@ -34,9 +35,11 @@ export async function abortSession(ctx: ContinueContext, sessionId: string): Pro
     const client = ctx.getClient()
     logAbort(sessionId, "host-continue-in-worktree")
     await client.session.abort({ sessionID: sessionId }).catch((err) => {
+      ctx.failure?.(err)
       ctx.log("Session abort failed (may already be idle):", getErrorMessage(err))
     })
   } catch (err) {
+    ctx.failure?.(err)
     ctx.log("Client not available for abort, continuing:", getErrorMessage(err))
   }
 }
@@ -44,9 +47,10 @@ export async function abortSession(ctx: ContinueContext, sessionId: string): Pro
 /** Capture git state from the workspace root. */
 export async function captureState(ctx: ContinueContext): Promise<StepResult<GitSnapshot>> {
   try {
-    const snapshot = await captureGitState(ctx.root, (...args) => ctx.log(...args))
+    const snapshot = await captureGitState(ctx.root, (...args) => ctx.log(...args), ctx.failure)
     return { ok: true, value: snapshot }
   } catch (err) {
+    ctx.failure?.(err)
     return { ok: false, error: `Failed to capture git state: ${getErrorMessage(err)}` }
   }
 }
@@ -58,7 +62,10 @@ export async function prepareWorktree(
   head: string,
 ): Promise<StepResult<{ worktreeId: string; result: CreateWorktreeResult }>> {
   const created = await ctx.createWorktreeOnDisk({ baseBranch: branch, baseRef: head })
-  if (!created) return { ok: false, error: "Failed to create worktree" }
+  if (!created) {
+    ctx.failure?.(new Error("Worktree continuation creation failed"))
+    return { ok: false, error: "Failed to create worktree" }
+  }
   await ctx.runSetupScript(created.result.path, created.result.branch, created.worktree.id)
   return { ok: true, value: { worktreeId: created.worktree.id, result: created.result } }
 }
@@ -69,7 +76,7 @@ export async function transferState(
   snapshot: GitSnapshot,
   target: string,
 ): Promise<StepResult<void>> {
-  const applied = await applyGitState(snapshot, target, (...args) => ctx.log(...args))
+  const applied = await applyGitState(snapshot, target, (...args) => ctx.log(...args), ctx.failure)
   if (!applied.ok) {
     ctx.log("Git state transfer failed:", applied.error)
     return { ok: false, error: applied.error ?? "Failed to apply changes to worktree" }
@@ -84,11 +91,13 @@ async function rollback(
   progress: (status: string, detail?: string, error?: string) => void,
 ): Promise<void> {
   await ctx.cleanupWorktree(prepared.worktreeId).catch((err) => {
+    ctx.failure?.(err)
     ctx.log("Failed to clean up worktree after continue error:", getErrorMessage(err))
   })
   try {
     ctx.notifyError(error, prepared.result, prepared.worktreeId)
   } catch (err) {
+    ctx.failure?.(err)
     ctx.log("Failed to notify Agent Manager about continue error:", getErrorMessage(err))
   }
   progress("error", undefined, error)
@@ -100,16 +109,19 @@ export async function forkSession(ctx: ContinueContext, sessionId: string, dir: 
   try {
     client = ctx.getClient()
   } catch (err) {
+    ctx.failure?.(err)
     ctx.log("Client not available for session fork:", getErrorMessage(err))
     return { ok: false, error: "Not connected to CLI backend" }
   }
   try {
     const { data } = await client.session.fork({ sessionID: sessionId, directory: dir }, { throwOnError: true })
     await recordForkHandoff({ client, sessionId: data.id, directory: dir }).catch((err) => {
+      ctx.failure?.(err)
       ctx.log("Failed to record fork handoff:", getErrorMessage(err))
     })
     return { ok: true, value: data }
   } catch (err) {
+    ctx.failure?.(err)
     return { ok: false, error: `Failed to fork session: ${getErrorMessage(err)}` }
   }
 }

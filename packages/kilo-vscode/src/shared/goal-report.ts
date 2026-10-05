@@ -288,6 +288,19 @@ function review(value: Goal["review"]) {
   return lines
 }
 
+function binding(check: NonNullable<GoalState["criteria"]>[number]["check"]) {
+  if (!check) return []
+  if (check.kind === "command")
+    return ["", "Required command:", quote(check.command), "Working directory:", quote(check.directory)]
+  return [
+    "",
+    "Saved exact byte-equality check:",
+    quote(
+      `Source: ${check.source.path}\nCanonical source: ${check.source.canonical}\nSource SHA-256: ${check.source.sha256}\nSource bytes: ${check.source.bytes}\nTarget: ${check.target.path}\nCanonical target: ${check.target.canonical}`,
+    ),
+  ]
+}
+
 function contract(goal: Pick<Goal, "criteria" | "audit" | "auditAttempt" | "review">) {
   const lines: string[] = []
   lines.push("", "## Saved acceptance criteria", "")
@@ -303,9 +316,7 @@ function contract(goal: Pick<Goal, "criteria" | "audit" | "auditAttempt" | "revi
       "",
       "Verification:",
       quote(item.verification),
-      ...(item.check
-        ? ["", "Required command:", quote(item.check.command), "Working directory:", quote(item.check.directory)]
-        : []),
+      ...binding(item.check),
       "",
     )
   lines.push(...review(goal.review))

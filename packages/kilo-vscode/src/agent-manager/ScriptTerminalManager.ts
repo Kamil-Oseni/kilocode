@@ -106,10 +106,50 @@ export class ScriptTerminalManager {
   private readonly ptys = new Map<string, Entry>()
   private readonly creates = new Map<string, Set<Promise<unknown>>>()
   private readonly blocked = new Map<string, number>()
+  private client: KiloClient | undefined
+  private retired = false
+  private closing: Promise<void> | undefined
+  private readonly failures: unknown[] = []
+  private readonly kills = new Set<Promise<void>>()
+  private readonly reservations = new Set<Promise<void>>()
 
   constructor(private readonly deps: ScriptTerminalDeps) {}
 
   async start(
+    kind: ScriptTerminalKind,
+    config: ScriptTerminalConfig,
+    done: (exit: ScriptTerminalExit) => void,
+  ): Promise<RunHandle> {
+    if (this.retired) throw new Error("Script terminal intake is retired")
+    return this.launch(kind, config, done)
+  }
+
+  /** One exact launch reserved before its accepted controller awaits configuration. */
+  reserve() {
+    if (this.retired) throw new Error("Script terminal intake is retired")
+    let valid = true
+    let used = false
+    let settle: () => void = () => undefined
+    const task = new Promise<void>((resolve) => {
+      settle = resolve
+    })
+    this.reservations.add(task)
+    return {
+      start: (kind: ScriptTerminalKind, config: ScriptTerminalConfig, done: (exit: ScriptTerminalExit) => void) => {
+        if (!valid || used) return Promise.reject(new Error("Script terminal launch reservation is not active"))
+        used = true
+        return this.launch(kind, config, done)
+      },
+      release: () => {
+        if (!valid) return
+        valid = false
+        this.reservations.delete(task)
+        settle()
+      },
+    }
+  }
+
+  private async launch(
     kind: ScriptTerminalKind,
     config: ScriptTerminalConfig,
     done: (exit: ScriptTerminalExit) => void,
@@ -164,11 +204,14 @@ export class ScriptTerminalManager {
       if (this.entries.has(id)) throw new Error(`Failed to remove previous ${TITLE[kind]} terminal`)
     }
 
-    const client = await this.deps.getClientAsync(config.cwd).catch((error) => {
-      const detail = message(error)
-      this.deps.log(`${TITLE[kind]} terminal create failed: ${detail}`)
-      throw new Error(detail)
-    })
+    const client = await (this.client ? Promise.resolve(this.client) : this.deps.getClientAsync(config.cwd)).catch(
+      (error) => {
+        this.failures.push(error)
+        const detail = message(error)
+        this.deps.log(`${TITLE[kind]} terminal create failed: ${detail}`)
+        throw new Error(detail)
+      },
+    )
     const created = await client.v2.pty
       .create({
         location: { directory: config.cwd },
@@ -179,12 +222,14 @@ export class ScriptTerminalManager {
         title: TITLE[kind],
       })
       .catch((error) => {
+        this.failures.push(error)
         const detail = message(error)
         this.deps.log(`${TITLE[kind]} terminal create failed: ${detail}`)
         throw new Error(detail)
       })
     const pty = created.data?.data
     if (created.error || !pty) {
+      this.failures.push(created.error ?? new Error("Script terminal create result is uncertain"))
       const detail = message(created.error ?? "unknown error")
       this.deps.log(`${TITLE[kind]} terminal create failed: ${detail}`)
       throw new Error(`Failed to create ${TITLE[kind]} terminal: ${detail}`)
@@ -339,8 +384,33 @@ export class ScriptTerminalManager {
     }
   }
 
-  async dispose(): Promise<void> {
-    await Promise.all([...this.terminals.keys()].map((terminalId) => this.close(terminalId, true)))
+  capture(client: KiloClient): void {
+    this.client = client
+    this.retired = true
+  }
+
+  dispose(): Promise<void> {
+    if (this.closing) return this.closing
+    this.retired = true
+    this.closing = (async () => {
+      while (this.reservations.size) await Promise.all([...this.reservations])
+      const creates = await Promise.allSettled([...this.creates.values()].flatMap((tasks) => [...tasks]))
+      const closes = await Promise.allSettled([...this.terminals.keys()].map((id) => this.close(id, true)))
+      while (this.kills.size) await Promise.all([...this.kills])
+      const errors = [
+        ...this.failures,
+        ...creates.flatMap((item) => (item.status === "rejected" ? [item.reason] : [])),
+        ...closes.flatMap((item) =>
+          item.status === "rejected"
+            ? [item.reason]
+            : item.value
+              ? []
+              : [new Error("Script terminal closure was not confirmed")],
+        ),
+      ]
+      if (errors.length) throw new AggregateError(errors, "Script terminal retirement failed")
+    })()
+    return this.closing
   }
 
   private async reconcile(entry: Entry, client: KiloClient): Promise<void> {
@@ -380,15 +450,19 @@ export class ScriptTerminalManager {
     if (entry.closing) return entry.closing
     const task = this.removeEntry(entry, stopped)
     entry.closing = task
-    void task.finally(() => {
+    const finish = () => {
       if (this.current(entry) && entry.closing === task) entry.closing = undefined
+    }
+    void task.then(finish, (err: unknown) => {
+      this.failures.push(err)
+      finish()
     })
     return task
   }
 
   private async removeEntry(entry: Entry, stopped: boolean): Promise<void> {
     try {
-      const client = await this.deps.getClientAsync(entry.cwd)
+      const client = this.client ?? (await this.deps.getClientAsync(entry.cwd))
       const result = await client.v2.pty.remove({ ptyID: entry.ptyID, location: { directory: entry.cwd } })
       if (result.error) {
         if (missing(result.error)) {
@@ -398,12 +472,14 @@ export class ScriptTerminalManager {
           return
         }
         this.failed(entry, `Failed to remove ${TITLE[entry.kind]} terminal: ${message(result.error)}`)
+        this.failures.push(result.error)
         return
       }
       this.drop(entry)
       this.emit()
       if (stopped) this.done(entry, { stopped: true })
     } catch (error) {
+      this.failures.push(error)
       this.failed(entry, `Failed to remove ${TITLE[entry.kind]} terminal: ${message(error)}`)
     }
   }
@@ -415,9 +491,11 @@ export class ScriptTerminalManager {
       this.deps.log(`Failed to build ${TITLE[kind]} terminal URL: ${message(error)}`)
       try {
         const result = await client.v2.pty.remove({ ptyID, location: { directory: cwd } })
+        if (result.error) this.failures.push(result.error)
         if (result.error)
           this.deps.log(`Failed to remove ${TITLE[kind]} terminal after URL failure: ${message(result.error)}`)
       } catch (cleanup) {
+        this.failures.push(cleanup)
         this.deps.log(`Failed to remove ${TITLE[kind]} terminal after URL failure: ${message(cleanup)}`)
       }
       throw error
@@ -449,15 +527,20 @@ export class ScriptTerminalManager {
     if (!this.current(entry) || (entry.state !== "running" && entry.state !== "stopping")) return
     entry.state = "failed"
     this.emit()
-    void this.deps
-      .getClientAsync(entry.cwd)
+    const task = (this.client ? Promise.resolve(this.client) : this.deps.getClientAsync(entry.cwd))
       .then(async (client) => {
         const result = await client.v2.pty.remove({ ptyID: entry.ptyID, location: { directory: entry.cwd } })
-        if (result.error) this.deps.log(`Failed to kill ${TITLE[entry.kind]} terminal: ${message(result.error)}`)
+        if (result.error) {
+          this.failures.push(result.error)
+          this.deps.log(`Failed to kill ${TITLE[entry.kind]} terminal: ${message(result.error)}`)
+        }
       })
       .catch((error) => {
+        this.failures.push(error)
         this.deps.log(`Failed to kill ${TITLE[entry.kind]} terminal: ${message(error)}`)
       })
+    this.kills.add(task)
+    void task.then(() => this.kills.delete(task))
     this.deps.log(reason)
     this.done(entry, { error: reason })
   }

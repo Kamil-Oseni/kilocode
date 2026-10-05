@@ -157,7 +157,13 @@ export interface GoalState {
     verification: string
     required?: boolean
     review?: boolean
-    check?: { kind: "command"; command: string; directory: string }
+    check?:
+      | { kind: "command"; command: string; directory: string }
+      | {
+          kind: "byte-equality"
+          source: { path: string; canonical: string; sha256: string; bytes: number }
+          target: { path: string; canonical: string }
+        }
   }>
   intent?: string
   inputs?: string[]

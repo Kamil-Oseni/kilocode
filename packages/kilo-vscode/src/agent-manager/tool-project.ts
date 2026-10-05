@@ -19,14 +19,14 @@ export function handleToolEvent<C extends { id: string }>(
   contexts: { byDirectory: (value: string) => C | undefined; usable: (id: string) => C | undefined },
   scope: { run: <T>(owner: C, fn: () => Promise<T>) => Promise<T> },
   start: (req: ToolRequest) => Promise<void>,
-): void {
+  admit: (body: () => Promise<void>) => Promise<void> = (body) => body(),
+): Promise<void> | undefined {
   const properties = (event as { properties?: unknown }).properties
   const req = parseToolRequest(properties)
   if (!req) return
-  const routed = routeToolRequest(req, directory, contexts)
-  if (routed.owner) {
-    void scope.run(routed.owner, () => start(routed.request))
-    return
-  }
-  void start(routed.request)
+  return admit(async () => {
+    const routed = routeToolRequest(req, directory, contexts)
+    if (routed.owner) return scope.run(routed.owner, () => start(routed.request))
+    await start(routed.request)
+  })
 }

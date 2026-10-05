@@ -1,3 +1,4 @@
+import { GoalBinding } from "./GoalBinding"
 import { Index, Show } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import type { GoalState } from "../../../../src/shared/goal"
@@ -7,6 +8,8 @@ export function GoalCriteriaEditor(props: {
   disabled?: boolean
   onChange: (value: NonNullable<GoalState["criteria"]>) => void
 }) {
+  const command = (item: NonNullable<GoalState["criteria"]>[number]) =>
+    item.check?.kind === "command" ? item.check : undefined
   let root: HTMLFieldSetElement | undefined
   const focus = (id: string) =>
     queueMicrotask(() => root?.querySelector<HTMLTextAreaElement>(`[data-criterion="${id}"]`)?.focus())
@@ -78,66 +81,71 @@ export function GoalCriteriaEditor(props: {
                 }
               />
             </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={!!item().check}
-                onChange={(event) =>
-                  props.onChange(
-                    props.value.map((entry, i) =>
-                      i === index
-                        ? {
-                            ...entry,
-                            check: event.currentTarget.checked
-                              ? { kind: "command", command: "", directory: "" }
-                              : undefined,
-                          }
-                        : entry,
-                    ),
-                  )
-                }
-              />
-              Require an exact command result for criterion {index + 1}
-            </label>
-            <Show when={item().check}>
-              <p>
-                The cited command must match this text, use this explicit absolute working directory, and exit
-                successfully. This does not run it or grant permission.
-              </p>
+            <Show when={item().check?.kind === "byte-equality"}>
+              <GoalBinding check={item().check} />
+            </Show>
+            <Show when={item().check?.kind !== "byte-equality"}>
               <label>
-                Command for criterion {index + 1}
-                <textarea
-                  rows="2"
-                  maxLength={4000}
-                  value={item().check?.command ?? ""}
-                  onInput={(event) =>
-                    props.onChange(
-                      props.value.map((entry, i) =>
-                        i === index && entry.check
-                          ? { ...entry, check: { ...entry.check, command: event.currentTarget.value } }
-                          : entry,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label>
-                Absolute working directory for criterion {index + 1}
                 <input
-                  type="text"
-                  maxLength={4000}
-                  value={item().check?.directory ?? ""}
-                  onInput={(event) =>
+                  type="checkbox"
+                  checked={!!item().check}
+                  onChange={(event) =>
                     props.onChange(
                       props.value.map((entry, i) =>
-                        i === index && entry.check
-                          ? { ...entry, check: { ...entry.check, directory: event.currentTarget.value } }
+                        i === index
+                          ? {
+                              ...entry,
+                              check: event.currentTarget.checked
+                                ? { kind: "command", command: "", directory: "" }
+                                : undefined,
+                            }
                           : entry,
                       ),
                     )
                   }
                 />
+                Require an exact command result for criterion {index + 1}
               </label>
+              <Show when={item().check?.kind === "command"}>
+                <p>
+                  The cited command must match this text, use this explicit absolute working directory, and exit
+                  successfully. This does not run it or grant permission.
+                </p>
+                <label>
+                  Command for criterion {index + 1}
+                  <textarea
+                    rows="2"
+                    maxLength={4000}
+                    value={command(item())?.command ?? ""}
+                    onInput={(event) =>
+                      props.onChange(
+                        props.value.map((entry, i) =>
+                          i === index && entry.check?.kind === "command"
+                            ? { ...entry, check: { ...entry.check, command: event.currentTarget.value } }
+                            : entry,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label>
+                  Absolute working directory for criterion {index + 1}
+                  <input
+                    type="text"
+                    maxLength={4000}
+                    value={command(item())?.directory ?? ""}
+                    onInput={(event) =>
+                      props.onChange(
+                        props.value.map((entry, i) =>
+                          i === index && entry.check?.kind === "command"
+                            ? { ...entry, check: { ...entry.check, directory: event.currentTarget.value } }
+                            : entry,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+              </Show>
             </Show>
             <Button
               size="small"

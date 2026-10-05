@@ -214,7 +214,7 @@ export const dict = {
 
   "speechToText.tooltip.start": "Iniciar entrada de voz com o Raya Gateway",
   "speechToText.tooltip.shortcut":
-    "Toque ou pressione Cmd/Ctrl+K para iniciar ou parar a gravação; mantenha o botão pressionado enquanto fala e solte-o para transcrever e enviar.",
+    "Toque ou pressione Cmd/Ctrl+Alt+K para iniciar ou parar a gravação; mantenha o botão pressionado enquanto fala e solte-o para transcrever e enviar.",
   "speechToText.tooltip.starting": "Iniciando o microfone... Aguarde antes de falar.",
   "speechToText.tooltip.stop": "Parar captura",
   "speechToText.tooltip.transcribing": "Transcrevendo... Clique para cancelar.",

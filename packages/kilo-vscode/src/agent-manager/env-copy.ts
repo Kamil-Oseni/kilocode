@@ -33,11 +33,12 @@ function isEnvFile(name: string): boolean {
  * List `.env` / `.env.*` filenames at the root of `dir`.
  * Returns basenames only (e.g. `[".env", ".env.local"]`).
  */
-export function listEnvFiles(dir: string): string[] {
+export function listEnvFiles(dir: string, failure?: (err: unknown) => void): string[] {
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true })
     return entries.filter((e) => e.isFile() && isEnvFile(e.name)).map((e) => e.name)
-  } catch {
+  } catch (err) {
+    failure?.(err)
     return []
   }
 }
@@ -53,8 +54,9 @@ export async function copyEnvFiles(
   repoPath: string,
   worktreePath: string,
   log: Log = () => {},
+  failure?: (err: unknown) => void,
 ): Promise<EnvCopyResult> {
-  const names = listEnvFiles(repoPath)
+  const names = listEnvFiles(repoPath, failure)
   if (names.length === 0) {
     log("No .env files found in main repo")
     return { copied: [], skipped: [] }
@@ -77,6 +79,7 @@ export async function copyEnvFiles(
         result.skipped.push(name)
         continue
       }
+      failure?.(err)
       log(`Failed to copy ${name}: ${err}`)
     }
   }

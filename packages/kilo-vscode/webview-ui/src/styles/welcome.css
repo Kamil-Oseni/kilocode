@@ -448,7 +448,7 @@
 .raya-home__row span:last-child {
   flex: none;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 
 .raya-home__all {

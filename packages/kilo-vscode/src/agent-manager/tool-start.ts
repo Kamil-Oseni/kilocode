@@ -55,13 +55,14 @@ export interface ToolDeps {
   setup: (dir: string, branch?: string, id?: string) => Promise<void>
   createSessionInWorktree: (dir: string, branch: string, id?: string, source?: ToolSource) => Promise<Session | null>
   sessionMetadata: (client: KiloClient, dir: string) => Promise<Record<string, unknown>>
-  registerWorktreeSession: (sid: string, dir: string) => void
+  registerWorktreeSession: (sid: string, dir: string) => void | Promise<void>
   notifyReady: (sid: string, result: CreateWorktreeResult, wid?: string) => void
   push: () => void
   post: (msg: unknown) => void
   capture: (event: string, props?: Record<string, unknown>) => void
   log: (...args: unknown[]) => void
   error: (msg: string) => void
+  failure?: (err: unknown) => void
 }
 
 function text(task: ToolTask): string | undefined {
@@ -151,7 +152,7 @@ async function local(deps: ToolDeps, client: KiloClient, task: ToolTask, directo
   )
   const session = data
   state.addSession(session.id, wt?.id ?? null)
-  if (wt) deps.registerWorktreeSession(session.id, wt.path)
+  if (wt) await deps.registerWorktreeSession(session.id, wt.path)
   deps.push()
   deps.getPanel()?.sessions.registerSession(session)
   if (wt) deps.post({ type: "agentManager.sessionAdded", sessionId: session.id, worktreeId: wt.id })
@@ -205,7 +206,7 @@ async function worktree(
     return false
   }
   state.addSession(session.id, created.worktree.id)
-  deps.registerWorktreeSession(session.id, created.result.path)
+  await deps.registerWorktreeSession(session.id, created.result.path)
   deps.notifyReady(session.id, created.result, created.worktree.id)
   deps.getPanel()?.sessions.registerSession(session)
   await prompt(client, session.id, created.result.path, task)
@@ -252,6 +253,7 @@ export async function startFromTool(deps: ToolDeps, req: ToolRequest): Promise<v
           : await worktree(deps, client, task, i, total, groupId, versions, source)
       if (done) state.ok++
     } catch (err) {
+      deps.failure?.(err)
       const msg = err instanceof Error ? err.message : String(err)
       deps.log("Agent Manager tool task failed", msg)
       deps.post({ type: "error", message: `Agent Manager tool task failed: ${msg}` })

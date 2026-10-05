@@ -1,5 +1,5 @@
 // raya_change - Raya extension namespace
-import { type ChildProcess } from "child_process"
+import { type ChildProcess, type SpawnOptions } from "child_process"
 import { spawn } from "../../util/process"
 import * as crypto from "crypto"
 import * as fs from "fs"
@@ -8,12 +8,14 @@ import * as vscode from "vscode"
 import { resolveLocalBwrapEnv, resolveTreeSitterEnv } from "./cli-resources"
 import { t } from "./i18n"
 import { launch, parseServerPort } from "./server-utils"
+import { Sources, stop, type ManagedSource } from "./managed-source"
 
 export interface ServerInstance {
   port: number
   password: string
   process: ChildProcess
   startedAt: number
+  source?: ManagedSource
 }
 
 export type ManagedProcessIdentity = { pid: number; startedAt: number; port: number; generation: number }
@@ -71,6 +73,10 @@ export class ServerManager {
   private instance: ServerInstance | null = null
   private startupPromise: Promise<ServerInstance> | null = null
   private generation = 0
+  private closed = false
+  private capturing = false
+  private capture: Promise<ManagedSource> | undefined
+  private readonly sources = new Sources()
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -81,7 +87,9 @@ export class ServerManager {
    * Get or start the server instance
    */
   async getServer(): Promise<ServerInstance> {
+    if (this.closed || this.capturing) throw new Error("Raya backend owner is retired")
     console.log("[Raya] ServerManager: 🔍 getServer called")
+    if (this.instance?.source?.exited) this.instance = null
     if (this.instance) {
       console.log("[Raya] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
       return this.instance
@@ -96,6 +104,10 @@ export class ServerManager {
     this.startupPromise = this.startServer()
     try {
       this.instance = await this.startupPromise
+      if (this.closed || this.instance.source?.exited) {
+        this.instance = null
+        throw new Error("Raya backend retired during startup")
+      }
       this.generation += 1
       console.log("[Raya] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
       return this.instance
@@ -109,6 +121,7 @@ export class ServerManager {
     const server = this.instance
     if (!server || this.startupPromise) return null
     const proc = server.process
+    if (server.source?.exited) return null
     if (
       !Number.isInteger(proc.pid) ||
       !proc.pid ||
@@ -121,7 +134,12 @@ export class ServerManager {
       server.startedAt <= 0
     )
       return null
-    return { pid: proc.pid, startedAt: server.startedAt, port: server.port, generation: this.generation }
+    return {
+      pid: server.source?.session.ticket.header.pid ?? proc.pid,
+      startedAt: server.startedAt,
+      port: server.port,
+      generation: this.generation,
+    }
   }
 
   private async startServer(): Promise<ServerInstance> {
@@ -141,75 +159,94 @@ export class ServerManager {
     console.log("[Raya] ServerManager: 📄 CLI isFile:", stat.isFile())
     console.log("[Raya] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
 
+    console.log("[Raya] ServerManager: 🎬 Spawning CLI process:", cliPath, launch)
+    const cfg = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
+    const claudeCompat = cfg.get<boolean>("claudeCodeCompat", false)
+    // Pin cwd so the CLI doesn't inherit the extension host's cwd ("/" under F5 debug)
+    // or "$HOME" in empty VS Code windows.
+    const folders = vscode.workspace.workspaceFolders
+    const spawnCwd = resolveServerCwd(folders, this.context.globalStorageUri.fsPath)
+    fs.mkdirSync(spawnCwd, { recursive: true })
+    const indexingEnv = resolveIndexingEnv(folders)
+    const localCli =
+      this.context.extensionMode === vscode.ExtensionMode.Development ||
+      fs.existsSync(path.join(this.context.extensionPath, "bin", ".cli-version"))
+    const bwrapEnv = process.env.KILO_BWRAP_PATH ? {} : resolveLocalBwrapEnv(this.context.extensionPath, localCli)
+    // TLS / corporate-proxy support:
+    //   - Default NODE_USE_SYSTEM_CA=1 so the bundled Bun CLI trusts the OS
+    //     trust store (Windows cert store, macOS keychain, Linux /etc/ssl).
+    //     Mirrors VS Code's `http.systemCertificates` default (true).
+    //   - Allow users behind MITM proxies to point at a custom CA bundle via
+    //     `raya.extraCaCerts` (NODE_EXTRA_CA_CERTS).
+    //   - Honor VS Code's `http.proxyStrictSSL=false` as an explicit opt-out
+    //     from verification, matching what VS Code already does for its own
+    //     requests. Users explicitly set that; we don't flip it ourselves.
+    // All three are overridable by the user's environment.
+    const extraCaCerts = cfg.get<string>("extraCaCerts", "").trim()
+    const proxyStrictSSL = vscode.workspace.getConfiguration("http").get<boolean>("proxyStrictSSL", true)
+    const startedAt = Date.now()
+    const opts = {
+      cwd: spawnCwd,
+      env: {
+        NODE_USE_SYSTEM_CA: "1",
+        ...(extraCaCerts && { NODE_EXTRA_CA_CERTS: extraCaCerts }),
+        ...(!proxyStrictSSL && { NODE_TLS_REJECT_UNAUTHORIZED: "0" }),
+        ...resolveManagedServerEnv(process.env, password, "kilo", claudeCompat),
+        // VS Code's http.proxy / http.noProxy settings are not reflected in
+        // process.env, so spawned children bypass the user's configured proxy
+        // and fail behind corporate firewalls. Forward them as the standard
+        // HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars that Bun's fetch and
+        // most HTTP clients already respect.
+        ...buildProxyEnv(),
+        // Force mimalloc (the allocator Bun ships with) to return freed pages
+        // to the OS immediately instead of retaining them in its arenas.
+        // Without this, Bun.spawn's piped stdio accumulates ~2 MB of native
+        // RSS per call on Windows, causing the Agent Manager (which polls git
+        // once per second per worktree) to reach multi-GB RSS in minutes.
+        // See oven-sh/bun#18265 and Jarred's workaround note in #21560.
+        MIMALLOC_PURGE_DELAY: "0",
+        // The CLI watches this PID and exits if the extension host is hard-killed without a
+        // chance to run dispose(), so it is never orphaned. See parent-watchdog.ts.
+        KILO_PARENT_PID: String(process.pid),
+        KILO_CLIENT: "vscode",
+        KILOCODE_FEATURE: "vscode-extension",
+        ...indexingEnv,
+        KILO_TELEMETRY_LEVEL: vscode.env.isTelemetryEnabled ? "all" : "off",
+        KILO_APP_NAME: "kilo-code",
+        KILO_EDITOR_NAME: vscode.env.appName,
+        KILO_PLATFORM: "vscode",
+        KILO_MACHINE_ID: vscode.env.machineId,
+        KILO_APP_VERSION: this.context.extension.packageJSON.version,
+        KILO_VSCODE_VERSION: vscode.version,
+        KILOCODE_VERSION: this.context.extension.packageJSON.version,
+        KILOCODE_EDITOR_NAME: `${vscode.env.appName} ${vscode.version}`,
+        ...resolveTreeSitterEnv(this.context.extensionPath),
+        ...bwrapEnv,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    } satisfies SpawnOptions
+    const source =
+      process.platform === "win32"
+        ? await this.sources.create({
+            executable: cliPath,
+            cwd: spawnCwd,
+            args: launch,
+            env: opts.env,
+            helper: path.join(this.context.extensionPath, "bin", "raya-process-host.exe"),
+          })
+        : undefined
+    const serverProcess = source?.session.child ?? spawn(cliPath, launch, opts)
+    if (this.closed) {
+      if (source) await stop(source)
+      if (!source) ServerManager.killProcess(serverProcess)
+      throw new Error("Raya backend owner retired before source admission")
+    }
     return new Promise((resolve, reject) => {
-      console.log("[Raya] ServerManager: 🎬 Spawning CLI process:", cliPath, launch)
-      const cfg = vscode.workspace.getConfiguration("raya") // raya_change - declared settings namespace
-      const claudeCompat = cfg.get<boolean>("claudeCodeCompat", false)
-      // Pin cwd so the CLI doesn't inherit the extension host's cwd ("/" under F5 debug)
-      // or "$HOME" in empty VS Code windows.
-      const folders = vscode.workspace.workspaceFolders
-      const spawnCwd = resolveServerCwd(folders, this.context.globalStorageUri.fsPath)
-      fs.mkdirSync(spawnCwd, { recursive: true })
-      const indexingEnv = resolveIndexingEnv(folders)
-      const localCli =
-        this.context.extensionMode === vscode.ExtensionMode.Development ||
-        fs.existsSync(path.join(this.context.extensionPath, "bin", ".cli-version"))
-      const bwrapEnv = process.env.KILO_BWRAP_PATH ? {} : resolveLocalBwrapEnv(this.context.extensionPath, localCli)
-      // TLS / corporate-proxy support:
-      //   - Default NODE_USE_SYSTEM_CA=1 so the bundled Bun CLI trusts the OS
-      //     trust store (Windows cert store, macOS keychain, Linux /etc/ssl).
-      //     Mirrors VS Code's `http.systemCertificates` default (true).
-      //   - Allow users behind MITM proxies to point at a custom CA bundle via
-      //     `raya.extraCaCerts` (NODE_EXTRA_CA_CERTS).
-      //   - Honor VS Code's `http.proxyStrictSSL=false` as an explicit opt-out
-      //     from verification, matching what VS Code already does for its own
-      //     requests. Users explicitly set that; we don't flip it ourselves.
-      // All three are overridable by the user's environment.
-      const extraCaCerts = cfg.get<string>("extraCaCerts", "").trim()
-      const proxyStrictSSL = vscode.workspace.getConfiguration("http").get<boolean>("proxyStrictSSL", true)
-      const startedAt = Date.now()
-      const serverProcess = spawn(cliPath, launch, {
-        cwd: spawnCwd,
-        env: {
-          NODE_USE_SYSTEM_CA: "1",
-          ...(extraCaCerts && { NODE_EXTRA_CA_CERTS: extraCaCerts }),
-          ...(!proxyStrictSSL && { NODE_TLS_REJECT_UNAUTHORIZED: "0" }),
-          ...resolveManagedServerEnv(process.env, password, "kilo", claudeCompat),
-          // VS Code's http.proxy / http.noProxy settings are not reflected in
-          // process.env, so spawned children bypass the user's configured proxy
-          // and fail behind corporate firewalls. Forward them as the standard
-          // HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars that Bun's fetch and
-          // most HTTP clients already respect.
-          ...buildProxyEnv(),
-          // Force mimalloc (the allocator Bun ships with) to return freed pages
-          // to the OS immediately instead of retaining them in its arenas.
-          // Without this, Bun.spawn's piped stdio accumulates ~2 MB of native
-          // RSS per call on Windows, causing the Agent Manager (which polls git
-          // once per second per worktree) to reach multi-GB RSS in minutes.
-          // See oven-sh/bun#18265 and Jarred's workaround note in #21560.
-          MIMALLOC_PURGE_DELAY: "0",
-          // The CLI watches this PID and exits if the extension host is hard-killed without a
-          // chance to run dispose(), so it is never orphaned. See parent-watchdog.ts.
-          KILO_PARENT_PID: String(process.pid),
-          KILO_CLIENT: "vscode",
-          KILOCODE_FEATURE: "vscode-extension",
-          ...indexingEnv,
-          KILO_TELEMETRY_LEVEL: vscode.env.isTelemetryEnabled ? "all" : "off",
-          KILO_APP_NAME: "kilo-code",
-          KILO_EDITOR_NAME: vscode.env.appName,
-          KILO_PLATFORM: "vscode",
-          KILO_MACHINE_ID: vscode.env.machineId,
-          KILO_APP_VERSION: this.context.extension.packageJSON.version,
-          KILO_VSCODE_VERSION: vscode.version,
-          KILOCODE_VERSION: this.context.extension.packageJSON.version,
-          KILOCODE_EDITOR_NAME: `${vscode.env.appName} ${vscode.version}`,
-          ...resolveTreeSitterEnv(this.context.extensionPath),
-          ...bwrapEnv,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: true,
-      })
-      console.log("[Raya] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
+      console.log(
+        "[Raya] ServerManager: 📦 Process spawned with PID:",
+        source?.session.ticket.header.pid ?? serverProcess.pid,
+      )
 
       let resolved = false
       const stderrLines: string[] = []
@@ -222,7 +259,7 @@ export class ServerManager {
         if (port !== null && !resolved) {
           resolved = true
           console.log("[Raya] ServerManager: 🎯 Port detected:", port)
-          resolve({ port, password, process: serverProcess, startedAt })
+          resolve({ port, password, process: serverProcess, startedAt, source })
         }
       })
 
@@ -235,6 +272,7 @@ export class ServerManager {
       serverProcess.on("error", (err: NodeJS.ErrnoException) => {
         console.error("[Raya] ServerManager: ❌ Process error:", err)
         if (!resolved) {
+          resolved = true
           const spawnErr = err as NodeJS.ErrnoException & { spawnargs?: string[] }
           const code = err.code || err.name || "UNKNOWN"
           const header = t("server.spawnFailed", { code })
@@ -251,25 +289,40 @@ export class ServerManager {
         }
       })
 
-      serverProcess.on("exit", (code, signal) => {
+      const exited = (code: number | null, signal: NodeJS.Signals | null) => {
         console.warn("[Raya] ServerManager: 🛑 Process exited:", { code, signal })
         if (this.instance?.process === serverProcess) {
           this.instance = null
-          this.onExit?.(code, signal)
+          if (!this.capturing) this.onExit?.(code, signal)
         }
         if (!resolved) {
+          resolved = true
           const msg = signal
             ? t("server.processSignaled", { signal })
             : t("server.processExited", { code: code ?? "unknown" })
           const { userMessage, userDetails } = toErrorMessage(msg, stderrLines, cliPath)
           reject(new ServerStartupError(userMessage, userDetails))
         }
-      })
+      }
+      if (source) {
+        void source.session.sourceExit.then(
+          (value) => exited(value.code, null),
+          (err: unknown) => {
+            console.error("[Raya] Source exit observation failed", err)
+            exited(null, null)
+          },
+        )
+      } else {
+        serverProcess.on("exit", exited)
+      }
 
       setTimeout(() => {
         if (!resolved) {
+          resolved = true
           console.error(`[Raya] ServerManager: ⏰ Server startup timeout (${STARTUP_TIMEOUT_SECONDS}s)`)
-          ServerManager.killProcess(serverProcess)
+          if (source)
+            void stop(source).catch((err: unknown) => console.error("[Raya] Source startup cleanup failed", err))
+          if (!source) ServerManager.killProcess(serverProcess)
           const { userMessage, userDetails } = toErrorMessage(
             t("server.startupTimeout", { seconds: STARTUP_TIMEOUT_SECONDS }),
             stderrLines,
@@ -278,6 +331,13 @@ export class ServerManager {
           reject(new ServerStartupError(userMessage, userDetails))
         }
       }, STARTUP_TIMEOUT_SECONDS * 1000)
+      if (source) {
+        void source.session.start().catch((err: unknown) => {
+          resolved = true
+          reject(err)
+          void stop(source).catch((failure: unknown) => console.error("[Raya] Source rollback failed", failure))
+        })
+      }
     })
   }
 
@@ -311,13 +371,35 @@ export class ServerManager {
   }
 
   dispose(): void {
+    if (this.capturing) {
+      void (async () => {
+        try {
+          await this.captureSource()
+        } catch (err) {
+          console.error("[Raya] Natural capture admission failed", err)
+        }
+        await this.sources.close()
+      })()
+        .catch((err: unknown) => console.error("[Raya] Natural capture disposal failed", err))
+        .finally(() => {
+          this.closed = true
+          this.instance = null
+        })
+      return
+    }
+    this.closed = true
+    void this.sources.close().catch((err: unknown) => console.error("[Raya] Source disposal failed", err))
     if (!this.instance) {
       return
     }
     const proc = this.instance.process
+    const source = this.instance.source
     this.instance = null
 
     console.log("[Raya] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
+    if (source) {
+      return
+    }
     ServerManager.killProcess(proc, "SIGTERM")
 
     // SIGKILL fallback after 5s. Ensures the process tree dies even if SIGTERM is ignored
@@ -331,6 +413,21 @@ export class ServerManager {
     // unref so this timer doesn't prevent the extension host from exiting
     timer.unref()
     proc.on("exit", () => clearTimeout(timer))
+  }
+
+  /** Join only already-admitted startup, then retain its exact source for authenticated export. */
+  captureSource(): Promise<ManagedSource> {
+    if (this.capture) return this.capture
+    if (this.closed) return Promise.reject(new Error("Raya backend was already disposed"))
+    this.capturing = true
+    this.capture = (async () => {
+      const server = this.startupPromise ? await this.startupPromise : this.instance
+      if (!server?.source || server.source.exited) throw new Error("No live native backend is available for capture")
+      const source = await this.sources.captureSource()
+      if (source !== server.source) throw new Error("Capture backend differs from its owned source family")
+      return source
+    })()
+    return this.capture
   }
 }
 

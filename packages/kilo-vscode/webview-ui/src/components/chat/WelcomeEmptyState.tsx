@@ -1,6 +1,7 @@
 // raya_change - Raya primary webview branding
-import { type Component, For, Show, createSignal, onMount } from "solid-js"
+import { type Component, For, Show, createSignal, createEffect } from "solid-js"
 import { useSession } from "../../context/session"
+import { useServer } from "../../context/server"
 import { HistoryPicker, HistoryRow, ordered } from "../history/HistoryPicker"
 
 interface WelcomeEmptyStateProps {
@@ -21,9 +22,12 @@ export const KiloLogo = () => {
 
 export const WelcomeEmptyState: Component<WelcomeEmptyStateProps> = (props) => {
   const session = useSession()
+  const server = useServer()
   const [open, setOpen] = createSignal(false)
   const chats = () => ordered(session.sessions()).filter((item) => !item.parentID)
-  onMount(session.loadSessions)
+  createEffect(() => {
+    if (server.isConnected()) session.loadSessions()
+  })
 
   return (
     <div class="message-list-empty raya-home">

@@ -37,6 +37,16 @@ export function sameReconcileShape(
   for (const [i, n] of incoming.entries()) {
     const c = current[i]!
     if (c.id !== n.id) return false
+    // Terminal metadata can change without another streamed part. Let the
+    // authoritative snapshot heal its exact parent before skipping store work.
+    if (
+      c.role !== n.role ||
+      c.parentID !== n.parentID ||
+      c.finish !== n.finish ||
+      c.time?.completed !== n.time?.completed ||
+      JSON.stringify(c.error) !== JSON.stringify(n.error)
+    )
+      return false
     if (!sameParts(getParts(c.id) ?? c.parts, n.parts)) return false
   }
   return true

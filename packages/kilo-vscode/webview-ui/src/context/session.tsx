@@ -71,6 +71,7 @@ import {
   type MessagePageState,
 } from "./session-utils"
 import { Identifier } from "../utils/id"
+import { reconcileQueued } from "./session-queue"
 import { apply, gather, type ReviewCounts } from "../components/chat/review-stats" // raya_change - session-scoped review counts
 import { resolveModelSelection } from "./model-selection"
 import { getAgentModel } from "./session-model-store"
@@ -93,6 +94,8 @@ import { isSameSessionTree } from "./model-usage"
 import { createDraftAgentSeed, resolvePromptAgent } from "./session-agent"
 import { createModelSelector } from "./session-model-selector"
 import { createMessageSender } from "./session-send"
+import { creation } from "./session-creation"
+import { bootstrap } from "./model-bootstrap"
 
 const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
@@ -290,7 +293,8 @@ interface SessionContextValue {
   closeQuestion: (requestID: string) => void
   acceptSuggestion: (requestID: string, index: number) => void
   dismissSuggestion: (requestID: string) => void
-  createSession: () => void
+  createSession: (signal?: AbortSignal) => Promise<string | undefined>
+  promoteCreation: (draft: string, id: string) => boolean | undefined
   clearCurrentSession: () => void
   loadSessions: () => void
   loadOlderMessages: () => boolean
@@ -969,7 +973,7 @@ export const SessionProvider: ParentComponent = (props) => {
     }
     setUserSetAgents(flags)
   })
-  vscode.postMessage({ type: "requestModelSelections" })
+  bootstrap(server.isConnected, () => vscode.postMessage({ type: "requestModelSelections" }))
   onCleanup(unsubSelections)
 
   // Load persisted recent models from extension globalState
@@ -1263,11 +1267,15 @@ export const SessionProvider: ParentComponent = (props) => {
 
   // Event handlers
   function handleSessionCreated(session: SessionInfo, draftID?: string) {
+    if (draftID && creations.retired.has(draftID)) {
+      setStore("sessions", session.id, session)
+      return
+    }
+    const creation = draftID ? creations.entries.get(draftID) : undefined
     freshSessions.add(session.id)
     if (draftID) aborts.move(draftID, session.id)
     batch(() => {
       setStore("sessions", session.id, session)
-
       if (draftID && submissionMap[draftID]) {
         const submissions = submissionMap[draftID]
         for (const [id, scope] of pendingSubmissions) {
@@ -1288,7 +1296,6 @@ export const SessionProvider: ParentComponent = (props) => {
           }),
         )
       }
-
       const drafts = draftID ? store.messages[draftID] : undefined
       if (draftID && drafts?.length) {
         const current = store.messages[session.id] ?? []
@@ -1303,7 +1310,6 @@ export const SessionProvider: ParentComponent = (props) => {
             delete messages[draftID]
           }),
         )
-
         const pending = pendingOptimistic.get(draftID)
         if (pending) {
           const merged = pendingOptimistic.get(session.id) ?? new Set<string>()
@@ -1324,7 +1330,6 @@ export const SessionProvider: ParentComponent = (props) => {
           }),
         )
       }
-
       // Only initialize messages if none exist yet — a cloud session import
       // (handleCloudSessionImported) may have already populated messages for
       // this session ID. The SSE session.created event can race with the
@@ -1334,7 +1339,6 @@ export const SessionProvider: ParentComponent = (props) => {
         setStore("messages", session.id, [])
       }
       if (!store.toolParts[session.id]) setStore("toolParts", session.id, [])
-
       const pendingAgent = draftID ? store.agentSelections[draftID] : pendingAgentSelection()
       const pendingModel = draftID ? store.sessionOverrides[draftID] : undefined
       if (draftID) {
@@ -1368,7 +1372,6 @@ export const SessionProvider: ParentComponent = (props) => {
         setStore("agentSelections", session.id, pendingAgent)
         setPendingAgentSelection(null)
       }
-
       const active = currentSessionID()
       const draft = draftSessionID()
       if (draftID && (draft === draftID || active === draftID)) {
@@ -1377,8 +1380,13 @@ export const SessionProvider: ParentComponent = (props) => {
         setUserClearedSession(false)
       }
     })
+    if (draftID && creation) {
+      if (currentSessionID() === session.id) {
+        vscode.postMessage({ type: "loadMessages", sessionID: session.id, mode: "focus" })
+        creation.finish(session.id)
+      } else creation.finish()
+    }
   }
-
   function patchPage(sessionID: string, patch: Partial<MessagePageState>) {
     setPages(sessionID, { ...(pages[sessionID] ?? emptyPageState), ...patch })
   }
@@ -1837,6 +1845,7 @@ export const SessionProvider: ParentComponent = (props) => {
    */
   function handleSendMessageFailed(message: SendMessageFailedMessage) {
     const sid = message.sessionID ?? message.draftID
+    if (message.draftID) creations.entries.get(message.draftID)?.finish()
     if (message.messageID) finishSubmission(message.messageID)
     if (!message.messageID && sid) aborts.clear(sid)
     if (sid && message.messageID) {
@@ -2516,19 +2525,33 @@ export const SessionProvider: ParentComponent = (props) => {
     })
   }
 
-  function createSession() {
-    if (!server.isConnected()) {
-      console.warn("[Raya] Cannot create session: not connected")
-      return
-    }
+  const creations = creation()
+  const cancelCreations = creations.cancel
+  onCleanup(cancelCreations)
+  createEffect(() => {
+    if (!server.isConnected()) cancelCreations()
+  })
 
-    // Clear the pending agent so the picker shows the default and send omits it
-    agentDrafts.prune(draftSessionID())
-    setPendingAgentSelection(null)
-    vscode.postMessage({ type: "createSession" })
+  function createSession(signal?: AbortSignal): Promise<string | undefined> {
+    if (!server.isConnected() || signal?.aborted) return Promise.resolve(undefined)
+    cancelCreations()
+    const agent = selectedAgentName()
+    const model = selected()
+    const variant = currentVariant()
+    const draft = crypto.randomUUID()
+    setStore("agentSelections", draft, agent)
+    if (model) {
+      setStore("sessionOverrides", draft, { ...model })
+      carryVariant(model, variant, agent, draft)
+    }
+    setDraftSessionID(draft)
+    const pending = creations.wait(draft, signal)
+    vscode.postMessage({ type: "createSession", draftID: draft })
+    return pending
   }
 
   function clearCurrentSession() {
+    cancelCreations()
     agentDrafts.prune(draftSessionID())
     setUserClearedSession(true)
     setCurrentSessionID(undefined)
@@ -2540,10 +2563,8 @@ export const SessionProvider: ParentComponent = (props) => {
   }
 
   function loadSessions() {
-    if (!server.isConnected()) {
-      console.warn("[Raya] Cannot load sessions: not connected")
-      return
-    }
+    // The host queues this read during startup and replays it on connection.
+    // Dropping it here leaves the sidebar welcome catalog empty indefinitely.
     vscode.postMessage({ type: "loadSessions" })
   }
 
@@ -2568,6 +2589,7 @@ export const SessionProvider: ParentComponent = (props) => {
   let deferredFetch: { id: string; focus: boolean } | undefined
 
   function selectSession(id: string, options: { focus?: boolean } = {}) {
+    cancelCreations()
     // Cloud preview sessions use a separate keyed path (selectCloudSession).
     if (id.startsWith("cloud:")) {
       console.warn("[Raya] Cannot select cloud preview session via selectSession")
@@ -2630,6 +2652,7 @@ export const SessionProvider: ParentComponent = (props) => {
   )
 
   function selectCloudSession(cloudSessionId: string) {
+    cancelCreations()
     if (!server.isConnected()) {
       console.warn("[Raya] Cannot select cloud session: not connected")
       return
@@ -2837,7 +2860,11 @@ export const SessionProvider: ParentComponent = (props) => {
     const id = currentSessionID()
     return id ? store.todos[id] || [] : []
   }
-  const queuedMessages = () => store.queues[currentSessionID() ?? ""] // raya_change - authoritative queue for active session
+  const queuedMessages = () => {
+    const sid = currentSessionID() ?? ""
+    const queued = store.queues[sid]
+    return queued ? reconcileQueued(store.messages[sid] ?? [], queued) : undefined
+  } // raya_change - reconcile completed parents without discarding other queued work
 
   const sessions = createMemo(() =>
     Object.values(store.sessions)
@@ -3033,6 +3060,7 @@ export const SessionProvider: ParentComponent = (props) => {
     acceptSuggestion,
     dismissSuggestion,
     createSession,
+    promoteCreation: creations.promote,
     clearCurrentSession,
     loadSessions,
     loadOlderMessages,

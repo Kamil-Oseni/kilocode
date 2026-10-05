@@ -34,6 +34,7 @@ import { Inbox, status, type Anchor, type Box } from "./Inbox"
 import { OrganizationActivity } from "./OrganizationActivity"
 import { ArchivedOrganizations } from "./ArchivedOrganizations"
 import { ReportSetting } from "./ReportSetting"
+import { RestoreReview } from "./RestoreReview"
 import { polling } from "./routine-polling"
 import { projectRuns } from "./run-projection"
 import { Output } from "../../../../src/shared/routine-output"
@@ -1860,6 +1861,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         </Show>
       </div>
       <div class="routines-body" data-pane={screen() === "roster" ? "inbox" : undefined}>
+        <RestoreReview />
         <Show when={error()}>
           <p class="routines-error" role="alert">
             {error()}
@@ -2088,6 +2090,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     <details class="routines-roster-more">
                       <summary>More options</summary>
                       <div class="routines-secondary">
+                        <Button variant="ghost" size="small" onClick={start}>
+                          Assign a routine
+                        </Button>
                         <Show when={!organization()}>
                           <Button variant="ghost" size="small" onClick={reports}>
                             Report settings

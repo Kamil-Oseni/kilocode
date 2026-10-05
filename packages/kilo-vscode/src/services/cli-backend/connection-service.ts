@@ -7,6 +7,9 @@ import type { ServerConfig } from "./types"
 import { resolveEventSessionId as resolveEventSessionIdPure } from "./connection-utils"
 import { SandboxPreference } from "../sandbox-preference"
 import { connectionDiagnostic } from "./connection-diagnostic"
+import { Hosts, hostPayload } from "../../kilo-provider/host-capture"
+import { exportSource } from "@opencode-ai/core/kilocode/source-export"
+import type { ManagedSource } from "./managed-source"
 
 export type ConnectionState = "connecting" | "connected" | "disconnected" | "error"
 type SSEEventListener = (event: SSEPayload, directory?: string) => void
@@ -107,6 +110,13 @@ export class KiloConnectionService {
   private state: ConnectionState = "disconnected"
   private error: Error | null = null
   private connectPromise: Promise<void> | null = null
+  private capturing = false
+  private captureRetired = false
+  private capturePromise:
+    | Promise<Readonly<{ session: ManagedSource["session"]; hostToken: Awaited<ReturnType<typeof Hosts.capture>> }>>
+    | undefined
+  private readonly viewedJobs = new Set<Promise<unknown>>()
+  private readonly viewedErrors: unknown[] = []
   private generation = 0
   private healthPollTimer: ReturnType<typeof setInterval> | null = null
   private remoteService: import("../RemoteStatusService").RemoteStatusService | null = null
@@ -166,6 +176,7 @@ export class KiloConnectionService {
    * Lazily start server + SSE. Multiple callers share the same promise.
    */
   async connect(workspaceDir: string): Promise<void> {
+    if (this.capturing) throw new Error("Raya connection intake is retired for capture")
     this.trackDirectory(workspaceDir)
     if (this.connectPromise) {
       return this.connectPromise
@@ -197,10 +208,16 @@ export class KiloConnectionService {
    * Get the shared SDK client. Throws if not connected.
    */
   getClient(): KiloClient {
+    if (this.capturing) throw new Error("Raya SDK intake is retired for capture")
     if (!this.client || this.state !== "connected") {
       throw new Error("Not connected — call connect() first")
     }
     return this.client
+  }
+
+  /** A retained SDK callback cannot publish to a replaced or disconnected backend. */
+  isClientCurrent(client: KiloClient): boolean {
+    return !this.captureRetired && this.state === "connected" && this.client === client
   }
 
   /**
@@ -210,6 +227,7 @@ export class KiloConnectionService {
    * or if the connection fails.
    */
   async getClientAsync(dir?: string): Promise<KiloClient> {
+    if (this.capturing) throw new Error("Raya SDK intake is retired for capture")
     if (dir) this.trackDirectory(dir)
     if (this.client && this.state === "connected") return this.client
     const root = dir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
@@ -671,6 +689,7 @@ export class KiloConnectionService {
 
   /** Debounced: send the aggregated attached + visible snapshot to the server. Works even when remote control is disabled. */
   flushViewed(): void {
+    if (this.capturing) return
     if (this.debounceTimer) clearTimeout(this.debounceTimer)
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null
@@ -679,6 +698,7 @@ export class KiloConnectionService {
   }
 
   private sendViewed(): void {
+    if (this.capturing) return
     if (this.viewedSending) {
       this.viewedDirty = true
       return
@@ -692,13 +712,76 @@ export class KiloConnectionService {
 
     this.viewedSending = true
     this.viewedDirty = false
-    void this.client.session
-      .viewed({ viewer: { id: this.viewerId, active: this.active }, attached: [...attached], visible: [...visible] })
-      .catch((err) => console.warn("[Raya] ConnectionService: viewed flush failed:", err))
+    const job = this.client.session
+      .viewed(
+        { viewer: { id: this.viewerId, active: this.active }, attached: [...attached], visible: [...visible] },
+        { throwOnError: true },
+      )
+      .catch((err: unknown) => {
+        this.viewedErrors.push(err)
+        console.warn("[Raya] ConnectionService: viewed flush failed:", err)
+      })
       .finally(() => {
         this.viewedSending = false
         if (this.viewedDirty) this.sendViewed()
       })
+    this.viewedJobs.add(job)
+    void job.then(() => this.viewedJobs.delete(job))
+  }
+
+  /** Retains the exact owned family for Core.exportSource; never aborts or starts a source. */
+  captureSource(deadline: number) {
+    if (this.capturePromise) return this.capturePromise
+    if (!Number.isSafeInteger(deadline) || deadline <= Date.now() || deadline > Date.now() + 60_000)
+      return Promise.reject(new Error("Raya host capture deadline is invalid"))
+    const client = this.client
+    if (!client || this.state !== "connected")
+      return Promise.reject(new Error("Raya host capture requires its current connected SDK"))
+    this.capturing = true
+    this.stopHealthPoll()
+    this.stopCheckin()
+    if (this.debounceTimer) clearTimeout(this.debounceTimer)
+    this.debounceTimer = null
+    this.viewedDirty = false
+    const source = this.serverManager.captureSource()
+    const hosts = Hosts.capture(client, deadline)
+    this.capturePromise = (async () => {
+      const results = await Promise.allSettled([source, hosts] as const)
+      while (this.viewedJobs.size) await Promise.all([...this.viewedJobs])
+      const errors = [
+        ...this.viewedErrors,
+        ...results.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
+      ]
+      this.captureRetired = true
+      for (const cleanup of [
+        () => this.resetConnection(),
+        () => this.setState("disconnected"),
+        () => this.windowStateDisposable?.dispose(),
+        () => this.unsubRemote?.(),
+      ]) {
+        try {
+          cleanup()
+        } catch (err) {
+          errors.push(err)
+        }
+      }
+      this.windowStateDisposable = null
+      this.unsubRemote = null
+      const owned = results[0]
+      const metadata = results[1]
+      if (errors.length) throw new AggregateError(errors, "Raya host source capture failed")
+      if (owned.status !== "fulfilled" || metadata.status !== "fulfilled")
+        throw new Error("Raya host source capture is incomplete")
+      return Object.freeze({ session: owned.value.session, hostToken: metadata.value })
+    })()
+    return this.capturePromise
+  }
+
+  /** API-only producer seam: Core authenticates the retained source and canonical profile policy. */
+  async exportProfile(input: Omit<Parameters<typeof exportSource>[1], "host">, deadline: number) {
+    const selected = structuredClone(input)
+    const captured = await this.captureSource(deadline)
+    return exportSource(captured.session, { ...selected, host: hostPayload(captured.hostToken) })
   }
 
   /**
@@ -724,7 +807,7 @@ export class KiloConnectionService {
     this.permissionDirectories.clear()
     this.questionDirectories.clear()
     this.questionRevision += 1
-    if (this.client?.session?.viewed) {
+    if (!this.capturing && this.client?.session?.viewed) {
       void this.client.session
         .viewed({ viewer: { id: this.viewerId, active: false }, attached: [], visible: [] })
         .catch(() => {})
@@ -774,7 +857,7 @@ export class KiloConnectionService {
         return
       }
       const healthy = await this.checkHealth(baseUrl, password)
-      if (!healthy && this.state === "connected") {
+      if (!this.capturing && !healthy && this.state === "connected") {
         console.warn("[Raya] ConnectionService: ❤️‍🩹 Health check failed — forcing SSE reconnect")
         this.sseClient?.reconnect()
       }
@@ -830,6 +913,7 @@ export class KiloConnectionService {
   }
 
   private async doConnect(_dir: string): Promise<void> {
+    if (this.capturing) throw new Error("Raya connection intake is retired for capture")
     // Never expose a stale SDK client while its replacement server is starting.
     this.resetConnection()
     const generation = this.generation
@@ -838,7 +922,7 @@ export class KiloConnectionService {
       console.error("[Raya] Connection diagnostic:", connectionDiagnostic("startup", undefined, error))
       throw error
     })
-    if (this.generation !== generation) throw new Superseded()
+    if (this.capturing || this.generation !== generation) throw new Superseded()
     this.info = { port: server.port }
 
     const config: ServerConfig = {

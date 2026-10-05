@@ -9,10 +9,10 @@ import {
   sameDirectory,
 } from "../../src/kilo-provider-utils"
 
-// Execute the production send method without constructing a VS Code host. Only
+// Execute the production send and composer submission methods without constructing a VS Code host. Only
 // editor/session adapters are supplied; request building and error handling are unchanged.
 const source = await Bun.file(new URL("../../src/KiloProvider.ts", import.meta.url)).text()
-const offset = source.indexOf("  private async handleSendMessage(")
+const offset = source.indexOf("  private async composerSubmit(")
 const end = source.indexOf("  // raya_change start - Milestone A persistent goal state", offset)
 if (offset < 0 || end < 0) throw new Error("Production send method not found")
 const code = new Bun.Transpiler({ loader: "ts" }).transformSync(

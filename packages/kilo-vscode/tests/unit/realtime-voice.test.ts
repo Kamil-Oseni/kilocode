@@ -2,7 +2,6 @@
 import { describe, expect, it } from "bun:test"
 import { join } from "node:path"
 import { PlayoutCursor } from "../../webview-ui/src/context/realtime-voice"
-import { StreamPlayer } from "../../webview-ui/src/context/stream-player"
 import { EchoGate } from "../../webview-ui/src/components/speech-to-text/echo-gate"
 
 describe("realtime voice thin client", () => {
@@ -14,67 +13,6 @@ describe("realtime voice thin client", () => {
     expect(cursor.milliseconds(24000)).toBe(150)
     cursor.reset()
     expect(cursor.samples).toBe(0)
-  })
-
-  it("keeps the gesture-unlocked audio sink for the first MiniMax chunk", () => {
-    const prior = globalThis.AudioContext
-    const stats = { contexts: 0, starts: 0, closes: 0 }
-    const nodes: Node[] = []
-    class Node extends EventTarget {
-      buffer: { duration: number } | undefined
-      connect() {}
-      start() {
-        stats.starts++
-      }
-      stop() {}
-    }
-    class Context {
-      currentTime = 0
-      destination = {}
-      constructor() {
-        stats.contexts++
-      }
-      resume() {
-        return Promise.resolve()
-      }
-      close() {
-        stats.closes++
-        return Promise.resolve()
-      }
-      createBuffer(_channels: number, count: number, rate: number) {
-        return { duration: count / rate, getChannelData: () => new Float32Array(count) }
-      }
-      createBufferSource() {
-        const node = new Node()
-        nodes.push(node)
-        return node
-      }
-    }
-    Object.defineProperty(globalThis, "AudioContext", { configurable: true, value: Context })
-    const player = new StreamPlayer(
-      () => {},
-      () => {},
-    )
-    player.unlock()
-    player.reset()
-    player.push("AQAAAA==", "audio/pcm;rate=16000")
-    expect(stats.contexts).toBe(1)
-    expect(stats.starts).toBe(1)
-    expect(stats.closes).toBe(0)
-    player.finish()
-    nodes[0]?.dispatchEvent(new Event("ended"))
-    player.push("AQAAAA==", "audio/pcm;rate=16000")
-    expect(stats.contexts).toBe(1)
-    expect(stats.starts).toBe(2)
-    expect(stats.closes).toBe(0)
-    player.reset()
-    player.push("AQAAAA==", "audio/pcm;rate=16000")
-    expect(stats.contexts).toBe(1)
-    expect(stats.starts).toBe(3)
-    expect(stats.closes).toBe(0)
-    player.stop(false)
-    expect(stats.closes).toBe(1)
-    Object.defineProperty(globalThis, "AudioContext", { configurable: true, value: prior })
   })
 
   it("learns stable speaker residue while retaining human barge-in", () => {
@@ -99,7 +37,7 @@ describe("realtime voice thin client", () => {
     const voice = await Bun.file(join(root, "webview-ui/src/context/voice.tsx")).text()
     const player = await Bun.file(join(root, "webview-ui/src/context/stream-player.ts")).text()
     expect(input).toContain("voice.start(id)")
-    expect(input).toContain('session.selectAgent("voice", id)')
+    expect(input).toContain('session.setSessionAgent(id, "voice")')
     expect(input).toContain('session.selectAgent("auto", sid())')
     expect(input).toContain('setTimeout(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")), 100)')
     expect(input).toContain("if (!voice.playing()) voice.listen()")

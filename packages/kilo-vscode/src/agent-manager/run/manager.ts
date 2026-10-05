@@ -45,6 +45,9 @@ function message(error: unknown): string {
 export class RunScriptManager {
   private entries = new Map<string, Entry>()
   private removed = new Set<string>()
+  private retired = false
+  private closing: Promise<void> | undefined
+  private readonly failures: unknown[] = []
 
   constructor(
     private readonly log: (msg: string) => void,
@@ -53,6 +56,7 @@ export class RunScriptManager {
   ) {}
 
   async start(worktreeId: string, start: () => Promise<RunHandle>): Promise<boolean> {
+    if (this.retired) throw new Error("Run script intake is retired")
     this.removed.delete(worktreeId)
     const current = this.entries.get(worktreeId)
     if (current && current.status.state !== "idle") return false
@@ -81,6 +85,7 @@ export class RunScriptManager {
         void this.halt(worktreeId, entry, handle)
       }
     } catch (error) {
+      this.failures.push(error)
       this.finish(worktreeId, { error: message(error) })
     }
     return true
@@ -102,6 +107,7 @@ export class RunScriptManager {
 
   finish(worktreeId: string, opts: FinishOptions = {}): void {
     if (this.removed.has(worktreeId)) return
+    if (opts.error) this.failures.push(new Error(opts.error))
     const entry = this.entries.get(worktreeId)
     entry?.handle?.dispose?.()
 
@@ -148,15 +154,25 @@ export class RunScriptManager {
     await this.release(worktreeId, entry, handle, false)
   }
 
-  dispose(): void {
-    for (const [id, entry] of this.entries) {
-      this.removed.add(id)
-      if (!entry.handle || entry.released) continue
-      entry.released = true
-      if (entry.status.state !== "idle") void this.halt(id, entry, entry.handle)
-      entry.handle.dispose?.()
-    }
-    this.entries.clear()
+  dispose(): Promise<void> {
+    if (this.closing) return this.closing
+    this.retired = true
+    this.closing = (async () => {
+      const results = await Promise.allSettled(
+        [...this.entries].map(async ([id, entry]) => {
+          this.removed.add(id)
+          const handle = entry.handle ?? (await entry.task)
+          if (handle) await this.release(id, entry, handle, entry.status.state !== "idle")
+        }),
+      )
+      const errors = [
+        ...this.failures,
+        ...results.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
+      ]
+      if (errors.length) throw new AggregateError(errors, "Run script retirement failed")
+      this.entries.clear()
+    })()
+    return this.closing
   }
 
   private async release(worktreeId: string, entry: Entry, handle: RunHandle, stop: boolean): Promise<void> {
@@ -172,8 +188,12 @@ export class RunScriptManager {
       try {
         return Promise.resolve(handle.stop())
           .then(() => undefined)
-          .catch((error) => this.log(`Failed to stop run script for ${worktreeId}: ${message(error)}`))
+          .catch((error) => {
+            this.failures.push(error)
+            this.log(`Failed to stop run script for ${worktreeId}: ${message(error)}`)
+          })
       } catch (error) {
+        this.failures.push(error)
         this.log(`Failed to stop run script for ${worktreeId}: ${message(error)}`)
         return Promise.resolve()
       }

@@ -64,7 +64,7 @@ export function createMessageSender(opts: {
     }
     const messageID = Identifier.ascending("message")
     const sid = origin === undefined ? opts.current() : (origin ?? undefined)
-    const selection = providerID && modelID ? { providerID, modelID } : opts.selected(sid)
+    const selection = providerID && modelID ? { providerID, modelID } : opts.selected(draftID ?? sid)
     opts.usage(selection?.providerID, selection?.modelID)
     const preview = sid?.startsWith("cloud:")
       ? sid.slice("cloud:".length)
@@ -80,8 +80,8 @@ export function createMessageSender(opts: {
         continuationID: opts.continuation(preview),
         text,
         messageID,
-        providerID,
-        modelID,
+        providerID: selection?.providerID,
+        modelID: selection?.modelID,
         agent,
         variant: opts.variant(scope),
         files,
@@ -101,8 +101,8 @@ export function createMessageSender(opts: {
       messageID,
       sessionID: sid,
       draftID: staged.draft,
-      providerID,
-      modelID,
+      providerID: selection?.providerID,
+      modelID: selection?.modelID,
       agent,
       variant: opts.variant(staged.scope),
       files,

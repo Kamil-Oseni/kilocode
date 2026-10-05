@@ -348,7 +348,7 @@
 [data-slot="todo-proposal-header"] h3 {
   margin-top: var(--raya-space-2);
   font-family: var(--raya-font-display);
-  font-size: 18px;
+  font-size: var(--kilo-font-size-18);
   font-weight: 500;
   line-height: var(--raya-leading-tight);
   overflow-wrap: anywhere;
@@ -573,7 +573,7 @@
 
 [data-slot="todo-proposals-header"] h2 {
   font-family: var(--raya-font-display);
-  font-size: 18px;
+  font-size: var(--kilo-font-size-18);
   font-weight: 500;
   line-height: var(--raya-leading-tight);
 }
@@ -642,7 +642,7 @@
 
 [data-slot="personal-todo-header"] h1 {
   font-family: var(--raya-font-display);
-  font-size: 26px;
+  font-size: calc(26px * var(--kilo-font-scale));
   font-weight: 400;
   line-height: var(--raya-leading-tight);
 }
@@ -687,7 +687,7 @@
 
 [data-slot="focus-timer-copy"] h2 {
   font-family: var(--raya-font-display);
-  font-size: 20px;
+  font-size: var(--kilo-font-size-20);
   font-weight: 400;
 }
 
@@ -702,7 +702,7 @@
   flex: none;
   color: var(--text-base, var(--vscode-foreground));
   font-family: var(--vscode-editor-font-family, monospace);
-  font-size: 28px;
+  font-size: calc(28px * var(--kilo-font-scale));
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -789,7 +789,7 @@
 [data-slot="personal-todo-empty"] h2 {
   color: var(--text-base, var(--vscode-foreground));
   font-family: var(--raya-font-display);
-  font-size: 20px;
+  font-size: var(--kilo-font-size-20);
   font-weight: 400;
 }
 

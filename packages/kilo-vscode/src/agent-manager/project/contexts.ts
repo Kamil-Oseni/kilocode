@@ -41,6 +41,9 @@ interface ContextsOptions {
 
 export class ProjectContexts {
   private readonly contexts = new Map<string, ProjectContext>()
+  private closed = false
+  private retirement: Promise<void> | undefined
+  private readonly history = new Set<ProjectContext>()
   private activeId: string | undefined
   private readonly expansion = new Map<string, boolean>()
 
@@ -54,11 +57,17 @@ export class ProjectContexts {
     return this.ensure(projectIdFor(canonical), canonical, true)
   }
 
+  private admit() {
+    if (this.closed) throw new Error("Project context registry is retired for capture")
+  }
+
   private ensure(id: string, root: string, pinned: boolean): ProjectContext {
+    this.admit()
     let ctx = this.contexts.get(id)
     if (!ctx) {
       ctx = new ProjectContext(id, root, pinned, this.opts.deps)
       this.contexts.set(id, ctx)
+      this.history.add(ctx)
     }
     return ctx
   }
@@ -99,6 +108,27 @@ export class ProjectContexts {
 
   values(): IterableIterator<ProjectContext> {
     return this.contexts.values()
+  }
+
+  /** Historical loaded metadata only. Never resolves a project or creates its services. */
+  loaded() {
+    return Object.freeze(
+      [...this.history].map((ctx) => {
+        const publication = ctx.peekState()?.publications()
+        return Object.freeze({
+          id: ctx.id,
+          root: ctx.root,
+          generation: ctx.identity,
+          publication,
+        })
+      }),
+    )
+  }
+
+  /** Joining participating host state does not provide native capture authority. */
+  async captureSnapshot() {
+    await this.captureClose()
+    return this.loaded()
   }
 
   /** The context that owns a directory: its root or one of its worktree paths. */
@@ -152,6 +182,7 @@ export class ProjectContexts {
 
   /** Make a project the active context and expand it. Returns undefined when not allowed. */
   activate(id: string): ProjectContext | undefined {
+    this.admit()
     const ctx = this.usableCtx(id)
     if (!ctx) return undefined
     this.activeId = id
@@ -161,6 +192,7 @@ export class ProjectContexts {
 
   /** Expand a project without activating it. Returns undefined when not allowed. */
   expand(id: string): ProjectContext | undefined {
+    this.admit()
     const ctx = this.usableCtx(id)
     if (!ctx) return undefined
     this.expansion.set(id, true)
@@ -168,6 +200,7 @@ export class ProjectContexts {
   }
 
   collapse(id: string): void {
+    this.admit()
     this.expansion.set(id, false)
     if (this.isActive(id)) return
     this.contexts.get(id)?.suspend()
@@ -175,6 +208,7 @@ export class ProjectContexts {
 
   /** Return ownership to pinned Local and suspend all secondary contexts. */
   disable(): ProjectContext | undefined {
+    this.admit()
     const pinned = this.pinned()
     this.activeId = pinned?.id
     if (pinned) this.expansion.set(pinned.id, true)
@@ -199,6 +233,7 @@ export class ProjectContexts {
 
   /** Remove a non-pinned project context. Falls back to the pinned project when it was active. */
   async remove(id: string): Promise<boolean> {
+    this.admit()
     const ctx = this.contexts.get(id)
     if (!ctx || ctx.pinned) return false
     this.expansion.delete(id)
@@ -215,6 +250,7 @@ export class ProjectContexts {
    * true when the active context may have changed.
    */
   syncPinned(): boolean {
+    this.admit()
     const root = this.opts.workspaceRoot()
     const next = root ? projectIdFor(canonicalizePath(root)) : undefined
     const current = [...this.contexts.values()].find((ctx) => ctx.pinned)?.id
@@ -264,6 +300,18 @@ export class ProjectContexts {
   private rememberExpansion(id: string, fallback: boolean): void {
     if (this.expansion.has(id)) return
     this.expansion.set(id, this.opts.registry.expanded?.(id) ?? fallback)
+  }
+
+  /** Retires only already realized contexts, including removed generations. */
+  captureClose(): Promise<void> {
+    if (this.retirement) return this.retirement
+    this.closed = true
+    const jobs = [...this.history].map((ctx) => ctx.captureClose())
+    this.retirement = Promise.allSettled(jobs).then((results) => {
+      const errors = results.flatMap((item) => (item.status === "rejected" ? [item.reason] : []))
+      if (errors.length) throw new AggregateError(errors, "Project registry capture closure failed")
+    })
+    return this.retirement
   }
 
   async dispose(): Promise<void> {

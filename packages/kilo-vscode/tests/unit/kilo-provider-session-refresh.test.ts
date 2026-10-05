@@ -287,6 +287,48 @@ describe("KiloProvider pending session refresh", () => {
     expect(msg.preserveSessionIds).toBeUndefined()
   })
 
+  it("defers a cached client while connecting and retains a failed request for reconnect", async () => {
+    const failure = new Error("owned transport disconnected")
+    const ctx = createContext({
+      listSessions: async () => {
+        throw failure
+      },
+    })
+    await loadSessions(ctx)
+    expect(ctx.pendingSessionRefresh).toBe(true)
+    expect(ctx.sent).toEqual([])
+    ctx.connectionState = "connected"
+    await expect(flushPendingSessionRefresh(ctx)).rejects.toBe(failure)
+    expect(ctx.pendingSessionRefresh).toBe(true)
+    ctx.listSessions = async () => []
+    await flushPendingSessionRefresh(ctx)
+    expect(ctx.pendingSessionRefresh).toBe(false)
+    expect(ctx.sent).toEqual([{ type: "sessionsLoaded", sessions: [] }])
+  })
+
+  it("does not publish a catalog returned by the previous backend generation", async () => {
+    const client = createClient()
+    const pending = deferred<{ data: never[] }>()
+    client.session.list = async () => pending.promise
+    const connection = createConnection(client)
+    await connection.connect()
+    const provider = new KiloProvider({} as never, connection as never)
+    const internal = provider as unknown as ProviderInternals & { connectionGeneration: number }
+    const sent: unknown[] = []
+    internal.connectionState = "connected"
+    internal.webview = {
+      postMessage: async (msg) => {
+        sent.push(msg)
+      },
+    }
+    const read = internal.handleLoadSessions()
+    internal.connectionGeneration++
+    pending.resolve({ data: [] })
+    await read
+    expect(sent).toEqual([])
+    expect(internal.pendingSessionRefresh).toBe(true)
+  })
+
   it("flushes deferred refresh via flushPendingSessionRefresh", async () => {
     const { calls, fn } = createListSessions()
     const ctx = createContext()

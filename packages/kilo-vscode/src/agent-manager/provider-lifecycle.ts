@@ -30,7 +30,7 @@ export interface LifecycleHost {
     forget: (sessionId: string) => void
   }
   push: () => void
-  register: (sessionId: string, dir: string) => void
+  register: (sessionId: string, dir: string) => void | Promise<void>
   skipStats: (worktreeId: string) => void
   unskipStats: (worktreeId: string) => void
   removePR: (worktreeId: string) => void
@@ -46,6 +46,7 @@ export interface LifecycleHost {
   metadata: (client: KiloClient, dir: string) => Promise<Record<string, unknown>>
   post: (message: AgentManagerOutMessage) => void
   log: (...args: unknown[]) => void
+  failure?: (err: unknown) => void
 }
 
 /** Create a new worktree with an auto-created first session. */
@@ -54,7 +55,7 @@ export async function createLifecycleWorktree(
   host: LifecycleHost,
   opts: { baseBranch?: string; branchName?: string },
 ): Promise<null> {
-  await initContextState(ctx, host.log)
+  await initContextState(ctx, host.log, host.failure)
 
   const created = await host.createOnDisk({ baseBranch: opts.baseBranch, branchName: opts.branchName })
   if (!created) return null
@@ -68,14 +69,16 @@ export async function createLifecycleWorktree(
     try {
       releasePtyCleanup = await host.acquirePtyCleanup(created.result.path)
     } catch (error) {
+      host.failure?.(error)
       host.log("Failed to remove worktree PTYs:", error)
       return null
     }
     try {
-      await ctx.worktreeManager().removeWorktree(created.result.path, created.result.branch)
+      await ctx.worktreeManager().removeWorktree(created.result.path, created.result.branch, host.failure)
       ctx.peekState()?.removeWorktree(created.worktree.id)
       host.push()
     } catch (error) {
+      host.failure?.(error)
       host.log("Failed to remove worktree after session creation failed:", error)
     } finally {
       releasePtyCleanup()
@@ -86,7 +89,7 @@ export async function createLifecycleWorktree(
   const state = ctx.peekState()!
   state.addSession(session.id, created.worktree.id)
   if (!opts.branchName && host.autoName().enabled) state.armAutoName(created.worktree.id, session.id)
-  host.register(session.id, created.result.path)
+  await host.register(session.id, created.result.path)
   // Push state before registerSession so the webview's sessionCreated handler
   // sees the worktree mapping and routes the session to the worktree tab.
   host.notifyReady(session.id, created.result, created.worktree.id)
@@ -119,6 +122,7 @@ export async function deleteLifecycleWorktree(
   host.skipStats(worktreeId)
   await host.removeRun(worktreeId)
   if (!(await host.clearRun(worktreeId))) {
+    host.failure?.(new Error("Worktree Run script retirement was not confirmed"))
     host.unskipStats(worktreeId)
     host.post({ type: "error", message: "Failed to stop the Run script before deleting the worktree" })
     return null
@@ -128,12 +132,13 @@ export async function deleteLifecycleWorktree(
   try {
     releasePtyCleanup = await host.acquirePtyCleanup(worktree.path)
   } catch (error) {
+    host.failure?.(error)
     host.log(`Failed to remove worktree from disk: ${error}`)
     host.unskipStats(worktreeId)
     return null
   }
   try {
-    await ctx.worktreeManager().removeWorktree(worktree.path, branch)
+    await ctx.worktreeManager().removeWorktree(worktree.path, branch, host.failure)
     const orphaned = state.removeWorktree(worktreeId)
     host.removePR(worktreeId)
     host.forgetName(worktreeId)
@@ -169,6 +174,7 @@ export async function removeStaleLifecycleWorktree(
 
   await host.removeRun(worktreeId)
   if (!(await host.clearRun(worktreeId))) {
+    host.failure?.(new Error("Stale worktree Run script retirement was not confirmed"))
     host.post({ type: "error", message: "Failed to stop the Run script before removing the worktree" })
     return null
   }
@@ -176,6 +182,7 @@ export async function removeStaleLifecycleWorktree(
     const releasePtyCleanup = await host.acquirePtyCleanup(worktree.path)
     releasePtyCleanup()
   } catch (error) {
+    host.failure?.(error)
     host.log(`Failed to remove stale worktree PTYs: ${error}`)
     return null
   }
@@ -195,7 +202,7 @@ export async function promoteLifecycleSession(
   host: LifecycleHost,
   sessionId: string,
 ): Promise<null> {
-  await initContextState(ctx, host.log)
+  await initContextState(ctx, host.log, host.failure)
   const created = await host.createOnDisk({})
   if (!created) return null
 
@@ -209,7 +216,7 @@ export async function promoteLifecycleSession(
     state.moveSession(sessionId, created.worktree.id)
   }
 
-  host.register(sessionId, created.result.path)
+  await host.register(sessionId, created.result.path)
   try {
     await recordPromotionHandoff({
       client: host.client(),
@@ -218,6 +225,7 @@ export async function promoteLifecycleSession(
       branch: created.result.branch,
     })
   } catch (err) {
+    host.failure?.(err)
     host.log("Failed to record worktree promotion handoff:", getErrorMessage(err))
   }
   host.notifyReady(sessionId, created.result, created.worktree.id)
@@ -237,6 +245,7 @@ export async function addSessionToLifecycleWorktree(
   try {
     client = host.client()
   } catch (err) {
+    host.failure?.(err)
     host.log("onAddSessionToWorktree: client not available:", err)
     host.post({ type: "error", message: "Not connected to CLI backend" })
     return null
@@ -254,7 +263,7 @@ export async function addSessionToLifecycleWorktree(
   if (sessionId) {
     if (state.getSession(sessionId)) state.moveSession(sessionId, worktreeId)
     else state.addSession(sessionId, worktreeId)
-    host.register(sessionId, worktree.path)
+    await host.register(sessionId, worktree.path)
     host.push()
     host.post({ type: "agentManager.sessionAdded", sessionId, worktreeId })
     host.capture("Agent Manager Session Started", {
@@ -276,6 +285,7 @@ export async function addSessionToLifecycleWorktree(
     )
     session = data
   } catch (error) {
+    host.failure?.(error)
     const err = getErrorMessage(error)
     host.post({ type: "error", message: `Failed to create session: ${err}` })
     host.capture("Agent Manager Session Error", {
@@ -288,7 +298,7 @@ export async function addSessionToLifecycleWorktree(
   }
 
   state.addSession(session.id, worktreeId)
-  host.register(session.id, worktree.path)
+  await host.register(session.id, worktree.path)
   host.push()
   host.post({ type: "agentManager.sessionAdded", sessionId: session.id, worktreeId, requestID })
   host.sessions.register(session)
@@ -315,6 +325,7 @@ export async function closeLifecycleSession(
   try {
     await stopSessionProcesses(host.client(), sessionId, dir)
   } catch (err) {
+    host.failure?.(err)
     host.log("onCloseSession: client not available:", err)
   }
 

@@ -47,6 +47,7 @@ class Driver implements DesktopDriver {
       height: 10,
       mime: "image/png",
       data: "cG5n",
+      timing: { acquisitionMs: 0, preparationMs: 0, totalMs: 0 },
     }
   }
 

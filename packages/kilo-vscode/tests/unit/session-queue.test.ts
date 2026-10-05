@@ -4,6 +4,7 @@ import {
   messageTurns,
   partitionTurns,
   queuedUserMessageIDs,
+  reconcileQueued,
   stableMessageTurns,
   visibleMessages,
   visibleParts,
@@ -30,6 +31,29 @@ const assistant = (id: string, parentID: string, opts: Partial<Message> = {}): M
   parentID,
   role: "assistant",
   ...opts,
+})
+
+describe("reconcileQueued", () => {
+  it("removes only a terminal reply's exact queued parent", () => {
+    expect(reconcileQueued([user("a"), user("b"), assistant("reply", "a", { finish: "stop" })], ["a", "b"])).toEqual([
+      "b",
+    ])
+    expect(reconcileQueued([assistant("foreign", "other", { finish: "stop" })], ["a"])).toEqual(["a"])
+  })
+
+  it("retains tool continuations even when their individual step completed", () => {
+    for (const finish of ["tool-calls", "unknown", undefined]) {
+      expect(reconcileQueued([assistant("reply", "a", { finish, time: { created: 1, completed: 2 } })], ["a"])).toEqual(
+        ["a"],
+      )
+    }
+  })
+
+  it("uses the current reply rather than an earlier terminal step", () => {
+    expect(reconcileQueued([assistant("old", "a", { finish: "stop" }), assistant("current", "a")], ["a"])).toEqual([
+      "a",
+    ])
+  })
 })
 
 const part = (id: string, messageID: string): Part => ({ id, messageID, type: "text", text: id })

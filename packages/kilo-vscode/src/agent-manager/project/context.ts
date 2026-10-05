@@ -19,6 +19,7 @@
  */
 
 import * as fs from "fs"
+import { randomUUID } from "node:crypto"
 import { WorktreeStateManager } from "../WorktreeStateManager"
 import { WorktreeManager } from "../WorktreeManager"
 import { SetupScriptService } from "../SetupScriptService"
@@ -44,6 +45,7 @@ export interface ProjectInitResult {
 }
 
 export class ProjectContext {
+  readonly identity = randomUUID()
   private state: WorktreeStateManager | undefined
   private worktrees: WorktreeManager | undefined
   private setup: SetupScriptService | undefined
@@ -52,6 +54,9 @@ export class ProjectContext {
   private phase: ProjectLifecycle = "cold"
   private version = 0
   private mutation: Promise<unknown> = Promise.resolve()
+  private retirement: Promise<void> | undefined
+  private captured = false
+  private readonly errors: unknown[] = []
   private live = new Set<string>()
   private listed = 0
   private views: readonly ProjectSessionView[] = []
@@ -99,6 +104,10 @@ export class ProjectContext {
         }
         return next
       })
+      .catch((err) => {
+        this.errors.push(err)
+        throw err
+      })
       .finally(() => {
         this.init = undefined
       })
@@ -122,11 +131,14 @@ export class ProjectContext {
       return result
     }
     const next = this.mutation.then(run, run)
-    this.mutation = next.catch(() => undefined)
+    this.mutation = next.catch((err) => {
+      this.errors.push(err)
+    })
     return next
   }
 
   stateManager(): WorktreeStateManager {
+    this.admit()
     this.state ??= (this.deps.state ?? ((root, log) => new WorktreeStateManager(root, log)))(this.root, (msg) =>
       this.deps.log(`[StateManager] ${msg}`),
     )
@@ -134,6 +146,7 @@ export class ProjectContext {
   }
 
   worktreeManager(): WorktreeManager {
+    this.admit()
     this.worktrees ??= (this.deps.worktrees ?? ((root, log, git) => new WorktreeManager(root, log, git)))(
       this.root,
       (msg) => this.deps.log(`[WorktreeManager] ${msg}`),
@@ -143,6 +156,7 @@ export class ProjectContext {
   }
 
   setupService(): SetupScriptService {
+    this.admit()
     this.setup ??= (this.deps.setup ?? ((root) => new SetupScriptService(root)))(this.root)
     return this.setup
   }
@@ -225,5 +239,28 @@ export class ProjectContext {
     await this.state?.flush().catch((err) => this.deps.log(`dispose: state flush failed: ${err}`))
     this.live.clear()
     this.phase = "disposed"
+  }
+
+  private admit(): void {
+    if (this.captured) throw new Error(`Project ${this.id} is retired for capture.`)
+  }
+
+  /** Strict participating state closure; does not prove other workspace/browser/native writers are retired. */
+  captureClose(): Promise<void> {
+    if (this.retirement) return this.retirement
+    this.captured = true
+    this.version++
+    this.phase = "disposing"
+    const state = this.state?.retire()
+    this.retirement = (async () => {
+      const result = await Promise.allSettled([this.init, this.mutation, state])
+      const errors = [
+        ...new Set([...this.errors, ...result.flatMap((item) => (item.status === "rejected" ? [item.reason] : []))]),
+      ]
+      if (errors.length) throw new AggregateError(errors, `Project ${this.id} capture closure failed`)
+      this.live.clear()
+      this.phase = "disposed"
+    })()
+    return this.retirement
   }
 }

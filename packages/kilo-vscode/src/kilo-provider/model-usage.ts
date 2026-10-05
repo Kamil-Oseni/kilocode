@@ -1,3 +1,5 @@
+import { hostPublications } from "./host-publications"
+
 const LIMIT = 200
 export type ModelUsageMap = Record<string, { count: number; lastUsed: number }>
 export type ModelUsageMessage =
@@ -55,11 +57,13 @@ export async function handleModelUsageMessage(
     | undefined,
   post: (message: unknown) => void,
 ): Promise<void> {
-  const current = context?.globalState.get("modelUsage")
   const usage =
-    message.type === "recordModelUsage"
-      ? recordModelUsage(current, message.providerID, message.modelID)
-      : validateModelUsage(current)
-  if (message.type === "recordModelUsage") await context?.globalState.update("modelUsage", usage)
+    message.type === "recordModelUsage" && context
+      ? await hostPublications(context)!.mutate("modelUsage", (current) =>
+          recordModelUsage(current, message.providerID, message.modelID),
+        )
+      : message.type === "recordModelUsage"
+        ? recordModelUsage(undefined, message.providerID, message.modelID)
+        : validateModelUsage(context?.globalState.get("modelUsage"))
   post({ type: "modelUsageLoaded", usage })
 }

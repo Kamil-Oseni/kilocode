@@ -1,6 +1,8 @@
 // raya_change - Milestone H encrypted speech settings and optional CLI mirror
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
+import { mkdir, readFile, unlink, writeFile, open, lstat, realpath } from "node:fs/promises"
+import { constants } from "node:fs"
+import { local } from "./local"
+import { dirname, join, resolve } from "node:path"
 import type * as vscode from "vscode"
 import { DEFAULT_SPEECH_SETTINGS, type SpeechSettings, type SpeechState, type SpeechKey } from "../shared/speech" // raya_change - node-free webview contract
 export { DEFAULT_SPEECH_SETTINGS, type SpeechSettings, type SpeechState, type VoiceMode } from "../shared/speech"
@@ -10,6 +12,8 @@ const REALTIME = "raya.speech.realtime.key"
 const OPENAI = "raya.speech.openai.key"
 const STT = "raya.speech.stt.key"
 const TTS = "raya.speech.tts.key"
+const LOCAL = "raya.speech.local.tts.key"
+const TOKEN = "D:/Raya/Services/Speech/access-token.txt"
 const MIRROR = ".raya/speech.local.json"
 
 type Storage = Pick<vscode.Memento, "get" | "update">
@@ -19,17 +23,26 @@ export class SpeechSettingsStore {
   constructor(
     private readonly state: Storage,
     private readonly secrets: Secrets,
+    private readonly importation: () => Promise<string> = () => credential(TOKEN),
   ) {}
 
   async load(): Promise<SpeechState> {
     const settings = normalize(this.state.get<Partial<SpeechSettings>>(STATE))
-    const [realtime, stt, tts, openai] = await Promise.all([
+    const [realtime, stt, tts, openai, local] = await Promise.all([
       this.secrets.get(REALTIME),
       this.secrets.get(STT),
       this.secrets.get(TTS),
       this.secrets.get(OPENAI),
+      this.secrets.get(LOCAL),
     ])
-    return { ...settings, hasOpenAIKey: !!openai, hasRealtimeKey: !!realtime, hasSttKey: !!stt, hasTtsKey: !!tts }
+    return {
+      ...settings,
+      hasOpenAIKey: !!openai,
+      hasRealtimeKey: !!realtime,
+      hasSttKey: settings.sttEngine === "local" ? !!local : !!stt,
+      hasTtsKey: !!tts,
+      hasLocalKey: !!local,
+    }
   }
 
   async update(settings: Partial<SpeechSettings>): Promise<SpeechState> {
@@ -38,7 +51,16 @@ export class SpeechSettingsStore {
   }
 
   async setKey(kind: SpeechKey, key?: string): Promise<SpeechState> {
-    const name = kind === "openai" ? OPENAI : kind === "realtime" ? REALTIME : kind === "stt" ? STT : TTS
+    const name =
+      kind === "local"
+        ? LOCAL
+        : kind === "openai"
+          ? OPENAI
+          : kind === "realtime"
+            ? REALTIME
+            : kind === "stt"
+              ? STT
+              : TTS
     const value = key?.trim()
     if (value) await this.secrets.store(name, value)
     if (!value) await this.secrets.delete(name)
@@ -46,9 +68,29 @@ export class SpeechSettingsStore {
   }
 
   async key(kind: SpeechKey) {
+    if (kind === "local") return this.secrets.get(LOCAL)
     if (kind === "openai") return this.secrets.get(OPENAI)
     if (kind === "realtime") return this.secrets.get(REALTIME)
     return this.secrets.get(kind === "stt" ? STT : TTS)
+  }
+
+  async local(): Promise<SpeechState> {
+    const token = await this.importation()
+    await this.secrets.store(LOCAL, token)
+    return this.update({
+      voiceEngine: "cascade-v1",
+      sttEndpoint: "http://127.0.0.1:8770/v1/audio/transcriptions",
+      sttEngine: "local",
+      sttModel: "whisper-small.en",
+      ttsEngine: "local-jobs",
+      localTtsEndpoint: "http://127.0.0.1:8770",
+      localTtsModel: "chatterbox-nano",
+      localTtsVoice: "freeman-reference-c-AI",
+      localTtsFallback: false,
+      mode: "push-to-talk",
+      autoSpeak: false,
+      cliMirror: false,
+    })
   }
 
   async sync(root: string): Promise<void> {
@@ -92,6 +134,7 @@ function normalize(input?: Partial<SpeechSettings>): SpeechSettings {
       : DEFAULT_SPEECH_SETTINGS.mode
   return {
     ...normalizeRealtime(input),
+    ...normalizeLocal(input),
     sttEndpoint: text(input?.sttEndpoint, DEFAULT_SPEECH_SETTINGS.sttEndpoint),
     sttModel: text(input?.sttModel, DEFAULT_SPEECH_SETTINGS.sttModel),
     ttsEndpoint: text(input?.ttsEndpoint, DEFAULT_SPEECH_SETTINGS.ttsEndpoint),
@@ -103,6 +146,81 @@ function normalize(input?: Partial<SpeechSettings>): SpeechSettings {
     vadThreshold: bounded(input?.vadThreshold, 0.005, 0.25, DEFAULT_SPEECH_SETTINGS.vadThreshold),
     vadSilenceMs: bounded(input?.vadSilenceMs, 250, 5_000, DEFAULT_SPEECH_SETTINGS.vadSilenceMs),
   }
+}
+
+function normalizeLocal(input?: Partial<SpeechSettings>) {
+  return {
+    sttEngine: input?.sttEngine === "local" ? ("local" as const) : ("http" as const),
+    ttsEngine: input?.ttsEngine === "local-jobs" ? ("local-jobs" as const) : ("minimax" as const),
+    localTtsEndpoint: local(input?.localTtsEndpoint ?? "") ?? DEFAULT_SPEECH_SETTINGS.localTtsEndpoint,
+    localTtsModel: text(input?.localTtsModel, DEFAULT_SPEECH_SETTINGS.localTtsModel!),
+    localTtsVoice: text(input?.localTtsVoice, DEFAULT_SPEECH_SETTINGS.localTtsVoice!),
+    localTtsFallback: input?.localTtsFallback === true,
+  }
+}
+
+/** Internal descriptor reader; the user-facing setup always supplies the fixed trusted service path. */
+export async function credential(file: string): Promise<string> {
+  const errors: unknown[] = []
+  const result: { value?: string } = {}
+  const handle = await (async () => {
+    if ((await realpath(file)).toLowerCase() !== resolve(file).toLowerCase())
+      throw new Error("Local speech credentials unavailable")
+    const before = await lstat(file, { bigint: true })
+    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || before.size < 1n || before.size > 4096n)
+      throw new Error("Local speech credentials unavailable")
+    const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+    try {
+      const stat = await handle.stat({ bigint: true })
+      if (
+        before.dev !== stat.dev ||
+        before.ino !== stat.ino ||
+        before.size !== stat.size ||
+        !stat.isFile() ||
+        stat.nlink !== 1n
+      )
+        throw new Error("Local speech credentials unavailable")
+      return { handle, before }
+    } catch (err) {
+      await handle.close().catch((close) => {
+        throw new AggregateError([err, close], "Local speech credentials unavailable")
+      })
+      throw err
+    }
+  })().catch(() => {
+    throw new Error("Local speech credentials unavailable")
+  })
+  try {
+    const bytes = await handle.handle.readFile()
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim()
+    if (!/^[A-Za-z0-9._~-]{16,4096}$/.test(text)) throw new Error("Local speech credentials unavailable")
+    const after = await lstat(file, { bigint: true })
+    const held = await handle.handle.stat({ bigint: true })
+    for (const stat of [after, held])
+      if (
+        stat.dev !== handle.before.dev ||
+        stat.ino !== handle.before.ino ||
+        stat.size !== handle.before.size ||
+        stat.mtimeNs !== handle.before.mtimeNs ||
+        !stat.isFile() ||
+        stat.isSymbolicLink() ||
+        stat.nlink !== 1n
+      )
+        throw new Error("Local speech credentials unavailable")
+    result.value = text
+  } catch (err) {
+    errors.push(err)
+  }
+  try {
+    await handle.handle.close()
+  } catch (err) {
+    errors.push(err)
+  }
+  if (errors.length)
+    throw new Error("Local speech credentials unavailable", {
+      cause: errors.length === 1 ? errors[0] : new AggregateError(errors),
+    })
+  return result.value!
 }
 
 // raya_change - keep native-engine validation separate from the legacy cascade normalization.

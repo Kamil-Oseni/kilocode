@@ -1,7 +1,7 @@
 // raya_change - Milestone H node-free speech contract shared with the webview
 export type VoiceMode = "off" | "push-to-talk" | "hands-free"
 export type VoiceEngine = "openai-live" | "openai-realtime" | "qwen-realtime" | "cascade-v1"
-export type SpeechKey = "openai" | "realtime" | "stt" | "tts"
+export type SpeechKey = "openai" | "realtime" | "stt" | "tts" | "local"
 export const OPENAI_LIVE_MODEL = "gpt-live-1"
 export const OPENAI_VOICE_MODEL = "gpt-realtime-2.1"
 
@@ -13,9 +13,15 @@ export type SpeechSettings = {
   realtimeVoice: string
   mediaFrontendURL: string
   sttEndpoint: string
+  sttEngine?: "http" | "local"
   sttModel: string
   ttsEndpoint: string
   ttsModel: string
+  ttsEngine?: "minimax" | "local-jobs"
+  localTtsEndpoint?: string
+  localTtsModel?: string
+  localTtsVoice?: string
+  localTtsFallback?: boolean
   voice: string
   mode: VoiceMode
   autoSpeak: boolean
@@ -29,6 +35,7 @@ export type SpeechState = SpeechSettings & {
   hasRealtimeKey: boolean
   hasSttKey: boolean
   hasTtsKey: boolean
+  hasLocalKey?: boolean
 }
 
 export const DEFAULT_SPEECH_SETTINGS: SpeechSettings = {
@@ -39,9 +46,15 @@ export const DEFAULT_SPEECH_SETTINGS: SpeechSettings = {
   realtimeVoice: "longanqian",
   mediaFrontendURL: "http://127.0.0.1:7890",
   sttEndpoint: "",
+  sttEngine: "http",
   sttModel: "SenseVoice-Small",
   ttsEndpoint: "wss://api.minimax.io/ws/v1/t2a_v2",
   ttsModel: "speech-2.6-turbo",
+  ttsEngine: "minimax",
+  localTtsEndpoint: "http://127.0.0.1:8770",
+  localTtsModel: "chatterbox-nano",
+  localTtsVoice: "freeman-reference-c-AI",
+  localTtsFallback: false,
   voice: "English_Graceful_Lady",
   mode: "push-to-talk",
   autoSpeak: true,

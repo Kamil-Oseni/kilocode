@@ -29,6 +29,7 @@ type Record = {
   uncertain?: { mutation: string; content: DraftContent; revision: number }
   held?: DraftCapture
   captured?: number
+  sent?: DraftContent
   seal?: Seal
   job?: Promise<void>
   moving?: boolean
@@ -61,6 +62,17 @@ const same = (left: DraftContent, right: DraftContent) =>
 // Model selections and other draft fields can come from Solid stores. Project
 // their enumerable data before cloning because structuredClone rejects proxies.
 const snapshot = (content: DraftContent) => structuredClone(canonical(content) as DraftContent)
+function consumed(local: DraftContent, sent: DraftContent, cleared: DraftContent): DraftContent {
+  const equal = (left: unknown, right: unknown) => JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
+  return {
+    ...local,
+    text: local.text === sent.text ? cleared.text : local.text,
+    comments: equal(local.comments, sent.comments) ? cleared.comments : local.comments,
+    images: equal(local.images, sent.images) ? cleared.images : local.images,
+    selection: local.text === sent.text ? cleared.selection : local.selection,
+    scroll: local.text === sent.text ? cleared.scroll : local.scroll,
+  }
+}
 const cutoff = (record: Record) => record.seal?.revision ?? record.revision
 const contents = (record: Record) => snapshot(record.seal?.content ?? record.content)
 const merged = (record: Record, local: DraftContent) => !!record.seal && !same(record.content, local)
@@ -176,6 +188,8 @@ export class DurableDrafts {
     this.contexts.set(box, value)
     if (known) this.owners.delete(box)
     this.notify()
+    if (known && !this.closed)
+      this.transport.postMessage({ type: "composerDraftPane", epoch: this.epoch, active: true })
   }
 
   destination(identity: DraftTarget) {
@@ -261,7 +275,10 @@ export class DurableDrafts {
   created(pendingID: string, sessionID: string, box: string) {
     const record = [...this.records.values()].find(
       (item) =>
-        item.identity.pendingID === pendingID && item.identity.box === box && item.owner === this.owners.get(box),
+        item.identity.pendingID === pendingID &&
+        item.identity.box === box &&
+        item.owner === this.owners.get(box) &&
+        (item.owner !== undefined || item.context === this.contexts.get(box)),
     )
     if (!record) return
     const next: DraftTarget = {
@@ -270,7 +287,7 @@ export class DurableDrafts {
       sessionID,
       projectID: record.identity.projectID,
     }
-    this.records.set(id(next, record.owner), record)
+    this.records.set(id(next, record.owner, record.context), record)
     if (record.held) return
     const prior = this.sync(record)
     record.moving = true
@@ -294,7 +311,7 @@ export class DurableDrafts {
           record.error = "promotion"
           return
         }
-        this.records.delete(id(record.identity, record.owner))
+        this.records.delete(id(record.identity, record.owner, record.context))
         record.identity = next
         record.entry = reply.target
       })
@@ -549,6 +566,7 @@ export class DurableDrafts {
     record.seal = undefined
     record.held = capture
     record.captured = seal.revision
+    record.sent = snapshot(seal.content)
     return capture
   }
 
@@ -556,6 +574,7 @@ export class DurableDrafts {
     const record = this.records.get(id(capture.identity, capture.owner))
     if (record?.held?.mutation !== capture.mutation) return
     record.held = undefined
+    record.sent = undefined
     void this.sync(record)
   }
 
@@ -662,22 +681,57 @@ export class DurableDrafts {
     for (const [key, value] of this.records) if (value === record) this.records.delete(key)
     record.identity = next
     this.records.set(id(next, record.owner), record)
-    const unchanged = record.revision === record.captured
+    // Caret and scrolling changes do not constitute a new unsent message.
+    // Keep every payload and picker field in the comparison.
+    const unchanged =
+      record.revision === record.captured ||
+      (!!record.sent &&
+        same(
+          { ...record.content, selection: undefined, scroll: 0 },
+          { ...record.sent, selection: undefined, scroll: 0 },
+        ))
     record.entry = message.entry
     if (unchanged) {
       record.content = snapshot(message.entry.content ?? empty())
       record.revision = 0
       record.saved = 0
+    } else if (record.sent) {
+      // Picker changes are new preferences, not a second copy of consumed speech.
+      // Clear only unchanged captured payload fields; independently edited fields survive.
+      record.content = consumed(record.content, record.sent, message.entry.content ?? empty())
     }
     record.error = undefined
     record.captured = undefined
+    record.sent = undefined
     this.notify()
     void this.sync(record)
     return
   }
 
   private async flush(message: Extract<ComposerDraftExtensionMessage, { type: "composerDraftFlush" }>) {
-    const cutoff = [...new Set(this.records.values())].map((record) => ({ record, revision: record.revision }))
+    // Rendering an unscoped empty box creates a cache record, not an admitted draft.
+    const selected = () =>
+      [...new Set(this.records.values())].filter(
+        (record) =>
+          !(
+            !record.owner &&
+            !this.owners.has(record.identity.box) &&
+            record.revision === 0 &&
+            record.saved === 0 &&
+            !record.entry &&
+            !record.error &&
+            !record.uncertain &&
+            !record.held &&
+            !record.captured &&
+            !record.seal &&
+            !record.job &&
+            !record.moving &&
+            !record.reading &&
+            !record.reviewed &&
+            same(record.content, empty())
+          ),
+      )
+    const cutoff = selected().map((record) => ({ record, revision: record.revision }))
     let timer: ReturnType<typeof setTimeout> | undefined
     const deadline = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, Math.max(0, message.deadline - Date.now()))
@@ -689,8 +743,7 @@ export class DurableDrafts {
         ? "timeout"
         : !this.connected || message.generation !== this.generation
           ? "disconnected"
-          : cutoff.some(({ record, revision }) => record.revision !== revision) ||
-              new Set(this.records.values()).size !== cutoff.length
+          : cutoff.some(({ record, revision }) => record.revision !== revision) || selected().length !== cutoff.length
             ? "changed"
             : cutoff.some(
                   ({ record, revision }) =>

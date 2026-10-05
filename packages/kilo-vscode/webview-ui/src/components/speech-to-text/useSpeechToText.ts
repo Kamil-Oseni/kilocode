@@ -28,6 +28,8 @@ type StartOptions = {
   threshold?: number // raya_change - Milestone H
   silenceMs?: number // raya_change - Milestone H
   echoSuppression?: boolean // raya_change - adaptive residual-echo floor during full-duplex playback
+  onError?: (message: string) => void
+  onEmpty?: () => void
   onSpeech?: () => void // raya_change - Milestone H barge-in
   onSilence?: () => void // raya_change - Milestone H hands-free turn boundary
 }
@@ -70,6 +72,8 @@ export function useSpeechToText(
   let local = false // raya_change - Milestone H
   let model = "" // raya_change - Milestone H
   let speech: (() => void) | undefined // raya_change - Milestone H extension-host VAD
+  let failed: ((message: string) => void) | undefined
+  let empty: (() => void) | undefined
   let silence: (() => void) | undefined // raya_change - Milestone H extension-host VAD
 
   const unsub = vscode.onMessage((msg) => {
@@ -85,11 +89,13 @@ export function useSpeechToText(
 
     // raya_change start - Milestone H extension-host VAD fallback
     if (msg.type === "speechToTextSpeech") {
+      if (state() !== "recording") return
       vscode.postMessage({ type: "speechPlaybackCancel" })
       speech?.()
       return
     }
     if (msg.type === "speechToTextSilence") {
+      if (state() !== "recording") return
       silence?.()
       return
     }
@@ -103,26 +109,18 @@ export function useSpeechToText(
     }
 
     if (msg.type === "speechToTextError") {
-      if (msg.code === "not_authenticated") {
-        login()
-        return
-      }
-      fail(msg.error)
+      rejected(msg)
       return
     }
 
     const text = msg.text.trim()
     if (!text) {
+      if (resume()) return
       fail(lang.t("speechToText.error.emptyTranscript"))
       return
     }
 
-    const next = ready?.() === false ? undefined : done
-    const accepted = insert?.(text)
-    cleanup()
-    setState("idle")
-    setError(undefined)
-    if (accepted !== false) next?.() // raya_change - do not send a voice-mode command as a chat turn
+    finish(text)
   })
 
   onCleanup(() => {
@@ -136,10 +134,13 @@ export function useSpeechToText(
     model = opts.model
     speech = opts.onSpeech
     silence = opts.onSilence
+    failed = opts.onError
+    empty = opts.handsFree ? opts.onEmpty : undefined
     setError(undefined)
 
     counter++
     request = `${prefix}-${counter}`
+    const id = request
     sessionID = session()
     setState("starting")
     // raya_change start - capture in the webview so hands-free VAD and barge-in see the live microphone
@@ -153,17 +154,21 @@ export function useSpeechToText(
           silenceMs: opts.silenceMs ?? 900,
           echoSuppression: opts.echoSuppression,
           onSpeech: () => {
+            if (request !== id || state() !== "recording") return
             vscode.postMessage({ type: "speechPlaybackCancel" })
             opts.onSpeech?.()
           },
-          onSilence: () => opts.onSilence?.(),
+          onSilence: () => {
+            if (request === id && state() === "recording") opts.onSilence?.()
+          },
         })
         .then(() => {
+          if (request !== id) return
           if (state() === "starting") setState("recording")
           if (pending) transcribe()
         })
         .catch((err: unknown) => {
-          if (state() !== "starting") return
+          if (request !== id || state() !== "starting") return
           console.warn("[Raya] Webview microphone unavailable; using extension-host capture:", err)
           local = false
           startHost(opts)
@@ -206,18 +211,24 @@ export function useSpeechToText(
     // raya_change start - send the actual webview recording to the configured STT endpoint
     if (local) {
       const id = request
+      const origin = sessionID
+      const selected = model
       void capture.stop().then(
-        (audio) =>
+        (audio) => {
+          if (request !== id || state() !== "transcribing") return
           vscode.postMessage({
             type: "speechToTextSubmit",
             requestId: id,
-            ...(sessionID ? { sessionID } : {}),
-            model,
+            ...(origin ? { sessionID: origin } : {}),
+            model: selected,
             language: langCode(),
             format: audio.format,
             data: audio.data,
-          }),
-        (err: unknown) => fail(err instanceof Error ? err.message : String(err)),
+          })
+        },
+        (err: unknown) => {
+          if (request === id) fail(err instanceof Error ? err.message : String(err))
+        },
       )
       return
     }
@@ -226,7 +237,7 @@ export function useSpeechToText(
   }
 
   function cancel() {
-    if (local) capture.cancel() // raya_change - Milestone H
+    capture.cancel() // Retire retained hands-free streams even after transcription cleared local state.
     if (!local && request && active())
       vscode.postMessage({ type: "speechToTextCancel", requestId: request, ...(sessionID ? { sessionID } : {}) })
     cleanup()
@@ -254,11 +265,42 @@ export function useSpeechToText(
     fail(message, false)
   }
 
+  function rejected(msg: Extract<ExtensionMessage, { type: "speechToTextError" }>) {
+    if (msg.code === "empty_transcript" && resume()) return
+    if (msg.code === "not_authenticated") {
+      login()
+      return
+    }
+    fail(msg.error)
+  }
+
+  function finish(text: string) {
+    const next = ready?.() === false ? undefined : done
+    const accepted = insert?.(text)
+    cleanup()
+    setState("idle")
+    setError(undefined)
+    if (accepted !== false) next?.() // raya_change - do not send a voice-mode command as a chat turn
+  }
+
   function fail(message: string, toast = true) {
+    const notify = failed
+    capture.cancel()
     cleanup()
     setState("error")
     setError(message)
+    notify?.(message)
     if (toast) showToast({ variant: "error", title: lang.t("speechToText.error.title"), description: message })
+  }
+
+  function resume() {
+    if (!empty) return false
+    const next = empty
+    cleanup()
+    setState("idle")
+    setError(undefined)
+    next()
+    return true
   }
 
   function cleanup() {
@@ -271,7 +313,9 @@ export function useSpeechToText(
     local = false // raya_change - Milestone H
     model = "" // raya_change - Milestone H
     speech = undefined // raya_change - Milestone H
-    silence = undefined // raya_change - Milestone H
+    silence = undefined
+    failed = undefined // raya_change - Milestone H
+    empty = undefined
   }
 
   return { state, error, active, start, stop, rejectEcho: () => capture.rejectEcho(), cancel, clear }

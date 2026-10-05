@@ -26,7 +26,7 @@ html [data-component="personal-todo"] {
 [data-component="personal-todo"] .todo-kicker {
   display: block;
   color: #b8b8ba;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -37,14 +37,14 @@ html [data-component="personal-todo"] {
   color: var(--text-base, var(--vscode-foreground));
   font-family: var(--raya-font-display);
   font-weight: 400;
-  font-size: 24px;
+  font-size: var(--kilo-font-size-24);
 }
 [data-component="personal-todo"] [data-slot="personal-todo-header"] {
   padding-bottom: 14px;
   border-bottom: 1px solid #272728;
 }
 [data-component="personal-todo"] [data-slot="personal-todo-header"] h1 {
-  font-size: 34px;
+  font-size: calc(34px * var(--kilo-font-scale));
 }
 [data-component="personal-todo"] [data-slot="personal-todo-header"] p {
   margin-top: 3px;
@@ -71,7 +71,7 @@ html [data-component="personal-todo"] {
   background: transparent;
   color: #b8b8ba;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
   cursor: pointer;
 }
 [data-slot="todo-modes"] button[aria-current="page"] {
@@ -106,7 +106,7 @@ html [data-component="personal-todo"] {
 [data-slot="todo-reminder-assistant"] p {
   margin: 7px 0 0;
   color: var(--text-weak, var(--vscode-descriptionForeground));
-  font-size: 13px;
+  font-size: var(--kilo-font-size-13);
 }
 
 [data-slot="todo-overview-grid"] {
@@ -151,18 +151,18 @@ html [data-component="personal-todo"] {
 }
 [data-slot="todo-overview-grid"] button > span {
   color: #b8b8ba;
-  font-size: 20px;
+  font-size: var(--kilo-font-size-20);
   line-height: 1;
 }
 [data-slot="todo-overview-grid"] button strong {
-  font-size: 18px;
+  font-size: var(--kilo-font-size-18);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 [data-slot="todo-overview-grid"] button small {
   grid-column: 1 / -1;
   color: #b8b8ba;
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 
 [data-component="personal-todo"] [data-slot="focus-timer"] {
@@ -177,7 +177,7 @@ html [data-component="personal-todo"] {
 }
 [data-slot="focus-timer-state"] {
   color: #bababe;
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 [data-slot="focus-timer-dial"] {
   display: grid;
@@ -215,7 +215,7 @@ html [data-component="personal-todo"] {
 
 [data-slot="focus-timer-face"] span {
   color: #c2c2c7;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
 }
 [data-slot="focus-timer-face"] output {
   color: #f3f2f6;
@@ -236,7 +236,7 @@ html [data-component="personal-todo"] {
 [data-slot="focus-duration"] > span,
 [data-slot="focus-duration-inputs"] label > span {
   color: #b8b8ba;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
 }
 [data-slot="focus-duration-inputs"] {
   display: grid;
@@ -276,7 +276,7 @@ html [data-component="personal-todo"] {
   background: transparent;
   color: #c4c4c6;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
   cursor: pointer;
 }
 [data-slot="focus-duration-presets"] button[data-active="true"] {
@@ -345,7 +345,7 @@ html [data-component="personal-todo"] {
   background: transparent;
   color: #c9c9ca;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
   cursor: pointer;
 }
 [data-slot="todo-assistant-prompts"] button:hover {
@@ -369,7 +369,7 @@ html [data-component="personal-todo"] {
 }
 [data-slot="todo-list-heading"] > span {
   color: #aaa;
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 [data-component="personal-todo"] [data-slot="personal-todo-list"] {
   gap: 9px;
@@ -385,7 +385,7 @@ html [data-component="personal-todo"] {
 [data-slot="todo-priority"] {
   width: fit-content;
   color: #b8b8ba;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
 }
 [data-slot="todo-subtasks"] {
   display: grid;
@@ -394,7 +394,7 @@ html [data-component="personal-todo"] {
   padding-left: 10px;
   border-left: 1px solid #454548;
   color: #c4c4c6;
-  font-size: 12px;
+  font-size: var(--kilo-font-size-12);
 }
 [data-slot="todo-subtasks"] [data-done="true"] [data-slot="checkbox-checkbox-label"] {
   color: #858589;
@@ -407,7 +407,7 @@ html [data-component="personal-todo"] {
   background: transparent;
   color: var(--raya-primary);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--kilo-font-size-11);
   cursor: pointer;
 }
 [data-slot="todo-expand"]:hover {

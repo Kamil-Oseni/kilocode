@@ -134,7 +134,16 @@ export async function routeEarlyMessage(
     return true
   }
   await routeSuggestionWebviewMessage(ctx.question, message)
-  if (await ModelState.handleMessage(message.type, message, ctx.client, ctx.post)) return true
+  if (
+    await ModelState.handleMessage(
+      message.type,
+      message,
+      ctx.client,
+      ctx.post,
+      () => !!ctx.client && ctx.connection.isClientCurrent(ctx.client),
+    )
+  )
+    return true
   if (message.type === "exportSessionTranscript") {
     const input = message as { sessionID?: unknown }
     if (typeof input.sessionID === "string") await ctx.exportTranscript(input.sessionID)

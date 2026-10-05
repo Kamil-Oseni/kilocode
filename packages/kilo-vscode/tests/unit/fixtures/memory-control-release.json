@@ -1,0 +1,14 @@
+{
+  "format": "raya.memory.control.catalog",
+  "version": 1,
+  "python_sha256": "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2",
+  "bridge_sha256": "d135c8c3f6a0ca8c2a746f5c7ac74f65909ff4ee4a7df8a1459a31ddb1c1abe5",
+  "source_sha256": {
+    "server.py": "51a19ed48dc3ec36ca608a141b3d1acca681c6993dde189ac8fc2ab04ae288b2",
+    "index.py": "6ce3985be9f34ef758f02091ce8052a181a8ece154fc6ef6bc3649e11ba984f9",
+    "notes.py": "59488d324200d95b0974bfa119215de627bc1b17dd3233fc6b02ab137b651923",
+    "policy.py": "87c931cfa7cceb7386e6d2b4b05fdacf916360fd2cb0ff590d0fccf5dd334ae2",
+    "admission.py": "5a4ae56bc2a5d55e0a1dab14c1401a98b56ebc5fedf9b8bd5312d84899877770",
+    "host.py": "4854ab90b06085450136e764ec1f70034ae27c597af9b6fa98a99860aa049a97"
+  }
+}

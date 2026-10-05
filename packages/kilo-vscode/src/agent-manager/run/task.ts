@@ -9,7 +9,9 @@
 import * as vscode from "vscode"
 import type { RunHandle } from "./manager"
 
-const GRACE_MS = 250
+import path from "node:path"
+import { bindTask } from "./task-native"
+import { TaskLifetime } from "./task-lifetime"
 
 export interface RunTaskConfig {
   worktreeId: string
@@ -22,6 +24,7 @@ export interface RunTaskConfig {
 
 export interface RunTaskExit {
   exitCode?: number
+  error?: string
 }
 
 export async function startVscodeRunTask(config: RunTaskConfig, done: (exit: RunTaskExit) => void): Promise<RunHandle> {
@@ -44,38 +47,54 @@ export async function startVscodeRunTask(config: RunTaskConfig, done: (exit: Run
     showReuseMessage: false,
   }
 
-  const execution = await vscode.tasks.executeTask(task)
-  let closed = false
+  const extension = vscode.extensions.getExtension("eden.raya")
+  if (process.platform === "win32" && !extension) throw new Error("Run task packaged extension unavailable")
+  const events: (
+    | { type: "start"; value: vscode.TaskProcessStartEvent }
+    | { type: "process"; value: vscode.TaskProcessEndEvent }
+    | { type: "end"; value: vscode.TaskEndEvent }
+  )[] = []
+  let execution: vscode.TaskExecution | undefined
   let cleaned = false
-  let grace: ReturnType<typeof setTimeout> | undefined
-
   const cleanup = () => {
     if (cleaned) return
     cleaned = true
-    processListener.dispose()
-    endListener.dispose()
-    if (grace) clearTimeout(grace)
+    for (const listener of listeners) listener.dispose()
+    lifetime.dispose()
   }
-
-  const finish = (exit: RunTaskExit = {}) => {
-    if (closed) return
-    closed = true
+  const lifetime = new TaskLifetime(
+    (exit) => {
+      cleanup()
+      done(exit)
+    },
+    process.platform === "win32"
+      ? (pid) => bindTask(pid, path.join(extension!.extensionPath, "bin", "raya-process-host.exe"))
+      : undefined,
+  )
+  const dispatch = (event: (typeof events)[number]) => {
+    if (!execution) {
+      events.push(event)
+      return
+    }
+    if (event.value.execution !== execution) return
+    if (event.type === "start") lifetime.started(event.value.processId)
+    if (event.type === "process") lifetime.ended(event.value.exitCode)
+    if (event.type === "end") lifetime.end()
+  }
+  const listeners = [
+    vscode.tasks.onDidStartTaskProcess((value) => dispatch({ type: "start", value })),
+    vscode.tasks.onDidEndTaskProcess((value) => dispatch({ type: "process", value })),
+    vscode.tasks.onDidEndTask((value) => dispatch({ type: "end", value })),
+  ]
+  try {
+    execution = await vscode.tasks.executeTask(task)
+    for (const event of events.splice(0)) dispatch(event)
+  } catch (err) {
     cleanup()
-    done(exit)
+    throw err
   }
-
-  const processListener = vscode.tasks.onDidEndTaskProcess((event) => {
-    if (event.execution !== execution) return
-    finish({ exitCode: event.exitCode ?? undefined })
-  })
-
-  const endListener = vscode.tasks.onDidEndTask((event) => {
-    if (event.execution !== execution || closed) return
-    grace = setTimeout(() => finish(), GRACE_MS)
-  })
-
   return {
-    stop: () => execution.terminate(),
+    stop: () => lifetime.stop(() => execution!.terminate()),
     dispose: cleanup,
   }
 }

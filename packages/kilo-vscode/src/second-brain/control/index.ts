@@ -21,7 +21,7 @@ export async function packaged(extension: string) {
   check(
     Object.keys(row).sort().join("|") === "exe|pdb|recipe|version" &&
       row.version === 1 &&
-      row.recipe === "aa7b52551fdf4e0b5bb1d43b62f0923206dbf213265ed7decf7949dbec824f52" &&
+      row.recipe === "fb46d5ad1ef444acaaa7307fe48b04b62352a7b205384129dede17a50f04bc3f" &&
       row.exe === files[0].digest &&
       row.pdb === files[1].digest,
     "Packaged helper fingerprint refused",

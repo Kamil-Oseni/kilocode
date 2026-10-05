@@ -51,6 +51,22 @@ const health = (items = healthy) => ({
   format: "raya.admin-health",
   version: 2,
   generatedAt: stamp,
+  ...(state === "rollback-available"
+    ? {
+        recovery: {
+          status: "available",
+          version: "1.2.2",
+          target: "win32-x64",
+          observedAt: stamp,
+          artifact: { digest: "a".repeat(64), size: 1024 },
+          binary: { digest: "b".repeat(64), size: 512 },
+        },
+      }
+    : state === "rollback-invalid"
+      ? { recovery: { status: "invalid", reason: "verification-failed" } }
+      : state === "rollback-progress"
+        ? { recovery: { status: "in-progress", reason: "installation-retained" } }
+        : {}),
   items,
   ...(state === "resources"
     ? {

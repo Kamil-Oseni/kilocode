@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { handleAdminMessage } from "../../src/kilo-provider/admin"
+import type { AdminResult } from "../../src/shared/admin"
 
 const ids = [
   "runtime",
@@ -23,6 +24,48 @@ const ids = [
 ] as const
 
 describe("admin host bridge", () => {
+  it("publishes only host-verified rollback metadata and contains verifier failures", async () => {
+    const health = {
+      format: "raya.admin-health" as const,
+      version: 2 as const,
+      generatedAt: 1,
+      items: [],
+      recovery: { status: "available" as const, version: "unverified backend claim" },
+    }
+    const client = {
+      raya: { admin: { health: async () => ({ data: health }), logs: async () => ({ data: [] }) } },
+    } as unknown as KiloClient
+    const posts: AdminResult[] = []
+    const input = {
+      client,
+      directory: "/workspace",
+      message: { type: "requestAdmin", requestID: "recovery" },
+      post: (value: AdminResult) => posts.push(value),
+    }
+    await handleAdminMessage(input)
+    expect(posts.pop()?.health?.recovery).toBeUndefined()
+    expect(health.recovery.version).toBe("unverified backend claim")
+    const verified = {
+      status: "available" as const,
+      version: "1.2.2",
+      target: "win32-x64",
+      observedAt: 2,
+      artifact: { digest: "a".repeat(64), size: 20 },
+      binary: { digest: "b".repeat(64), size: 10 },
+    }
+    await handleAdminMessage({ ...input, host: { recovery: () => verified } })
+    expect(posts.pop()?.health?.recovery).toEqual(verified)
+    await handleAdminMessage({
+      ...input,
+      host: {
+        recovery: () => {
+          throw new Error("C:/private token=synthetic")
+        },
+      },
+    })
+    expect(posts[0]?.health?.recovery).toEqual({ status: "invalid", reason: "verification-failed" })
+    expect(JSON.stringify(posts)).not.toContain("private")
+  })
   it("uses the generated read-only endpoints in order", async () => {
     const calls: string[] = []
     const posts: unknown[] = []

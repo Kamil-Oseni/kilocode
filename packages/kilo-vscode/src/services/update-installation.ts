@@ -251,6 +251,11 @@ export class Installation {
     if (this.root) await rm(join(this.root, "update-rollback"), { recursive: true, force: true })
   }
 
+  /** Read-only observation for rollback availability; never reconcile or dispatch. */
+  snapshot() {
+    return this.read()
+  }
+
   run(input: InstallRequest, install: () => Promise<void>) {
     const value = request.parse(input)
     return this.lock(async () => {

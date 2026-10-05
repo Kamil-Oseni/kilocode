@@ -7,6 +7,7 @@ import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage } from "../../types/messages"
 import type { AdminEntry, AdminRow } from "../../../../src/shared/admin"
 import { Resources } from "./Resources"
+import { Recovery } from "./Recovery"
 import { BackgroundAgents } from "../chat/BackgroundAgents"
 
 const ids = [
@@ -240,6 +241,7 @@ export function AdminView(props: { onBack: () => void }) {
       </Card>
 
       <Resources value={health()?.resources} />
+      <Recovery value={health()?.recovery} />
 
       <section aria-labelledby="admin-workers-title">
         <h2 id="admin-workers-title">Current conversation workers</h2>

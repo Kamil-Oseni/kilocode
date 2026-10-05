@@ -227,6 +227,7 @@ import { detail as selfHealReviewDetail, review as reviewSelfHeal } from "./self
 import { detail as selfHealInstallDetail, install as installSelfHeal } from "./self-heal/install"
 import { SelfHealInstallation } from "./self-heal/installation"
 import { PackageVault } from "./services/package-vault"
+import { availability } from "./kilo-provider/recovery"
 import {
   accept as acceptSelfHeal,
   detail as selfHealVerificationDetail,
@@ -1828,6 +1829,22 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         ...(this.adminBrowser ? { browser: () => this.adminBrowser!.admin() } : {}),
         ...(this.speech ? { voice: () => this.speech!.admin() } : {}),
         updates: updateAdminSignal,
+        ...(this.extensionContext
+          ? {
+              recovery: () =>
+              availability({
+                  root: this.extensionContext!.globalStorageUri.fsPath,
+                  state: this.extensionContext!.globalState,
+                  version: String(this.extensionContext!.extension.packageJSON.version),
+                  target: `${process.platform}-${process.arch}`,
+                  binary: path.join(
+                    this.extensionUri.fsPath,
+                    "bin",
+                    process.platform === "win32" ? "kilo.exe" : "kilo",
+                  ),
+                }),
+            }
+          : {}),
       },
     }
     if (await handlePersonalTodoMessage(input)) return true

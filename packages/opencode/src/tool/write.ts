@@ -115,17 +115,28 @@ export const WriteTool = Tool.define(
           }
           output += yield* Effect.promise(() => ConfigValidation.check(filepath)) // kilocode_change
 
+          // kilocode_change start - preserve an executed mutation without claiming unavailable readback succeeded
+          const revision = yield* Artifact.capture(
+            fs,
+            target,
+            target,
+            Artifact.digest(EncodedIO.encode(Bom.join(final, desiredBom), source.encoding)),
+          )
+          const confirmation = Artifact.confirmation(revision, output, "Wrote file successfully.")
+          // kilocode_change end
+
           return {
             title: path.relative(instance.worktree, filepath),
             metadata: {
               diagnostics: filterDiagnostics(diagnostics, [normalizedFilepath]), // kilocode_change
               filepath,
               exists: exists,
-              rayaRevision: yield* Artifact.capture(fs, target), // kilocode_change - fingerprint actual encoded/formatted bytes
+              rayaRevision: revision, // kilocode_change - fingerprint actual encoded/formatted bytes
+              rayaVerification: confirmation.status, // kilocode_change
               diff, // kilocode_change
               filediff, // kilocode_change
             },
-            output,
+            output: confirmation.output, // kilocode_change
           }
         }).pipe(Effect.orDie),
     }

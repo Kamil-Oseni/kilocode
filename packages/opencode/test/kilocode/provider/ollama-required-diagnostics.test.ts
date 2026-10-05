@@ -32,6 +32,53 @@ function inspect(err: unknown) {
   return JSON.parse(err.message.slice(err.message.indexOf(" [") + 2, -1))
 }
 
+test("actual HTTP EOF distinguishes missing terminal and missing required tools before publishing", async () => {
+  const state = { done: false, requests: 0, published: false }
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      state.requests++
+      return new Response(
+        JSON.stringify({
+          model: "fixture",
+          message: { role: "assistant", content: marker },
+          done: state.done,
+          ...(state.done ? { done_reason: "stop" } : {}),
+        }) + "\n",
+      )
+    },
+  })
+  try {
+    for (const done of [false, true]) {
+      state.done = done
+      const err = await ollama({ localInference: true, localInferenceAPI: "ollama" }, fetch)(
+        `${server.url}v1/chat/completions`,
+        { method: "POST", body: JSON.stringify({ ...request, tool_choice: "required" }) },
+      ).then(
+        () => {
+          state.published = true
+        },
+        (err: unknown) => err,
+      )
+      expect(state.published).toBe(false)
+      expect(inspect(err)).toMatchObject({
+        reason: "required-acquisition",
+        stage: "eof",
+        refusal: done ? "tool-missing" : "terminal-missing",
+        calls: 0,
+        envelope: false,
+        frames: 1,
+        content: 0,
+        finish: done ? "stop" : "missing",
+      })
+    }
+    expect(state.requests).toBe(2)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("real native HTTP outer JSON and UTF8 failures have distinct private-safe stages before any SSE", async () => {
   const bodies = [new TextEncoder().encode('{"message":"' + marker + "\n"), new Uint8Array([0xc3, 0x28])]
   const state = { index: 0, requests: 0, published: false }

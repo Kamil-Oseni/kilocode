@@ -25,6 +25,8 @@ type Diagnostic = {
     | "native-tools"
     | "tool-name"
     | "tool-count"
+    | "terminal-missing"
+    | "tool-missing"
   calls?: number
   nameShape?:
     | "empty"
@@ -322,7 +324,20 @@ async function required(
       if (!chunk.done) continue
       if (state.text.trim()) accept(state.text)
       stage = "eof"
-      if (!state.done || (!envelope && !state.tools)) throw new OllamaBridgeError()
+      if (!state.done || (!envelope && !state.tools))
+        throw new OllamaBridgeError({
+          diagnostic: {
+            reason: "required-acquisition",
+            stage: "eof",
+            refusal: !state.done ? "terminal-missing" : "tool-missing",
+            calls: state.tools,
+            envelope: Boolean(envelope),
+            finish: rows.at(-1)?.done_reason,
+            bytes: state.bytes,
+            frames: state.frames,
+            content: 0,
+          },
+        })
       signal?.throwIfAborted()
       break
     }
@@ -437,6 +452,8 @@ export class OllamaBridgeError extends Error {
                   "native-tools",
                   "tool-name",
                   "tool-count",
+                  "terminal-missing",
+                  "tool-missing",
                 ].includes(row.refusal)
                   ? row.refusal
                   : undefined,

@@ -118,6 +118,7 @@ export const EditTool = Tool.define(
           let diff = ""
           let contentOld = ""
           let contentNew = ""
+          let intended: string | undefined // kilocode_change - exact final encoded bytes, including BOM and formatter output
           let cachedFilediff: Snapshot.FileDiff | undefined // kilocode_change
           yield* lock(target).withPermits(1)(
             // kilocode_change - aliases to one target share the same edit lock
@@ -157,6 +158,7 @@ export const EditTool = Tool.define(
                     format.file,
                   )
                 }
+                intended = Artifact.digest(EncodedIO.encode(Bom.join(contentNew, desiredBom), Encoding.DEFAULT)) // kilocode_change
                 yield* EncodedIO.anchored(target, Bom.join(contentNew, desiredBom), anchor, Encoding.DEFAULT) // kilocode_change - create only beneath the reviewed parent identity
                 // kilocode_change end
                 yield* events.publish(FileSystem.Event.Edited, { file: filePath })
@@ -217,6 +219,7 @@ export const EditTool = Tool.define(
                   format.file,
                 )
               }
+              intended = Artifact.digest(EncodedIO.encode(Bom.join(contentNew, desiredBom), source.encoding))
               yield* EncodedIO.checked(target, Bom.join(contentNew, desiredBom), source.encoding, proof, pre.sha256)
               // kilocode_change end
               yield* events.publish(FileSystem.Event.Edited, { file: filePath })
@@ -253,15 +256,21 @@ export const EditTool = Tool.define(
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
           output += yield* Effect.promise(() => ConfigValidation.check(filePath)) // kilocode_change
 
+          // kilocode_change start - preserve an executed mutation without claiming unavailable readback succeeded
+          const revision = yield* Artifact.capture(afs, target, target, intended)
+          const confirmation = Artifact.confirmation(revision, output, "Edit applied successfully.")
+          // kilocode_change end
+
           return {
             metadata: {
               diagnostics: filterDiagnostics(diagnostics, [normalizedFilePath]), // kilocode_change
-              rayaRevision: yield* Artifact.capture(afs, target), // kilocode_change
+              rayaRevision: revision, // kilocode_change
+              rayaVerification: confirmation.status, // kilocode_change
               diff,
               filediff, // kilocode_change
             },
             title: `${path.relative(instance.worktree, filePath)}`,
-            output,
+            output: confirmation.output, // kilocode_change
           }
         }).pipe(Effect.orDie), // kilocode_change - tool execution cannot expose filesystem failures
     }

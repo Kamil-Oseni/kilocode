@@ -31,6 +31,20 @@ const Bundle = Schema.Struct({
 })
 const Value = Schema.Union([Entry, Bundle])
 
+export const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex")
+
+/** A completed mutation is not proof that its final file state could be read back. */
+export function confirmation(value: unknown, output: string, heading: string) {
+  if (Option.isSome(Schema.decodeUnknownOption(Value)(value))) return { status: "confirmed" as const, output }
+  const details = output.startsWith(heading) ? output.slice(heading.length) : output
+  return {
+    status: "unavailable" as const,
+    output:
+      "Mutation executed, but saved file state could not be verified. Do not automatically retry this mutation." +
+      (details ? `\n${details}` : ""),
+  }
+}
+
 export const entries = (value: unknown): readonly Entry[] =>
   Option.match(Schema.decodeUnknownOption(Value)(value), {
     onNone: () => [],
@@ -62,6 +76,7 @@ const missing = (fs: FSUtil.Interface, file: string, expected?: string) =>
 export const patch = (
   fs: FSUtil.Interface,
   changes: readonly { filePath: string; type: "add" | "update" | "delete" | "move"; movePath?: string }[],
+  expected?: readonly { target: string; result?: { sha256: string } }[],
 ) =>
   Effect.gen(function* () {
     const paths = new Map<string, boolean>()
@@ -71,7 +86,16 @@ export const patch = (
     }
     const revisions = yield* Effect.forEach(paths, ([file, present]) =>
       Effect.gen(function* () {
-        if (present) return yield* capture(fs, file)
+        if (present) {
+          const revision = yield* capture(fs, file)
+          if (
+            expected &&
+            revision.status === "captured" &&
+            expected.find((entry) => entry.target === revision.canonical)?.result?.sha256 !== revision.sha256
+          )
+            return { version: 1 as const, status: "unavailable" as const, path: file }
+          return revision
+        }
         return yield* missing(fs, file)
       }),
     )
@@ -86,7 +110,7 @@ const same = (one: FileSystem.File.Info, two: FileSystem.File.Info) =>
   Option.getOrUndefined(one.ino) === Option.getOrUndefined(two.ino) &&
   Option.getOrUndefined(one.mtime)?.getTime() === Option.getOrUndefined(two.mtime)?.getTime()
 
-export const capture = (fs: FSUtil.Interface, file: string, expected?: string) =>
+export const capture = (fs: FSUtil.Interface, file: string, expected?: string, intended?: string) =>
   Effect.scoped(
     Effect.gen(function* () {
       if (!path.isAbsolute(file)) return yield* Effect.fail(new Error("Artifact path must be absolute"))
@@ -109,12 +133,15 @@ export const capture = (fs: FSUtil.Interface, file: string, expected?: string) =
         canonical !== (yield* fs.realPath(file))
       )
         return yield* Effect.fail(new Error("Artifact changed while reading"))
+      const sha256 = hash.digest("hex")
+      if (intended !== undefined && sha256 !== intended)
+        return yield* Effect.fail(new Error("Artifact content does not match executed mutation"))
       return {
         version: 1 as const,
         status: "captured" as const,
         path: file,
         canonical,
-        sha256: hash.digest("hex"),
+        sha256,
         mode: before.mode,
         bytes: Number(before.size),
       }

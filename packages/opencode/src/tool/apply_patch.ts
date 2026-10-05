@@ -24,7 +24,7 @@ import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 import { Storage } from "@/storage/storage" // kilocode_change
 import { transact, type Item } from "@/kilocode/tool/apply-patch-transaction" // kilocode_change
 import { records, seal, type Intent, type Receipt } from "@/kilocode/tool/apply-patch-receipt" // kilocode_change
-import { Conflict, journals } from "@/kilocode/tool/mutation-journal" // kilocode_change
+import { Conflict, journals, Outcome } from "@/kilocode/tool/mutation-journal" // kilocode_change
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -76,7 +76,7 @@ export const ApplyPatchTool = Tool.define(
         .update(JSON.stringify([instance.worktree, params.patchText]))
         .digest("hex")
       const replay = records(storage)
-      const finish = Effect.fn("ApplyPatchTool.finish")(function* (intent: Intent) {
+      const finish = Effect.fn("ApplyPatchTool.finish")(function* (intent: Intent, committed: typeof Outcome.Type) {
         for (const change of intent.changes) {
           if (change.type === "delete") continue
           yield* lsp.touchFile(change.movePath ?? change.filePath, "document")
@@ -103,15 +103,22 @@ export const ApplyPatchTool = Tool.define(
           }
           output += yield* Effect.promise(() => ConfigValidation.check(target))
         }
+        const expected =
+          committed?.phase === "done" && committed.decision === "commit" && committed.digest === intent.digest
+            ? committed.entries
+            : []
+        const revision = yield* Artifact.patch(afs, intent.changes, expected)
+        const confirmation = Artifact.confirmation(revision, output, "Success. Updated the following files:")
         const result: Receipt["result"] = {
-          title: output,
+          title: confirmation.output,
           metadata: {
             diff: intent.diff,
             files: intent.files,
             diagnostics: filterDiagnostics(diagnostics, changed),
-            rayaRevision: yield* Artifact.patch(afs, intent.changes),
+            rayaRevision: revision,
+            rayaVerification: confirmation.status,
           },
-          output,
+          output: confirmation.output,
         }
         const saved = yield* replay.publish({
           version: 1,
@@ -153,7 +160,7 @@ export const ApplyPatchTool = Tool.define(
             return yield* new Conflict({ message: "Apply Patch response exists without a committed transaction." })
           return cached.result
         }
-        if (outcome?.phase === "done" && outcome.decision === "commit") return yield* finish(retained)
+        if (outcome?.phase === "done" && outcome.decision === "commit") return yield* finish(retained, outcome)
         if (outcome)
           return yield* new Conflict({
             message: `Apply Patch invocation is retained at ${outcome.phase}/${outcome.decision ?? "undecided"}.`,
@@ -533,8 +540,13 @@ export const ApplyPatchTool = Tool.define(
         })),
       }
       const intent = yield* replay.prepare(ctx.sessionID, { ...proposed, digest: seal(proposed) })
-      yield* transact(storage, { invocation, digest: intent.digest, workspace: instance.worktree, items })
-      return yield* finish(intent)
+      const committed = yield* transact(storage, {
+        invocation,
+        digest: intent.digest,
+        workspace: instance.worktree,
+        items,
+      })
+      return yield* finish(intent, committed)
       // kilocode_change end
     })
 

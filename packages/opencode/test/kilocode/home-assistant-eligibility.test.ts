@@ -407,6 +407,7 @@ for (const mode of ["auto", "voice"] as const)
                   yield* llm.tool("chief_route", {
                     objective: "Turn on the allowed Home Assistant PC light, then report its state.",
                     workflow: "home_assistant",
+                    access: "read",
                   })
                 yield* llm.tool("raya_home_assistant_lights_read", { entity: "light.pc_rgb" })
                 yield* llm.tool("raya_home_assistant_lights_set", { entity: "light.pc_rgb", state: "on" })
@@ -621,7 +622,7 @@ it.live(
           expect(RayaChief.tools(catalog, session.metadata, { session: session.id, user: user.id })).toEqual({
             chief_route: "route",
           })
-          const general = yield* tool.execute({ objective: "Turn on a light" }, ctx)
+          const general = yield* tool.execute({ objective: "Turn on a light", access: "read" }, ctx)
           expect(general.metadata.decision?.request).toBe(request)
           expect(general.metadata.decision?.agent).toBe("generalist")
           const routed = yield* sessions.get(session.id)
@@ -638,7 +639,10 @@ it.live(
           expect(
             Exit.isFailure(
               yield* Effect.exit(
-                tool.execute({ objective: request, workflow: "home_assistant" }, { ...ctx, sessionID: foreign.id }),
+                tool.execute(
+                  { objective: request, workflow: "home_assistant", access: "read" },
+                  { ...ctx, sessionID: foreign.id },
+                ),
               ),
             ),
           ).toBe(true)
@@ -647,14 +651,18 @@ it.live(
             metadata: { [RayaChief.requestKey]: "Drifted request" },
           })
           expect(
-            Exit.isFailure(yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant" }, ctx))),
+            Exit.isFailure(
+              yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant", access: "read" }, ctx)),
+            ),
           ).toBe(true)
           yield* sessions.setMetadata({ sessionID: session.id, metadata: { [RayaChief.requestKey]: request } })
-          yield* tool.execute({ objective: request, workflow: "home_assistant" }, ctx)
+          yield* tool.execute({ objective: request, workflow: "home_assistant", access: "read" }, ctx)
           const selected = yield* sessions.get(session.id)
           expect(HomeAssistant.selected(selected.metadata, { session: session.id, user: user.id })).toBe(true)
           expect(
-            Exit.isFailure(yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant" }, ctx))),
+            Exit.isFailure(
+              yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant", access: "read" }, ctx)),
+            ),
           ).toBe(true)
           const latest = yield* sessions.updateMessage({
             ...user,
@@ -672,7 +680,9 @@ it.live(
             chief_route: "route",
           })
           expect(
-            Exit.isFailure(yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant" }, ctx))),
+            Exit.isFailure(
+              yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant", access: "read" }, ctx)),
+            ),
           ).toBe(true)
           const agents = yield* Agent.Service
           const voice = yield* agents.get("voice")

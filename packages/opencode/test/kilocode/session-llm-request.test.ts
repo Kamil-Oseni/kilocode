@@ -201,10 +201,10 @@ describe("Chief work-class request preparation", () => {
     const property = schema.properties?.access
     expect(typeof property).toBe("object")
     if (!property || typeof property !== "object") throw new Error("Access schema required")
-    expect(property.description).toContain("Set explicitly for every fresh route")
+    expect(property.description).toContain("Required work class")
     for (const access of ["read", "edit", "computer"] as const)
       expect(Schema.decodeUnknownSync(Parameters)({ objective: "Complete request", access }).access).toBe(access)
-    expect(Schema.decodeUnknownSync(Parameters)({ objective: "Legacy request" }).access).toBeUndefined()
+    expect(() => Schema.decodeUnknownSync(Parameters)({ objective: "Missing work class" })).toThrow()
     const task = await prepare("auto", false, { task: route })
     expect(task.system.at(-1)).toContain("Carry the selected Chief access into Task")
     expect(task.system.at(-1)).toContain("omission never grants permission to edit")

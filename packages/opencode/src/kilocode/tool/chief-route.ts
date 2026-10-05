@@ -18,9 +18,9 @@ import { gate } from "@/kilocode/session/input-gate"
 import * as Tool from "@/tool/tool"
 
 export const Parameters = Schema.Struct({
-  access: Schema.optional(RayaChief.Access).annotate({
+  access: RayaChief.Access.annotate({
     description:
-      "Requested work class: read for inspection, edit for requested file changes, computer for desktop actions. Set explicitly for every fresh route and carry the chosen class into Task. This does not grant permissions. Omission is supported only for legacy calls and does not infer edit work from the objective.",
+      "Required work class: read for inspection or conversation, edit for requested file changes, computer for desktop actions. Carry this class into Task. This requests capability and does not grant permissions.",
   }),
   objective: Schema.String.annotate({ description: "The user's complete request, copied without narrowing its scope" }),
   workflow: Schema.optional(
@@ -185,7 +185,7 @@ export const ChiefRouteTool = Tool.define<
                 throw new Error("The selected Auto specialist is unavailable")
               const direct =
                 selected.name === "generalist" &&
-                !params.access &&
+                params.access === "read" &&
                 !answer &&
                 RayaChief.request(session.metadata) === request &&
                 session.metadata?.["raya.goal.open"] !== true &&
@@ -258,7 +258,7 @@ export const ChiefRouteTool = Tool.define<
                     sessions,
                     storage: storage!,
                     ctx,
-                    access: params.access!,
+                    access: params.access,
                   })
                   if (checked.previous !== refinement.previous)
                     throw new Error("Chief classification changed before refinement")

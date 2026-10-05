@@ -1916,7 +1916,7 @@ describe("tool.task", () => {
         // kilocode_change end
       })
       const result = yield* def.execute(
-        { objective: "Implement a typed API endpoint and add unit tests" },
+        { objective: "Implement a typed API endpoint and add unit tests", access: "edit" }, // kilocode_change
         {
           sessionID: chat.id,
           messageID: chief.id,
@@ -1958,7 +1958,7 @@ describe("tool.task", () => {
       })
       const route = yield* ChiefRouteTool
       const routed = yield* (yield* route.init()).execute(
-        { objective: "What does idempotency mean?" },
+        { objective: "What does idempotency mean?", access: "read" }, // kilocode_change
         {
           sessionID: chat.id,
           messageID: assistant.id,
@@ -2049,7 +2049,8 @@ describe("tool.task", () => {
         metadata: { [RayaChief.modelKey]: ref, [RayaChief.requestKey]: "Write a greeting in a file" },
       })
       expect(
-        (yield* def.execute({ objective: "Write a greeting in a file" }, ctx)).metadata.decision?.direct,
+        (yield* def.execute({ objective: "Write a greeting in a file", access: "edit" }, ctx)).metadata.decision
+          ?.direct, // kilocode_change
       ).toBeUndefined()
       expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
 
@@ -2063,7 +2064,8 @@ describe("tool.task", () => {
         },
       })
       expect(
-        (yield* def.execute({ objective: "What does idempotency mean?" }, ctx)).metadata.decision?.direct,
+        (yield* def.execute({ objective: "What does idempotency mean?", access: "read" }, ctx)).metadata.decision
+          ?.direct, // kilocode_change
       ).toBeUndefined()
       expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
     }),
@@ -2087,7 +2089,7 @@ describe("tool.task", () => {
       const def = yield* tool.init()
       const fiber = yield* def
         .execute(
-          { objective: "Implement code by inspecting this repository" }, // raya_change - simulated Chief rewrite
+          { objective: "Implement code by inspecting this repository", access: "read" }, // kilocode_change - simulated Chief rewrite
           {
             sessionID: chat.id,
             messageID: assistant.id,

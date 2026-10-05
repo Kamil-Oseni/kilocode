@@ -14,7 +14,11 @@ const options = {
 const model = { api: { id: "fixture" }, limit: { context: 32768 } }
 const original = ToolJsonSchema.fromSchema(Parameters)
 const tools = [{ type: "function", function: { name: "chief_route", parameters: original } }]
-const args = { objective: "Delegate the requested fixture file work", workflow: "specialist" as const }
+const args = {
+  objective: "Delegate the requested fixture file work",
+  workflow: "specialist" as const,
+  access: "edit" as const,
+}
 const envelope = JSON.stringify({ kind: "tool", name: "chief_route", arguments: args })
 const request = (choice = "required", stream = false) => ({
   model: "fixture",
@@ -30,6 +34,13 @@ const row = (content = envelope) => ({
   done_reason: "stop",
   prompt_eval_count: 7,
   eval_count: 3,
+})
+
+test("fresh Chief calls require a work class in the actual model schema", () => {
+  expect(original.required).toContain("access")
+  expect(() => Schema.decodeUnknownSync(Parameters)({ objective: args.objective, workflow: args.workflow })).toThrow()
+  for (const access of ["read", "edit", "computer"] as const)
+    expect(Schema.decodeUnknownSync(Parameters)({ ...args, access }).access).toBe(access)
 })
 
 test("required sole Chief routing sends its actual immutable schema and preserves ordinary tool IDs", async () => {

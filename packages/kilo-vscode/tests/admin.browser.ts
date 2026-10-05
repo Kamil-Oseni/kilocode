@@ -8,12 +8,20 @@ test("Voice attention explains observed retained state without asserting a serve
     page.getByText("Recorded voice state: 0 active · 1 failed · 0 incomplete", { exact: true }),
   ).toBeVisible()
   await expect(
-    page.getByText("A retained voice failure is recorded. Successful voice work is needed to confirm recovery.", {
-      exact: true,
-    }),
+    page.getByText(
+      "A voice failure or incomplete result is retained. Successful voice work is needed to confirm recovery.",
+      {
+        exact: true,
+      },
+    ),
   ).toBeVisible()
   await expect(page.getByText("Voice needs attention", { exact: true })).toBeVisible()
   await audit(page)
+  await page.goto("/?state=voice-incomplete")
+  await expect(
+    page.getByText("Recorded voice state: 0 active · 0 failed · 1 incomplete", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("Voice result incomplete", { exact: true })).toBeVisible()
   await page.goto("/?state=voice-invalid")
   await expect(page.getByText("Recorded voice state:", { exact: false })).toHaveCount(0)
   const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")

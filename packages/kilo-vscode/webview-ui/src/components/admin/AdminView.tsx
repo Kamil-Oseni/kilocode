@@ -291,7 +291,8 @@ export function AdminView(props: { onBack: () => void }) {
                         </p>
                         <Show when={metrics().failed! > 0 || metrics().incomplete! > 0}>
                           <p>
-                            A retained voice failure is recorded. Successful voice work is needed to confirm recovery.
+                            A voice failure or incomplete result is retained. Successful voice work is needed to confirm
+                            recovery.
                           </p>
                         </Show>
                       </>

@@ -73,11 +73,13 @@ const health = (items = healthy) => ({
           ? {
               ...row,
               status: "degraded",
-              reason: "voice-failed",
+              reason: state === "voice-incomplete" ? "voice-incomplete" : "voice-failed",
               metrics:
                 state === "voice-invalid"
                   ? { active: -1, failed: "unknown", incomplete: 0 }
-                  : { active: 0, failed: 1, incomplete: 0 },
+                  : state === "voice-incomplete"
+                    ? { active: 0, failed: 0, incomplete: 1 }
+                    : { active: 0, failed: 1, incomplete: 0 },
             }
           : row,
       )

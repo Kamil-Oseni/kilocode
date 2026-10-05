@@ -7,6 +7,7 @@ import type { ServerConfig } from "./types"
 import { resolveEventSessionId as resolveEventSessionIdPure } from "./connection-utils"
 import { SandboxPreference } from "../sandbox-preference"
 import { connectionDiagnostic } from "./connection-diagnostic"
+import { build } from "./build"
 import { Hosts, hostPayload } from "../../kilo-provider/host-capture"
 import { exportSource } from "@opencode-ai/core/kilocode/source-export"
 import type { ManagedSource } from "./managed-source"
@@ -105,7 +106,7 @@ export class KiloConnectionService {
   )
   private client: KiloClient | null = null
   private sseClient: SdkSSEAdapter | null = null
-  private info: { port: number } | null = null
+  private info: { port: number; version?: string } | null = null
   private config: ServerConfig | null = null
   private state: ConnectionState = "disconnected"
   private error: Error | null = null
@@ -253,7 +254,7 @@ export class KiloConnectionService {
   /**
    * Get server info (port). Returns null if not connected.
    */
-  getServerInfo(): { port: number } | null {
+  getServerInfo(): { port: number; version?: string } | null {
     return this.info
   }
 
@@ -958,8 +959,15 @@ export class KiloConnectionService {
     this.client = client
     this.sseClient = sse
 
-    const compatible = await this.capabilities.probe(client, "client.vscode")
+    const [compatible, version] = await Promise.all([
+      this.capabilities.probe(client, "client.vscode"),
+      build(client).catch((error: unknown) => {
+        console.error("[Raya] Backend build identity unavailable:", error)
+        return undefined
+      }),
+    ])
     if (this.generation !== generation || this.client !== client || this.sseClient !== sse) throw new Superseded()
+    this.info = { port: server.port, ...(version ? { version } : {}) }
     if (!compatible.permit()) {
       const unsupported = compatible.status === "unsupported"
       this.client = null

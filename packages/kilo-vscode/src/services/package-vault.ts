@@ -243,13 +243,15 @@ export class PackageVault {
   }
 
   private async retained(value: Package) {
-    const root = resolve(this.root)
-    const path = resolve(value.package)
-    if (resolve(await realpath(root)) !== root) throw new Error("Noncanonical vault root")
+    // VS Code fsPath lowercases Windows drive letters; preserve all other path casing.
+    const canonical = (path: string) => resolve(path).replace(/^[a-z]:/, (drive) => drive.toUpperCase())
+    const root = canonical(this.root)
+    const path = canonical(value.package)
+    if (canonical(await realpath(root)) !== root) throw new Error("Noncanonical vault root")
     if (!isAbsolute(value.package) || path !== join(root, `raya.${value.artifact.digest}.vsix`))
       throw new Error("Noncanonical retained package")
     const info = await lstat(path)
-    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || resolve(await realpath(path)) !== path)
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || canonical(await realpath(path)) !== path)
       throw new Error("Linked retained package")
     await verify(path, { name: "raya", publisher: "eden", ...value })
     return { path, info }

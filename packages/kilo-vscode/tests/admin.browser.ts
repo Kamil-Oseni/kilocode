@@ -1,6 +1,27 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("Voice attention explains observed retained state without asserting a server outage", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.goto("/?state=voice-failed")
+  await expect(
+    page.getByText("Recorded voice state: 0 active · 1 failed · 0 incomplete", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText("A retained voice failure is recorded. Successful voice work is needed to confirm recovery.", {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(page.getByText("Voice needs attention", { exact: true })).toBeVisible()
+  await audit(page)
+  await page.goto("/?state=voice-invalid")
+  await expect(page.getByText("Recorded voice state:", { exact: false })).toHaveCount(0)
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(
+    sent.some((message: { type: string }) => message.type.startsWith("speech") || message.type.startsWith("voice")),
+  ).toBe(false)
+})
+
 test("rollback availability shows checked metadata without installing or asserting a tested restore", async ({
   page,
 }) => {

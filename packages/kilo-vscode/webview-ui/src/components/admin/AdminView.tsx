@@ -271,6 +271,32 @@ export function AdminView(props: { onBack: () => void }) {
                 <div>
                   <strong>{names[row.id]}</strong>
                   <span>{reasons[row.reason]}</span>
+                  <Show
+                    when={
+                      row.id === "voice" &&
+                      row.metrics &&
+                      [row.metrics.active, row.metrics.failed, row.metrics.incomplete].every(
+                        (count) =>
+                          typeof count === "number" && Number.isSafeInteger(count) && count >= 0 && count <= 1_000_000,
+                      )
+                        ? row.metrics
+                        : undefined
+                    }
+                  >
+                    {(metrics) => (
+                      <>
+                        <p>
+                          Recorded voice state: {metrics().active} active · {metrics().failed} failed ·{" "}
+                          {metrics().incomplete} incomplete
+                        </p>
+                        <Show when={metrics().failed! > 0 || metrics().incomplete! > 0}>
+                          <p>
+                            A retained voice failure is recorded. Successful voice work is needed to confirm recovery.
+                          </p>
+                        </Show>
+                      </>
+                    )}
+                  </Show>
                 </div>
                 <span class="admin-status" data-status={row.status}>
                   {states[row.status]}

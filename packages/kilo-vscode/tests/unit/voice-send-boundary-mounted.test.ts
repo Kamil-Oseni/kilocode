@@ -64,7 +64,7 @@ test("actual Voice composer arms replies only at dispatch and ignores retired VA
       },
     ],
   })
-  const browser = await chromium.launch({ headless: true, channel: "msedge", args: ["--mute-audio"] })
+  const browser = await chromium.launch({ headless: true, args: ["--mute-audio"] })
   const page = await browser.newPage()
   const errors: string[] = []
 

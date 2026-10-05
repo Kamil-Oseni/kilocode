@@ -46,3 +46,13 @@ Two installed presentation failures were reproduced and repaired in source:
 The repair passed 17 tests with 64 assertions, including actual Windows archives, journal immutability, corrupted receipts and real SDK HTTP identity responses. Extension types, lint, Knip and bundling passed. A matching reinstall and installed-interface recheck remain pending.
 
 Voice's attention status was referred to the integration owner: retained failed voice sessions can degrade its registry status even when the speech service is ready. Historical failures must remain visible without implying an unobserved current service outage.
+
+## Independent reinstall evidence
+
+The fresh same-version reinstall of `7.4.23-snapshot+8db2d6bd4e.local.1791240779706` has a passing preservation receipt. Independent inspection confirmed exact profile content, unrelated extension payloads and registrations, and the expected registered Raya version, with empty discrepancy counts. The receipt SHA-256 is `98d5196d9fa7b70108f6fd97fbd226a15ff6dbccc57a928775b7fc580e08553f`; its baseline is bound by digest `476973eeaa8b2c3aadb4566c550ca110e131c2c93495310c8c3bf5d14e8c50ee`. Both are retained under the integration worktree's `.tmp/new-pc/8db2-reinstall-permitted-preservation-*-next.json`.
+
+The original installer process, PID 6500, exited successfully on its sole attempt; both that process and its output streams were joined without forced termination. The accompanying writer monitor passed with 422 samples over 109.109 seconds and a largest sampling gap of 266 milliseconds. Its result digest is `52d5d4e3dcf52e43bc7f52e77b34611aa4d23b2fc599f47d674fbb0e421cdcaa`. Sampling is not an operating-system event subscription and cannot exclude shorter-lived writers between observations.
+
+This is file-preservation evidence for the fresh same-version run. It does not replace the earlier failed upgrade comparison, prove an atomic snapshot of live databases, export the operating-system credential vault, or demonstrate an actual restore. The receipt explicitly leaves `normalWindowLoadedVersionProven` false.
+
+After the normal window reopened, read-only observation showed the saved **Heart rate via Home Assistant** conversation, four New Session tabs, an empty composer, a resolved selected 4B model, and inactive voice-start controls. An attempted About navigation failed because input geometry was unavailable; no loaded About version, backend identity, rollback display or Memory workflow acceptance follows from that observation. No chat, model request, voice capture, light action or setting change was performed. Interface ownership was returned to the integration chat.

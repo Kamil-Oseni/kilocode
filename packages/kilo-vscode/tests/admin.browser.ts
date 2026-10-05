@@ -1,6 +1,53 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("a lost Stop receipt refreshes observed worker state without replaying cancellation", async ({ page }) => {
+  await page.clock.install()
+  await page.goto("/?state=workers-delayed")
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  await workers.getByRole("button", { name: "Stop: Code", exact: true }).click()
+  await page.clock.fastForward(20_000)
+  await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toHaveLength(1)
+  expect(sent.filter((message: { type: string }) => message.type === "requestBackgroundJobs").length).toBeGreaterThan(1)
+  await page.evaluate(() => (window as unknown as { __confirmStop: () => void }).__confirmStop())
+  await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
+})
+
+test("Activity and health exposes the actual worker strip and scoped Stop command", async ({ page }) => {
+  await page.goto("/?state=workers-delayed")
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  await expect(workers.getByText("Write daily summary", { exact: true })).toBeVisible()
+  await workers.getByRole("button", { name: "Stop: Code", exact: true }).click()
+  await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toBeDisabled()
+  await expect(workers.getByText("Stopping…", { exact: true })).toBeVisible()
+  await expect(workers.getByText("Cancelled", { exact: true })).toHaveCount(0)
+  await page.evaluate(() => (window as unknown as { __confirmStop: () => void }).__confirmStop())
+  await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
+  await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toHaveCount(0)
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toEqual([
+    expect.objectContaining({ jobID: "synthetic-worker", sessionID: "story-session-001" }),
+  ])
+  await audit(page)
+})
+
+test("shared resource observations render without claiming worker or GPU attribution", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.goto("/?state=resources")
+  await expect(page.getByText("Backend memory: 1.00 GiB · Process 42", { exact: true })).toBeVisible()
+  await expect(page.getByText("PC RAM available: 12.00 GiB of 32.00 GiB", { exact: true })).toBeVisible()
+  await expect(page.getByText("Local inference: 1 active · 2 waiting", { exact: true })).toBeVisible()
+  await expect(page.getByText("GPU memory is not reported here.", { exact: false })).toBeVisible()
+  await audit(page)
+  await page.goto("/?state=resources-invalid")
+  await expect(page.getByText("Resource readings are not available", { exact: false })).toBeVisible()
+  await expect(page.getByText("Backend memory:", { exact: false })).toHaveCount(0)
+})
+
 const audit = async (page: import("@playwright/test").Page) => {
   const result = await new AxeBuilder({ page })
     .include(".admin-view")

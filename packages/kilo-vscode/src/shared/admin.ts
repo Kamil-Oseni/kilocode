@@ -1,6 +1,12 @@
 import type { RayaAdminHealthResponse, RayaAdminLogsResponse } from "@kilocode/sdk/v2/client"
 
-export type AdminHealth = RayaAdminHealthResponse
+export type AdminResources = {
+  observedAt: number
+  process: { pid: number; rss: number; heapUsed: number; heapTotal: number }
+  host: { free: number; total: number }
+  inference: { active: number; queued: number; bytes: number }
+}
+export type AdminHealth = RayaAdminHealthResponse & { resources?: AdminResources }
 export type AdminRow = AdminHealth["items"][number]
 export type AdminLogs = RayaAdminLogsResponse
 export type AdminEntry = AdminLogs[number]

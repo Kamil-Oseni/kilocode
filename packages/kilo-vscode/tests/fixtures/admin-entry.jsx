@@ -25,6 +25,7 @@ let proposal = {
   changes: [{ path: "Preferences/lights.md", expected: null, before: null, content: "Use a slow one-minute cycle." }],
 }
 let attempts = 0
+let stopped = false
 const ids = [
   "runtime",
   "sessions",
@@ -46,7 +47,24 @@ const ids = [
 ]
 const stamp = Date.UTC(2026, 8, 15, 14, 30)
 const healthy = ids.map((id) => ({ id, status: "healthy", reason: "ready", observedAt: stamp }))
-const health = (items = healthy) => ({ format: "raya.admin-health", version: 2, generatedAt: stamp, items })
+const health = (items = healthy) => ({
+  format: "raya.admin-health",
+  version: 2,
+  generatedAt: stamp,
+  items,
+  ...(state === "resources"
+    ? {
+        resources: {
+          observedAt: stamp,
+          process: { pid: 42, rss: 1024 ** 3, heapUsed: 256 * 1024 ** 2, heapTotal: 512 * 1024 ** 2 },
+          host: { free: 12 * 1024 ** 3, total: 32 * 1024 ** 3 },
+          inference: { active: 1, queued: 2, bytes: 1024 },
+        },
+      }
+    : state === "resources-invalid"
+      ? { resources: { process: { rss: "invalid" } } }
+      : {}),
+})
 const entry = (index) => ({
   at: stamp - index * 60_000,
   level: index % 7 === 0 ? "warn" : "info",
@@ -85,6 +103,37 @@ window.acquireVsCodeApi = () => ({
   setState: () => {},
   postMessage: (message) => {
     record(message)
+    if (message.type === "requestBackgroundJobs" || message.type === "cancelBackgroundJob") {
+      if (message.type === "cancelBackgroundJob") stopped = true
+      const reply = {
+        type: "backgroundJobsLoaded",
+        sessionID: message.sessionID,
+        requestID: message.requestID,
+        jobs: state.startsWith("workers")
+          ? [
+              {
+                id: "synthetic-worker",
+                type: "task",
+                title: "Write daily summary",
+                status: stopped ? "cancelled" : "running",
+                started_at: Date.now() - 10_000,
+                metadata: {
+                  parentSessionId: message.sessionID,
+                  sessionId: "synthetic-child",
+                  background: true,
+                  selectedAgent: "Code",
+                },
+              },
+            ]
+          : [],
+      }
+      if (state === "workers-delayed" && message.type === "cancelBackgroundJob") {
+        window.__confirmStop = () => emit(reply)
+        return
+      }
+      emit(reply)
+      return
+    }
     if (message.type === "secondBrain" && message.action === "proposal") {
       if (message.command.action === "edit")
         proposal = {

@@ -62,6 +62,19 @@ export namespace RayaAdmin {
 
   const Count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 }))
   const Time = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0))
+  const Bytes = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+  export const Resources = Schema.Struct({
+    observedAt: Time,
+    process: Schema.Struct({
+      pid: Schema.Int.check(Schema.isGreaterThan(0)),
+      rss: Bytes,
+      heapUsed: Bytes,
+      heapTotal: Bytes,
+    }),
+    host: Schema.Struct({ free: Bytes, total: Bytes }),
+    inference: Schema.Struct({ active: Count, queued: Count, bytes: Bytes }),
+  })
+  export type Resources = typeof Resources.Type
   export const Metrics = Schema.Struct({
     agents: Schema.optional(Count),
     goals: Schema.optional(Count),
@@ -113,6 +126,7 @@ export namespace RayaAdmin {
     format: Schema.Literal("raya.admin-health"),
     version: Schema.Literal(2),
     generatedAt: Time,
+    resources: Schema.optional(Resources),
     items: Schema.Array(Row).check(
       Schema.makeFilter((items) =>
         items.length === order.length ? undefined : "Admin health must contain every subsystem.",

@@ -49,7 +49,9 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const [hidden, setHidden] = createSignal<Set<string>>(new Set())
   const [mounted, setMounted] = createSignal(false)
   const [now, setNow] = createSignal(Date.now())
+  const [cancelling, setCancelling] = createSignal<string>()
   let pending: string | undefined
+  let deadline = 0
   let revision = 0
 
   createEffect(
@@ -60,14 +62,21 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       setHidden(new Set(saved.hidden))
       setSnapshot({ jobs: [], loaded: false, unavailable: false })
       pending = undefined
+      setCancelling()
       if (mounted()) requestJobs()
     }),
   )
 
   const requestJobs = () => {
     const id = session.currentSessionID()
-    if (!id || pending) return
+    if (!id) return
+    if (pending && Date.now() < deadline) return
+    if (pending) {
+      setSnapshot((state) => ({ ...state, unavailable: true }))
+      setCancelling()
+    }
     pending = `${id}:${++revision}`
+    deadline = Date.now() + 15_000
     vscode.postMessage({ type: "requestBackgroundJobs", sessionID: id, requestID: pending })
   }
 
@@ -78,6 +87,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       if (message.sessionID !== session.currentSessionID()) return
       if (message.requestID !== pending) return
       pending = undefined
+      setCancelling()
       setSnapshot((state) => reconcileBackgroundAgents(state, message))
     })
     requestJobs()
@@ -161,11 +171,14 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
 
   const cancelAgent = (event: MouseEvent, agent: BackgroundAgent) => {
     event.stopPropagation()
+    if (cancelling()) return
     if (snapshot().unavailable) return
     if (agent.status !== "running") return
     const id = session.currentSessionID()
     if (!id) return
     pending = `${id}:${++revision}`
+    deadline = Date.now() + 15_000
+    setCancelling(agent.jobID)
     vscode.postMessage({ type: "cancelBackgroundJob", jobID: agent.jobID, sessionID: id, requestID: pending })
   }
 
@@ -353,10 +366,15 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                         variant="ghost"
                         size="small"
                         aria-label={`${language.t("task.backgroundAgents.cancel")}: ${label(agent)}`}
+                        disabled={cancelling() !== undefined}
                         onClick={(event: MouseEvent) => cancelAgent(event, agent)}
                       >
                         <span data-slot="task-header-agent-action-label">
-                          {language.t("task.backgroundAgents.cancel")}
+                          {language.t(
+                            cancelling() === agent.jobID
+                              ? "task.backgroundAgents.stopping"
+                              : "task.backgroundAgents.cancel",
+                          )}
                         </span>
                       </Button>
                     </Show>

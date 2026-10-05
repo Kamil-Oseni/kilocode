@@ -1,5 +1,13 @@
 # Routine calendar scheduling
 
+## Current installed validation
+
+The 2026-10-05 private two-period trial on installed snapshot `7.4.23-snapshot+8db2d6bd4e.local.1791240779706` reached two distinct UTC timer sessions. Its saved baseline records both runs as complete after actual full-file reads and accepted goal completion. This validates those two scheduled executions only.
+
+The full trial remains failed: the cold-reopen check requested `GET /kilocode/agent/{id}` and received HTTP 404. Current production source registers the list GET plus item PATCH/DELETE, but no item GET. Before another trial, confirm the installed API contract and correct the driver to select the exact retained worker from the list response. Preserve the disabled-state assertion, history equality, and full no-replay observation; this diagnosis does not prove persistence or recovery.
+
+Retained result: `routine-current-8db2-two-period-actual-556ff89e023e499ca5bd675a63ae054b.json`, 372076 bytes, SHA256 `a2ecb68d96de13cd9b37a217f52f35f26237dbf2114f5ac0797a8bed61bed81d`. Independent source diagnosis is saved in `.tmp/new-pc/routine-8db2-cold-reopen-independent-source-diagnosis.json`. No readiness gate is advanced by this partial result.
+
 This describes the implemented calendar-time behavior. The complete routine overhaul remains tracked in [implementation progress](Raya-Implementation-Progress.md).
 
 ## Structured schedule creation

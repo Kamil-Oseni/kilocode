@@ -3,6 +3,7 @@ import { randomBytes, createHash, timingSafeEqual } from "node:crypto"
 import { Lights } from "./client"
 import { record } from "./policy"
 import { Failure, safe } from "./error"
+import { Moods } from "./moods"
 
 function id(value: unknown): value is string | number {
   return (
@@ -63,6 +64,7 @@ export class Bridge {
     private readonly lights: Lights,
     private readonly admission: () => boolean = () => true,
     private readonly owns = true,
+    private readonly moods?: Moods,
   ) {}
 
   open() {
@@ -96,6 +98,77 @@ export class Bridge {
       additionalProperties: false,
     })
     return [
+      ...(this.moods
+        ? [
+            {
+              name: "moods_list",
+              description:
+                "Read locally saved dynamic light moods and the actual running/stopped/failed host cycle status. A source URL documents palette inspiration, not an official colour palette.",
+              inputSchema: schema({}, []),
+            },
+            {
+              name: "moods_save",
+              description:
+                "Save a reviewed named dynamic mood locally without changing lights. Research a requested theme first and include source URLs; identify inferred colours as inspiration. Use 60 seconds for the user's preferred slow staggered movement. Only configured lights are allowed. Explicit replace=true is required to overwrite a name.",
+              inputSchema: schema(
+                {
+                  mood: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["name", "theme", "sources", "palette", "seconds", "duration", "lights"],
+                    properties: {
+                      name: { type: "string", pattern: "^[a-z][a-z0-9_]{0,39}$" },
+                      theme: { type: "string", minLength: 1, maxLength: 240 },
+                      sources: { type: "array", maxItems: 5, items: { type: "string", maxLength: 1024 } },
+                      palette: {
+                        type: "array",
+                        minItems: 2,
+                        maxItems: 6,
+                        items: {
+                          type: "array",
+                          minItems: 3,
+                          maxItems: 3,
+                          items: { type: "integer", minimum: 0, maximum: 255 },
+                        },
+                      },
+                      seconds: { type: "integer", minimum: 30, maximum: 600 },
+                      duration: { type: "integer", minimum: 60, maximum: 10800 },
+                      lights: {
+                        type: "array",
+                        minItems: 1,
+                        maxItems: entities.length,
+                        items: {
+                          type: "object",
+                          additionalProperties: false,
+                          required: ["entity", "brightness", "phase"],
+                          properties: {
+                            entity: { type: "string", enum: entities },
+                            brightness: { type: "integer", minimum: 1, maximum: 255 },
+                            phase: { type: "number", minimum: 0, maximum: 599 },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  replace: { type: "boolean" },
+                },
+                ["mood"],
+              ),
+            },
+            {
+              name: "moods_start",
+              description:
+                "Start one explicitly requested saved mood. Confirms the first frame through HA readback, then runs a bounded host-owned cycle; this is startup, not completed physical playback. Other Raya light commands stop it; observed external light changes stop it too. It never resumes after restart. Inspect mood status for failures.",
+              inputSchema: schema({ name: { type: "string", pattern: "^[a-z][a-z0-9_]{0,39}$" } }, ["name"]),
+            },
+            {
+              name: "moods_stop",
+              description:
+                "Stop and join the current host-owned colour cycle, preserving the current colours. Does not stop unrelated HA scripts.",
+              inputSchema: schema({}, []),
+            },
+          ]
+        : []),
       {
         name: "lights_read",
         description:
@@ -281,6 +354,8 @@ export class Bridge {
       const args = input.arguments
       const fields = Object.keys(args).sort().join()
       const result = await (() => {
+        if (typeof input.name === "string" && input.name.startsWith("moods_"))
+          return this.mood(input.name, args, fields, signal)
         if (input.name === "lights_read" && fields === "entity" && typeof args.entity === "string")
           return this.lights.state(args.entity, signal)
         if (
@@ -293,14 +368,16 @@ export class Bridge {
           ].includes(fields) &&
           typeof args.entity === "string"
         )
-          return this.lights.set(
-            args.entity,
-            {
-              state: args.state,
-              ...(args.brightness === undefined ? {} : { brightness: args.brightness }),
-              ...(args.rgb_color === undefined ? {} : { rgb_color: args.rgb_color }),
-            },
-            signal,
+          return (this.moods?.stop() ?? Promise.resolve()).then(() =>
+            this.lights.set(
+              args.entity as string,
+              {
+                state: args.state,
+                ...(args.brightness === undefined ? {} : { brightness: args.brightness }),
+                ...(args.rgb_color === undefined ? {} : { rgb_color: args.rgb_color }),
+              },
+              signal,
+            ),
           )
         if (
           input.name === "lights_mode" &&
@@ -308,7 +385,9 @@ export class Bridge {
           typeof args.mode === "string" &&
           (args.action === undefined || args.action === "activate" || args.action === "stop")
         )
-          return this.lights.mode(args.mode, args.action ?? "activate", signal)
+          return (this.moods?.stop() ?? Promise.resolve()).then(() =>
+            this.lights.mode(args.mode as string, args.action === "stop" ? "stop" : "activate", signal),
+          )
         throw new Failure("invalid_request")
       })()
       return { content: [{ type: "text", text: JSON.stringify(result) }] }
@@ -329,11 +408,39 @@ export class Bridge {
     }
   }
 
+  private mood(name: string, args: Record<string, unknown>, fields: string, signal: AbortSignal) {
+    if (!this.moods) throw new Failure("invalid_request")
+    if (name === "moods_list" && fields === "") return this.moods.list()
+    if (
+      name === "moods_save" &&
+      ["mood", "mood,replace"].includes(fields) &&
+      (args.replace === undefined || typeof args.replace === "boolean")
+    )
+      return this.moods.save(args.mood, args.replace ?? false)
+    if (name === "moods_start" && fields === "name" && typeof args.name === "string")
+      return this.moods.start(args.name, signal)
+    if (name === "moods_stop" && fields === "") return this.moods.stop()
+    throw new Failure("invalid_request")
+  }
+
   dispose() {
     this.#closed = true
     for (const controller of this.#controllers.values()) controller.abort()
     this.#ending ??= (async () => {
-      const owned = Promise.allSettled(this.owns ? [this.lights.dispose()] : [])
+      const owned = Promise.allSettled(
+        this.owns
+          ? [
+              (async () => {
+                const stopped = await Promise.allSettled(this.moods ? [this.moods.dispose()] : [])
+                const closed = await Promise.allSettled([this.lights.dispose()])
+                const errors = [...stopped, ...closed].flatMap((value) =>
+                  value.status === "rejected" ? [value.reason] : [],
+                )
+                if (errors.length) throw new AggregateError(errors, "Home Assistant mood and light ownership retained")
+              })(),
+            ]
+          : [],
+      )
       const opening = await Promise.allSettled(this.#opening ? [this.#opening] : [])
       const closing = this.#server.listening
         ? new Promise<void>((resolve, reject) => {

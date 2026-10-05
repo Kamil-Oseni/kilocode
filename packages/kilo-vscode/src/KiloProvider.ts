@@ -7189,6 +7189,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       topBar: this.opts.hideTopBar !== true && isCursorHost(),
       topBarSurface: this.opts.topBarSurface === "tab" ? "tab_title" : "sidebar_title",
       agentManagerSettings: this.opts.agentManagerSettings !== undefined,
+      navigation: this.opts.hideTopBar !== true,
       settingsCatalog: this.buildSettingsCatalog(), // raya_change - searchable index of contributed raya.* settings
     })
   }

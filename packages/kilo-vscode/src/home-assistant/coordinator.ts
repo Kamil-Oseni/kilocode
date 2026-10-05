@@ -6,6 +6,8 @@ import { Settings } from "./settings"
 import { Journal } from "./journal"
 import { Failure } from "./error"
 import { record, selection } from "./policy"
+import type { Memento } from "vscode"
+import { Moods } from "./moods"
 
 type Connection = Pick<
   KiloConnectionService,
@@ -28,6 +30,7 @@ async function join(jobs: readonly Promise<unknown>[]) {
 }
 export class Coordinator {
   #lights?: Lights
+  #moods?: Moods
   #ready = false
   #bindings = new Map<KiloClient, Map<string, Binding>>()
   #jobs = new Set<Promise<unknown>>()
@@ -41,6 +44,7 @@ export class Coordinator {
     private readonly connection: Connection,
     private readonly settings: Settings,
     private readonly journal: Journal,
+    private readonly storage?: Pick<Memento, "get" | "update">,
   ) {
     this.#off = [
       connection.onStateChange(() => {
@@ -101,6 +105,7 @@ export class Coordinator {
     const lights = new Lights(token, input, this.journal)
     this.#lights = lights
     await lights.prepare()
+    if (this.storage && !this.#closed && this.#lights === lights) this.#moods = new Moods(lights, this.storage)
     if (!this.#closed && this.#lights === lights) this.#ready = true
   }
   private current(client: KiloClient, epoch: number) {
@@ -114,14 +119,15 @@ export class Coordinator {
       this.#bindings.delete(client)
       for (const [directory, row] of rows) jobs.push(this.track(this.close(client, directory, row)))
     }
-    if (this.connection.getConnectionState() !== "connected") return join(jobs)
+    if (this.connection.getConnectionState() !== "connected")
+      return join([...jobs, this.#moods?.stop() ?? Promise.resolve()])
     const client = this.connection.getClient()
     const rows = this.#bindings.get(client) ?? new Map<string, Binding>()
     this.#bindings.set(client, rows)
     const epoch = this.#epoch
     for (const directory of this.connection.getKnownDirectories()) {
       if (!directory || rows.has(directory)) continue
-      const bridge = new Bridge(this.#lights, () => this.current(client, epoch), false)
+      const bridge = new Bridge(this.#lights, () => this.current(client, epoch), false, this.#moods)
       const row = { bridge, job: Promise.resolve() }
       rows.set(directory, row)
       row.job = (async () => {
@@ -160,11 +166,24 @@ export class Coordinator {
   }
   private release() {
     const lights = this.#lights
+    const moods = this.#moods
+    this.#moods = undefined
     this.#lights = undefined
     this.#ready = false
     const bindings = this.#bindings
     this.#bindings = new Map()
-    const jobs: Promise<unknown>[] = lights ? [start(() => lights.dispose())] : []
+    const jobs: Promise<unknown>[] = lights
+      ? [
+          start(async () => {
+            const stopped = await Promise.allSettled(moods ? [moods.dispose()] : [])
+            const closed = await Promise.allSettled([lights.dispose()])
+            const errors = [...stopped, ...closed].flatMap((value) =>
+              value.status === "rejected" ? [value.reason] : [],
+            )
+            if (errors.length) throw new AggregateError(errors, "Home Assistant mood and light ownership retained")
+          }),
+        ]
+      : []
     for (const [client, rows] of bindings)
       for (const [directory, row] of rows) jobs.push(this.close(client, directory, row))
     return join(jobs)

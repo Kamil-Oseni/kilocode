@@ -1,20 +1,22 @@
 import { For, Show, type Component } from "solid-js"
 import { useVoice } from "../../context/voice"
+import { useSession } from "../../context/session"
+import { activity } from "./activity-status"
 
 export const VoiceTranscript: Component = () => {
   const voice = useVoice()
+  const session = useSession()
   const transcript = voice.transcript
-  const state = () => {
-    if (voice.status() === "degraded") return voice.error() ? "Voice paused" : "Reconnecting voice"
-    return {
-      off: "Voice off",
-      connecting: "Connecting voice",
-      listening: "Listening",
-      thinking: "Thinking",
-      speaking: "Raya is speaking",
-      degraded: "Voice paused",
-    }[voice.status()]
-  }
+  const state = () =>
+    activity({
+      voice: voice.status(),
+      error: voice.error(),
+      busy: session.status() !== "idle",
+      messages: session.visibleMessages(),
+      tools: session.getSessionToolParts(session.currentSessionID() ?? ""),
+      permission: session.scopedPermissions(session.currentSessionID()).length > 0,
+      question: session.scopedQuestions(session.currentSessionID()).length > 0,
+    })
   const caption = () => {
     const value = transcript()
     if (!value) return

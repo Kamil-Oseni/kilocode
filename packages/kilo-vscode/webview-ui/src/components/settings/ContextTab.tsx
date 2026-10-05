@@ -1,4 +1,4 @@
-import { Component, For, Show, createSignal } from "solid-js"
+import { Component, For, Show, createEffect, createSignal } from "solid-js"
 import { Switch } from "@kilocode/kilo-ui/switch"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { Card } from "@kilocode/kilo-ui/card"
@@ -16,14 +16,31 @@ import { SecondBrain } from "./SecondBrain"
 export function MemoryActions(props: { memory: MemoryContextValue }) {
   const [correction, setCorrection] = createSignal("")
   const [forgotten, setForgotten] = createSignal("")
+  const [review, setReview] = createSignal<{ operation: "correct" | "forget"; text: string; root: string }>()
+  createEffect(() => {
+    const proposal = review()
+    if (proposal && (proposal.root !== props.memory.status()?.root || !props.memory.enabled())) setReview()
+  })
+  const preview = (operation: "correct" | "forget", value: string) => {
+    const root = props.memory.status()?.root
+    if (!root || !value.trim() || props.memory.pending()) return
+    setReview({ operation, text: value.trim(), root })
+  }
+  const apply = () => {
+    const proposal = review()
+    if (!proposal || proposal.root !== props.memory.status()?.root || props.memory.pending()) return
+    const accepted =
+      proposal.operation === "correct" ? props.memory.correct(proposal.text) : props.memory.forget(proposal.text)
+    if (accepted) setReview()
+  }
   return (
-    <>
+    <div class="raya-memory-actions">
       <SettingsRow
         title="Correct remembered context"
         description="Save the current fact for this project. The historical receipt stays read-only."
       >
-        <div style={{ display: "flex", gap: "8px", "align-items": "center", width: "min(100%, 420px)" }}>
-          <div style={{ flex: 1 }}>
+        <div class="raya-memory-action">
+          <div>
             <TextField
               value={correction()}
               onChange={setCorrection}
@@ -36,10 +53,12 @@ export function MemoryActions(props: { memory: MemoryContextValue }) {
             intent="primary"
             scale="compact"
             pending={props.memory.pending()}
-            disabled={!props.memory.enabled() || !correction().trim()}
-            onClick={() => props.memory.correct(correction())}
+            disabled={
+              props.memory.pending() || !props.memory.enabled() || !props.memory.status()?.root || !correction().trim()
+            }
+            onClick={() => preview("correct", correction())}
           >
-            Save correction
+            Review correction
           </Button>
         </div>
       </SettingsRow>
@@ -48,8 +67,8 @@ export function MemoryActions(props: { memory: MemoryContextValue }) {
         description="Describe the stale fact to remove from this project. Raya will report if nothing matched."
         last
       >
-        <div style={{ display: "flex", gap: "8px", "align-items": "center", width: "min(100%, 420px)" }}>
-          <div style={{ flex: 1 }}>
+        <div class="raya-memory-action">
+          <div>
             <TextField
               value={forgotten()}
               onChange={setForgotten}
@@ -62,14 +81,37 @@ export function MemoryActions(props: { memory: MemoryContextValue }) {
             intent="destructive"
             scale="compact"
             pending={props.memory.pending()}
-            disabled={!props.memory.enabled() || !forgotten().trim()}
-            onClick={() => props.memory.forget(forgotten())}
+            disabled={
+              props.memory.pending() || !props.memory.enabled() || !props.memory.status()?.root || !forgotten().trim()
+            }
+            onClick={() => preview("forget", forgotten())}
           >
-            Remove
+            Review removal
           </Button>
         </div>
       </SettingsRow>
-    </>
+      <Show when={review()}>
+        {(proposal) => (
+          <Card>
+            <h4>{proposal().operation === "correct" ? "Review memory correction" : "Review memory removal"}</h4>
+            <p>Project: {proposal().root}</p>
+            <p>Source: your explicit correction in this form.</p>
+            <p>{proposal().text}</p>
+            <p>
+              {proposal().operation === "correct"
+                ? "Save this as the current project fact."
+                : "Remove matching project facts. The result will report whether a match was found."}
+            </p>
+            <Button onClick={apply} disabled={props.memory.pending() || !props.memory.enabled()}>
+              {proposal().operation === "correct" ? "Confirm correction" : "Confirm removal"}
+            </Button>
+            <Button variant="secondary" onClick={() => setReview()}>
+              Keep editing
+            </Button>
+          </Card>
+        )}
+      </Show>
+    </div>
   )
 }
 
@@ -83,10 +125,7 @@ export function WorkLocation(props: {
     <>
       <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>Work location and indexed context</h4>
       <Card>
-        <SettingsRow
-          title="Active work location"
-          description={props.directory ?? "No project directory is connected."}
-        >
+        <SettingsRow title="Active work location" description={props.directory ?? "No project directory is connected."}>
           <span>{props.directory ? "Connected" : "Unavailable"}</span>
         </SettingsRow>
         <SettingsRow

@@ -4,10 +4,18 @@ import type { MessageV2 } from "@/session/message-v2"
 /** Exact connected-device tools; registration and per-call approval remain separate boundaries. */
 export namespace HomeAssistant {
   export const key = "raya.home-assistant.selection"
-  const names = ["raya_home_assistant_lights_read", "raya_home_assistant_lights_set", "raya_home_assistant_lights_mode"]
+  const names = [
+    "raya_home_assistant_lights_read",
+    "raya_home_assistant_lights_set",
+    "raya_home_assistant_lights_mode",
+    "raya_home_assistant_moods_list",
+    "raya_home_assistant_moods_save",
+    "raya_home_assistant_moods_start",
+    "raya_home_assistant_moods_stop",
+  ]
 
   export const prompt =
-    "For Home Assistant light inspection or control, use the registered raya_home_assistant_lights_read, raya_home_assistant_lights_set, or raya_home_assistant_lights_mode tools directly in this primary chat. Do not delegate these device actions to a read-only specialist or call chief_route for them. If the tools are unavailable, report that limitation. Honor tool approval and the configured device/mode allowlist. Send a mutation once; never retry an uncertain action. Report target readback truthfully; scene acceptance and script startup do not prove completed physical change."
+    "For Home Assistant lights, use the registered raya_home_assistant tools directly in this primary chat. Do not delegate device actions to a read-only specialist or call chief_route for them. If unavailable, report the limitation. Honor approval and device/mode allowlists. Send a mutation once; never retry uncertain actions. Report readback truthfully; scene acceptance or script/mood startup does not prove completed physical change. For themed dynamic moods, research the theme with available web tools, cite inspiration and distinguish inferred colours from official palettes. Propose the palette and requested targets, save with moods_save, and start only when requested. Prefer a 60-second staggered cycle; preserve ceiling/PC participation when requested. Recall saved names with moods_list/start; inspect actual cycle status and use moods_stop to cancel."
 
   export const auto =
     "For a new Auto request, first call chief_route with workflow:home_assistant only when the complete request needs Home Assistant light inspection or control; otherwise use its default specialist workflow. Device tools are unavailable until that exact request is selected. After Home Assistant selection, use its registered tools directly in this primary chat; do not delegate device actions. If no device tools are available, report that limitation. Honor approval and configured device/mode allowlists. Send a mutation once, never retry an uncertain action, and report target readback truthfully."
@@ -74,7 +82,9 @@ export namespace HomeAssistant {
 
   export function tools<T>(available: Record<string, T>) {
     return Object.fromEntries(
-      names.flatMap((name) => (Object.hasOwn(available, name) ? [[name, available[name]]] : [])),
+      [...names, "websearch", "webfetch"].flatMap((name) =>
+        Object.hasOwn(available, name) ? [[name, available[name]]] : [],
+      ),
     )
   }
 }

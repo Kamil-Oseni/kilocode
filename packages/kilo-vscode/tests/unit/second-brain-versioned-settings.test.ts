@@ -47,7 +47,7 @@ function metadata(op: "sync" | "search") {
 test("separate v2 setup schema refuses cross-version, paged and incomplete maps", () => {
   expect(parse(setup)).toEqual(setup)
   const prior = Object.fromEntries(
-    Object.entries(pins).filter(([name]) => !["historical.py", "dispatch.py"].includes(name)),
+    Object.entries(pins).filter(([name]) => !["historical.py", "dispatch.py", "proposals.py"].includes(name)),
   )
   expect(Object.keys(prior)).toHaveLength(9)
   expect(() => parse({ ...setup, source_sha256: prior })).toThrow()

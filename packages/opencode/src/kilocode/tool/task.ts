@@ -144,6 +144,7 @@ export namespace KiloTask {
         ? ["Constraints:", ...input.brief.constraints.map((item) => `- ${item.trim()}`).filter((item) => item !== "- ")]
         : []),
       `Step cap: ${input.cap}`,
+      "Execution responsibility: Carry out this assigned objective directly with the available authorized tools. Unless the assignment explicitly requests delegation, do not simply forward the same objective to another worker. Nested delegation is appropriate for a distinct necessary specialist subtask or independent parallel work; retain responsibility for the complete result. A worker's report is not proof that a file was saved. Verify requested file changes through actual mutation results and readback before reporting completion; report missing capability or unverified outcomes honestly.",
       `Expected return: ${
         input.brief?.expected_return?.trim() ||
         "A concise synthesized result with conclusions, evidence, and artifact paths; do not return the raw transcript."

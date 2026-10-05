@@ -1866,6 +1866,12 @@ describe("tool.task", () => {
       expect(part?.type).toBe("text")
       if (part?.type !== "text") throw new Error("expected structured text brief")
       expect(part.text).toContain("<subagent_brief>")
+      // kilocode_change start - retain execution responsibility in the actual delegated input
+      expect(part.text).toContain("Carry out this assigned objective directly with the available authorized tools")
+      expect(part.text).toContain("Unless the assignment explicitly requests delegation")
+      expect(part.text).toContain("distinct necessary specialist subtask or independent parallel work")
+      expect(part.text).toContain("actual mutation results and readback before reporting completion")
+      // kilocode_change end
       expect(part.text).toContain("Expected return: A concise endpoint map with source paths")
       expect(result.output).toContain("Synthesized endpoint map")
     }),

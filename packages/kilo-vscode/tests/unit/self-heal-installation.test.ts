@@ -3,13 +3,14 @@ import { createWriteStream } from "node:fs"
 import { spawn } from "node:child_process"
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
-import { join } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import { pipeline } from "node:stream/promises"
 import type { Readable } from "node:stream"
 import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { cleanup as runCleanup, detail as cleanupDetail } from "../../src/self-heal/cleanup"
 import { install as runInstall } from "../../src/self-heal/install"
+import { PackageVault } from "../../src/services/package-vault"
 import { SelfHealInstallation, type Plan } from "../../src/self-heal/installation"
 import { detail as rollbackDetail, rollback as runRollback } from "../../src/self-heal/rollback"
 import {
@@ -1085,6 +1086,32 @@ test("cleanup refuses uncertain work and resumes a confirmed pending cleanup", a
     expect(confirmed).toBe(false)
     expect(await journal.inspect()).toBeUndefined()
   } finally {
+    await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+test("rollback availability observes retained installation progress without dispatch", async () => {
+  const run = await fixture()
+  try {
+    const vault = new PackageVault(join(run.root, "vault"))
+    const journal = new SelfHealInstallation(join(run.root, "installation"))
+    const input = {
+      version: run.plan.extension,
+      target: run.plan.target,
+      binary: join(run.root, "installed-kilo"),
+      installation: journal,
+    }
+    expect(await vault.availability(input)).toEqual({ status: "absent", reason: "active-unavailable" })
+    const before = await journal.run(run.plan, async () => {})
+    expect(before.record.phase).toBe("awaiting-reload")
+    expect(await vault.availability(input)).toEqual({ status: "in-progress", reason: "installation-retained" })
+    expect(await journal.snapshot()).toEqual(before.record)
+  } finally {
+    if (
+      dirname(resolve(run.root)) !== resolve(import.meta.dir) ||
+      !basename(run.root).startsWith(".self-heal-install-")
+    )
+      throw new Error("Installation fixture cleanup escaped its selected directory")
     await rm(run.root, { recursive: true, force: true })
   }
 })

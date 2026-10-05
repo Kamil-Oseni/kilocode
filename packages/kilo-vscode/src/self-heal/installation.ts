@@ -205,6 +205,11 @@ export class SelfHealInstallation {
     await rename(tmp, destination)
   }
 
+  /** Read-only observation; availability callers reread to detect concurrent changes. */
+  snapshot() {
+    return this.read()
+  }
+
   inspect() {
     return this.lock(() => this.read())
   }

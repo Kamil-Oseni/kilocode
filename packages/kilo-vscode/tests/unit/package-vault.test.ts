@@ -1,10 +1,11 @@
 import { createWriteStream } from "node:fs"
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
-import { join } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import { pipeline } from "node:stream/promises"
 import type { Readable } from "node:stream"
 import { expect, test } from "bun:test"
+import { SelfHealInstallation } from "../../src/self-heal/installation"
 import { PackageVault, type Package } from "../../src/services/package-vault"
 
 const require = createRequire(import.meta.url)
@@ -42,7 +43,7 @@ function gate(target: "retain" | "activate") {
   return {
     entered: entered.promise,
     release: () => resumed.resolve(),
-    barrier: async (phase: "retain" | "activate") => {
+    barrier: async (phase: "retain" | "activate" | "availability") => {
       if (phase !== target) return
       entered.resolve()
       await resumed.promise
@@ -296,5 +297,151 @@ test("pruning removes missing index entries and unindexed digest packages", asyn
     await expect(Bun.file(orphan).exists()).resolves.toBeFalse()
   } finally {
     await rm(run.root, { recursive: true, force: true })
+  }
+})
+
+async function dispose(root: string) {
+  if (dirname(resolve(root)) !== resolve(import.meta.dir) || !basename(root).startsWith(".package-vault-"))
+    throw new Error("Vault fixture cleanup escaped its selected directory")
+  await rm(root, { recursive: true, force: true })
+}
+
+async function availability() {
+  const run = await fixture()
+  const root = join(run.root, "vault")
+  const vault = new PackageVault(root)
+  const old = await vault.retain(run.source, {
+    name: "raya",
+    publisher: "eden",
+    version: run.version,
+    target: run.target,
+  })
+  const next = await archive(run.root, "1.2.4", "current installed binary", "current.vsix")
+  const current = await vault.retain(next.source, {
+    name: "raya",
+    publisher: "eden",
+    version: next.version,
+    target: next.target,
+  })
+  const binary = join(run.root, "installed-kilo")
+  await writeFile(binary, next.binary)
+  await vault.activate(next.version, next.target, binary)
+  const file = join(root, "packages.json")
+  const saved = JSON.parse(await readFile(file, "utf8"))
+  saved.packages = saved.packages.map((value: Package) => ({
+    ...value,
+    retainedAt: value.version === run.version ? 1 : 2,
+  }))
+  await writeFile(file, JSON.stringify(saved))
+  const installation = new SelfHealInstallation(join(run.root, "journal"))
+  return {
+    run,
+    root,
+    vault,
+    old,
+    current,
+    file,
+    saved,
+    input: { version: next.version, target: next.target, binary, installation },
+  }
+}
+
+test("availability verifies a retained archive and CLI without state changes", async () => {
+  const cfg = await availability()
+  try {
+    const before = await readFile(cfg.file)
+    expect(await cfg.vault.availability(cfg.input)).toMatchObject({
+      status: "available",
+      version: cfg.old.version,
+      target: cfg.old.target,
+      artifact: cfg.old.artifact,
+      binary: cfg.old.binary,
+    })
+    expect(await cfg.vault.availability(cfg.input)).not.toHaveProperty("package")
+    expect(await readFile(cfg.file)).toEqual(before)
+    expect(await Bun.file(join(cfg.run.root, "journal/installation.json")).exists()).toBe(false)
+    await writeFile(cfg.input.binary, "different installed binary")
+    expect((await cfg.vault.availability(cfg.input)).status).toBe("invalid")
+  } finally {
+    await dispose(cfg.run.root)
+  }
+})
+
+test("availability rejects damaged, missing and foreign retained packages", async () => {
+  const cfg = await availability()
+  try {
+    await writeFile(cfg.old.package, "damaged")
+    expect((await cfg.vault.availability(cfg.input)).status).toBe("invalid")
+    await rm(cfg.old.package)
+    expect((await cfg.vault.availability(cfg.input)).status).toBe("invalid")
+    cfg.saved.packages[0].package = cfg.run.source
+    await writeFile(cfg.file, JSON.stringify(cfg.saved))
+    expect((await cfg.vault.availability(cfg.input)).status).toBe("invalid")
+  } finally {
+    await dispose(cfg.run.root)
+  }
+})
+
+test("availability excludes foreign targets, current versions and later retention", async () => {
+  const cfg = await availability()
+  try {
+    for (const patch of [{ target: "foreign-platform" }, { version: cfg.input.version }, { retainedAt: 3 }]) {
+      await writeFile(
+        cfg.file,
+        JSON.stringify({ ...cfg.saved, packages: [{ ...cfg.saved.packages[0], ...patch }, cfg.saved.packages[1]] }),
+      )
+      expect(await cfg.vault.availability(cfg.input)).toEqual({
+        status: "absent",
+        reason: "earlier-package-unavailable",
+      })
+    }
+  } finally {
+    await dispose(cfg.run.root)
+  }
+})
+
+test("availability rejects state races after archive verification", async () => {
+  const cfg = await availability()
+  try {
+    const vault = new PackageVault(cfg.root, async (phase) => {
+      if (phase === "availability")
+        await writeFile(cfg.file, JSON.stringify({ ...cfg.saved, active: cfg.old.artifact.digest }))
+    })
+    expect((await vault.availability(cfg.input)).status).toBe("invalid")
+    await writeFile(cfg.file, JSON.stringify(cfg.saved))
+    const changing = new PackageVault(cfg.root, async (phase) => {
+      if (phase !== "availability") return
+      await mkdir(join(cfg.run.root, "journal"))
+      await writeFile(join(cfg.run.root, "journal/installation.json"), "invalid installation")
+    })
+    expect((await changing.availability(cfg.input)).status).toBe("invalid")
+  } finally {
+    await dispose(cfg.run.root)
+  }
+})
+
+test("availability checks embedded CLI receipts and rejects same-byte archive replacement", async () => {
+  const cfg = await availability()
+  try {
+    await writeFile(
+      cfg.file,
+      JSON.stringify({
+        ...cfg.saved,
+        packages: [
+          { ...cfg.saved.packages[0], binary: { ...cfg.old.binary, digest: "f".repeat(64) } },
+          cfg.saved.packages[1],
+        ],
+      }),
+    )
+    expect((await cfg.vault.availability(cfg.input)).status).toBe("invalid")
+    await writeFile(cfg.file, JSON.stringify(cfg.saved))
+    const changing = new PackageVault(cfg.root, async (phase) => {
+      if (phase !== "availability") return
+      await rm(cfg.old.package)
+      await copyFile(cfg.run.source, cfg.old.package)
+    })
+    expect((await changing.availability(cfg.input)).status).toBe("invalid")
+  } finally {
+    await dispose(cfg.run.root)
   }
 })

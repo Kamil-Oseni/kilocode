@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { constants } from "node:fs"
-import { copyFile, link, mkdir, open, readdir, readFile, rename, rm, stat } from "node:fs/promises"
+import { copyFile, link, mkdir, open, readdir, readFile, realpath, lstat, rename, rm, stat } from "node:fs/promises"
 import { basename, isAbsolute, join, relative, resolve } from "node:path"
+import { isDeepStrictEqual } from "node:util"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { z } from "zod"
 import { checksum, inspect, verify, type PackageIdentity } from "./update-vsix"
@@ -45,7 +46,7 @@ export class PackageVault {
 
   constructor(
     private readonly root: string,
-    private readonly barrier?: (phase: "retain" | "activate") => Promise<void>,
+    private readonly barrier?: (phase: "retain" | "activate" | "availability") => Promise<void>,
   ) {
     this.file = join(root, "packages.json")
     this.locks = join(root, ".locks")
@@ -239,6 +240,81 @@ export class PackageVault {
       if (saved.active !== value.artifact.digest) await this.write({ ...saved, active: value.artifact.digest })
       return value
     })
+  }
+
+  private async retained(value: Package) {
+    const root = resolve(this.root)
+    const path = resolve(value.package)
+    if (resolve(await realpath(root)) !== root) throw new Error("Noncanonical vault root")
+    if (!isAbsolute(value.package) || path !== join(root, `raya.${value.artifact.digest}.vsix`))
+      throw new Error("Noncanonical retained package")
+    const info = await lstat(path)
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || resolve(await realpath(path)) !== path)
+      throw new Error("Linked retained package")
+    await verify(path, { name: "raya", publisher: "eden", ...value })
+    return { path, info }
+  }
+
+  /** Verify retained rollback availability only; never dispatch or alter installation state. */
+  async availability(input: {
+    version: string
+    target: string
+    binary: string
+    installation: { snapshot(): Promise<{ phase: string } | undefined> }
+  }) {
+    try {
+      const state = await input.installation.snapshot()
+      if (state && ["failed", "rollback-failed"].includes(state.phase))
+        return { status: "invalid" as const, reason: "installation-failed" as const }
+      if (state && !["verified-active", "rollback-verified"].includes(state.phase))
+        return { status: "in-progress" as const, reason: "installation-retained" as const }
+      const saved = await this.read()
+      if (!saved.active) return { status: "absent" as const, reason: "active-unavailable" as const }
+      const active = saved.packages.find((value) => value.artifact.digest === saved.active)
+      if (!active || active.version !== input.version || active.target !== input.target)
+        return { status: "invalid" as const, reason: "active-mismatch" as const }
+      const candidate = saved.packages
+        .filter(
+          (value) =>
+            value.target === active.target &&
+            value.version !== active.version &&
+            value.artifact.digest !== active.artifact.digest &&
+            value.retainedAt < active.retainedAt,
+        )
+        .sort((a, b) => b.retainedAt - a.retainedAt)[0]
+      const checked = []
+      for (const value of candidate ? [active, candidate] : [active]) checked.push(await this.retained(value))
+      const binary = await lstat(input.binary)
+      await checksum(input.binary, active.binary, 512 * 1024 * 1024)
+      await this.barrier?.("availability")
+      if (
+        !isDeepStrictEqual(saved, await this.read()) ||
+        !isDeepStrictEqual(state, await input.installation.snapshot())
+      )
+        throw new Error("Availability state changed")
+      const same = (a: Awaited<ReturnType<typeof lstat>>, b: Awaited<ReturnType<typeof lstat>>) =>
+        a.dev === b.dev &&
+        a.ino === b.ino &&
+        a.size === b.size &&
+        a.mtimeMs === b.mtimeMs &&
+        a.ctimeMs === b.ctimeMs &&
+        a.nlink === b.nlink
+      for (const value of checked) {
+        if (!same(value.info, await lstat(value.path))) throw new Error("Retained package changed")
+      }
+      if (!same(binary, await lstat(input.binary))) throw new Error("Installed binary changed")
+      if (!candidate) return { status: "absent" as const, reason: "earlier-package-unavailable" as const }
+      return {
+        status: "available" as const,
+        version: candidate.version,
+        target: candidate.target,
+        artifact: candidate.artifact,
+        binary: candidate.binary,
+        observedAt: Date.now(),
+      }
+    } catch {
+      return { status: "invalid" as const, reason: "verification-failed" as const }
+    }
   }
 
   current(signal?: AbortSignal) {

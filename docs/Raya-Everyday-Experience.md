@@ -48,3 +48,13 @@ The repair passed 17 tests with 64 assertions, including actual Windows archives
 Voice's attention status was referred to the integration owner: retained failed voice sessions can degrade its registry status even when the speech service is ready. Historical failures must remain visible without implying an unobserved current service outage.
 
 A further read-only check found a concrete configured-Memory blocker in that installed candidate: `dist/extension.js` retains expected native-helper recipe `aa7b52551fdf4e0b5bb1d43b62f0923206dbf213265ed7decf7949dbec824f52`, while the installed `raya-process-host.json` reports `fb46d5ad1ef444acaaa7307fe48b04b62352a7b205384129dede17a50f04bc3f`. The actual installed executable and PDB both match that manifest's checksums; the current source build recipe also matches the manifest. The stale expected recipe causes the Memory control verifier to reject the current helper. The integration owner is repairing the pinned expectation while retaining executable, PDB and recipe verification. Configured Memory acceptance remains unearned until the repaired package and actual workflow are verified.
+
+## Independent successor source checks
+
+The current Memory helper pin repair and byte-preserving Git attributes were imported into this worktree. All 19 managed Memory and Retrieval Python files match their committed Git bytes, including the reviewed line endings. The actual native helper was staged into this worktree's ignored build assets through its verifying ProcessHost staging operation.
+
+The packaged-helper, managed-pair, managed-document and dispatch-release suites passed together: 16 tests and 121 assertions. They cover current helper acceptance, foreign recipe refusal even with matching file digests, original non-model child processes, readiness and drain behavior, failed stdin and durable uncertainty, fresh namespace protection, exact document identifiers, and missing proposal-source refusal. The retrieval portable suite separately passed all three cases.
+
+The handled edit-refusal suite passed with its ordinary command: three tests and 113 assertions. Its cold processor fixture has an explicit 30-second per-case budget; the earlier default five-second failure is retained as the reason for that test adjustment.
+
+These are successor source checks. They do not establish configured Memory use, a successful local-model delegation, installed voice playback, or recovery after a real restart. The matching package and everyday workflow acceptance remain pending.

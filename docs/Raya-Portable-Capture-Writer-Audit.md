@@ -1,5 +1,7 @@
 # Raya portable capture writer audit
 
+October 3 current-source check: the production manifest has **32 boundaries: 12 integrated, 15 declared-unintegrated and five uncertain**, with `complete:false`. The historical tables below retain their audit-time classifications. Actual Memory control integration and worker ownership checks are underway; neither their source tests nor an empty process registry establish complete profile capture. The ten declared manifest gaps remain open. Portable capture remains refused.
+
 ChatGPT read-only source audit: **2026-09-30 07:43 EDT / 11:43 UTC**. This document records the source state during durable composer bridge validation. No production code, live profile, desktop, runtime tests or dependencies were changed by this audit. Ship and verify the current composer bridge before starting this work.
 
 ## Requirement and current decision

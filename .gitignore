@@ -97,3 +97,10 @@ packages/opencode/.artifacts/
 # raya_change - local generated media and SDK configuration
 /.cache/
 /.sdkgen-config/
+
+# Private ownership records and local verification artifacts
+**/.raya-profile-locks/
+**/__pycache__/
+*.pyc
+**/Microsoft/Windows/PowerShell/ModuleAnalysisCache
+/raya-existing-changes.patch

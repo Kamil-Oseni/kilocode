@@ -33,6 +33,9 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { Provider } from "../../src/provider/provider" // kilocode_change
 import { KiloSession } from "../../src/kilocode/session" // kilocode_change
+import { KiloSessionPrompt } from "../../src/kilocode/session/prompt" // kilocode_change - actual inherited permission enforcement
+import { ChiefVerification } from "../../src/kilocode/chief/verification" // kilocode_change - real foreground observation
+import { Refusal } from "../../src/kilocode/session/tool-refusal" // kilocode_change - exact missing-resume refusal
 import { KiloTask } from "../../src/kilocode/tool/task" // kilocode_change // raya_change
 import { TaskAuthority } from "../../src/kilocode/tool/task-authority" // kilocode_change - raya_change
 import { Desktop } from "../../src/kilocode/desktop/service" // kilocode_change - selected Computer Use task admission
@@ -102,6 +105,7 @@ const layer = (
       ToolRegistry.node,
       Provider.node, // kilocode_change
       Question.node, // kilocode_change // raya_change - Milestone B Chief option prompt
+      Permission.node, // kilocode_change - actual parent ceiling request enforcement
       Database.node,
       RuntimeFlags.node,
       Ripgrep.node,
@@ -700,6 +704,7 @@ describe("tool.task planned Auto Chief branch", () => {
         const registry = yield* ToolRegistry.Service
         const jobs = yield* BackgroundJob.Service
         const { chat, assistant } = yield* seed()
+        yield* sessions.updateMessage({ ...assistant, agent: "auto", mode: "auto" }) // kilocode_change - genuine Chief producer
         yield* clean(storage, chat.id)
         const request = "Audit authorization and navigation"
         yield* sessions.updatePart({
@@ -879,6 +884,15 @@ describe("tool.task planned Auto Chief branch", () => {
             context(`call-review-${item.id}`),
           )
         }
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: chat.id,
+          messageID: assistant.id,
+          type: "tool",
+          tool: "chief_synthesize",
+          callID: "call-synthesize",
+          state: { status: "running", input: {}, time: { start: Date.now() } },
+        })
         yield* get("chief_synthesize").execute(
           {
             summary: "Both saved audits were reviewed.",
@@ -1537,7 +1551,7 @@ describe("tool.task", () => {
         {
           description: "Inspect selected desktop",
           prompt: "Inspect the selected application",
-          subagent_type: "explore",
+          subagent_type: "general",
           access: "computer",
         },
         ctx,
@@ -1555,7 +1569,7 @@ describe("tool.task", () => {
           {
             description: "Continue selected desktop",
             prompt: "Inspect the selected application",
-            subagent_type: "explore",
+            subagent_type: "general",
             task_id: child.id,
           },
           ctx,
@@ -1658,8 +1672,47 @@ describe("tool.task", () => {
         )
         const limited = yield* sessions.get(restricted.metadata.sessionId)
         const inherited = Permission.merge(specialist.permission, limited.permission ?? [])
-        expect(Permission.evaluate("read", "*", inherited).action).toBe("deny")
+        const permission = yield* Permission.Service
+        const agents = yield* Agent.Service
+        const denied = yield* Effect.exit(
+          KiloSessionPrompt.askPermission({
+            permission,
+            agents,
+            sessions,
+            agent: specialist,
+            session: limited,
+            request: {
+              permission: "read",
+              patterns: ["input.txt"],
+              always: ["input.txt"],
+              metadata: {},
+              sessionID: limited.id,
+            },
+          }),
+        )
+        expect(Exit.isFailure(denied)).toBe(true)
+        if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("DeniedError")
+        expect(TaskAuthority.hard(limited.metadata, "read", ["input.txt"])).toEqual([
+          { permission: "read", pattern: "input.txt", action: "deny" },
+        ])
+        expect(yield* permission.list()).toHaveLength(0)
         expect(Permission.evaluate("grep", "*", inherited).action).toBe("allow")
+        expect(
+          yield* KiloSessionPrompt.askPermission({
+            permission,
+            agents,
+            sessions,
+            agent: specialist,
+            session: limited,
+            request: {
+              permission: "grep",
+              patterns: ["input.txt"],
+              always: ["input.txt"],
+              metadata: {},
+              sessionID: limited.id,
+            },
+          }),
+        ).toMatchObject({ source: "session", rule: { permission: "grep", pattern: "*", action: "allow" } })
       }),
     { config: { permission: { "*": "allow" } } },
   )
@@ -1993,7 +2046,7 @@ describe("tool.task", () => {
         )
         .pipe(Effect.exit)
       expect(Exit.isFailure(refused)).toBe(true)
-      if (Exit.isFailure(refused)) expect(Cause.pretty(refused.cause)).toContain("no subagent is authorized")
+      if (Exit.isFailure(refused)) expect(Cause.pretty(refused.cause)).toContain("chief_route on a new request")
       expect(called).toBe(false)
       expect(yield* sessions.children(chat.id)).toEqual([])
 
@@ -2257,23 +2310,75 @@ describe("tool.task", () => {
   )
 
   // kilocode_change start - persisted Auto continuations delegate without inventing a Chief decision
-  it.instance(
+  planned.instance(
     "Auto continuation delegates from its saved objective while a new request still requires Chief",
     () =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
         const { chat, assistant } = yield* seed()
+        const storage = yield* Storage.Service
+        yield* clean(storage, chat.id)
+        const request = "Implement a typed API endpoint and tests"
+        yield* sessions.updateMessage({ ...assistant, agent: "auto", mode: "auto" })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: chat.id,
+          messageID: assistant.parentID,
+          type: "text",
+          text: request,
+        })
+        const goals = RayaGoal.make({ storage, sessions })
+        const goal = yield* goals.create(chat.id, request, assistant.parentID)
+        if (!goal.intent) throw new Error("Expected goal intent")
+        yield* goals.initial(chat.id, goal.intent, "auto")
         const tool = yield* TaskTool
         const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
+        const invocation = PartID.ascending()
         const ctx = {
           sessionID: chat.id,
           messageID: assistant.id,
           agent: "auto",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+          callID: "call-continue",
+          extra: {
+            promptOps: {
+              ...stubOps(),
+              prompt: (input: SessionPrompt.PromptInput) =>
+                Effect.gen(function* () {
+                  seen = input
+                  if (!input.messageID) throw new Error("Missing child input")
+                  yield* sessions.updateMessage({
+                    id: input.messageID,
+                    role: "user",
+                    sessionID: input.sessionID,
+                    agent: input.agent ?? "general",
+                    model: ref,
+                    time: { created: Date.now() },
+                  })
+                  const result = reply(input, "Typed endpoint inspected")
+                  yield* sessions.updateMessage({
+                    ...result.info,
+                    time: { ...result.info.time, completed: Date.now() },
+                  })
+                  for (const part of result.parts) yield* sessions.updatePart(part)
+                  return result
+                }),
+            },
+          },
           messages: [],
-          metadata: () => Effect.void,
+          metadata: (value: { title?: string; metadata?: Record<string, unknown> }) =>
+            sessions
+              .updatePart({
+                id: invocation,
+                sessionID: chat.id,
+                messageID: assistant.id,
+                type: "tool",
+                callID: "call-continue",
+                tool: "task",
+                state: { status: "running", input: {}, time: { start: Date.now() }, metadata: value.metadata },
+              })
+              .pipe(Effect.asVoid),
           ask: () => Effect.void,
         }
         yield* sessions.setMetadata({
@@ -2313,6 +2418,15 @@ describe("tool.task", () => {
             [RayaChief.phaseKey]: "task",
           },
         })
+        yield* sessions.updatePart({
+          id: invocation,
+          sessionID: chat.id,
+          messageID: assistant.id,
+          type: "tool",
+          callID: "call-continue",
+          tool: "task",
+          state: { status: "running", input: {}, time: { start: Date.now() } },
+        })
         const result = yield* def.execute({ description: "Continue", subagent_type: "designer" }, ctx)
         expect(result.metadata.selectedAgent).toBe("coder")
         expect(result.metadata.selection).toBe("auto")
@@ -2322,6 +2436,14 @@ describe("tool.task", () => {
         if (part?.type !== "text") throw new Error("expected structured text brief")
         expect(part.text).toContain("Objective: Implement a typed API endpoint and tests")
         expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("goal")
+        expect((yield* sessions.get(chat.id)).metadata?.[ChiefVerification.key]).toMatchObject({
+          kind: "foreground",
+          userID: assistant.parentID,
+          messageID: assistant.id,
+          callID: "call-continue",
+          child: { sessionID: result.metadata.sessionId, inputID: result.metadata.childMessageID },
+          goal: { status: "active" },
+        })
         expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toHaveLength(1)
       }),
     {
@@ -2652,7 +2774,8 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("execute creates a child when task_id does not exist", () =>
+  // kilocode_change start - absent retained sessions never create replacement work
+  it.instance("execute refuses an absent retained task without creating a child", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
@@ -2661,33 +2784,40 @@ describe("tool.task", () => {
       let seen: SessionPrompt.PromptInput | undefined
       const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
 
-      const result = yield* def.execute(
-        {
-          description: "inspect bug",
-          prompt: "look into the cache key path",
-          subagent_type: "general",
-          task_id: SessionID.make("ses_missing"), // kilocode_change - valid absent session retains fallback coverage
-        },
-        {
-          sessionID: chat.id,
-          messageID: assistant.id,
-          agent: "build",
-          abort: new AbortController().signal,
-          extra: { promptOps },
-          messages: [],
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
-        },
+      const result = yield* Effect.exit(
+        def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            task_id: SessionID.make("ses_missing"), // kilocode_change - valid absent retained session refuses without fallback
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
       )
 
       const kids = yield* sessions.children(chat.id)
-      expect(kids).toHaveLength(1)
-      expect(kids[0]?.id).toBe(result.metadata.sessionId)
-      expect(result.metadata.sessionId).not.toBe("ses_missing")
-      expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
-      expect(seen?.sessionID).toBe(result.metadata.sessionId)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) {
+        const error = Cause.squash(result.cause)
+        expect(error).toBeInstanceOf(Refusal)
+        if (!(error instanceof Refusal)) throw error
+        expect(error.reason).toBe("task-resume")
+      }
+      expect(kids).toHaveLength(0)
+      expect(seen).toBeUndefined()
     }),
   )
+  // kilocode_change end
 
   it.instance(
     "prevents subagents from launching subagents by default",

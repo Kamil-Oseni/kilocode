@@ -64,7 +64,7 @@ test.each([false, true, "owned"])(
         },
       ],
     })
-    const browser = await chromium.launch({ headless: true, channel: "msedge", args: ["--mute-audio"] })
+    const browser = await chromium.launch({ headless: true, args: ["--mute-audio"] })
     const page = await browser.newPage()
     const errors: string[] = []
     const rows: Array<Record<string, unknown>> = []

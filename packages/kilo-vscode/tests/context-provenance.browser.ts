@@ -36,6 +36,16 @@ for (const theme of ["light", "dark"]) {
       await nav.getByRole("button", { name: "Tasks", exact: true }).click()
       await expect(nav.getByRole("button", { name: "Tasks", exact: true })).toHaveAttribute("aria-current", "page")
 
+      await fixture.getByRole("button", { name: "Edit proposed changes" }).click()
+      const proposal = fixture.getByLabel("Proposed text: Preferences/lighting.md", { exact: true })
+      await proposal.fill("Use calm colours")
+      await proposal.press("End")
+      await proposal.pressSequentially(" slowly")
+      await expect(proposal).toBeFocused()
+      await expect(proposal).toHaveValue("Use calm colours slowly")
+      await fixture.getByRole("button", { name: "Save proposal revision" }).click()
+      await expect(fixture.getByTestId("context-outcome")).toHaveText("Proposal edited: Use calm colours slowly")
+
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       const result = await new AxeBuilder({ page })
         .include('[aria-label="Context provenance"]')

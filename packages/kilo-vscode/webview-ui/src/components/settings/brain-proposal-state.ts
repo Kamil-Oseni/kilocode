@@ -40,7 +40,7 @@ export function reviewed(value: unknown): BrainProposalResult | undefined {
     record(value) &&
     value.capture_enabled === false &&
     Array.isArray(value.proposals) &&
-    value.proposals.length <= 100 &&
+    value.proposals.length <= 128 &&
     value.proposals.every(proposal)
   )
     return { capture_enabled: false, proposals: value.proposals }

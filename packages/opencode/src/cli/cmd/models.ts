@@ -6,6 +6,7 @@ import { UI } from "../ui"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 export const ModelsCommand = effectCmd({
+  watcher: false, // kilocode_change - model metadata needs project provider config, not filesystem warm-up
   command: "models [provider]",
   describe: "list all available models",
   builder: (yargs) =>

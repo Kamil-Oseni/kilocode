@@ -4,6 +4,7 @@ import type { AppServices } from "@/effect/app-runtime"
 import type { InstanceStore } from "@/project/instance-store"
 import { Instance } from "@/kilocode/instance" // kilocode_change
 import { retireCommand } from "@/kilocode/cli/command-retirement" // kilocode_change
+import * as BootstrapMode from "@/kilocode/cli/bootstrap-mode" // kilocode_change
 import { cmd, type WithDoubleDash } from "./cmd/cmd"
 
 /**
@@ -46,6 +47,7 @@ interface EffectCmdOpts<Args, A> {
    * `serve`, `web`, `account`, `db`, `upgrade`).
    */
   instance?: boolean | ((args: Args) => boolean)
+  watcher?: boolean // kilocode_change - metadata commands retain project config without eager search/watch startup
   /** Defaults to process.cwd(). Override for commands that take a directory positional. */
   directory?: (args: Args) => string
   handler: (args: WithDoubleDash<Args>) => Effect.Effect<A, CliError, AppServices | InstanceStore.Service>
@@ -86,9 +88,13 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
       const { InstanceStore } = await import("@/project/instance-store")
       const { InstanceRef } = await import("@/effect/instance-ref")
       const directory = opts.directory?.(args) ?? process.cwd()
-      const { store, ctx } = await AppRuntime.runPromise(
-        InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
+      // kilocode_change start - request-local metadata mode retains the original project instance/configuration
+      const { store, ctx } = await BootstrapMode.run(opts.watcher, () =>
+        AppRuntime.runPromise(
+          InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
+        ),
       )
+      // kilocode_change end
       try {
         // kilocode_change start - preserve legacy instance context across Promise callbacks
         await Instance.restore(ctx, () =>

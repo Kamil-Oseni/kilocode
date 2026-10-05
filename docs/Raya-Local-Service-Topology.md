@@ -2,6 +2,12 @@
 
 This document records the current managed launch contract and the remaining EN-10 work. It does not certify shared or remote deployment.
 
+## Legacy manual recovery boundary
+
+The same-PC recovery guide at `D:/RayaBackups/RECOVERY.md` also references the older `D:/Raya/Services/runtime.py` launcher. Source inspection on 2026-10-05, SHA-256 `fac2912c38896a1ae068ffb577bd40d177f9b996db40b016584f7691c0502a96`, found that `stop` verifies an idle drain lease, then calls `retire`, which terminates the owned process tree and kills survivors after five seconds. Its successful result does not prove cooperative shutdown, original output-stream joins or absence of forced termination. Do not use that command as evidence for the ordinary managed-service recovery gate.
+
+For ordinary recovery, retain the installed lifecycle owner's process identity and use its supported drain/close path; inspect the exact close result before another start. A busy, refused or uncertain result requires inspection of that same owned run, not a replacement process or deletion of its ownership records. A healthy listener alone does not establish that the former owner closed successfully. The legacy launcher remains historical/manual tooling; this source review did not stop, restart or alter any service.
+
 ## Managed VS Code backend
 
 The extension launches its bundled CLI with an ephemeral port, explicit `127.0.0.1` hostname and disabled mDNS. These explicit arguments override standalone CLI server settings. `ServerManager` generates a fresh 32-byte random password for each child process and supplies it through `KILO_SERVER_PASSWORD`; the extension uses that credential for HTTP and SSE. The password is not a tenant identity.

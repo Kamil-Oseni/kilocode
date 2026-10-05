@@ -43,32 +43,42 @@ function voiceRow(value: Awaited<ReturnType<NonNullable<AdminHostSignals["voice"
 }
 
 async function overlay(health: AdminHealth, host?: AdminHostSignals): Promise<AdminHealth> {
-  if (!host?.browser && !host?.voice && !host?.updates) return health
+  const base = { ...health }
+  delete base.recovery
+  if (!host?.browser && !host?.voice && !host?.updates && !host?.recovery) return base
   const at = health.generatedAt
   const rows = new Map(health.items.map((item) => [item.id, item]))
-  const reads = await Promise.all([
-    host.browser
+  const [reads, recovery] = await Promise.all([
+    Promise.all([
+      host.browser
+        ? Promise.resolve()
+            .then(host.browser)
+            .then((value) => browserRow(value, at))
+            .catch(() => failed("browser", at))
+        : undefined,
+      host.voice
+        ? Promise.resolve()
+            .then(host.voice)
+            .then((value) => voiceRow(value, at))
+            .catch(() => failed("voice", at))
+        : undefined,
+      host.updates
+        ? Promise.resolve()
+            .then(host.updates)
+            .then((value) => updateRow(value, at))
+            .catch(() => failed("updates", at))
+        : undefined,
+    ]),
+    host.recovery
       ? Promise.resolve()
-          .then(host.browser)
-          .then((value) => browserRow(value, at))
-          .catch(() => failed("browser", at))
-      : undefined,
-    host.voice
-      ? Promise.resolve()
-          .then(host.voice)
-          .then((value) => voiceRow(value, at))
-          .catch(() => failed("voice", at))
-      : undefined,
-    host.updates
-      ? Promise.resolve()
-          .then(host.updates)
-          .then((value) => updateRow(value, at))
-          .catch(() => failed("updates", at))
+          .then(host.recovery)
+          .catch(() => ({ status: "invalid" as const, reason: "verification-failed" as const }))
       : undefined,
   ])
   for (const row of reads) if (row) rows.set(row.id, row)
   return {
-    ...health,
+    ...base,
+    ...(recovery ? { recovery } : {}),
     items: health.items.map((item) => rows.get(item.id) ?? item),
   }
 }

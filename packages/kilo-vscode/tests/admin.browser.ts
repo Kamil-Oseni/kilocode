@@ -1,6 +1,23 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("rollback availability shows checked metadata without installing or asserting a tested restore", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.goto("/?state=rollback-available")
+  await expect(page.getByText("Earlier version: 1.2.2 · win32-x64", { exact: true })).toBeVisible()
+  await page.getByText("Verified package checksums", { exact: true }).click()
+  await expect(page.getByText(`Package SHA-256: ${"a".repeat(64)}`, { exact: true })).toBeVisible()
+  await expect(page.getByText("This verifies retained files.", { exact: false })).toBeVisible()
+  await audit(page)
+  for (const state of ["rollback-invalid", "rollback-progress"]) {
+    await page.goto(`/?state=${state}`)
+    await expect(page.getByText("Earlier version:", { exact: false })).toHaveCount(0)
+    await expect(page.getByText("Verified package checksums", { exact: true })).toHaveCount(0)
+  }
+})
+
 test("a lost Stop receipt refreshes observed worker state without replaying cancellation", async ({ page }) => {
   await page.clock.install()
   await page.goto("/?state=workers-delayed")

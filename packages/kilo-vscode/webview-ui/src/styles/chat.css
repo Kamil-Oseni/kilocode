@@ -1031,3 +1031,6 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+.raya-recovery-data p {
+  overflow-wrap: anywhere;
+}

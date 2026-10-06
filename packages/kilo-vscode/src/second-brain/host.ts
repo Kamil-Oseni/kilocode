@@ -20,6 +20,7 @@ import { MemoryFiles } from "@kilocode/kilo-memory/store"
 import { snapshot as dreamSnapshot } from "./dream-view"
 import { explanation } from "./dream-review"
 import { DreamTransport } from "./dream-transport"
+import { entry as dreamEntry } from "./dream-entry"
 import { Effect } from "effect"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
@@ -396,6 +397,7 @@ export class BrainHost {
   async accept(message: Record<string, unknown>, post: (value: BrainResponse) => void) {
     if (message.type !== "secondBrain") return false
     if (typeof message.id !== "string") return true
+    if (await dreamEntry(message, (command) => vscode.commands.executeCommand(command), post)) return true
     if (message.action === "proposal") {
       await this.proposal(message, post)
       return true
@@ -417,7 +419,10 @@ export class BrainHost {
       await this.handle(
         {
           type: "secondBrain",
-          action: message.action as Exclude<BrainRequest["action"], "search" | "context" | "cancel" | "proposal">,
+          action: message.action as Exclude<
+            BrainRequest["action"],
+            "search" | "context" | "cancel" | "proposal" | "dreamStart" | "dreamInspect"
+          >,
           id: message.id,
         },
         post,

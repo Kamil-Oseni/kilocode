@@ -146,11 +146,12 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(new BrainBridge(connectionService, brain))
   context.subscriptions.push(
     vscode.commands.registerCommand("raya.memory.startDream", () =>
-      brain.startDream(connectionService).catch((err: unknown) => {
+      brain.startDream(connectionService).catch(async (err: unknown) => {
         console.warn("[Raya] Manual consolidation needs inspection", err)
-        return vscode.window.showErrorMessage(
+        await vscode.window.showErrorMessage(
           "Memory consolidation could not be confirmed. Inspect its saved checkpoint before retrying.",
         )
+        throw err
       }),
     ),
   )

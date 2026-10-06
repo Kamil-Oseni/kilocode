@@ -5,6 +5,7 @@ import { TextField } from "@kilocode/kilo-ui/text-field"
 import { useVSCode } from "../../context/vscode"
 import type { BrainState, BrainRequest } from "../../../../src/shared/second-brain"
 import { BrainProposals } from "./BrainProposals"
+import { BrainConsolidation } from "./BrainConsolidation"
 
 const labels: Record<string, string> = {
   namespace_changed: "Memory folder changed. Trusted re-admission is required.",
@@ -28,7 +29,7 @@ export function SecondBrain() {
   const [query, setQuery] = createSignal("")
   const [id, setId] = createSignal("")
   const busy = () => ["checking", "searching"].includes(state().status)
-  const request = (action: Exclude<BrainRequest["action"], "proposal">) => {
+  const request = (action: Exclude<BrainRequest["action"], "proposal" | "dreamStart" | "dreamInspect">) => {
     const target = id()
     const next = crypto.randomUUID()
     setId(next)
@@ -167,6 +168,7 @@ export function SecondBrain() {
         Review and sync require separate native confirmations. Disconnect joins local transport only. Capture is
         disabled.
       </p>
+      <BrainConsolidation configured={state().configured} />
       <BrainProposals configured={state().configured} />
     </Card>
   )

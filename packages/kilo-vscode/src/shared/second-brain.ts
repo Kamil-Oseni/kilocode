@@ -37,6 +37,7 @@ export type BrainState = Readonly<{
   review?: BrainReview
   context?: BrainContext
   root?: string
+  dream?: Readonly<{ status: "native-review" | "closed" | "unavailable" }>
   results: readonly BrainSource[]
   control?: Readonly<{
     status: "unchecked" | "reviewing" | "approved" | "syncing" | "synced" | "policy_disabled" | "uncertain"
@@ -49,7 +50,17 @@ export type BrainRequest =
   | { type: "secondBrain"; action: "proposal"; id: string; command: BrainProposalCommand }
   | {
       type: "secondBrain"
-      action: "state" | "setup" | "check" | "disconnect" | "controlSetup" | "review" | "sync" | "disable"
+      action:
+        | "state"
+        | "setup"
+        | "check"
+        | "disconnect"
+        | "controlSetup"
+        | "review"
+        | "sync"
+        | "disable"
+        | "dreamStart"
+        | "dreamInspect"
       id: string
     }
   | { type: "secondBrain"; action: "cancel"; id: string; target: string }

@@ -20,12 +20,12 @@ const STORIES = [
   { id: "session-tabs--switcher-open", name: "Session tabs / switcher" },
 ]
 
-function url(id: string) {
-  return `/iframe.html?id=${id}&viewMode=story&globals=${GLOBALS}`
+function url(id: string, globals = GLOBALS) {
+  return `/iframe.html?id=${id}&viewMode=story&globals=${globals}`
 }
 
-async function open(page: Page, id: string) {
-  await page.goto(url(id), { waitUntil: "load" })
+async function open(page: Page, id: string, globals = GLOBALS) {
+  await page.goto(url(id, globals), { waitUntil: "load" })
   await page.waitForSelector("#storybook-root *", { state: "attached" })
 }
 
@@ -46,11 +46,19 @@ async function reach(page: Page, target: Locator) {
 }
 
 test.describe("webview accessibility ratchet", () => {
-  for (const story of STORIES) {
-    test(`${story.name} passes automated WCAG checks`, async ({ page }) => {
-      await open(page, story.id)
-      await scan(page)
-    })
+  for (const theme of ["light", "dark"]) {
+    for (const width of [320, 900]) {
+      for (const story of STORIES) {
+        test(`${story.name} passes WCAG and overflow checks in ${theme} at ${width}px`, async ({ page }) => {
+          await page.setViewportSize({ width, height: 900 })
+          await open(page, story.id, `colorScheme:${theme};theme:kilo-vscode;vscodeTheme:${theme}-modern`)
+          await expect(page.locator("html")).toHaveAttribute("data-color-scheme", theme)
+          await expect(page.locator("body")).toHaveClass(new RegExp(`\\bvscode-${theme}\\b`))
+          await scan(page)
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+        })
+      }
+    }
   }
 
   test("Agent Manager keeps virtualized transcript fragments laid out", async ({ page }) => {

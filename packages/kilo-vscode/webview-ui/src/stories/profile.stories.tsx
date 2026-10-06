@@ -96,7 +96,7 @@ const directUsage: ProviderUsageData = {
 const noop = () => {}
 const render = (profileData: ProfileData | null, providerUsage: ProviderUsageData, height: number, error?: string) => (
   <StoryProviders noPadding>
-    <div style={{ width: "420px", height: `${height}px` }}>
+    <div style={{ width: "100%", "max-width": "420px", height: `${height}px` }}>
       <ProfileView
         profileData={profileData}
         providerUsage={providerUsage}

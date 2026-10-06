@@ -30,6 +30,14 @@ The health panel now expires a missing read-only reply after 15 seconds, clears 
 
 ## Validation recorded on 2026-10-05
 
+### Combined context and resource source checks, 2026-10-06
+
+The current combined source passes 29 CLI context, routing and recall tests (232 assertions), plus 63 extension live-context, activity and session-queue tests (143 assertions). Real request preparation estimates fixed input at 7,624 tokens for Ask, 5,772 for Auto and 13,351 for Code against the configured 32,768-token window and 1,024-token output allowance. These are estimator results for the isolated test configuration, not measured model tokens or available space in a personal workspace. Indexed recall checks cover all pages/batches, worktree boundaries, current-turn exclusion, prior assistant tails, literal queries, bounded snippets and cancellation. The explicit local-context transport checks preserve configured 65,536/131,072 windows without silent truncation; they do not establish model support, usable latency or RAM/VRAM capacity at those sizes.
+
+The scheduler and saved-action cohort passes 29 tests (223 assertions), including real loopback HTTP streams, queue count/byte reservations, fairness, failed streams and executed-but-unconfirmed file readback. Two added actual-stream tests hold the original cancellation and response-body cleanup promises. Queued requests remain undispatched while those promises are pending; only the original cleanup completion releases the slot. The enlarged scheduler suite passes 19 tests (122 assertions). Those controlled transport joins do not prove server-side model unloading or native process retirement.
+
+Logs are `.tmp/memory-private/context-postmerge-*`. These source checks perform no model inference, microphone capture, audible playback, Home Assistant action, automatic Memory capture or installed-profile mutation. Installed long-conversation, conversation-under-job-load and delegated task acceptance remain pending with the integration owner; the broad readiness score is unchanged.
+
 - The first UI and mood batch passed 60 focused extension tests (392 assertions), nine genuine backend Home Assistant eligibility checks (128 assertions), and browser layout/accessibility checks at narrow and wide widths in light and dark themes. Types, lint, unused-export checks and the production bundle passed.
 - Proposal editing preserves input focus. Browser transport checks verify revision-aware edit/apply, workspace invalidation and dismissed native review without an applied claim. Combined host and webview types pass against the regenerated backend SDK. These transport-boundary checks do not establish genuine model-to-Store acceptance.
 - Seventeen voice dispatch, draft, mounted-session, Stop and playback-correlation tests passed (63 assertions). Mounted checks use Playwright's bundled browser because installed Edge refused test-profile launches before application code.

@@ -63,6 +63,90 @@ async function until(check: () => boolean) {
   }
 }
 
+describe("local inference scheduler with held transport cleanup", () => {
+  test("consumer cancellation retains the slot until the original stream cancellation joins", async () => {
+    const queue = createLocalScheduler()
+    const gate = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    const calls: string[] = []
+    const transport = async (input: Parameters<typeof fetch>[0]) => {
+      calls.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
+      if (calls.length > 1) return new Response(null, { status: 204 })
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          cancel() {
+            started.resolve()
+            return gate.promise
+          },
+        }),
+      )
+    }
+    const first = await queue.fetch(transport, "http://fixture/first")
+    const second = queue.fetch(transport, "http://fixture/second")
+    let joined = false
+    const cancellation = first.body!.cancel("finished").then(() => {
+      joined = true
+    })
+    try {
+      await started.promise
+      expect(joined).toBe(false)
+      expect(calls).toEqual(["http://fixture/first"])
+      expect(queue.snapshot()).toMatchObject({ active: 1, queued: 1 })
+    } finally {
+      gate.resolve()
+      await cancellation
+      expect((await second).status).toBe(204)
+    }
+    expect(joined).toBe(true)
+    expect(calls).toEqual(["http://fixture/first", "http://fixture/second"])
+    expect(queue.snapshot()).toEqual({ active: 0, queued: 0, bytes: 0 })
+  })
+
+  test("abort before headers waits for the original response and its body cleanup before dispatch", async () => {
+    const queue = createLocalScheduler()
+    const headers = Promise.withResolvers<Response>()
+    const cleanup = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    const calls: string[] = []
+    const transport = async (input: Parameters<typeof fetch>[0]) => {
+      calls.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
+      return calls.length === 1 ? headers.promise : new Response(null, { status: 204 })
+    }
+    const abort = new AbortController()
+    const reason = new Error("stop original request")
+    const first = queue.fetch(transport, "http://fixture/first", { signal: abort.signal }).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    const second = queue.fetch(transport, "http://fixture/second")
+    abort.abort(reason)
+    try {
+      expect(calls).toEqual(["http://fixture/first"])
+      expect(queue.snapshot()).toMatchObject({ active: 1, queued: 1 })
+      headers.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel(error) {
+              expect(error).toBe(reason)
+              started.resolve()
+              return cleanup.promise
+            },
+          }),
+        ),
+      )
+      await started.promise
+      expect(calls).toEqual(["http://fixture/first"])
+      expect(queue.snapshot()).toMatchObject({ active: 1, queued: 1 })
+    } finally {
+      cleanup.resolve()
+      expect(await first).toBe(reason)
+      expect((await second).status).toBe(204)
+    }
+    expect(calls).toEqual(["http://fixture/first", "http://fixture/second"])
+    expect(queue.snapshot()).toEqual({ active: 0, queued: 0, bytes: 0 })
+  })
+})
+
 describe("local inference scheduler with real HTTP streams", () => {
   for (const row of [
     { name: "a waiting slot", limits: { count: 3 }, bodies: ["", ""], denied: "", chat: "" },

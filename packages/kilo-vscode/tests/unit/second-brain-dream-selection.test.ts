@@ -6,6 +6,7 @@ import os from "node:os"
 import { selection } from "../../src/second-brain/dream-selection"
 import { BrainSettings } from "../../src/second-brain/settings"
 import { sources } from "../../src/second-brain/setup-v2"
+import { MemoryFiles } from "@kilocode/kilo-memory/store"
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "raya-dream-selection-"))
@@ -49,8 +50,14 @@ async function fixture() {
     source_sha256: Object.fromEntries(sources.map((name) => [name, "a".repeat(64)])),
   }
   await settings.save(setup, "synthetic-private")
+  const bound = await MemoryFiles.dream.bind(
+    setup.root,
+    root,
+    [{ key: "voice", path: "Preferences/voice.md" }],
+    new AbortController().signal,
+  )
   const approved = {
-    scope: "971da465-70aa-4e29-baad-272aaf840354",
+    scope: bound.scope,
     sources: [{ path: "approved.md", sha256: "b".repeat(64), kind: "approved-summary" as const }],
     targets: [{ key: "voice", path: "Preferences/voice.md", expected: null }],
   }
@@ -96,6 +103,37 @@ check("manual grant binds original configured root, selection, trust and credent
   expect(await readFile(f.file, "utf8")).not.toContain("synthetic-replacement")
 })
 
+check("persisted target moves and alternate scopes invalidate native review grants", async () => {
+  const f = await fixture()
+  const signal = new AbortController().signal
+  const input = {
+    settings: f.settings,
+    project: f.root,
+    approved: f.approved,
+    trusted: () => true,
+    review: async () => true,
+  }
+  await expect(
+    selection({ ...input, approved: { ...f.approved, scope: crypto.randomUUID() } }, signal),
+  ).rejects.toThrow("persisted")
+  const grant = await selection(input, signal)
+  await MemoryFiles.dream.bind(f.setup.root, f.root, [{ key: "voice", path: "Preferences/speech.md" }], signal)
+  await expect(grant.authorize(grant.root, grant.project, grant.approved, signal)).rejects.toThrow("persisted")
+  await MemoryFiles.dream.bind(f.setup.root, f.root, [{ key: "voice", path: "Preferences/voice.md" }], signal)
+  await expect(
+    selection(
+      {
+        ...input,
+        review: async () => {
+          await MemoryFiles.dream.bind(f.setup.root, f.root, [{ key: "voice", path: "Preferences/moved.md" }], signal)
+          return true
+        },
+      },
+      signal,
+    ),
+  ).rejects.toThrow("persisted")
+})
+
 check("refused, changed, cancelled and closed selections cannot mint or retain authorization", async () => {
   const f = await fixture()
   const cfg = {
@@ -118,6 +156,7 @@ check("refused, changed, cancelled and closed selections cannot mint or retain a
       new AbortController().signal,
     ),
   ).rejects.toThrow("changed during review")
+  await f.settings.save(f.setup, "synthetic-private")
   const controller = new AbortController()
   const grant = await selection({ ...cfg, review: async () => true }, controller.signal)
   grant.close()

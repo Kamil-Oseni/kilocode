@@ -30,9 +30,27 @@ export async function selection(
     throw new Error("Select the original reviewed SecondBrain configuration")
   const root = cfg.setup.root
   if (Buffer.byteLength(JSON.stringify(approved)) > 64000) throw new Error("Dream selection exceeds its review bound")
+  const mapping = async (current: AbortSignal) => {
+    current.throwIfAborted()
+    signal.throwIfAborted()
+    const saved = await MemoryFiles.dream.list(root, project)
+    current.throwIfAborted()
+    signal.throwIfAborted()
+    if (
+      saved.scope !== approved.scope ||
+      !approved.targets.length ||
+      approved.targets.length > 8 ||
+      new Set(approved.targets.map((item) => item.key)).size !== approved.targets.length ||
+      approved.targets.some((item) => !saved.slots.some((slot) => slot.key === item.key && slot.path === item.path))
+    )
+      throw new Error("Original persisted Dream target mapping differs; select and review targets again")
+  }
+  await mapping(signal)
   if (!(await review({ root, project, approved: structuredClone(approved) }, signal)))
     throw new Error("Manual Dream selection was not approved")
   signal.throwIfAborted()
+  if (!trusted(project) || !settings.current(cfg.setup)) throw new Error("Dream authority changed during review")
+  await mapping(signal)
   if (!trusted(project) || !settings.current(cfg.setup)) throw new Error("Dream authority changed during review")
   let closed = false
   return {
@@ -53,6 +71,9 @@ export async function selection(
         !trusted(project) ||
         !settings.current(cfg.setup)
       )
+        throw new Error("Original manual Dream selection is no longer authorized")
+      await mapping(current)
+      if (closed || !trusted(project) || !settings.current(cfg.setup))
         throw new Error("Original manual Dream selection is no longer authorized")
     },
   }

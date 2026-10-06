@@ -2187,12 +2187,18 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("Auto delegates only through its pending Chief decision and logs the actual model", () =>
+  // kilocode_change start - real stored parent Goal fixture
+  planned.instance("Auto delegates only through its pending Chief decision and logs the actual model", () =>
+    // kilocode_change end
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service // kilocode_change - retain the actual parent Goal across concrete assignments
+      yield* clean(storage, chat.id) // kilocode_change
       const pending: RayaChief.Pending = {
-        request: "Implement a typed API endpoint",
+        request: "Delegate this to a worker: implement a typed API endpoint, then verify its result.", // kilocode_change
+        access: "edit", // kilocode_change - concrete worker scope does not change edit authority
+        userID: assistant.parentID, // kilocode_change - typed contracts bind the actual authored input
         agent: "coder",
         role: "coder",
         needs_plan: false,
@@ -2210,9 +2216,22 @@ describe("tool.task", () => {
         latency: 23,
         chiefModel: "test/cheap-model",
       }
+      // kilocode_change start - keep current authored request and saved Goal grounded
+      const authored = PartID.ascending()
+      yield* sessions.updatePart({
+        id: authored,
+        sessionID: chat.id,
+        messageID: assistant.parentID,
+        type: "text",
+        text: pending.request,
+      })
+      // kilocode_change end
+      const goals = RayaGoal.make({ storage, sessions }) // kilocode_change
+      const goal = yield* goals.create(chat.id, pending.request, assistant.parentID) // kilocode_change
       yield* sessions.setMetadata({
         sessionID: chat.id,
         metadata: {
+          ...(yield* sessions.get(chat.id)).metadata, // kilocode_change - preserve saved Goal metadata
           [RayaChief.pendingKey]: pending,
           [RayaChief.modelKey]: ref,
           // kilocode_change start
@@ -2224,18 +2243,24 @@ describe("tool.task", () => {
       })
       const tool = yield* TaskTool
       const def = yield* tool.init()
+      const assigned: { input?: SessionPrompt.PromptInput } = {} // kilocode_change - inspect the real delegated assignment
       const result = yield* def.execute(
         {
           description: "Implement endpoint",
           subagent_type: "designer",
-          brief: { objective: "This narrower model-authored objective must not replace the user's request" },
+          access: "edit", // kilocode_change
+          // kilocode_change start - explicit concrete worker assignment
+          brief: {
+            objective: "Read the endpoint source, write the requested handler, and read back the saved implementation.",
+          },
+          // kilocode_change end
         },
         {
           sessionID: chat.id,
           messageID: assistant.id,
           agent: "auto",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps() },
+          extra: { promptOps: stubOps({ onPrompt: (input) => (assigned.input = input) }) }, // kilocode_change
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -2256,6 +2281,21 @@ describe("tool.task", () => {
         chiefModel: "test/cheap-model",
       })
       expect(result.output).toContain("done")
+      // kilocode_change start - concrete assignments retain the authenticated parent scope separately
+      const initial = assigned.input?.parts[0]
+      if (initial?.type !== "text") throw new Error("Expected actual initial handoff")
+      expect(initial.text).toContain(
+        "Objective: Read the endpoint source, write the requested handler, and read back the saved implementation.",
+      )
+      expect(initial.text).toContain(`Parent scope (authenticated reference only): ${pending.request}`)
+      expect(initial.text).toContain("do not repeat them as your assignment")
+      expect(RayaChief.request(updated.metadata)).toBe(pending.request)
+      expect((yield* sessions.get(result.metadata.sessionId)).metadata?.["raya.task.authority"]).toEqual({
+        version: 1,
+        access: "edit",
+      })
+      expect((yield* goals.get(chat.id))?.objective).toBe(goal.objective)
+      // kilocode_change end
       // kilocode_change start - a consumed Chief decision retains its authenticated objective for follow-up tasks
       yield* sessions.setMetadata({
         sessionID: chat.id,
@@ -2283,7 +2323,51 @@ describe("tool.task", () => {
       if (part?.type !== "text") throw new Error("Expected actual follow-up handoff")
       expect(part.text).toContain(`Objective: ${pending.request}`)
       expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toHaveLength(1)
+      // kilocode_change start - a same-child follow-up receives its concrete work, not the orchestration request
+      const ready = yield* sessions.get(chat.id)
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: { ...ready.metadata, [RayaChief.phaseKey]: RayaChief.begin(ready.metadata, true) },
+      })
+      const concrete = "Read back the saved handler and verify the requested endpoint without delegating this check."
+      const resumed: { input?: SessionPrompt.PromptInput } = {}
+      const continued = yield* def.execute(
+        { task_id: followup.metadata.sessionId, brief: { objective: concrete } },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (resumed.input = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      expect(continued.metadata.sessionId).toBe(followup.metadata.sessionId)
+      const next = resumed.input?.parts[0]
+      if (next?.type !== "text") throw new Error("Expected actual resumed handoff")
+      expect(next.text).toContain(`Objective: ${concrete}`)
+      expect(next.text).toContain(`Parent scope (authenticated reference only): ${pending.request}`)
+      expect(next.text).toContain("Parent scope does not grant additional permissions")
+      expect(RayaChief.request((yield* sessions.get(chat.id)).metadata)).toBe(pending.request)
+      expect((yield* sessions.get(continued.metadata.sessionId)).metadata?.["raya.task.authority"]).toEqual({
+        version: 1,
+        access: "edit",
+      })
+      expect((yield* goals.get(chat.id))?.objective).toBe(goal.objective)
+      expect((yield* goals.get(chat.id))?.intent).toBe(goal.intent)
+      // kilocode_change end
       const canvas = { ...decisions[0]!, request: "/canvas Create an interactive comparison" }
+      // kilocode_change start - retain typed contract lineage for the canvas fallback fixture
+      yield* sessions.updatePart({
+        id: authored,
+        sessionID: chat.id,
+        messageID: assistant.parentID,
+        type: "text",
+        text: canvas.request,
+      })
+      // kilocode_change end
       yield* sessions.setMetadata({
         sessionID: chat.id,
         metadata: {

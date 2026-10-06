@@ -2,6 +2,7 @@
 import { Schema } from "effect"
 import { Permission } from "@/permission"
 import { HomeAssistant } from "../home-assistant/tools"
+import { Refusal } from "../session/tool-refusal"
 
 export namespace RayaChief {
   export const threshold = 0.7
@@ -461,7 +462,7 @@ export namespace RayaChief {
           a.agent.name.localeCompare(b.agent.name),
       )
     const first = ranked[0]
-    if (!first) throw new Error("Auto routing requires at least one eligible specialist")
+    if (!first) throw new Refusal("chief-no-eligible", "Auto routing requires at least one eligible specialist")
     const quick = ranked.find((item) => item.profile.role === "generalist")
     const parallel =
       /\b(?:two|three|2|3)\b.{0,100}\b(?:independent|parallel|specialists|agents)\b|\b(?:independent|parallel)\b.{0,100}\b(?:two|three|2|3)\b/i.test(

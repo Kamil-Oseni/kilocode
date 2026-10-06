@@ -375,17 +375,18 @@ export const TaskTool = Tool.define(
       const canvasRule =
         "You MUST call create_canvas as your first tool. Do NOT write .html/.htm files or open a browser for this artifact."
       const extras = canvas ? [canvasRule] : []
+      const boundary = branch ? undefined : (chief?.request ?? follow?.request ?? continued) // kilocode_change - retain authenticated parent scope independently
+      const objective = KiloTask.assignment({
+        saved: branch?.brief.objective,
+        brief: params.brief,
+        prompt: params.prompt,
+        scope: boundary,
+      }) // kilocode_change - deliver concrete worker work without replacing the parent request
       const handoff = KiloTask.brief({
-        prompt: branch?.brief.objective ?? chief?.request ?? follow?.request ?? continued ?? params.prompt, // kilocode_change - retain authenticated follow-up objective
+        prompt: objective, // kilocode_change - the same concrete assignment reaches fresh and resumed workers
+        scope: boundary, // kilocode_change - orchestration is reference context, not the worker assignment
         brief: {
-          objective:
-            branch?.brief.objective ??
-            chief?.request ??
-            follow?.request ??
-            continued ??
-            params.brief?.objective ??
-            params.prompt ??
-            "", // kilocode_change - logged specialist and objective must stay bound
+          objective, // kilocode_change - saved branches stay authoritative; omitted work retains authenticated fallback
           context: branch
             ? branch.brief.context
             : chief

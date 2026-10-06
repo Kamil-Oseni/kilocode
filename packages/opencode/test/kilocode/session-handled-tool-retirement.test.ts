@@ -47,6 +47,8 @@ import { RayaChief } from "../../src/kilocode/chief"
 import { PartID } from "../../src/session/schema"
 import { Refusal } from "../../src/kilocode/session/tool-refusal"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { ChiefRouteTool } from "../../src/kilocode/tool/chief-route"
+import { Question } from "../../src/question"
 
 await Log.init({ print: false })
 
@@ -151,6 +153,7 @@ const root = LayerNode.group([
   FSUtil.node,
   BackgroundJob.node,
   Provider.node,
+  Question.node,
   testNode,
 ])
 const env = LayerNode.compile(root, [
@@ -202,187 +205,227 @@ const setup = Effect.fn("SessionProcessorTest.setup")(function* (dir: string) {
   return { test, session, chat, handle, input }
 })
 
-it.effect("durable processor handling settles actual permission and schema refusals through native SDK", () =>
-  provideTmpdirProject(
-    (dir) =>
-      Effect.gen(function* () {
-        const item = yield* setup(dir)
-        const permission = yield* Permission.Service
-        const bridge = yield* EffectBridge.make()
-        const spec = yield* Tool.define(
-          "refusal",
-          Effect.succeed({
-            description: "Exercise actual permission and parameter validation without external actions",
-            parameters: Schema.Struct({ value: Schema.String }),
-            execute: () =>
-              permission
-                .ask({
-                  permission: "read",
-                  patterns: ["input.txt"],
-                  always: [],
-                  metadata: {},
-                  sessionID: item.chat.id,
-                  ruleset: Permission.fromConfig({ read: "deny" }),
-                })
-                .pipe(
-                  Effect.orDie,
-                  Effect.as({ title: "Unreachable", metadata: { truncated: false }, output: "Unreachable" }),
-                ),
-          }),
-        ).pipe(Effect.flatMap(Tool.init))
-        const edit = yield* EditTool.pipe(Effect.flatMap(Tool.init))
-        const task = yield* TaskTool.pipe(Effect.flatMap(Tool.init))
-        const generic = yield* Tool.define(
-          "generic",
-          Effect.succeed({
-            description: "Exercise a generic failure with the same business refusal wording",
-            parameters: Schema.Struct({ value: Schema.String }),
-            execute: () => Effect.die(new Error("No changes to apply: oldString and newString are identical.")),
-          }),
-        ).pipe(Effect.flatMap(Tool.init))
-        const file = path.join(dir, "stale.txt")
-        const fs = yield* FSUtil.Service
-        yield* fs.writeFileString(file, "unchanged actual file")
-        yield* item.session.setPermission({
-          sessionID: item.chat.id,
-          permission: Permission.fromConfig({ edit: "deny" }),
-        })
-        const cases: {
-          call: string
-          spec: Tool.Def
-          args: Record<string, unknown>
-          reason?: string
-          sticky?: boolean
-        }[] = [
-          { call: "permission", spec, args: { value: "valid" } },
-          {
-            call: "no-change",
-            spec: edit,
-            args: { filePath: file, oldString: "", newString: "" },
-            reason: "edit-no-change",
-          },
-          {
-            call: "same-text",
-            spec: edit,
-            args: { filePath: file, oldString: "unchanged actual file", newString: "unchanged actual file" },
-            reason: "edit-no-change",
-          },
-          { call: "schema", spec, args: { value: 7 } },
-          {
-            call: "stale",
-            spec: edit,
-            args: { filePath: file, oldString: "not the source", newString: "new text" },
-            reason: "stale-edit",
-          },
-          {
-            call: "authority",
-            spec: task,
-            args: { brief: { objective: "Edit the requested file" }, access: "edit" },
-            reason: "parent-edit-policy",
-          },
-          { call: "session", spec: task, args: { brief: { objective: "Resume a task" }, task_id: "invalid-session" } },
-          { call: "objective", spec: task, args: { access: "read" }, reason: "task-objective" },
-          {
-            call: "work",
-            spec: task,
-            args: { access: "read", brief: { objective: "Write the requested file" } },
-            reason: "task-access",
-          },
-          { call: "generic", spec: generic, args: { value: "valid" }, sticky: true },
-        ]
-        for (const row of cases) {
-          const call = row.call
-          if (call === "work") {
-            const request = "Write the requested file"
-            yield* item.session.updatePart({
-              id: PartID.ascending(),
-              messageID: item.input.user.id,
-              sessionID: item.chat.id,
-              type: "text",
-              text: request,
-            })
-            yield* item.session.setMetadata({
-              sessionID: item.chat.id,
-              metadata: {
-                [RayaChief.phaseKey]: "task",
-                [RayaChief.requestKey]: request,
-                [RayaChief.pendingKey]: {
-                  request,
-                  userID: item.input.user.id,
-                  access: "edit",
-                  agent: "general",
-                  role: "generalist",
-                  needs_plan: false,
-                  confidence: 1,
-                  reason: "Requested work",
-                  candidates: [],
-                  prompted: false,
-                  latency: 0,
-                  chiefModel: "test/test-model",
-                },
-              },
-            })
-          }
-          const args = row.args
-          const tools = nativeTools(
-            {
-              refusal: aitool({
-                inputSchema: jsonSchema({ type: "object" }),
-                execute: (args, opts) =>
-                  bridge.promise(
-                    row.spec
-                      .execute(args, {
-                        sessionID: item.chat.id,
-                        messageID: item.handle.message.id,
-                        agent: call === "work" ? "auto" : "build",
-                        abort: new AbortController().signal,
-                        callID: opts.toolCallId,
-                        messages: [],
-                        ask: () => Effect.void,
-                        metadata: () => Effect.void,
-                      })
-                      .pipe(SessionRetirement.tool(item.chat.id, opts.toolCallId)),
+it.effect(
+  "durable processor handling settles actual permission and schema refusals through native SDK",
+  () =>
+    provideTmpdirProject(
+      (dir) =>
+        Effect.gen(function* () {
+          const item = yield* setup(dir)
+          const permission = yield* Permission.Service
+          const bridge = yield* EffectBridge.make()
+          const spec = yield* Tool.define(
+            "refusal",
+            Effect.succeed({
+              description: "Exercise actual permission and parameter validation without external actions",
+              parameters: Schema.Struct({ value: Schema.String }),
+              execute: () =>
+                permission
+                  .ask({
+                    permission: "read",
+                    patterns: ["input.txt"],
+                    always: [],
+                    metadata: {},
+                    sessionID: item.chat.id,
+                    ruleset: Permission.fromConfig({ read: "deny" }),
+                  })
+                  .pipe(
+                    Effect.orDie,
+                    Effect.as({ title: "Unreachable", metadata: { truncated: false }, output: "Unreachable" }),
                   ),
-              }),
+            }),
+          ).pipe(Effect.flatMap(Tool.init))
+          const edit = yield* EditTool.pipe(Effect.flatMap(Tool.init))
+          const task = yield* TaskTool.pipe(Effect.flatMap(Tool.init))
+          const chief = yield* ChiefRouteTool.pipe(Effect.flatMap(Tool.init))
+          const lookalike = yield* Tool.define(
+            "chief-lookalike",
+            Effect.succeed({
+              description: "Retain an unexpected routing failure with identical wording",
+              parameters: Schema.Struct({}),
+              execute: () => Effect.die(new Error("Auto routing requires at least one eligible specialist")),
+            }),
+          ).pipe(Effect.flatMap(Tool.init))
+          const generic = yield* Tool.define(
+            "generic",
+            Effect.succeed({
+              description: "Exercise a generic failure with the same business refusal wording",
+              parameters: Schema.Struct({ value: Schema.String }),
+              execute: () => Effect.die(new Error("No changes to apply: oldString and newString are identical.")),
+            }),
+          ).pipe(Effect.flatMap(Tool.init))
+          const file = path.join(dir, "stale.txt")
+          const fs = yield* FSUtil.Service
+          yield* fs.writeFileString(file, "unchanged actual file")
+          yield* item.session.setPermission({
+            sessionID: item.chat.id,
+            permission: Permission.fromConfig({ edit: "deny" }),
+          })
+          const cases: {
+            call: string
+            spec: Tool.Def
+            args: Record<string, unknown>
+            reason?: string
+            sticky?: boolean
+          }[] = [
+            { call: "permission", spec, args: { value: "valid" } },
+            {
+              call: "no-change",
+              spec: edit,
+              args: { filePath: file, oldString: "", newString: "" },
+              reason: "edit-no-change",
             },
-            { messages: [], abort: new AbortController().signal },
-          )
-          const event = LLMEvent.toolCall({ id: call, name: "refusal", input: args })
-          const dispatched = yield* ToolRuntime.dispatch(tools, event)
-          expect(dispatched.result.type).toBe("error")
-          expect(SessionRetirement.snapshot().failures).toBe(1)
-          const error = dispatched.events.find((event) => event.type === "tool-error")?.error
-          if (row.reason) expect(error).toMatchObject({ reason: row.reason })
-          if (call === "session") expect(error).toBeInstanceOf(InvalidArgumentsError)
-          expect(completed(item.chat.id, "foreign-call", error)).toBe(false)
-          expect(completed("foreign-session", call, error)).toBe(false)
-          expect(completed(item.chat.id, call, new InvalidArgumentsError({ tool: "refusal", detail: "foreign" }))).toBe(
-            false,
-          )
-          // A real processor event without the original running tool part cannot publish or acknowledge it.
-          yield* item.test.reply(LLMEvent.toolError({ id: call, name: "refusal", message: "fixture refusal", error }))
-          yield* item.handle.process(item.input)
-          expect(SessionRetirement.snapshot().failures).toBe(1)
-          yield* item.test.reply(
-            LLMEvent.stepStart({ index: 0 }),
-            event,
-            ...dispatched.events,
-            LLMEvent.stepFinish({ index: 0, reason: "stop", usage: usage() }),
-            LLMEvent.finish({ reason: "stop", usage: usage() }),
-          )
-          yield* item.handle.process(item.input)
-          const parts = yield* MessageV2.parts(item.handle.message.id)
-          expect(
-            parts.some((part) => part.type === "tool" && part.callID === call && part.state.status === "error"),
-          ).toBe(true)
-          expect(SessionRetirement.snapshot().failures).toBe(row.sticky ? 1 : 0)
-          expect(completed(item.chat.id, call, error)).toBe(false)
-        }
-        expect(yield* fs.readFileString(file)).toBe("unchanged actual file")
-        expect(Exit.isFailure(yield* Effect.exit(SessionRetirement.drain))).toBe(true)
-      }),
-    { git: true },
-  ),
+            {
+              call: "same-text",
+              spec: edit,
+              args: { filePath: file, oldString: "unchanged actual file", newString: "unchanged actual file" },
+              reason: "edit-no-change",
+            },
+            { call: "schema", spec, args: { value: 7 } },
+            {
+              call: "stale",
+              spec: edit,
+              args: { filePath: file, oldString: "not the source", newString: "new text" },
+              reason: "stale-edit",
+            },
+            {
+              call: "authority",
+              spec: task,
+              args: { brief: { objective: "Edit the requested file" }, access: "edit" },
+              reason: "parent-edit-policy",
+            },
+            {
+              call: "session",
+              spec: task,
+              args: { brief: { objective: "Resume a task" }, task_id: "invalid-session" },
+            },
+            { call: "objective", spec: task, args: { access: "read" }, reason: "task-objective" },
+            {
+              call: "work",
+              spec: task,
+              args: { access: "read", brief: { objective: "Write the requested file" } },
+              reason: "task-access",
+            },
+            {
+              call: "chief-unavailable",
+              spec: chief,
+              args: { objective: "Inspect the desktop", access: "computer" },
+              reason: "chief-no-eligible",
+            },
+            { call: "chief-lookalike", spec: lookalike, args: {}, sticky: true },
+            { call: "generic", spec: generic, args: { value: "valid" }, sticky: true },
+          ]
+          let sticky = 0
+          for (const row of cases) {
+            const call = row.call
+            if (call === "chief-unavailable") {
+              yield* item.session.setMetadata({
+                sessionID: item.chat.id,
+                metadata: { [RayaChief.phaseKey]: "route", [RayaChief.requestKey]: "Inspect the desktop" },
+              })
+            }
+            if (call === "work") {
+              const request = "Write the requested file"
+              yield* item.session.updatePart({
+                id: PartID.ascending(),
+                messageID: item.input.user.id,
+                sessionID: item.chat.id,
+                type: "text",
+                text: request,
+              })
+              yield* item.session.setMetadata({
+                sessionID: item.chat.id,
+                metadata: {
+                  [RayaChief.phaseKey]: "task",
+                  [RayaChief.requestKey]: request,
+                  [RayaChief.pendingKey]: {
+                    request,
+                    userID: item.input.user.id,
+                    access: "edit",
+                    agent: "general",
+                    role: "generalist",
+                    needs_plan: false,
+                    confidence: 1,
+                    reason: "Requested work",
+                    candidates: [],
+                    prompted: false,
+                    latency: 0,
+                    chiefModel: "test/test-model",
+                  },
+                },
+              })
+            }
+            const args = row.args
+            const tools = nativeTools(
+              {
+                refusal: aitool({
+                  inputSchema: jsonSchema({ type: "object" }),
+                  execute: (args, opts) =>
+                    bridge.promise(
+                      row.spec
+                        .execute(args, {
+                          sessionID: item.chat.id,
+                          messageID: item.handle.message.id,
+                          agent: call === "work" ? "auto" : "build",
+                          abort: new AbortController().signal,
+                          callID: opts.toolCallId,
+                          messages: [],
+                          ask: () => Effect.void,
+                          metadata: () => Effect.void,
+                        })
+                        .pipe(SessionRetirement.tool(item.chat.id, opts.toolCallId)),
+                    ),
+                }),
+              },
+              { messages: [], abort: new AbortController().signal },
+            )
+            const event = LLMEvent.toolCall({ id: call, name: "refusal", input: args })
+            const dispatched = yield* ToolRuntime.dispatch(tools, event)
+            expect(dispatched.result.type).toBe("error")
+            expect(SessionRetirement.snapshot().failures).toBe(sticky + 1)
+            const error = dispatched.events.find((event) => event.type === "tool-error")?.error
+            if (row.reason) expect(error).toMatchObject({ reason: row.reason })
+            if (call === "session") expect(error).toBeInstanceOf(InvalidArgumentsError)
+            expect(completed(item.chat.id, "foreign-call", error)).toBe(false)
+            expect(completed("foreign-session", call, error)).toBe(false)
+            expect(
+              completed(item.chat.id, call, new InvalidArgumentsError({ tool: "refusal", detail: "foreign" })),
+            ).toBe(false)
+            // A real processor event without the original running tool part cannot publish or acknowledge it.
+            yield* item.test.reply(LLMEvent.toolError({ id: call, name: "refusal", message: "fixture refusal", error }))
+            yield* item.handle.process(item.input)
+            expect(SessionRetirement.snapshot().failures).toBe(sticky + 1)
+            yield* item.test.reply(
+              LLMEvent.stepStart({ index: 0 }),
+              event,
+              ...dispatched.events,
+              LLMEvent.stepFinish({ index: 0, reason: "stop", usage: usage() }),
+              LLMEvent.finish({ reason: "stop", usage: usage() }),
+            )
+            yield* item.handle.process(item.input)
+            const parts = yield* MessageV2.parts(item.handle.message.id)
+            expect(
+              parts.some((part) => part.type === "tool" && part.callID === call && part.state.status === "error"),
+            ).toBe(true)
+            if (row.sticky) sticky++
+            expect(SessionRetirement.snapshot().failures).toBe(sticky)
+            expect(completed(item.chat.id, call, error)).toBe(false)
+            if (call === "chief-unavailable") {
+              expect(error).toBeInstanceOf(Refusal)
+              expect(error).toMatchObject({ message: "Auto routing requires at least one eligible specialist" })
+              const chat = yield* item.session.get(item.chat.id)
+              expect(RayaChief.phase(chat.metadata)).toBe("route")
+              expect(RayaChief.history(chat.metadata)).toEqual([])
+            }
+          }
+          expect(yield* fs.readFileString(file)).toBe("unchanged actual file")
+          expect(Exit.isFailure(yield* Effect.exit(SessionRetirement.drain))).toBe(true)
+        }),
+      {
+        git: true,
+        config: { permission: { desktop_observe: "deny", desktop_click: "deny", desktop_type: "deny" } },
+      },
+    ),
   // Cold Windows processor setup and the real durable refusal cases exceed Bun's default five seconds.
   30_000,
 )
@@ -419,6 +462,32 @@ test("closed business refusal kinds do not acknowledge generic lookalikes or mix
   const owner = SessionRetirement.make()
   await Effect.runPromiseExit(owner.tool("session", "call", Effect.die(error)))
   expect(owner.completed("session", "call", new Refusal("stale-edit", error.message))).toBe(false)
+  expect(Exit.isFailure(await Effect.runPromiseExit(owner.drain))).toBe(true)
+  const mixed = SessionRetirement.make()
+  await Effect.runPromiseExit(
+    mixed.tool("session", "call", Effect.die(error).pipe(Effect.ensuring(Effect.die(generic)))),
+  )
+  expect(mixed.completed("session", "call", error)).toBe(false)
+  expect(Exit.isFailure(await Effect.runPromiseExit(mixed.drain))).toBe(true)
+})
+
+test("unavailable Chief refusal preserves generic and mixed retirement failures", async () => {
+  const error = (() => {
+    try {
+      RayaChief.route({ request: "Inspect the desktop", agents: [], access: "computer" })
+    } catch (err) {
+      return err
+    }
+    throw new Error("Expected the actual routing guard to refuse")
+  })()
+  expect(error).toBeInstanceOf(Refusal)
+  expect(error).toMatchObject({ reason: "chief-no-eligible" })
+  const generic = new Error("Auto routing requires at least one eligible specialist")
+  expect(completed("session", "call", generic)).toBe(false)
+  const owner = SessionRetirement.make()
+  await Effect.runPromiseExit(owner.tool("session", "call", Effect.die(error)))
+  expect(owner.completed("foreign", "call", error)).toBe(false)
+  expect(owner.completed("session", "call", generic)).toBe(false)
   expect(Exit.isFailure(await Effect.runPromiseExit(owner.drain))).toBe(true)
   const mixed = SessionRetirement.make()
   await Effect.runPromiseExit(

@@ -15,3 +15,8 @@ Keep the watch counter separate from the phone daily total. The earlier review i
 Remaining acceptance requires a same-date comparison with Samsung Health/Health Connect and source timestamp inspection. No medical conclusion follows from this single heart-rate value. Automatic SecondBrain capture and health ingestion remain unchanged.
 
 The concurrent lighting observation showed Sleep mode On and Ceiling Off. This read-only review did not restart or interrupt the active fade.
+## Later dashboard label update
+
+After the read-only observation, the entity Name setting for `sensor.galaxy_watch_ultra2_steps_sensor` was changed from its default to **Steps since watch restart**. The Update action completed, and a fresh navigation to Overview displayed **Steps since watch restart 6,536 steps**, separately from phone Daily steps. The entity ID, enabled/visible state, sensor values, collection and alert settings were not edited. To undo, clear the entity Name field through the same settings page and press Update.
+
+Visual verification is saved at `D:/Raya/Services/HomeAssistant/health-dashboard-label-20261006.png`. This improves presentation; it does not establish receipt freshness or agreement with Samsung Health. The active lighting fade was not restarted.

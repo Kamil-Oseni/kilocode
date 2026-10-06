@@ -3,7 +3,13 @@ import path from "node:path"
 
 // Conservative candidate detection, never proof that Git evidence is valid.
 export async function candidate(directory: string) {
-  if (Object.entries(process.env).some(([key, value]) => key.toUpperCase().startsWith("GIT_") && value)) return true
+  // Optional locking does not select a repository or change its discovery.
+  if (
+    Object.entries(process.env).some(
+      ([key, value]) => key.toUpperCase().startsWith("GIT_") && key.toUpperCase() !== "GIT_OPTIONAL_LOCKS" && value,
+    )
+  )
+    return true
   const root = await realpath(directory).catch(() => undefined)
   if (!root) return true
   async function present(file: string) {

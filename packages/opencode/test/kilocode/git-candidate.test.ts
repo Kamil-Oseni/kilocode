@@ -90,6 +90,19 @@ test("real committed repo preserves actual preview and context", async () => {
     expect(counts.bun).toBeGreaterThan(0)
   })
 }, 30000)
+
+test("optional-lock control preserves nonrepo refusal and fallback without Git", async () => {
+  const dir = await fresh()
+  for (const key of Object.keys(process.env)) if (key.toUpperCase().startsWith("GIT_")) delete process.env[key]
+  process.env.GIT_OPTIONAL_LOCKS = "0"
+  expect(await candidate(dir)).toBe(false)
+  await recorded(async (counts) => {
+    await assert.rejects(ChiefEdits.preview({ directory: dir, baseCommit: "0".repeat(40) }), /Git inspection failed:/)
+    expect(await getGitContext(dir)).toEqual({ branch: "HEAD", recentCommits: [], files: [] })
+    expect(counts.node).toBe(0)
+    expect(counts.bun).toBe(0)
+  })
+}, 30000)
 test("linked worktree gitfile and nested directories preserve Git paths", async () => {
   const item = await repo()
   const dir = await fresh()

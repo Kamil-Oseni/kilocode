@@ -42,7 +42,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
-import { MessageID, SessionID } from "../../src/session/schema"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SystemPrompt } from "../../src/session/system"
 import { SessionSummary } from "../../src/session/summary"
@@ -80,6 +80,7 @@ const summary = Layer.succeed(
 const plugin = Layer.mock(Plugin.Service)({
   trigger: <Name extends string, Input, Output>(_name: Name, _input: Input, output: Output) => Effect.succeed(output),
   list: () => Effect.succeed([]),
+  sources: () => Effect.succeed([]),
   init: () => Effect.void,
 })
 
@@ -234,6 +235,86 @@ const overflowBody = { type: "error", error: { code: "context_length_exceeded" }
 
 describe("session compaction cap", () => {
   it.live(
+    "allows four compaction cycles separated by actual completed read progress",
+    () =>
+      provideTmpdirServer(
+        Effect.fnUntraced(function* ({ dir, llm }) {
+          yield* Effect.tryPromise(() => Bun.write(`${dir}/progress.txt`, "Actual read progress"))
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "Progressing compactions",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+          for (let index = 0; index < 4; index++) {
+            yield* llm.error(400, overflowBody)
+            yield* llm.text(`summary ${index}`)
+            yield* llm.tool("read", { filePath: `${dir}/progress.txt` })
+          }
+          yield* llm.text("All four reads completed")
+          yield* prompt.prompt({
+            sessionID: chat.id,
+            agent: "code",
+            noReply: true,
+            parts: [{ type: "text", text: "Read the progress file after each necessary compaction" }],
+          })
+          const result = yield* prompt.loop({ sessionID: chat.id })
+          const saved = yield* sessions.messages({ sessionID: chat.id })
+          expect(yield* llm.calls).toBe(13)
+          expect(result.info.role).toBe("assistant")
+          if (result.info.role !== "assistant") return
+          expect(result.info.finish).toBe("stop")
+          expect(result.info.error).toBeUndefined()
+          expect(
+            saved
+              .flatMap((message) => message.parts)
+              .filter((part) => part.type === "tool" && part.tool === "read" && part.state.status === "completed"),
+          ).toHaveLength(4)
+        }),
+        { git: true, config: providerCfg },
+      ),
+    30_000,
+  )
+
+  it.live(
+    "still exhausts three ineffective compactions after genuine resumed progress",
+    () =>
+      provideTmpdirServer(
+        Effect.fnUntraced(function* ({ dir, llm }) {
+          yield* Effect.tryPromise(() => Bun.write(`${dir}/progress.txt`, "Actual read progress"))
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "Progress then ineffective compactions",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+          yield* llm.error(400, overflowBody)
+          yield* llm.text("summary before real progress")
+          yield* llm.tool("read", { filePath: `${dir}/progress.txt` })
+          for (let index = 0; index < 3; index++) {
+            yield* llm.error(400, overflowBody)
+            yield* llm.text(`ineffective summary ${index}`)
+          }
+          yield* llm.error(400, overflowBody)
+          yield* prompt.prompt({
+            sessionID: chat.id,
+            agent: "code",
+            noReply: true,
+            parts: [{ type: "text", text: "Read the progress file, then continue" }],
+          })
+          const result = yield* prompt.loop({ sessionID: chat.id })
+          expect(yield* llm.calls).toBe(10)
+          expect(result.info.role).toBe("assistant")
+          if (result.info.role !== "assistant") return
+          expect(result.info.error?.name).toBe("ContextOverflowError")
+          expect(result.info.finish).toBe("error")
+        }),
+        { git: true, config: providerCfg },
+      ),
+    30_000,
+  )
+
+  it.live(
     "closes the turn with reason=error after MAX_COMPACTION_ATTEMPTS compactions",
     () =>
       provideTmpdirServer(
@@ -354,6 +435,57 @@ function makeAssistantStub(sessionID: string): MessageV2.Assistant {
 }
 
 describe("KiloSessionPrompt.guardCompactionAttempt", () => {
+  it.effect("counts only usable completed inference as compaction progress", () =>
+    Effect.sync(() => {
+      const msg = makeAssistantStub("ses_progress")
+      const base = { id: PartID.ascending(), messageID: msg.id, sessionID: msg.sessionID }
+      const text: MessageV2.TextPart = { ...base, type: "text", text: "Usable progress" }
+      const tool: MessageV2.ToolPart = {
+        ...base,
+        type: "tool",
+        callID: "read-progress",
+        tool: "read",
+        state: {
+          status: "completed",
+          input: {},
+          output: "Read bytes",
+          title: "Read",
+          metadata: {},
+          time: { start: 1, end: 2 },
+        },
+      }
+      const done = { ...msg, time: { ...msg.time, completed: 2 }, finish: "tool-calls" }
+      expect(KiloSessionPrompt.compactionProgress(done, [tool])).toBe(true)
+      expect(KiloSessionPrompt.compactionProgress({ ...done, finish: "stop" }, [text])).toBe(true)
+      expect(KiloSessionPrompt.compactionProgress(msg, [tool])).toBe(false)
+      expect(KiloSessionPrompt.compactionProgress({ ...done, summary: true }, [text, tool])).toBe(false)
+      expect(
+        KiloSessionPrompt.compactionProgress(
+          { ...done, error: { name: "ContextOverflowError", data: { message: "Overflow" } } },
+          [text, tool],
+        ),
+      ).toBe(false)
+      expect(KiloSessionPrompt.compactionProgress({ ...done, finish: "unknown" }, [text, tool])).toBe(false)
+      expect(KiloSessionPrompt.compactionProgress(done, [{ ...text, ignored: true }])).toBe(false)
+      expect(KiloSessionPrompt.compactionProgress(done, [{ ...text, synthetic: true }])).toBe(false)
+      expect(KiloSessionPrompt.compactionProgress(done, [{ ...text, text: "  " }])).toBe(false)
+      expect(
+        KiloSessionPrompt.compactionProgress(done, [{ ...tool, state: { status: "pending", input: {}, raw: "" } }]),
+      ).toBe(false)
+      expect(
+        KiloSessionPrompt.compactionProgress(done, [
+          { ...tool, state: { status: "running", input: {}, time: { start: 1 } } },
+        ]),
+      ).toBe(false)
+      expect(
+        KiloSessionPrompt.compactionProgress(done, [
+          { ...tool, state: { status: "error", input: {}, error: "Read failed", time: { start: 1, end: 2 } } },
+        ]),
+      ).toBe(false)
+      expect(KiloSessionPrompt.compactionProgress(done, [])).toBe(false)
+    }),
+  )
+
   it.effect("returns { exhausted: false } and does not mutate state below the cap", () =>
     Effect.sync(() => {
       const closeReasons = new Map<string, KiloSession.CloseReason>()

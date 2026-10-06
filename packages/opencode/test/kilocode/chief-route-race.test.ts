@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect, Fiber, Queue, Exit, Schema } from "effect"
+import { Cause, Effect, Fiber, Queue, Exit, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -8,6 +8,7 @@ import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { Permission } from "@/permission"
 import { Session } from "@/session/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Truncate } from "@/tool/truncate"
@@ -30,6 +31,7 @@ const it = testEffect(
       Config.node,
       Provider.node,
       Question.node,
+      Permission.node,
       Session.node,
       EventV2Bridge.node,
       Truncate.node,
@@ -252,3 +254,42 @@ it.live(
     ),
   { timeout: 30000 },
 )
+
+for (const denied of ["question", "ask_options"]) {
+  it.live(`low-confidence Chief refuses ${denied} before publishing options`, () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const permission = yield* Permission.Service
+          const question = yield* Question.Service
+          const queue = yield* asked()
+          const input = yield* dispatch(dir, ambiguous)
+          const tool = yield* (yield* ChiefRouteTool).init()
+          const result = yield* tool
+            .execute(
+              { objective: ambiguous, access: "read" },
+              {
+                ...input.ctx,
+                ask: (request) =>
+                  permission
+                    .ask({
+                      ...request,
+                      sessionID: input.chat.id,
+                      ruleset: Permission.fromConfig({ question: "allow", ask_options: "allow", [denied]: "deny" }),
+                    })
+                    .pipe(Effect.asVoid, Effect.orDie),
+              },
+            )
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(result)).toBe(true)
+          if (Exit.isFailure(result)) expect(Cause.squash(result.cause)).toBeInstanceOf(Permission.DeniedError)
+          expect(yield* question.list()).toHaveLength(0)
+          expect(yield* Queue.size(queue)).toBe(0)
+          expect(RayaChief.history((yield* sessions.get(input.chat.id)).metadata)).toHaveLength(0)
+          expect(RayaChief.phase((yield* sessions.get(input.chat.id)).metadata)).toBe("route")
+        }),
+      { config: cfg },
+    ),
+  )
+}

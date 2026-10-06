@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { Question } from "@/question"
+import type * as Tool from "@/tool/tool"
 
 /**
  * Helpers for the shared `@/tool/question` tool that surface a dismissed-question
@@ -11,6 +12,14 @@ import { Question } from "@/question"
  * early return, minimising the surface area that conflicts with upstream.
  */
 export namespace KiloQuestionTool {
+  export const admit = Effect.fn("KiloQuestionTool.admit")(function* (
+    ctx: Pick<Tool.Context, "ask">,
+    tool: "question" | "ask_options" = "question",
+  ) {
+    for (const permission of tool === "question" ? ["question"] : ["question", "ask_options"])
+      yield* ctx.ask({ permission, patterns: ["*"], always: ["*"], metadata: {} })
+  })
+
   const DISMISSED = "dismissed" as const
   type Dismissed = typeof DISMISSED
 

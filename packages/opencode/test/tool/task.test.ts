@@ -33,6 +33,9 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { Provider } from "../../src/provider/provider" // kilocode_change
 import { KiloSession } from "../../src/kilocode/session" // kilocode_change
+import { KiloSessionPrompt } from "../../src/kilocode/session/prompt" // kilocode_change - actual inherited permission enforcement
+import { ChiefVerification } from "../../src/kilocode/chief/verification" // kilocode_change - real foreground observation
+import { Refusal } from "../../src/kilocode/session/tool-refusal" // kilocode_change - exact missing-resume refusal
 import { KiloTask } from "../../src/kilocode/tool/task" // kilocode_change // raya_change
 import { TaskAuthority } from "../../src/kilocode/tool/task-authority" // kilocode_change - raya_change
 import { Desktop } from "../../src/kilocode/desktop/service" // kilocode_change - selected Computer Use task admission
@@ -102,6 +105,7 @@ const layer = (
       ToolRegistry.node,
       Provider.node, // kilocode_change
       Question.node, // kilocode_change // raya_change - Milestone B Chief option prompt
+      Permission.node, // kilocode_change - actual parent ceiling request enforcement
       Database.node,
       RuntimeFlags.node,
       Ripgrep.node,
@@ -657,6 +661,12 @@ describe("tool.task planned Auto Chief branch", () => {
               prompt: (input: SessionPrompt.PromptInput) =>
                 Effect.gen(function* () {
                   const dir = yield* InstanceState.directory
+                  // kilocode_change start - the actual selected worktree owns the worker environment
+                  const part = input.parts[0]
+                  if (part?.type !== "text") throw new Error("Expected actual worker handoff")
+                  expect(part.text).toContain(`Authenticated working directory: ${JSON.stringify(dir)}`)
+                  expect(dir).not.toBe(parent)
+                  // kilocode_change end
                   yield* Effect.promise(() => Bun.write(path.join(dir, "chief-owned.txt"), "written by child"))
                   return reply(input, "Edited child-only file")
                 }),
@@ -700,6 +710,7 @@ describe("tool.task planned Auto Chief branch", () => {
         const registry = yield* ToolRegistry.Service
         const jobs = yield* BackgroundJob.Service
         const { chat, assistant } = yield* seed()
+        yield* sessions.updateMessage({ ...assistant, agent: "auto", mode: "auto" }) // kilocode_change - genuine Chief producer
         yield* clean(storage, chat.id)
         const request = "Audit authorization and navigation"
         yield* sessions.updatePart({
@@ -879,6 +890,15 @@ describe("tool.task planned Auto Chief branch", () => {
             context(`call-review-${item.id}`),
           )
         }
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: chat.id,
+          messageID: assistant.id,
+          type: "tool",
+          tool: "chief_synthesize",
+          callID: "call-synthesize",
+          state: { status: "running", input: {}, time: { start: Date.now() } },
+        })
         yield* get("chief_synthesize").execute(
           {
             summary: "Both saved audits were reviewed.",
@@ -1537,7 +1557,7 @@ describe("tool.task", () => {
         {
           description: "Inspect selected desktop",
           prompt: "Inspect the selected application",
-          subagent_type: "explore",
+          subagent_type: "general",
           access: "computer",
         },
         ctx,
@@ -1555,7 +1575,7 @@ describe("tool.task", () => {
           {
             description: "Continue selected desktop",
             prompt: "Inspect the selected application",
-            subagent_type: "explore",
+            subagent_type: "general",
             task_id: child.id,
           },
           ctx,
@@ -1658,8 +1678,47 @@ describe("tool.task", () => {
         )
         const limited = yield* sessions.get(restricted.metadata.sessionId)
         const inherited = Permission.merge(specialist.permission, limited.permission ?? [])
-        expect(Permission.evaluate("read", "*", inherited).action).toBe("deny")
+        const permission = yield* Permission.Service
+        const agents = yield* Agent.Service
+        const denied = yield* Effect.exit(
+          KiloSessionPrompt.askPermission({
+            permission,
+            agents,
+            sessions,
+            agent: specialist,
+            session: limited,
+            request: {
+              permission: "read",
+              patterns: ["input.txt"],
+              always: ["input.txt"],
+              metadata: {},
+              sessionID: limited.id,
+            },
+          }),
+        )
+        expect(Exit.isFailure(denied)).toBe(true)
+        if (Exit.isFailure(denied)) expect(Cause.pretty(denied.cause)).toContain("DeniedError")
+        expect(TaskAuthority.hard(limited.metadata, "read", ["input.txt"])).toEqual([
+          { permission: "read", pattern: "input.txt", action: "deny" },
+        ])
+        expect(yield* permission.list()).toHaveLength(0)
         expect(Permission.evaluate("grep", "*", inherited).action).toBe("allow")
+        expect(
+          yield* KiloSessionPrompt.askPermission({
+            permission,
+            agents,
+            sessions,
+            agent: specialist,
+            session: limited,
+            request: {
+              permission: "grep",
+              patterns: ["input.txt"],
+              always: ["input.txt"],
+              metadata: {},
+              sessionID: limited.id,
+            },
+          }),
+        ).toMatchObject({ source: "session", rule: { permission: "grep", pattern: "*", action: "allow" } })
       }),
     { config: { permission: { "*": "allow" } } },
   )
@@ -1812,13 +1871,15 @@ describe("tool.task", () => {
       const tool = yield* TaskTool
       const def = yield* tool.init()
       let seen: SessionPrompt.PromptInput | undefined
+      const dir = yield* InstanceState.directory // kilocode_change - actual environment, never model context
+      const absolute = path.join(dir, "explicit-source.ts") // kilocode_change - preserve legitimate absolute paths
 
       const result = yield* def.execute(
         {
           description: "Map API routes",
           brief: {
             objective: "Find and map every HTTP API endpoint in the codebase",
-            context: "Focus on the server package",
+            context: `Working directory: Z:/invented/workspace. Read exactly ${absolute}`, // kilocode_change
             constraints: ["Do not edit files"],
             expected_return: "A concise endpoint map with source paths",
           },
@@ -1837,6 +1898,7 @@ describe("tool.task", () => {
       )
 
       const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.directory).toBe(dir) // kilocode_change - conflicting context cannot relocate a child
       expect(child.parentID).toBe(chat.id)
       expect(child.agent).toBe("explore")
       // kilocode_change start - raya_change: durable task identity
@@ -1866,6 +1928,13 @@ describe("tool.task", () => {
       expect(part?.type).toBe("text")
       if (part?.type !== "text") throw new Error("expected structured text brief")
       expect(part.text).toContain("<subagent_brief>")
+      // kilocode_change start - authenticated environment and untrusted context remain distinct
+      expect(part.text).toContain(`Authenticated working directory: ${JSON.stringify(dir)}`)
+      expect(part.text).toContain(
+        `Model-provided context (not environment authority): Working directory: Z:/invented/workspace. Read exactly ${absolute}`,
+      )
+      expect(part.text).toContain("Do not rewrite or rebase explicit absolute paths")
+      // kilocode_change end
       // kilocode_change start - retain execution responsibility in the actual delegated input
       expect(part.text).toContain("Carry out this assigned objective directly with the available authorized tools")
       expect(part.text).toContain("Unless the assignment explicitly requests delegation")
@@ -1999,7 +2068,7 @@ describe("tool.task", () => {
         )
         .pipe(Effect.exit)
       expect(Exit.isFailure(refused)).toBe(true)
-      if (Exit.isFailure(refused)) expect(Cause.pretty(refused.cause)).toContain("no subagent is authorized")
+      if (Exit.isFailure(refused)) expect(Cause.pretty(refused.cause)).toContain("chief_route on a new request")
       expect(called).toBe(false)
       expect(yield* sessions.children(chat.id)).toEqual([])
 
@@ -2134,12 +2203,18 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("Auto delegates only through its pending Chief decision and logs the actual model", () =>
+  // kilocode_change start - real stored parent Goal fixture
+  planned.instance("Auto delegates only through its pending Chief decision and logs the actual model", () =>
+    // kilocode_change end
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
+      const storage = yield* Storage.Service // kilocode_change - retain the actual parent Goal across concrete assignments
+      yield* clean(storage, chat.id) // kilocode_change
       const pending: RayaChief.Pending = {
-        request: "Implement a typed API endpoint",
+        request: "Delegate this to a worker: implement a typed API endpoint, then verify its result.", // kilocode_change
+        access: "edit", // kilocode_change - concrete worker scope does not change edit authority
+        userID: assistant.parentID, // kilocode_change - typed contracts bind the actual authored input
         agent: "coder",
         role: "coder",
         needs_plan: false,
@@ -2157,9 +2232,22 @@ describe("tool.task", () => {
         latency: 23,
         chiefModel: "test/cheap-model",
       }
+      // kilocode_change start - keep current authored request and saved Goal grounded
+      const authored = PartID.ascending()
+      yield* sessions.updatePart({
+        id: authored,
+        sessionID: chat.id,
+        messageID: assistant.parentID,
+        type: "text",
+        text: pending.request,
+      })
+      // kilocode_change end
+      const goals = RayaGoal.make({ storage, sessions }) // kilocode_change
+      const goal = yield* goals.create(chat.id, pending.request, assistant.parentID) // kilocode_change
       yield* sessions.setMetadata({
         sessionID: chat.id,
         metadata: {
+          ...(yield* sessions.get(chat.id)).metadata, // kilocode_change - preserve saved Goal metadata
           [RayaChief.pendingKey]: pending,
           [RayaChief.modelKey]: ref,
           // kilocode_change start
@@ -2171,18 +2259,24 @@ describe("tool.task", () => {
       })
       const tool = yield* TaskTool
       const def = yield* tool.init()
+      const assigned: { input?: SessionPrompt.PromptInput } = {} // kilocode_change - inspect the real delegated assignment
       const result = yield* def.execute(
         {
           description: "Implement endpoint",
           subagent_type: "designer",
-          brief: { objective: "This narrower model-authored objective must not replace the user's request" },
+          access: "edit", // kilocode_change
+          // kilocode_change start - explicit concrete worker assignment
+          brief: {
+            objective: "Read the endpoint source, write the requested handler, and read back the saved implementation.",
+          },
+          // kilocode_change end
         },
         {
           sessionID: chat.id,
           messageID: assistant.id,
           agent: "auto",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps() },
+          extra: { promptOps: stubOps({ onPrompt: (input) => (assigned.input = input) }) }, // kilocode_change
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -2203,6 +2297,21 @@ describe("tool.task", () => {
         chiefModel: "test/cheap-model",
       })
       expect(result.output).toContain("done")
+      // kilocode_change start - concrete assignments retain the authenticated parent scope separately
+      const initial = assigned.input?.parts[0]
+      if (initial?.type !== "text") throw new Error("Expected actual initial handoff")
+      expect(initial.text).toContain(
+        "Objective: Read the endpoint source, write the requested handler, and read back the saved implementation.",
+      )
+      expect(initial.text).toContain(`Parent scope (authenticated reference only): ${pending.request}`)
+      expect(initial.text).toContain("do not repeat them as your assignment")
+      expect(RayaChief.request(updated.metadata)).toBe(pending.request)
+      expect((yield* sessions.get(result.metadata.sessionId)).metadata?.["raya.task.authority"]).toEqual({
+        version: 1,
+        access: "edit",
+      })
+      expect((yield* goals.get(chat.id))?.objective).toBe(goal.objective)
+      // kilocode_change end
       // kilocode_change start - a consumed Chief decision retains its authenticated objective for follow-up tasks
       yield* sessions.setMetadata({
         sessionID: chat.id,
@@ -2230,7 +2339,51 @@ describe("tool.task", () => {
       if (part?.type !== "text") throw new Error("Expected actual follow-up handoff")
       expect(part.text).toContain(`Objective: ${pending.request}`)
       expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toHaveLength(1)
+      // kilocode_change start - a same-child follow-up receives its concrete work, not the orchestration request
+      const ready = yield* sessions.get(chat.id)
+      yield* sessions.setMetadata({
+        sessionID: chat.id,
+        metadata: { ...ready.metadata, [RayaChief.phaseKey]: RayaChief.begin(ready.metadata, true) },
+      })
+      const concrete = "Read back the saved handler and verify the requested endpoint without delegating this check."
+      const resumed: { input?: SessionPrompt.PromptInput } = {}
+      const continued = yield* def.execute(
+        { task_id: followup.metadata.sessionId, brief: { objective: concrete } },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "auto",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (resumed.input = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      expect(continued.metadata.sessionId).toBe(followup.metadata.sessionId)
+      const next = resumed.input?.parts[0]
+      if (next?.type !== "text") throw new Error("Expected actual resumed handoff")
+      expect(next.text).toContain(`Objective: ${concrete}`)
+      expect(next.text).toContain(`Parent scope (authenticated reference only): ${pending.request}`)
+      expect(next.text).toContain("Parent scope does not grant additional permissions")
+      expect(RayaChief.request((yield* sessions.get(chat.id)).metadata)).toBe(pending.request)
+      expect((yield* sessions.get(continued.metadata.sessionId)).metadata?.["raya.task.authority"]).toEqual({
+        version: 1,
+        access: "edit",
+      })
+      expect((yield* goals.get(chat.id))?.objective).toBe(goal.objective)
+      expect((yield* goals.get(chat.id))?.intent).toBe(goal.intent)
+      // kilocode_change end
       const canvas = { ...decisions[0]!, request: "/canvas Create an interactive comparison" }
+      // kilocode_change start - retain typed contract lineage for the canvas fallback fixture
+      yield* sessions.updatePart({
+        id: authored,
+        sessionID: chat.id,
+        messageID: assistant.parentID,
+        type: "text",
+        text: canvas.request,
+      })
+      // kilocode_change end
       yield* sessions.setMetadata({
         sessionID: chat.id,
         metadata: {
@@ -2263,23 +2416,75 @@ describe("tool.task", () => {
   )
 
   // kilocode_change start - persisted Auto continuations delegate without inventing a Chief decision
-  it.instance(
+  planned.instance(
     "Auto continuation delegates from its saved objective while a new request still requires Chief",
     () =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
         const { chat, assistant } = yield* seed()
+        const storage = yield* Storage.Service
+        yield* clean(storage, chat.id)
+        const request = "Implement a typed API endpoint and tests"
+        yield* sessions.updateMessage({ ...assistant, agent: "auto", mode: "auto" })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: chat.id,
+          messageID: assistant.parentID,
+          type: "text",
+          text: request,
+        })
+        const goals = RayaGoal.make({ storage, sessions })
+        const goal = yield* goals.create(chat.id, request, assistant.parentID)
+        if (!goal.intent) throw new Error("Expected goal intent")
+        yield* goals.initial(chat.id, goal.intent, "auto")
         const tool = yield* TaskTool
         const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
+        const invocation = PartID.ascending()
         const ctx = {
           sessionID: chat.id,
           messageID: assistant.id,
           agent: "auto",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+          callID: "call-continue",
+          extra: {
+            promptOps: {
+              ...stubOps(),
+              prompt: (input: SessionPrompt.PromptInput) =>
+                Effect.gen(function* () {
+                  seen = input
+                  if (!input.messageID) throw new Error("Missing child input")
+                  yield* sessions.updateMessage({
+                    id: input.messageID,
+                    role: "user",
+                    sessionID: input.sessionID,
+                    agent: input.agent ?? "general",
+                    model: ref,
+                    time: { created: Date.now() },
+                  })
+                  const result = reply(input, "Typed endpoint inspected")
+                  yield* sessions.updateMessage({
+                    ...result.info,
+                    time: { ...result.info.time, completed: Date.now() },
+                  })
+                  for (const part of result.parts) yield* sessions.updatePart(part)
+                  return result
+                }),
+            },
+          },
           messages: [],
-          metadata: () => Effect.void,
+          metadata: (value: { title?: string; metadata?: Record<string, unknown> }) =>
+            sessions
+              .updatePart({
+                id: invocation,
+                sessionID: chat.id,
+                messageID: assistant.id,
+                type: "tool",
+                callID: "call-continue",
+                tool: "task",
+                state: { status: "running", input: {}, time: { start: Date.now() }, metadata: value.metadata },
+              })
+              .pipe(Effect.asVoid),
           ask: () => Effect.void,
         }
         yield* sessions.setMetadata({
@@ -2319,6 +2524,15 @@ describe("tool.task", () => {
             [RayaChief.phaseKey]: "task",
           },
         })
+        yield* sessions.updatePart({
+          id: invocation,
+          sessionID: chat.id,
+          messageID: assistant.id,
+          type: "tool",
+          callID: "call-continue",
+          tool: "task",
+          state: { status: "running", input: {}, time: { start: Date.now() } },
+        })
         const result = yield* def.execute({ description: "Continue", subagent_type: "designer" }, ctx)
         expect(result.metadata.selectedAgent).toBe("coder")
         expect(result.metadata.selection).toBe("auto")
@@ -2328,6 +2542,14 @@ describe("tool.task", () => {
         if (part?.type !== "text") throw new Error("expected structured text brief")
         expect(part.text).toContain("Objective: Implement a typed API endpoint and tests")
         expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("goal")
+        expect((yield* sessions.get(chat.id)).metadata?.[ChiefVerification.key]).toMatchObject({
+          kind: "foreground",
+          userID: assistant.parentID,
+          messageID: assistant.id,
+          callID: "call-continue",
+          child: { sessionID: result.metadata.sessionId, inputID: result.metadata.childMessageID },
+          goal: { status: "active" },
+        })
         expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toHaveLength(1)
       }),
     {
@@ -2450,6 +2672,28 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).toBe(child.id)
       expect(result.metadata.displayName).toBe("Existing child") // kilocode_change - raya_change
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
+      // kilocode_change start - completed results expose their own resumable ID
+      expect(result.output).toContain(`task_id="${child.id}"`)
+      expect(result.output).toContain("Keep the same authorized access")
+      const id = result.output.match(/task_id="([^"]+)"/)?.[1]
+      expect(id).toBe(child.id)
+      if (!id) throw new Error("completed task did not expose its resumable session")
+      const continued = yield* def.execute(
+        { prompt: "verify the assigned work", task_id: SessionID.make(id) },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      expect(continued.metadata.sessionId).toBe(child.id)
+      expect((yield* sessions.children(chat.id)).map((row) => row.id)).toEqual([child.id])
+      // kilocode_change end
       expect(seen?.sessionID).toBe(child.id)
       expect(seen?.variant).toBe("xhigh")
     }),
@@ -2658,7 +2902,8 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("execute creates a child when task_id does not exist", () =>
+  // kilocode_change start - absent retained sessions never create replacement work
+  it.instance("execute refuses an absent retained task without creating a child", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
@@ -2667,33 +2912,40 @@ describe("tool.task", () => {
       let seen: SessionPrompt.PromptInput | undefined
       const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
 
-      const result = yield* def.execute(
-        {
-          description: "inspect bug",
-          prompt: "look into the cache key path",
-          subagent_type: "general",
-          task_id: SessionID.make("ses_missing"), // kilocode_change - valid absent session retains fallback coverage
-        },
-        {
-          sessionID: chat.id,
-          messageID: assistant.id,
-          agent: "build",
-          abort: new AbortController().signal,
-          extra: { promptOps },
-          messages: [],
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
-        },
+      const result = yield* Effect.exit(
+        def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            task_id: SessionID.make("ses_missing"), // kilocode_change - valid absent retained session refuses without fallback
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
       )
 
       const kids = yield* sessions.children(chat.id)
-      expect(kids).toHaveLength(1)
-      expect(kids[0]?.id).toBe(result.metadata.sessionId)
-      expect(result.metadata.sessionId).not.toBe("ses_missing")
-      expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
-      expect(seen?.sessionID).toBe(result.metadata.sessionId)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) {
+        const error = Cause.squash(result.cause)
+        expect(error).toBeInstanceOf(Refusal)
+        if (!(error instanceof Refusal)) throw error
+        expect(error.reason).toBe("task-resume")
+      }
+      expect(kids).toHaveLength(0)
+      expect(seen).toBeUndefined()
     }),
   )
+  // kilocode_change end
 
   it.instance(
     "prevents subagents from launching subagents by default",
@@ -3112,6 +3364,13 @@ describe("tool.task", () => {
       const job = yield* jobs.get(result.metadata.sessionId)
       expect(result.metadata.background).toBe(true)
       expect(result.output).toContain(`state="running"`)
+      // kilocode_change start - running results expose the actual retained child ID
+      expect(result.output).toContain(`task_id="${result.metadata.sessionId}"`)
+      expect(result.output).toContain("Keep the same authorized access")
+      expect(result.output).toContain("after the child finishes")
+      expect(result.output).toContain("do not poll, nudge, or resume")
+      expect(result.output).not.toContain("can be resumed: call the task tool again")
+      // kilocode_change end
       expect(job?.status).toBe("running")
     }),
   )

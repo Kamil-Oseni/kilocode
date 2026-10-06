@@ -14,11 +14,20 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
     const fingerprint = Effect.tryPromise(async (signal) => {
       const hash = createHash("sha256")
       const format = scanner()
+      const parts: Buffer[] = []
+      let size = 0
       for await (const bytes of file.stream(abort ? AbortSignal.any([abort, signal]) : signal)) {
         hash.update(bytes)
         format.add(bytes)
+        size += bytes.length
+        if (size <= 8192) parts.push(Buffer.from(bytes))
+        else parts.length = 0
       }
-      return { hash: hash.digest("hex"), format: format.finish() }
+      return {
+        hash: hash.digest("hex"),
+        format: format.finish(),
+        text: size <= 8192 ? Buffer.concat(parts).toString("utf8") : undefined,
+      }
     })
     const before = yield* Effect.tryPromise(() => file.handle.stat({ bigint: true })).pipe(Effect.option)
     const initial = yield* fingerprint.pipe(Effect.option)
@@ -61,12 +70,31 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
       ),
     )
     const format = Option.isSome(initial) ? initial.value.format : undefined
-    const display = result.metadata as { display?: { type?: unknown } }
+    const display = result.metadata as {
+      display?: {
+        type?: unknown
+        text?: unknown
+        lineStart?: unknown
+        lineEnd?: unknown
+        totalLines?: unknown
+        truncated?: unknown
+      }
+    }
+    const text = Option.isSome(initial) ? initial.value.text : undefined
+    const lines = text?.replace(/\r\n|\r/g, "\n").replace(/\n$/, "")
+    const complete =
+      text !== undefined &&
+      display.display?.lineStart === 1 &&
+      display.display.lineEnd === display.display.totalLines &&
+      display.display.truncated === false &&
+      (display.display.text === lines || display.display.text === lines?.replace(/^\ufeff/, ""))
+    const encoded = complete ? JSON.stringify(text).replace(/</g, "\\u003c") : undefined
+    const content = encoded !== undefined && Buffer.byteLength(encoded, "utf8") <= 8192 ? encoded : undefined
     const output =
       revision.status === "captured" && format && display.display?.type === "file" && typeof result.output === "string"
         ? {
             ...result,
-            output: `${result.output}\n<file-format encoding="${format.encoding}" bom="${format.bom ? "UTF-8" : "none"}" line-endings="${format.endings}" final-newline="${format.newline}" bytes="${format.bytes}" sha256="${revision.sha256}" />`,
+            output: `${result.output}\n<file-format encoding="${format.encoding}" bom="${format.bom ? "UTF-8" : "none"}" line-endings="${format.endings}" final-newline="${format.newline}" bytes="${format.bytes}" sha256="${revision.sha256}" />${content !== undefined ? `\n<file-content-json encoding="UTF-8" complete="true" bytes="${format.bytes}" sha256="${revision.sha256}">\n${content}\n</file-content-json>` : ""}`,
           }
         : result
     return { ...output, metadata: { ...result.metadata, rayaRevision: revision } }

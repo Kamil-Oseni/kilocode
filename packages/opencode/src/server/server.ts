@@ -220,7 +220,7 @@ function serverLayer(opts: { port: number; hostname: string }) {
   }) as typeof server.close
 
   return Layer.mergeAll(
-    NodeHttpServer.layer(() => server, { port: opts.port, host: opts.hostname, gracefulShutdownTimeout: "1 second" }),
+    NodeHttpServer.layer(() => server, { port: opts.port, host: opts.hostname, disablePreemptiveShutdown: true }), // kilocode_change - join the original close instead of caching a timed-out interruption
     Layer.succeed(ListenerServerService)(
       ListenerServerService.of({
         closeAll: Effect.sync(() => {

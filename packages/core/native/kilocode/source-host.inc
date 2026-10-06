@@ -1,6 +1,7 @@
 #include <map>
 #include <memory>
 #include <algorithm>
+#include <psapi.h>
 
 // This protocol is separate from PTY cancellation. Root/controller exit never
 // terminates persistent descendants. Only an explicit correlated abort forces.
@@ -106,12 +107,13 @@ struct Member {
     if (settled) return true;
     if (WaitForSingleObject(process.value, timeout) != WAIT_OBJECT_0) return false;
     if (!GetExitCodeProcess(process.value, &code) || code == STILL_ACTIVE) throw std::runtime_error("Native source member exact exit unavailable");
-    CloseHandle(process.value);
-    process.value = nullptr;
     settled = true;
     return true;
   }
 };
+
+// Match the public receipt parser's existing bound; retained handles prohibit PID reuse.
+constexpr size_t capacity = 4096;
 
 #include "source-diagnostic.inc"
 
@@ -300,18 +302,45 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
       DWORD message = 0;
       ULONG_PTR completion = 0;
       LPOVERLAPPED value = nullptr;
-      while (GetQueuedCompletionStatus(port.value, &message, &completion, &value, 0)) {
+      DWORD wait = 10;
+      while (GetQueuedCompletionStatus(port.value, &message, &completion, &value, wait)) {
+        wait = 0;
         if (completion != reinterpret_cast<ULONG_PTR>(job.value)) throw std::runtime_error("Native source membership identity changed");
         const DWORD id = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(value));
         if (message == JOB_OBJECT_MSG_NEW_PROCESS) {
-          if (members.contains(id) && !members.at(id)->settled) continue;
+          ++observations.notifications;
           HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, id);
-          if (!handle) { unknown = true; complete = false; continue; }
+          if (!handle) {
+            const auto error = GetLastError();
+            if (!observations.opened) observations.first = error;
+            observations.last = error;
+            ++observations.opened;
+            unknown = true; complete = false; continue;
+          }
+          const auto found = members.find(id);
+          if (found != members.end()) {
+            Handle held(handle);
+            if (birth(handle) != found->second->born) {
+              ++observations.replaced;
+              unknown = true; complete = false;
+            } else if (found->second->settled) ++observations.settled;
+            else ++observations.duplicates;
+            continue;
+          }
           BOOL assigned = FALSE;
-          if (!IsProcessInJob(handle, job.value, &assigned) || !assigned) { CloseHandle(handle); unknown = true; complete = false; continue; }
+          if (!IsProcessInJob(handle, job.value, &assigned)) {
+            ++observations.queried;
+            CloseHandle(handle); unknown = true; complete = false; continue;
+          }
+          if (!assigned) {
+            ++observations.unassigned;
+            CloseHandle(handle); unknown = true; complete = false; continue;
+          }
           if (diagnostic) observations.observe(id, handle, members);
-          if (members.contains(id)) { members.erase(id); unknown = true; complete = false; }
-          if (members.size() >= 1024) { CloseHandle(handle); overflow = true; unknown = true; complete = false; continue; }
+          if (members.size() >= capacity) {
+            ++observations.capacity;
+            CloseHandle(handle); overflow = true; unknown = true; complete = false; continue;
+          }
           members.emplace(id, std::make_unique<Member>(handle));
         }
         if (message == JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS) unknown = true;
@@ -330,7 +359,7 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
           try { if (_wcsicmp(canonical(boundary).c_str(), boundary.c_str())) { unknown = true; changed = true; } }
           catch (const std::exception&) { unknown = true; changed = true; }
         }
-        if (accounting.TotalProcesses != members.size()) { unknown = true; complete = false; }
+        if (accounting.TotalProcesses != members.size()) { ++observations.accounting; unknown = true; complete = false; }
         const ULONGLONG finish = GetTickCount64() + 10000;
         if (WaitForSingleObject(process.value, 10000) != WAIT_OBJECT_0) throw std::runtime_error("Native source root final handle did not settle");
         DWORD code = STILL_ACTIVE;
@@ -342,7 +371,8 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
         std::string descendants = "[";
         for (const auto& [id, member] : members) {
           const ULONGLONG remaining = finish > GetTickCount64() ? finish - GetTickCount64() : 0;
-          if (!member->close(static_cast<DWORD>(remaining))) { unknown = true; complete = false; }
+          if (!member->close(static_cast<DWORD>(remaining))) { ++observations.unsettled; unknown = true; complete = false; }
+          if (diagnostic && member->settled) observations.finish(id, member->born, member->code);
           const auto status = member->code;
           if (capture && status != 0) unknown = true;
           if (descendants.size() > 1) descendants += ",";
@@ -365,6 +395,7 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
           ",\"memberObservationsOverflow\":" + (overflow ? "true" : "false") +
           ",\"success\":" + (zero ? "true" : "false") + ",\"members\":" + descendants + ",\"completeProfileCoverage\":false,\"portableCaptureAuthorized\":false}");
         if (diagnostic) {
+          observations.measure(members.size());
           try { write(control + L".source-members-diagnostic", observations.report()); }
           catch (const std::exception&) { std::fputs("Native member diagnostic publication failed\n", stderr); }
         }
@@ -475,7 +506,6 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
           write(control + L".source-broker.refused", header + ",\"success\":false,\"forced\":false,\"reason\":" + json(std::wstring(error.what(), error.what() + strlen(error.what()))) + "}");
         }
       }
-      Sleep(10);
     }
   } catch (...) {
     TerminateJobObject(job.value, 1);

@@ -133,13 +133,35 @@ export namespace KiloTask {
     return { ...current, [STEP_KEY]: cap(value) }
   }
 
-  export function brief(input: { prompt?: string; brief?: Brief; cap: number }) {
+  export function assignment(input: { saved?: string; prompt?: string; brief?: Brief; scope?: string }) {
+    return input.saved?.trim() || input.brief?.objective.trim() || input.prompt?.trim() || input.scope?.trim() || ""
+  }
+
+  export function environment(text: string, dir: string) {
+    return [
+      "<task_environment>",
+      `Authenticated working directory: ${JSON.stringify(dir)}`,
+      "This directory comes from the active worker runtime, not the model-provided context. Resolve relative paths against it. Do not rewrite or rebase explicit absolute paths; existing tool permissions still govern access.",
+      "</task_environment>",
+      text,
+    ].join("\n")
+  }
+
+  export function brief(input: { prompt?: string; brief?: Brief; cap: number; scope?: string }) {
     const objective = input.brief?.objective.trim() || input.prompt?.trim()
     if (!objective) throw new Refusal("task-objective", "Task requires brief.objective or prompt")
     return [
       "<subagent_brief>",
       `Objective: ${objective}`,
-      ...(input.brief?.context ? [`Context: ${input.brief.context.trim()}`] : []),
+      ...(input.scope?.trim() && input.scope.trim() !== objective
+        ? [
+            `Parent scope (authenticated reference only): ${input.scope.trim()}`,
+            "Execute the concrete Objective above within this parent scope. The parent's orchestration or delegation instructions describe the overall workflow; do not repeat them as your assignment or substitute a new goal. Parent scope does not grant additional permissions.",
+          ]
+        : []),
+      ...(input.brief?.context
+        ? [`Model-provided context (not environment authority): ${input.brief.context.trim()}`]
+        : []),
       ...(input.brief?.constraints?.length
         ? ["Constraints:", ...input.brief.constraints.map((item) => `- ${item.trim()}`).filter((item) => item !== "- ")]
         : []),

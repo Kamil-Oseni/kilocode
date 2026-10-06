@@ -6,6 +6,7 @@ import { RayaAskOptions } from "@/kilocode/ask-options" // raya_change - Milesto
 import { RayaChief } from "@/kilocode/chief"
 import { HomeAssistant } from "@/kilocode/home-assistant/tools"
 import { KiloTask } from "@/kilocode/tool/task"
+import { KiloQuestionTool } from "@/kilocode/tool/question"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Provider } from "@/provider/provider"
@@ -171,12 +172,16 @@ export const ChiefRouteTool = Tool.define<
               // raya_change end
               // raya_change start - Milestone C low-confidence routing reuses ask_options
               const answer = RayaChief.needsPrompt(initial, threshold, request)
-                ? yield* RayaAskOptions.ask(question, {
-                    sessionID: ctx.sessionID,
-                    questions: [RayaChief.question(initial)],
-                    blocking: true,
-                    tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-                  })
+                ? yield* KiloQuestionTool.admit(ctx, "ask_options").pipe(
+                    Effect.andThen(
+                      RayaAskOptions.ask(question, {
+                        sessionID: ctx.sessionID,
+                        questions: [RayaChief.question(initial)],
+                        blocking: true,
+                        tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+                      }),
+                    ),
+                  )
                 : undefined
               const chosen = answer?.[0]?.selected[0]?.id ?? answer?.[0]?.other[0] ?? initial.agent
               const selected = available.find((item) => item.name === chosen)

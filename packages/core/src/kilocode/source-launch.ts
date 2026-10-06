@@ -61,6 +61,34 @@ export type Ticket = Readonly<
   }
 >
 
+/** Pre-Go cleanup joins the original helper; it cannot grant natural source-family retirement. */
+export class LaunchFailure extends AggregateError {
+  constructor(
+    primary: unknown,
+    failures: readonly unknown[],
+    readonly cleanup: Readonly<{
+      exit: { code: number | null; signal: NodeJS.Signals | null } | null
+      originalExitJoined: boolean
+      originalCloseJoined: boolean
+      originalStreamsJoined: boolean
+      ordinaryRetirement: false
+      portableCaptureAuthorized: false
+      forced: "unknown"
+    }>,
+  ) {
+    super([primary, ...failures], "Source admission failed; original helper cleanup retained", { cause: primary })
+    this.name = "SourceLaunchFailure"
+  }
+}
+
+async function drain(stream: ReturnType<typeof spawn>["stdout"]) {
+  if (!stream || stream.readableEnded) return
+  if (stream.destroyed) throw stream.errored ?? new Error("Source admission output closed without EOF")
+  for await (const _chunk of stream) {
+    // Consume the original pipe without retaining an unbounded failed-launch payload.
+  }
+}
+
 const same = (left: string, right: string) => left.toLowerCase() === right.toLowerCase()
 const hash = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex")
 const sum = async (file: string) => hash(await readFile(file))
@@ -302,26 +330,55 @@ export async function launch(input: {
     child.once("error", reject)
     child.once("exit", (code, signal) => resolve({ code, signal }))
   })
+  const close = new Promise<void>((resolve) => child.once("close", () => resolve()))
+  const owner = Object.freeze({ child, exit, close })
+  const streams = [child.stdout, child.stderr]
   void exit.catch(() => undefined)
-  const actual = header.parse(await wait(`${control}.source-launch`, 15000, executable))
-  const ticket = parseTicket({
-    format: "raya.source-job",
-    version: 1,
-    control,
-    token,
-    header: actual,
-    image: { executable, digest: checksum },
-  })
-  if (
-    actual.helper !== child.pid ||
-    actual.digest !== input.digest ||
-    !same(actual.executable, command) ||
-    JSON.stringify(actual.roots) !==
-      JSON.stringify(selected.map((value) => ({ kind: value.kind, path: value.path.toLowerCase() })))
-  )
-    throw new Error(`Source suspended identity differs; retained at ${directory}`)
-  await owned(actual.pid, actual.birth, executable)
-  await owned(actual.helper, actual.helperBirth, executable)
+  const ticket = await (async () => {
+    try {
+      const actual = header.parse(await wait(`${control}.source-launch`, 15000, executable))
+      const ticket = parseTicket({
+        format: "raya.source-job",
+        version: 1,
+        control,
+        token,
+        header: actual,
+        image: { executable, digest: checksum },
+      })
+      if (
+        actual.helper !== child.pid ||
+        actual.digest !== input.digest ||
+        !same(actual.executable, command) ||
+        JSON.stringify(actual.roots) !==
+          JSON.stringify(selected.map((value) => ({ kind: value.kind, path: value.path.toLowerCase() })))
+      )
+        throw new Error(`Source suspended identity differs; retained at ${directory}`)
+      await owned(actual.pid, actual.birth, executable)
+      await owned(actual.helper, actual.helperBirth, executable)
+      return ticket
+    } catch (primary) {
+      const results = await Promise.allSettled([owner.exit, owner.close, ...streams.map(drain)] as const)
+      const result = results[0]
+      const exit = result.status === "fulfilled" ? result.value : null
+      const failures = results.flatMap((value) => (value.status === "rejected" ? [value.reason] : []))
+      if (exit && (exit.code !== 0 || exit.signal))
+        failures.push(new Error("Source pre-Go helper exited without natural retirement"))
+      throw new LaunchFailure(
+        primary,
+        failures,
+        Object.freeze({
+          exit,
+          originalExitJoined: result.status === "fulfilled",
+          originalCloseJoined: results[1].status === "fulfilled",
+          originalStreamsJoined:
+            streams.every((value) => value !== null) && results.slice(2).every((value) => value.status === "fulfilled"),
+          ordinaryRetirement: false,
+          portableCaptureAuthorized: false,
+          forced: "unknown",
+        }),
+      )
+    }
+  })()
   const state = {
     started: undefined as Promise<void> | undefined,
     closing: undefined as Promise<void> | undefined,

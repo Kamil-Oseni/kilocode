@@ -12,6 +12,7 @@ import { visible as pathVisible } from "@/kilocode/tool/path-catalog" // kilocod
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { TaskSchema } from "@/kilocode/tool/task-schema" // kilocode_change - preserve only authenticated saved Task objectives
+import { FileGuidance } from "@/kilocode/tool/file-guidance" // kilocode_change - distinguish file text from rendered tool output
 import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - fence the original completed goal dispatch
 import { prepare as goalSchema } from "@/kilocode/goal/completion-schema" // kilocode_change - bind saved goal criteria before model schema transformation
 import { ToolRegistry } from "@/tool/registry"
@@ -192,6 +193,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         Effect.orDie,
       ),
   )
+  const admit = yield* GoalGate.first(
+    items.find((item) => item.id === "update_goal")?.jsonSchema,
+    input.session,
+    input.processor.message.parentID,
+    sessions,
+  )
   // kilocode_change end
   for (const item of items) {
     // kilocode_change
@@ -208,7 +215,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     const base = yield* goalSchema(item.id, advertised, input.session.id) // kilocode_change - actual original goal owner supplies fresh criterion IDs
     const schema = ProviderTransform.schema(input.model, base)
     tools[item.id] = tool({
-      description: item.description,
+      description: FileGuidance.description(item.id, TaskSchema.description(item.description, advertised)), // kilocode_change - retain static/recovery instructions and distinguish rendered file views
       inputSchema: jsonSchema(schema),
       execute(args, options) {
         return run.promise(
@@ -510,8 +517,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // kilocode_change end
 
   // kilocode_change start - bind bounded discovery to genuine current-turn execution and completed parts
-  const finish = () => GoalGate.bind(select(), check, run.promise) // kilocode_change - check queued callbacks before original effects
+  const initial = yield* GoalGate.select(tools, admit)
+  const finish = () => GoalGate.bind(select(), check, run.promise, admit) // kilocode_change - check queued callbacks before original effects
   const select = () => {
+    if (initial !== tools) return initial // kilocode_change - timer observation precedes discovery/code/MCP advertisement
     // kilocode_change - preserve the original complete catalogue
     if (!LazyTools.eligible(input.agent)) return tools
     const user = input.messages.findLast((row) => row.info.role === "user")

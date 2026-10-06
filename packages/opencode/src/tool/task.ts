@@ -48,6 +48,7 @@ import { Git } from "@/git" // kilocode_change - pin editing branches to the par
 import { Worktree } from "@/worktree" // kilocode_change - isolated Chief edit workspaces
 import { InstanceStore } from "@/project/instance-store" // kilocode_change - run edit children in their worktree
 import { InstanceState } from "@/effect/instance-state" // kilocode_change - record the parent directory
+import { gate } from "@/kilocode/session/input-gate" // kilocode_change - fence foreground recovery at child admission
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
@@ -138,9 +139,9 @@ function renderOutput(input: {
   text: string
 }) {
   const tag = input.state === "error" ? "task_error" : "task_result"
-  // kilocode_change start - surface the resumable task_id when a background subagent fails (#11620)
-  const hint = resumeHint(input.sessionID)
-  const body = input.state === "error" && !input.text.includes(hint) ? `${input.text}\n${hint}` : input.text
+  // kilocode_change start - expose the retained task_id for every task result
+  const hint = resumeHint(input.sessionID, input.state === "running" ? "running" : undefined)
+  const body = !input.text.includes(hint) ? `${input.text}\n${hint}` : input.text
   // kilocode_change end
   return [
     `<task id="${input.sessionID}" state="${input.state}">`,
@@ -196,6 +197,18 @@ export const TaskTool = Tool.define(
         callID: ctx.callID,
         params,
       })
+      // kilocode_change start - retain the authenticated foreground worker for unplanned recovery
+      const recovery = yield* ChiefVerification.reuse({
+        storage,
+        sessions,
+        background,
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        agent: ctx.agent,
+        planned: !!binding.branch,
+        taskID: params.task_id,
+      })
+      // kilocode_change end
       const plan = binding.plan
       const requestPlan = binding.request // kilocode_change - dormant request-bound plan
       const branch = binding.branch
@@ -209,7 +222,12 @@ export const TaskTool = Tool.define(
         )
       }
       // kilocode_change end
-      const follow = ctx.agent === "auto" ? RayaChief.follow(parent.metadata) : undefined
+      // kilocode_change start - exact-child recovery retains the authenticated logged contract
+      const follow =
+        ctx.agent === "auto"
+          ? RayaChief.follow(recovery ? { ...parent.metadata, [RayaChief.phaseKey]: "goal" } : parent.metadata)
+          : undefined // kilocode_change - only authenticated exact-child recovery retains the logged work contract
+      // kilocode_change end
       const continued = ctx.agent === "auto" && !follow ? RayaChief.continuation(parent.metadata) : undefined
       if (ctx.agent === "auto" && !branch && !follow && !continued) {
         return yield* Effect.fail(new Error("Auto must call chief_route on a new request before delegating with task"))
@@ -375,17 +393,18 @@ export const TaskTool = Tool.define(
       const canvasRule =
         "You MUST call create_canvas as your first tool. Do NOT write .html/.htm files or open a browser for this artifact."
       const extras = canvas ? [canvasRule] : []
+      const boundary = branch ? undefined : (chief?.request ?? follow?.request ?? continued) // kilocode_change - retain authenticated parent scope independently
+      const objective = KiloTask.assignment({
+        saved: branch?.brief.objective,
+        brief: params.brief,
+        prompt: params.prompt,
+        scope: boundary,
+      }) // kilocode_change - deliver concrete worker work without replacing the parent request
       const handoff = KiloTask.brief({
-        prompt: branch?.brief.objective ?? chief?.request ?? follow?.request ?? continued ?? params.prompt, // kilocode_change - retain authenticated follow-up objective
+        prompt: objective, // kilocode_change - the same concrete assignment reaches fresh and resumed workers
+        scope: boundary, // kilocode_change - orchestration is reference context, not the worker assignment
         brief: {
-          objective:
-            branch?.brief.objective ??
-            chief?.request ??
-            follow?.request ??
-            continued ??
-            params.brief?.objective ??
-            params.prompt ??
-            "", // kilocode_change - logged specialist and objective must stay bound
+          objective, // kilocode_change - saved branches stay authoritative; omitted work retains authenticated fallback
           context: branch
             ? branch.brief.context
             : chief
@@ -590,7 +609,8 @@ export const TaskTool = Tool.define(
       if (
         ctx.agent === "auto" &&
         !branch &&
-        (RayaChief.phase(parent.metadata) === "task" ||
+        (recovery ||
+          RayaChief.phase(parent.metadata) === "task" ||
           (ctx.callID !== undefined && RayaChief.phase(parent.metadata) === "goal"))
       ) {
         yield* ChiefVerification.reserve({
@@ -626,6 +646,18 @@ export const TaskTool = Tool.define(
       const created = yield* TaskName.gate
         .withLock(ctx.sessionID)(
           Effect.gen(function* () {
+            // kilocode_change start - recheck current request and retained child under the input publication gate
+            yield* ChiefVerification.reuse({
+              storage,
+              sessions,
+              background,
+              sessionID: ctx.sessionID,
+              messageID: ctx.messageID,
+              agent: ctx.agent,
+              planned: !!branch,
+              taskID: params.task_id,
+            })
+            // kilocode_change end
             if (session) {
               const identity = TaskName.read(session.metadata?.[TaskName.key])
               return { session, displayName: identity?.displayName ?? session.title }
@@ -652,7 +684,7 @@ export const TaskTool = Tool.define(
             })
             const child = yield* edit && store ? store.provide({ directory: edit.directory }, create) : create // kilocode_change
             return { session: child, displayName: identity.displayName }
-          }),
+          }).pipe(gate.withLock(ctx.sessionID)), // kilocode_change - no stale fresh child after request publication
         )
         .pipe(Effect.tapError(() => lease.release))
       const nextSession = created.session
@@ -783,7 +815,7 @@ export const TaskTool = Tool.define(
 
       const runTask = Effect.fn("TaskTool.runTask")(
         function* () {
-          const parts = yield* ops.resolvePromptParts(handoff) // raya_change - structured brief, never raw transcript context
+          const parts = yield* ops.resolvePromptParts(KiloTask.environment(handoff, yield* InstanceState.directory)) // kilocode_change - bind the selected worker runtime directory without changing requested paths
           KiloSessionProcessor.markReviewTelemetry(parts, params.command) // kilocode_change - carry review command into child session telemetry
           const result = yield* ops.prompt({
             messageID: message, // kilocode_change - use the exact child input recorded for this invocation

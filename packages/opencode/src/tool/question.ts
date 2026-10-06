@@ -23,6 +23,7 @@ export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Se
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
+          yield* KiloQuestionTool.admit(ctx) // kilocode_change - enforce denial before publishing a question
           // kilocode_change start - surface Question.dismissAll's RejectedError as a normal
           // tool result via KiloQuestionTool helpers, so Effect.orDie below does not turn
           // it into a defect and kill the in-flight stream.

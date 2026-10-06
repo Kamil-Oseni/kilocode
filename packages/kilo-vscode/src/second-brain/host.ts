@@ -12,6 +12,7 @@ import { join } from "./join"
 import { Control, parseCatalog } from "./control/index"
 import { drain, register } from "./retirement"
 import { descriptor, selection, type Descriptor } from "./managed/descriptor"
+import { diagnostic } from "./diagnostic"
 
 const services = new WeakMap<
   vscode.ExtensionContext,
@@ -49,6 +50,11 @@ export class BrainHost {
       })
     if (existing) return
     services.set(context, { settings: this.settings, service: this.service, control: this.control })
+    context.subscriptions.push(
+      vscode.commands.registerCommand("raya.memory.inspectConfiguration", () =>
+        diagnostic(this.settings, context.globalState),
+      ),
+    )
     const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
     register(close)
     context.subscriptions.push({

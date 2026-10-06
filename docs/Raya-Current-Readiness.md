@@ -14,6 +14,8 @@ Use [the full implementation tracker](Raya-Implementation-Progress.md#findings-a
 
 The first installed General run remains a failed gate. Its original controller exited with code 1 and joined its streams without forced termination; the server and guardian retired naturally. The isolated fixture reports `ContextOverflowError`: compaction still exceeded the model limit after three attempts. Its stream also records six distinct General child sessions where the acceptance condition requires one delegated worker. Successful inference steps alone do not satisfy that condition. Investigate continuation context and worker reuse before another unchanged run; neither preserved files nor successful shutdown promotes the full workflow to accepted.
 
+The context-counter repair is now committed as `f503182e6f`: completed usable inference resets the consecutive ineffective-compaction count. Eight source regression tests with 46 assertions pass, including four compaction cycles separated by actual reads and exhaustion after three ineffective attempts. Summaries, synthetic text and failed or incomplete tools do not reset the count. This repair is not yet in the reviewed installed package. Worker recovery remains under validation, including synthesis, failed resumes and later goal dispatches. The full installed General gate and readiness measures remain unchanged until the repaired package passes the complete workflow.
+
 ## Active unfinished requirements
 
 | Requirement | Recorded status |

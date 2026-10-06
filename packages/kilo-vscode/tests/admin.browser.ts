@@ -1,6 +1,55 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("lost health reads expire and late replies cannot replace a fresh retry", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.clock.install()
+  await page.goto("/?state=health-held")
+  const refresh = page.getByRole("button", { name: "Refresh", exact: true })
+  await expect(refresh).toBeDisabled()
+  await page.clock.fastForward(15_001)
+  await expect(page.locator(".admin-notice[role=alert]")).toContainText("System health did not reply")
+  await expect(refresh).toBeEnabled()
+  await audit(page)
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[0]())
+  await expect(page.locator(".admin-notice[role=alert]")).toContainText("System health did not reply")
+  await refresh.click()
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[0]())
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[1]())
+  await expect(refresh).toBeEnabled()
+  await expect(page.locator(".admin-notice[role=alert]")).toHaveCount(0)
+  await page.clock.fastForward(20_000)
+  await expect(page.locator(".admin-notice[role=alert]")).toHaveCount(0)
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "requestAdmin")).toHaveLength(2)
+})
+
+test("disconnect invalidates outstanding health reads before reconnect", async ({ page }) => {
+  await page.clock.install()
+  await page.goto("/?state=health-held")
+  const refresh = page.getByRole("button", { name: "Refresh", exact: true })
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() =>
+    (window as unknown as { __healthConnection: (connected: boolean) => void }).__healthConnection(false),
+  )
+  await expect(page.locator(".admin-notice[role=status]")).toContainText("Raya is disconnected")
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[0]())
+  await expect(page.locator(".admin-notice[role=status]")).toContainText("Raya is disconnected")
+  await page.clock.fastForward(20_000)
+  await expect(page.locator(".admin-notice[role=alert]")).toHaveCount(0)
+  await page.evaluate(() =>
+    (window as unknown as { __healthConnection: (connected: boolean) => void }).__healthConnection(true),
+  )
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[0]())
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[1]())
+  await expect(refresh).toBeEnabled()
+  await expect(page.getByText("Raya is disconnected", { exact: false })).toHaveCount(0)
+})
+
 test("Voice attention explains observed retained state without asserting a server outage", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 })
   await page.goto("/?state=voice-failed")

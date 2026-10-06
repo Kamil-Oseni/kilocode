@@ -206,6 +206,15 @@ window.acquireVsCodeApi = () => ({
     }
     if (message.type !== "requestAdmin") return
     attempts += 1
+    if (state === "health-held") {
+      window.__healthReplies ??= []
+      window.__healthReplies.push(() =>
+        emit({ type: "adminResult", requestID: message.requestID, health: health(), logs }),
+      )
+      window.__healthConnection = (connected) =>
+        emit({ type: "connectionState", state: connected ? "connected" : "disconnected" })
+      return
+    }
     if (state === "loading") return
     if (state === "retry" && attempts === 1) {
       emit({

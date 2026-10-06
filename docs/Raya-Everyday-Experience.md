@@ -18,6 +18,10 @@ Conversation, coding, delegated jobs, routines and goals remain first-class work
 
 The proposal interface requires the matching native/backend contract; do not install the UI commit alone. Runtime health does not establish microphone, model adherence, physical-device or recovery acceptance. The broader readiness checklist remains version-scoped and independent of these source checks.
 
+## Health read recovery, 2026-10-06
+
+The health panel now expires a missing read-only reply after 15 seconds, clears unavailable readings and enables a fresh request. Exact request IDs fence expired replies, completed duplicate replies and replies from before disconnection or workspace replacement. Unmount clears the UI timer and listener. This timeout does not cancel native probes or claim their completion. The complete mounted health-panel browser suite passes 22 cases, including timeout/retry, old replies, disconnect/reconnect, existing worker Stop, Memory publication controls, resources, rollback and narrow accessible layouts. Host/webview types, full lint, production bundle and Knip pass. Fixture replies are synthetic native-transport responses; these checks do not prove installed service recovery. Logs: `.tmp/memory-private/admin-health-*`.
+
 ## Validation recorded on 2026-10-05
 
 - The first UI and mood batch passed 60 focused extension tests (392 assertions), nine genuine backend Home Assistant eligibility checks (128 assertions), and browser layout/accessibility checks at narrow and wide widths in light and dark themes. Types, lint, unused-export checks and the production bundle passed.

@@ -1362,6 +1362,7 @@ export namespace KiloSessions {
   }
 
   async function getGitUrl(): Promise<string | undefined> {
+    if (Instance.project.vcs !== "git") return undefined
     return withInFlightCache(gitUrlKeyPrefix + Instance.worktree, ttlMs, async () => {
       const repo = simpleGit(Instance.worktree)
       const remotes = await repo.getRemotes(true).catch(() => [])

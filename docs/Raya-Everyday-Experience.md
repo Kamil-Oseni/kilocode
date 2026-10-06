@@ -4,6 +4,16 @@ Conversation, coding, delegated jobs, routines and goals remain first-class work
 
 ## Source changes
 
+### Non-Git metadata process checkpoint, 2026-10-06
+
+Session remote metadata now checks the current project's Git identity before constructing `simple-git`. Non-Git instances use the global worktree sentinel; repeated metadata reads previously attempted remote discovery there and discarded the failures. The new guard follows the existing Vcs service boundary, preserving actual Git remote selection, URL sanitization and successful cache reuse.
+
+The regression executes the current production lookup and normalization bodies with the real Instance, cache and Git client in disposable folders. Its factory observer retains real Git results. It reproduces two unnecessary non-Git constructions before the guard and zero afterward; the real Git remote case passes on both versions. The first attempted child-process spy did not observe the imported library boundary reliably and is not accepted as regression evidence. Historical logs remain in `.tmp/memory-private/non-git-metadata-*`.
+
+The selected session/remote/cache cohort passes **35 tests and 88 assertions across three files**. CLI typecheck passes; focused lint has zero errors and thirteen pre-existing warnings in the session source. Annotation, Effect-facade, Markdown-table and diff checks pass. Disposable fixture transport is not a real cloud worker; no stopped cloud worker was assigned or restarted.
+
+Independent read-only diagnosis of the earlier joined native failure groups its 76 nonzero members into 25 command-shell exits, 50 Git exits and one runtime exit. None matches the decoded direct-process PIDs; the diagnostic report at `.tmp/memory-private/general-native-exit-independent.json` does not establish caller identity or retirement. This metadata fix is not proof of that failure's cause or installed recovery, and no native/model retry was performed.
+
 ### Combined-source admission checkpoint, 2026-10-06
 
 The captured integration-owner commit `8cd07fc3c99d95da755cfd677436fcf774664166` is combined with this branch's worker recovery, prompt cancellation and voice announcement fixes. Its completed-Goal recovery and bounded near-limit reply fixes are retained. The one merge conflict was the supervisor digest: the merged supervisor retained the current service release table but still bound the index reader's previous hash. The genuine admission suite failed all three cases before that exact pin was reconciled with the existing reviewed reader at SHA-256 `55d17ba416e1cf187a5497c4257d07a5628a66e30d49ef75e18ca169567315e5`.

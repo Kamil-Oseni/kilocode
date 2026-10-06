@@ -448,10 +448,7 @@ export namespace KiloSessions {
             // Same-title Updated (setTitle no-op / double session.renamed): still
             // consume a matching rename adoption after sync so the mark cannot
             // stick and swallow a later real local rename (Decision 8).
-            const outcome = (():
-              | { kind: "same" }
-              | { kind: "adopted" }
-              | { kind: "report"; generated: boolean } => {
+            const outcome = ((): { kind: "same" } | { kind: "adopted" } | { kind: "report"; generated: boolean } => {
               if (sameTitle) return { kind: "same" }
               // Consume marks before the network hop so the 60s TTL does not span
               // token resolution + ingest.sync. Checks run even when prev is
@@ -1362,6 +1359,7 @@ export namespace KiloSessions {
   }
 
   async function getGitUrl(): Promise<string | undefined> {
+    if (Instance.project.vcs !== "git") return undefined
     return withInFlightCache(gitUrlKeyPrefix + Instance.worktree, ttlMs, async () => {
       const repo = simpleGit(Instance.worktree)
       const remotes = await repo.getRemotes(true).catch(() => [])

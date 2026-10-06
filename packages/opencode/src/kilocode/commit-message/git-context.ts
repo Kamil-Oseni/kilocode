@@ -1,3 +1,4 @@
+import { candidate } from "../git-candidate"
 import type { GitContext, FileChange } from "./types"
 
 const LOCK_FILES = new Set([
@@ -178,6 +179,7 @@ export function isUntracked(code: string): boolean {
 }
 
 export async function getGitContext(repoPath: string, selectedFiles?: string[]): Promise<GitContext> {
+  if (!(await candidate(repoPath))) return { branch: "HEAD", recentCommits: [], files: [] }
   const branch = git(["branch", "--show-current"], repoPath) || "HEAD"
   const log = git(["log", "--oneline", "-5"], repoPath)
   const recentCommits = log ? log.split("\n") : []

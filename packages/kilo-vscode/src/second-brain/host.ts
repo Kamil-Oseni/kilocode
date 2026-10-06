@@ -142,6 +142,19 @@ export class BrainHost {
               authorize: authority.authorize,
               model: model.port,
               execute: Effect.runPromise,
+              observe: (run) => {
+                const phases = {
+                  generation: "Preparing or generating proposals",
+                  validation: "Checking sources and changes",
+                  submission: "Saving pending proposals",
+                  "review-pending": "Proposals ready for review",
+                  reconciliation: "Original run needs inspection",
+                  completed: "Consolidation completed",
+                  cancelled: "Consolidation cancelled",
+                  failed: "Consolidation failed",
+                }
+                progress.report({ message: `${phases[run.phase]} · ${run.model} · changes require separate review` })
+              },
               propose: (id, candidate, current) =>
                 MemoryFiles.dreamProposal.submit(
                   project,

@@ -15,13 +15,24 @@ type Ports = {
   validate(candidate: MemoryDream.Candidate, signal: AbortSignal): Promise<void>
   /** Existing proposal owner only creates the named pending proposal; it never applies it here. */
   propose(id: string, candidate: MemoryDream.Candidate, signal: AbortSignal): Promise<{ id: string; status: "pending" }>
+  /** Synchronous display observer; receives a copy after the original run is saved. */
+  observe?(run: Readonly<MemoryDream.Run>): void
 }
 
 /** Explicit invocation only. No capture, scheduling, note publication or alternate model owner. */
 export namespace MemoryDreamJob {
   export async function start(root: string, project: string, selection: Selection, ports: Ports, signal?: AbortSignal) {
     signal?.throwIfAborted()
+    const observe = ports.observe?.bind(ports)
+    const report = (run: MemoryDream.Run) => {
+      try {
+        observe?.(structuredClone(run))
+      } catch (err) {
+        console.warn("[Raya] Dream phase display failed", err)
+      }
+    }
     const run = await MemoryDream.begin(root, project, selection)
+    report(run)
     const controller = new AbortController()
     const abort = () => controller.abort(signal?.reason)
     signal?.addEventListener("abort", abort, { once: true })
@@ -55,7 +66,7 @@ export namespace MemoryDreamJob {
       // Await the original operation after abort too: a race must not release an unjoined model worker.
       const candidates = await lease.generate(controller.signal)
       controller.signal.throwIfAborted()
-      await MemoryDream.advance(root, project, { ...owner, phase: "validation" })
+      report(await MemoryDream.advance(root, project, { ...owner, phase: "validation" }))
       if (!Array.isArray(candidates) || candidates.length > 20)
         throw new Error("Dream generation must return 0–20 candidates")
       let tokens = 0
@@ -84,7 +95,7 @@ export namespace MemoryDreamJob {
           : "No supported memory changes"
       }
       if (fingerprints.length) {
-        await MemoryDream.advance(root, project, { ...owner, phase: "submission", candidates: fingerprints })
+        report(await MemoryDream.advance(root, project, { ...owner, phase: "submission", candidates: fingerprints }))
         const retained = await MemoryDream.list(root, project)
         for (const fingerprint of fingerprints) {
           controller.signal.throwIfAborted()
@@ -138,6 +149,7 @@ export namespace MemoryDreamJob {
     const result = await MemoryDream.advance(root, project, { ...owner, phase, reason }).catch((err: unknown) => {
       errors.push(err)
     })
+    if (result) report(result)
     if (errors.length === 1) throw errors[0]
     if (errors.length) throw new AggregateError(errors, "Dream job retained its original failures")
     if (!result) throw new Error("Dream run has no retained final phase")

@@ -12,6 +12,7 @@ type Ports = {
   model: Model["model"]
   execute: Model["execute"]
   propose: Job[3]["propose"]
+  observe?: Job[3]["observe"]
 }
 
 /** One explicit manual invocation. Capture and idle scheduling remain outside this coordinator. */
@@ -25,6 +26,7 @@ export namespace MemoryDreamManual {
     const model = ports.model
     const execute = ports.execute.bind(ports)
     const propose = ports.propose.bind(ports)
+    const observe = ports.observe?.bind(ports)
     const controller = new AbortController()
     const signal = parent ? AbortSignal.any([parent, controller.signal]) : controller.signal
     const deadline = Date.now() + selected.timeout
@@ -80,6 +82,7 @@ export namespace MemoryDreamManual {
             await plan.validate(candidate, current)
           },
           propose,
+          observe,
         },
         signal,
       )

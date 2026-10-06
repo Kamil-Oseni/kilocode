@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test"
 import { createHash, randomUUID } from "node:crypto"
+import { readFileSync } from "node:fs"
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { z } from "zod"
 import { MemoryFiles } from "../src/storage/store"
 
 async function fixture() {
@@ -215,8 +217,55 @@ test("unconfirmed lease retirement preserves active reconciliation", async () =>
       throw new Error("Lease not joined")
     },
   })
-  await expect(MemoryFiles.dreamJob.start(f.root, f.project, f.selection, f.ports)).rejects.toThrow("Lease not joined")
+  const phases: string[] = []
+  await expect(
+    MemoryFiles.dreamJob.start(f.root, f.project, f.selection, {
+      ...f.ports,
+      observe: (run) => phases.push(run.phase),
+    }),
+  ).rejects.toThrow("Lease not joined")
   expect((await MemoryFiles.dream.list(f.root, f.project)).runs[0].phase).toBe("reconciliation")
+  expect(phases).toEqual(["generation", "validation", "submission", "reconciliation"])
+})
+
+test("phase observation retains the original saved run and cannot mutate generation authority", async () => {
+  const f = await fixture()
+  const phases: string[] = []
+  const ids: string[] = []
+  const saved: (string | undefined)[] = []
+  const result = await MemoryFiles.dreamJob.start(f.root, f.project, f.selection, {
+    ...f.ports,
+    observe: (run) => {
+      phases.push(run.phase)
+      ids.push(run.id)
+      const ledger = z
+        .object({ runs: z.array(z.object({ id: z.string(), owner: z.string(), phase: z.string() })) })
+        .parse(JSON.parse(readFileSync(path.join(f.root, "dream.json"), "utf8")))
+      saved.push(ledger.runs.find((item) => item.id === run.id && item.owner === run.owner)?.phase)
+      run.sources.length = 0
+      run.budget.output = 1
+    },
+  })
+  expect(phases).toEqual(["generation", "validation", "submission", "review-pending"])
+  expect(ids).toEqual(phases.map(() => f.selection.id))
+  expect(saved).toEqual(phases)
+  expect(result.sources).toEqual(f.selection.sources)
+  expect(result.budget).toEqual(f.selection.budget)
+  expect((await MemoryFiles.dream.list(f.root, f.project)).runs[0]).toEqual(result)
+})
+
+test("display failure cannot fail an otherwise successful original run", async () => {
+  const f = await fixture()
+  let calls = 0
+  const result = await MemoryFiles.dreamJob.start(f.root, f.project, f.selection, {
+    ...f.ports,
+    observe: () => {
+      if (++calls === 1) throw new Error("Synthetic display unavailable")
+    },
+  })
+  expect(result.phase).toBe("review-pending")
+  expect(calls).toBe(4)
+  expect(f.events.filter((event) => event === "proposed")).toHaveLength(1)
 })
 
 test("generated output cannot exceed the explicit engineering budget", async () => {

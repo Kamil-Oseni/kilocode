@@ -12,7 +12,15 @@ Snapshot: 2026-10-06. Estimated everyday readiness: **48/100**. Full installed w
 
 The tracker records **23 verified, 35 in progress, 3 planned, 1 maintenance item and 1 deferred item**. The active unfinished queue has **38 requirements**. The classifications below are copied from the implementation tracker; they do not independently recertify its historical evidence against the current installed build.
 
-## Latest registered candidate and workflow boundary
+## Latest fd11 installed candidate and workflow boundary
+
+The registered candidate is now `7.4.23-snapshot+fd11bde5e9.local.1791310351751`, built from combined source `fd11bde5e956fadb2dd7075b6a5c32b74ba2cf40`. Independent read-only inspection hashes all 479 unchanged extension payload files against the reviewed processed VSCE manifest with no missing or changed files. The installed package.json is structurally identical after removing only VS Code's `__metadata`; the sole additional file, `.vsixmanifest`, exactly matches the archived installer manifest. The reviewed archive contains 482 entries with SHA-256 `a47dc0a387e15562edebd8bd86db717ffb6bec7374fd5a142b9fcc58d55176dc`. Evidence: `.tmp/memory-private/retained-installed-payload-initial-review.json` and `retained-installed-manifest-review.json`. The initial report's package comparison is explicitly pending; the separate manifest report closes that comparison.
+
+All fifty direct references in the original installation-chain peer review rehash exactly. Independent comparison of saved pre/post objects confirms exact profile, unrelated payload and unrelated registry preservation. All four original pre-scan, installer, post-scan and monitor receipts record exit zero, process/stream joins, one attempt and no force. The monitor is sampled evidence, not proof excluding actors between samples. Evidence: `.tmp/memory-private/retained-install-preservation-chain-review.json` and the integration worktree's `.tmp/new-pc/fd11-node-cli-upgrade-full-strict-chain-independent-actual-readonly-review-next.json`.
+
+These checks support the two package/preservation gates for this candidate. They do not prove a loaded normal client, matching running backend, autonomous model tasks, physical voice continuity, configured Memory, boot recovery or restoration. Readiness remains 48/100, with seven workflow/recovery gates pending. The full implementation scope and 38 unfinished requirements remain active.
+
+## Previous 4de84 registered candidate
 
 A read-only registry comparison matches the retained installation packet's version `7.4.23-snapshot+4de84ec4d2.local.1791296630477`. The packet SHA-256 is `556d2718778aaf696228c6dfb896d79482e7e6cb62f35dbeae96b46a3b683f96`; its referenced physical-review file still matches the recorded digest `d1b6ac562efbc555053b1aa7eef6ae41c242887278ccd1705243446a9c95eb68`. The packet reports installation/preservation acceptance but explicitly leaves runtime and loaded-normal-window acceptance false. Evidence: the integration worktree's `.tmp/new-pc/current-4de84-node-cli-upgrade-actual-archive-packet-installed-pending-shape-qualified-next.json`, with this comparison saved in `.tmp/memory-private/readiness-reconciliation.json`.
 

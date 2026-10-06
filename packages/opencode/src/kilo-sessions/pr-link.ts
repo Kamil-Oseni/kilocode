@@ -6,6 +6,8 @@ import { Instance } from "@/kilocode/instance"
 import { Storage } from "@/storage/storage"
 import { Process } from "@/util/process"
 import { withInFlightCache } from "@/kilo-sessions/inflight-cache"
+import { which } from "@opencode-ai/core/util/which"
+import { candidate } from "@/kilocode/git-candidate"
 
 export type PrLink = {
   platform: string
@@ -65,7 +67,9 @@ export function parsePrUrl(url: string): PrLink | undefined {
 
 export async function detectPrLink(): Promise<PrLink | undefined> {
   return withInFlightCache(prLinkKeyPrefix + Instance.worktree, ttlMs, async () => {
-    const result = await Process.text(["gh", "pr", "view", "--json", "url"], {
+    const bin = which("gh")
+    if (!bin || !(await candidate(Instance.worktree))) return undefined
+    const result = await Process.text([bin, "pr", "view", "--json", "url"], {
       nothrow: true,
       cwd: Instance.worktree,
     }).catch(() => undefined)

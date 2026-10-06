@@ -1,24 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test"
-
-// Mock @/util/process before importing the module under test. Bun's
-// mock.module is process-wide; spread the real exports and only override
-// `Process.text` so nothing else that imports the process util breaks.
-const realProcess = await import("@/util/process")
-
-let outcome: { code: number; text: string } | { error: Error } = { code: 0, text: "" }
-
-const ghText = mock(async (_cmd: string[]) => {
-  if ("error" in outcome) throw outcome.error
-  return { code: outcome.code, text: outcome.text, stdout: Buffer.from(outcome.text), stderr: Buffer.alloc(0) }
-})
-
-void mock.module("@/util/process", () => ({
-  ...realProcess,
-  Process: {
-    ...realProcess.Process,
-    text: ghText,
-  },
-}))
+import { describe, expect, test } from "bun:test"
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 
 import { detectPrLink, overrideKey, parsePrUrl } from "@/kilo-sessions/pr-link"
 import { Instance } from "@/kilocode/instance"
@@ -121,39 +104,88 @@ describe("overrideKey", () => {
 })
 
 describe("detectPrLink", () => {
-  let n = 0
-  const nextWorktree = () => `/tmp/pr-link-${process.pid}-${n++}`
-
-  beforeEach(() => {
-    outcome = { code: 0, text: "" }
-    ghText.mockClear()
-  })
+  async function fixture(
+    text: string,
+    code: number,
+    run: (dir: string, receipt: string) => Promise<void>,
+    opts: { repository?: boolean; executable?: boolean } = {},
+  ) {
+    const dir = await mkdtemp(path.join(tmpdir(), "raya-pr-link-"))
+    const bin = path.join(dir, "bin")
+    const receipt = path.join(dir, "invocation.txt")
+    await mkdir(bin)
+    if (opts.repository !== false) {
+      const git = Bun.spawnSync(["git", "init", dir], { windowsHide: true, stdout: "pipe", stderr: "pipe" })
+      expect(git.exitCode).toBe(0)
+    }
+    if (opts.executable !== false) {
+      const windows = process.platform === "win32"
+      await writeFile(
+        path.join(bin, windows ? "gh.cmd" : "gh"),
+        windows
+          ? `@echo off\r\necho %*> "${receipt}"\r\necho ${text}\r\nexit /b ${code}\r\n`
+          : `#!/bin/sh\nprintf '%s\\n' "$*" > '${receipt}'\nprintf '%s\\n' '${text}'\nexit ${code}\n`,
+        { mode: 0o755 },
+      )
+    }
+    const prior = process.env.PATH
+    const vars = Object.entries(process.env).filter(([key]) => key.toUpperCase().startsWith("GIT_"))
+    for (const [key] of vars) delete process.env[key]
+    process.env.PATH = bin
+    try {
+      await run(dir, receipt)
+    } finally {
+      if (prior === undefined) delete process.env.PATH
+      if (prior !== undefined) process.env.PATH = prior
+      for (const [key, value] of vars) process.env[key] = value
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
 
   test("detects a PR from gh", async () => {
-    outcome = {
-      code: 0,
-      text: JSON.stringify({ url: "https://github.com/owner/repo/pull/123", number: 123 }),
-    }
-    const link = await restoreWorktree(nextWorktree(), () => detectPrLink())
-    expect(link).toEqual({ platform: "github", prUrl: "https://github.com/owner/repo/pull/123", prNumber: 123 })
-    expect(ghText.mock.calls[0]?.[0]).toEqual(["gh", "pr", "view", "--json", "url"])
+    await fixture(JSON.stringify({ url: "https://github.com/owner/repo/pull/123" }), 0, async (dir, receipt) => {
+      const link = await restoreWorktree(dir, () => detectPrLink())
+      expect(link).toEqual({ platform: "github", prUrl: "https://github.com/owner/repo/pull/123", prNumber: 123 })
+      expect((await readFile(receipt, "utf8")).trim()).toBe(
+        process.platform === "win32" ? '"pr" "view" "--json" "url"' : "pr view --json url",
+      )
+      expect(await restoreWorktree(dir, () => detectPrLink())).toEqual(link)
+    })
   })
 
   test("returns undefined when gh is missing", async () => {
-    outcome = { error: new Error("spawn gh ENOENT") }
-    const link = await restoreWorktree(nextWorktree(), () => detectPrLink())
-    expect(link).toBeUndefined()
+    await fixture(
+      "",
+      0,
+      async (dir, receipt) => {
+        expect(await restoreWorktree(dir, () => detectPrLink())).toBeUndefined()
+        expect(await Bun.file(receipt).exists()).toBe(false)
+      },
+      { executable: false },
+    )
   })
 
   test("returns undefined when there is no PR", async () => {
-    outcome = { code: 1, text: "" }
-    const link = await restoreWorktree(nextWorktree(), () => detectPrLink())
-    expect(link).toBeUndefined()
+    await fixture("", 1, async (dir) => {
+      expect(await restoreWorktree(dir, () => detectPrLink())).toBeUndefined()
+    })
   })
 
   test("returns undefined on bad JSON", async () => {
-    outcome = { code: 0, text: "not json" }
-    const link = await restoreWorktree(nextWorktree(), () => detectPrLink())
-    expect(link).toBeUndefined()
+    await fixture("not json", 0, async (dir) => {
+      expect(await restoreWorktree(dir, () => detectPrLink())).toBeUndefined()
+    })
+  })
+
+  test("does not launch available gh outside a repository", async () => {
+    await fixture(
+      JSON.stringify({ url: "https://github.com/owner/repo/pull/123" }),
+      0,
+      async (dir, receipt) => {
+        expect(await restoreWorktree(dir, () => detectPrLink())).toBeUndefined()
+        expect(await Bun.file(receipt).exists()).toBe(false)
+      },
+      { repository: false },
+    )
   })
 })

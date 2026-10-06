@@ -519,12 +519,12 @@ describe("memory ports", () => {
     const sha256 = createHash("sha256")
       .update(await readFile(source))
       .digest("hex")
-    const input = await MemoryFiles.dreamInput.prepare(root, project, {
+    const approved = {
       scope: randomUUID(),
-      sources: [{ path: "approved.md", sha256, kind: "approved-summary" }],
+      sources: [{ path: "approved.md", sha256, kind: "approved-summary" as const }],
       targets: [{ key: "voice", path: "Preferences/voice.md", expected: null }],
-      budget: 3000,
-    })
+    }
+    const input = await MemoryFiles.dreamInput.prepare(root, project, { ...approved, budget: 3000 })
     const selection = {
       id: randomUUID(),
       owner: randomUUID(),
@@ -583,25 +583,33 @@ describe("memory ports", () => {
           getLanguage: () => Effect.succeed(sdk.languageModel("fake-memory-model")),
         },
       })
-      const run = await MemoryFiles.dreamJob.start(root, project, selection, {
-        admit: (selection, signal) =>
-          MemoryFiles.dreamModel.admit(
-            {
-              model,
-              execute: (effect) => Effect.runPromise(effect),
-              selection,
-              system: input.system,
-              prompt: input.prompt,
-              decode: input.decode,
-            },
-            signal,
-          ),
-        validate: input.validate,
-        propose: async (id, candidate) => {
-          await writeFile(path.join(root, `${id}.proposal.json`), JSON.stringify(candidate), { flag: "wx" })
-          return { id, status: "pending" }
+      let approvals = 0
+      const run = await MemoryFiles.dreamManual.start(
+        root,
+        project,
+        { ...selection, approved },
+        {
+          authorize: async (selected, directory, evidence, signal) => {
+            signal.throwIfAborted()
+            expect(selected).toBe(root)
+            expect(directory).toBe(project)
+            expect(evidence).toEqual(approved)
+            expect(
+              createHash("sha256")
+                .update(await readFile(source))
+                .digest("hex"),
+            ).toBe(sha256)
+            approvals++
+          },
+          model,
+          execute: (effect) => Effect.runPromise(effect),
+          propose: async (id, candidate) => {
+            await writeFile(path.join(root, `${id}.proposal.json`), JSON.stringify(candidate), { flag: "wx" })
+            return { id, status: "pending" }
+          },
         },
-      })
+      )
+      expect(approvals).toBe(4)
       expect(run.phase).toBe("review-pending")
       const ledger = await MemoryFiles.dream.list(root, project)
       expect(ledger.rows[0].state).toBe("pending")

@@ -144,7 +144,7 @@ export class RunController {
   }
 
   remove(worktreeId: string): Promise<void> {
-    return this.manager.remove(worktreeId)
+    return this.accept(() => this.manager.remove(worktreeId))
   }
 
   fence(): void {

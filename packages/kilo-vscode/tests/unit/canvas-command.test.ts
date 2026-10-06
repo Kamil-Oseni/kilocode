@@ -101,7 +101,7 @@ test("saved Canvas command explains empty and failed recovery states", async () 
       "Canvas couldn't reopen. Your saved files are still available. Both saved copies are damaged.",
     )
     expect(log).toHaveBeenCalledWith(
-      "[Kilo New] [Raya] Could not open saved canvas report:",
+      "[Raya] Could not open saved canvas report:",
       expect.objectContaining({ message: "Both saved copies are damaged." }),
     )
   } finally {

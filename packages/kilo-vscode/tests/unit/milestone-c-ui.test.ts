@@ -32,7 +32,7 @@ describe("Milestone C option cards", () => {
 
     expect(dock).toContain("if (single() && props.request.autoSubmit)")
     expect(dock).toContain("reply(answers)")
-    expect(dock).toContain("<Show when={question()?.custom !== false}>")
+    expect(dock).toContain("<Show when={!confirm() && question()?.custom !== false}>")
     expect(bridge).toContain("autoSubmit: event.properties.autoSubmit")
     expect(message).toContain("matchToolRequest(part, undefined, session.questions())")
   })

@@ -99,7 +99,7 @@ describe("abortSession", () => {
       await expect(
         abortSession({ client: client(calls, true), sessionID: "session_1", dir: "/private/repo", source: "cost-alert-stop" }),
       ).rejects.toThrow("abort failed")
-      expect(log).toHaveBeenCalledWith("[Kilo New] Session abort requested", {
+      expect(log).toHaveBeenCalledWith("[Raya] Session abort requested", {
         sessionID: "session_1",
         source: "cost-alert-stop",
       })

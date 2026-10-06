@@ -58,6 +58,7 @@ const scenes = [
 ]
 const modes = [
   ...scenes.map((name) => ({ name, entity: "scene." + name, stop: undefined })),
+  { name: "sleep_mode", entity: "script.sleep_mode_fade", stop: true },
   { name: "wake_mode", entity: "script.wake_mode_sunrise", stop: true },
   { name: "temperature_check", entity: "script.pc_temperature_check", stop: undefined },
 ]

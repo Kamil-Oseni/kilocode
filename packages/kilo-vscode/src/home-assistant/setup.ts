@@ -7,7 +7,6 @@ const modes = [
   "cinematic_mode",
   "sunset_mode",
   "sexy_time_mode",
-  "sleep_mode",
   "full_brightness_warm_white",
   "full_brightness_normal_white",
   "evening_wind_down",
@@ -22,6 +21,7 @@ const modes = [
   entity: "scene." + name,
 }))
 const scripts = [
+  { name: "sleep_mode", entity: "script.sleep_mode_fade", stop: true },
   { name: "wake_mode", entity: "script.wake_mode_sunrise", stop: true },
   { name: "temperature_check", entity: "script.pc_temperature_check" },
 ]

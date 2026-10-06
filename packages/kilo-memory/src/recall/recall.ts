@@ -176,17 +176,20 @@ export namespace MemoryRecall {
     return novel * 2 < terms.length
   }
 
-  function dedupe(input: { hits: Hit[]; query: string }) {
-    const typed = input.hits.filter((hit) => !session(hit))
-    return input.hits.filter((hit) => {
-      if (!session(hit)) return true
+  function dedupe(input: { hits: Hit[]; query: string; limit: number }) {
+    const typed = input.hits.filter((hit) => !session(hit) && overlap(hit.text, input.query) >= 2)
+    const hits: Hit[] = []
+    for (const hit of input.hits) {
       // Dedupe is hit-to-hit symmetric, so corpus-wide function words do not favor one hit over another.
       // Suppress only genuine restatements: shares the query anchor with a typed hit AND is mostly
       // covered by it. A digest with substantial net-new content survives.
-      return !typed.some(
-        (item) => overlap(hit.text, item.text) >= 2 && overlap(item.text, input.query) >= 2 && restates(hit, item),
-      )
-    })
+      if (session(hit) && typed.some((item) => overlap(hit.text, item.text) >= 2 && restates(hit, item))) continue
+      hits.push(hit)
+      // All eligible facts inform deduplication, but stop scanning once the
+      // bounded result window is filled with distinct relevant evidence.
+      if (hits.length === input.limit) break
+    }
+    return hits
   }
 
   function renderLine(hit: Hit) {
@@ -232,15 +235,15 @@ export namespace MemoryRecall {
     return hits.length ? { block, hits } : undefined
   }
 
-  function select(input: { hits: Hit[]; keys: string[]; limit: number; force?: boolean }) {
+  function select(input: { hits: Hit[]; keys: string[]; force?: boolean }) {
     if (input.keys.length === 0) return [] as Hit[]
     const hits = input.hits
       .map((hit) => ({ ...hit, score: score({ hit, keys: input.keys }) }))
       .filter((hit) => hit.score > 0)
       .sort(compare)
-    if (input.force) return hits.slice(0, input.limit)
+    if (input.force) return hits
     const top = hits[0]?.score ?? 0
-    return hits.filter((hit) => hit.score >= Math.max(1, top - 2)).slice(0, input.limit)
+    return hits.filter((hit) => hit.score >= Math.max(1, top - 2))
   }
 
   function noise(hits: Hit[]) {
@@ -288,8 +291,9 @@ export namespace MemoryRecall {
     // Query terms absent from the corpus add zero to every hit; only corpus-ubiquitous terms need removal.
     const keys = MemoryTopics.expand(MemoryShared.terms(query, { drop: noise([...typedItems, ...digestItems]) }))
     const hits = dedupe({
-      hits: select({ hits: [...typedItems, ...digestItems], keys, limit, force: input.force }),
+      hits: select({ hits: [...typedItems, ...digestItems], keys, force: input.force }),
       query,
+      limit,
     })
     if (hits.length === 0) return
     const result = format({ hits, max: input.maxBytes ?? 1200 })

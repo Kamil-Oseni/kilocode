@@ -516,6 +516,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private noticed = new Set<string>()
   private readonly streams = new SessionStreamScheduler((msg) => this.postMessage(msg))
   private jobsBackoff = 0
+  private readonly jobReads = new Map<string, symbol>()
   private readonly visibleTaskStreams = new VisibleTaskStreams((id, visible) => this.streams.setVisible(id, visible))
   private readonly confirmations = new MessageConfirmation()
   private readonly costs = new MaxCostNudge()
@@ -4008,7 +4009,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     const directory = this.getWorkspaceDirectory(sessionID)
     const generation = this.connectionGeneration
+    const id = Symbol()
+    this.jobReads.set(sessionID, id)
     const current = () =>
+      this.jobReads.get(sessionID) === id &&
       this.client === client &&
       this.connectionState === "connected" &&
       this.connectionGeneration === generation &&
@@ -4029,6 +4033,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         jobs: [],
         error: "Background agent status is temporarily unavailable",
       })
+    } finally {
+      if (this.jobReads.get(sessionID) === id) this.jobReads.delete(sessionID)
     }
   }
 

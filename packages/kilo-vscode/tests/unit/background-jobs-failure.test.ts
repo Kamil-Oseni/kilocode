@@ -8,6 +8,7 @@ type Context = {
   client: { kilocode: { backgroundJobs: () => Promise<{ data: unknown[] }> } }
   connectionState: "connected"
   jobsBackoff: number
+  jobReads: Map<string, symbol>
   getWorkspaceDirectory: () => string
   postMessage: (message: Reply) => void
 }
@@ -29,6 +30,7 @@ describe("background job refresh", () => {
       },
       connectionState: "connected",
       jobsBackoff: 0,
+      jobReads: new Map(),
       getWorkspaceDirectory: () => "C:\\workspace",
       postMessage: (message) => sent.push(message),
     }
@@ -73,6 +75,7 @@ for (const action of ["refresh", "cancel"] as const)
           connectionState: "connected" as const,
           connectionGeneration: 1,
           jobsBackoff: 0,
+          jobReads: new Map<string, symbol>(),
           getWorkspaceDirectory: () => workspace.directory,
           postMessage: (message: Reply) => sent.push(message),
           fetchAndSendBackgroundJobs: async (sessionID: string, requestID: string) =>
@@ -133,6 +136,7 @@ for (const status of [200, 503])
       connectionState: "connected" as const,
       connectionGeneration: 1,
       jobsBackoff: 0,
+      jobReads: new Map<string, symbol>(),
       getWorkspaceDirectory: () => "C:/original",
       postMessage: (message: Reply) => sent.push(message),
       fetchAndSendBackgroundJobs: async (sessionID: string, requestID: string) =>
@@ -153,3 +157,94 @@ for (const status of [200, 503])
       await server.stop(true)
     }
   })
+
+for (const status of [200, 503])
+  it(`actual SDK older same-session status ${status} cannot replace a newer success or its backoff`, async () => {
+    const entered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<Response>()
+    const sent: Reply[] = []
+    const requests: string[] = []
+    const jobs = [{ id: "worker", status: "completed" }]
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        requests.push(request.method)
+        if (requests.length > 1) return Response.json(jobs)
+        entered.resolve()
+        return held.promise
+      },
+    })
+    const state = {
+      client: createKiloClient({ baseUrl: server.url.toString() }),
+      connectionState: "connected" as const,
+      connectionGeneration: 1,
+      jobsBackoff: 0,
+      jobReads: new Map<string, symbol>(),
+      getWorkspaceDirectory: () => "C:/original",
+      postMessage: (message: Reply) => sent.push(message),
+    }
+    const provider = KiloProvider.prototype as unknown as {
+      fetchAndSendBackgroundJobs: (this: typeof state, sessionID: string, requestID: string) => Promise<void>
+    }
+    const pending = provider.fetchAndSendBackgroundJobs.call(state, "parent", "old")
+    try {
+      await entered.promise
+      await provider.fetchAndSendBackgroundJobs.call(state, "parent", "new")
+      expect(sent).toEqual([{ type: "backgroundJobsLoaded", sessionID: "parent", requestID: "new", jobs }])
+      held.resolve(Response.json(status === 200 ? [{ id: "worker", status: "running" }] : {}, { status }))
+      await pending
+      expect(sent).toHaveLength(1)
+      expect(state.jobsBackoff).toBe(0)
+      expect(state.jobReads.size).toBe(0)
+      await provider.fetchAndSendBackgroundJobs.call(state, "parent", "fresh")
+      expect(requests).toHaveLength(3)
+      expect(sent[1]).toMatchObject({ requestID: "fresh", jobs })
+    } finally {
+      held.resolve(Response.json({}, { status: 503 }))
+      await pending
+      await server.stop(true)
+    }
+  })
+
+it("actual SDK worker status reads for independent sessions both complete", async () => {
+  const entered = Promise.withResolvers<void>()
+  const held = Promise.withResolvers<Response>()
+  const sent: Reply[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      if (new URL(request.url).searchParams.get("sessionID") === "first") {
+        entered.resolve()
+        return held.promise
+      }
+      return Response.json([])
+    },
+  })
+  const state = {
+    client: createKiloClient({ baseUrl: server.url.toString() }),
+    connectionState: "connected" as const,
+    connectionGeneration: 1,
+    jobsBackoff: 0,
+    jobReads: new Map<string, symbol>(),
+    getWorkspaceDirectory: () => "C:/original",
+    postMessage: (message: Reply) => sent.push(message),
+  }
+  const provider = KiloProvider.prototype as unknown as {
+    fetchAndSendBackgroundJobs: (this: typeof state, sessionID: string, requestID: string) => Promise<void>
+  }
+  const pending = provider.fetchAndSendBackgroundJobs.call(state, "first", "one")
+  try {
+    await entered.promise
+    await provider.fetchAndSendBackgroundJobs.call(state, "second", "two")
+    held.resolve(Response.json([]))
+    await pending
+    expect(sent.map((reply) => reply.sessionID)).toEqual(["second", "first"])
+    expect(state.jobReads.size).toBe(0)
+  } finally {
+    held.resolve(Response.json({}, { status: 503 }))
+    await pending
+    await server.stop(true)
+  }
+})

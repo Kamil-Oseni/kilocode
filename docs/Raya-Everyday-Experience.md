@@ -12,6 +12,8 @@ Worker status and cancellation replies now retain their original client, connect
 
 Twelve held HTTP requests through the generated SDK reproduce the failures against the previous source. With the fix, the selected worker/activity cohort passes **66 tests and 209 assertions across nine files**, including two current-scope cancellation checks. The original failure evidence remains in `.tmp/memory-private/workers-scope-before.log`. These controlled source checks do not establish installed cancellation, model unloading or process retirement.
 
+Overlapping status reads also retain a per-session identity: an older success cannot replace the newer reply, and an older failure cannot impose backoff after a newer success. Pending identities are removed only by their owning request; different sessions remain independent. Two actual SDK held-response cases fail against the preceding source, while the independent-session case passes. After the repair, the worker/activity cohort passes **69 tests and 223 assertions across nine files**. The evidence is retained in `.tmp/memory-private/workers-order-*`; the initial independent-session fixture used the wrong URL shape and was corrected to the actual SDK query parameter before reproducing the two production failures. This does not change cancellation authority or prove installed worker retirement.
+
 | Area | Implemented behavior | Acceptance still needed |
 |---|---|---|
 | Navigation | Conversation, Tasks, Routines, Memory, Activity and health, and Settings are directly accessible. Opening Conversation does not create another session. | Integrated installed-window check. |

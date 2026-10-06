@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { MemoryDigest } from "../capture/digest"
 import { MemoryFiles } from "../storage/store"
 import { MemoryIndexer } from "./indexer"
@@ -216,7 +217,9 @@ export namespace MemoryRecall {
     const rows = input.hits.map((hit) => ({
       hit,
       text: [
-        `record id=${label(`${hit.source}:${hit.kind}:${hit.text.slice(0, 32)}`)} type=${label(hit.kind.toLowerCase())} source=${label(hit.source)}${
+        `record id=${label(hit.kind)}_${createHash("sha256")
+          .update(JSON.stringify([hit.source, hit.kind, hit.text]))
+          .digest("hex")} type=${label(hit.kind.toLowerCase())} source=${label(hit.source)}${
           hit.topics?.length ? ` topics=${hit.topics.map(label).join(",")}` : ""
         } updated=${hit.updatedAt ? new Date(hit.updatedAt).toISOString() : "unknown"}`,
         `text: ${body(hit.text)}`,
@@ -291,8 +294,17 @@ export namespace MemoryRecall {
     }
     // Query terms absent from the corpus add zero to every hit; only corpus-ubiquitous terms need removal.
     const keys = MemoryTopics.expand(MemoryShared.terms(query, { drop: noise([...typedItems, ...digestItems]) }))
+    const selected = select({ hits: [...typedItems, ...digestItems], keys, force: input.force })
     const hits = dedupe({
-      hits: select({ hits: [...typedItems, ...digestItems], keys, force: input.force }),
+      // A frequently saved topic can itself be ubiquitous. If noise filtering
+      // finds nothing, retry the original query rather than hiding that topic.
+      hits: selected.length
+        ? selected
+        : select({
+            hits: [...typedItems, ...digestItems],
+            keys: MemoryTopics.expand(MemoryShared.terms(query)),
+            force: input.force,
+          }),
       query,
       limit,
     })

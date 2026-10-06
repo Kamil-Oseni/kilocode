@@ -1,12 +1,14 @@
 /** A model-facing example, not an inferred or automatically executed continuation. */
-export function example(id: string) {
+export function example(
+  id: string,
+  prompt = "Continue the same assigned objective. Correct missing or failed work and verify the actual result with authorized tools.",
+) {
   return `<task_recovery>${JSON.stringify({
     kind: "tool",
     name: "task",
     arguments: {
       task_id: id,
-      prompt:
-        "Continue the same assigned objective. Correct missing or failed work and verify the actual result with authorized tools.",
+      prompt,
     },
   })}</task_recovery>`
 }

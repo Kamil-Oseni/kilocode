@@ -1,12 +1,16 @@
 // raya_change - Milestone A bounded model-facing goal tools
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import * as Tool from "@/tool/tool"
 import { RayaGoal } from "@/kilocode/goal"
 import { Update } from "@/kilocode/goal/plan"
 import { owned } from "@/kilocode/goal/completion-schema"
 import * as GoalGate from "@/kilocode/goal/tool-gate"
 import { ToolJsonSchema } from "@/tool/json-schema"
-import type { Session } from "@/session/session"
+import { Session } from "@/session/session"
+import { Storage } from "@/storage/storage"
+import { BackgroundJob } from "@/background/job"
+import { ChiefVerification } from "@/kilocode/chief/verification"
+import { example } from "@/kilocode/task-resume"
 import { RayaChief } from "@/kilocode/chief"
 import { associate } from "@/kilocode/goal/turn"
 import type { SessionRunState } from "@/session/run-state"
@@ -32,6 +36,37 @@ export function goalTools(
   sessions?: Pick<Session.Interface, "get" | "setMetadata">,
   runs?: Pick<SessionRunState.Interface, "inspect">,
 ) {
+  const recovery = Effect.fn("RayaGoalTool.recovery")(function* (ctx: Tool.Context, rejected = false) {
+    if (ctx.agent !== "auto") return undefined
+    const sessions = Option.getOrUndefined(yield* Effect.serviceOption(Session.Service))
+    const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service))
+    if (!sessions || !storage) return undefined
+    const worker = yield* ChiefVerification.retained({
+      sessions,
+      storage,
+      background: Option.getOrUndefined(yield* Effect.serviceOption(BackgroundJob.Service)),
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      agent: ctx.agent,
+      planned: false,
+    }).pipe(Effect.orDie)
+    if (!worker) return undefined
+    const goal = yield* goals.get(ctx.sessionID)
+    const correction = rejected || worker.correction
+    const exact = goal?.criteria?.some((criterion) => criterion.check?.kind === "byte-equality")
+    return {
+      task_id: worker.taskID,
+      example: example(
+        worker.taskID,
+        correction
+          ? exact
+            ? "Correct the rejected completion audit in this same worker. Re-read the authorized source and saved target, preserve exact bytes including whether a final newline exists; do not add or remove one. Correct any mismatch and verify the actual saved result before claiming completion."
+            : "Correct the rejected completion audit in this same assigned objective. Perform the missing authorized work and verify the actual results before claiming completion."
+          : undefined,
+      ),
+    }
+  })
+
   const phase = Effect.fn("RayaGoalTool.phase")(function* (
     sessionID: Parameters<Goals["get"]>[0],
     value: RayaChief.Phase,
@@ -95,6 +130,7 @@ export function goalTools(
               onSuccess: (items) => items,
             }),
           )
+          const resumed = yield* recovery(ctx)
           return result(
             "Current goal",
             JSON.stringify(
@@ -102,6 +138,7 @@ export function goalTools(
                 planUpdate: { expectedIntent: goal.intent ?? "unset", expectedRevision: goal.plan?.revision ?? null },
                 goal,
                 eligibleEvidence: evidence,
+                recovery: resumed,
               },
               null,
               2,
@@ -172,7 +209,9 @@ export function goalTools(
                 ),
             }),
           )
-          return output
+          if (output.title !== "Completion audit rejected") return output
+          const resumed = yield* recovery(ctx, true)
+          return resumed ? { ...output, output: `${output.output}\n${resumed.example}` } : output
         }),
     }),
   )

@@ -1,2 +1,2 @@
 # Preserve the exact benchmark bytes used by recorded dataset fingerprints.
-*.json -text
+*.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

@@ -274,7 +274,12 @@ export namespace ChiefVerification {
   }
 
   export function reuse(
-    input: Parameters<typeof retained>[0] & { background: Pick<BackgroundJob.Interface, "get">; taskID?: string },
+    input: Parameters<typeof retained>[0] & {
+      background: Pick<BackgroundJob.Interface, "get">
+      taskID?: string
+      prompt?: string
+      objective?: string
+    },
   ) {
     return Effect.gen(function* () {
       const worker = yield* retained(input)
@@ -285,6 +290,13 @@ export namespace ChiefVerification {
             "task-recovery",
             `This current Chief request already has a completed worker. Continue or recover that same work with task_id="${worker.taskID}"; do not create a replacement child by rewording the brief. Distinct saved branches or a genuinely new routed request remain separate work. Put the ID in arguments.task_id, not only in the objective text. Supply a concrete continuation or correction in prompt or brief.objective.
 ${example(worker.taskID)}`,
+          ),
+        )
+      if (worker.correction && !input.prompt?.trim() && !input.objective?.trim())
+        return yield* Effect.fail(
+          new Refusal(
+            "task-objective",
+            `The retained worker's completion audit was rejected. Supply an explicit, nonblank correction in prompt or brief.objective and retain task_id="${worker.taskID}". The original request is not a correction.`,
           ),
         )
       return true

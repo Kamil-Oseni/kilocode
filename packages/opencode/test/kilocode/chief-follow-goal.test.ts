@@ -872,15 +872,47 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect(valid({task_id:id})).toBe(true)
         expect(valid({task_id:"ses_foreign",prompt:"Repair missing work"})).toBe(false)
         expect(valid({branch_id:"saved-branch"})).toBe(true)
+        expect(yield* ChiefVerification.reuse({...common, taskID: id})).toBe(true)
         // A real rejected completion audit, not an arbitrary worker narrative, requires corrective context.
         const updater = yield* goalTools(RayaGoal.make({storage:common.storage,sessions}),sessions).update.pipe(Effect.flatMap(Tool.init))
         const completion = {status:"complete" as const,summary:"Worker claimed completion",requirements:[]}
-        const audit = yield* updater.execute(completion, {sessionID:chat.id,messageID:assistant.id,callID:"recovery-audit",agent:"auto",abort:new AbortController().signal,messages:[],ask:()=>Effect.void,metadata:()=>Effect.void})
-        expect(audit.title).toBe("Completion audit rejected")
-        yield* sessions.updatePart({id:PartID.ascending(),sessionID:chat.id,messageID:assistant.id,
-          type:"tool",tool:"update_goal",callID:"recovery-audit",state:{status:"completed",input:completion,
-            title:audit.title,output:audit.output,metadata:audit.metadata,time:{start:Date.now(),end:Date.now()}},
+        const rejection = Effect.gen(function* () {
+          const audit = yield* updater.execute(completion, {sessionID:chat.id,messageID:assistant.id,callID:"recovery-audit",agent:"auto",abort:new AbortController().signal,messages:[],ask:()=>Effect.void,metadata:()=>Effect.void})
+          expect(audit.title).toBe("Completion audit rejected")
+          yield* sessions.updatePart({id:PartID.ascending(),sessionID:chat.id,messageID:assistant.id,
+            type:"tool",tool:"update_goal",callID:"recovery-audit",state:{status:"completed",input:completion,
+              title:audit.title,output:audit.output,metadata:audit.metadata,time:{start:Date.now(),end:Date.now()}},
+          })
         })
+        // The preflight permits an ordinary ID-only resume; a rejection during permission refresh
+        // must be observed by locked admission before any child dispatch.
+        const late = yield* Effect.exit(attempt({task_id:id}, assistant, rejection))
+        if (!Exit.isFailure(late)) throw new Error("Late rejection bypassed locked correction admission")
+        const error = Cause.squash(late.cause)
+        expect(error).toBeInstanceOf(Refusal)
+        if (!(error instanceof Refusal)) throw error
+        expect(error.reason).toBe("task-objective")
+        expect(started).toBe(1)
+        expect((yield* sessions.children(chat.id)).length).toBe(count)
+        // Static execution decoding must enforce correction even without the advertised schema.
+        for (const input of [
+          { task_id: id },
+          { task_id: id, prompt: "" },
+          { task_id: id, prompt: " \t\n " },
+          { task_id: id, prompt: " ", brief: { objective: "\t" } },
+        ]) {
+          const refused = yield* Effect.exit(attempt(input))
+          if (!Exit.isFailure(refused)) throw new Error("Blank correction resumed the retained worker")
+          const error = Cause.squash(refused.cause)
+          expect(error).toBeInstanceOf(Refusal)
+          if (!(error instanceof Refusal)) throw error
+          expect(error.reason).toBe("task-objective")
+          expect(error.message).toContain(`task_id="${id}"`)
+          expect((yield* sessions.children(chat.id)).length).toBe(count)
+          expect(started).toBe(1)
+        }
+        expect(yield* ChiefVerification.reuse({...common, taskID: id, prompt: "Correct the saved result"})).toBe(true)
+        expect(yield* ChiefVerification.reuse({...common, taskID: id, objective: "Correct the saved result"})).toBe(true)
         const corrected = yield* TaskSchema.prepare("task", shape, chat.id, assistant.id, "auto")
         const correction = validator.compile(corrected)
         expect(correction({task_id:id,background:false})).toBe(false)

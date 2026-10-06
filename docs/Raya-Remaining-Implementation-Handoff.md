@@ -1,5 +1,13 @@
 # Raya remaining implementation and agent handoff
 
+## Matching local package checkpoint, 2026-10-06
+
+Readiness48/100, workflows2/9, unfinished38 (35 In progress,3 Planned). Three repairs are now packaged from59524dc934/production958b0e1186 as7.4.23-snapshot+59524dc934.local.1791282001041. Original CLI98644/snapshot19497 naturally exit0 and join original streams/processes; parenta3c97565/b119d8d9. Default parallel extension/webview types, lint and bundling pass. Archive190514232 bytes/SHA0008d2b085d6d80657010b2ff76e844652aaa8fad7cb10b49a4f8dee93d3c826; CLI300090368/SHA4de10ca2ba80560eef1d7b5fd8db683dd98679284f8c8c8a9035623d5420add8. Fresh native recipe7ee9/PE64/PDB linkage independently verified0040b100, with maintained Windows cross-channel ctime qualification.
+
+Collector originalparent986195e4 and whole-audit09c9873a exit0, natural joins/no force. All482 archive entries/641143618 uncompressed bytes match processed payload; source manifest2fc164c9 authenticates120 static plus all50 fresh companions,170 total. Preparation/source peers17a46726/d482efbb/af596632 preserve exact75 explicit source pins and13 changed paths. Canonical files are combined-59524-* and current-59524-* under.tmp/new-pc.
+
+Installed version remains4cdd. Next execute fresh exact current-eight vault capture/external backup including4cdd, strict normal installer with full profile/log/unrelated-extension preservation and owned-writer monitor, physical/loaded identity, then original full General/Routine and all four voice-failure checks. Historical before4cdd backup does not substitute for this baseline. Cloud reservations remain released; Decision and second-PC migration canceled; local agents only. No models loaded or audio/device actions; goal active. Do not infer readiness/full workflow acceptance from package proof.
+
 ## Local-only continuation checkpoint, 2026-10-06
 
 Verified readiness48/100; installed workflows2/9; unfinished38 (35 In progress,3 Planned). All cloud reservations are released: Memory contract/service/protocol/tool, retrieval/Dream, lessons/self-heal, Memory UI and General/follow-up defects have no cloud owner. Do not assign/restart cloud workers or transfer source. Decision and second-PC migration remain canceled; full goal active.

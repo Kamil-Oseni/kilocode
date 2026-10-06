@@ -46,5 +46,7 @@ export namespace MemoryPorts {
       /** Explicit manual-job limits; omitted by legacy capture calls. */
       budget?: { input: number; output: number }
     }) => Promise<{ text: string; usage: unknown }>
+    /** Remote hosts join the original backend operation separately from the client transport. */
+    readonly retire?: () => Promise<void>
   }
 }

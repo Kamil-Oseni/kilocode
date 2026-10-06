@@ -29,6 +29,7 @@ export namespace MemoryDreamModel {
     const timeout = input.selection.timeout
     const decode = input.decode.bind(input)
     const model = input.model
+    const retire = model.retire?.bind(model)
     const selected = MemoryConfig.parse(configured)
     if (!selected) throw new Error("Dream requires an explicit provider/model identity")
     const resolved = await input.execute(model.resolve({ configured, session: selected }))
@@ -55,6 +56,7 @@ export namespace MemoryDreamModel {
         // The original generate promise delivers its error to the job. Retirement joins that same
         // operation; a failed generation is not evidence that its lifetime remains unconfirmed.
         if (work) await Promise.allSettled([work])
+        await retire?.()
       },
     }
   }

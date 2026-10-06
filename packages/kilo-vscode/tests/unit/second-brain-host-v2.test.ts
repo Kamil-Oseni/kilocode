@@ -195,6 +195,30 @@ test("selected v5 catalog refuses mixed legacy and unreviewed releases", () => {
   ).toThrow()
 })
 
+test("proposal authority checks the prepared root before dispatch", async () => {
+  const value = await fixture()
+  const cause = new Error("Original selected root was revoked")
+  const roots: string[] = []
+  try {
+    const failure = await value.service
+      .proposal({ action: "list", project: "C:\\Synthetic" }, undefined, async (root, signal) => {
+        signal.throwIfAborted()
+        roots.push(root)
+        throw cause
+      })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+    expect(failure).toBe(cause)
+    expect(roots).toEqual(["C:\\Synthetic"])
+    expect(value.calls).toEqual([])
+    expect(value.settings.pending()).toBeUndefined()
+  } finally {
+    await value.close()
+  }
+})
+
 genuine("real settings, service and selected Journal complete one search with exact Windows root debt", async () => {
   const value = await fixture()
   try {

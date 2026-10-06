@@ -115,6 +115,11 @@
     },
     "commands": [
       {
+        "command": "raya.memory.startDream",
+        "title": "Consolidate Approved Memories",
+        "category": "Raya"
+      },
+      {
         "command": "raya.memory.inspectDream",
         "title": "Inspect Saved Memory Consolidation",
         "category": "Raya"
@@ -1583,6 +1588,7 @@
     "vite-plugin-solid": "2.11.10"
   },
   "dependencies": {
+    "effect": "catalog:",
     "@anthropic-ai/sdk": "^0.39.0",
     "@kilocode/kilo-gateway": "workspace:*",
     "@kilocode/kilo-i18n": "workspace:*",

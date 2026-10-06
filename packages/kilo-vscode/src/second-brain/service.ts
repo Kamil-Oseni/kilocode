@@ -37,14 +37,20 @@ export class BrainService {
     return { ...this.state, configured: !!cfg, results: [] }
   }
 
-  async proposal(body: BrainProposalCommand, parent?: AbortSignal): Promise<BrainProposalResult> {
+  async proposal(
+    body: BrainProposalCommand,
+    parent?: AbortSignal,
+    authorize?: (root: string, signal: AbortSignal) => Promise<void>,
+  ): Promise<BrainProposalResult> {
     const signal = parent ? AbortSignal.any([parent, AbortSignal.timeout(35000)]) : AbortSignal.timeout(35000)
     const result: { value?: BrainProposalResult } = {}
     await this.configure(async () => {
       const cfg = await this.prepare(signal)
       if (!cfg || cfg.setup.version !== 2) throw new Error("Reviewed v2 Memory setup required")
+      await authorize?.(cfg.setup.root, signal)
       const client = new ClientV2(cfg.key, cfg.setup)
       result.value = await client.proposal(body, signal)
+      await authorize?.(cfg.setup.root, signal)
       if (this.managed && !this.managed.valid()) throw new Error("Original managed generation is unavailable")
     }, false)
     if (!result.value) throw new Error("Proposal publication was not observed")

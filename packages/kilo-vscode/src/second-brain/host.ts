@@ -19,6 +19,9 @@ import { targets as dreamTargets } from "./dream-sources"
 import { MemoryFiles } from "@kilocode/kilo-memory/store"
 import { snapshot as dreamSnapshot } from "./dream-view"
 import { explanation } from "./dream-review"
+import { DreamTransport } from "./dream-transport"
+import { Effect } from "effect"
+import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
   return (
@@ -44,6 +47,149 @@ export class BrainHost {
   private readonly service: BrainService
   private readonly control: BrainControl
   private current: { id: string; owner: object } | undefined
+  private dream?: Promise<void>
+  private closing = false
+  private controller?: AbortController
+  private debt?: unknown
+
+  startDream(connection: KiloConnectionService) {
+    if (this.closing) return Promise.reject(new Error("Memory consolidation intake is retired"))
+    if (this.debt)
+      return Promise.reject(new Error("Original consolidation cleanup is unconfirmed; inspect its checkpoint"))
+    if (this.dream) return this.dream
+    const work = this.consolidate(connection).finally(() => {
+      this.dream = undefined
+    })
+    this.dream = work
+    return work
+  }
+
+  private async stopDream() {
+    this.closing = true
+    this.controller?.abort()
+    if (this.dream) await Promise.allSettled([this.dream])
+    if (this.debt) throw this.debt
+  }
+
+  private async consolidate(connection: KiloConnectionService) {
+    if (!vscode.workspace.isTrusted) throw new Error("Trust the selected consolidation workspace")
+    const folders = vscode.workspace.workspaceFolders
+    if (!folders?.length) throw new Error("Open the project whose approved notes you want to consolidate")
+    const folder = folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick()
+    if (!folder || folder.uri.scheme !== "file") return
+    const project = folder.uri.fsPath
+    const client = await connection.getClientAsync(project)
+    const catalog = await client.provider.list({ directory: project })
+    if (catalog.error || !catalog.data) throw new Error("Original backend model catalog is unavailable")
+    if (this.closing) throw new Error("Memory consolidation intake is retired")
+    const data = catalog.data
+    const selected = await vscode.window.showQuickPick(
+      data.all
+        .filter((provider) => data.connected.includes(provider.id))
+        .flatMap((provider) =>
+          Object.values(provider.models).map((model) => ({
+            label: model.name,
+            description: provider.name,
+            model: `${provider.id}/${model.id}`,
+          })),
+        ),
+      { title: "Choose the consolidation model", matchOnDescription: true },
+    )
+    if (!selected) return
+    if (this.closing) throw new Error("Memory consolidation intake is retired")
+    if (connection.getClient() !== client) throw new Error("Original Dream backend changed; review again")
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Consolidate approved memories",
+        cancellable: true,
+      },
+      async (progress, cancellation) => {
+        const controller = new AbortController()
+        this.controller = controller
+        if (this.closing) controller.abort()
+        const off = cancellation.onCancellationRequested(() => controller.abort())
+        if (cancellation.isCancellationRequested) controller.abort()
+        const signal = controller.signal
+        let grant: Awaited<ReturnType<BrainHost["selectDream"]>> | undefined
+        let model: DreamTransport | undefined
+        const identity = { id: crypto.randomUUID(), owner: crypto.randomUUID() }
+        const errors: unknown[] = []
+        try {
+          progress.report({ message: "Select approved sources and note targets" })
+          const sources = await this.pickDreamSources(project, signal)
+          if (!sources) return
+          const targets = await this.pickDreamTargets(project, signal)
+          if (!targets) return
+          grant = await this.selectDream(project, { sources, ...targets }, signal)
+          if (connection.getClient() !== client) throw new Error("Original Dream backend changed; review again")
+          model = new DreamTransport(connection, { ...identity, project, model: selected.model })
+          const approved = grant.approved
+          const authority = grant
+          progress.report({ message: "Preparing proposals; note publication requires separate review" })
+          const result = await MemoryFiles.dreamManual.start(
+            grant.root,
+            project,
+            {
+              ...identity,
+              model: selected.model,
+              approved,
+              budget: { input: 12000, output: 4000 },
+              timeout: 300000,
+            },
+            {
+              authorize: authority.authorize,
+              model: model.port,
+              execute: Effect.runPromise,
+              propose: (id, candidate, current) =>
+                MemoryFiles.dreamProposal.submit(
+                  project,
+                  id,
+                  candidate,
+                  (command, current) =>
+                    this.service.proposal(command, current, async (root, active) => {
+                      await authority.authorize(root, project, approved, active)
+                    }),
+                  current,
+                ),
+            },
+            signal,
+          )
+          progress.report({
+            message:
+              result.phase === "review-pending"
+                ? "Pending proposals are ready for review in Memory"
+                : "No supported changes need review",
+          })
+        } catch (err) {
+          errors.push(err)
+        } finally {
+          off.dispose()
+          controller.abort()
+          this.controller = undefined
+          grant?.close()
+          await model?.close().catch((err: unknown) => {
+            this.debt = err
+            if (!errors.includes(err)) errors.push(err)
+          })
+        }
+        if (errors.length && signal.aborted && !this.debt && grant) {
+          const saved = await MemoryFiles.dream.list(grant.root, project).catch((err: unknown) => {
+            errors.push(err)
+            return undefined
+          })
+          if (
+            saved?.runs.some(
+              (run) => run.id === identity.id && run.owner === identity.owner && run.phase === "cancelled",
+            )
+          )
+            return
+        }
+        if (errors.length === 1) throw errors[0]
+        if (errors.length) throw new AggregateError(errors, "Original consolidation failures remain unconfirmed")
+      },
+    )
+  }
 
   private async inspectDream() {
     if (!vscode.workspace.isTrusted) throw new Error("Trust the selected workspace before inspecting its memory")
@@ -207,6 +353,12 @@ export class BrainHost {
   }
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    register(() => this.stopDream())
+    context.subscriptions.push({
+      dispose: () => {
+        void this.stopDream().catch(() => console.warn("[Raya] Consolidation cleanup is unconfirmed"))
+      },
+    })
     const existing = services.get(context)
     this.settings = existing?.settings ?? new BrainSettings(context.globalState, context.secrets)
     this.service = existing?.service ?? new BrainService(this.settings, context.extensionPath)

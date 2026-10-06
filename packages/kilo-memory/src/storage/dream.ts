@@ -225,6 +225,8 @@ export namespace MemoryDream {
       const value = await read(root, project)
       if (value.runs.some((item) => !terminal.has(item.phase)))
         throw new Error("Reconcile the original active Dream run before starting another")
+      if (value.rows.some((row) => row.state === "submitting"))
+        throw new Error("Reconcile the original uncertain Dream proposal before starting another")
       if (value.runs.some((item) => item.id === input.id)) throw new Error("Dream run identity has already been used")
       const timeout = z.number().int().min(1).max(300000).parse(input.timeout)
       const started = Date.now()
@@ -276,7 +278,7 @@ export namespace MemoryDream {
       if (terminal.has(item.phase)) throw new Error("Dream run is already terminal")
       const allowed: Record<Run["phase"], Run["phase"][]> = {
         generation: ["validation", "reconciliation", "cancelled", "failed"],
-        validation: ["submission", "reconciliation", "cancelled", "failed"],
+        validation: ["submission", "completed", "reconciliation", "cancelled", "failed"],
         submission: ["review-pending", "reconciliation", "cancelled", "failed"],
         "review-pending": ["completed", "reconciliation", "cancelled", "failed"],
         reconciliation: ["review-pending", "completed", "cancelled", "failed"],

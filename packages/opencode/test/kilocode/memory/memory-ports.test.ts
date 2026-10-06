@@ -6,7 +6,6 @@ import { createHash, randomUUID } from "node:crypto"
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { z } from "zod"
 import { MemoryFiles } from "@kilocode/kilo-memory/store"
 import { localFetch, status } from "../../../src/kilocode/provider/local-scheduler"
 import { Effect } from "effect"
@@ -520,6 +519,12 @@ describe("memory ports", () => {
     const sha256 = createHash("sha256")
       .update(await readFile(source))
       .digest("hex")
+    const input = await MemoryFiles.dreamInput.prepare(root, project, {
+      scope: randomUUID(),
+      sources: [{ path: "approved.md", sha256, kind: "approved-summary" }],
+      targets: [{ key: "voice", path: "Preferences/voice.md", expected: null }],
+      budget: 3000,
+    })
     const selection = {
       id: randomUUID(),
       owner: randomUUID(),
@@ -546,7 +551,17 @@ describe("memory ports", () => {
               index: 0,
               message: {
                 role: "assistant",
-                content: JSON.stringify({ content: "Use a calm voice.", reason: "Approved evidence." }),
+                content: JSON.stringify({
+                  items: [
+                    {
+                      key: "voice",
+                      sources: ["approved.md"],
+                      content: "Use a calm voice.",
+                      rationale: "Approved evidence.",
+                      contradictions: [],
+                    },
+                  ],
+                }),
               },
               finish_reason: "stop",
             },
@@ -575,35 +590,13 @@ describe("memory ports", () => {
               model,
               execute: (effect) => Effect.runPromise(effect),
               selection,
-              system: "Propose a preference from the approved source. Return JSON content and reason.",
-              prompt: JSON.stringify({
-                sources: selection.sources,
-                text: "Approved synthetic preference: use a calm voice.",
-              }),
-              decode: async (text) => {
-                const value = z.object({ content: z.string(), reason: z.string() }).strict().parse(JSON.parse(text))
-                return [
-                  {
-                    fact: "a".repeat(64),
-                    kind: "memory",
-                    sources: selection.sources,
-                    changes: [{ path: "Preferences/voice.md", expected: null, content: value.content }],
-                    rationale: value.reason,
-                    contradictions: [],
-                  },
-                ]
-              },
+              system: input.system,
+              prompt: input.prompt,
+              decode: input.decode,
             },
             signal,
           ),
-        validate: async (candidate) => {
-          expect(candidate.sources).toEqual(selection.sources)
-          expect(
-            createHash("sha256")
-              .update(await readFile(source))
-              .digest("hex"),
-          ).toBe(sha256)
-        },
+        validate: input.validate,
         propose: async (id, candidate) => {
           await writeFile(path.join(root, `${id}.proposal.json`), JSON.stringify(candidate), { flag: "wx" })
           return { id, status: "pending" }
@@ -612,9 +605,22 @@ describe("memory ports", () => {
       expect(run.phase).toBe("review-pending")
       const ledger = await MemoryFiles.dream.list(root, project)
       expect(ledger.rows[0].state).toBe("pending")
+      const proposal = JSON.parse(await readFile(path.join(root, `${ledger.rows[0].proposal}.proposal.json`), "utf8"))
+      expect(proposal).toMatchObject({
+        kind: "memory",
+        sources: selection.sources,
+        changes: [{ path: "Preferences/voice.md", expected: null, content: "Use a calm voice." }],
+      })
+      expect(proposal.fact).toMatch(/^[a-f0-9]{64}$/)
       expect(await MemoryFiles.exists(path.join(root, "Preferences/voice.md"))).toBe(false)
       expect(requests).toHaveLength(1)
       expect(requests[0]).toMatchObject({ stream: false, max_tokens: 512 })
+      expect(requests[0]).toMatchObject({
+        messages: [
+          { role: "system", content: input.system },
+          { role: "user", content: input.prompt },
+        ],
+      })
       expect(tags).toEqual([null])
       expect(status()).toEqual({ active: 0, queued: 0, bytes: 0 })
     } finally {

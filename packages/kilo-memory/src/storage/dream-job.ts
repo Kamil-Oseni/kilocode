@@ -56,8 +56,8 @@ export namespace MemoryDreamJob {
       const candidates = await lease.generate(controller.signal)
       controller.signal.throwIfAborted()
       await MemoryDream.advance(root, project, { ...owner, phase: "validation" })
-      if (!Array.isArray(candidates) || !candidates.length || candidates.length > 20)
-        throw new Error("Dream generation must return 1–20 candidates")
+      if (!Array.isArray(candidates) || candidates.length > 20)
+        throw new Error("Dream generation must return 0–20 candidates")
       let tokens = 0
       for (const candidate of candidates) {
         controller.signal.throwIfAborted()
@@ -76,10 +76,12 @@ export namespace MemoryDreamJob {
         await ports.validate(candidate, controller.signal)
       }
       controller.signal.throwIfAborted()
-      const fingerprints = await MemoryDream.stage(root, project, candidates)
+      const fingerprints = candidates.length ? await MemoryDream.stage(root, project, candidates) : []
       if (!fingerprints.length) {
-        phase = "cancelled"
-        reason = "All candidates were already reviewed or suppressed"
+        phase = "completed"
+        reason = candidates.length
+          ? "All candidates were already reviewed or suppressed"
+          : "No supported memory changes"
       }
       if (fingerprints.length) {
         await MemoryDream.advance(root, project, { ...owner, phase: "submission", candidates: fingerprints })

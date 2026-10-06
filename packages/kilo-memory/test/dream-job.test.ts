@@ -74,6 +74,50 @@ test("manual job retains original pending proposal and never applies generated n
   expect(await readdir(f.root)).not.toContain("Preferences")
 })
 
+test("no supported changes completes after joining the original lease without proposals", async () => {
+  const f = await fixture()
+  f.ports.admit = async () => ({
+    generate: async () => [],
+    retire: async () => {
+      f.events.push("retired")
+    },
+  })
+  const run = await MemoryFiles.dreamJob.start(f.root, f.project, f.selection, f.ports)
+  expect(run.phase).toBe("completed")
+  expect(run.reason).toBe("No supported memory changes")
+  expect(f.events).toEqual(["retired"])
+  expect((await MemoryFiles.dream.list(f.root, f.project)).rows).toEqual([])
+  expect((await readdir(f.root)).filter((file) => file.endsWith(".proposal.json"))).toEqual([])
+  const next = await MemoryFiles.dreamJob.start(f.root, f.project, { ...f.selection, id: randomUUID() }, f.ports)
+  expect(next.phase).toBe("completed")
+})
+
+test("an orphan uncertain proposal blocks a new generation even without an active run", async () => {
+  const f = await fixture()
+  const [fingerprint] = await MemoryFiles.dream.stage(f.root, f.project, [f.candidate])
+  await MemoryFiles.dream.submit(f.root, f.project, fingerprint, randomUUID())
+  await expect(MemoryFiles.dreamJob.start(f.root, f.project, f.selection, f.ports)).rejects.toThrow(
+    "original uncertain",
+  )
+  expect(f.events).toEqual([])
+  expect((await MemoryFiles.dream.list(f.root, f.project)).runs).toEqual([])
+})
+
+test("empty output cannot claim completion when original lease retirement fails", async () => {
+  const f = await fixture()
+  f.ports.admit = async () => ({
+    generate: async () => [],
+    retire: async () => {
+      throw new Error("Original lease unresolved")
+    },
+  })
+  await expect(MemoryFiles.dreamJob.start(f.root, f.project, f.selection, f.ports)).rejects.toThrow("lease unresolved")
+  expect((await MemoryFiles.dream.list(f.root, f.project)).runs[0].phase).toBe("reconciliation")
+  await expect(
+    MemoryFiles.dreamJob.start(f.root, f.project, { ...f.selection, id: randomUUID() }, f.ports),
+  ).rejects.toThrow("original active")
+})
+
 test("lost proposal reply retains reconciliation and refuses another job", async () => {
   const f = await fixture()
   const propose = f.ports.propose.bind(f.ports)

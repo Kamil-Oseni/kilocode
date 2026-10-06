@@ -6,4 +6,8 @@ The source implementation prepares a bounded JSON prompt from explicitly selecte
 
 Selection labels do not grant consent. The calling host must authorize roots, sources and targets. Source checks do not prove the factual interpretation of generated text or authorize embedded Markdown links. Human review remains required before publication.
 
-Seven actual-filesystem checks pass with 22 assertions, and the memory package typecheck passes. This step does not enable capture, scheduling, publish notes or verify repairs. The host selection interface and proposal review integration remain unfinished. An empty generated result also needs lifecycle integration before ordinary use.
+Seven actual-filesystem checks pass with 22 assertions, and the memory package typecheck passes. The composed test now exercises this input reader, the real model SDK over a controlled local HTTP endpoint, the original job lease, source revalidation and the durable candidate ledger. It creates a synthetic pending proposal file, not a published note or a production review-service proposal. This does not test real model quality or installed native process ownership.
+
+Empty generated results complete only after the original lease retires. Unconfirmed retirement remains in reconciliation, and orphan uncertain proposal records block replacement runs. This step does not enable capture, scheduling, publish notes or verify repairs. The host selection interface and proposal review integration remain unfinished.
+
+Verification after lifecycle integration: the full memory package passes 197 tests with 826 assertions; the model-port suite passes 17 tests with 48 assertions. Both package typechecks pass. Affected lint has zero errors and retains existing model-port fixture warnings; the upstream annotation guard reports no shared upstream source changes. All commands used private profile paths.

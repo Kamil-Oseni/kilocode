@@ -49,6 +49,12 @@ import { Refusal } from "../../src/kilocode/session/tool-refusal"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ChiefRouteTool } from "../../src/kilocode/tool/chief-route"
 import { Question } from "../../src/question"
+import { WriteTool } from "../../src/tool/write"
+import { ReadTool } from "../../src/tool/read"
+import { Instruction } from "../../src/session/instruction"
+import { Storage } from "../../src/storage/storage"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import * as ExactWrite from "../../src/kilocode/tool/exact-write"
 
 await Log.init({ print: false })
 
@@ -154,6 +160,9 @@ const root = LayerNode.group([
   BackgroundJob.node,
   Provider.node,
   Question.node,
+  Instruction.node,
+  Storage.node,
+  Ripgrep.node,
   testNode,
 ])
 const env = LayerNode.compile(root, [
@@ -238,6 +247,8 @@ it.effect(
           const edit = yield* EditTool.pipe(Effect.flatMap(Tool.init))
           const task = yield* TaskTool.pipe(Effect.flatMap(Tool.init))
           const chief = yield* ChiefRouteTool.pipe(Effect.flatMap(Tool.init))
+          const writer = yield* WriteTool.pipe(Effect.flatMap(Tool.init))
+          const reader = yield* ReadTool.pipe(Effect.flatMap(Tool.init))
           const lookalike = yield* Tool.define(
             "chief-lookalike",
             Effect.succeed({
@@ -257,6 +268,53 @@ it.effect(
           const file = path.join(dir, "stale.txt")
           const fs = yield* FSUtil.Service
           yield* fs.writeFileString(file, "unchanged actual file")
+          const source = path.join(dir, "exact-source.txt")
+          const target = path.join(dir, "exact-target.txt")
+          yield* fs.writeFileString(source, "a".repeat(48))
+          const read = yield* reader.execute(
+            { filePath: source },
+            {
+              sessionID: item.chat.id,
+              messageID: item.handle.message.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              callID: "source-read",
+              messages: [],
+              ask: () => Effect.void,
+              metadata: () => Effect.void,
+            },
+          )
+          const block = read.output.match(
+            /<file-content-json encoding="UTF-8" complete="true" bytes="(\d+)" sha256="([a-f0-9]{64})">\n(.*?)\n<\/file-content-json>/s,
+          )
+          expect(block).not.toBeNull()
+          const content: unknown = JSON.parse(block![3])
+          if (typeof content !== "string") throw new Error("Complete source Read must contain a JSON string")
+          const exact = { bytes: Number(block![1]), sha256: block![2] }
+          const lookalikeWrite = yield* Tool.define(
+            "write-lookalike",
+            Effect.succeed({
+              description: "Preserve a generic error with identical exact-write wording",
+              parameters: Schema.Struct({}),
+              execute: () =>
+                Effect.die(
+                  new Error(
+                    "Exact UTF-8 write refused: content bytes or SHA-256 differ from the expected Read evidence. Decode the complete file-content-json string exactly; check BOM, newline endings and final newline. No file was written.",
+                  ),
+                ),
+            }),
+          ).pipe(Effect.flatMap(Tool.init))
+          const mixedWrite = yield* Tool.define(
+            "write-finalizer",
+            Effect.succeed({
+              description: "Retain an actual exact-write refusal combined with a finalizer failure",
+              parameters: Schema.Struct({}),
+              execute: (_, ctx) =>
+                writer
+                  .execute({ filePath: target, content: content + "\n", exact }, ctx)
+                  .pipe(Effect.ensuring(Effect.die(new Error("actual exact-write finalizer failed")))),
+            }),
+          ).pipe(Effect.flatMap(Tool.init))
           yield* item.session.setPermission({
             sessionID: item.chat.id,
             permission: Permission.fromConfig({ edit: "deny" }),
@@ -269,6 +327,30 @@ it.effect(
             sticky?: boolean
           }[] = [
             { call: "permission", spec, args: { value: "valid" } },
+            {
+              call: "exact-newline",
+              spec: writer,
+              args: { filePath: target, content: content + "\n", exact },
+              reason: "exact-write",
+            },
+            {
+              call: "exact-equal-length",
+              spec: writer,
+              args: { filePath: target, content: "b".repeat(48), exact },
+              reason: "exact-write",
+            },
+            {
+              call: "exact-surrogate",
+              spec: writer,
+              args: { filePath: target, content: "\ud800", exact },
+              reason: "exact-write",
+            },
+            {
+              call: "exact-bound",
+              spec: writer,
+              args: { filePath: target, content: "x".repeat(8193), exact },
+              reason: "exact-write",
+            },
             {
               call: "no-change",
               spec: edit,
@@ -313,6 +395,8 @@ it.effect(
               reason: "chief-no-eligible",
             },
             { call: "chief-lookalike", spec: lookalike, args: {}, sticky: true },
+            { call: "write-lookalike", spec: lookalikeWrite, args: {}, sticky: true },
+            { call: "write-finalizer", spec: mixedWrite, args: {}, sticky: true },
             { call: "generic", spec: generic, args: { value: "valid" }, sticky: true },
           ]
           let sticky = 0
@@ -385,6 +469,7 @@ it.effect(
             expect(SessionRetirement.snapshot().failures).toBe(sticky + 1)
             const error = dispatched.events.find((event) => event.type === "tool-error")?.error
             if (row.reason) expect(error).toMatchObject({ reason: row.reason })
+            if (call.startsWith("exact-")) expect(yield* fs.exists(target)).toBe(false)
             if (call === "session") expect(error).toBeInstanceOf(InvalidArgumentsError)
             expect(completed(item.chat.id, "foreign-call", error)).toBe(false)
             expect(completed("foreign-session", call, error)).toBe(false)
@@ -419,6 +504,8 @@ it.effect(
             }
           }
           expect(yield* fs.readFileString(file)).toBe("unchanged actual file")
+          expect(yield* fs.readFileString(source)).toBe(content)
+          expect(yield* fs.exists(target)).toBe(false)
           expect(Exit.isFailure(yield* Effect.exit(SessionRetirement.drain))).toBe(true)
         }),
       {
@@ -487,6 +574,34 @@ test("unavailable Chief refusal preserves generic and mixed retirement failures"
   const owner = SessionRetirement.make()
   await Effect.runPromiseExit(owner.tool("session", "call", Effect.die(error)))
   expect(owner.completed("foreign", "call", error)).toBe(false)
+  expect(owner.completed("session", "call", generic)).toBe(false)
+  expect(Exit.isFailure(await Effect.runPromiseExit(owner.drain))).toBe(true)
+  const mixed = SessionRetirement.make()
+  await Effect.runPromiseExit(
+    mixed.tool("session", "call", Effect.die(error).pipe(Effect.ensuring(Effect.die(generic)))),
+  )
+  expect(mixed.completed("session", "call", error)).toBe(false)
+  expect(Exit.isFailure(await Effect.runPromiseExit(mixed.drain))).toBe(true)
+})
+
+test("exact-write refusal keeps unpublished, foreign and mixed failures sticky", async () => {
+  const error = (() => {
+    try {
+      ExactWrite.check("literal\n", { bytes: 7, sha256: "0".repeat(64) })
+    } catch (err) {
+      return err
+    }
+    throw new Error("Expected the actual exact-write validation guard to refuse")
+  })()
+  expect(error).toBeInstanceOf(Refusal)
+  expect(error).toMatchObject({ reason: "exact-write" })
+  if (!(error instanceof Refusal)) throw new Error("Actual exact-write guard did not emit Refusal")
+  const generic = new Error(error.message)
+  expect(completed("session", "call", generic)).toBe(false)
+  const owner = SessionRetirement.make()
+  await Effect.runPromiseExit(owner.tool("session", "call", Effect.die(error)))
+  expect(owner.completed("foreign", "call", error)).toBe(false)
+  expect(owner.completed("session", "foreign", error)).toBe(false)
   expect(owner.completed("session", "call", generic)).toBe(false)
   expect(Exit.isFailure(await Effect.runPromiseExit(owner.drain))).toBe(true)
   const mixed = SessionRetirement.make()

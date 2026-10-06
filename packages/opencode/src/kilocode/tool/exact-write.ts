@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { Schema } from "effect"
+import { Refusal } from "../session/tool-refusal"
 
 export const Exact = Schema.Struct({
   bytes: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8192 })),
@@ -16,15 +17,17 @@ export function check(content: string, exact: typeof Exact.Type | undefined) {
     if (code >= 0xd800 && code <= 0xdbff) {
       const next = content.charCodeAt(++index)
       if (next >= 0xdc00 && next <= 0xdfff) continue
-      throw new Error("Exact UTF-8 write refused: unpaired surrogate in content.")
+      throw new Refusal("exact-write", "Exact UTF-8 write refused: unpaired surrogate in content.")
     }
-    if (code >= 0xdc00 && code <= 0xdfff) throw new Error("Exact UTF-8 write refused: unpaired surrogate in content.")
+    if (code >= 0xdc00 && code <= 0xdfff)
+      throw new Refusal("exact-write", "Exact UTF-8 write refused: unpaired surrogate in content.")
   }
   const data = Buffer.from(content, "utf8")
   if (data.length > 8192 || Buffer.byteLength(JSON.stringify(content).replace(/</g, "\\u003c"), "utf8") > 8192)
-    throw new Error("Exact UTF-8 write refused: content exceeds the complete Read evidence bound.")
+    throw new Refusal("exact-write", "Exact UTF-8 write refused: content exceeds the complete Read evidence bound.")
   if (data.length !== exact.bytes || createHash("sha256").update(data).digest("hex") !== exact.sha256)
-    throw new Error(
+    throw new Refusal(
+      "exact-write",
       "Exact UTF-8 write refused: content bytes or SHA-256 differ from the expected Read evidence. Decode the complete file-content-json string exactly; check BOM, newline endings and final newline. No file was written.",
     )
 }

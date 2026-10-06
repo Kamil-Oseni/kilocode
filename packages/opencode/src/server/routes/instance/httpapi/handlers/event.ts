@@ -5,6 +5,8 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { Effect, Queue } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
+import { HttpServerRequest } from "effect/unstable/http" // kilocode_change
+import * as EventDrain from "@/kilocode/server/event-drain" // kilocode_change
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { EventApi } from "../groups/event"
@@ -29,6 +31,7 @@ function eventResponse(events: EventV2.Interface) {
   return Effect.gen(function* () {
     const instance = yield* InstanceState.context
     const workspaceID = yield* InstanceState.workspaceID
+    const request = yield* HttpServerRequest.HttpServerRequest // kilocode_change
     // kilocode_change start - GlobalBus includes encoded EventV2 events, sync envelopes, and Kilo's legacy
     // Bus events. EventV2.listen would silently drop the latter two groups. Register eagerly to avoid gaps.
     const wake = yield* Queue.dropping<void>(1)
@@ -38,6 +41,7 @@ function eventResponse(events: EventV2.Interface) {
     let closed = false
     const signal = () => void Queue.offerUnsafe(wake, undefined)
     const terminal = (type: string, properties: Record<string, string>) => {
+      EventDrain.terminal(request.source) // kilocode_change
       pending.length = 0
       bytes = 0
       pending.push({ data: JSON.stringify({ id: eventID(), type, properties }), type })

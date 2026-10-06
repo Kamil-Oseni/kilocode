@@ -16,6 +16,7 @@ import { PublicApi } from "./routes/instance/httpapi/public"
 import type { CorsOptions } from "@opencode-ai/server/cors"
 import { lazy } from "@/util/lazy"
 import * as KiloListener from "@/kilocode/server/listener" // kilocode_change
+import * as EventDrain from "@/kilocode/server/event-drain" // kilocode_change
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -207,6 +208,7 @@ function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>, list
 
 function serverLayer(opts: { port: number; hostname: string }) {
   const server = createServer()
+  const events = EventDrain.track(server) // kilocode_change
   const serverRef = { closeStarted: false, forceStop: false }
   const close = server.close.bind(server)
   // Keep shutdown owned by NodeHttpServer, but honor listener.stop(true) by
@@ -221,14 +223,24 @@ function serverLayer(opts: { port: number; hostname: string }) {
 
   return Layer.mergeAll(
     NodeHttpServer.layer(() => server, { port: opts.port, host: opts.hostname, disablePreemptiveShutdown: true }), // kilocode_change - join the original close instead of caching a timed-out interruption
-    Layer.succeed(ListenerServerService)(
-      ListenerServerService.of({
-        closeAll: Effect.sync(() => {
-          serverRef.forceStop = true
-          server.closeAllConnections() // kilocode_change - retire HTTP streams before joining listener scope finalizers
-        }),
-      }),
+    // kilocode_change start - join terminal event writers before forcing remaining sockets
+    Layer.effect(ListenerServerService)(
+      Effect.acquireRelease(Effect.succeed(events), (events) => Effect.sync(() => events.close())).pipe(
+        Effect.map((events) =>
+          ListenerServerService.of({
+            closeAll: Effect.promise(async () => {
+              try {
+                await events.drain()
+              } finally {
+                serverRef.forceStop = true
+                server.closeAllConnections()
+              }
+            }),
+          }),
+        ),
+      ),
     ),
+    // kilocode_change end
   )
 }
 

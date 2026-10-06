@@ -6,6 +6,8 @@ import { parse } from "./settings"
 import { sources } from "./setup-v2"
 import { raw } from "./raw-response"
 import { search } from "./search-results"
+import { context } from "./linked-results"
+import { release } from "./control/catalog-v2"
 import type { BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 
 type Selection = Parameters<typeof operation>[1]
@@ -153,7 +155,7 @@ export class ClientV2 {
     return this.#selection
   }
 
-  private async send(kind: "sync" | "search", body: object, opts: Options, expected?: string) {
+  private async send(kind: "sync" | "search", body: object, opts: Options, expected?: string, budget?: number) {
     const id = opts.id
     const before = opts.before
     const downstream = opts.downstream
@@ -172,6 +174,7 @@ export class ClientV2 {
       release: health.release,
       kind,
       digest: fingerprint(body),
+      ...(budget === undefined ? {} : { budget }),
       ...(downstream ? { downstream } : {}),
     })
     const request = Object.freeze({
@@ -263,6 +266,29 @@ export class ClientV2 {
       capture_enabled: false as const,
       kind: "source_candidates" as const,
     })
+  }
+
+  async context(query: string, budget: number, opts: Options) {
+    const body = { query, top: 5, context_budget: budget }
+    if (
+      typeof query !== "string" ||
+      !query.trim() ||
+      query.length > 8000 ||
+      !integer(budget, 12000) ||
+      budget === 0 ||
+      Buffer.byteLength(JSON.stringify(body)) > 16000
+    )
+      throw new Error("Supply a bounded query and explicit linked-context budget")
+    if (Object.entries(release).some(([name, hash]) => this.#setup.source_sha256[name] !== hash))
+      throw new Failure(
+        "unsupported",
+        "Select the separately reviewed context-capable Memory release before linked recall.",
+        0,
+      )
+    const value = await this.send("search", body, opts, undefined, budget)
+    const result = context(object(value.result!).context, this.#setup.root, budget)
+    value.signal.throwIfAborted()
+    return result
   }
 
   async sync(expected: string, opts: Options) {

@@ -5,6 +5,7 @@ import { TextField } from "@kilocode/kilo-ui/text-field"
 import { useVSCode } from "../../context/vscode"
 import type { BrainState, BrainRequest } from "../../../../src/shared/second-brain"
 import { BrainProposals } from "./BrainProposals"
+import { BrainConsolidation } from "./BrainConsolidation"
 
 const labels: Record<string, string> = {
   namespace_changed: "Memory folder changed. Trusted re-admission is required.",
@@ -13,6 +14,7 @@ const labels: Record<string, string> = {
   service_draining: "Memory is draining and cannot accept searches.",
   identity_mismatch: "Memory does not match the selected setup manifest.",
   setup_invalid: "Select a valid reviewed setup manifest and credential.",
+  unsupported: "Linked context requires a reviewed context-capable Memory release. Import its service setup first.",
   setup_changing: "Memory setup is changing. Wait for local requests to finish, then check the service.",
   transport_error: "The local Memory service could not finish the request.",
   control_setup_required: "Import a reviewed local control setup before reviewing sources.",
@@ -26,37 +28,61 @@ export function SecondBrain() {
   const [state, setState] = createSignal<BrainState>({ configured: false, status: "disconnected", results: [] })
   const [query, setQuery] = createSignal("")
   const [id, setId] = createSignal("")
-  const busy = () => ["checking", "searching"].includes(state().status)
-  const request = (action: Exclude<BrainRequest["action"], "proposal">) => {
+  const [control, setControl] = createSignal<"review" | "sync">()
+  const searching = () => ["checking", "searching"].includes(state().status)
+  const busy = () => searching() || Boolean(control())
+  const request = (
+    action: Exclude<
+      BrainRequest["action"],
+      "proposal" | "dreamStart" | "dreamInspect" | "dreamActivity" | "dreamCancel"
+    >,
+  ) => {
+    if (control()) return
     const target = id()
     const next = crypto.randomUUID()
     setId(next)
+    if (action === "review" || action === "sync") setControl(action)
     if (action === "cancel") {
       vscode.postMessage({ type: "secondBrain", action, id: next, target })
       return
     }
     if (action === "setup" || action === "check")
       setState({ configured: state().configured, status: "checking", results: [] })
-    if (action === "search") {
+    if (action === "search" || action === "context") {
       setState({ configured: state().configured, status: "searching", results: [] })
-      vscode.postMessage({ type: "secondBrain", action, id: next, query: query() })
+      vscode.postMessage(
+        action === "context"
+          ? { type: "secondBrain", action, id: next, query: query(), budget: 3000 }
+          : { type: "secondBrain", action, id: next, query: query() },
+      )
       return
     }
     vscode.postMessage({ type: "secondBrain", action, id: next })
   }
   const off = vscode.onMessage((message) => {
-    if (message.type === "secondBrainState" && message.id === id()) setState(message.state)
+    if (message.type === "secondBrainState" && message.id === id()) {
+      setControl()
+      setState(message.state)
+    }
   })
   onMount(() => request("state"))
   onCleanup(() => {
     off()
-    if (busy()) vscode.postMessage({ type: "secondBrain", action: "cancel", id: crypto.randomUUID(), target: id() })
+    if (searching())
+      vscode.postMessage({ type: "secondBrain", action: "cancel", id: crypto.randomUUID(), target: id() })
   })
   return (
     <Card>
       <h4>SecondBrain</h4>
       <p>Search your reviewed local notes. Results stay in this panel and are not added to chat.</p>
       <p role="status">{state().configured ? state().status : "Setup required"}</p>
+      <Show when={control()}>
+        {(action) => (
+          <p role="status">
+            {action() === "review" ? "Reviewing sources in native review…" : "Waiting for confirmed index sync…"}
+          </p>
+        )}
+      </Show>
       <Show when={state().code}>
         <p role="alert">{labels[state().code!] ?? "Memory is unavailable. Check the local service."}</p>
       </Show>
@@ -99,7 +125,10 @@ export function SecondBrain() {
       <Button onClick={() => request("search")} disabled={!state().configured || busy() || !query().trim()}>
         Search notes
       </Button>
-      <Show when={busy()}>
+      <Button onClick={() => request("context")} disabled={!state().configured || busy() || !query().trim()}>
+        Preview linked context
+      </Button>
+      <Show when={searching()}>
         <Button onClick={() => request("cancel")}>Cancel search</Button>
       </Show>
       <For each={state().results}>
@@ -116,11 +145,51 @@ export function SecondBrain() {
           </section>
         )}
       </For>
+      <Show when={state().context}>
+        {(context) => (
+          <section aria-label="Linked memory context">
+            <p>
+              {context().tokens} estimated passage tokens · {context().sources.length} sources
+            </p>
+            <Show when={context().truncated}>
+              <p role="status">Some context was omitted. Narrow your query to retrieve more relevant passages.</p>
+            </Show>
+            <For each={context().sources}>
+              {(source) => (
+                <section>
+                  <h5>
+                    {source.relative} · lines {source.line}–{source.end_line}
+                  </h5>
+                  <Show when={source.heading}>
+                    <p>{source.heading}</p>
+                  </Show>
+                  <pre>{source.text}</pre>
+                  <Show when={source.truncated}>
+                    <small>Limited passage · </small>
+                  </Show>
+                  <small>Source SHA-256: {source.source_sha256}</small>
+                </section>
+              )}
+            </For>
+            <Show when={context().diagnostics.length}>
+              <h5>Skipped links</h5>
+              <For each={context().diagnostics}>
+                {(row) => (
+                  <p>
+                    {row.relative}: {row.reason}
+                  </p>
+                )}
+              </For>
+            </Show>
+          </section>
+        )}
+      </Show>
       <p>
         Review and sync require separate native confirmations. Disconnect joins local transport only. Capture is
         disabled.
       </p>
-      <BrainProposals configured={state().configured} />
+      <BrainConsolidation configured={state().configured} />
+      <BrainProposals configured={state().configured} busy={busy()} index={(action) => request(action)} />
     </Card>
   )
 }

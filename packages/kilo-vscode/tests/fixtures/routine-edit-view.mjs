@@ -799,10 +799,16 @@ try {
   emit({ type: "routineScheduleUpdated", requestID: final.requestID, agentID: "another-routine" })
   assert.ok(button("Saving").disabled)
   emit({ type: "routineScheduleUpdated", requestID: final.requestID, agentID: "routine" })
-  assert.equal(root.querySelector("form"), null)
+  assert.equal(root.querySelector("form.routines-form"), null)
+  assert.ok(root.querySelector("form.routines-start-composer"))
   assert.equal(root.querySelector("h2").textContent, "Routines")
   {
     const archive = root.querySelector(".routines-archive")
+    const reload = () => {
+      const control = [...archive.querySelectorAll("button")].find((item) => item.textContent.trim() === "Refresh")
+      assert.ok(control, "Missing archive Refresh control")
+      control.click()
+    }
     archive.open = true
     archive.dispatchEvent(new window.Event("toggle"))
     const listing = sent.findLast((msg) => msg.type === "routineArchive")
@@ -915,12 +921,12 @@ try {
     assert.equal(picker.options.length, 3)
     assert.equal(picker.value, "archived")
     assert.doesNotMatch(archive.textContent, /Load more removed routines/)
-    button("Refresh").click()
+    reload()
     const refresh = sent.findLast((msg) => msg.type === "routineArchive")
     emit({ type: "routineArchive", requestID: refresh.requestID, archive: [] })
     assert.match(archive.textContent, /No past workers yet/)
     assert.doesNotMatch(archive.textContent, /Saved result/)
-    button("Refresh").click()
+    reload()
     const cancelled = sent.findLast((msg) => msg.type === "routineArchive")
     archive.open = false
     archive.dispatchEvent(new window.Event("toggle"))
@@ -967,7 +973,7 @@ try {
         },
       ],
     })
-    button("New").click()
+    button("Assign a routine").click()
     button("Inbox starter").click()
     assert.match(root.textContent, /Review this routine/)
     const advanced = root.querySelector("details.routines-advanced")

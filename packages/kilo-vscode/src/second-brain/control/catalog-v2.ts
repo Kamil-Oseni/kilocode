@@ -1,7 +1,7 @@
 /** Exact separately reviewed twelve-source release; paths are selected by the native host. */
 export const release = Object.freeze({
-  "server.py": "7fef4ffa5970a2f1859106f16ce2e7d4b54e83f7bae1d654d8f5ede7ba648932",
-  "index.py": "13324aaf68693fe70a08a03dbb149066661cbf74921db54dd05c1d676ede83e8",
+  "server.py": "99200f6543198c25a85e9c739362bca843ee250005825b882a67ce7514f167ee",
+  "index.py": "55d17ba416e1cf187a5497c4257d07a5628a66e30d49ef75e18ca169567315e5",
   "notes.py": "59488d324200d95b0974bfa119215de627bc1b17dd3233fc6b02ab137b651923",
   "policy.py": "87c931cfa7cceb7386e6d2b4b05fdacf916360fd2cb0ff590d0fccf5dd334ae2",
   "admission.py": "c47d6881f4c6560b2aa2dad97d0999e0a08ca6d35b595fc17ad6a4ffde5f2267",

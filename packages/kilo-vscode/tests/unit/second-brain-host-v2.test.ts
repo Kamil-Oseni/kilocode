@@ -106,7 +106,13 @@ async function fixture() {
         },
       )
       child.stdin.write(
-        JSON.stringify({ id, epoch: epoch.value, kind: url.pathname.endsWith("sync") ? "sync" : "search", body, release }),
+        JSON.stringify({
+          id,
+          epoch: epoch.value,
+          kind: url.pathname.endsWith("sync") ? "sync" : "search",
+          body,
+          release,
+        }),
       )
       child.stdin.end()
       const [code, out, err] = await Promise.all([
@@ -189,6 +195,30 @@ test("selected v5 catalog refuses mixed legacy and unreviewed releases", () => {
   ).toThrow()
 })
 
+test("proposal authority checks the prepared root before dispatch", async () => {
+  const value = await fixture()
+  const cause = new Error("Original selected root was revoked")
+  const roots: string[] = []
+  try {
+    const failure = await value.service
+      .proposal({ action: "list", project: "C:\\Synthetic" }, undefined, async (root, signal) => {
+        signal.throwIfAborted()
+        roots.push(root)
+        throw cause
+      })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+    expect(failure).toBe(cause)
+    expect(roots).toEqual(["C:\\Synthetic"])
+    expect(value.calls).toEqual([])
+    expect(value.settings.pending()).toBeUndefined()
+  } finally {
+    await value.close()
+  }
+})
+
 genuine("real settings, service and selected Journal complete one search with exact Windows root debt", async () => {
   const value = await fixture()
   try {
@@ -204,6 +234,28 @@ genuine("real settings, service and selected Journal complete one search with ex
     })
     expect(states.at(-1)).toMatchObject({ status: "unavailable", code: "identity_mismatch" })
     expect(value.calls.filter((call) => call.startsWith("POST"))).toHaveLength(1)
+  } finally {
+    await value.close()
+  }
+})
+
+genuine("context coordinator completes one original zero-passage Journal operation", async () => {
+  const value = await fixture()
+  try {
+    const result = await value.service.context("Synthetic preference", 1000, new AbortController().signal)
+    expect(result).toEqual({
+      root: "C:\\Synthetic",
+      context: {
+        sources: [],
+        diagnostics: [],
+        tokens: 0,
+        truncated: false,
+        capture_enabled: false,
+      },
+    })
+    expect(value.calls.filter((call) => call.startsWith("POST"))).toEqual(["POST /v1/memory/search"])
+    expect(value.calls.filter((call) => call.startsWith("GET /v1"))).toHaveLength(1)
+    expect(value.settings.pending()).toBeUndefined()
   } finally {
     await value.close()
   }

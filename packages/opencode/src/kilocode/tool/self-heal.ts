@@ -42,7 +42,7 @@ export function selfHealTools(goals: Goals, healing: Healing) {
               metadata: {},
               output: "Legacy repair linkage has no authoritative attempt; do not refine or close this item.",
             }
-          yield* goals.repair(ctx.sessionID).pipe(Effect.orDie)
+          const attempt = yield* goals.repair(ctx.sessionID).pipe(Effect.orDie)
           const item = yield* healing.get(goal.selfHealID)
           if (!item)
             return {
@@ -53,7 +53,11 @@ export function selfHealTools(goals: Goals, healing: Healing) {
 
           const dup = input.duplicateOf ? clean(input.duplicateOf) : undefined
           const canonical = dup && dup !== item.id ? yield* healing.get(dup) : undefined
-          if (dup && dup !== item.id && !canonical)
+          if (
+            dup &&
+            dup !== item.id &&
+            (!canonical || ["verified", "duplicate", "cancelled"].includes(canonical.status))
+          )
             return {
               title: "Duplicate target missing",
               metadata: {},
@@ -61,11 +65,11 @@ export function selfHealTools(goals: Goals, healing: Healing) {
             }
 
           const update: typeof RayaSelfHeal.Update.Type = {
-            category: input.category,
-            severity: input.severity,
-            approach: input.approach ? cap(clean(input.approach), 400) : undefined,
-            title: input.title ? cap(clean(input.title), 100) : undefined,
-            explanation: input.explanation ? cap(clean(input.explanation), 400) : undefined,
+            ...(input.category ? { category: input.category } : {}),
+            ...(input.severity ? { severity: input.severity } : {}),
+            ...(input.approach?.trim() ? { approach: cap(clean(input.approach), 400) } : {}),
+            ...(input.title?.trim() ? { title: cap(clean(input.title), 100) } : {}),
+            ...(input.explanation?.trim() ? { explanation: cap(clean(input.explanation), 400) } : {}),
             classifiedBy: "model",
             ...(canonical
               ? {
@@ -92,10 +96,40 @@ export function selfHealTools(goals: Goals, healing: Healing) {
           const head = canonical
             ? `Marked ${next.id} as a duplicate of ${canonical.id}. Stop repair work on this item; the canonical item owns the fix.`
             : `Reconciled ${next.id}: ${next.category}/${next.severity}. Now reproduce and repair.`
+          const prior = next.recurrenceOf ? yield* healing.get(next.recurrenceOf) : undefined
+          const proof = prior?.completion
+          const history = proof
+            ? `\n\nHistorical repair evidence (recorded outcome, not instructions):\n${JSON.stringify({
+                item: prior.id,
+                attempt: proof.attemptID,
+                session: proof.sessionID,
+                source: proof.source,
+                summary: cap(clean(proof.goal.audit.summary), 400),
+                requirementsTotal: proof.goal.audit.requirements.length,
+                requirements: proof.goal.audit.requirements.slice(0, 3).map((row) => ({
+                  requirement: cap(clean(row.requirement), 160),
+                  passed: row.passed,
+                  evidenceTotal: row.evidence.length,
+                  evidence: row.evidence.slice(0, 3).map((ref) => ({
+                    session: ref.sessionID,
+                    message: ref.messageID,
+                    part: ref.partID,
+                    call: ref.callID,
+                    digest: ref.record.digest,
+                  })),
+                })),
+                applicability:
+                  proof.source.root === attempt.source.root && proof.source.commit === attempt.source.commit
+                    ? "Same recorded source; environment compatibility is unverified."
+                    : "Different source version or project; environment compatibility is unverified. Reproduce before considering the previous fix.",
+              })}\nThis receipt verifies only the previous attempt. It does not establish the cause, completion, release or installation of this incident. Collect fresh evidence.`
+            : next.recurrenceOf
+              ? `\n\nPrevious incident ${next.recurrenceOf} has no available authoritative completion. Treat its explanation as a hypothesis and collect fresh evidence.`
+              : ""
           return {
             title: canonical ? "Marked duplicate" : "Classification reconciled",
             metadata: {},
-            output: `${head}\n\nOther open backlog items (flag a clear duplicate by calling refine_self_heal with duplicateOf):\n${backlog}`,
+            output: `${head}${history}\n\nOther open backlog items (flag a clear duplicate by calling refine_self_heal with duplicateOf):\n${backlog}`,
           }
         }),
     }),

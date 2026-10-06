@@ -6,6 +6,7 @@ process.chdir(dir)
 
 import { $ } from "bun"
 import path from "path"
+import { readFile, writeFile } from "node:fs/promises" // kilocode_change - fresh generated-file handles after Windows directory replacement
 
 import { createClient } from "@hey-api/openapi-ts"
 import { sse } from "./sse"
@@ -72,7 +73,7 @@ await createClient({
   ],
 })
 
-const generatedTypes = await Bun.file("./src/v2/gen/types.gen.ts").text()
+const generatedTypes = await readFile(path.join(dir, "src/v2/gen/types.gen.ts"), "utf8") // kilocode_change - reopen generated paths after clean output
 if (/export type SessionNext\w+1 =/.test(generatedTypes)) {
   throw new Error("Session history generated duplicate Session event variants")
 }
@@ -83,9 +84,9 @@ const historyTypesPatched = generatedTypes.replace(
 if (historyTypesPatched === generatedTypes) {
   throw new Error("Session history numeric query patch did not apply")
 }
-await Bun.write("./src/v2/gen/types.gen.ts", historyTypesPatched)
+await writeFile(path.join(dir, "src/v2/gen/types.gen.ts"), historyTypesPatched) // kilocode_change - reopen generated paths after clean output
 
-const generatedSdk = await Bun.file("./src/v2/gen/sdk.gen.ts").text()
+const generatedSdk = await readFile(path.join(dir, "src/v2/gen/sdk.gen.ts"), "utf8") // kilocode_change - reopen generated paths after clean output
 const historySdkPatched = generatedSdk.replace(
   /(Get session history[\s\S]*?parameters: \{\s*sessionID: string[;,]\s*limit\?: )string([;,]\s*after\?: )string/,
   "$1number$2number",
@@ -93,7 +94,7 @@ const historySdkPatched = generatedSdk.replace(
 if (historySdkPatched === generatedSdk) {
   throw new Error("Session history numeric SDK patch did not apply")
 }
-await Bun.write("./src/v2/gen/sdk.gen.ts", historySdkPatched)
+await writeFile(path.join(dir, "src/v2/gen/sdk.gen.ts"), historySdkPatched) // kilocode_change - reopen generated paths after clean output
 
 // Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
 // endpoint's TError into the second generic of ServerSentEventsResult, which
@@ -102,8 +103,7 @@ await Bun.write("./src/v2/gen/sdk.gen.ts", historySdkPatched)
 // from a mock generator gets type-checked against the wrong shape. Drop the
 // arg so TReturn defaults to void.
 const sseTypesPath = "./src/v2/gen/client/types.gen.ts"
-const sseTypesFile = Bun.file(sseTypesPath)
-const sseTypesSource = await sseTypesFile.text()
+const sseTypesSource = await readFile(path.join(dir, sseTypesPath), "utf8") // kilocode_change - reopen generated paths after clean output
 const sseTypesPatched = sseTypesSource.replace(
   "=> Promise<ServerSentEventsResult<TData, TError>>",
   "=> Promise<ServerSentEventsResult<TData>>",
@@ -111,10 +111,10 @@ const sseTypesPatched = sseTypesSource.replace(
 if (sseTypesPatched === sseTypesSource) {
   throw new Error(`SseFn patch did not apply; @hey-api/openapi-ts output may have changed (${sseTypesPath})`)
 }
-await Bun.write(sseTypesPath, sseTypesPatched)
+await writeFile(path.join(dir, sseTypesPath), sseTypesPatched) // kilocode_change - reopen generated paths after clean output
 
 const stream = "./src/v2/gen/core/serverSentEvents.gen.ts"
-await Bun.write(stream, sse(await Bun.file(stream).text()))
+await writeFile(path.join(dir, stream), sse(await readFile(path.join(dir, stream), "utf8"))) // kilocode_change - reopen generated paths after clean output
 
 // The legacy SDK generator is retired, but this public Config type remains exported.
 // Keep Kilo's released sandbox settings aligned with the current generated client.

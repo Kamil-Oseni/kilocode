@@ -43,7 +43,7 @@ export function matchLegacyKiloOpenApi(input: Record<string, unknown>) {
   const proposals = spec.components?.schemas
   const command = proposals?.SecondBrainCommand?.anyOf?.find((row) => row.properties?.request)
   const draft = command?.properties?.request
-  const result = proposals?.SecondBrainResult?.properties?.proposals?.items
+  const result = proposals?.SecondBrainProposalResult?.properties?.proposals?.items
   for (const view of [draft, result]) {
     const changes = view?.properties?.changes?.items?.properties
     for (const field of ["expected", "content", "before"]) {

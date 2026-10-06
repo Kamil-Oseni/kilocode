@@ -1,6 +1,7 @@
 import { Agent } from "@/agent/agent"
 import { KiloSessionPrompt } from "@/kilocode/session/prompt" // kilocode_change
 import { MemoryMarker } from "@/kilocode/memory/marker" // kilocode_change
+import * as MemoryContext from "@/kilocode/second-brain/context" // kilocode_change
 import { CapabilityCatalog } from "@/kilocode/capability/catalog" // kilocode_change
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
@@ -98,9 +99,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const grant = (id: string) => (routine ? id : "read")
   // kilocode_change end
   const catalog = CapabilityCatalog.bind(tools, restricted) // kilocode_change
+  const memory = MemoryContext.create() // kilocode_change - one allowance per original resolved tool owner
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => {
     const extra = {
       model: input.model,
+      memoryContext: memory.reserve, // kilocode_change - outgoing frame must establish the allowance
       bypassAgentCheck: input.bypassAgentCheck,
       promptOps: input.promptOps,
       sandboxed, // kilocode_change
@@ -520,7 +523,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
   // kilocode_change start - bind bounded discovery to genuine current-turn execution and completed parts
   const initial = yield* GoalGate.select(tools, admit)
-  const finish = () => GoalGate.bind(select(), check, run.promise, admit) // kilocode_change - check queued callbacks before original effects
+  const finish = () => MemoryContext.bind(GoalGate.bind(select(), check, run.promise, admit), memory) // kilocode_change - retain original goal and context owners
   const select = () => {
     if (initial !== tools) return initial // kilocode_change - timer observation precedes discovery/code/MCP advertisement
     // kilocode_change - preserve the original complete catalogue

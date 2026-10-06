@@ -54,6 +54,36 @@ function storage() {
   )
 }
 
+test("context coordinator refuses legacy setup and cancelled input without starting search", async () => {
+  const requests: string[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      requests.push(request.method)
+      return Response.json({})
+    },
+  })
+  const settings = storage()
+  await settings.save(
+    { format: "raya.memory.setup", version: 1, origin: server.url.origin, root, source_sha256: pins },
+    "private-fixture-key",
+  )
+  const service = new BrainService(settings)
+  try {
+    await expect(service.context("preference", 1000, new AbortController().signal)).rejects.toThrow("Reviewed v2")
+    const parent = new AbortController()
+    parent.abort(new Error("private cancellation"))
+    await expect(service.context("preference", 1000, parent.signal)).rejects.toThrow("private cancellation")
+    await expect(service.context(" ", 1000, new AbortController().signal)).rejects.toThrow("bounded")
+    expect(requests).toEqual([])
+    expect(settings.pending()).toBeUndefined()
+  } finally {
+    await service.dispose()
+    await server.stop()
+  }
+})
+
 test("explicit setup validates loopback and exact five pins without storing credentials in public state", async () => {
   const store = storage()
   expect(await store.load()).toBeUndefined()

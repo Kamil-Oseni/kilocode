@@ -1966,11 +1966,17 @@ export type SecondBrainCommand =
       }
     }
 
+export type SecondBrainRecall = {
+  action: "context"
+  query: string
+  budget: number
+}
+
 export type SecondBrainRequest = {
   id: SecondBrainRequestId
   sessionID: string
   project: string
-  command: SecondBrainCommand
+  command: SecondBrainCommand | SecondBrainRecall
 }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
@@ -6831,7 +6837,7 @@ export type DesktopFailure = {
   receipt?: ComputerUseReceipt
 }
 
-export type SecondBrainResult = {
+export type SecondBrainProposalResult = {
   action: "list" | "read" | "propose"
   project: string
   proposals: Array<{
@@ -6856,6 +6862,35 @@ export type SecondBrainResult = {
     provenance: string
   }>
 }
+
+export type SecondBrainContextResult = {
+  action: "context"
+  project: string
+  root: string
+  context: {
+    sources: Array<{
+      path: string
+      relative: string
+      line: number
+      end_line: number
+      heading: string
+      text: string
+      source_sha256: string
+      depth: number
+      tokens: number
+      truncated: boolean
+    }>
+    diagnostics: Array<{
+      relative: string
+      reason: string
+    }>
+    tokens: number
+    truncated: boolean
+    capture_enabled: false
+  }
+}
+
+export type SecondBrainResult = SecondBrainProposalResult | SecondBrainContextResult
 
 export type SecondBrainFailure = {
   code: "cancelled" | "disconnected" | "invalid_request" | "not_found" | "timeout" | "unsupported" | "conflict"
@@ -28268,6 +28303,7 @@ export type KilocodeSelfHealListResponses = {
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     duplicateOf?: string
+    recurrenceOf?: string
     classifiedBy?: "keyword" | "model"
   }>
 }
@@ -28361,6 +28397,7 @@ export type KilocodeSelfHealCreateResponses = {
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     duplicateOf?: string
+    recurrenceOf?: string
     classifiedBy?: "keyword" | "model"
   }
 }
@@ -28757,6 +28794,7 @@ export type KilocodeSelfHealGetResponses = {
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     duplicateOf?: string
+    recurrenceOf?: string
     classifiedBy?: "keyword" | "model"
   }
 }
@@ -28876,6 +28914,7 @@ export type KilocodeSelfHealUpdateResponses = {
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     duplicateOf?: string
+    recurrenceOf?: string
     classifiedBy?: "keyword" | "model"
   }
 }
@@ -30002,6 +30041,98 @@ export type TelemetrySetEnabledResponses = {
 }
 
 export type TelemetrySetEnabledResponse = TelemetrySetEnabledResponses[keyof TelemetrySetEnabledResponses]
+
+export type MemoryDreamGenerateData = {
+  body?: {
+    id: string
+    owner: string
+    model: string
+    system: string
+    prompt: string
+    timeoutMs: number
+    budget: {
+      input: number
+      output: number
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/memory/dream/generate"
+}
+
+export type MemoryDreamGenerateErrors = {
+  /**
+   * MemoryApiClientError | InvalidRequestError
+   */
+  400: MemoryApiClientError | InvalidRequestError
+  /**
+   * MemoryApiServerError
+   */
+  503: MemoryApiServerError
+}
+
+export type MemoryDreamGenerateError = MemoryDreamGenerateErrors[keyof MemoryDreamGenerateErrors]
+
+export type MemoryDreamGenerateResponses = {
+  /**
+   * Prepared Dream text generation
+   */
+  200: {
+    id: string
+    owner: string
+    configuredModel: string
+    text: string
+    settlement: "sdk"
+  }
+}
+
+export type MemoryDreamGenerateResponse = MemoryDreamGenerateResponses[keyof MemoryDreamGenerateResponses]
+
+export type MemoryDreamInspectData = {
+  body?: {
+    id: string
+    owner: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/memory/dream/inspect"
+}
+
+export type MemoryDreamInspectErrors = {
+  /**
+   * MemoryApiClientError | InvalidRequestError
+   */
+  400: MemoryApiClientError | InvalidRequestError
+  /**
+   * MemoryApiServerError
+   */
+  503: MemoryApiServerError
+}
+
+export type MemoryDreamInspectError = MemoryDreamInspectErrors[keyof MemoryDreamInspectErrors]
+
+export type MemoryDreamInspectResponses = {
+  /**
+   * Original Dream SDK operation
+   */
+  200: {
+    id: string
+    owner: string
+    configuredModel: string
+    settlement: "pending" | "sdk"
+    outcome: "running" | "completed" | "failed" | "interrupted"
+    startedAt: number
+    settledAt?: number
+  }
+}
+
+export type MemoryDreamInspectResponse = MemoryDreamInspectResponses[keyof MemoryDreamInspectResponses]
 
 export type MemoryStatusData = {
   body?: never

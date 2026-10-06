@@ -24,17 +24,18 @@ import type {
   ToolPart,
 } from "../../types/messages"
 
-interface BackgroundAgentSnapshot {
+export interface BackgroundAgentSnapshot {
   jobs: BackgroundJobInfo[]
   loaded: boolean
   unavailable: boolean
+  error?: string
 }
 
 export function reconcileBackgroundAgents(
   state: BackgroundAgentSnapshot,
   message: BackgroundJobsLoadedMessage,
 ): BackgroundAgentSnapshot {
-  if (message.error) return { ...state, unavailable: true }
+  if (message.error) return { ...state, unavailable: true, error: message.error.trim().slice(0, 800) }
   return { jobs: message.jobs, loaded: true, unavailable: false }
 }
 

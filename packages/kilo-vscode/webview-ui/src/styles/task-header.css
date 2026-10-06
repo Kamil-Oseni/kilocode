@@ -220,6 +220,11 @@ html[data-theme="kilo-vscode"] [data-slot="task-header-title-label"] {
     white-space: nowrap;
   }
 
+  [data-slot="task-header-agent-attention"] > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   [data-slot="task-header-agent-main"] {
     all: unset;
     display: flex;

@@ -11,7 +11,9 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import posixpath
+from urllib.parse import unquote
 from notes import clean
 from admission import Store, Refused, Retirement, closing, entry, leaf
 from policy import Policy
@@ -385,6 +387,203 @@ def split(path, note):
     return result
 
 
+def ordinary(path):
+    for part in (path, *path.parents):
+        if part.is_symlink() or part.is_junction():
+            raise ValueError('Linked memory ancestry is refused.')
+    if path.is_file() and path.stat().st_nlink != 1:
+        raise ValueError('Linked memory files are refused.')
+
+
+def image(path):
+    ordinary(path)
+    before = path.stat()
+    with path.open('rb') as file:
+        held = os.fstat(file.fileno())
+        raw = file.read(256001)
+        final = os.fstat(file.fileno())
+    ordinary(path)
+    after = path.stat()
+    fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_nlink')
+    expected = tuple(getattr(before, field) for field in fields)
+    if any(tuple(getattr(row, field) for field in fields) != expected for row in (held, final, after)):
+        raise ValueError('Linked source identity changed during read.')
+    # Windows path stat and handle fstat expose different ctime semantics;
+    # compare each original observation with its matching final observation.
+    if before.st_ctime_ns != after.st_ctime_ns or held.st_ctime_ns != final.st_ctime_ns:
+        raise ValueError('Linked source metadata changed during read.')
+    if len(raw) > 256000:
+        raise ValueError('Linked note exceeds the 256 KB bound.')
+    return raw
+
+
+def address(source, target):
+    value = unquote(target.split('#', 1)[0])
+    if not value or re.search(r'[\\<>:"|?*\x00-\x1f]', value) or value.startswith('/'):
+        raise ValueError('Use a relative local Markdown link.')
+    name = posixpath.normpath(posixpath.join(posixpath.dirname(source), value))
+    parts = name.split('/')
+    if any(not part or part in {'.', '..'} or part.endswith((' ', '.')) for part in parts):
+        raise ValueError('Linked note escapes the memory root.')
+    if PurePosixPath(name).suffix.casefold() != '.md':
+        raise ValueError('Linked recall follows Markdown notes only.')
+    return name
+
+
+def links(text):
+    # Links inside fenced examples are not navigation instructions.
+    fence = None
+    for line in text.splitlines():
+        marker = re.match(r'^\s{0,3}(`{3,}|~{3,})', line)
+        if marker:
+            value = marker.group(1)
+            if fence is None:
+                fence = value
+            elif value[0] == fence[0] and len(value) >= len(fence):
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        for match in re.finditer(r'(?<!!)\[[^\]\n]+\]\((?:<([^>\n]+)>|([^\s)]+))(?:\s+"[^"\n]*")?\)', line):
+            yield match.group(1) or match.group(2)
+
+
+def passage(name, text, query, limit, measure, check):
+    lines = text.splitlines()
+    if not lines:
+        return None
+    terms = set(re.findall(r'\w+', query.casefold()))
+    start = max(range(len(lines)), key=lambda index: len(terms.intersection(re.findall(r'\w+', lines[index].casefold()))))
+    # Keep qualifiers around the matched fact in the same paragraph. Returning
+    # only its matching line can turn a historical or disputed note into a fact.
+    end = start + 1
+    while start > 0 and lines[start - 1].strip() and not re.match(r'^#{1,6} ', lines[start]):
+        check()
+        start -= 1
+    while end < len(lines) and lines[end].strip() and not re.match(r'^#{1,6} ', lines[end]):
+        check()
+        end += 1
+    heading = ''
+    for line in lines[:start + 1]:
+        if re.match(r'^#{1,6} ', line):
+            heading = line.lstrip('#').strip()
+    prefix = f'Source: {name}\nSection: {heading}\n'
+    selected = '\n'.join(lines[start:end])
+    check()
+    if measure(prefix + selected) > limit:
+        return None
+    while end < len(lines):
+        check()
+        candidate = '\n'.join(lines[start:end + 1])
+        if measure(prefix + candidate) > limit:
+            break
+        selected = candidate
+        end += 1
+    if not selected.strip():
+        return None
+    return {'line': start + 1, 'end_line': end, 'heading': heading,
+            'text': selected, 'tokens': measure(prefix + selected),
+            'truncated': start != 0 or end != len(lines)}
+
+
+def retrieve(root, policy, seeds, query, budget, measure, check, *, depth=2, count=12, entry=2000):
+    """Relevant seeds first, compact entry point next, then breadth-first links.
+
+    Seeds are {relative, sha256} revisions from the owner's validated search.
+    Budget includes source/heading labels. Every returned image is revalidated
+    before return; an unavailable/stale source is a diagnostic, never a fact.
+    """
+    if (type(budget) is not int or not 1 <= budget <= 12000 or
+            type(depth) is not int or not 0 <= depth <= 2 or
+            type(count) is not int or not 1 <= count <= 12 or
+            type(entry) is not int or not 1 <= entry <= 2000):
+        raise ValueError('Linked recall budget is outside its bounds.')
+    if not isinstance(seeds, list) or len(seeds) > count or not isinstance(query, str) or len(query) > 8000:
+        raise ValueError('Bounded search seeds and query required.')
+    root = Path(root).absolute()
+    ordinary(root)
+    identity = (root.stat().st_dev, root.stat().st_ino)
+    policy.bind(root)
+    exclusion = root / '.rayaignore'
+    ordinary(exclusion)
+    ignored = image(exclusion) if exclusion.exists() else None
+    patterns = [] if ignored is None else [line.strip().casefold() for line in ignored.decode('utf-8').splitlines()
+                                         if line.strip() and not line.startswith('#')]
+    queue = []
+    for seed in seeds:
+        if not isinstance(seed, dict) or set(seed) != {'relative', 'sha256'}:
+            raise ValueError('Exact search seed revision required.')
+        name = seed['relative']
+        if not isinstance(name, str) or address('', name) != name:
+            raise ValueError('Canonical seed path required.')
+        queue.append((name, 0, seed['sha256'], False))
+    if policy.admit('INDEX.md'):
+        queue.append(('INDEX.md', 0, None, True))
+    seen = set()
+    result = []
+    diagnostics = []
+    images = {}
+    used = 0
+    omitted = False
+    while queue and len(images) < count and used < budget:
+        check()
+        name, level, expected, compact = queue.pop(0)
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if not policy.admit(name) or any(key.startswith(pattern) if pattern.endswith('/') else
+                                            fnmatch.fnmatchcase(key, pattern) for pattern in patterns):
+                raise ValueError('Linked source is not approved or is excluded.')
+            selected = policy.files[key]['relative']
+            path = root.joinpath(*selected.split('/'))
+            raw = image(path)
+            policy.verify(name, raw)
+            sha = hashlib.sha256(raw).hexdigest()
+            if expected is not None and expected != sha:
+                raise ValueError('Search seed revision is stale.')
+            text = raw.decode('utf-8-sig')
+        except (OSError, ValueError) as err:
+            diagnostics.append({'relative': name, 'reason': str(err)})
+            continue
+        images[selected] = raw
+        row = passage(selected, text, query, min(budget - used, entry if compact else 2000), measure, check)
+        if row is not None:
+            used += row['tokens']
+            result.append(dict(row, relative=selected, path=str(path), source_sha256=sha, depth=level))
+        if row is None:
+            omitted = True
+            diagnostics.append({'relative': selected, 'reason': 'No passage fits the remaining token budget.'})
+        if level >= depth:
+            continue
+        for target in links(text):
+            check()
+            # Count navigation attempts as well as returned notes; a hostile
+            # document cannot cause an unbounded queue or diagnostic list.
+            if len(queue) + len(seen) + len(diagnostics) >= count * 8:
+                diagnostics.append({'relative': selected, 'reason': 'Navigation attempt budget exhausted.'})
+                break
+            try:
+                queue.append((address(selected, target), level + 1, None, False))
+            except ValueError as err:
+                diagnostics.append({'relative': selected, 'reason': str(err)})
+    check()
+    policy.bind(root)
+    ordinary(root)
+    if (root.stat().st_dev, root.stat().st_ino) != identity:
+        raise ValueError('Memory root identity changed during linked recall.')
+    if (image(exclusion) if exclusion.exists() else None) != ignored:
+        raise ValueError('Memory exclusions changed during linked recall.')
+    for name, raw in images.items():
+        check()
+        if image(root.joinpath(*name.split('/'))) != raw:
+            raise ValueError('Memory revision changed during linked recall.')
+        policy.verify(name, raw)
+    return {'sources': result, 'diagnostics': diagnostics, 'tokens': used,
+            'truncated': omitted or bool(queue) or any(row['truncated'] for row in result), 'capture_enabled': False}
+
+
 class Index:
     def __init__(self, root, *, existing=False, generation=None):
         self.store = Store(root, existing=existing, generation=generation)
@@ -542,6 +741,18 @@ class Index:
             db.execute('INSERT OR REPLACE INTO meta VALUES (?,?)', ('updated', str(time.time())))
             self.guard(snapshot)
         return {'files': len(snapshot), 'chunks': len(chunks), 'new_embeddings': len(fresh), 'reused_embeddings': len(chunks) - len(fresh)}
+
+    @bounded
+    @admitted
+    def context(self, query, budget=3000, top=5):
+        if type(budget) is not int or not 1 <= budget <= 12000:
+            raise ValueError('Linked recall budget is outside its bounds.')
+        seeds = [{'relative': row['relative'], 'sha256': row['source_sha256']}
+                 for row in self.search(query, top)]
+        value = retrieve(self.root, self.lease.policy, seeds, query, budget, tokens, remaining)
+        clean(self.root)
+        self.lease.check()
+        return value
 
     @bounded
     @admitted

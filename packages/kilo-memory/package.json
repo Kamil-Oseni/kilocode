@@ -55,6 +55,7 @@
   },
   "dependencies": {
     "effect": "catalog:",
+    "marked": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

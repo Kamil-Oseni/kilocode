@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceState } from "@/effect/instance-state"
 import { MemoryError } from "@kilocode/kilo-memory/effect/errors"
@@ -6,6 +7,10 @@ import { MemoryContract } from "@kilocode/kilo-memory/effect/httpapi"
 import { MemoryService } from "@kilocode/kilo-memory/effect/service"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
+import { Provider } from "@/provider/provider"
+import { generate } from "@/kilocode/memory/dream-generation"
+import { inspect, track, type Records } from "@/kilocode/memory/dream-tracking"
+import { disconnect } from "@/kilocode/server/sse"
 import {
   MemoryConfigurePayload,
   MemoryCorrectPayload,
@@ -27,6 +32,32 @@ function invalidate<T extends { root: string }>(input: T) {
 export const memoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "memory", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* MemoryService.Service
+    const provider = yield* Provider.Service
+    const dreams = yield* InstanceState.make(() => Effect.sync((): Records => new Map()))
+    const dreamGenerate = Effect.fn("MemoryHttpApi.dreamGenerate")(function* (req: {
+      query: typeof MemoryQuery.Type
+      payload: typeof MemoryContract.DreamGeneratePayload.Type
+    }) {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      const records = yield* InstanceState.get(dreams)
+      return yield* api(
+        track(
+          records,
+          req.payload,
+          generate(provider, req.payload).pipe(
+            Effect.timeout(req.payload.timeoutMs),
+            Effect.mapError(MemoryError.from),
+            Effect.raceFirst(disconnect(request).pipe(Effect.andThen(Effect.interrupt))),
+          ),
+        ),
+      )
+    })
+    const dreamInspect = Effect.fn("MemoryHttpApi.dreamInspect")(function* (req: {
+      query: typeof MemoryQuery.Type
+      payload: typeof MemoryContract.DreamInspectPayload.Type
+    }) {
+      return yield* api(inspect(yield* InstanceState.get(dreams), req.payload))
+    })
     const status = Effect.fn("MemoryHttpApi.status")(function* (req: { query: typeof MemoryQuery.Type }) {
       const ctx = yield* InstanceState.context
       return MemoryContract.output(yield* api(svc.status({ ctx })))
@@ -122,6 +153,8 @@ export const memoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "memory", (h
     })
 
     return handlers
+      .handle("dreamGenerate", dreamGenerate)
+      .handle("dreamInspect", dreamInspect)
       .handle("status", status)
       .handle("show", show)
       .handle("enable", enable)

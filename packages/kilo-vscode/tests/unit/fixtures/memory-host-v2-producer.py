@@ -10,7 +10,7 @@ root = Path(sys.argv[1]).resolve(strict=True)
 cfg = json.loads(sys.stdin.buffer.read(16384))
 pins = cfg['release']
 names = {'server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
-         'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py'}
+         'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py'}
 assert isinstance(pins, dict) and set(pins) == names
 for name, expected in pins.items():
     assert isinstance(expected, str) and len(expected) == 64 and set(expected) <= set('0123456789abcdef')
@@ -40,6 +40,9 @@ with tempfile.TemporaryDirectory(prefix='raya-memory-host-codec-') as temp:
     result = {'files': 1, 'chunks': 2, 'new_embeddings': 1, 'reused_embeddings': 1}
     if cfg['kind'] == 'search':
         result = {'capture_enabled': False, 'results': []}
+        if 'context_budget' in cfg['body']:
+            result['context'] = {'sources': [], 'diagnostics': [], 'tokens': 0,
+                                 'truncated': False, 'capture_enabled': False}
     # Empty downstream is a genuine no-inference codec case, not a fabricated worker claim.
     terminal = owner.complete(pending, result, 'completed', [])
     print(json.dumps({'terminal': terminal, 'response': dict(result, operation=terminal)},

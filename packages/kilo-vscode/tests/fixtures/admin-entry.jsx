@@ -6,6 +6,7 @@ import { render } from "solid-js/web"
 import { StoryProviders } from "../../webview-ui/src/stories/StoryProviders"
 import { AdminView } from "../../webview-ui/src/components/admin/AdminView"
 import { BrainProposals } from "../../webview-ui/src/components/settings/BrainProposals"
+import { SecondBrain } from "../../webview-ui/src/components/settings/SecondBrain"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
 import { createSignal } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
@@ -164,7 +165,36 @@ window.acquireVsCodeApi = () => ({
         window.__confirmStop = () => emit(reply)
         return
       }
+      if (["workers-failed", "workers-longerror"].includes(state) && message.type === "cancelBackgroundJob") {
+        emit({
+          ...reply,
+          error:
+            state === "workers-longerror"
+              ? "x".repeat(2000)
+              : "Worker cancellation could not be confirmed. Refresh status.",
+        })
+        return
+      }
       emit(reply)
+      return
+    }
+    if (state === "proposals-index" && message.type === "secondBrain" && message.action === "state") {
+      emit({ type: "secondBrainState", id: message.id, state: { configured: true, status: "ready", results: [] } })
+      return
+    }
+    if (state === "proposals-index" && message.type === "secondBrain" && ["review", "sync"].includes(message.action)) {
+      window.__finishIndex = (code) =>
+        emit({
+          type: "secondBrainState",
+          id: message.id,
+          state: {
+            configured: true,
+            status: code ? "unavailable" : "ready",
+            results: [],
+            ...(code ? { code } : {}),
+            control: { status: code ? "uncertain" : message.action === "review" ? "approved" : "synced" },
+          },
+        })
       return
     }
     if (message.type === "secondBrain" && message.action === "proposal") {
@@ -187,6 +217,15 @@ window.acquireVsCodeApi = () => ({
     }
     if (message.type !== "requestAdmin") return
     attempts += 1
+    if (state === "health-held") {
+      window.__healthReplies ??= []
+      window.__healthReplies.push(() =>
+        emit({ type: "adminResult", requestID: message.requestID, health: health(), logs }),
+      )
+      window.__healthConnection = (connected) =>
+        emit({ type: "connectionState", state: connected ? "connected" : "disconnected" })
+      return
+    }
     if (state === "loading") return
     if (state === "retry" && attempts === 1) {
       emit({
@@ -286,7 +325,7 @@ function ProposalFixture() {
   const [root, setRoot] = createSignal("C:/work/raya-feature")
   return (
     <ServerContext.Provider value={{ ...server, workspaceDirectory: root }}>
-      <BrainProposals configured />
+      {state === "proposals-index" ? <SecondBrain /> : <BrainProposals configured />}
       <Button onClick={() => setRoot("C:/work/other")}>Switch fixture workspace</Button>
     </ServerContext.Provider>
   )

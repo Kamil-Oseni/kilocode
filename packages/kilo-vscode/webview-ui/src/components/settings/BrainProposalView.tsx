@@ -3,6 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Card } from "@kilocode/kilo-ui/card"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { Switch } from "@kilocode/kilo-ui/switch"
+import type { BrainReview } from "../../../../src/shared/second-brain"
 
 /** Presentation contract only; the native host owns project/source and apply authority. */
 type Proposal = {
@@ -18,7 +19,11 @@ type Proposal = {
 
 export function BrainProposalView(props: {
   proposal: Proposal
+  review?: BrainReview
   pending: boolean
+  uncertain?: boolean
+  refresh?: () => void
+  index?: (action: "review" | "sync") => void
   apply: () => void
   cancel: () => void
   edit: (changes: { path: string; expected: string | null; content: string | null }[]) => void
@@ -32,7 +37,7 @@ export function BrainProposalView(props: {
   })
   const update = (path: string, content: string | null) =>
     setDraft((items) => items.map((item) => (item.path === path ? { ...item, content } : item)))
-  const writable = () => !props.pending && props.proposal.status === "pending"
+  const writable = () => !props.pending && !props.uncertain && props.proposal.status === "pending"
   const invalid = () => draft().some((item) => item.content !== null && !item.content.trim())
   const clipped = (text: string | null) =>
     text === null
@@ -45,9 +50,60 @@ export function BrainProposalView(props: {
       <h3>Proposed memory changes</h3>
       <p>Project: {props.proposal.project}</p>
       <p role="status">{props.proposal.status} · Automatic capture is off</p>
+      <Show when={props.proposal.status === "applying"}>
+        <p role="alert">Publication is unresolved. Read the current outcome before taking another action.</p>
+      </Show>
+      <Show when={props.uncertain}>
+        <p role="alert">The last reply is unconfirmed. Read the current outcome before editing or applying again.</p>
+      </Show>
+      <Show when={props.proposal.status === "applied"}>
+        <p>Changes are published. Search-index freshness is not verified by this proposal view.</p>
+        <Show when={props.index}>
+          <p>
+            Review sources to include the current note revisions, then separately confirm sync. Sync does not repeat
+            publication. Search afterward to check the source hashes.
+          </p>
+          <Button disabled={props.pending || props.uncertain} onClick={() => props.index?.("review")}>
+            Review sources for indexing
+          </Button>
+          <Button disabled={props.pending || props.uncertain} onClick={() => props.index?.("sync")}>
+            Confirm index sync
+          </Button>
+        </Show>
+      </Show>
+      <Show when={props.refresh}>
+        <Button disabled={props.pending || (editing() && !props.uncertain)} onClick={props.refresh}>
+          Read current outcome
+        </Button>
+      </Show>
       <p>{props.proposal.provenance}</p>
+      <Show
+        when={props.review?.id === props.proposal.id && props.review?.digest === props.proposal.digest && props.review}
+      >
+        {(review) => (
+          <section aria-label="Suggestion explanation">
+            <h4>Why this was suggested</h4>
+            <p>{review().rationale}</p>
+            <p>Original suggestion rationale; your edits require a fresh review.</p>
+            <Show when={review().kind !== "memory"}>
+              <p>This is a proposed {review().kind}. It does not verify a repair or establish a fact.</p>
+            </Show>
+            <h4>Conflicts to review</h4>
+            <Show
+              when={review().contradictions.length > 0}
+              fallback={<p>No conflicts were recorded by this suggestion.</p>}
+            >
+              <ul>
+                <For each={review().contradictions}>{(item) => <li>{item}</li>}</For>
+              </ul>
+            </Show>
+            <p>These explanations are suggestions, not independently verified evidence.</p>
+          </section>
+        )}
+      </Show>
       <details>
         <summary>Sources and revision</summary>
+        <p>Proposal: {props.proposal.id}</p>
         <p>Proposal revision: {props.proposal.digest}</p>
         <For each={props.proposal.sources}>
           {(source) => (

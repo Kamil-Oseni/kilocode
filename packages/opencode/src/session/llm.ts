@@ -29,6 +29,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { KiloSession } from "@/kilocode/session"
 import { KiloLLM } from "@/kilocode/session/llm"
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
+import * as MemoryContext from "@/kilocode/second-brain/context"
 import { ToolInputRepair } from "@/kilocode/session/tool-input-repair"
 import { KiloToolSchema } from "@/kilocode/session/tool-schema"
 import { SessionExport } from "@/kilocode/session-export"
@@ -171,6 +172,14 @@ const live: Layer.Layer<
       if (checked?.compact) {
         return yield* Effect.fail(KiloSessionOverflow.error(checked, input.model))
       }
+      MemoryContext.prepare({
+        originals: input.tools,
+        tools,
+        messages: estimated,
+        context: input.model.limit.input || input.model.limit.context,
+        output: input.model.limit.input ? 0 : maxOutputTokens,
+        reported: input.reportedContextTokens,
+      })
       const prepared = { ...base, tools, params: { ...base.params, maxOutputTokens } }
       const selected = item.options.localInference === true ? yield* lane(input, database) : "interactive"
       prepared.headers = headers(prepared.headers, selected, item.options.localInference === true)

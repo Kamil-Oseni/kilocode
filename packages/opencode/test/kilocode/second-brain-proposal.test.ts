@@ -1,15 +1,28 @@
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
 import path from "node:path"
-import { Effect, Fiber, Layer, Queue, Schema } from "effect"
+import { Cause, Effect, Fiber, Layer, Queue, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { Command, Event, type Request, type Result } from "@/kilocode/second-brain/protocol"
+import { InstanceRef } from "@/effect/instance-ref"
+import { proposal as dreamProposal } from "@/kilocode/memory/dream-host"
+import { MemoryFiles } from "@kilocode/kilo-memory/store"
+import {
+  Command,
+  Recall,
+  Event,
+  type Request,
+  type ProposalResult,
+  type ContextResult,
+} from "@/kilocode/second-brain/protocol"
 import { SecondBrain } from "@/kilocode/second-brain/service"
 import { SecondBrainTool } from "@/kilocode/tool/second-brain"
+import { BrainRecallTool } from "@/kilocode/tool/second-brain-recall"
+import * as MemoryContext from "@/kilocode/second-brain/context"
+import { tool as aiTool, jsonSchema } from "ai"
 import { Session } from "@/session/session"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { MessageID, SessionID } from "@/session/schema"
@@ -30,7 +43,8 @@ const it = testEffect(
   ),
 )
 
-function result(request: Request): Result {
+function result(request: Request): ProposalResult {
+  if (request.command.action === "context") throw new Error("Proposal request required")
   return {
     action: request.command.action,
     project: request.project,
@@ -59,6 +73,356 @@ function result(request: Request): Result {
           ],
   }
 }
+
+it.instance("Dream uses the original host request and refuses altered candidate replies", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const brain = yield* SecondBrain.Service
+    const candidate: Parameters<typeof MemoryFiles.dreamProposal.submit>[2] = {
+      fact: "f".repeat(64),
+      kind: "memory",
+      sources: [{ path: "source.txt", sha256: "b".repeat(64) }],
+      changes: [{ path: "Projects/example.md", expected: null, content: "Pending note" }],
+      rationale: "Controlled bridge evidence only.",
+      contradictions: [],
+    }
+    const controller = new AbortController()
+    const propose = dreamProposal({
+      project: inst.directory,
+      sessionID: SessionID.make("ses_dream_host"),
+      brain,
+      execute: (effect, signal) => Effect.runPromise(effect.pipe(Effect.provideService(InstanceRef, inst)), { signal }),
+    })
+    const job = yield* Effect.tryPromise({
+      try: () => propose(id, candidate, controller.signal),
+      catch: (err) => err,
+    }).pipe(Effect.forkChild)
+    const pending = yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    expect(pending[0].sessionID).toBe(SessionID.make("ses_dream_host"))
+    expect(pending[0].command).toMatchObject({
+      action: "propose",
+      id,
+      request: {
+        sources: [
+          { path: path.join(inst.directory, "source.txt"), sha256: "b".repeat(64), kind: "document", event_time: null },
+        ],
+        changes: candidate.changes,
+      },
+    })
+    yield* brain.reply({ requestID: pending[0].id, result: { ...result(pending[0]), action: "propose" } })
+    expect(yield* Fiber.join(job)).toEqual({ id, status: "pending" })
+    expect(yield* brain.list()).toEqual([])
+    const changed = yield* Effect.tryPromise({
+      try: () => propose(id, candidate, controller.signal),
+      catch: (err) => err,
+    }).pipe(Effect.forkChild)
+    const next = yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    const value = result(next[0])
+    yield* brain.reply({
+      requestID: next[0].id,
+      result: {
+        ...value,
+        action: "propose",
+        proposals: value.proposals.map((row) => ({
+          ...row,
+          changes: [{ ...row.changes[0], content: "Unselected note" }],
+        })),
+      },
+    })
+    const failure = yield* Fiber.join(changed).pipe(Effect.flip)
+    expect(String(failure)).toContain("changes or baseline differ")
+    expect(yield* brain.list()).toEqual([])
+    const cancelled = yield* Effect.tryPromise({
+      try: () => propose(id, candidate, controller.signal),
+      catch: (err) => err,
+    }).pipe(Effect.forkChild)
+    yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    controller.abort(new Error("Manual Dream cancelled"))
+    yield* Fiber.join(cancelled).pipe(Effect.flip)
+    expect(yield* brain.list()).toEqual([])
+    const before = yield* Effect.tryPromise({
+      try: () => propose(id, candidate, controller.signal),
+      catch: (err) => err,
+    }).pipe(Effect.flip)
+    expect(String(before)).toContain("Manual Dream cancelled")
+    expect(yield* brain.list()).toEqual([])
+  }),
+)
+
+it.instance("context replies retain original budget, provenance and cancellation ownership", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create()
+    const brain = yield* SecondBrain.Service
+    const fiber = yield* brain
+      .request({
+        sessionID: chat.id,
+        project: inst.directory,
+        command: { action: "context", query: "project preference", budget: 100 },
+      })
+      .pipe(Effect.forkChild)
+    const pending = yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    const root = path.join(inst.directory, "SecondBrain")
+    const value: ContextResult = {
+      action: "context",
+      project: inst.directory,
+      root,
+      context: {
+        sources: [
+          {
+            path: path.join(root, "Projects", "Eden.md"),
+            relative: "Projects/Eden.md",
+            line: 2,
+            end_line: 3,
+            heading: "Preferences",
+            text: "Keep replies concise.",
+            source_sha256: "a".repeat(64),
+            depth: 1,
+            tokens: 20,
+            truncated: false,
+          },
+        ],
+        diagnostics: [{ relative: "missing.md", reason: "missing" }],
+        tokens: 20,
+        truncated: false,
+        capture_enabled: false,
+      },
+    }
+    const source = value.context.sources[0]
+    const invalid: ContextResult[] = [
+      { ...value, project: path.dirname(inst.directory) },
+      { ...value, root: "relative" },
+      { ...value, context: { ...value.context, tokens: 101, sources: [{ ...source, tokens: 101 }] } },
+      { ...value, context: { ...value.context, tokens: 21 } },
+      { ...value, context: { ...value.context, sources: [{ ...source, relative: "../Eden.md" }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, path: path.join(inst.directory, "Eden.md") }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, end_line: 1 }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, truncated: true }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, source_sha256: "bad" }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, text: "" }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, path: "relative.md" }] } },
+      {
+        ...value,
+        context: {
+          ...value.context,
+          sources: [{ ...source, relative: "Health/note.md", path: path.join(root, "Health", "note.md") }],
+        },
+      },
+      { ...value, context: { ...value.context, sources: [source, source], tokens: 40 } },
+    ]
+    for (const result of invalid) {
+      const rejected = yield* brain.reply({ requestID: pending[0].id, result }).pipe(Effect.flip)
+      expect(rejected._tag).toBe("SecondBrain.InvalidReplyError")
+      expect(yield* brain.list()).toHaveLength(1)
+    }
+    yield* brain.reply({ requestID: pending[0].id, result: value })
+    expect(yield* Fiber.join(fiber)).toEqual(value)
+    expect(yield* brain.list()).toEqual([])
+    const cancelled = yield* brain
+      .request({
+        sessionID: chat.id,
+        project: inst.directory,
+        command: { action: "context", query: "project preference", budget: 100 },
+      })
+      .pipe(Effect.forkChild)
+    yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    yield* brain.cancelSession(chat.id)
+    const failure = yield* Fiber.join(cancelled).pipe(Effect.flip)
+    expect(failure.code).toBe("cancelled")
+    expect(failure.message).toContain("No note changes were requested")
+    expect(failure.message).not.toContain("Proposal outcome")
+    expect(yield* brain.list()).toEqual([])
+  }),
+)
+
+test("recall contract refuses empty queries and unbounded budgets", () => {
+  for (const query of ["", "  ", "\n", "x".repeat(8001)])
+    expect(Schema.is(Recall)({ action: "context", query, budget: 100 })).toBe(false)
+  for (const budget of [0, -1, 1.5, 12001])
+    expect(Schema.is(Recall)({ action: "context", query: "preference", budget })).toBe(false)
+  expect(Schema.is(Recall)({ action: "context", query: "preference", budget: 100 })).toBe(true)
+})
+
+it.instance("real recall tool requires original frame, permission and sourced bounded reply", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create()
+    const brain = yield* SecondBrain.Service
+    const bus = yield* Bus.Service
+    const events = yield* Queue.unbounded<Request>()
+    const off = yield* bus.subscribeCallback(Event.Requested, (event) => Queue.offerUnsafe(events, event.properties))
+    yield* Effect.addFinalizer(() => Effect.sync(off))
+    const owner = MemoryContext.create()
+    const catalog = MemoryContext.bind({ recall: aiTool({ inputSchema: jsonSchema({ type: "object" }) }) }, owner)
+    const asks: string[] = []
+    const ctx: Tool.Context = {
+      sessionID: chat.id,
+      messageID: MessageID.make("msg_brain_recall"),
+      agent: "ask",
+      abort: new AbortController().signal,
+      messages: [],
+      extra: { memoryContext: owner.reserve },
+      metadata: () => Effect.void,
+      ask: (row) =>
+        Effect.sync(() => {
+          asks.push(row.permission)
+        }),
+    }
+    const recall = yield* BrainRecallTool.pipe(Effect.flatMap(Tool.init))
+    expect((yield* recall.execute({ query: "Eden", budget: 3000 }, ctx).pipe(Effect.exit))._tag).toBe("Failure")
+    expect(yield* Queue.size(events)).toBe(0)
+    MemoryContext.prepare({
+      originals: catalog,
+      tools: catalog,
+      messages: [{ role: "system", content: "Use sources." }],
+      context: 8192,
+      output: 1024,
+    })
+    const fiber = yield* recall.execute({ query: "Eden", budget: 3000 }, ctx).pipe(Effect.forkChild)
+    const request = yield* Queue.take(events).pipe(Effect.timeout("1 second"))
+    expect(request.command.action).toBe("context")
+    if (request.command.action !== "context") throw new Error("Recall request required")
+    expect(request.command.budget).toBeLessThan(3000)
+    expect(request.project).toBe(chat.directory)
+    const root = path.join(inst.directory, "SecondBrain")
+    yield* brain.reply({
+      requestID: request.id,
+      result: {
+        action: "context",
+        project: inst.directory,
+        root,
+        context: {
+          sources: [
+            {
+              path: path.join(root, "Eden.md"),
+              relative: "Eden.md",
+              line: 1,
+              end_line: 1,
+              heading: "Eden",
+              text: "Project preference",
+              source_sha256: "a".repeat(64),
+              depth: 0,
+              tokens: 20,
+              truncated: false,
+            },
+          ],
+          diagnostics: [],
+          tokens: 20,
+          truncated: false,
+          capture_enabled: false,
+        },
+      },
+    })
+    const result = yield* Fiber.join(fiber)
+    expect(result.metadata.count).toBe(1)
+    expect(JSON.parse(result.output).context.sources[0].relative).toBe("Eden.md")
+    expect(asks).toEqual(["second_brain_recall", "second_brain_recall"])
+    expect(yield* brain.list()).toEqual([])
+    expect(
+      (yield* recall
+        .execute({ query: "Eden" }, { ...ctx, extra: { memoryContext: () => ({ budget: 10000 }) } })
+        .pipe(Effect.exit))._tag,
+    ).toBe("Failure")
+    expect(yield* Queue.size(events)).toBe(0)
+  }),
+)
+
+it.instance("real recall rejects late replaced or cancelled frames and recovers in the current frame", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create()
+    const brain = yield* SecondBrain.Service
+    const bus = yield* Bus.Service
+    const events = yield* Queue.unbounded<Request>()
+    const off = yield* bus.subscribeCallback(Event.Requested, (event) => Queue.offerUnsafe(events, event.properties))
+    yield* Effect.addFinalizer(() => Effect.sync(off))
+    const owner = MemoryContext.create()
+    const catalog = MemoryContext.bind({ recall: aiTool({ inputSchema: jsonSchema({ type: "object" }) }) }, owner)
+    const frame = {
+      originals: catalog,
+      tools: catalog,
+      messages: [{ role: "system" as const, content: "Use sources." }],
+      context: 8192,
+      output: 1024,
+    }
+    const root = path.join(inst.directory, "SecondBrain")
+    const value: ContextResult = {
+      action: "context",
+      project: inst.directory,
+      root,
+      context: {
+        sources: [
+          {
+            path: path.join(root, "Eden.md"),
+            relative: "Eden.md",
+            line: 1,
+            end_line: 1,
+            heading: "Eden",
+            text: "Synthetic project preference",
+            source_sha256: "a".repeat(64),
+            depth: 0,
+            tokens: 20,
+            truncated: false,
+          },
+        ],
+        diagnostics: [],
+        tokens: 20,
+        truncated: false,
+        capture_enabled: false,
+      },
+    }
+    const recall = yield* BrainRecallTool.pipe(Effect.flatMap(Tool.init))
+    const asks: string[] = []
+    for (const mode of ["replaced", "cancelled", "current"]) {
+      const abort = new AbortController()
+      const ctx: Tool.Context = {
+        sessionID: chat.id,
+        messageID: MessageID.make(`msg_recall_${mode}`),
+        agent: "ask",
+        abort: abort.signal,
+        messages: [],
+        extra: { memoryContext: owner.reserve },
+        metadata: () => Effect.void,
+        ask: (row) =>
+          Effect.sync(() => {
+            asks.push(row.permission)
+          }),
+      }
+      MemoryContext.prepare(frame)
+      const fiber = yield* recall.execute({ query: "Eden", budget: 3000 }, ctx).pipe(Effect.forkChild)
+      const request = yield* Queue.take(events).pipe(Effect.timeout("1 second"))
+      expect(request.command.action).toBe("context")
+      expect(request.sessionID).toBe(chat.id)
+      if (mode === "replaced") MemoryContext.prepare(frame)
+      if (mode === "cancelled") {
+        abort.abort()
+        expect((yield* Fiber.join(fiber).pipe(Effect.exit))._tag).toBe("Failure")
+        expect(yield* brain.list()).toEqual([])
+        expect((yield* brain.reply({ requestID: request.id, result: value }).pipe(Effect.exit))._tag).toBe("Failure")
+        continue
+      }
+      yield* brain.reply({ requestID: request.id, result: value })
+      const outcome = yield* Fiber.join(fiber).pipe(Effect.exit)
+      if (mode === "replaced") {
+        expect(outcome._tag).toBe("Failure")
+        if (outcome._tag !== "Failure") throw new Error("Replaced recall frame was published")
+        expect(Cause.pretty(outcome.cause)).toContain("superseded request")
+      }
+      if (mode === "current") {
+        expect(outcome._tag).toBe("Success")
+        if (outcome._tag !== "Success") throw new Error("Current recall did not recover")
+        expect(JSON.parse(outcome.value.output).context.sources[0].text).toBe("Synthetic project preference")
+        expect(outcome.value.metadata.count).toBe(1)
+      }
+      expect(yield* brain.list()).toEqual([])
+    }
+    expect(asks).toEqual(["second_brain_recall", "second_brain_recall", "second_brain_recall"])
+    expect(yield* Queue.size(events)).toBe(0)
+  }),
+)
 
 it.instance("real tool binds retained session, authorizes actual source and returns only pending creation", () =>
   Effect.gen(function* () {
@@ -192,7 +556,9 @@ it.instance("foreign project refuses before publication and mismatched reply doe
       proposals: result(pending[0]).proposals.map((row) => ({ ...row, status: "applied" as const })),
     }
     yield* brain.reply({ requestID: pending[0].id, result: closed })
-    expect((yield* Fiber.join(fiber)).proposals[0].status).toBe("applied")
+    const replied = yield* Fiber.join(fiber)
+    if (replied.action === "context") throw new Error("Proposal result required")
+    expect(replied.proposals[0].status).toBe("applied")
     const row = closed.proposals[0]
     const create = yield* brain
       .request({

@@ -6,6 +6,35 @@ import { MemorySchema } from "../schema"
  * MemorySchema. The wire shape coerces nullable timestamps to 0 / "" before returning ApiState. */
 export namespace MemoryContract {
   const root = "/memory"
+  const integer = (min: number, max: number) =>
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(min), Schema.isLessThanOrEqualTo(max))
+  const uuid = Schema.String.check(Schema.isUUID())
+  export const DreamGeneratePayload = Schema.Struct({
+    id: uuid,
+    owner: uuid,
+    model: Schema.String.check(Schema.isMinLength(3), Schema.isMaxLength(512), Schema.isPattern(/^[^/\s]+\/\S+$/)),
+    system: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(16384)),
+    prompt: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(65536)),
+    timeoutMs: integer(1, 300000),
+    budget: Schema.Struct({ input: integer(1, 12000), output: integer(1, 8000) }),
+  })
+  export const DreamGenerate = Schema.Struct({
+    id: uuid,
+    owner: uuid,
+    configuredModel: Schema.String,
+    text: Schema.String.check(Schema.isMaxLength(256000)),
+    settlement: Schema.Literal("sdk"),
+  })
+  export const DreamInspectPayload = Schema.Struct({ id: uuid, owner: uuid })
+  export const DreamInspection = Schema.Struct({
+    id: uuid,
+    owner: uuid,
+    configuredModel: Schema.String,
+    settlement: Schema.Literals(["pending", "sdk"]),
+    outcome: Schema.Literals(["running", "completed", "failed", "interrupted"]),
+    startedAt: Schema.Finite,
+    settledAt: Schema.optional(Schema.Finite),
+  })
   const Source = Schema.Literals(MemorySchema.Sources)
   const Section = Schema.String.check(Schema.isMaxLength(80), Schema.isPattern(/^[^\x00-\x1f\x7f]*$/))
 

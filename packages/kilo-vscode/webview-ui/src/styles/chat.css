@@ -1034,3 +1034,9 @@
 .raya-recovery-data p {
   overflow-wrap: anywhere;
 }
+
+/* Memory consolidation activity */
+.raya-dream-activity {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

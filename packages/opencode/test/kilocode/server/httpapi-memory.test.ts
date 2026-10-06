@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect, Layer } from "effect"
+import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { HttpRouter } from "effect/unstable/http"
 import * as Log from "@opencode-ai/core/util/log"
 import { MemoryPaths } from "../../../src/kilocode/server/httpapi/groups/memory"
@@ -76,6 +77,159 @@ afterEach(async () => {
 })
 
 describe("HttpApi memory", () => {
+  test("prepared Dream generation uses the actual provider and bounded original HTTP transport without memory writes", async () => {
+    const calls: Record<string, unknown>[] = []
+    const ready = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let hold = false
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        calls.push(rec(await request.json()))
+        if (hold) {
+          ready.resolve()
+          await release.promise
+        }
+        return Response.json({
+          id: "fixture-completion",
+          object: "chat.completion",
+          created: 1,
+          model: "dream-fixture",
+          choices: [{ index: 0, message: { role: "assistant", content: '{"items":[]}' }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24 },
+        })
+      },
+    })
+    const api = app()
+    const requests = new Set<Promise<Response>>()
+    const router = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) => {
+        const work = api.request(request)
+        requests.add(work)
+        void work.then(
+          () => requests.delete(work),
+          () => requests.delete(work),
+        )
+        return work
+      },
+    })
+    try {
+      await using tmp = await tmpdir({
+        config: {
+          formatter: false,
+          lsp: false,
+          provider: {
+            "dream-fixture": {
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              options: { baseURL: new URL("v1", server.url).toString(), localInference: true },
+              models: { "dream-fixture": { limit: { context: 32768, output: 4096 } } },
+            },
+          },
+        },
+      })
+      const payload = {
+        id: crypto.randomUUID(),
+        owner: crypto.randomUUID(),
+        model: "dream-fixture/dream-fixture",
+        system: "Return a bounded consolidation result.",
+        prompt: "No supported changes in these synthetic approved inputs.",
+        timeoutMs: 5000,
+        budget: { input: 1000, output: 500 },
+      }
+      const send = (body: unknown) =>
+        api.request("/memory/dream/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-kilo-directory": tmp.path },
+          body: JSON.stringify(body),
+        })
+      const before = await api.request(MemoryPaths.status, { headers: { "x-kilo-directory": tmp.path } })
+      const status = await before.json()
+      const client = createKiloClient({ baseUrl: router.url.toString() })
+      const response = await client.memory.dreamGenerate({ ...payload, directory: tmp.path })
+      expect(response.response.status, JSON.stringify(response.error)).toBe(200)
+      expect(response.data).toEqual({
+        id: payload.id,
+        owner: payload.owner,
+        configuredModel: payload.model,
+        text: '{"items":[]}',
+        settlement: "sdk",
+      })
+      expect(calls).toHaveLength(1)
+      expect(calls[0].max_tokens).toBe(500)
+      expect(calls[0].stream).toBe(false)
+      const inspected = await client.memory.dreamInspect({ id: payload.id, owner: payload.owner, directory: tmp.path })
+      expect(inspected.response.status).toBe(200)
+      expect(inspected.data).toMatchObject({
+        id: payload.id,
+        owner: payload.owner,
+        configuredModel: payload.model,
+        settlement: "sdk",
+        outcome: "completed",
+      })
+      expect(Object.keys(inspected.data!).sort()).toEqual(
+        ["id", "owner", "configuredModel", "settlement", "outcome", "startedAt", "settledAt"].sort(),
+      )
+      expect((await send(payload)).status).toBe(400)
+      expect(
+        (await client.memory.dreamInspect({ id: payload.id, owner: crypto.randomUUID(), directory: tmp.path })).response
+          .status,
+      ).toBe(400)
+      await using other = await tmpdir({ config: { formatter: false, lsp: false } })
+      expect(
+        (await client.memory.dreamInspect({ id: payload.id, owner: payload.owner, directory: other.path })).response
+          .status,
+      ).toBe(400)
+      for (const body of [
+        { ...payload, timeoutMs: 300001 },
+        { ...payload, id: "invalid" },
+        { ...payload, model: "invalid" },
+        { ...payload, prompt: "x".repeat(65537) },
+        { ...payload, budget: { input: 12001, output: 500 } },
+      ])
+        expect((await send(body)).status).toBe(400)
+      const missing = { ...payload, id: crypto.randomUUID(), model: "dream-fixture/missing" }
+      expect((await send(missing)).status).not.toBe(200)
+      expect(
+        (await client.memory.dreamInspect({ id: missing.id, owner: missing.owner, directory: tmp.path })).data,
+      ).toMatchObject({
+        configuredModel: missing.model,
+        settlement: "sdk",
+        outcome: "failed",
+      })
+      expect(calls).toHaveLength(1)
+      hold = true
+      const controller = new AbortController()
+      const identity = { ...payload, id: crypto.randomUUID(), directory: tmp.path }
+      const cancelled = client.memory.dreamGenerate(identity, { signal: controller.signal })
+      await ready.promise
+      const original = [...requests]
+      expect(original).toHaveLength(1)
+      const pending = await client.memory.dreamInspect({ id: identity.id, owner: identity.owner, directory: tmp.path })
+      expect(pending.data).toMatchObject({ settlement: "pending", outcome: "running" })
+      expect(pending.data).not.toHaveProperty("settledAt")
+      expect((await send({ ...payload, id: crypto.randomUUID() })).status).toBe(400)
+      expect(calls).toHaveLength(2)
+      controller.abort()
+      await Bun.sleep(30)
+      release.resolve()
+      const [outcome, joined] = await Promise.all([Promise.allSettled([cancelled]), Promise.allSettled(original)])
+      expect(outcome[0].status === "rejected" || Boolean(outcome[0].value.error)).toBe(true)
+      expect(joined.every((item) => item.status === "rejected" || item.value.status !== 200)).toBe(true)
+      const settled = await client.memory.dreamInspect({ id: identity.id, owner: identity.owner, directory: tmp.path })
+      expect(settled.data).toMatchObject({ settlement: "sdk", outcome: "interrupted" })
+      expect(settled.data!.settledAt).toBeGreaterThanOrEqual(settled.data!.startedAt)
+      const after = await api.request(MemoryPaths.status, { headers: { "x-kilo-directory": tmp.path } })
+      expect(await after.json()).toEqual(status)
+    } finally {
+      release.resolve()
+      await Promise.all([router.stop(true), server.stop(true)])
+    }
+  }, 30000)
+
   test("manages project memory through HTTP routes", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const api = app()

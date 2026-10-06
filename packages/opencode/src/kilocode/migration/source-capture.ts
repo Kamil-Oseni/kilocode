@@ -69,7 +69,7 @@ export async function capture(token: object) {
     ).values(),
   ])
   for (const root of [
-    ...closure.roots.filter((root) => root.kind === "sqlite"),
+    ...closure.roots, // Include every authenticated root in the final held image; disposition still classifies payloads.
     ...namespaces.roots,
     ...namespaces.origins,
     ...artifacts,

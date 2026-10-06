@@ -85,13 +85,17 @@ const dispose = render(
 )
 const emit = (data) => window.dispatchEvent(new window.MessageEvent("message", { data }))
 const button = (text) => {
-  const found = [...root.querySelectorAll("button")].find((item) => item.textContent.trim() === text)
+  const found = [...root.querySelectorAll("button")].find(
+    (item) => item.textContent.trim() === text && !item.closest("[hidden]"),
+  )
   assert.ok(found, `Missing button: ${text}`)
   return found
 }
 const reveal = () => {
-  const control = button("Delegate")
+  if (root.querySelector("form.routines-delegate")) return
+  const control = button("Info")
   if (control.getAttribute("aria-expanded") !== "true") control.click()
+  button("Ask another worker").click()
 }
 const person = (name) => {
   const found = [...root.querySelectorAll(".routines-identity")].find((item) => item.textContent.includes(name))
@@ -218,9 +222,9 @@ try {
       },
     ],
   })
-  assert.match(root.textContent, /Asked another worker/)
-  assert.match(root.textContent, /Asked Books/)
-  assert.match(root.textContent, /queued until the worker is free/)
+  assert.match(root.textContent, /To Books/)
+  assert.match(root.textContent, /Review Friday expenses/)
+  assert.match(root.textContent, /Waiting to start/)
   assert.equal(root.querySelector("textarea[aria-label='Ask another worker']").value, "")
   button("Show request chain").click()
   const inspect = sent.findLast((msg) => msg.type === "routineDelegateChain")
@@ -311,7 +315,7 @@ try {
     [...root.querySelectorAll("button")].some((item) => item.textContent.trim() === "Stop this request"),
     false,
   )
-  button("Back").click()
+  assert.ok(person("Books"), "Worker navigation remains available beside the conversation")
   person("Books").click()
   await new Promise((resolve) => setImmediate(resolve))
   const asked = sent.findLast((msg) => msg.type === "routineInboxPage")
@@ -331,9 +335,9 @@ try {
       },
     ],
   })
-  assert.match(root.textContent, /Asked you/)
-  assert.match(root.textContent, /Request from Chief of Staff/)
-  button("Back").click()
+  assert.match(root.textContent, /From Chief of Staff/)
+  assert.match(root.textContent, /Review Friday expenses/)
+  assert.ok(person("Chief of Staff"), "Worker navigation remains available beside the conversation")
   person("Chief of Staff").click()
   await new Promise((resolve) => setImmediate(resolve))
   const reopen = sent.findLast((msg) => msg.type === "routineInboxPage")
@@ -431,11 +435,11 @@ try {
   await new Promise((resolve) => setImmediate(resolve))
   const paused = sent.findLast((msg) => msg.type === "routineInboxPage")
   emit({ type: "routineInboxPage", requestID: paused.requestID, agentID: books.id, messages: [] })
-  assert.match(root.textContent, /Follow-ups still arrive here/)
-  assert.match(root.textContent, /Scheduled starts stay off/)
+  assert.match(root.textContent, /Reports and follow-ups for this worker will appear here/)
+  assert.match(root.textContent, /You can still message this worker\. Scheduled work stays paused/)
   console.log("routine-delegate-view: paused recipient copy passed")
 } finally {
   dispose()
   root.remove()
-  window.happyDOM.abort()
+  await window.happyDOM.abort()
 }

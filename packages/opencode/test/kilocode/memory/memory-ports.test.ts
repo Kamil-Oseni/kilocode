@@ -2,6 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { APICallError } from "ai"
+import { createHash, randomUUID } from "node:crypto"
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { MemoryFiles } from "@kilocode/kilo-memory/store"
+import { localFetch, status } from "../../../src/kilocode/provider/local-scheduler"
 import { Effect } from "effect"
 import { ModelNotFoundError, type Provider } from "../../../src/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -12,9 +18,97 @@ import type { Session } from "../../../src/session/session"
 import type { SessionSummary } from "../../../src/session/summary"
 import type { Snapshot } from "../../../src/snapshot"
 import { MemoryModel, MemorySession } from "../../../src/kilocode/memory/ports"
+import { generate } from "../../../src/kilocode/memory/dream-generation"
 
 const pid = ProviderV2.ID.make("test")
 const mid = ModelV2.ID.make("fake-memory-model")
+
+test("Dream Effect transport cancellation joins its original delayed SDK work", async () => {
+  const controller = new AbortController()
+  const ready = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let ended = false
+  const work = Effect.runPromiseExit(
+    generate(
+      provider({
+        wait: async () => {
+          ready.resolve()
+          await release.promise
+        },
+      }),
+      {
+        id: randomUUID(),
+        owner: randomUUID(),
+        model: "test/memory-config-model",
+        system: "Synthetic approved inputs",
+        prompt: "Return bounded text",
+        timeoutMs: 10000,
+        budget: { input: 1000, output: 500 },
+      },
+    ),
+    { signal: controller.signal },
+  ).finally(() => {
+    ended = true
+  })
+  await ready.promise
+  try {
+    controller.abort()
+    await Bun.sleep(10)
+    expect(ended).toBe(false)
+  } finally {
+    release.resolve()
+  }
+  const exit = await work
+  expect(exit._tag).toBe("Failure")
+  expect(ended).toBe(true)
+})
+
+test("Dream transport retains the original prepared payload through asynchronous model resolution", async () => {
+  const calls: unknown[] = []
+  const base = provider({ calls })
+  const ready = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const selected: Provider.Interface = {
+    ...base,
+    getModel: (...args) =>
+      base.getModel(...args).pipe(
+        Effect.tap(() =>
+          Effect.promise(async () => {
+            ready.resolve()
+            await release.promise
+          }),
+        ),
+      ),
+  }
+  const payload = {
+    id: randomUUID(),
+    owner: randomUUID(),
+    model: "test/memory-config-model",
+    system: "Original system",
+    prompt: "Original prepared input",
+    timeoutMs: 10000,
+    budget: { input: 1000, output: 500 },
+  }
+  const original = structuredClone(payload)
+  const work = Effect.runPromise(generate(selected, payload))
+  await ready.promise
+  payload.id = randomUUID()
+  payload.owner = randomUUID()
+  payload.model = "changed/model"
+  payload.system = "Changed system"
+  payload.prompt = "Changed prompt"
+  payload.budget.output = 4000
+  release.resolve()
+  expect(await work).toMatchObject({
+    id: original.id,
+    owner: original.owner,
+    configuredModel: original.model,
+    settlement: "sdk",
+  })
+  expect(calls[0]).toMatchObject({ maxOutputTokens: 500 })
+  expect(JSON.stringify(calls[0])).toContain("Original prepared input")
+  expect(JSON.stringify(calls[0])).not.toContain("Changed prompt")
+})
 
 function mdl(id = mid, npm = "test-provider", providerID = pid): Provider.Model {
   return {
@@ -33,7 +127,12 @@ function mdl(id = mid, npm = "test-provider", providerID = pid): Provider.Model 
   } as unknown as Provider.Model
 }
 
-function lang(outputs: (string | Error)[] = ["{}"], calls?: unknown[], hang?: boolean): LanguageModelV3 {
+function lang(
+  outputs: (string | Error)[] = ["{}"],
+  calls?: unknown[],
+  hang?: boolean,
+  wait?: (signal?: AbortSignal) => Promise<void>,
+): LanguageModelV3 {
   let idx = 0
   const next = () => {
     const item = outputs[idx++] ?? outputs.at(-1) ?? "{}"
@@ -47,7 +146,13 @@ function lang(outputs: (string | Error)[] = ["{}"], calls?: unknown[], hang?: bo
     supportedUrls: {},
     doGenerate: async (...args: Parameters<LanguageModelV3["doGenerate"]>) => {
       calls?.push(args[0])
-      if (hang) return new Promise(() => {})
+      if (hang)
+        return new Promise<never>((_, reject) => {
+          const signal = args[0].abortSignal
+          if (signal?.aborted) return reject(signal.reason)
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true })
+        })
+      if (wait) await wait(args[0].abortSignal)
       const text = next()
       return {
         content: [{ type: "text", text }],
@@ -74,6 +179,8 @@ function provider(
     hang?: boolean
     npm?: string
     providerID?: ProviderV2.ID
+    wait?: (signal?: AbortSignal) => Promise<void>
+    local?: boolean
   } = {},
 ): Provider.Interface {
   const providerID = input.providerID ?? pid
@@ -84,7 +191,7 @@ function provider(
     name: "Test",
     source: "config",
     env: [],
-    options: {},
+    options: { localInference: input.local === true },
     models: { [base.id]: base, [mem.id]: mem },
   } satisfies Provider.Info
   return {
@@ -97,7 +204,7 @@ function provider(
     },
     getLanguage: (model) => {
       input.seen?.push(model.id)
-      return Effect.succeed(lang(input.outputs, input.calls, input.hang))
+      return Effect.succeed(lang(input.outputs, input.calls, input.hang, input.wait))
     },
     closest: () => Effect.succeed({ providerID: pid, modelID: base.id }),
     getSmallModel: () => Effect.succeed(mem),
@@ -289,9 +396,7 @@ describe("memory ports", () => {
     const seen: string[] = []
     const port = MemoryModel.port({ provider: provider({ seen }) })
 
-    const configured = await Effect.runPromise(
-      port.resolve({ configured: "test/memory-config-model", session: ref }),
-    )
+    const configured = await Effect.runPromise(port.resolve({ configured: "test/memory-config-model", session: ref }))
     const fallback = await Effect.runPromise(port.resolve({ configured: "test/missing-memory-model", session: ref }))
 
     expect(configured.fallback).toBeUndefined()
@@ -381,6 +486,14 @@ describe("memory ports", () => {
 
       expect((seen[0] as { stream?: boolean }).stream).toBe(false)
       expect(result.text).toBe('{"topic":"t","summary":"s"}')
+      await port.run({
+        handle: resolved.handle,
+        system: "system",
+        prompt: "prompt",
+        timeoutMs: 30000,
+        budget: { input: 3000, output: 128 },
+      })
+      expect(seen[1]).toMatchObject({ stream: false, max_tokens: 128 })
     } finally {
       server.stop(true)
     }
@@ -407,6 +520,254 @@ describe("memory ports", () => {
     expect(opts.providerOptions?.test?.stream).toBeUndefined()
   })
 
+  test("consolidation requests use the background lane only for explicitly local providers", async () => {
+    for (const local of [true, false]) {
+      const calls: unknown[] = []
+      const port = MemoryModel.port({ provider: provider({ local, calls }) })
+      const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+      await port.run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000 })
+      expect(calls[0]).toMatchObject({ headers: local ? { "x-raya-inference-lane": "background" } : {} })
+      if (!local) expect(JSON.stringify(calls[0])).not.toContain("x-raya-inference-lane")
+    }
+  })
+
+  test("explicit manual model budgets reach the provider while unbudgeted capture stays unchanged", async () => {
+    const calls: unknown[] = []
+    const port = MemoryModel.port({ provider: provider({ calls }) })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    await port.run({
+      handle: resolved.handle,
+      system: "system",
+      prompt: "prompt",
+      timeoutMs: 30000,
+      budget: { input: 3000, output: 512 },
+    })
+    expect(calls[0]).toMatchObject({ maxOutputTokens: 512 })
+    await port.run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000 })
+    expect(JSON.stringify(calls[1])).not.toContain("maxOutputTokens")
+  })
+
+  test("invalid model budgets and oversized prompts refuse before provider dispatch", async () => {
+    const calls: unknown[] = []
+    const port = MemoryModel.port({ provider: provider({ calls }) })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    for (const budget of [
+      { input: 0, output: 100 },
+      { input: 3000, output: 5000 },
+      { input: 3000, output: Number.POSITIVE_INFINITY },
+    ]) {
+      const error = await port
+        .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000, budget })
+        .then(
+          () => undefined,
+          (err: unknown) => err,
+        )
+      expect(error).toBeInstanceOf(Error)
+    }
+    const error = await port
+      .run({
+        handle: resolved.handle,
+        system: "system",
+        prompt: "x".repeat(20000),
+        timeoutMs: 30000,
+        budget: { input: 3000, output: 1000 },
+      })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+    expect(error).toMatchObject({ message: "Memory model prompt exceeds its estimated input budget" })
+    expect(calls).toEqual([])
+  })
+
+  test("oversized returned model text is not admitted to a manual job", async () => {
+    const port = MemoryModel.port({ provider: provider({ outputs: ["x".repeat(10000)] }) })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    const error = await port
+      .run({
+        handle: resolved.handle,
+        system: "system",
+        prompt: "prompt",
+        timeoutMs: 30000,
+        budget: { input: 3000, output: 1000 },
+      })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+    expect(error).toMatchObject({ message: "Memory model output exceeds its estimated output budget" })
+  })
+
+  test("manual Dream job uses the bounded SDK model lease and retains a real pending proposal file", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "raya-dream-sdk-"))
+    const project = path.join(root, "project")
+    await mkdir(project)
+    const source = path.join(project, "approved.md")
+    await writeFile(source, "Approved synthetic preference: use a calm voice.")
+    const sha256 = createHash("sha256")
+      .update(await readFile(source))
+      .digest("hex")
+    const approved = {
+      scope: randomUUID(),
+      sources: [{ path: "approved.md", sha256, kind: "approved-summary" as const }],
+      targets: [{ key: "voice", path: "Preferences/voice.md", expected: null }],
+    }
+    const input = await MemoryFiles.dreamInput.prepare(root, project, { ...approved, budget: 3000 })
+    const selection = {
+      id: randomUUID(),
+      owner: randomUUID(),
+      model: "test/fake-memory-model",
+      sources: [{ path: "approved.md", sha256 }],
+      timeout: 30000,
+      budget: { input: 3000, output: 512 },
+    }
+    const requests: unknown[] = []
+    const tags: (string | null)[] = []
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: async (request) => {
+        requests.push(await request.json())
+        tags.push(request.headers.get("x-raya-inference-lane"))
+        return Response.json({
+          id: "dream",
+          object: "chat.completion",
+          created: 0,
+          model: "fake-memory-model",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  items: [
+                    {
+                      key: "voice",
+                      sources: ["approved.md"],
+                      content: "Use a calm voice.",
+                      rationale: "Approved evidence.",
+                      contradictions: [],
+                    },
+                  ],
+                }),
+              },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 },
+        })
+      },
+    })
+    try {
+      const sdk = createOpenAICompatible({
+        name: "test",
+        baseURL: `http://127.0.0.1:${server.port}/v1`,
+        apiKey: "unused",
+        fetch: Object.assign(localFetch({ localInference: true }), { preconnect: fetch.preconnect.bind(fetch) }),
+      })
+      const model = MemoryModel.port({
+        provider: {
+          ...provider({ npm: "@ai-sdk/openai-compatible", local: true }),
+          getLanguage: () => Effect.succeed(sdk.languageModel("fake-memory-model")),
+        },
+      })
+      let approvals = 0
+      const run = await MemoryFiles.dreamManual.start(
+        root,
+        project,
+        { ...selection, approved },
+        {
+          authorize: async (selected, directory, evidence, signal) => {
+            signal.throwIfAborted()
+            expect(selected).toBe(root)
+            expect(directory).toBe(project)
+            expect(evidence).toEqual(approved)
+            expect(
+              createHash("sha256")
+                .update(await readFile(source))
+                .digest("hex"),
+            ).toBe(sha256)
+            approvals++
+          },
+          model,
+          execute: (effect) => Effect.runPromise(effect),
+          propose: async (id, candidate, signal) => {
+            if (process.platform !== "win32") {
+              await writeFile(path.join(root, `${id}.proposal.json`), JSON.stringify(candidate), { flag: "wx" })
+              return { id, status: "pending" }
+            }
+            return MemoryFiles.dreamProposal.submit(
+              project,
+              id,
+              candidate,
+              async (command, current) => {
+                current.throwIfAborted()
+                const child = Bun.spawn(
+                  [
+                    "D:/Raya/Services/Packaging/Python/3.12.14/python.exe",
+                    "-I",
+                    "-S",
+                    "-B",
+                    path.resolve(import.meta.dir, "../../../../kilo-memory/test/fixtures/dream-proposal.py"),
+                    path.resolve(import.meta.dir, "../../../../kilo-vscode/script/memory/service"),
+                    root,
+                  ],
+                  { stdin: new Blob([JSON.stringify(command)]), stdout: "pipe", stderr: "pipe" },
+                )
+                const [code, text, error] = await Promise.all([
+                  child.exited,
+                  new Response(child.stdout).text(),
+                  new Response(child.stderr).text(),
+                ])
+                current.throwIfAborted()
+                if (code !== 0) throw new Error(error)
+                return JSON.parse(text)
+              },
+              signal,
+            )
+          },
+        },
+      )
+      expect(approvals).toBe(4)
+      expect(run.phase).toBe("review-pending")
+      const ledger = await MemoryFiles.dream.list(root, project)
+      expect(ledger.rows[0].state).toBe("pending")
+      const file =
+        process.platform === "win32"
+          ? path.join(root, "System/Proposals", `${ledger.rows[0].proposal}.json`)
+          : path.join(root, `${ledger.rows[0].proposal}.proposal.json`)
+      const proposal = JSON.parse(await readFile(file, "utf8"))
+      expect(proposal).toMatchObject({
+        sources:
+          process.platform === "win32"
+            ? [{ path: source, sha256, kind: "document", event_time: null }]
+            : selection.sources,
+        changes: [{ path: "Preferences/voice.md", expected: null, content: "Use a calm voice." }],
+      })
+      expect(ledger.rows[0].candidate.fact).toMatch(/^[a-f0-9]{64}$/)
+      if (process.platform === "win32") {
+        expect(proposal.status).toBe("pending")
+        expect(proposal.id).toBe(ledger.rows[0].proposal)
+        expect(
+          await MemoryFiles.dreamProposal.reconcile(root, project, proposal, new AbortController().signal),
+        ).toEqual({ status: "pending" })
+      }
+      expect(await MemoryFiles.exists(path.join(root, "Preferences/voice.md"))).toBe(false)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({ stream: false, max_tokens: 512 })
+      expect(requests[0]).toMatchObject({
+        messages: [
+          { role: "system", content: input.system },
+          { role: "user", content: input.prompt },
+        ],
+      })
+      expect(tags).toEqual([null])
+      expect(status()).toEqual({ active: 0, queued: 0, bytes: 0 })
+    } finally {
+      await server.stop(true)
+    }
+  })
+
   test("model port emits a structured timeout error", async () => {
     const port = MemoryModel.port({ provider: provider({ hang: true }) })
     const resolved = await Effect.runPromise(port.resolve({ session: ref }))
@@ -414,6 +775,110 @@ describe("memory ports", () => {
     await expect(
       port.run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 1 }),
     ).rejects.toMatchObject({ name: "TimeoutError", message: "memory model timed out" })
+  })
+
+  test("model timeout joins its original delayed provider completion before returning", async () => {
+    const events: string[] = []
+    const port = MemoryModel.port({
+      provider: provider({
+        wait: async (signal) => {
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) return resolve()
+            signal?.addEventListener("abort", () => resolve(), { once: true })
+          })
+          events.push("aborted")
+          await Bun.sleep(20)
+          events.push("provider-joined")
+        },
+      }),
+    })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    const error = await port
+      .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 5 })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      .finally(() => {
+        events.push("returned")
+      })
+    expect(error).toMatchObject({ name: "TimeoutError" })
+    expect(events).toEqual(["aborted", "provider-joined", "returned"])
+  })
+
+  test("parent cancellation joins delayed provider completion and discards its late output", async () => {
+    const ctl = new AbortController()
+    const events: string[] = []
+    const port = MemoryModel.port({
+      provider: provider({
+        wait: async () => {
+          ctl.abort(new DOMException("User cancelled memory", "AbortError"))
+          await Bun.sleep(20)
+          events.push("provider-joined")
+        },
+      }),
+    })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    const error = await port
+      .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000, signal: ctl.signal })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      .finally(() => {
+        events.push("returned")
+      })
+    expect(error).toMatchObject({ name: "AbortError", message: "User cancelled memory" })
+    expect(events).toEqual(["provider-joined", "returned"])
+  })
+
+  test("already cancelled model work never starts a provider request", async () => {
+    const calls: unknown[] = []
+    const ctl = new AbortController()
+    ctl.abort(new DOMException("Already cancelled", "AbortError"))
+    const port = MemoryModel.port({ provider: provider({ calls }) })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    const error = await port
+      .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000, signal: ctl.signal })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+    expect(error).toMatchObject({ name: "AbortError" })
+    expect(calls).toEqual([])
+  })
+
+  test("streaming timeout retains its original provider opening until completion", async () => {
+    const events: string[] = []
+    const language = lang()
+    language.doStream = async (opts) => {
+      await new Promise<void>((resolve) => {
+        if (opts.abortSignal?.aborted) return resolve()
+        opts.abortSignal?.addEventListener("abort", () => resolve(), { once: true })
+      })
+      events.push("aborted")
+      await Bun.sleep(20)
+      events.push("provider-joined")
+      return { stream: new ReadableStream({ start: (controller) => controller.close() }) }
+    }
+    const port = MemoryModel.port({
+      provider: {
+        ...provider({ npm: "@ai-sdk/openai", providerID: ProviderV2.ID.make("openai") }),
+        getLanguage: () => Effect.succeed(language),
+      },
+    })
+    const resolved = await Effect.runPromise(port.resolve({ session: { providerID: "openai", modelID: mid } }))
+    const error = await port
+      .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 5 })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      .finally(() => {
+        events.push("returned")
+      })
+    expect(error).toMatchObject({ name: "TimeoutError" })
+    expect(events).toEqual(["aborted", "provider-joined", "returned"])
   })
 
   test("model port clears its timeout after successful output", async () => {

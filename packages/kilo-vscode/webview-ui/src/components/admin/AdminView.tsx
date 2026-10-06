@@ -9,6 +9,7 @@ import type { AdminEntry, AdminRow } from "../../../../src/shared/admin"
 import { Resources } from "./Resources"
 import { Recovery } from "./Recovery"
 import { BackgroundAgents } from "../chat/BackgroundAgents"
+import { BrainDreamActivity } from "../settings/BrainDreamActivity"
 
 const ids = [
   "runtime",
@@ -138,8 +139,11 @@ export function AdminView(props: { onBack: () => void }) {
   const [kind, setKind] = createSignal<"offline" | "error">()
   let request = ""
   let scope = ""
+  let timer: ReturnType<typeof setTimeout> | undefined
 
   const refresh = () => {
+    clearTimeout(timer)
+    request = ""
     if (!server.isConnected()) {
       setLoading(false)
       setKind("offline")
@@ -150,18 +154,34 @@ export function AdminView(props: { onBack: () => void }) {
     setLoading(true)
     setError()
     setKind()
+    const id = request
+    timer = setTimeout(() => {
+      if (request !== id) return
+      request = ""
+      setLoading(false)
+      setHealth()
+      setLogs([])
+      setKind("error")
+      setError("System health did not reply. Try again to request fresh readings.")
+    }, 15_000)
     vscode.postMessage({ type: "requestAdmin", requestID: request })
   }
 
   const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
-    if (message.type !== "adminResult" || message.requestID !== request) return
+    if (message.type !== "adminResult" || !request || message.requestID !== request) return
+    clearTimeout(timer)
+    request = ""
     setLoading(false)
     if (message.health) setHealth(message.health)
     if (message.logs) setLogs(message.logs)
     setKind(message.error?.kind)
     setError(message.error?.message)
   })
-  onCleanup(unsubscribe)
+  onCleanup(() => {
+    clearTimeout(timer)
+    request = ""
+    unsubscribe()
+  })
 
   createEffect(() => {
     const next = `${server.isConnected() ? "1" : "0"}:${server.workspaceDirectory()}`
@@ -247,6 +267,9 @@ export function AdminView(props: { onBack: () => void }) {
         <h2 id="admin-workers-title">Current conversation workers</h2>
         <BackgroundAgents />
       </section>
+      <Card>
+        <BrainDreamActivity />
+      </Card>
 
       <Show when={error()}>
         <div class="admin-notice" data-kind={kind()} role={kind() === "error" ? "alert" : "status"}>

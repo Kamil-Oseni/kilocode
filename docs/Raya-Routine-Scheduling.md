@@ -1,5 +1,19 @@
 # Routine calendar scheduling
 
+## Current installed validation
+
+The corrected 2026-10-05 private trial passed on installed snapshot `7.4.23-snapshot+8db2d6bd4e.local.1791240779706`: two distinct UTC timer sessions completed, then the disabled routine and exact history survived cold reopening through the 65-second no-replay observation. Both backend hosts closed. Independent result binding matched all 752 saved API response hashes and settled stream bytes; both recorded source/guardian join groups fulfilled with exit code zero and family-zero observations.
+
+Passing result: `routine-current-8db2-two-period-cold-list-actual-f84624eb138d40b9a0219c27386a0910.json`, 464393 bytes, SHA256 `1127decb405d021eb370dfc282e3733f35913604d9d1c64abbd97a59ba9813c9`. Independent binding receipt: `.tmp/new-pc/routine-cold-list-independent-result-binding.json`. This verifies the tested scheduling/disabled cold-reopen scenario; pause/resume, live Stop, crash recovery, normal-profile UX and later build compatibility remain pending. The binding review does not replace signed-retirement verification or advance the full Routine readiness gate.
+
+### Retained predecessor failure
+
+The 2026-10-05 private two-period trial on installed snapshot `7.4.23-snapshot+8db2d6bd4e.local.1791240779706` reached two distinct UTC timer sessions. Its saved baseline records both runs as complete after actual full-file reads and accepted goal completion. This validates those two scheduled executions only.
+
+The predecessor trial remains failed: the cold-reopen check requested `GET /kilocode/agent/{id}` and received HTTP 404. Current production source registers the list GET plus item PATCH/DELETE, but no item GET. The corrected successor selects the exact retained worker from the supported list response. Preserve the disabled-state assertion, history equality, and full no-replay observation; this diagnosis does not prove persistence or recovery.
+
+Retained result: `routine-current-8db2-two-period-actual-556ff89e023e499ca5bd675a63ae054b.json`, 372076 bytes, SHA256 `a2ecb68d96de13cd9b37a217f52f35f26237dbf2114f5ac0797a8bed61bed81d`. Independent source diagnosis is saved in `.tmp/new-pc/routine-8db2-cold-reopen-independent-source-diagnosis.json`. No readiness gate is advanced by this partial result.
+
 This describes the implemented calendar-time behavior. The complete routine overhaul remains tracked in [implementation progress](Raya-Implementation-Progress.md).
 
 ## Structured schedule creation
@@ -64,7 +78,7 @@ Each new run records the version selected at startup, and later history updates 
 
 Records written before versioning are treated as version 1. Existing history does not need an eager rewrite. Reopening storage preserves both legacy consumption and the eligibility/consumption of a revised schedule. Runs from an older version cannot disable the current version through the repeated-block guard.
 
-History retains unfinished runs, the latest 50 terminal records, and one consumption anchor for the newest recorded schedule version if it falls outside that window. The anchor is the greatest scheduled timestamp among timer runs, with startup time used for legacy records. New manual/event records cannot replace it. This prevents late older records or many manual runs from evicting a newer consumed occurrence. Archived definition snapshots, a durable occurrence ledger and complete interrupted-start reconciliation remain separate unfinished work.
+History retains unfinished runs, the latest 50 terminal records, and one consumption anchor for the newest recorded schedule version if it falls outside that window. The anchor is the greatest scheduled timestamp among timer runs, with startup time used for legacy records. New manual/event records cannot replace it. This prevents late older records or many manual runs from evicting a newer consumed occurrence. The runner also persists selected timer occurrences and immutable startup instruction snapshots; see [Routine queue](Raya-Routine-Queue.md) for their identity, publication and recovery boundaries. Snapshot retention and complete interrupted-start reconciliation remain separate unfinished work.
 
 ## Why a run started
 
@@ -82,7 +96,7 @@ The history API returns the evidence. Routine rows distinguish scheduled, manual
 
 Calendar consumption advances using the greatest recorded scheduled timestamp in the current version, not the last history publication or the startup clock. A backward clock change between polling and startup or a late update to an older run therefore cannot move that cursor backward. Existing polling-window and overlap rules still apply.
 
-The deterministic timer ID is persisted evidence, not an atomic uniqueness constraint across a durable occurrence queue. Event IDs/deduplication, queued or missed occurrence records, leases/heartbeats, catch-up policy and complete startup reconciliation remain unfinished. No exactly-once external side-effect guarantee is implied.
+The durable timer queue enforces uniqueness of routine ID, schedule version and scheduled timestamp, and records selected occurrences, claims, owners, leases and session links. The scheduler publishes selected timer occurrences and uses conditional claim, heartbeat and settlement transitions. Queue publication, filesystem startup claims, sessions and history remain separate persistence boundaries. Event IDs/deduplication, a complete missed-occurrence/catch-up policy and complete startup reconciliation remain unfinished. No exactly-once external side-effect guarantee is implied.
 
 ## Timezone
 
@@ -97,7 +111,7 @@ Legacy cron schedules with a missing or blank timezone require review before fur
 The evaluator searches absolute minutes in increasing order and compares their local calendar fields in the selected timezone.
 
 - A nonexistent local time during a forward clock change is skipped. For example, Toronto's daily 02:30 schedule skips the spring transition date where 02:30 does not occur.
-- A repeated local minute during a backward clock change has two distinct absolute occurrences. Both are eligible at the evaluator level and receive distinct timer occurrence IDs if selected. Existing overlap exclusion may prevent a second run while the first is unfinished. A durable occurrence queue and an explicit product control for duplicate-hour policy are still outstanding.
+- A repeated local minute during a backward clock change has two distinct absolute occurrences. Both are eligible at the evaluator level and receive distinct timer occurrence IDs if selected. Existing overlap exclusion may prevent a second run while the first is unfinished. The timer queue preserves selected occurrence identities; an explicit product control for duplicate-hour policy is still outstanding.
 - Fractional-hour offsets and thirty-minute clock changes use the same timezone conversion. The evaluator does not assume an integer-hour UTC offset or a one-hour daylight-saving transition.
 - Next occurrence is strictly after the supplied reference timestamp. The task-level due calculation applies its existing polling window around that evaluator.
 

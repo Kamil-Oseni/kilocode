@@ -142,7 +142,23 @@ export function activate(context: vscode.ExtensionContext) {
 
   // raya_change start - Milestone E live React canvas panel and host bridge
   const canvasService = new CanvasService(connectionService, context)
-  context.subscriptions.push(new BrainBridge(connectionService, new BrainHost(context)))
+  const brain = new BrainHost(context)
+  context.subscriptions.push(
+    vscode.commands.registerCommand("raya.memory.dreamActivity", () => brain.dreamActivity()),
+    vscode.commands.registerCommand("raya.memory.cancelDream", (target: unknown) => brain.cancelDream(target)),
+  )
+  context.subscriptions.push(new BrainBridge(connectionService, brain))
+  context.subscriptions.push(
+    vscode.commands.registerCommand("raya.memory.startDream", () =>
+      brain.startDream(connectionService).catch(async (err: unknown) => {
+        console.warn("[Raya] Manual consolidation needs inspection", err)
+        await vscode.window.showErrorMessage(
+          "Memory consolidation could not be confirmed. Inspect its saved checkpoint before retrying.",
+        )
+        throw err
+      }),
+    ),
+  )
   context.subscriptions.push(
     registerCanvasCommand(canvasService),
     vscode.window.registerWebviewPanelSerializer(CanvasPanel.viewType, {

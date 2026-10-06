@@ -12,11 +12,18 @@ from pathlib import Path
 import sys
 import tempfile
 
-assert len(sys.argv) == 2
+assert len(sys.argv) in (2, 3)
 root = Path(sys.argv[1]).resolve(strict=True)
-review = root / 'source-review.json'
-assert hashlib.sha256(review.read_bytes()).hexdigest() == 'f99cc7a0819bb7c2216c727e03620ca56ac3b1e8fc94ef0207ad3e7ccda7d037'
-sources = json.loads(review.read_bytes())['sources']
+review = None
+if len(sys.argv) == 3:
+    pins = json.loads(sys.argv[2])
+    assert set(pins) == {'server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
+                         'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py'}
+    sources = [{'name': name, 'sha256': sha, 'bytes': (root / name).stat().st_size} for name, sha in pins.items()]
+else:
+    review = root / 'source-review.json'
+    assert hashlib.sha256(review.read_bytes()).hexdigest() == 'f99cc7a0819bb7c2216c727e03620ca56ac3b1e8fc94ef0207ad3e7ccda7d037'
+    sources = json.loads(review.read_bytes())['sources']
 for row in sources:
     data = root.joinpath(row['name']).read_bytes()
     assert len(data) == row['bytes'] and hashlib.sha256(data).hexdigest() == row['sha256']
@@ -106,5 +113,5 @@ with tempfile.TemporaryDirectory(prefix='raya-memory-operation-codec-') as temp:
                       'terminal': encoded(terminal), 'response': encoded(dict(result, operation=terminal))
                       if outcome == 'completed' else None})
 print(json.dumps({'format': 'raya.memory.operation.producer-fixture', 'cases': cases,
-                  'sourceReviewSHA': hashlib.sha256(review.read_bytes()).hexdigest(), 'source_sha256': pins,
+                  'sourceReviewSHA': hashlib.sha256(review.read_bytes()).hexdigest() if review else None, 'source_sha256': pins,
                   'qualification': 'Actual pure Journal/certificate codecs; inert file sink, no namespace/native/model proof'}))

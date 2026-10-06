@@ -25,6 +25,7 @@ export type KiloProviderMemoryMessage = {
 
 export type KiloProviderMemoryInput = {
   client(): KiloClient | undefined
+  generation?(): number
   session(): Session | undefined
   /** Project directory for memory operations, or undefined when project scope is disabled. */
   dir(sessionID?: string): string | undefined
@@ -98,10 +99,23 @@ export class KiloProviderMemory {
     }
   }
 
-  private serial<T>(fn: () => Promise<T>) {
+  private scope(sessionID?: string) {
+    const client = this.input.client()
+    const generation = this.input.generation?.()
+    const session = sessionID ?? this.input.session()?.id
+    const directory = this.input.dir(session)
+    return () =>
+      this.input.client() === client &&
+      this.input.generation?.() === generation &&
+      (sessionID !== undefined || this.input.session()?.id === session) &&
+      this.input.dir(session) === directory
+  }
+
+  private serial<T>(fn: (current: () => boolean) => Promise<T>, sessionID: string | undefined, refused: () => T) {
+    const current = this.scope(sessionID)
     // this.tail is always reassigned below to a never-rejecting promise, so it
     // never settles rejected — a single fulfillment handler is sufficient.
-    const next = this.tail.then(fn)
+    const next = this.tail.then(() => (current() ? fn(current) : refused()))
     this.tail = next.then(
       () => undefined,
       () => undefined,
@@ -142,7 +156,11 @@ export class KiloProviderMemory {
   }
 
   fetch(sessionID?: string): Promise<void> {
-    return this.serial(() => this.load(sessionID))
+    return this.serial(
+      (current) => this.load(sessionID, current),
+      sessionID,
+      () => undefined,
+    )
   }
 
   /** Resolves once the serialized operation queue has drained. */
@@ -150,7 +168,7 @@ export class KiloProviderMemory {
     return this.tail
   }
 
-  private async load(sessionID?: string): Promise<void> {
+  private async load(sessionID: string | undefined, current: () => boolean): Promise<void> {
     try {
       const directory = this.input.dir(sessionID ?? this.input.session()?.id)
       const client = this.input.client()
@@ -173,6 +191,7 @@ export class KiloProviderMemory {
       }
 
       const { data: status } = await retry(() => api.status({ directory }, { throwOnError: true }))
+      if (!current()) return
       const msg = {
         type: "memoryLoaded",
         sessionID,
@@ -182,6 +201,7 @@ export class KiloProviderMemory {
       this.input.post(msg)
     } catch (err) {
       console.error("[Raya] Provider: Failed to fetch memory:", err)
+      if (!current()) return
       this.input.post({
         type: "memoryLoaded",
         sessionID,
@@ -191,10 +211,14 @@ export class KiloProviderMemory {
   }
 
   show(sessionID?: string, mode: "status" | "show" = "show"): Promise<void> {
-    return this.serial(() => this.doShow(sessionID, mode))
+    return this.serial(
+      (current) => this.doShow(sessionID, mode, current),
+      sessionID,
+      () => undefined,
+    )
   }
 
-  private async doShow(sessionID: string | undefined, mode: "status" | "show"): Promise<void> {
+  private async doShow(sessionID: string | undefined, mode: "status" | "show", current: () => boolean): Promise<void> {
     const client = this.input.client()
     if (!client) {
       this.input.post({
@@ -226,6 +250,7 @@ export class KiloProviderMemory {
         retry(() => api.show({ directory }, { throwOnError: true })),
         retry(() => api.status({ directory }, { throwOnError: true })),
       ])
+      if (!current()) return
       const msg = {
         type: "memoryLoaded",
         sessionID,
@@ -274,6 +299,7 @@ export class KiloProviderMemory {
       })
     } catch (err) {
       console.error("[Raya] Provider: Failed to show memory:", err)
+      if (!current()) return
       this.input.post({
         type: "memoryLoaded",
         sessionID,
@@ -283,7 +309,21 @@ export class KiloProviderMemory {
   }
 
   run(message: KiloProviderMemoryMessage): Promise<boolean> {
-    return this.serial(() => this.execute(message))
+    const request = { ...message }
+    return this.serial(
+      (current) => this.execute(request, current),
+      request.sessionID,
+      () => {
+        this.input.post({
+          type: "memoryOperationResult",
+          operation: request.operation,
+          sessionID: request.sessionID,
+          ok: false,
+          error: "Memory connection or project changed. Retry in the intended project.",
+        })
+        return false
+      },
+    )
   }
 
   /**
@@ -293,20 +333,29 @@ export class KiloProviderMemory {
    * already posted to the webview by execute()).
    */
   toggle(sessionID?: string): Promise<MemoryOperation | undefined> {
-    return this.serial(async () => {
-      const client = this.input.client()
-      if (!client) throw new Error("Not connected to CLI backend")
-      const api = memory(client)
-      if (!api) throw new Error("Memory unavailable in CLI backend")
-      const directory = this.input.dir(sessionID ?? this.input.session()?.id)
-      if (!directory) throw new Error(NO_PROJECT)
-      const { data: status } = await retry(() => api.status({ directory }, { throwOnError: true }))
-      const operation = status.state.enabled ? "disable" : "enable"
-      return (await this.execute({ operation, sessionID })) ? operation : undefined
-    })
+    return this.serial(
+      async (current) => {
+        const client = this.input.client()
+        if (!client) throw new Error("Not connected to CLI backend")
+        const api = memory(client)
+        if (!api) throw new Error("Memory unavailable in CLI backend")
+        const directory = this.input.dir(sessionID ?? this.input.session()?.id)
+        if (!directory) throw new Error(NO_PROJECT)
+        const response = await retry(() => api.status({ directory }, { throwOnError: true })).catch((err: unknown) => {
+          if (!current()) return undefined
+          throw err
+        })
+        if (!current() || !response) return undefined
+        const operation = response.data.state.enabled ? "disable" : "enable"
+        const applied = await this.execute({ operation, sessionID }, current)
+        return current() && applied ? operation : undefined
+      },
+      sessionID,
+      () => undefined,
+    )
   }
 
-  private async execute(message: KiloProviderMemoryMessage): Promise<boolean> {
+  private async execute(message: KiloProviderMemoryMessage, current: () => boolean): Promise<boolean> {
     const client = this.input.client()
     if (!client) {
       this.input.post({
@@ -343,7 +392,11 @@ export class KiloProviderMemory {
         })
         return false
       }
-      const data = await this.action(api, directory, message)
+      const data = await this.action(api, directory, message, current)
+      if (!current()) {
+        this.cached.delete(directory)
+        return true
+      }
       const refreshed =
         message.operation === "status"
           ? { data }
@@ -352,6 +405,10 @@ export class KiloProviderMemory {
               return undefined
             })
       const status = refreshed?.data
+      if (!current()) {
+        this.cached.delete(directory)
+        return true
+      }
       const result = {
         type: "memoryOperationResult",
         operation: message.operation,
@@ -377,6 +434,7 @@ export class KiloProviderMemory {
       return true
     } catch (err) {
       console.error("[Raya] Provider: Failed memory operation:", err)
+      if (!current()) return false
       this.input.post({
         type: "memoryOperationResult",
         operation: message.operation,
@@ -388,11 +446,11 @@ export class KiloProviderMemory {
     }
   }
 
-  private async action(api: MemoryApi, directory: string, message: KiloProviderMemoryMessage) {
+  private async action(api: MemoryApi, directory: string, message: KiloProviderMemoryMessage, current: () => boolean) {
     const op = message.operation
     if (op === "enable") return (await api.enable({ directory }, { throwOnError: true })).data
     if (op === "status") return (await api.status({ directory }, { throwOnError: true })).data
-    if (op === "inspect") return this.inspect(api, directory)
+    if (op === "inspect") return this.inspect(api, directory, current)
     if (op === "disable") return (await api.disable({ directory }, { throwOnError: true })).data
     if (op === "rebuild") return (await api.rebuild({ directory }, { throwOnError: true })).data
     if (op === "purge") return this.purge(api, directory, message)
@@ -442,8 +500,9 @@ export class KiloProviderMemory {
     return (await api.forget({ directory, query, sessionID: message.sessionID }, { throwOnError: true })).data
   }
 
-  private async inspect(api: MemoryApi, directory: string) {
+  private async inspect(api: MemoryApi, directory: string, current: () => boolean) {
     const { data: status } = await retry(() => api.status({ directory }, { throwOnError: true }))
+    if (!current()) return status
     if (!status.state.enabled) throw new Error("Memory is disabled. Run /memory on first.")
     await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(status.root))
     return status

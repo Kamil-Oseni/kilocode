@@ -379,6 +379,7 @@ export namespace Backlogs {
     reloadRequired: Schema.Boolean,
     notifiedAt: Schema.optional(Schema.Number),
     duplicateOf: Schema.optional(Schema.String), // raya_change - canonical item this report duplicates
+    recurrenceOf: Schema.optional(Schema.String),
     classifiedBy: Schema.optional(Schema.Literals(["keyword", "model"])), // raya_change - who set the current category/severity
   })
   export type Item = typeof Item.Type

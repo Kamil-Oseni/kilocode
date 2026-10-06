@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { release } from "../../src/second-brain/control/catalog-v2"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
@@ -18,9 +19,8 @@ type Case = {
   response: string | null
 }
 type Fixture = { source_sha256: Record<string, string>; cases: Case[] }
-const source = process.env.RAYA_MEMORY_OPERATION_SOURCE
 const python = process.env.RAYA_MEMORY_OPERATION_PYTHON
-const genuine = source && python ? test : test.skip
+const genuine = python ? test : test.skip
 const digest = (value: Uint8Array) => createHash("sha256").update(value).digest("hex")
 function deferred() {
   let resolve!: () => void
@@ -32,10 +32,18 @@ function deferred() {
 let memo: Promise<Fixture> | undefined
 function fixture() {
   return (memo ??= (async () => {
-    if (!python || !source) throw new Error("Pinned pure producer required")
+    if (!python) throw new Error("Pinned pure producer interpreter required")
     expect(digest(await readFile(python))).toBe("b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2")
     const child = Bun.spawn(
-      [python, "-I", "-S", "-B", path.join(import.meta.dir, "fixtures/memory-client-v2-producer.py"), source],
+      [
+        python,
+        "-I",
+        "-S",
+        "-B",
+        path.join(import.meta.dir, "fixtures/memory-client-v2-producer.py"),
+        path.join(import.meta.dir, "../../script/memory/service"),
+        JSON.stringify(release),
+      ],
       {
         windowsHide: true,
         stdin: "ignore",
@@ -54,11 +62,12 @@ function fixture() {
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ])
-    expect(code).toBe(0)
+    expect(code, err).toBe(0)
     expect(err).toBe("")
     expect(Buffer.byteLength(out)).toBeLessThan(65536)
     const value = JSON.parse(out)
-    expect(value.sourceReviewSHA).toBe("f99cc7a0819bb7c2216c727e03620ca56ac3b1e8fc94ef0207ad3e7ccda7d037")
+    expect(value.sourceReviewSHA).toBeNull()
+    expect(value.source_sha256).toEqual(release)
     return value as Fixture
   })())
 }

@@ -1,6 +1,55 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("lost health reads expire and late replies cannot replace a fresh retry", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.clock.install()
+  await page.goto("/?state=health-held")
+  const refresh = page.getByRole("button", { name: "Refresh", exact: true })
+  await expect(refresh).toBeDisabled()
+  await page.clock.fastForward(15_001)
+  await expect(page.locator(".admin-notice[role=alert]")).toContainText("System health did not reply")
+  await expect(refresh).toBeEnabled()
+  await audit(page)
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[0]())
+  await expect(page.locator(".admin-notice[role=alert]")).toContainText("System health did not reply")
+  await refresh.click()
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[0]())
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[1]())
+  await expect(refresh).toBeEnabled()
+  await expect(page.locator(".admin-notice[role=alert]")).toHaveCount(0)
+  await page.clock.fastForward(20_000)
+  await expect(page.locator(".admin-notice[role=alert]")).toHaveCount(0)
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "requestAdmin")).toHaveLength(2)
+})
+
+test("disconnect invalidates outstanding health reads before reconnect", async ({ page }) => {
+  await page.clock.install()
+  await page.goto("/?state=health-held")
+  const refresh = page.getByRole("button", { name: "Refresh", exact: true })
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() =>
+    (window as unknown as { __healthConnection: (connected: boolean) => void }).__healthConnection(false),
+  )
+  await expect(page.locator(".admin-notice[role=status]")).toContainText("Raya is disconnected")
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[0]())
+  await expect(page.locator(".admin-notice[role=status]")).toContainText("Raya is disconnected")
+  await page.clock.fastForward(20_000)
+  await expect(page.locator(".admin-notice[role=alert]")).toHaveCount(0)
+  await page.evaluate(() =>
+    (window as unknown as { __healthConnection: (connected: boolean) => void }).__healthConnection(true),
+  )
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[0]())
+  await expect(refresh).toBeDisabled()
+  await page.evaluate(() => (window as unknown as { __healthReplies: (() => void)[] }).__healthReplies[1]())
+  await expect(refresh).toBeEnabled()
+  await expect(page.getByText("Raya is disconnected", { exact: false })).toHaveCount(0)
+})
+
 test("Voice attention explains observed retained state without asserting a server outage", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 })
   await page.goto("/?state=voice-failed")
@@ -68,6 +117,38 @@ test("a lost Stop receipt refreshes observed worker state without replaying canc
   await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
 })
 
+test("worker failure explains uncertainty and refreshes without replaying Stop", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.clock.install()
+  await page.goto("/?state=workers-failed")
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  await workers.getByRole("button", { name: "Stop: Code", exact: true }).click()
+  await expect(workers.getByRole("status")).toHaveText("Worker cancellation could not be confirmed. Refresh status.")
+  await expect(workers.getByText("Cancelled", { exact: true })).toHaveCount(0)
+  await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toHaveCount(0)
+  await audit(page)
+  await workers.getByRole("button", { name: "Refresh", exact: true }).click()
+  await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
+  await expect(workers.getByRole("status")).toHaveCount(0)
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toHaveLength(1)
+  expect(sent.filter((message: { type: string }) => message.type === "requestBackgroundJobs")).toHaveLength(2)
+})
+
+test("long worker failure details stay bounded and wrap at narrow widths", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.clock.install()
+  await page.goto("/?state=workers-longerror")
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  await workers.getByRole("button", { name: "Stop: Code", exact: true }).click()
+  const notice = workers.getByRole("status")
+  await expect(notice).toHaveText("x".repeat(800))
+  expect(await notice.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await audit(page)
+})
+
 test("Activity and health exposes the actual worker strip and scoped Stop command", async ({ page }) => {
   await page.goto("/?state=workers-delayed")
   const workers = page.getByRole("region", { name: "Current conversation workers" })
@@ -128,7 +209,7 @@ test("proposal transport reviews an exact revision, preserves source hashes and 
 }) => {
   await page.goto("/?state=proposals")
   await page.getByRole("button", { name: "Refresh proposals" }).click()
-  await page.getByRole("button", { name: /aaaaaaaa.*pending/ }).click()
+  await page.getByRole("button", { name: "Review Preferences/lights.md", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Proposed memory changes" })).toBeVisible()
   await page.getByRole("button", { name: "Edit proposed changes" }).click()
   await page.getByLabel("Proposed text: Preferences/lights.md", { exact: true }).fill("Prefer calm amber")
@@ -154,10 +235,57 @@ test("proposal transport reviews an exact revision, preserves source hashes and 
 test("dismissed native review settles the UI without claiming an applied note", async ({ page }) => {
   await page.goto("/?state=proposals-dismiss")
   await page.getByRole("button", { name: "Refresh proposals" }).click()
-  await page.getByRole("button", { name: /aaaaaaaa.*pending/ }).click()
+  await page.getByRole("button", { name: "Review Preferences/lights.md", exact: true }).click()
   await page.getByRole("button", { name: "Open full review and apply" }).click()
   await expect(page.getByText("pending · Automatic capture is off", { exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "Refresh proposals" })).toBeEnabled()
+})
+
+test("published memories use separate source review and index sync without replaying publication", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.goto("/?state=proposals-index")
+  await page.getByRole("button", { name: "Refresh proposals" }).click()
+  await page.getByRole("button", { name: "Review Preferences/lights.md", exact: true }).click()
+  await expect(page.getByRole("button", { name: "Confirm index sync" })).toHaveCount(0)
+  await page.getByRole("button", { name: "Open full review and apply" }).click()
+  await expect(page.getByText("applied · Automatic capture is off", { exact: true })).toBeVisible()
+  const review = page.getByRole("button", { name: "Review sources for indexing", exact: true })
+  const sync = page.getByRole("button", { name: "Confirm index sync", exact: true })
+  await review.click()
+  await expect(review).toBeDisabled()
+  await expect(sync).toBeDisabled()
+  await expect(page.getByText("Reviewing sources in native review…", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Refresh proposals" })).toBeDisabled()
+  await page.evaluate(() => window.__finishIndex())
+  await expect(sync).toBeEnabled()
+  await sync.click()
+  await expect(sync).toBeDisabled()
+  await expect(page.getByText("Waiting for confirmed index sync…", { exact: true })).toBeVisible()
+  await page.evaluate(() => window.__finishIndex("transport_error"))
+  await expect(page.getByText("The local Memory service could not finish the request.", { exact: true })).toBeVisible()
+  await expect(page.getByText("applied · Automatic capture is off", { exact: true })).toBeVisible()
+  await sync.click()
+  await page.evaluate(() => window.__finishIndex())
+  await expect(page.getByText("Source policy: synced", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("Changes are published. Search-index freshness is not verified by this proposal view.", {
+      exact: true,
+    }),
+  ).toBeVisible()
+  const messages = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  const indexing = messages.filter((row) => row.type === "secondBrain" && ["review", "sync"].includes(row.action))
+  expect(indexing.map((row) => row.action)).toEqual(["review", "sync", "sync"])
+  expect(indexing.every((row) => Object.keys(row).sort().join("|") === "action|id|type")).toBe(true)
+  expect(messages.filter((row) => row.action === "proposal" && row.command.action === "apply")).toHaveLength(1)
+  expect(messages.filter((row) => row.action === "cancel")).toHaveLength(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()
+  expect(accessibility.violations).toEqual([])
+  await page.screenshot({ path: info.outputPath("published-memory-indexing.png"), fullPage: true })
+  await page.getByRole("button", { name: "Switch fixture workspace" }).click()
+  await expect(sync).toHaveCount(0)
 })
 
 for (const theme of ["light", "dark", "contrast"])
@@ -235,7 +363,7 @@ test("keeps 48 diagnostics inside the view and preserves keyboard navigation", a
   await page.setViewportSize({ width: 320, height: 520 })
   await page.goto("/?state=long")
   await expect(page.locator(".admin-log > li")).toHaveCount(48)
-  const refresh = page.getByRole("button", { name: "Refresh" })
+  const refresh = page.getByRole("button", { name: "Refresh", exact: true })
   await refresh.focus()
   await expect(refresh).toBeFocused()
   await page.keyboard.press("Shift+Tab")

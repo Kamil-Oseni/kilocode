@@ -10,11 +10,53 @@ export type BrainSource = Readonly<{
   relevance_score: number
 }>
 
+export type BrainContext = Readonly<{
+  sources: readonly Readonly<{
+    path: string
+    relative: string
+    line: number
+    end_line: number
+    heading: string
+    text: string
+    source_sha256: string
+    depth: number
+    tokens: number
+    truncated: boolean
+  }>[]
+  diagnostics: readonly Readonly<{ relative: string; reason: string }>[]
+  tokens: number
+  truncated: boolean
+  capture_enabled: false
+}>
+
+export type BrainDreamActivity = Readonly<{
+  id: string
+  owner: string
+  project: string
+  model: string
+  revision: number
+  phase:
+    | "selection"
+    | "generation"
+    | "validation"
+    | "submission"
+    | "review-pending"
+    | "reconciliation"
+    | "completed"
+    | "cancelled"
+    | "failed"
+  lifecycle: "active" | "settling" | "joined" | "uncertain"
+}>
+
 export type BrainState = Readonly<{
   configured: boolean
   status: "disconnected" | "checking" | "ready" | "searching" | "cancelled" | "unavailable"
   code?: string
   proposals?: BrainProposalResult
+  review?: BrainReview
+  context?: BrainContext
+  root?: string
+  dream?: Readonly<{ status: "native-review" | "closed" | "unavailable"; activity?: BrainDreamActivity }>
   results: readonly BrainSource[]
   control?: Readonly<{
     status: "unchecked" | "reviewing" | "approved" | "syncing" | "synced" | "policy_disabled" | "uncertain"
@@ -27,13 +69,36 @@ export type BrainRequest =
   | { type: "secondBrain"; action: "proposal"; id: string; command: BrainProposalCommand }
   | {
       type: "secondBrain"
-      action: "state" | "setup" | "check" | "disconnect" | "controlSetup" | "review" | "sync" | "disable"
+      action:
+        | "state"
+        | "setup"
+        | "check"
+        | "disconnect"
+        | "controlSetup"
+        | "review"
+        | "sync"
+        | "disable"
+        | "dreamStart"
+        | "dreamInspect"
+        | "dreamActivity"
       id: string
     }
+  | { type: "secondBrain"; action: "dreamCancel"; id: string; target: { id: string; owner: string } }
   | { type: "secondBrain"; action: "cancel"; id: string; target: string }
   | { type: "secondBrain"; action: "search"; id: string; query: string }
+  | { type: "secondBrain"; action: "context"; id: string; query: string; budget: number }
 
 export type BrainResponse = { type: "secondBrainState"; id: string; state: BrainState }
+
+/** Read-only explanation from the matching saved candidate, outside the signed publication record. */
+export type BrainReview = Readonly<{
+  id: string
+  digest: string
+  fingerprint: string
+  kind: "memory" | "hypothesis" | "lesson"
+  rationale: string
+  contradictions: readonly string[]
+}>
 
 export type BrainProposal = Readonly<{
   format: "raya.memory.proposal.v1"

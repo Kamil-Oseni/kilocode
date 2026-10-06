@@ -661,6 +661,12 @@ describe("tool.task planned Auto Chief branch", () => {
               prompt: (input: SessionPrompt.PromptInput) =>
                 Effect.gen(function* () {
                   const dir = yield* InstanceState.directory
+                  // kilocode_change start - the actual selected worktree owns the worker environment
+                  const part = input.parts[0]
+                  if (part?.type !== "text") throw new Error("Expected actual worker handoff")
+                  expect(part.text).toContain(`Authenticated working directory: ${JSON.stringify(dir)}`)
+                  expect(dir).not.toBe(parent)
+                  // kilocode_change end
                   yield* Effect.promise(() => Bun.write(path.join(dir, "chief-owned.txt"), "written by child"))
                   return reply(input, "Edited child-only file")
                 }),
@@ -1865,13 +1871,15 @@ describe("tool.task", () => {
       const tool = yield* TaskTool
       const def = yield* tool.init()
       let seen: SessionPrompt.PromptInput | undefined
+      const dir = yield* InstanceState.directory // kilocode_change - actual environment, never model context
+      const absolute = path.join(dir, "explicit-source.ts") // kilocode_change - preserve legitimate absolute paths
 
       const result = yield* def.execute(
         {
           description: "Map API routes",
           brief: {
             objective: "Find and map every HTTP API endpoint in the codebase",
-            context: "Focus on the server package",
+            context: `Working directory: Z:/invented/workspace. Read exactly ${absolute}`, // kilocode_change
             constraints: ["Do not edit files"],
             expected_return: "A concise endpoint map with source paths",
           },
@@ -1890,6 +1898,7 @@ describe("tool.task", () => {
       )
 
       const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.directory).toBe(dir) // kilocode_change - conflicting context cannot relocate a child
       expect(child.parentID).toBe(chat.id)
       expect(child.agent).toBe("explore")
       // kilocode_change start - raya_change: durable task identity
@@ -1919,6 +1928,13 @@ describe("tool.task", () => {
       expect(part?.type).toBe("text")
       if (part?.type !== "text") throw new Error("expected structured text brief")
       expect(part.text).toContain("<subagent_brief>")
+      // kilocode_change start - authenticated environment and untrusted context remain distinct
+      expect(part.text).toContain(`Authenticated working directory: ${JSON.stringify(dir)}`)
+      expect(part.text).toContain(
+        `Model-provided context (not environment authority): Working directory: Z:/invented/workspace. Read exactly ${absolute}`,
+      )
+      expect(part.text).toContain("Do not rewrite or rebase explicit absolute paths")
+      // kilocode_change end
       // kilocode_change start - retain execution responsibility in the actual delegated input
       expect(part.text).toContain("Carry out this assigned objective directly with the available authorized tools")
       expect(part.text).toContain("Unless the assignment explicitly requests delegation")

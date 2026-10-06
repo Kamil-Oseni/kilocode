@@ -815,7 +815,7 @@ export const TaskTool = Tool.define(
 
       const runTask = Effect.fn("TaskTool.runTask")(
         function* () {
-          const parts = yield* ops.resolvePromptParts(handoff) // raya_change - structured brief, never raw transcript context
+          const parts = yield* ops.resolvePromptParts(KiloTask.environment(handoff, yield* InstanceState.directory)) // kilocode_change - bind the selected worker runtime directory without changing requested paths
           KiloSessionProcessor.markReviewTelemetry(parts, params.command) // kilocode_change - carry review command into child session telemetry
           const result = yield* ops.prompt({
             messageID: message, // kilocode_change - use the exact child input recorded for this invocation

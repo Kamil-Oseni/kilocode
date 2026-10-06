@@ -26,6 +26,7 @@ export function BrainDreamActivity() {
   const [notice, setNotice] = createSignal<string>()
   let query = ""
   let cancel = ""
+  let target: { id: string; owner: string; revision: number } | undefined
   let inspect = ""
   let deadline: ReturnType<typeof setTimeout> | undefined
   let cancellation: ReturnType<typeof setTimeout> | undefined
@@ -52,6 +53,7 @@ export function BrainDreamActivity() {
     const current = run()
     if (!current || cancelling() || error() || !["active", "settling"].includes(current.lifecycle)) return
     cancel = crypto.randomUUID()
+    target = { id: current.id, owner: current.owner, revision: current.revision }
     const id = cancel
     setCancelling(true)
     setUnconfirmed(false)
@@ -90,12 +92,28 @@ export function BrainDreamActivity() {
       clearTimeout(cancellation)
       cancellation = undefined
       cancel = ""
+      target = undefined
       setCancelling(false)
       setUnconfirmed(false)
     }
     setError(message.state.dream.status === "unavailable")
     if (message.state.dream.status !== "unavailable") {
-      setRun((previous) => latest(previous, message.state.dream?.activity))
+      const current = latest(run(), message.state.dream.activity)
+      setRun(current)
+      if (
+        target &&
+        current?.id === target.id &&
+        current.owner === target.owner &&
+        current.revision > target.revision &&
+        current.lifecycle === "joined"
+      ) {
+        clearTimeout(cancellation)
+        cancellation = undefined
+        cancel = ""
+        target = undefined
+        setCancelling(false)
+        setUnconfirmed(false)
+      }
     }
   })
   onMount(refresh)

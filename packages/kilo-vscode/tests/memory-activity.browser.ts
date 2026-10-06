@@ -216,3 +216,57 @@ test("lost cancellation receipt becomes unconfirmed without replay and its origi
   await expect(view.getByRole("button", { name: "Cancellation unconfirmed" })).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.dataset.previewDreamCancel)).toBe(original)
 })
+
+test("fresh joined activity settles only the original cancellation owner", async ({ page }) => {
+  await page.goto("/?state=dark-memory-activity")
+  const view = page.getByRole("region", { name: "Consolidation activity" })
+  await expect(view.getByRole("button", { name: "Cancel consolidation" })).toBeEnabled()
+  await page.clock.install()
+  await page.evaluate(() => {
+    document.documentElement.dataset.previewHoldDreamActivity = "true"
+  })
+  await view.getByRole("button", { name: "Cancel consolidation" }).click()
+  const original = await page.evaluate(() => document.documentElement.dataset.previewDreamCancel!)
+  await page.clock.fastForward(10001)
+  for (const row of [
+    { revision: 1, owner: "22222222-2222-4222-8222-222222222222", lifecycle: "joined" },
+    { revision: 3, owner: "33333333-3333-4333-8333-333333333333", lifecycle: "joined" },
+    { revision: 4, owner: "22222222-2222-4222-8222-222222222222", lifecycle: "uncertain" },
+    { revision: 5, owner: "22222222-2222-4222-8222-222222222222", lifecycle: "joined" },
+  ]) {
+    await view.getByRole("button", { name: "Refresh activity" }).click()
+    const id = await page.evaluate(() => JSON.parse(document.documentElement.dataset.previewDreamActivity!).id)
+    await page.evaluate(
+      ({ id, row }) =>
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: {
+              type: "secondBrainState",
+              id,
+              state: {
+                configured: false,
+                status: "disconnected",
+                results: [],
+                dream: {
+                  status: "closed",
+                  activity: {
+                    id: "11111111-1111-4111-8111-111111111111",
+                    project: "C:/Synthetic/Approved",
+                    model: "fixture/model",
+                    phase: "cancelled",
+                    ...row,
+                  },
+                },
+              },
+            },
+          }),
+        ),
+      { id, row },
+    )
+    const notice = view.getByText(/Cancellation has not been confirmed/)
+    if (row.revision === 5) await expect(notice).toHaveCount(0)
+    if (row.revision !== 5) await expect(notice).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.dataset.previewDreamCancel)).toBe(original)
+  }
+  await expect(view.getByRole("button", { name: "Cancel consolidation" })).toHaveCount(0)
+})

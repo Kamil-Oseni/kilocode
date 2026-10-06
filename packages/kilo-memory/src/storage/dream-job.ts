@@ -120,6 +120,21 @@ export namespace MemoryDreamJob {
           reason = "Original model lease retirement is unresolved; do not start a replacement"
         })
     }
+    if (phase === "review-pending") {
+      const saved = await MemoryDream.list(root, project)
+      const selected = saved.runs.find((item) => item.id === run.id && item.owner === run.owner)
+      if (
+        selected?.candidates.length &&
+        selected.candidates.every((key) =>
+          saved.rows.some(
+            (row) => row.fingerprint === key && ["accepted", "rejected", "superseded", "deleted"].includes(row.state),
+          ),
+        )
+      ) {
+        phase = "completed"
+        reason = "All retained proposals have final review outcomes"
+      }
+    }
     const result = await MemoryDream.advance(root, project, { ...owner, phase, reason }).catch((err: unknown) => {
       errors.push(err)
     })

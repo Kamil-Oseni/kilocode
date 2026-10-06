@@ -74,6 +74,34 @@ test("manual job retains original pending proposal and never applies generated n
   expect(await readdir(f.root)).not.toContain("Preferences")
 })
 
+test("review during retirement closes only after the original lease successfully retires", async () => {
+  for (const failed of [false, true]) {
+    const f = await fixture()
+    const work = MemoryFiles.dreamJob.start(f.root, f.project, f.selection, {
+      ...f.ports,
+      admit: async () => ({
+        generate: async () => [f.candidate],
+        retire: async () => {
+          const saved = await MemoryFiles.dream.list(f.root, f.project)
+          const row = saved.rows[0]
+          await MemoryFiles.dream.settle(f.root, f.project, {
+            fingerprint: row.fingerprint,
+            proposal: row.proposal,
+            state: "rejected",
+            reason: "Explicit review during retirement",
+          })
+          if (failed) throw new Error("Original lease did not retire")
+        },
+      }),
+    })
+    if (failed) await expect(work).rejects.toThrow("did not retire")
+    if (!failed) expect((await work).phase).toBe("completed")
+    const saved = await MemoryFiles.dream.list(f.root, f.project)
+    expect(saved.rows[0].state).toBe("rejected")
+    expect(saved.runs[0].phase).toBe(failed ? "reconciliation" : "completed")
+  }
+})
+
 test("no supported changes completes after joining the original lease without proposals", async () => {
   const f = await fixture()
   f.ports.admit = async () => ({

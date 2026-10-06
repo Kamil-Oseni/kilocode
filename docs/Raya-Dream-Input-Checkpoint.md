@@ -2,6 +2,12 @@
 
 Cloud workers remain stopped and their former work reservations are released. Continue locally; do not restart cloud assignments.
 
+## Original review outcomes
+
+The native proposal read/cancel/apply flow now reconciles tracked Dream candidates against the original configured root. The adapter checks the original ID/project, canonical proposal digest, exact sources, proposed content and before hashes. Cancellation records rejection; applied status requires the original committed publication receipt, exact target set and freshly observed note hashes. The receipt fingerprint is retained in review history. Applying outcomes remain unresolved, edited candidates refuse automatic settlement, and unrelated proposals are left untracked. Idempotent original outcomes do not rewrite history. This adapter never replays publication and does not certify a repair or factual correctness.
+
+Runs with final candidate decisions close automatically only from review-pending, which the job records after original lease retirement. Review during retirement also closes after a successful join; failed retirement remains reconciliation even if every proposal has a final outcome. The actual Python proposal-store test performs publication/cancellation in private temporary roots and verifies receipts, changed-note refusal and suppression. All 204 Memory tests pass with 899 assertions, package typechecking, extension build/types/lint, Knip and marker guards pass, and affected Memory lint is clean. Installed review UX and the manual generation/start transport remain unverified.
+
 ## Saved checkpoint inspection
 
 The extension now contributes `Raya: Inspect Saved Memory Consolidation`. It selects the trusted workspace and original configured root, reads the existing ledger, rechecks authority and presents a read-only JSON snapshot. The view includes persisted run phases/models/budgets, stable slots, exact proposed changes, evidence hashes, rationale, contradictions, proposal IDs and disposition history. It explicitly labels saved phases as history rather than live worker/GPU status; it cannot publish, retry, cancel, enable capture or certify a repair. An actual-filesystem test checks an uncertain submission and confirms unchanged ledger bytes and no published note. The test passes with nine assertions; extension build, types, lint, Knip and marker guards pass. This command is source-registered at activation; native display and installed acceptance remain unverified.

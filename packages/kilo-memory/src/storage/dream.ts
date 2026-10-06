@@ -329,7 +329,7 @@ export namespace MemoryDream {
       const allowed: Record<Run["phase"], Run["phase"][]> = {
         generation: ["validation", "reconciliation", "cancelled", "failed"],
         validation: ["submission", "completed", "reconciliation", "cancelled", "failed"],
-        submission: ["review-pending", "reconciliation", "cancelled", "failed"],
+        submission: ["review-pending", "completed", "reconciliation", "cancelled", "failed"],
         "review-pending": ["completed", "reconciliation", "cancelled", "failed"],
         reconciliation: ["review-pending", "completed", "cancelled", "failed"],
         completed: [],
@@ -468,6 +468,21 @@ export namespace MemoryDream {
       })
       if (next.state === "deleted" && !value.tombstones.includes(item.candidate.fact))
         value.tombstones.push(item.candidate.fact)
+      for (const run of value.runs) {
+        // review-pending is recorded only after the original model lease has retired.
+        // Reconciliation can also mean failed retirement, so proposal receipts cannot close it.
+        if (run.phase !== "review-pending" || !run.candidates.length) continue
+        if (
+          !run.candidates.every((key) =>
+            value.rows.some(
+              (row) => row.fingerprint === key && ["accepted", "rejected", "superseded", "deleted"].includes(row.state),
+            ),
+          )
+        )
+          continue
+        run.phase = "completed"
+        run.reason = "All retained proposals have final review outcomes"
+      }
       await save(root, value)
     })
   }

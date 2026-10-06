@@ -3,6 +3,9 @@ import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 import type { MemoryDream } from "./dream"
+import { MemoryDream as ledger } from "./dream"
+import { MemoryDreamInput } from "./dream-input"
+import { MemoryFs } from "./fs"
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const relative = z
@@ -51,8 +54,107 @@ const proposal = z
   })
   .strict()
 
+const outcome = proposal.extend({
+  status: z.enum(["pending", "cancelled", "applying", "applied"]),
+  reviewed_digest: hash.optional(),
+  receipt: z
+    .object({
+      id: z.string().uuid(),
+      status: z.literal("committed"),
+      duplicate: z.boolean(),
+      note_sha256: z.record(relative, hash.nullable()),
+    })
+    .strict()
+    .optional(),
+})
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`
+  if (value && typeof value === "object")
+    return `{${Object.entries(value)
+      .sort(([one], [two]) => (one < two ? -1 : one > two ? 1 : 0))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
+      .join(",")}}`
+  return JSON.stringify(value)
+}
+
 /** Trusted host supplies its existing proposal owner. This adapter creates pending review only. */
 export namespace MemoryDreamProposal {
+  /** Reconcile a retained original proposal; this never retries a write or certifies a repair. */
+  export async function reconcile(root: string, project: string, input: unknown, signal: AbortSignal) {
+    signal.throwIfAborted()
+    if (Buffer.byteLength(JSON.stringify(input) ?? "") > 3000000) throw new Error("Dream outcome exceeds its bound")
+    const identity = z.object({ id: z.string().uuid(), project: z.string() }).parse(input)
+    if (identity.project !== project) throw new Error("Original Dream outcome project differs")
+    return MemoryFs.queue(path.resolve(root), async () => {
+      signal.throwIfAborted()
+      const saved = await ledger.list(root, project)
+      const row = saved.rows.find((item) => item.proposal === identity.id)
+      if (!row) return { status: "untracked" as const }
+      const value = outcome.parse(input)
+      const { digest, ...proof } = value
+      if (createHash("sha256").update(canonical(proof)).digest("hex") !== digest)
+        throw new Error("Dream outcome digest differs")
+      const sources = row.candidate.sources.map((item) => ({
+        path: path.join(project, item.path),
+        sha256: item.sha256,
+        kind: "document",
+        event_time: null,
+      }))
+      if (
+        !isDeepStrictEqual(sources, value.sources) ||
+        !isDeepStrictEqual(
+          row.candidate.changes,
+          value.changes.map((item) => ({ path: item.path, expected: item.expected, content: item.content })),
+        )
+      )
+        throw new Error("Reviewed Dream candidate changed; retain original reconciliation")
+      for (const item of value.changes)
+        if ((item.before === null ? null : createHash("sha256").update(item.before).digest("hex")) !== item.expected)
+          throw new Error("Dream outcome baseline differs")
+      if (value.status === "applying") return { status: "unresolved" as const }
+      if (value.status === "pending") {
+        if (row.state === "pending") return { status: "pending" as const }
+        signal.throwIfAborted()
+        await ledger.settle(root, project, { fingerprint: row.fingerprint, proposal: value.id, state: "pending" })
+        return { status: "pending" as const }
+      }
+      if (value.status === "cancelled") {
+        if (row.state === "rejected") return { status: "rejected" as const }
+        signal.throwIfAborted()
+        await ledger.settle(root, project, {
+          fingerprint: row.fingerprint,
+          proposal: value.id,
+          state: "rejected",
+          reason: "Original proposal cancelled by its review owner",
+        })
+        return { status: "rejected" as const }
+      }
+      const receipt = value.receipt
+      if (
+        !receipt ||
+        receipt.id !== value.id ||
+        !value.reviewed_digest ||
+        !isDeepStrictEqual(Object.keys(receipt.note_sha256).sort(), value.changes.map((item) => item.path).sort())
+      )
+        throw new Error("Original Dream publication receipt is unavailable")
+      for (const item of value.changes) {
+        const observed = await MemoryDreamInput.baseline(root, item.path, signal)
+        if (observed.expected !== receipt.note_sha256[item.path])
+          throw new Error("Published Dream note differs from its receipt")
+      }
+      const fingerprint = createHash("sha256").update(canonical(receipt)).digest("hex")
+      if (row.state === "accepted" && row.receipt === fingerprint) return { status: "accepted" as const }
+      signal.throwIfAborted()
+      await ledger.settle(root, project, {
+        fingerprint: row.fingerprint,
+        proposal: value.id,
+        state: "accepted",
+        receipt: fingerprint,
+      })
+      return { status: "accepted" as const }
+    })
+  }
   export async function submit(
     project: string,
     id: string,

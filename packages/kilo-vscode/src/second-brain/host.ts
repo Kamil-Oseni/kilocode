@@ -332,6 +332,8 @@ export class BrainHost {
       if (!["list", "read", "propose", "edit", "cancel", "apply"].includes(String(row.action)))
         throw new Error("Unknown proposal action")
       const body = command as BrainProposalCommand
+      const cfg = await this.settings.load()
+      if (!cfg || cfg.setup.version !== 2) throw new Error("Reviewed Memory setup required")
       if (body.action === "apply") {
         const review = await this.approve(body, folder)
         if (!review.accepted) {
@@ -344,6 +346,10 @@ export class BrainHost {
         }
       }
       const proposals = await this.service.proposal(body)
+      if (["read", "cancel", "apply"].includes(body.action) && !("proposals" in proposals)) {
+        if (!this.settings.current(cfg.setup)) throw new Error("Memory setup changed before Dream reconciliation")
+        await MemoryFiles.dreamProposal.reconcile(cfg.setup.root, body.project, proposals, AbortSignal.timeout(15000))
+      }
       post({ type: "secondBrainState", id: message.id, state: { ...(await this.service.status()), proposals } })
     } catch {
       post({

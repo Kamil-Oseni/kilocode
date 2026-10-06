@@ -70,7 +70,7 @@ test("run checkpoint requires durable candidates and unknown submission cannot b
   await f.ledger.advance(f.root, f.project, { ...owner, phase: "review-pending" })
   await expect(f.ledger.advance(f.root, f.project, { ...owner, phase: "completed" })).rejects.toThrow("review remains")
   await f.ledger.settle(f.root, f.project, { fingerprint, proposal, state: "rejected", reason: "Not useful" })
-  await f.ledger.advance(f.root, f.project, { ...owner, phase: "completed" })
+  await expect(f.ledger.advance(f.root, f.project, { ...owner, phase: "completed" })).rejects.toThrow("terminal")
   expect((await f.ledger.list(f.root, f.project)).runs[0]).toMatchObject({
     phase: "completed",
     candidates: [fingerprint],

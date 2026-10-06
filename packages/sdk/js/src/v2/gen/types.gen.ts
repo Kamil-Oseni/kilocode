@@ -28296,6 +28296,7 @@ export type KilocodeSelfHealListResponses = {
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     duplicateOf?: string
+    recurrenceOf?: string
     classifiedBy?: "keyword" | "model"
   }>
 }
@@ -28389,6 +28390,7 @@ export type KilocodeSelfHealCreateResponses = {
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     duplicateOf?: string
+    recurrenceOf?: string
     classifiedBy?: "keyword" | "model"
   }
 }
@@ -28785,6 +28787,7 @@ export type KilocodeSelfHealGetResponses = {
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     duplicateOf?: string
+    recurrenceOf?: string
     classifiedBy?: "keyword" | "model"
   }
 }
@@ -28904,6 +28907,7 @@ export type KilocodeSelfHealUpdateResponses = {
     reloadRequired: boolean
     notifiedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     duplicateOf?: string
+    recurrenceOf?: string
     classifiedBy?: "keyword" | "model"
   }
 }

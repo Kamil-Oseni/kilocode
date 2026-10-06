@@ -2,6 +2,16 @@
 
 Cloud workers remain stopped and their former work reservations are released. Continue locally; do not restart cloud assignments.
 
+## Recurring repair reports
+
+The original self-heal intake now starts a fresh backlog generation when the same normalized symptom returns after an authoritative completion. It links the previous item through `recurrenceOf`, preserves the earlier completion receipt and report count, and retains each new report's text and reporting session in its existing report journal. Concurrent reports join the same fresh item. Completed historical items no longer block that item's admission; uncertain or unfinished attempts retain their existing ownership gates. No repair is dispatched by intake, and an old verified fix is not treated as proof for the new incident.
+
+The source regression uses actual Storage and goal completion/review owners. It checks eight concurrent reports, original evidence preservation, continued intake into the new generation, and admission of the new item while refusing reuse of the old completed attempt. Completion and ownership suites pass 23 tests / 182 assertions; CLI and generated SDK typechecks pass. Affected lint reports zero errors and eleven existing warnings on unchanged code; the annotation guard and whitespace check pass. The prescribed generator also refreshes the previously stale recall/context definitions in the tracked OpenAPI document. Installed presentation and end-to-end repair acceptance remain pending.
+
+## Branch publication
+
+The source checkpoint through `a8446a057f` was pushed to `origin/codex/raya-everyday-experience` after all 29 package typechecks and the required JetBrains typecheck passed. The first push stalled because the hook inherited `GIT_DIR` without `GIT_WORK_TREE`; Turbo's Git commands ran inside package directories and blocked on their output pipes. Setting process `GIT_WORK_TREE` to this checkout's absolute root allowed the unchanged hook to complete. Future pushes must also use the private profile environment. This is branch publication, not a merge or installed acceptance.
+
 ## Consolidated source build
 
 The 2026-10-06 consolidated extension compile from source `af7ca6dba2` passes a rebuilt Windows CLI, version/model-catalog/sandbox mutation smoke checks, SDK preparation, extension/webview typechecks, lint and production bundling. Generated tracked SDK files remain unchanged and the worktree is clean before this documentation update. The ignored built CLI is 300,386,304 bytes with SHA-256 `d4e215ad738f644f570e9c7414e679206b4378bd032437a0ceb3177ab8c5c91a`. Checks use private HOME/USERPROFILE/APPDATA/LOCALAPPDATA/XDG profiles. No normal-profile installation, live microphone, lights, VM or automatic capture action is performed. The manual start and original-backend transport still need integration; SDK/stream settlement alone is not a native inference retirement receipt. Preserve these distinctions when reviewing or installing the branch.

@@ -47499,6 +47499,9 @@
                     "duplicateOf": {
                       "type": "string"
                     },
+                    "recurrenceOf": {
+                      "type": "string"
+                    },
                     "classifiedBy": {
                       "type": "string",
                       "enum": ["keyword", "model"]
@@ -47922,6 +47925,9 @@
                         ]
                       },
                       "duplicateOf": {
+                        "type": "string"
+                      },
+                      "recurrenceOf": {
                         "type": "string"
                       },
                       "classifiedBy": {
@@ -49227,6 +49233,9 @@
                     "duplicateOf": {
                       "type": "string"
                     },
+                    "recurrenceOf": {
+                      "type": "string"
+                    },
                     "classifiedBy": {
                       "type": "string",
                       "enum": ["keyword", "model"]
@@ -49628,6 +49637,9 @@
                       ]
                     },
                     "duplicateOf": {
+                      "type": "string"
+                    },
+                    "recurrenceOf": {
                       "type": "string"
                     },
                     "classifiedBy": {
@@ -81231,6 +81243,28 @@
           }
         ]
       },
+      "SecondBrainRecall": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["context"]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000,
+            "pattern": "\\S"
+          },
+          "budget": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12000
+          }
+        },
+        "required": ["action", "query", "budget"],
+        "additionalProperties": false
+      },
       "SecondBrainRequest": {
         "type": "object",
         "properties": {
@@ -81247,7 +81281,14 @@
             "maxLength": 4096
           },
           "command": {
-            "$ref": "#/components/schemas/SecondBrainCommand"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SecondBrainCommand"
+              },
+              {
+                "$ref": "#/components/schemas/SecondBrainRecall"
+              }
+            ]
           }
         },
         "required": ["id", "sessionID", "project", "command"],
@@ -96587,7 +96628,7 @@
         "required": ["code", "message"],
         "additionalProperties": false
       },
-      "SecondBrainResult": {
+      "SecondBrainProposalResult": {
         "type": "object",
         "properties": {
           "action": {
@@ -96738,6 +96779,142 @@
         },
         "required": ["action", "project", "proposals"],
         "additionalProperties": false
+      },
+      "SecondBrainContextResult": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["context"]
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "root": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "context": {
+            "type": "object",
+            "properties": {
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "maxLength": 8192
+                    },
+                    "relative": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 256000
+                    },
+                    "end_line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 256000
+                    },
+                    "heading": {
+                      "type": "string",
+                      "maxLength": 256000
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256000
+                    },
+                    "source_sha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "depth": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "tokens": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2000
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "relative",
+                    "line",
+                    "end_line",
+                    "heading",
+                    "text",
+                    "source_sha256",
+                    "depth",
+                    "tokens",
+                    "truncated"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 12
+              },
+              "diagnostics": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "relative": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "reason": {
+                      "type": "string",
+                      "maxLength": 8192
+                    }
+                  },
+                  "required": ["relative", "reason"],
+                  "additionalProperties": false
+                },
+                "maxItems": 108
+              },
+              "tokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 12000
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "capture_enabled": {
+                "type": "boolean",
+                "enum": [false]
+              }
+            },
+            "required": ["sources", "diagnostics", "tokens", "truncated", "capture_enabled"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["action", "project", "root", "context"],
+        "additionalProperties": false
+      },
+      "SecondBrainResult": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/SecondBrainProposalResult"
+          },
+          {
+            "$ref": "#/components/schemas/SecondBrainContextResult"
+          }
+        ]
       },
       "SecondBrainFailure": {
         "type": "object",

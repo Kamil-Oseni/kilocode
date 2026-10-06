@@ -577,6 +577,42 @@ it.live(
             callID: proof.part!.callID,
           })
           expect(receipt.goal.audit.requirements[0].evidence[0].record.digest).toHaveLength(64)
+          const healing = RayaSelfHeal.make(storage)
+          const reports = yield* Effect.all(
+            Array.from({ length: 8 }, (_, index) =>
+              RayaSelfHeal.make(storage).create({
+                description: item.description,
+                reporterSessionID: SessionID.make(`ses_recurrence_${index}`),
+              }),
+            ),
+            { concurrency: 8 },
+          )
+          expect(new Set(reports.map((row) => row.id)).size).toBe(1)
+          const repeated = (yield* healing.get(reports[0].id))!
+          expect(repeated.id).not.toBe(item.id)
+          expect(repeated.recurrenceOf).toBe(item.id)
+          expect(repeated.status).toBe("triaged")
+          expect(repeated.reports).toBe(8)
+          expect(repeated.completion).toBeUndefined()
+          expect(repeated.repair).toBeUndefined()
+          expect(repeated.evidence).toEqual([])
+          const original = (yield* healing.get(item.id))!
+          expect(original.status).toBe("verified")
+          expect(original.reports).toBe(observed!.reports)
+          expect(original.completion).toEqual(receipt)
+          const keys = yield* storage.list(["raya", "self-heal", "reports", repeated.id])
+          const incidents = yield* Effect.forEach(
+            keys.filter((key) => key.at(-1) !== "base"),
+            (key) => storage.read<{ description: string; reporterSessionID: string }>(key),
+          )
+          expect(incidents).toHaveLength(8)
+          expect(incidents.every((row) => row.description === item.description)).toBe(true)
+          expect(new Set(incidents.map((row) => row.reporterSessionID)).size).toBe(8)
+          const next = yield* RayaSelfHeal.make(storage).create({ description: item.description })
+          expect(next.id).toBe(repeated.id)
+          expect(next.reports).toBe(9)
+          expect((yield* healing.admit(repeated.id, { source: receipt.source }))?.owned).toBe(true)
+          expect((yield* healing.admit(item.id, { source: receipt.source }))?.owned).toBe(false)
         }),
       )
     }),

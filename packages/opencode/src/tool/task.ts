@@ -207,6 +207,8 @@ export const TaskTool = Tool.define(
         agent: ctx.agent,
         planned: !!binding.branch,
         taskID: params.task_id,
+        prompt: params.prompt,
+        objective: params.brief?.objective,
       })
       // kilocode_change end
       const plan = binding.plan
@@ -656,6 +658,8 @@ export const TaskTool = Tool.define(
               agent: ctx.agent,
               planned: !!branch,
               taskID: params.task_id,
+              prompt: params.prompt,
+              objective: params.brief?.objective,
             })
             // kilocode_change end
             if (session) {

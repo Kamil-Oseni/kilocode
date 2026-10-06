@@ -1,0 +1,10 @@
+{
+  "label": "gemma-v3",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 11.920636599999852,
+  "sampled_peak_rss": 1960816640,
+  "minimum_free_ram": 10764439552,
+  "remaining_owned_pids": []
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "model": "Qwen--Qwen3-Embedding-0.6B",
+    "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+    "verified_files": 12,
+    "all_hashes_match": true
+  },
+  {
+    "model": "Qwen--Qwen3-Reranker-0.6B",
+    "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+    "verified_files": 14,
+    "all_hashes_match": true
+  },
+  {
+    "model": "google--embeddinggemma-2",
+    "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "verified_files": 15,
+    "all_hashes_match": true
+  }
+]

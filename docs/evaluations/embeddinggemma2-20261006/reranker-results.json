@@ -1,0 +1,2774 @@
+{
+  "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+  "source_sha256": "c0cfec605b11efc4a3ff641a9c61be01e830fbabe63048b55e8783780c723345",
+  "dataset_sha256": "97ab3bfe5abc361d2ddec3ab7af69b37105812191b634f0d8101fbbd35aee15e",
+  "dtype": "float32",
+  "device": "cpu",
+  "threads": 6,
+  "max_tokens": 512,
+  "torch": "2.6.0+cpu",
+  "transformers": "5.2.0",
+  "load_seconds": 1.143631099985214,
+  "qwen-current-v2": {
+    "results": [
+      {
+        "query": "When should the overhead lamp go dark during bedtime?",
+        "expected": "sleep-current",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0887364000082016,
+        "order": [
+          "sleep-current",
+          "sleep-old",
+          "wake-current",
+          "wake-old",
+          "romantic"
+        ]
+      },
+      {
+        "query": "Which lights fade rather than turning off immediately at night?",
+        "expected": "sleep-current",
+        "group": "memory",
+        "rank": 2,
+        "seconds": 1.030238699982874,
+        "order": [
+          "sleep-old",
+          "sleep-current",
+          "romantic",
+          "wake-old",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "What time does the morning sunrise finish?",
+        "expected": "wake-current",
+        "group": "memory",
+        "rank": 3,
+        "seconds": 1.003785999986576,
+        "order": [
+          "wake-old",
+          "sleep-old",
+          "wake-current",
+          "sleep-current",
+          "video-ad"
+        ]
+      },
+      {
+        "query": "How long does the gradual morning brightening take?",
+        "expected": "wake-current",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0275801999960095,
+        "order": [
+          "wake-current",
+          "sleep-current",
+          "sleep-old",
+          "wake-old",
+          "romantic"
+        ]
+      },
+      {
+        "query": "Which synthesizer handles expressive narration?",
+        "expected": "voice-primary",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9916445999988355,
+        "order": [
+          "voice-primary",
+          "voice-fallback",
+          "dream-review",
+          "context",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "How should the assistant decide when to add emotional delivery?",
+        "expected": "voice-primary",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9859574000001885,
+        "order": [
+          "voice-primary",
+          "context",
+          "voice-fallback",
+          "routing",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "What should speak if the main narrator service breaks?",
+        "expected": "voice-fallback",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9894013999728486,
+        "order": [
+          "voice-fallback",
+          "voice-primary",
+          "routing",
+          "dream-review",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Which backup voice is selected?",
+        "expected": "voice-fallback",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9578829000238329,
+        "order": [
+          "voice-fallback",
+          "voice-primary",
+          "backup",
+          "persona-deferred",
+          "routing"
+        ]
+      },
+      {
+        "query": "Why is the downloaded duplex voice model staying unloaded?",
+        "expected": "persona-deferred",
+        "group": "memory",
+        "rank": 3,
+        "seconds": 0.9882882999954745,
+        "order": [
+          "routing",
+          "video-deferred",
+          "persona-deferred",
+          "decision-cancelled",
+          "voice-fallback"
+        ]
+      },
+      {
+        "query": "Should we test PersonaPlex on this machine today?",
+        "expected": "persona-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.996407900005579,
+        "order": [
+          "persona-deferred",
+          "remote-cancelled",
+          "capture-off",
+          "dream-review",
+          "ha-vm"
+        ]
+      },
+      {
+        "query": "What happened to local video generation testing?",
+        "expected": "video-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9478760000201873,
+        "order": [
+          "video-deferred",
+          "video-ad",
+          "remote-cancelled",
+          "thermal-test",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Which downloaded video project should remain off for now?",
+        "expected": "video-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9765907000110019,
+        "order": [
+          "video-deferred",
+          "persona-deferred",
+          "brain-structure",
+          "video-ad",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Should we keep a separate decision model resident?",
+        "expected": "decision-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9597576999804005,
+        "order": [
+          "decision-cancelled",
+          "brain-structure",
+          "routing",
+          "context",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Is the evaluated decision specialist still scheduled for integration?",
+        "expected": "decision-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9865202000073623,
+        "order": [
+          "decision-cancelled",
+          "brain-structure",
+          "dream-review",
+          "routing",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Are events in my life automatically recorded?",
+        "expected": "capture-off",
+        "group": "memory",
+        "rank": 2,
+        "seconds": 0.9492899999895599,
+        "order": [
+          "capture-future",
+          "capture-off",
+          "dream-review",
+          "context",
+          "health"
+        ]
+      },
+      {
+        "query": "Can the assistant silently save new personal memories?",
+        "expected": "capture-off",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9526050999993458,
+        "order": [
+          "capture-off",
+          "dream-review",
+          "context",
+          "backup",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Where should relationships and commitments be organized?",
+        "expected": "brain-structure",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9460768999997526,
+        "order": [
+          "brain-structure",
+          "capture-future",
+          "context",
+          "dream-review",
+          "capture-off"
+        ]
+      },
+      {
+        "query": "Does memory retrieval need the entire folder in each prompt?",
+        "expected": "brain-structure",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9743941999913659,
+        "order": [
+          "brain-structure",
+          "context",
+          "dream-review",
+          "capture-off",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "May overnight memory consolidation apply edits automatically?",
+        "expected": "dream-review",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9747967000002973,
+        "order": [
+          "dream-review",
+          "capture-off",
+          "capture-future",
+          "context",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "How is memory consolidation reviewed before publication?",
+        "expected": "dream-review",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9741328999807592,
+        "order": [
+          "dream-review",
+          "capture-off",
+          "context",
+          "brain-structure",
+          "decision-cancelled"
+        ]
+      },
+      {
+        "query": "How should a television theme move across room colours?",
+        "expected": "movie-dynamic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0852524999936577,
+        "order": [
+          "movie-dynamic",
+          "romantic",
+          "wake-current",
+          "cinematic",
+          "sleep-old"
+        ]
+      },
+      {
+        "query": "What makes the themed movie lighting reusable?",
+        "expected": "movie-dynamic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0412115000071935,
+        "order": [
+          "movie-dynamic",
+          "cinematic",
+          "romantic",
+          "wake-old",
+          "sleep-old"
+        ]
+      },
+      {
+        "query": "Which static mode uses warm white and orange including overhead light?",
+        "expected": "cinematic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.184195300011197,
+        "order": [
+          "cinematic",
+          "romantic",
+          "movie-dynamic",
+          "wake-old",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "What palette belongs to cinematic lighting?",
+        "expected": "cinematic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0846511999843642,
+        "order": [
+          "cinematic",
+          "movie-dynamic",
+          "romantic",
+          "wake-old",
+          "sleep-old"
+        ]
+      },
+      {
+        "query": "Which moving mode combines red and purple?",
+        "expected": "romantic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0740987000172026,
+        "order": [
+          "romantic",
+          "movie-dynamic",
+          "dream-review",
+          "matter-network",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "How often should the romantic colour cycle advance?",
+        "expected": "romantic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1085113000008278,
+        "order": [
+          "romantic",
+          "wake-current",
+          "sleep-old",
+          "movie-dynamic",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "What are the amber warning temperatures for each processor?",
+        "expected": "thermal",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1064326000050642,
+        "order": [
+          "thermal",
+          "thermal-test",
+          "cpu-cool",
+          "ha-vm",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "When should the PC lighting turn red and notify the phone?",
+        "expected": "thermal",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.311584999988554,
+        "order": [
+          "thermal",
+          "romantic",
+          "sleep-old",
+          "wake-current",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "How much memory is reserved for the smart-home virtual machine?",
+        "expected": "ha-vm",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.350246399990283,
+        "order": [
+          "ha-vm",
+          "dream-review",
+          "capture-off",
+          "health",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "How many virtual processors does the Home Assistant guest use?",
+        "expected": "ha-vm",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.2858379000099376,
+        "order": [
+          "ha-vm",
+          "health",
+          "backup",
+          "dream-review",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Must the computer use the same Wi-Fi frequency as the bulbs?",
+        "expected": "matter-network",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1813010000041686,
+        "order": [
+          "matter-network",
+          "ha-vm",
+          "sleep-old",
+          "sleep-current",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "Do these Linkind lamps need a Thread border router?",
+        "expected": "matter-network",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1704245999862906,
+        "order": [
+          "matter-network",
+          "ha-vm",
+          "sleep-old",
+          "romantic",
+          "token"
+        ]
+      },
+      {
+        "query": "How do we check whether the health dashboard readings are recent?",
+        "expected": "health",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0584571000072174,
+        "order": [
+          "health",
+          "cpu-cool",
+          "capture-future",
+          "capture-off",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Can a missing sleep record be inferred from watch connection alone?",
+        "expected": "health",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0939454000035767,
+        "order": [
+          "health",
+          "dream-review",
+          "capture-off",
+          "sleep-old",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "Should the old laptop still be used for integration acceptance?",
+        "expected": "remote-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0836491000081878,
+        "order": [
+          "remote-cancelled",
+          "decision-cancelled",
+          "routing",
+          "dream-review",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Is remote testing on the second machine still required?",
+        "expected": "remote-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0166714000224601,
+        "order": [
+          "remote-cancelled",
+          "backup",
+          "persona-deferred",
+          "thermal-test",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "How should normal chat and difficult code review choose models?",
+        "expected": "routing",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.066785200004233,
+        "order": [
+          "routing",
+          "context",
+          "decision-cancelled",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "What should heavy background work do to leave room for conversation?",
+        "expected": "routing",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1140228000003844,
+        "order": [
+          "routing",
+          "context",
+          "jobs",
+          "voice-primary",
+          "capture-off"
+        ]
+      },
+      {
+        "query": "Is the assistant only for chatting and lighting?",
+        "expected": "jobs",
+        "group": "memory",
+        "rank": null,
+        "seconds": 1.1257470999844372,
+        "order": [
+          "token",
+          "ha-vm",
+          "routing",
+          "health",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "What information should a running job show?",
+        "expected": "jobs",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.001062399998773,
+        "order": [
+          "jobs",
+          "capture-future",
+          "capture-off",
+          "dream-review",
+          "cloud-off"
+        ]
+      },
+      {
+        "query": "Find the helper that computes a SHA256 hash of raw bytes.",
+        "expected": "code-digest",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.1713333999796305,
+        "order": [
+          "code-digest",
+          "code-atomic",
+          "brain-structure",
+          "dream-review",
+          "browser-job"
+        ]
+      },
+      {
+        "query": "Where is note content fingerprinted using hashlib?",
+        "expected": "code-digest",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.0354146999889053,
+        "order": [
+          "code-digest",
+          "brain-structure",
+          "context",
+          "dream-review",
+          "capture-off"
+        ]
+      },
+      {
+        "query": "Find the note writer that publishes through a temporary file and replaces the target.",
+        "expected": "code-atomic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.572909400012577,
+        "order": [
+          "code-atomic",
+          "code-semantic",
+          "dream-review",
+          "brain-structure",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Which function makes a saved note replacement atomic?",
+        "expected": "code-atomic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.1218482000113,
+        "order": [
+          "code-atomic",
+          "backup",
+          "context",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find the code that reads current note bytes and validates UTF-8 and the writer size limit.",
+        "expected": "code-current",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.2418364000041038,
+        "order": [
+          "code-current",
+          "token",
+          "dream-review",
+          "brain-structure",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Where is a missing note returned as None before applying changes?",
+        "expected": "code-current",
+        "group": "code",
+        "rank": null,
+        "seconds": 1.0449473999906331,
+        "order": [
+          "capture-off",
+          "token",
+          "dream-review",
+          "decision-cancelled",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "Find the policy check for sensitive filenames.",
+        "expected": "code-restricted",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.1098363999917638,
+        "order": [
+          "code-restricted",
+          "capture-future",
+          "brain-structure",
+          "capture-off",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Which function detects paths that should be excluded from memory indexing?",
+        "expected": "code-restricted",
+        "group": "code",
+        "rank": null,
+        "seconds": 1.1614581999892835,
+        "order": [
+          "browser-job",
+          "dream-review",
+          "brain-structure",
+          "capture-off",
+          "decision-cancelled"
+        ]
+      },
+      {
+        "query": "Find the deadline and cancellation check before continuing an index operation.",
+        "expected": "code-remaining",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.1934275999956299,
+        "order": [
+          "code-remaining",
+          "brain-structure",
+          "decision-cancelled",
+          "cloud-off",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Where does an indexing operation refuse to run after its time budget expires?",
+        "expected": "code-remaining",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.209604900010163,
+        "order": [
+          "code-remaining",
+          "decision-cancelled",
+          "dream-review",
+          "brain-structure",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Find the function counting text tokens with the cached tokenizer.",
+        "expected": "code-tokens",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.6863669999875128,
+        "order": [
+          "code-tokens",
+          "code-links",
+          "code-semantic",
+          "routing",
+          "context"
+        ]
+      },
+      {
+        "query": "Where is the tokenizer used to measure a text input?",
+        "expected": "code-tokens",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.110760899988236,
+        "order": [
+          "code-tokens",
+          "routing",
+          "context",
+          "brain-structure",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Find the function removing Markdown link destinations before semantic matching.",
+        "expected": "code-semantic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.148345399997197,
+        "order": [
+          "code-semantic",
+          "code-address",
+          "code-links",
+          "code-headings",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "Which helper simplifies Markdown text for semantic comparisons?",
+        "expected": "code-semantic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.3842692999751307,
+        "order": [
+          "code-semantic",
+          "brain-structure",
+          "context",
+          "routing",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find the scanner that hides fenced-code headings from live Markdown sections.",
+        "expected": "code-headings",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.223871499998495,
+        "order": [
+          "code-headings",
+          "code-links",
+          "brain-structure",
+          "code-semantic",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Which code tracks backtick and tilde fences while looking for section headings?",
+        "expected": "code-headings",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.064588500012178,
+        "order": [
+          "code-headings",
+          "code-links",
+          "code-semantic",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find relative Markdown link resolution with a source folder.",
+        "expected": "code-address",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.0053447000100277,
+        "order": [
+          "code-address",
+          "brain-structure",
+          "code-semantic",
+          "code-links",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Where is a linked note path resolved relative to its containing document?",
+        "expected": "code-address",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.0355751999886706,
+        "order": [
+          "code-address",
+          "code-current",
+          "brain-structure",
+          "code-semantic",
+          "code-links"
+        ]
+      },
+      {
+        "query": "Find extraction of ordinary Markdown links outside code fences.",
+        "expected": "code-links",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.1517813999962527,
+        "order": [
+          "code-links",
+          "code-address",
+          "code-headings",
+          "code-semantic",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "Which function collects linked references from a note?",
+        "expected": "code-links",
+        "group": "code",
+        "rank": null,
+        "seconds": 1.3155002999992575,
+        "order": [
+          "code-address",
+          "brain-structure",
+          "context",
+          "capture-off",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find JSON parsing code that rejects duplicate object keys.",
+        "expected": "code-fields",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.6814901000179816,
+        "order": [
+          "code-fields",
+          "code-canonical",
+          "code-headings",
+          "dream-review",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Which helper refuses repeated field names in a received object?",
+        "expected": "code-fields",
+        "group": "code",
+        "rank": null,
+        "seconds": 1.0630921999982093,
+        "order": [
+          "routing",
+          "dream-review",
+          "brain-structure",
+          "decision-cancelled",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Find bounded deterministic serialization with sorted JSON keys.",
+        "expected": "code-canonical",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.098952400003327,
+        "order": [
+          "code-canonical",
+          "brain-structure",
+          "dream-review",
+          "context",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Where is canonical JSON produced before computing a request fingerprint?",
+        "expected": "code-canonical",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.1244320999830961,
+        "order": [
+          "code-canonical",
+          "video-ad",
+          "dream-review",
+          "brain-structure",
+          "capture-future"
+        ]
+      }
+    ],
+    "errors": 0,
+    "all": {
+      "count": 64,
+      "top1": 55,
+      "top3": 59,
+      "mrr": 0.8854166666666666
+    },
+    "memory": {
+      "count": 40,
+      "top1": 35,
+      "top3": 39,
+      "mrr": 0.9166666666666666
+    },
+    "code": {
+      "count": 24,
+      "top1": 20,
+      "top3": 20,
+      "mrr": 0.8333333333333334
+    },
+    "median_seconds": 1.0913409000058891
+  },
+  "qwen-matched": {
+    "results": [
+      {
+        "query": "When should the overhead lamp go dark during bedtime?",
+        "expected": "sleep-current",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1338480999984313,
+        "order": [
+          "sleep-current",
+          "sleep-old",
+          "wake-current",
+          "wake-old",
+          "romantic"
+        ]
+      },
+      {
+        "query": "Which lights fade rather than turning off immediately at night?",
+        "expected": "sleep-current",
+        "group": "memory",
+        "rank": 2,
+        "seconds": 1.140488400007598,
+        "order": [
+          "sleep-old",
+          "sleep-current",
+          "romantic",
+          "wake-old",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "What time does the morning sunrise finish?",
+        "expected": "wake-current",
+        "group": "memory",
+        "rank": 3,
+        "seconds": 1.0909156999841798,
+        "order": [
+          "wake-old",
+          "sleep-old",
+          "wake-current",
+          "sleep-current",
+          "video-ad"
+        ]
+      },
+      {
+        "query": "How long does the gradual morning brightening take?",
+        "expected": "wake-current",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.101595099986298,
+        "order": [
+          "wake-current",
+          "sleep-current",
+          "sleep-old",
+          "wake-old",
+          "romantic"
+        ]
+      },
+      {
+        "query": "Which synthesizer handles expressive narration?",
+        "expected": "voice-primary",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0338885000091977,
+        "order": [
+          "voice-primary",
+          "voice-fallback",
+          "dream-review",
+          "context",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "How should the assistant decide when to add emotional delivery?",
+        "expected": "voice-primary",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.047030600020662,
+        "order": [
+          "voice-primary",
+          "context",
+          "voice-fallback",
+          "routing",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "What should speak if the main narrator service breaks?",
+        "expected": "voice-fallback",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0586986000125762,
+        "order": [
+          "voice-fallback",
+          "voice-primary",
+          "routing",
+          "dream-review",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Which backup voice is selected?",
+        "expected": "voice-fallback",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0253403999959119,
+        "order": [
+          "voice-fallback",
+          "voice-primary",
+          "backup",
+          "persona-deferred",
+          "routing"
+        ]
+      },
+      {
+        "query": "Why is the downloaded duplex voice model staying unloaded?",
+        "expected": "persona-deferred",
+        "group": "memory",
+        "rank": 3,
+        "seconds": 1.0589160999807063,
+        "order": [
+          "routing",
+          "video-deferred",
+          "persona-deferred",
+          "decision-cancelled",
+          "voice-fallback"
+        ]
+      },
+      {
+        "query": "Should we test PersonaPlex on this machine today?",
+        "expected": "persona-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0854089000204112,
+        "order": [
+          "persona-deferred",
+          "remote-cancelled",
+          "capture-off",
+          "dream-review",
+          "ha-vm"
+        ]
+      },
+      {
+        "query": "What happened to local video generation testing?",
+        "expected": "video-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0269090000074357,
+        "order": [
+          "video-deferred",
+          "video-ad",
+          "remote-cancelled",
+          "thermal-test",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Which downloaded video project should remain off for now?",
+        "expected": "video-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0485353999829385,
+        "order": [
+          "video-deferred",
+          "persona-deferred",
+          "brain-structure",
+          "video-ad",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Should we keep a separate decision model resident?",
+        "expected": "decision-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1165578000072856,
+        "order": [
+          "decision-cancelled",
+          "brain-structure",
+          "routing",
+          "context",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Is the evaluated decision specialist still scheduled for integration?",
+        "expected": "decision-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0937159999739379,
+        "order": [
+          "decision-cancelled",
+          "brain-structure",
+          "dream-review",
+          "routing",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Are events in my life automatically recorded?",
+        "expected": "capture-off",
+        "group": "memory",
+        "rank": 2,
+        "seconds": 1.0118170000205282,
+        "order": [
+          "capture-future",
+          "capture-off",
+          "dream-review",
+          "context",
+          "health"
+        ]
+      },
+      {
+        "query": "Can the assistant silently save new personal memories?",
+        "expected": "capture-off",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.025792000000365,
+        "order": [
+          "capture-off",
+          "dream-review",
+          "context",
+          "backup",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Where should relationships and commitments be organized?",
+        "expected": "brain-structure",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0266814999922644,
+        "order": [
+          "brain-structure",
+          "capture-future",
+          "context",
+          "dream-review",
+          "capture-off"
+        ]
+      },
+      {
+        "query": "Does memory retrieval need the entire folder in each prompt?",
+        "expected": "brain-structure",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.047131500003161,
+        "order": [
+          "brain-structure",
+          "context",
+          "dream-review",
+          "capture-off",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "May overnight memory consolidation apply edits automatically?",
+        "expected": "dream-review",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0149290000263136,
+        "order": [
+          "dream-review",
+          "capture-off",
+          "capture-future",
+          "context",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "How is memory consolidation reviewed before publication?",
+        "expected": "dream-review",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0404942000168376,
+        "order": [
+          "dream-review",
+          "capture-off",
+          "context",
+          "brain-structure",
+          "decision-cancelled"
+        ]
+      },
+      {
+        "query": "How should a television theme move across room colours?",
+        "expected": "movie-dynamic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1018725000030827,
+        "order": [
+          "movie-dynamic",
+          "romantic",
+          "wake-current",
+          "cinematic",
+          "sleep-old"
+        ]
+      },
+      {
+        "query": "What makes the themed movie lighting reusable?",
+        "expected": "movie-dynamic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.056811699992977,
+        "order": [
+          "movie-dynamic",
+          "cinematic",
+          "romantic",
+          "wake-old",
+          "sleep-old"
+        ]
+      },
+      {
+        "query": "Which static mode uses warm white and orange including overhead light?",
+        "expected": "cinematic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0825516000040807,
+        "order": [
+          "cinematic",
+          "romantic",
+          "movie-dynamic",
+          "wake-old",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "What palette belongs to cinematic lighting?",
+        "expected": "cinematic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.023863700014772,
+        "order": [
+          "cinematic",
+          "movie-dynamic",
+          "romantic",
+          "wake-old",
+          "sleep-old"
+        ]
+      },
+      {
+        "query": "Which moving mode combines red and purple?",
+        "expected": "romantic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0770285000035074,
+        "order": [
+          "romantic",
+          "movie-dynamic",
+          "dream-review",
+          "matter-network",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "How often should the romantic colour cycle advance?",
+        "expected": "romantic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0910637000051793,
+        "order": [
+          "romantic",
+          "wake-current",
+          "sleep-old",
+          "movie-dynamic",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "What are the amber warning temperatures for each processor?",
+        "expected": "thermal",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0787181000050623,
+        "order": [
+          "thermal",
+          "thermal-test",
+          "cpu-cool",
+          "ha-vm",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "When should the PC lighting turn red and notify the phone?",
+        "expected": "thermal",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1157704000070225,
+        "order": [
+          "thermal",
+          "romantic",
+          "sleep-old",
+          "wake-current",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "How much memory is reserved for the smart-home virtual machine?",
+        "expected": "ha-vm",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1770217999874149,
+        "order": [
+          "ha-vm",
+          "dream-review",
+          "capture-off",
+          "health",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "How many virtual processors does the Home Assistant guest use?",
+        "expected": "ha-vm",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.6885464999941178,
+        "order": [
+          "ha-vm",
+          "health",
+          "backup",
+          "dream-review",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Must the computer use the same Wi-Fi frequency as the bulbs?",
+        "expected": "matter-network",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 2.2587084000115283,
+        "order": [
+          "matter-network",
+          "ha-vm",
+          "sleep-old",
+          "sleep-current",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "Do these Linkind lamps need a Thread border router?",
+        "expected": "matter-network",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 2.1363934999972116,
+        "order": [
+          "matter-network",
+          "ha-vm",
+          "sleep-old",
+          "romantic",
+          "token"
+        ]
+      },
+      {
+        "query": "How do we check whether the health dashboard readings are recent?",
+        "expected": "health",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.2643047000165097,
+        "order": [
+          "health",
+          "cpu-cool",
+          "capture-future",
+          "capture-off",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Can a missing sleep record be inferred from watch connection alone?",
+        "expected": "health",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.2701553000079002,
+        "order": [
+          "health",
+          "dream-review",
+          "capture-off",
+          "sleep-old",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "Should the old laptop still be used for integration acceptance?",
+        "expected": "remote-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.2150962999730837,
+        "order": [
+          "remote-cancelled",
+          "decision-cancelled",
+          "routing",
+          "dream-review",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Is remote testing on the second machine still required?",
+        "expected": "remote-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.30377800000133,
+        "order": [
+          "remote-cancelled",
+          "backup",
+          "persona-deferred",
+          "thermal-test",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "How should normal chat and difficult code review choose models?",
+        "expected": "routing",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.184351300005801,
+        "order": [
+          "routing",
+          "context",
+          "decision-cancelled",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "What should heavy background work do to leave room for conversation?",
+        "expected": "routing",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1868295000167564,
+        "order": [
+          "routing",
+          "context",
+          "jobs",
+          "voice-primary",
+          "capture-off"
+        ]
+      },
+      {
+        "query": "Is the assistant only for chatting and lighting?",
+        "expected": "jobs",
+        "group": "memory",
+        "rank": null,
+        "seconds": 1.2076841999951284,
+        "order": [
+          "token",
+          "ha-vm",
+          "routing",
+          "health",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "What information should a running job show?",
+        "expected": "jobs",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.2094393000006676,
+        "order": [
+          "jobs",
+          "capture-future",
+          "capture-off",
+          "dream-review",
+          "cloud-off"
+        ]
+      },
+      {
+        "query": "Find the helper that computes a SHA256 hash of raw bytes.",
+        "expected": "code-digest",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.4316987000056542,
+        "order": [
+          "code-digest",
+          "code-current",
+          "code-atomic",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Where is note content fingerprinted using hashlib?",
+        "expected": "code-digest",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.467710500000976,
+        "order": [
+          "code-digest",
+          "code-current",
+          "code-address",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find the note writer that publishes through a temporary file and replaces the target.",
+        "expected": "code-atomic",
+        "group": "code",
+        "rank": 2,
+        "seconds": 1.9121903000050224,
+        "order": [
+          "code-address",
+          "code-atomic",
+          "code-current",
+          "code-semantic",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Which function makes a saved note replacement atomic?",
+        "expected": "code-atomic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.6404586000135168,
+        "order": [
+          "code-atomic",
+          "code-semantic",
+          "backup",
+          "context",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find the code that reads current note bytes and validates UTF-8 and the writer size limit.",
+        "expected": "code-current",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.7876094999955967,
+        "order": [
+          "code-current",
+          "token",
+          "code-address",
+          "brain-structure",
+          "code-semantic"
+        ]
+      },
+      {
+        "query": "Where is a missing note returned as None before applying changes?",
+        "expected": "code-current",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.9554746999929193,
+        "order": [
+          "code-current",
+          "code-address",
+          "code-semantic",
+          "token",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find the policy check for sensitive filenames.",
+        "expected": "code-restricted",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.0004750000080094,
+        "order": [
+          "code-restricted",
+          "code-headings",
+          "capture-future",
+          "brain-structure",
+          "capture-off"
+        ]
+      },
+      {
+        "query": "Which function detects paths that should be excluded from memory indexing?",
+        "expected": "code-restricted",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.6331741999892984,
+        "order": [
+          "code-restricted",
+          "code-semantic",
+          "browser-job",
+          "dream-review",
+          "decision-cancelled"
+        ]
+      },
+      {
+        "query": "Find the deadline and cancellation check before continuing an index operation.",
+        "expected": "code-remaining",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.2992356000177097,
+        "order": [
+          "code-remaining",
+          "decision-cancelled",
+          "cloud-off",
+          "capture-future",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Where does an indexing operation refuse to run after its time budget expires?",
+        "expected": "code-remaining",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.382291800022358,
+        "order": [
+          "code-remaining",
+          "decision-cancelled",
+          "cloud-off",
+          "dream-review",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Find the function counting text tokens with the cached tokenizer.",
+        "expected": "code-tokens",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.067299100017408,
+        "order": [
+          "code-tokens",
+          "code-links",
+          "code-semantic",
+          "routing",
+          "context"
+        ]
+      },
+      {
+        "query": "Where is the tokenizer used to measure a text input?",
+        "expected": "code-tokens",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.8504965999745764,
+        "order": [
+          "code-tokens",
+          "code-semantic",
+          "code-links",
+          "routing",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "Find the function removing Markdown link destinations before semantic matching.",
+        "expected": "code-semantic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.26901769998949,
+        "order": [
+          "code-semantic",
+          "code-address",
+          "code-links",
+          "code-headings",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "Which helper simplifies Markdown text for semantic comparisons?",
+        "expected": "code-semantic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.2636220999993384,
+        "order": [
+          "code-semantic",
+          "code-links",
+          "code-headings",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find the scanner that hides fenced-code headings from live Markdown sections.",
+        "expected": "code-headings",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.248296500009019,
+        "order": [
+          "code-headings",
+          "code-links",
+          "brain-structure",
+          "code-address",
+          "code-semantic"
+        ]
+      },
+      {
+        "query": "Which code tracks backtick and tilde fences while looking for section headings?",
+        "expected": "code-headings",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.1259445999749005,
+        "order": [
+          "code-headings",
+          "code-links",
+          "code-semantic",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find relative Markdown link resolution with a source folder.",
+        "expected": "code-address",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.9115075999870896,
+        "order": [
+          "code-address",
+          "brain-structure",
+          "code-semantic",
+          "code-links",
+          "browser-job"
+        ]
+      },
+      {
+        "query": "Where is a linked note path resolved relative to its containing document?",
+        "expected": "code-address",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.0443863999971654,
+        "order": [
+          "code-address",
+          "code-current",
+          "brain-structure",
+          "code-semantic",
+          "code-links"
+        ]
+      },
+      {
+        "query": "Find extraction of ordinary Markdown links outside code fences.",
+        "expected": "code-links",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.2115860999911092,
+        "order": [
+          "code-links",
+          "code-address",
+          "code-headings",
+          "code-semantic",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "Which function collects linked references from a note?",
+        "expected": "code-links",
+        "group": "code",
+        "rank": 3,
+        "seconds": 1.9009633000241593,
+        "order": [
+          "code-address",
+          "code-semantic",
+          "code-links",
+          "brain-structure",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Find JSON parsing code that rejects duplicate object keys.",
+        "expected": "code-fields",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.753202899999451,
+        "order": [
+          "code-fields",
+          "code-canonical",
+          "code-headings",
+          "code-semantic",
+          "token"
+        ]
+      },
+      {
+        "query": "Which helper refuses repeated field names in a received object?",
+        "expected": "code-fields",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.2632748000032734,
+        "order": [
+          "code-fields",
+          "code-canonical",
+          "code-restricted",
+          "dream-review",
+          "token"
+        ]
+      },
+      {
+        "query": "Find bounded deterministic serialization with sorted JSON keys.",
+        "expected": "code-canonical",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.1384524000168312,
+        "order": [
+          "code-canonical",
+          "code-fields",
+          "brain-structure",
+          "dream-review",
+          "routing"
+        ]
+      },
+      {
+        "query": "Where is canonical JSON produced before computing a request fingerprint?",
+        "expected": "code-canonical",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.1390554999816231,
+        "order": [
+          "code-canonical",
+          "video-ad",
+          "dream-review",
+          "routing",
+          "brain-structure"
+        ]
+      }
+    ],
+    "errors": 0,
+    "all": {
+      "count": 64,
+      "top1": 57,
+      "top3": 63,
+      "mrr": 0.9296875
+    },
+    "memory": {
+      "count": 40,
+      "top1": 35,
+      "top3": 39,
+      "mrr": 0.9166666666666666
+    },
+    "code": {
+      "count": 24,
+      "top1": 22,
+      "top3": 24,
+      "mrr": 0.9513888888888888
+    },
+    "median_seconds": 1.1855904000112787
+  },
+  "gemma-v3": {
+    "results": [
+      {
+        "query": "When should the overhead lamp go dark during bedtime?",
+        "expected": "sleep-current",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1459036000014748,
+        "order": [
+          "sleep-current",
+          "sleep-old",
+          "wake-current",
+          "wake-old",
+          "romantic"
+        ]
+      },
+      {
+        "query": "Which lights fade rather than turning off immediately at night?",
+        "expected": "sleep-current",
+        "group": "memory",
+        "rank": 2,
+        "seconds": 1.146910499985097,
+        "order": [
+          "sleep-old",
+          "sleep-current",
+          "romantic",
+          "wake-old",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "What time does the morning sunrise finish?",
+        "expected": "wake-current",
+        "group": "memory",
+        "rank": 3,
+        "seconds": 1.1465325999888591,
+        "order": [
+          "wake-old",
+          "sleep-old",
+          "wake-current",
+          "sleep-current",
+          "jobs"
+        ]
+      },
+      {
+        "query": "How long does the gradual morning brightening take?",
+        "expected": "wake-current",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.155068099993514,
+        "order": [
+          "wake-current",
+          "sleep-current",
+          "sleep-old",
+          "wake-old",
+          "romantic"
+        ]
+      },
+      {
+        "query": "Which synthesizer handles expressive narration?",
+        "expected": "voice-primary",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.084567399986554,
+        "order": [
+          "voice-primary",
+          "voice-old",
+          "voice-fallback",
+          "jobs",
+          "context"
+        ]
+      },
+      {
+        "query": "How should the assistant decide when to add emotional delivery?",
+        "expected": "voice-primary",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1499968999996781,
+        "order": [
+          "voice-primary",
+          "voice-old",
+          "jobs",
+          "routing",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "What should speak if the main narrator service breaks?",
+        "expected": "voice-fallback",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1423558999958914,
+        "order": [
+          "voice-fallback",
+          "voice-primary",
+          "backup",
+          "voice-old",
+          "dream-review"
+        ]
+      },
+      {
+        "query": "Which backup voice is selected?",
+        "expected": "voice-fallback",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.187735999992583,
+        "order": [
+          "voice-fallback",
+          "voice-primary",
+          "voice-old",
+          "backup",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Why is the downloaded duplex voice model staying unloaded?",
+        "expected": "persona-deferred",
+        "group": "memory",
+        "rank": 3,
+        "seconds": 1.2786284000030719,
+        "order": [
+          "routing",
+          "video-deferred",
+          "persona-deferred",
+          "voice-primary",
+          "voice-fallback"
+        ]
+      },
+      {
+        "query": "Should we test PersonaPlex on this machine today?",
+        "expected": "persona-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.294204699981492,
+        "order": [
+          "persona-deferred",
+          "remote-cancelled",
+          "capture-off",
+          "thermal-test",
+          "cpu-cool"
+        ]
+      },
+      {
+        "query": "What happened to local video generation testing?",
+        "expected": "video-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.2709678999963216,
+        "order": [
+          "video-deferred",
+          "video-ad",
+          "remote-cancelled",
+          "thermal-test",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "Which downloaded video project should remain off for now?",
+        "expected": "video-deferred",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.329402499977732,
+        "order": [
+          "video-deferred",
+          "persona-deferred",
+          "cloud-off",
+          "wake-old",
+          "remote-cancelled"
+        ]
+      },
+      {
+        "query": "Should we keep a separate decision model resident?",
+        "expected": "decision-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.2092216000019107,
+        "order": [
+          "decision-cancelled",
+          "routing",
+          "capture-future",
+          "capture-off",
+          "remote-cancelled"
+        ]
+      },
+      {
+        "query": "Is the evaluated decision specialist still scheduled for integration?",
+        "expected": "decision-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1165473000146449,
+        "order": [
+          "decision-cancelled",
+          "capture-future",
+          "remote-cancelled",
+          "persona-deferred",
+          "cloud-off"
+        ]
+      },
+      {
+        "query": "Are events in my life automatically recorded?",
+        "expected": "capture-off",
+        "group": "memory",
+        "rank": 2,
+        "seconds": 1.0489607000199612,
+        "order": [
+          "capture-future",
+          "capture-off",
+          "dream-review",
+          "context",
+          "jobs"
+        ]
+      },
+      {
+        "query": "Can the assistant silently save new personal memories?",
+        "expected": "capture-off",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0075468999857549,
+        "order": [
+          "capture-off",
+          "dream-review",
+          "context",
+          "backup",
+          "token"
+        ]
+      },
+      {
+        "query": "Where should relationships and commitments be organized?",
+        "expected": "brain-structure",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0141200000070967,
+        "order": [
+          "brain-structure",
+          "capture-future",
+          "jobs",
+          "dream-review",
+          "cloud-off"
+        ]
+      },
+      {
+        "query": "Does memory retrieval need the entire folder in each prompt?",
+        "expected": "brain-structure",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.116363300010562,
+        "order": [
+          "brain-structure",
+          "context",
+          "capture-off",
+          "code-current",
+          "browser-job"
+        ]
+      },
+      {
+        "query": "May overnight memory consolidation apply edits automatically?",
+        "expected": "dream-review",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9981537000276148,
+        "order": [
+          "dream-review",
+          "capture-off",
+          "capture-future",
+          "context",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "How is memory consolidation reviewed before publication?",
+        "expected": "dream-review",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0391736000019591,
+        "order": [
+          "dream-review",
+          "capture-off",
+          "context",
+          "routing",
+          "backup"
+        ]
+      },
+      {
+        "query": "How should a television theme move across room colours?",
+        "expected": "movie-dynamic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0707210999971721,
+        "order": [
+          "movie-dynamic",
+          "romantic",
+          "cinematic",
+          "wake-old",
+          "sleep-current"
+        ]
+      },
+      {
+        "query": "What makes the themed movie lighting reusable?",
+        "expected": "movie-dynamic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9973205999995116,
+        "order": [
+          "movie-dynamic",
+          "cinematic",
+          "romantic",
+          "wake-old",
+          "token"
+        ]
+      },
+      {
+        "query": "Which static mode uses warm white and orange including overhead light?",
+        "expected": "cinematic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0717712999903597,
+        "order": [
+          "cinematic",
+          "romantic",
+          "movie-dynamic",
+          "sleep-current",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "What palette belongs to cinematic lighting?",
+        "expected": "cinematic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 0.9899557000026107,
+        "order": [
+          "cinematic",
+          "movie-dynamic",
+          "romantic",
+          "wake-old",
+          "browser-job"
+        ]
+      },
+      {
+        "query": "Which moving mode combines red and purple?",
+        "expected": "romantic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0513888999994379,
+        "order": [
+          "romantic",
+          "movie-dynamic",
+          "thermal",
+          "voice-old",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "How often should the romantic colour cycle advance?",
+        "expected": "romantic",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0483023000124376,
+        "order": [
+          "romantic",
+          "movie-dynamic",
+          "wake-old",
+          "voice-old",
+          "thermal"
+        ]
+      },
+      {
+        "query": "What are the amber warning temperatures for each processor?",
+        "expected": "thermal",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0732122999907006,
+        "order": [
+          "thermal",
+          "thermal-test",
+          "cpu-cool",
+          "browser-job",
+          "matter-network"
+        ]
+      },
+      {
+        "query": "When should the PC lighting turn red and notify the phone?",
+        "expected": "thermal",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1250656000047456,
+        "order": [
+          "thermal",
+          "thermal-test",
+          "romantic",
+          "wake-current",
+          "matter-network"
+        ]
+      },
+      {
+        "query": "How much memory is reserved for the smart-home virtual machine?",
+        "expected": "ha-vm",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1446537000010721,
+        "order": [
+          "ha-vm",
+          "code-remaining",
+          "context",
+          "cloud-off",
+          "token"
+        ]
+      },
+      {
+        "query": "How many virtual processors does the Home Assistant guest use?",
+        "expected": "ha-vm",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0629026000096928,
+        "order": [
+          "ha-vm",
+          "health",
+          "backup",
+          "token",
+          "matter-network"
+        ]
+      },
+      {
+        "query": "Must the computer use the same Wi-Fi frequency as the bulbs?",
+        "expected": "matter-network",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1548186999862082,
+        "order": [
+          "matter-network",
+          "ha-vm",
+          "sleep-current",
+          "token",
+          "wake-current"
+        ]
+      },
+      {
+        "query": "Do these Linkind lamps need a Thread border router?",
+        "expected": "matter-network",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.4401645000034478,
+        "order": [
+          "matter-network",
+          "ha-vm",
+          "code-address",
+          "sleep-current",
+          "token"
+        ]
+      },
+      {
+        "query": "How do we check whether the health dashboard readings are recent?",
+        "expected": "health",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.4128654000232928,
+        "order": [
+          "health",
+          "cpu-cool",
+          "thermal",
+          "capture-future",
+          "thermal-test"
+        ]
+      },
+      {
+        "query": "Can a missing sleep record be inferred from watch connection alone?",
+        "expected": "health",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.4030965999991167,
+        "order": [
+          "health",
+          "sleep-old",
+          "matter-network",
+          "wake-old",
+          "thermal-test"
+        ]
+      },
+      {
+        "query": "Should the old laptop still be used for integration acceptance?",
+        "expected": "remote-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.2014606000157073,
+        "order": [
+          "remote-cancelled",
+          "decision-cancelled",
+          "backup",
+          "persona-deferred",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "Is remote testing on the second machine still required?",
+        "expected": "remote-cancelled",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1194364000111818,
+        "order": [
+          "remote-cancelled",
+          "capture-off",
+          "decision-cancelled",
+          "persona-deferred",
+          "thermal-test"
+        ]
+      },
+      {
+        "query": "How should normal chat and difficult code review choose models?",
+        "expected": "routing",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.1057622999942396,
+        "order": [
+          "routing",
+          "voice-primary",
+          "context",
+          "voice-old",
+          "decision-cancelled"
+        ]
+      },
+      {
+        "query": "What should heavy background work do to leave room for conversation?",
+        "expected": "routing",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.088225399988005,
+        "order": [
+          "routing",
+          "context",
+          "voice-old",
+          "cloud-off",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Is the assistant only for chatting and lighting?",
+        "expected": "jobs",
+        "group": "memory",
+        "rank": 2,
+        "seconds": 1.1090359000081662,
+        "order": [
+          "token",
+          "jobs",
+          "ha-vm",
+          "romantic",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "What information should a running job show?",
+        "expected": "jobs",
+        "group": "memory",
+        "rank": 1,
+        "seconds": 1.0652973999967799,
+        "order": [
+          "jobs",
+          "routing",
+          "capture-future",
+          "browser-job",
+          "voice-old"
+        ]
+      },
+      {
+        "query": "Find the helper that computes a SHA256 hash of raw bytes.",
+        "expected": "code-digest",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.5467687000054866,
+        "order": [
+          "code-digest",
+          "code-current",
+          "code-atomic",
+          "code-restricted",
+          "browser-job"
+        ]
+      },
+      {
+        "query": "Where is note content fingerprinted using hashlib?",
+        "expected": "code-digest",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.9327416000014637,
+        "order": [
+          "code-digest",
+          "code-current",
+          "code-address",
+          "token",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "Find the note writer that publishes through a temporary file and replaces the target.",
+        "expected": "code-atomic",
+        "group": "code",
+        "rank": 2,
+        "seconds": 1.7351903000089806,
+        "order": [
+          "code-address",
+          "code-atomic",
+          "code-current",
+          "code-semantic",
+          "cloud-off"
+        ]
+      },
+      {
+        "query": "Which function makes a saved note replacement atomic?",
+        "expected": "code-atomic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.316262199979974,
+        "order": [
+          "code-atomic",
+          "code-current",
+          "backup",
+          "voice-old",
+          "cloud-off"
+        ]
+      },
+      {
+        "query": "Find the code that reads current note bytes and validates UTF-8 and the writer size limit.",
+        "expected": "code-current",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.5980547000071965,
+        "order": [
+          "code-current",
+          "code-canonical",
+          "token",
+          "code-tokens",
+          "code-address"
+        ]
+      },
+      {
+        "query": "Where is a missing note returned as None before applying changes?",
+        "expected": "code-current",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.6938460000092164,
+        "order": [
+          "code-current",
+          "code-address",
+          "code-semantic",
+          "cloud-off",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "Find the policy check for sensitive filenames.",
+        "expected": "code-restricted",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.7824206000077538,
+        "order": [
+          "code-restricted",
+          "code-semantic",
+          "code-current",
+          "code-address",
+          "token"
+        ]
+      },
+      {
+        "query": "Which function detects paths that should be excluded from memory indexing?",
+        "expected": "code-restricted",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.582283899973845,
+        "order": [
+          "code-restricted",
+          "code-address",
+          "browser-job",
+          "code-current",
+          "cloud-off"
+        ]
+      },
+      {
+        "query": "Find the deadline and cancellation check before continuing an index operation.",
+        "expected": "code-remaining",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.2637469999899622,
+        "order": [
+          "code-remaining",
+          "jobs",
+          "decision-cancelled",
+          "cloud-off",
+          "capture-future"
+        ]
+      },
+      {
+        "query": "Where does an indexing operation refuse to run after its time budget expires?",
+        "expected": "code-remaining",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.3545785000023898,
+        "order": [
+          "code-remaining",
+          "decision-cancelled",
+          "cloud-off",
+          "capture-future",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "Find the function counting text tokens with the cached tokenizer.",
+        "expected": "code-tokens",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.163269400014542,
+        "order": [
+          "code-tokens",
+          "routing",
+          "context",
+          "browser-job",
+          "persona-deferred"
+        ]
+      },
+      {
+        "query": "Where is the tokenizer used to measure a text input?",
+        "expected": "code-tokens",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.292064199980814,
+        "order": [
+          "code-tokens",
+          "routing",
+          "context",
+          "browser-job",
+          "voice-primary"
+        ]
+      },
+      {
+        "query": "Find the function removing Markdown link destinations before semantic matching.",
+        "expected": "code-semantic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.9671554999949876,
+        "order": [
+          "code-semantic",
+          "code-address",
+          "code-links",
+          "code-restricted",
+          "voice-old"
+        ]
+      },
+      {
+        "query": "Which helper simplifies Markdown text for semantic comparisons?",
+        "expected": "code-semantic",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.8418032999907155,
+        "order": [
+          "code-semantic",
+          "code-links",
+          "brain-structure",
+          "browser-job",
+          "voice-old"
+        ]
+      },
+      {
+        "query": "Find the scanner that hides fenced-code headings from live Markdown sections.",
+        "expected": "code-headings",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.162066599994432,
+        "order": [
+          "code-headings",
+          "code-links",
+          "brain-structure",
+          "code-restricted",
+          "voice-old"
+        ]
+      },
+      {
+        "query": "Which code tracks backtick and tilde fences while looking for section headings?",
+        "expected": "code-headings",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.7765208999917377,
+        "order": [
+          "code-headings",
+          "code-links",
+          "brain-structure",
+          "browser-job",
+          "voice-old"
+        ]
+      },
+      {
+        "query": "Find relative Markdown link resolution with a source folder.",
+        "expected": "code-address",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.2597206000064034,
+        "order": [
+          "code-address",
+          "brain-structure",
+          "code-semantic",
+          "code-links",
+          "code-restricted"
+        ]
+      },
+      {
+        "query": "Where is a linked note path resolved relative to its containing document?",
+        "expected": "code-address",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.3156600999936927,
+        "order": [
+          "code-address",
+          "code-current",
+          "code-semantic",
+          "code-links",
+          "code-restricted"
+        ]
+      },
+      {
+        "query": "Find extraction of ordinary Markdown links outside code fences.",
+        "expected": "code-links",
+        "group": "code",
+        "rank": 1,
+        "seconds": 2.379949399997713,
+        "order": [
+          "code-links",
+          "code-address",
+          "code-headings",
+          "code-semantic",
+          "browser-job"
+        ]
+      },
+      {
+        "query": "Which function collects linked references from a note?",
+        "expected": "code-links",
+        "group": "code",
+        "rank": 3,
+        "seconds": 1.9884434000123292,
+        "order": [
+          "code-address",
+          "code-semantic",
+          "code-links",
+          "code-current",
+          "brain-structure"
+        ]
+      },
+      {
+        "query": "Find JSON parsing code that rejects duplicate object keys.",
+        "expected": "code-fields",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.838717499980703,
+        "order": [
+          "code-fields",
+          "code-canonical",
+          "code-headings",
+          "code-restricted",
+          "voice-old"
+        ]
+      },
+      {
+        "query": "Which helper refuses repeated field names in a received object?",
+        "expected": "code-fields",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.39069090000703,
+        "order": [
+          "code-fields",
+          "code-restricted",
+          "token",
+          "voice-old",
+          "wake-old"
+        ]
+      },
+      {
+        "query": "Find bounded deterministic serialization with sorted JSON keys.",
+        "expected": "code-canonical",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.6790335999976378,
+        "order": [
+          "code-canonical",
+          "code-fields",
+          "code-restricted",
+          "routing",
+          "voice-old"
+        ]
+      },
+      {
+        "query": "Where is canonical JSON produced before computing a request fingerprint?",
+        "expected": "code-canonical",
+        "group": "code",
+        "rank": 1,
+        "seconds": 1.6371416999900248,
+        "order": [
+          "code-canonical",
+          "code-digest",
+          "code-fields",
+          "browser-job",
+          "voice-old"
+        ]
+      }
+    ],
+    "errors": 0,
+    "all": {
+      "count": 64,
+      "top1": 57,
+      "top3": 64,
+      "mrr": 0.9375
+    },
+    "memory": {
+      "count": 40,
+      "top1": 35,
+      "top3": 40,
+      "mrr": 0.9291666666666666
+    },
+    "code": {
+      "count": 24,
+      "top1": 22,
+      "top3": 24,
+      "mrr": 0.9513888888888888
+    },
+    "median_seconds": 1.1945983000041451
+  },
+  "rss": 2953080832,
+  "peak_wset": 4049100800
+}

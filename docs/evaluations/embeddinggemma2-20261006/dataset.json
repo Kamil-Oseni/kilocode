@@ -1,0 +1,571 @@
+{
+  "scope": "Fixed representative synthetic setup notes plus real source function snippets. Archived distractors are deliberate. This is not live personal-memory indexing or general benchmark certification.",
+  "documents": [
+    {
+      "id": "sleep-current",
+      "group": "memory",
+      "text": "Current sleep routine: begin at 21:00. Switch the ceiling lamp off immediately; gradually warm and dim the other bedroom lights until 22:30, then switch them off."
+    },
+    {
+      "id": "wake-current",
+      "group": "memory",
+      "text": "Current wake routine: start at 09:00 and smoothly increase bedroom brightness from zero to full intensity over sixty minutes, reaching 100 percent at 10:00."
+    },
+    {
+      "id": "voice-primary",
+      "group": "memory",
+      "text": "The preferred primary voice is an expressive calm narrator delivered locally by Chatterbox Nano with reference C. Emotional delivery should be selected intelligently from conversational meaning."
+    },
+    {
+      "id": "voice-fallback",
+      "group": "memory",
+      "text": "Fallback speech uses Kokoro Onyx at the accepted faster conversational pace when the primary speech synthesizer fails. This is recovery, not the primary voice."
+    },
+    {
+      "id": "persona-deferred",
+      "group": "memory",
+      "text": "PersonaPlex weights are downloaded, but real-time PersonaPlex inference is deferred until a stronger workstation is available. Do not load it during current voice testing."
+    },
+    {
+      "id": "video-deferred",
+      "group": "memory",
+      "text": "FreeVideo was downloaded for later experimentation. The low-memory video attempt was deferred after resource limits; unload its model and wait for a stronger PC."
+    },
+    {
+      "id": "decision-cancelled",
+      "group": "memory",
+      "text": "Decision 2.0 evaluation is finished and integration was cancelled. Avoid spending RAM on a decision worker; reconsider future open decision models later."
+    },
+    {
+      "id": "capture-off",
+      "group": "memory",
+      "text": "SecondBrain automatic personal-life capture is disabled. Proposed memories require review with sources and support correction or deletion before any automatic capture is enabled."
+    },
+    {
+      "id": "brain-structure",
+      "group": "memory",
+      "text": "SecondBrain uses organized Markdown folders for Daily, Areas, Projects, People, Preferences, Decisions and Commitments. Relevant evidence is retrieved selectively instead of loading every file."
+    },
+    {
+      "id": "dream-review",
+      "group": "memory",
+      "text": "Dream produces reviewable memory-maintenance proposals with evidence, ledger records and recovery. Automatic scheduled Dream publication and self-heal repair remain disabled."
+    },
+    {
+      "id": "movie-dynamic",
+      "group": "memory",
+      "text": "Movie themes use a reusable dim palette researched for the current film or show, with slow staggered colour movement among bedroom bulbs, ceiling and PC RGB when included."
+    },
+    {
+      "id": "cinematic",
+      "group": "memory",
+      "text": "Cinematic lighting includes the ceiling and combines dim warm white with orange and amber, like a soft cinema atmosphere."
+    },
+    {
+      "id": "romantic",
+      "group": "memory",
+      "text": "The intimate lighting mode includes ceiling light, red and shades of purple, with calm staggered transitions on a one-minute colour cycle."
+    },
+    {
+      "id": "thermal",
+      "group": "memory",
+      "text": "Thermal warning policy: amber when CPU reaches 85 Celsius or GPU reaches 80; red when CPU reaches 95 or GPU reaches 85. Send phone alerts and restore the prior mood after cooling."
+    },
+    {
+      "id": "ha-vm",
+      "group": "memory",
+      "text": "Home Assistant OS runs locally in VirtualBox with 2048 MiB memory and two virtual processors. Reliable startup and avoiding host sleep are important for continuous bulb control."
+    },
+    {
+      "id": "matter-network",
+      "group": "memory",
+      "text": "Four Linkind A19 RGBTW bulbs use Matter over Wi-Fi on 2.4 GHz. The PC may use 5 GHz if both radios reach the same local network; these bulbs do not require a Thread border router."
+    },
+    {
+      "id": "health",
+      "group": "memory",
+      "text": "Samsung Health data reaches Home Assistant through Health Connect and companion sensors. Check measurement freshness; sleep records cannot be assumed present until the source actually supplies them."
+    },
+    {
+      "id": "remote-cancelled",
+      "group": "memory",
+      "text": "The second PC is no longer needed for Raya testing. Stop using the remote SSH testing workflow and run acceptance on the primary PC."
+    },
+    {
+      "id": "routing",
+      "group": "memory",
+      "text": "Use a faster local model for ordinary conversation and a stronger coding model for implementation and review. Heavy jobs queue and unload models so conversation retains resource headroom."
+    },
+    {
+      "id": "jobs",
+      "group": "memory",
+      "text": "Raya supports jobs, routines, goals and project work as well as voice conversation. Worker activity should show task, progress, model and a working cancellation control."
+    },
+    {
+      "id": "sleep-old",
+      "group": "distractor",
+      "text": "Archived original sleep plan: all four bulbs, including ceiling, gradually fade from 21:00 to 22:30. Superseded by the current ceiling-off-at-start policy."
+    },
+    {
+      "id": "wake-old",
+      "group": "distractor",
+      "text": "Archived proposal: wake lighting is a manually selected bright scene. Superseded by the current one-hour sunrise schedule."
+    },
+    {
+      "id": "voice-old",
+      "group": "distractor",
+      "text": "Archived early preference: af_heart was liked before selecting Onyx and later expressive Chatterbox narration."
+    },
+    {
+      "id": "capture-future",
+      "group": "distractor",
+      "text": "Future proposal only: continuously log daily events automatically once reviewed policies and permission controls are ready. Not enabled."
+    },
+    {
+      "id": "thermal-test",
+      "group": "distractor",
+      "text": "Simulated TEST amber and red temperature alerts were sent successfully without intentionally heating the hardware."
+    },
+    {
+      "id": "video-ad",
+      "group": "distractor",
+      "text": "An experimental four-second Eden marketing clip was requested. This request did not establish successful video inference."
+    },
+    {
+      "id": "cpu-cool",
+      "group": "distractor",
+      "text": "An idle hardware screenshot showed GPU 34 Celsius and system temperature 37 Celsius; these historical readings are not current telemetry."
+    },
+    {
+      "id": "browser-job",
+      "group": "distractor",
+      "text": "A browser worker may search sources and extract a colour palette. Browser execution and memory embeddings are different services."
+    },
+    {
+      "id": "backup",
+      "group": "distractor",
+      "text": "Backups preserve Home Assistant configuration, local service manifests and SecondBrain notes. Restoration requires clear instructions and verified saved archives."
+    },
+    {
+      "id": "token",
+      "group": "distractor",
+      "text": "The Home Assistant credential is held in secure storage. The lighting adapter limits allowed devices and modes; credential text must not appear in notes."
+    },
+    {
+      "id": "context",
+      "group": "distractor",
+      "text": "Conversation summaries and retrieved memories leave room for current tasks. An embedding model does not enlarge the generation model context limit."
+    },
+    {
+      "id": "cloud-off",
+      "group": "distractor",
+      "text": "Cloud workers and their reserved tasks were released. Do not assign new work to cancelled cloud workers."
+    },
+    {
+      "id": "code-digest",
+      "group": "code",
+      "title": "service/notes.py",
+      "text": "def digest(raw):\n    return hashlib.sha256(raw).hexdigest()",
+      "source_sha256": "59488d324200d95b0974bfa119215de627bc1b17dd3233fc6b02ab137b651923"
+    },
+    {
+      "id": "code-atomic",
+      "group": "code",
+      "title": "service/notes.py",
+      "text": "    def atomic(self, path, raw):\n        safe(path)\n        stage = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')\n        with stage.open('xb') as file:\n            file.write(raw)\n            file.flush()\n            os.fsync(file.fileno())\n        os.replace(stage, path)",
+      "source_sha256": "59488d324200d95b0974bfa119215de627bc1b17dd3233fc6b02ab137b651923"
+    },
+    {
+      "id": "code-current",
+      "group": "code",
+      "title": "service/notes.py",
+      "text": "    def current(self, path):\n        safe(path)\n        if not path.exists():\n            return None\n        raw = path.read_bytes()\n        if len(raw) > 256000:\n            raise ValueError('A note exceeds the 256 KB writer limit.')\n        raw.decode('utf-8')\n        return raw",
+      "source_sha256": "59488d324200d95b0974bfa119215de627bc1b17dd3233fc6b02ab137b651923"
+    },
+    {
+      "id": "code-restricted",
+      "group": "code",
+      "title": "service/policy.py",
+      "text": "    def restricted(name):\n        parts = name.casefold().split('/')\n        reserved = {'system', 'archive', '.git', 'health', 'medical', 'private', 'sensitive'}\n        return any(part in reserved or PurePosixPath(part).stem in reserved for part in parts)",
+      "source_sha256": "87c931cfa7cceb7386e6d2b4b05fdacf916360fd2cb0ff590d0fccf5dd334ae2"
+    },
+    {
+      "id": "code-remaining",
+      "group": "code",
+      "title": "service/index.py",
+      "text": "def remaining():\n    cancel = CANCEL.get()\n    if cancel is not None and cancel.is_set():\n        raise Cancelled('Memory operation cancellation requested.')\n    until = DEADLINE.get()\n    value = 170 if until is None else until - time.monotonic()\n    if value <= 0:\n        raise TimeoutError('Memory operation deadline expired.')\n    return value",
+      "source_sha256": "8cf3e8de652cca38babf9529c287cb01157509e448c5c0a568d0cfc7e2e42c00"
+    },
+    {
+      "id": "code-tokens",
+      "group": "code",
+      "title": "service/index.py",
+      "text": "def tokens(text):\n    remaining()\n    value = tokenizer()\n    remaining()\n    result = len(value.encode(text, add_special_tokens=False))\n    remaining()\n    return result",
+      "source_sha256": "8cf3e8de652cca38babf9529c287cb01157509e448c5c0a568d0cfc7e2e42c00"
+    },
+    {
+      "id": "code-semantic",
+      "group": "code",
+      "title": "service/index.py",
+      "text": "def semantic(text):\n    def replace(match):\n        address = match.group(2) or match.group(3)\n        if re.match(r'^[a-z][a-z0-9+.-]*:', address, re.I) and not re.match(r'^[a-z]:[/\\\\]', address, re.I) and not address.casefold().startswith('file:'):\n            return match.group(0)\n        return match.group(1)\n    # Local citation destinations are provenance, not the note's subject matter.\n    return re.sub(r'\\[([^\\]\\n]+)\\]\\((?:<([^>\\n]+)>|([^)\\n]+))\\)', replace, text)",
+      "source_sha256": "8cf3e8de652cca38babf9529c287cb01157509e448c5c0a568d0cfc7e2e42c00"
+    },
+    {
+      "id": "code-headings",
+      "group": "code",
+      "title": "service/index.py",
+      "text": "def headings(lines, check):\n    result = {}\n    fence = None\n    for index, line in enumerate(lines):\n        check()\n        marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line)\n        if marker:\n            value, tail = marker.groups()\n            if fence is None:\n                if value[0] != '`' or '`' not in tail:\n                    fence = value\n            elif value[0] == fence[0] and len(value) >= len(fence) and not tail.strip():\n                fence = None\n            continue\n        if fence is not None:\n            continue\n        marker = re.match(r'^ {0,3}#{1,6}(?:[ \\t]+(.*)|$)', line)\n        if marker:\n            result[index] = re.sub(r'(?:^|[ \\t]+)#+[ \\t]*$', '', marker.group(1) or '').strip(' \\t')\n    return result",
+      "source_sha256": "8cf3e8de652cca38babf9529c287cb01157509e448c5c0a568d0cfc7e2e42c00"
+    },
+    {
+      "id": "code-address",
+      "group": "code",
+      "title": "service/index.py",
+      "text": "def address(source, target):\n    value = unquote(target.split('#', 1)[0])\n    if not value or re.search(r'[\\\\<>:\"|?*\\x00-\\x1f]', value) or value.startswith('/'):\n        raise ValueError('Use a relative local Markdown link.')\n    name = posixpath.normpath(posixpath.join(posixpath.dirname(source), value))\n    parts = name.split('/')\n    if any(not part or part in {'.', '..'} or part.endswith((' ', '.')) for part in parts):\n        raise ValueError('Linked note escapes the memory root.')\n    if PurePosixPath(name).suffix.casefold() != '.md':\n        raise ValueError('Linked recall follows Markdown notes only.')\n    return name",
+      "source_sha256": "8cf3e8de652cca38babf9529c287cb01157509e448c5c0a568d0cfc7e2e42c00"
+    },
+    {
+      "id": "code-links",
+      "group": "code",
+      "title": "service/index.py",
+      "text": "def links(text):\n    # Links inside fenced examples are not navigation instructions.\n    fence = None\n    for line in text.splitlines():\n        marker = re.match(r'^\\s{0,3}(`{3,}|~{3,})', line)\n        if marker:\n            value = marker.group(1)\n            if fence is None:\n                fence = value\n            elif value[0] == fence[0] and len(value) >= len(fence):\n                fence = None\n            continue\n        if fence is not None:\n            continue\n        for match in re.finditer(r'(?<!!)\\[[^\\]\\n]+\\]\\((?:<([^>\\n]+)>|([^\\s)]+))(?:\\s+\"[^\"\\n]*\")?\\)', line):\n            yield match.group(1) or match.group(2)",
+      "source_sha256": "8cf3e8de652cca38babf9529c287cb01157509e448c5c0a568d0cfc7e2e42c00"
+    },
+    {
+      "id": "code-fields",
+      "group": "code",
+      "title": "retrieval/validation.py",
+      "text": "def fields(pairs):\n    result = {}\n    for key, value in pairs:\n        if key in result:\n            raise ValueError('duplicate_json_field')\n        result[key] = value\n    return result",
+      "source_sha256": "a926b33a6d9d710956f8b60bcf8c01635bbee05ff1da7e17222b48dd79dccbdb"
+    },
+    {
+      "id": "code-canonical",
+      "group": "code",
+      "title": "retrieval/validation.py",
+      "text": "def canonical(value, bound):\n    raw = json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')\n    if len(raw) > bound:\n        raise ValueError('canonical_bound')\n    return raw",
+      "source_sha256": "a926b33a6d9d710956f8b60bcf8c01635bbee05ff1da7e17222b48dd79dccbdb"
+    }
+  ],
+  "queries": [
+    {
+      "query": "When should the overhead lamp go dark during bedtime?",
+      "expected": "sleep-current",
+      "group": "memory"
+    },
+    {
+      "query": "Which lights fade rather than turning off immediately at night?",
+      "expected": "sleep-current",
+      "group": "memory"
+    },
+    {
+      "query": "What time does the morning sunrise finish?",
+      "expected": "wake-current",
+      "group": "memory"
+    },
+    {
+      "query": "How long does the gradual morning brightening take?",
+      "expected": "wake-current",
+      "group": "memory"
+    },
+    {
+      "query": "Which synthesizer handles expressive narration?",
+      "expected": "voice-primary",
+      "group": "memory"
+    },
+    {
+      "query": "How should the assistant decide when to add emotional delivery?",
+      "expected": "voice-primary",
+      "group": "memory"
+    },
+    {
+      "query": "What should speak if the main narrator service breaks?",
+      "expected": "voice-fallback",
+      "group": "memory"
+    },
+    {
+      "query": "Which backup voice is selected?",
+      "expected": "voice-fallback",
+      "group": "memory"
+    },
+    {
+      "query": "Why is the downloaded duplex voice model staying unloaded?",
+      "expected": "persona-deferred",
+      "group": "memory"
+    },
+    {
+      "query": "Should we test PersonaPlex on this machine today?",
+      "expected": "persona-deferred",
+      "group": "memory"
+    },
+    {
+      "query": "What happened to local video generation testing?",
+      "expected": "video-deferred",
+      "group": "memory"
+    },
+    {
+      "query": "Which downloaded video project should remain off for now?",
+      "expected": "video-deferred",
+      "group": "memory"
+    },
+    {
+      "query": "Should we keep a separate decision model resident?",
+      "expected": "decision-cancelled",
+      "group": "memory"
+    },
+    {
+      "query": "Is the evaluated decision specialist still scheduled for integration?",
+      "expected": "decision-cancelled",
+      "group": "memory"
+    },
+    {
+      "query": "Are events in my life automatically recorded?",
+      "expected": "capture-off",
+      "group": "memory"
+    },
+    {
+      "query": "Can the assistant silently save new personal memories?",
+      "expected": "capture-off",
+      "group": "memory"
+    },
+    {
+      "query": "Where should relationships and commitments be organized?",
+      "expected": "brain-structure",
+      "group": "memory"
+    },
+    {
+      "query": "Does memory retrieval need the entire folder in each prompt?",
+      "expected": "brain-structure",
+      "group": "memory"
+    },
+    {
+      "query": "May overnight memory consolidation apply edits automatically?",
+      "expected": "dream-review",
+      "group": "memory"
+    },
+    {
+      "query": "How is memory consolidation reviewed before publication?",
+      "expected": "dream-review",
+      "group": "memory"
+    },
+    {
+      "query": "How should a television theme move across room colours?",
+      "expected": "movie-dynamic",
+      "group": "memory"
+    },
+    {
+      "query": "What makes the themed movie lighting reusable?",
+      "expected": "movie-dynamic",
+      "group": "memory"
+    },
+    {
+      "query": "Which static mode uses warm white and orange including overhead light?",
+      "expected": "cinematic",
+      "group": "memory"
+    },
+    {
+      "query": "What palette belongs to cinematic lighting?",
+      "expected": "cinematic",
+      "group": "memory"
+    },
+    {
+      "query": "Which moving mode combines red and purple?",
+      "expected": "romantic",
+      "group": "memory"
+    },
+    {
+      "query": "How often should the romantic colour cycle advance?",
+      "expected": "romantic",
+      "group": "memory"
+    },
+    {
+      "query": "What are the amber warning temperatures for each processor?",
+      "expected": "thermal",
+      "group": "memory"
+    },
+    {
+      "query": "When should the PC lighting turn red and notify the phone?",
+      "expected": "thermal",
+      "group": "memory"
+    },
+    {
+      "query": "How much memory is reserved for the smart-home virtual machine?",
+      "expected": "ha-vm",
+      "group": "memory"
+    },
+    {
+      "query": "How many virtual processors does the Home Assistant guest use?",
+      "expected": "ha-vm",
+      "group": "memory"
+    },
+    {
+      "query": "Must the computer use the same Wi-Fi frequency as the bulbs?",
+      "expected": "matter-network",
+      "group": "memory"
+    },
+    {
+      "query": "Do these Linkind lamps need a Thread border router?",
+      "expected": "matter-network",
+      "group": "memory"
+    },
+    {
+      "query": "How do we check whether the health dashboard readings are recent?",
+      "expected": "health",
+      "group": "memory"
+    },
+    {
+      "query": "Can a missing sleep record be inferred from watch connection alone?",
+      "expected": "health",
+      "group": "memory"
+    },
+    {
+      "query": "Should the old laptop still be used for integration acceptance?",
+      "expected": "remote-cancelled",
+      "group": "memory"
+    },
+    {
+      "query": "Is remote testing on the second machine still required?",
+      "expected": "remote-cancelled",
+      "group": "memory"
+    },
+    {
+      "query": "How should normal chat and difficult code review choose models?",
+      "expected": "routing",
+      "group": "memory"
+    },
+    {
+      "query": "What should heavy background work do to leave room for conversation?",
+      "expected": "routing",
+      "group": "memory"
+    },
+    {
+      "query": "Is the assistant only for chatting and lighting?",
+      "expected": "jobs",
+      "group": "memory"
+    },
+    {
+      "query": "What information should a running job show?",
+      "expected": "jobs",
+      "group": "memory"
+    },
+    {
+      "query": "Find the helper that computes a SHA256 hash of raw bytes.",
+      "expected": "code-digest",
+      "group": "code"
+    },
+    {
+      "query": "Where is note content fingerprinted using hashlib?",
+      "expected": "code-digest",
+      "group": "code"
+    },
+    {
+      "query": "Find the note writer that publishes through a temporary file and replaces the target.",
+      "expected": "code-atomic",
+      "group": "code"
+    },
+    {
+      "query": "Which function makes a saved note replacement atomic?",
+      "expected": "code-atomic",
+      "group": "code"
+    },
+    {
+      "query": "Find the code that reads current note bytes and validates UTF-8 and the writer size limit.",
+      "expected": "code-current",
+      "group": "code"
+    },
+    {
+      "query": "Where is a missing note returned as None before applying changes?",
+      "expected": "code-current",
+      "group": "code"
+    },
+    {
+      "query": "Find the policy check for sensitive filenames.",
+      "expected": "code-restricted",
+      "group": "code"
+    },
+    {
+      "query": "Which function detects paths that should be excluded from memory indexing?",
+      "expected": "code-restricted",
+      "group": "code"
+    },
+    {
+      "query": "Find the deadline and cancellation check before continuing an index operation.",
+      "expected": "code-remaining",
+      "group": "code"
+    },
+    {
+      "query": "Where does an indexing operation refuse to run after its time budget expires?",
+      "expected": "code-remaining",
+      "group": "code"
+    },
+    {
+      "query": "Find the function counting text tokens with the cached tokenizer.",
+      "expected": "code-tokens",
+      "group": "code"
+    },
+    {
+      "query": "Where is the tokenizer used to measure a text input?",
+      "expected": "code-tokens",
+      "group": "code"
+    },
+    {
+      "query": "Find the function removing Markdown link destinations before semantic matching.",
+      "expected": "code-semantic",
+      "group": "code"
+    },
+    {
+      "query": "Which helper simplifies Markdown text for semantic comparisons?",
+      "expected": "code-semantic",
+      "group": "code"
+    },
+    {
+      "query": "Find the scanner that hides fenced-code headings from live Markdown sections.",
+      "expected": "code-headings",
+      "group": "code"
+    },
+    {
+      "query": "Which code tracks backtick and tilde fences while looking for section headings?",
+      "expected": "code-headings",
+      "group": "code"
+    },
+    {
+      "query": "Find relative Markdown link resolution with a source folder.",
+      "expected": "code-address",
+      "group": "code"
+    },
+    {
+      "query": "Where is a linked note path resolved relative to its containing document?",
+      "expected": "code-address",
+      "group": "code"
+    },
+    {
+      "query": "Find extraction of ordinary Markdown links outside code fences.",
+      "expected": "code-links",
+      "group": "code"
+    },
+    {
+      "query": "Which function collects linked references from a note?",
+      "expected": "code-links",
+      "group": "code"
+    },
+    {
+      "query": "Find JSON parsing code that rejects duplicate object keys.",
+      "expected": "code-fields",
+      "group": "code"
+    },
+    {
+      "query": "Which helper refuses repeated field names in a received object?",
+      "expected": "code-fields",
+      "group": "code"
+    },
+    {
+      "query": "Find bounded deterministic serialization with sorted JSON keys.",
+      "expected": "code-canonical",
+      "group": "code"
+    },
+    {
+      "query": "Where is canonical JSON produced before computing a request fingerprint?",
+      "expected": "code-canonical",
+      "group": "code"
+    }
+  ]
+}

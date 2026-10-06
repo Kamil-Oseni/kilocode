@@ -1,0 +1,1904 @@
+{
+  "model": "qwen",
+  "label": "qwen-current-v2",
+  "device": "cpu",
+  "dtype": "float32",
+  "threads": 6,
+  "max_tokens": 512,
+  "batch_size": 2,
+  "torch": "2.6.0+cpu",
+  "transformers": "5.2.0",
+  "dataset_sha256": "97ab3bfe5abc361d2ddec3ab7af69b37105812191b634f0d8101fbbd35aee15e",
+  "scope": "Fixed representative synthetic setup notes plus real source function snippets. Archived distractors are deliberate. This is not live personal-memory indexing or general benchmark certification.",
+  "baseline_rss": 217300992,
+  "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+  "source_sha256": "c0cfec605b11efc4a3ff641a9c61be01e830fbabe63048b55e8783780c723345",
+  "load_seconds": 3.39798310000333,
+  "loaded_rss": 2857799680,
+  "index_seconds": 4.8648934999946505,
+  "all": {
+    "count": 64,
+    "top1": 43,
+    "top3": 56,
+    "top5": 59,
+    "mrr": 0.7898623511904762
+  },
+  "memory": {
+    "count": 40,
+    "top1": 30,
+    "top3": 38,
+    "top5": 39,
+    "mrr": 0.8578125
+  },
+  "code": {
+    "count": 24,
+    "top1": 13,
+    "top3": 18,
+    "top5": 20,
+    "mrr": 0.6766121031746032
+  },
+  "dimensions": 1024,
+  "parameters": 595776512,
+  "warm_query_median": 0.09976389998337254,
+  "warm_query_p95": 0.11188829998718575,
+  "rss": 2913570816,
+  "peak_wset": 4049240064,
+  "results": [
+    {
+      "query": "When should the overhead lamp go dark during bedtime?",
+      "expected": "sleep-current",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09761730002355762,
+      "top5": [
+        {
+          "id": "sleep-current",
+          "score": 0.7217677235603333
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.685835599899292
+        },
+        {
+          "id": "wake-current",
+          "score": 0.6549960970878601
+        },
+        {
+          "id": "wake-old",
+          "score": 0.5811770558357239
+        },
+        {
+          "id": "romantic",
+          "score": 0.5476347208023071
+        }
+      ]
+    },
+    {
+      "query": "Which lights fade rather than turning off immediately at night?",
+      "expected": "sleep-current",
+      "group": "memory",
+      "rank": 2,
+      "seconds": 0.09575099998619407,
+      "top5": [
+        {
+          "id": "sleep-old",
+          "score": 0.6865594387054443
+        },
+        {
+          "id": "sleep-current",
+          "score": 0.6598359942436218
+        },
+        {
+          "id": "wake-old",
+          "score": 0.6252906322479248
+        },
+        {
+          "id": "wake-current",
+          "score": 0.60966956615448
+        },
+        {
+          "id": "romantic",
+          "score": 0.5888627171516418
+        }
+      ]
+    },
+    {
+      "query": "What time does the morning sunrise finish?",
+      "expected": "wake-current",
+      "group": "memory",
+      "rank": 2,
+      "seconds": 0.1109582000062801,
+      "top5": [
+        {
+          "id": "wake-old",
+          "score": 0.5749145746231079
+        },
+        {
+          "id": "wake-current",
+          "score": 0.5261227488517761
+        },
+        {
+          "id": "sleep-current",
+          "score": 0.4681257903575897
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.4513230323791504
+        },
+        {
+          "id": "video-ad",
+          "score": 0.35755375027656555
+        }
+      ]
+    },
+    {
+      "query": "How long does the gradual morning brightening take?",
+      "expected": "wake-current",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10158170000067912,
+      "top5": [
+        {
+          "id": "wake-current",
+          "score": 0.6019860506057739
+        },
+        {
+          "id": "wake-old",
+          "score": 0.5655537843704224
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.5053805708885193
+        },
+        {
+          "id": "sleep-current",
+          "score": 0.49496421217918396
+        },
+        {
+          "id": "romantic",
+          "score": 0.4806858003139496
+        }
+      ]
+    },
+    {
+      "query": "Which synthesizer handles expressive narration?",
+      "expected": "voice-primary",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09952019999036565,
+      "top5": [
+        {
+          "id": "voice-primary",
+          "score": 0.588404655456543
+        },
+        {
+          "id": "voice-fallback",
+          "score": 0.5360751152038574
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.5005732178688049
+        },
+        {
+          "id": "context",
+          "score": 0.47090333700180054
+        },
+        {
+          "id": "dream-review",
+          "score": 0.46352699398994446
+        }
+      ]
+    },
+    {
+      "query": "How should the assistant decide when to add emotional delivery?",
+      "expected": "voice-primary",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10727629999746569,
+      "top5": [
+        {
+          "id": "voice-primary",
+          "score": 0.683740496635437
+        },
+        {
+          "id": "context",
+          "score": 0.48476555943489075
+        },
+        {
+          "id": "routing",
+          "score": 0.4663209915161133
+        },
+        {
+          "id": "voice-fallback",
+          "score": 0.4527566432952881
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.40507885813713074
+        }
+      ]
+    },
+    {
+      "query": "What should speak if the main narrator service breaks?",
+      "expected": "voice-fallback",
+      "group": "memory",
+      "rank": 2,
+      "seconds": 0.10528229997726157,
+      "top5": [
+        {
+          "id": "voice-primary",
+          "score": 0.5482566952705383
+        },
+        {
+          "id": "voice-fallback",
+          "score": 0.5440348982810974
+        },
+        {
+          "id": "dream-review",
+          "score": 0.482655793428421
+        },
+        {
+          "id": "routing",
+          "score": 0.46459102630615234
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.463595986366272
+        }
+      ]
+    },
+    {
+      "query": "Which backup voice is selected?",
+      "expected": "voice-fallback",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.1025458000076469,
+      "top5": [
+        {
+          "id": "voice-fallback",
+          "score": 0.6973658204078674
+        },
+        {
+          "id": "voice-primary",
+          "score": 0.5936596393585205
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.5720403790473938
+        },
+        {
+          "id": "routing",
+          "score": 0.5130841732025146
+        },
+        {
+          "id": "backup",
+          "score": 0.49845805764198303
+        }
+      ]
+    },
+    {
+      "query": "Why is the downloaded duplex voice model staying unloaded?",
+      "expected": "persona-deferred",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.11561840001377277,
+      "top5": [
+        {
+          "id": "persona-deferred",
+          "score": 0.6147595643997192
+        },
+        {
+          "id": "routing",
+          "score": 0.5795499682426453
+        },
+        {
+          "id": "video-deferred",
+          "score": 0.5398949384689331
+        },
+        {
+          "id": "voice-fallback",
+          "score": 0.5310052037239075
+        },
+        {
+          "id": "decision-cancelled",
+          "score": 0.4865863025188446
+        }
+      ]
+    },
+    {
+      "query": "Should we test PersonaPlex on this machine today?",
+      "expected": "persona-deferred",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.105682399997022,
+      "top5": [
+        {
+          "id": "persona-deferred",
+          "score": 0.7736918926239014
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5545176267623901
+        },
+        {
+          "id": "remote-cancelled",
+          "score": 0.5116280913352966
+        },
+        {
+          "id": "capture-off",
+          "score": 0.48578208684921265
+        },
+        {
+          "id": "ha-vm",
+          "score": 0.4844544231891632
+        }
+      ]
+    },
+    {
+      "query": "What happened to local video generation testing?",
+      "expected": "video-deferred",
+      "group": "memory",
+      "rank": 2,
+      "seconds": 0.10156420001294464,
+      "top5": [
+        {
+          "id": "video-ad",
+          "score": 0.6063675880432129
+        },
+        {
+          "id": "video-deferred",
+          "score": 0.600455641746521
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.491965651512146
+        },
+        {
+          "id": "thermal-test",
+          "score": 0.47766372561454773
+        },
+        {
+          "id": "remote-cancelled",
+          "score": 0.4700273275375366
+        }
+      ]
+    },
+    {
+      "query": "Which downloaded video project should remain off for now?",
+      "expected": "video-deferred",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09701810000115074,
+      "top5": [
+        {
+          "id": "video-deferred",
+          "score": 0.6433159708976746
+        },
+        {
+          "id": "video-ad",
+          "score": 0.5714149475097656
+        },
+        {
+          "id": "dream-review",
+          "score": 0.510909378528595
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.5053924322128296
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4817025661468506
+        }
+      ]
+    },
+    {
+      "query": "Should we keep a separate decision model resident?",
+      "expected": "decision-cancelled",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09842019999632612,
+      "top5": [
+        {
+          "id": "decision-cancelled",
+          "score": 0.715538501739502
+        },
+        {
+          "id": "routing",
+          "score": 0.5955039858818054
+        },
+        {
+          "id": "dream-review",
+          "score": 0.529299259185791
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4995163083076477
+        },
+        {
+          "id": "context",
+          "score": 0.49609947204589844
+        }
+      ]
+    },
+    {
+      "query": "Is the evaluated decision specialist still scheduled for integration?",
+      "expected": "decision-cancelled",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10170340002514422,
+      "top5": [
+        {
+          "id": "decision-cancelled",
+          "score": 0.731478750705719
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5474311113357544
+        },
+        {
+          "id": "capture-future",
+          "score": 0.49971479177474976
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.49183619022369385
+        },
+        {
+          "id": "routing",
+          "score": 0.4911775290966034
+        }
+      ]
+    },
+    {
+      "query": "Are events in my life automatically recorded?",
+      "expected": "capture-off",
+      "group": "memory",
+      "rank": 2,
+      "seconds": 0.09567010001046583,
+      "top5": [
+        {
+          "id": "capture-future",
+          "score": 0.587116003036499
+        },
+        {
+          "id": "capture-off",
+          "score": 0.5684064030647278
+        },
+        {
+          "id": "dream-review",
+          "score": 0.4515104591846466
+        },
+        {
+          "id": "health",
+          "score": 0.4496351182460785
+        },
+        {
+          "id": "context",
+          "score": 0.43144741654396057
+        }
+      ]
+    },
+    {
+      "query": "Can the assistant silently save new personal memories?",
+      "expected": "capture-off",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10447680001379922,
+      "top5": [
+        {
+          "id": "capture-off",
+          "score": 0.6427668929100037
+        },
+        {
+          "id": "context",
+          "score": 0.613681972026825
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5683789253234863
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.5087220668792725
+        },
+        {
+          "id": "backup",
+          "score": 0.4968642294406891
+        }
+      ]
+    },
+    {
+      "query": "Where should relationships and commitments be organized?",
+      "expected": "brain-structure",
+      "group": "memory",
+      "rank": 2,
+      "seconds": 0.09437839998281561,
+      "top5": [
+        {
+          "id": "dream-review",
+          "score": 0.4282032251358032
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.41475099325180054
+        },
+        {
+          "id": "capture-off",
+          "score": 0.3870405852794647
+        },
+        {
+          "id": "capture-future",
+          "score": 0.3789050579071045
+        },
+        {
+          "id": "context",
+          "score": 0.36516183614730835
+        }
+      ]
+    },
+    {
+      "query": "Does memory retrieval need the entire folder in each prompt?",
+      "expected": "brain-structure",
+      "group": "memory",
+      "rank": 4,
+      "seconds": 0.10617930002626963,
+      "top5": [
+        {
+          "id": "context",
+          "score": 0.6615442633628845
+        },
+        {
+          "id": "capture-off",
+          "score": 0.620744526386261
+        },
+        {
+          "id": "dream-review",
+          "score": 0.6059240102767944
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.5751063227653503
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.5070117115974426
+        }
+      ]
+    },
+    {
+      "query": "May overnight memory consolidation apply edits automatically?",
+      "expected": "dream-review",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10191959998337552,
+      "top5": [
+        {
+          "id": "dream-review",
+          "score": 0.594904899597168
+        },
+        {
+          "id": "capture-off",
+          "score": 0.5763896107673645
+        },
+        {
+          "id": "context",
+          "score": 0.5607215762138367
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.5282678604125977
+        },
+        {
+          "id": "capture-future",
+          "score": 0.4907582998275757
+        }
+      ]
+    },
+    {
+      "query": "How is memory consolidation reviewed before publication?",
+      "expected": "dream-review",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.102447100012796,
+      "top5": [
+        {
+          "id": "dream-review",
+          "score": 0.5580729246139526
+        },
+        {
+          "id": "context",
+          "score": 0.5435476303100586
+        },
+        {
+          "id": "capture-off",
+          "score": 0.4982231855392456
+        },
+        {
+          "id": "decision-cancelled",
+          "score": 0.4574173092842102
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4557249844074249
+        }
+      ]
+    },
+    {
+      "query": "How should a television theme move across room colours?",
+      "expected": "movie-dynamic",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10085889999754727,
+      "top5": [
+        {
+          "id": "movie-dynamic",
+          "score": 0.7161641716957092
+        },
+        {
+          "id": "romantic",
+          "score": 0.5376828908920288
+        },
+        {
+          "id": "cinematic",
+          "score": 0.5119543075561523
+        },
+        {
+          "id": "wake-current",
+          "score": 0.4468151926994324
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.41819626092910767
+        }
+      ]
+    },
+    {
+      "query": "What makes the themed movie lighting reusable?",
+      "expected": "movie-dynamic",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.1031170999922324,
+      "top5": [
+        {
+          "id": "movie-dynamic",
+          "score": 0.7050411701202393
+        },
+        {
+          "id": "cinematic",
+          "score": 0.602215051651001
+        },
+        {
+          "id": "romantic",
+          "score": 0.5701218843460083
+        },
+        {
+          "id": "wake-old",
+          "score": 0.5166655778884888
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.4861128628253937
+        }
+      ]
+    },
+    {
+      "query": "Which static mode uses warm white and orange including overhead light?",
+      "expected": "cinematic",
+      "group": "memory",
+      "rank": 2,
+      "seconds": 0.10750759998336434,
+      "top5": [
+        {
+          "id": "romantic",
+          "score": 0.6408230662345886
+        },
+        {
+          "id": "cinematic",
+          "score": 0.5862886905670166
+        },
+        {
+          "id": "wake-old",
+          "score": 0.5506834387779236
+        },
+        {
+          "id": "wake-current",
+          "score": 0.5127059817314148
+        },
+        {
+          "id": "movie-dynamic",
+          "score": 0.5090126395225525
+        }
+      ]
+    },
+    {
+      "query": "What palette belongs to cinematic lighting?",
+      "expected": "cinematic",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09498120000353083,
+      "top5": [
+        {
+          "id": "cinematic",
+          "score": 0.6788439154624939
+        },
+        {
+          "id": "movie-dynamic",
+          "score": 0.6453056931495667
+        },
+        {
+          "id": "romantic",
+          "score": 0.6248869895935059
+        },
+        {
+          "id": "wake-old",
+          "score": 0.4549001157283783
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.4384807050228119
+        }
+      ]
+    },
+    {
+      "query": "Which moving mode combines red and purple?",
+      "expected": "romantic",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09619859998929314,
+      "top5": [
+        {
+          "id": "romantic",
+          "score": 0.617236852645874
+        },
+        {
+          "id": "movie-dynamic",
+          "score": 0.4962240755558014
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.42682698369026184
+        },
+        {
+          "id": "dream-review",
+          "score": 0.41632068157196045
+        },
+        {
+          "id": "matter-network",
+          "score": 0.40506112575531006
+        }
+      ]
+    },
+    {
+      "query": "How often should the romantic colour cycle advance?",
+      "expected": "romantic",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10758390001137741,
+      "top5": [
+        {
+          "id": "romantic",
+          "score": 0.5386976003646851
+        },
+        {
+          "id": "wake-current",
+          "score": 0.4518475830554962
+        },
+        {
+          "id": "movie-dynamic",
+          "score": 0.44223058223724365
+        },
+        {
+          "id": "dream-review",
+          "score": 0.43804672360420227
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.42250147461891174
+        }
+      ]
+    },
+    {
+      "query": "What are the amber warning temperatures for each processor?",
+      "expected": "thermal",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.11613700000452809,
+      "top5": [
+        {
+          "id": "thermal",
+          "score": 0.6967040300369263
+        },
+        {
+          "id": "thermal-test",
+          "score": 0.5896458029747009
+        },
+        {
+          "id": "cpu-cool",
+          "score": 0.5321346521377563
+        },
+        {
+          "id": "dream-review",
+          "score": 0.38823413848876953
+        },
+        {
+          "id": "ha-vm",
+          "score": 0.3875372111797333
+        }
+      ]
+    },
+    {
+      "query": "When should the PC lighting turn red and notify the phone?",
+      "expected": "thermal",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10755879999487661,
+      "top5": [
+        {
+          "id": "thermal",
+          "score": 0.5843390226364136
+        },
+        {
+          "id": "romantic",
+          "score": 0.554541289806366
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.5204986333847046
+        },
+        {
+          "id": "wake-current",
+          "score": 0.5175491571426392
+        },
+        {
+          "id": "wake-old",
+          "score": 0.5093337297439575
+        }
+      ]
+    },
+    {
+      "query": "How much memory is reserved for the smart-home virtual machine?",
+      "expected": "ha-vm",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09826199998497032,
+      "top5": [
+        {
+          "id": "ha-vm",
+          "score": 0.6922479271888733
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5762268900871277
+        },
+        {
+          "id": "health",
+          "score": 0.5376582741737366
+        },
+        {
+          "id": "capture-off",
+          "score": 0.5306939482688904
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.5042206048965454
+        }
+      ]
+    },
+    {
+      "query": "How many virtual processors does the Home Assistant guest use?",
+      "expected": "ha-vm",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.0942473000031896,
+      "top5": [
+        {
+          "id": "ha-vm",
+          "score": 0.7198383808135986
+        },
+        {
+          "id": "health",
+          "score": 0.5773521661758423
+        },
+        {
+          "id": "backup",
+          "score": 0.5196144580841064
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5155990719795227
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.5119721293449402
+        }
+      ]
+    },
+    {
+      "query": "Must the computer use the same Wi-Fi frequency as the bulbs?",
+      "expected": "matter-network",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10568249999778345,
+      "top5": [
+        {
+          "id": "matter-network",
+          "score": 0.6363581418991089
+        },
+        {
+          "id": "ha-vm",
+          "score": 0.5414577722549438
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.5309268832206726
+        },
+        {
+          "id": "wake-current",
+          "score": 0.5015289187431335
+        },
+        {
+          "id": "sleep-current",
+          "score": 0.4502365291118622
+        }
+      ]
+    },
+    {
+      "query": "Do these Linkind lamps need a Thread border router?",
+      "expected": "matter-network",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09598800001549534,
+      "top5": [
+        {
+          "id": "matter-network",
+          "score": 0.7239530086517334
+        },
+        {
+          "id": "token",
+          "score": 0.43763411045074463
+        },
+        {
+          "id": "romantic",
+          "score": 0.4153205454349518
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.40584665536880493
+        },
+        {
+          "id": "ha-vm",
+          "score": 0.3996446132659912
+        }
+      ]
+    },
+    {
+      "query": "How do we check whether the health dashboard readings are recent?",
+      "expected": "health",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.10098190000280738,
+      "top5": [
+        {
+          "id": "health",
+          "score": 0.6827500462532043
+        },
+        {
+          "id": "capture-future",
+          "score": 0.5648975968360901
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5157638788223267
+        },
+        {
+          "id": "capture-off",
+          "score": 0.5053940415382385
+        },
+        {
+          "id": "cpu-cool",
+          "score": 0.4817639887332916
+        }
+      ]
+    },
+    {
+      "query": "Can a missing sleep record be inferred from watch connection alone?",
+      "expected": "health",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09883570001693442,
+      "top5": [
+        {
+          "id": "health",
+          "score": 0.6197497248649597
+        },
+        {
+          "id": "capture-off",
+          "score": 0.5082046389579773
+        },
+        {
+          "id": "dream-review",
+          "score": 0.500421941280365
+        },
+        {
+          "id": "sleep-old",
+          "score": 0.5003139972686768
+        },
+        {
+          "id": "wake-old",
+          "score": 0.4713000953197479
+        }
+      ]
+    },
+    {
+      "query": "Should the old laptop still be used for integration acceptance?",
+      "expected": "remote-cancelled",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.0965823000005912,
+      "top5": [
+        {
+          "id": "remote-cancelled",
+          "score": 0.5658600330352783
+        },
+        {
+          "id": "decision-cancelled",
+          "score": 0.5587041974067688
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5284092426300049
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.47861379384994507
+        },
+        {
+          "id": "routing",
+          "score": 0.46614572405815125
+        }
+      ]
+    },
+    {
+      "query": "Is remote testing on the second machine still required?",
+      "expected": "remote-cancelled",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09080470001208596,
+      "top5": [
+        {
+          "id": "remote-cancelled",
+          "score": 0.7273374199867249
+        },
+        {
+          "id": "thermal-test",
+          "score": 0.5365012884140015
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.5156916379928589
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5012836456298828
+        },
+        {
+          "id": "backup",
+          "score": 0.4710007905960083
+        }
+      ]
+    },
+    {
+      "query": "How should normal chat and difficult code review choose models?",
+      "expected": "routing",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.09415780002018437,
+      "top5": [
+        {
+          "id": "routing",
+          "score": 0.6675450205802917
+        },
+        {
+          "id": "decision-cancelled",
+          "score": 0.48982614278793335
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4773528277873993
+        },
+        {
+          "id": "context",
+          "score": 0.4697549641132355
+        },
+        {
+          "id": "dream-review",
+          "score": 0.4483098089694977
+        }
+      ]
+    },
+    {
+      "query": "What should heavy background work do to leave room for conversation?",
+      "expected": "routing",
+      "group": "memory",
+      "rank": 2,
+      "seconds": 0.10915610002120957,
+      "top5": [
+        {
+          "id": "voice-primary",
+          "score": 0.4678780436515808
+        },
+        {
+          "id": "routing",
+          "score": 0.4557659327983856
+        },
+        {
+          "id": "jobs",
+          "score": 0.42949819564819336
+        },
+        {
+          "id": "context",
+          "score": 0.42709600925445557
+        },
+        {
+          "id": "capture-off",
+          "score": 0.41338270902633667
+        }
+      ]
+    },
+    {
+      "query": "Is the assistant only for chatting and lighting?",
+      "expected": "jobs",
+      "group": "memory",
+      "rank": 16,
+      "seconds": 0.09058099999674596,
+      "top5": [
+        {
+          "id": "token",
+          "score": 0.553743302822113
+        },
+        {
+          "id": "ha-vm",
+          "score": 0.5167576670646667
+        },
+        {
+          "id": "routing",
+          "score": 0.5115383267402649
+        },
+        {
+          "id": "health",
+          "score": 0.5013634562492371
+        },
+        {
+          "id": "wake-current",
+          "score": 0.4965989887714386
+        }
+      ]
+    },
+    {
+      "query": "What information should a running job show?",
+      "expected": "jobs",
+      "group": "memory",
+      "rank": 1,
+      "seconds": 0.08958969998639077,
+      "top5": [
+        {
+          "id": "jobs",
+          "score": 0.4978756010532379
+        },
+        {
+          "id": "dream-review",
+          "score": 0.4818890690803528
+        },
+        {
+          "id": "capture-future",
+          "score": 0.4567343592643738
+        },
+        {
+          "id": "cloud-off",
+          "score": 0.4347166419029236
+        },
+        {
+          "id": "capture-off",
+          "score": 0.43327173590660095
+        }
+      ]
+    },
+    {
+      "query": "Find the helper that computes a SHA256 hash of raw bytes.",
+      "expected": "code-digest",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.10807600000407547,
+      "top5": [
+        {
+          "id": "code-digest",
+          "score": 0.6636016368865967
+        },
+        {
+          "id": "code-atomic",
+          "score": 0.39670583605766296
+        },
+        {
+          "id": "dream-review",
+          "score": 0.3794119656085968
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.3782404661178589
+        },
+        {
+          "id": "browser-job",
+          "score": 0.3617101311683655
+        }
+      ]
+    },
+    {
+      "query": "Where is note content fingerprinted using hashlib?",
+      "expected": "code-digest",
+      "group": "code",
+      "rank": 2,
+      "seconds": 0.08978699997533113,
+      "top5": [
+        {
+          "id": "brain-structure",
+          "score": 0.5189561247825623
+        },
+        {
+          "id": "code-digest",
+          "score": 0.501063883304596
+        },
+        {
+          "id": "dream-review",
+          "score": 0.4918675720691681
+        },
+        {
+          "id": "capture-off",
+          "score": 0.4840376675128937
+        },
+        {
+          "id": "context",
+          "score": 0.43710583448410034
+        }
+      ]
+    },
+    {
+      "query": "Find the note writer that publishes through a temporary file and replaces the target.",
+      "expected": "code-atomic",
+      "group": "code",
+      "rank": 2,
+      "seconds": 0.11142770000151359,
+      "top5": [
+        {
+          "id": "dream-review",
+          "score": 0.5273981094360352
+        },
+        {
+          "id": "code-atomic",
+          "score": 0.48583027720451355
+        },
+        {
+          "id": "capture-future",
+          "score": 0.4596727192401886
+        },
+        {
+          "id": "code-semantic",
+          "score": 0.45396867394447327
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4472147822380066
+        }
+      ]
+    },
+    {
+      "query": "Which function makes a saved note replacement atomic?",
+      "expected": "code-atomic",
+      "group": "code",
+      "rank": 5,
+      "seconds": 0.08892330000526272,
+      "top5": [
+        {
+          "id": "dream-review",
+          "score": 0.5532324314117432
+        },
+        {
+          "id": "context",
+          "score": 0.49535849690437317
+        },
+        {
+          "id": "backup",
+          "score": 0.4891824424266815
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4812379479408264
+        },
+        {
+          "id": "code-atomic",
+          "score": 0.4801631271839142
+        }
+      ]
+    },
+    {
+      "query": "Find the code that reads current note bytes and validates UTF-8 and the writer size limit.",
+      "expected": "code-current",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.1153661000134889,
+      "top5": [
+        {
+          "id": "code-current",
+          "score": 0.6054327487945557
+        },
+        {
+          "id": "token",
+          "score": 0.4117414057254791
+        },
+        {
+          "id": "dream-review",
+          "score": 0.3825339078903198
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.38013482093811035
+        },
+        {
+          "id": "capture-future",
+          "score": 0.3593728244304657
+        }
+      ]
+    },
+    {
+      "query": "Where is a missing note returned as None before applying changes?",
+      "expected": "code-current",
+      "group": "code",
+      "rank": 16,
+      "seconds": 0.09597480000229552,
+      "top5": [
+        {
+          "id": "dream-review",
+          "score": 0.5505274534225464
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.5096194744110107
+        },
+        {
+          "id": "decision-cancelled",
+          "score": 0.47966086864471436
+        },
+        {
+          "id": "capture-off",
+          "score": 0.4749082326889038
+        },
+        {
+          "id": "token",
+          "score": 0.47349902987480164
+        }
+      ]
+    },
+    {
+      "query": "Find the policy check for sensitive filenames.",
+      "expected": "code-restricted",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.09201069999835454,
+      "top5": [
+        {
+          "id": "code-restricted",
+          "score": 0.5375754833221436
+        },
+        {
+          "id": "capture-future",
+          "score": 0.5317962169647217
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.444248229265213
+        },
+        {
+          "id": "capture-off",
+          "score": 0.43072983622550964
+        },
+        {
+          "id": "dream-review",
+          "score": 0.4301322400569916
+        }
+      ]
+    },
+    {
+      "query": "Which function detects paths that should be excluded from memory indexing?",
+      "expected": "code-restricted",
+      "group": "code",
+      "rank": 7,
+      "seconds": 0.09976389998337254,
+      "top5": [
+        {
+          "id": "dream-review",
+          "score": 0.489698588848114
+        },
+        {
+          "id": "browser-job",
+          "score": 0.4756440222263336
+        },
+        {
+          "id": "capture-off",
+          "score": 0.4745497405529022
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.45578959584236145
+        },
+        {
+          "id": "decision-cancelled",
+          "score": 0.44943150877952576
+        }
+      ]
+    },
+    {
+      "query": "Find the deadline and cancellation check before continuing an index operation.",
+      "expected": "code-remaining",
+      "group": "code",
+      "rank": 2,
+      "seconds": 0.09803239998291247,
+      "top5": [
+        {
+          "id": "decision-cancelled",
+          "score": 0.5565057992935181
+        },
+        {
+          "id": "code-remaining",
+          "score": 0.5091619491577148
+        },
+        {
+          "id": "dream-review",
+          "score": 0.4911593496799469
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4749797582626343
+        },
+        {
+          "id": "cloud-off",
+          "score": 0.47263017296791077
+        }
+      ]
+    },
+    {
+      "query": "Where does an indexing operation refuse to run after its time budget expires?",
+      "expected": "code-remaining",
+      "group": "code",
+      "rank": 3,
+      "seconds": 0.10689759999513626,
+      "top5": [
+        {
+          "id": "decision-cancelled",
+          "score": 0.5781112313270569
+        },
+        {
+          "id": "dream-review",
+          "score": 0.518446147441864
+        },
+        {
+          "id": "code-remaining",
+          "score": 0.5166240334510803
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4783506989479065
+        },
+        {
+          "id": "capture-future",
+          "score": 0.47726231813430786
+        }
+      ]
+    },
+    {
+      "query": "Find the function counting text tokens with the cached tokenizer.",
+      "expected": "code-tokens",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.09369860001606867,
+      "top5": [
+        {
+          "id": "code-tokens",
+          "score": 0.723628580570221
+        },
+        {
+          "id": "routing",
+          "score": 0.44579336047172546
+        },
+        {
+          "id": "context",
+          "score": 0.44104230403900146
+        },
+        {
+          "id": "code-links",
+          "score": 0.4042116701602936
+        },
+        {
+          "id": "code-semantic",
+          "score": 0.40233978629112244
+        }
+      ]
+    },
+    {
+      "query": "Where is the tokenizer used to measure a text input?",
+      "expected": "code-tokens",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.0962881000014022,
+      "top5": [
+        {
+          "id": "code-tokens",
+          "score": 0.6420299410820007
+        },
+        {
+          "id": "routing",
+          "score": 0.49425211548805237
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.48540353775024414
+        },
+        {
+          "id": "context",
+          "score": 0.4724528193473816
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.4642113149166107
+        }
+      ]
+    },
+    {
+      "query": "Find the function removing Markdown link destinations before semantic matching.",
+      "expected": "code-semantic",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.09461619998910464,
+      "top5": [
+        {
+          "id": "code-semantic",
+          "score": 0.634349524974823
+        },
+        {
+          "id": "code-links",
+          "score": 0.5657899379730225
+        },
+        {
+          "id": "code-address",
+          "score": 0.56058669090271
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.5276572704315186
+        },
+        {
+          "id": "code-headings",
+          "score": 0.4601150453090668
+        }
+      ]
+    },
+    {
+      "query": "Which helper simplifies Markdown text for semantic comparisons?",
+      "expected": "code-semantic",
+      "group": "code",
+      "rank": 4,
+      "seconds": 0.09070149998296984,
+      "top5": [
+        {
+          "id": "brain-structure",
+          "score": 0.5841185450553894
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5246669054031372
+        },
+        {
+          "id": "context",
+          "score": 0.49739179015159607
+        },
+        {
+          "id": "code-semantic",
+          "score": 0.456178218126297
+        },
+        {
+          "id": "routing",
+          "score": 0.4514159560203552
+        }
+      ]
+    },
+    {
+      "query": "Find the scanner that hides fenced-code headings from live Markdown sections.",
+      "expected": "code-headings",
+      "group": "code",
+      "rank": 2,
+      "seconds": 0.10525349999079481,
+      "top5": [
+        {
+          "id": "brain-structure",
+          "score": 0.5602917671203613
+        },
+        {
+          "id": "code-headings",
+          "score": 0.5190215110778809
+        },
+        {
+          "id": "code-links",
+          "score": 0.45375320315361023
+        },
+        {
+          "id": "dream-review",
+          "score": 0.42519477009773254
+        },
+        {
+          "id": "code-semantic",
+          "score": 0.424307256937027
+        }
+      ]
+    },
+    {
+      "query": "Which code tracks backtick and tilde fences while looking for section headings?",
+      "expected": "code-headings",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.11149519999162294,
+      "top5": [
+        {
+          "id": "code-headings",
+          "score": 0.5934173464775085
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.4972485899925232
+        },
+        {
+          "id": "code-links",
+          "score": 0.48019081354141235
+        },
+        {
+          "id": "code-semantic",
+          "score": 0.4640708267688751
+        },
+        {
+          "id": "dream-review",
+          "score": 0.41550639271736145
+        }
+      ]
+    },
+    {
+      "query": "Find relative Markdown link resolution with a source folder.",
+      "expected": "code-address",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.09642959997290745,
+      "top5": [
+        {
+          "id": "code-address",
+          "score": 0.664104700088501
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.5901961326599121
+        },
+        {
+          "id": "dream-review",
+          "score": 0.44732367992401123
+        },
+        {
+          "id": "code-semantic",
+          "score": 0.4409673511981964
+        },
+        {
+          "id": "code-links",
+          "score": 0.41624048352241516
+        }
+      ]
+    },
+    {
+      "query": "Where is a linked note path resolved relative to its containing document?",
+      "expected": "code-address",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.12258600001223385,
+      "top5": [
+        {
+          "id": "code-address",
+          "score": 0.5774139761924744
+        },
+        {
+          "id": "code-current",
+          "score": 0.48707419633865356
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.47519317269325256
+        },
+        {
+          "id": "code-semantic",
+          "score": 0.4732406735420227
+        },
+        {
+          "id": "code-links",
+          "score": 0.4469705820083618
+        }
+      ]
+    },
+    {
+      "query": "Find extraction of ordinary Markdown links outside code fences.",
+      "expected": "code-links",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.11188829998718575,
+      "top5": [
+        {
+          "id": "code-links",
+          "score": 0.6725319623947144
+        },
+        {
+          "id": "code-semantic",
+          "score": 0.5291798710823059
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.5105854272842407
+        },
+        {
+          "id": "code-address",
+          "score": 0.5056580901145935
+        },
+        {
+          "id": "code-headings",
+          "score": 0.4367540776729584
+        }
+      ]
+    },
+    {
+      "query": "Which function collects linked references from a note?",
+      "expected": "code-links",
+      "group": "code",
+      "rank": 6,
+      "seconds": 0.11038270001881756,
+      "top5": [
+        {
+          "id": "brain-structure",
+          "score": 0.5414365530014038
+        },
+        {
+          "id": "capture-off",
+          "score": 0.5140155553817749
+        },
+        {
+          "id": "dream-review",
+          "score": 0.5119938850402832
+        },
+        {
+          "id": "context",
+          "score": 0.4867124557495117
+        },
+        {
+          "id": "code-address",
+          "score": 0.483053982257843
+        }
+      ]
+    },
+    {
+      "query": "Find JSON parsing code that rejects duplicate object keys.",
+      "expected": "code-fields",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.09581910000997595,
+      "top5": [
+        {
+          "id": "code-fields",
+          "score": 0.5588213801383972
+        },
+        {
+          "id": "code-canonical",
+          "score": 0.4059048295021057
+        },
+        {
+          "id": "code-headings",
+          "score": 0.3105165362358093
+        },
+        {
+          "id": "capture-future",
+          "score": 0.2918185293674469
+        },
+        {
+          "id": "dream-review",
+          "score": 0.28498631715774536
+        }
+      ]
+    },
+    {
+      "query": "Which helper refuses repeated field names in a received object?",
+      "expected": "code-fields",
+      "group": "code",
+      "rank": 12,
+      "seconds": 0.09630129998549819,
+      "top5": [
+        {
+          "id": "dream-review",
+          "score": 0.44404926896095276
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.417356014251709
+        },
+        {
+          "id": "routing",
+          "score": 0.4045878052711487
+        },
+        {
+          "id": "decision-cancelled",
+          "score": 0.4000518023967743
+        },
+        {
+          "id": "persona-deferred",
+          "score": 0.3998812735080719
+        }
+      ]
+    },
+    {
+      "query": "Find bounded deterministic serialization with sorted JSON keys.",
+      "expected": "code-canonical",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.09611569999833591,
+      "top5": [
+        {
+          "id": "code-canonical",
+          "score": 0.5335407257080078
+        },
+        {
+          "id": "dream-review",
+          "score": 0.43549221754074097
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.42844271659851074
+        },
+        {
+          "id": "capture-future",
+          "score": 0.41398918628692627
+        },
+        {
+          "id": "context",
+          "score": 0.3932300806045532
+        }
+      ]
+    },
+    {
+      "query": "Where is canonical JSON produced before computing a request fingerprint?",
+      "expected": "code-canonical",
+      "group": "code",
+      "rank": 1,
+      "seconds": 0.09672479997971095,
+      "top5": [
+        {
+          "id": "code-canonical",
+          "score": 0.5072576403617859
+        },
+        {
+          "id": "dream-review",
+          "score": 0.41981974244117737
+        },
+        {
+          "id": "brain-structure",
+          "score": 0.41657283902168274
+        },
+        {
+          "id": "video-ad",
+          "score": 0.405551016330719
+        },
+        {
+          "id": "capture-future",
+          "score": 0.40166598558425903
+        }
+      ]
+    }
+  ]
+}

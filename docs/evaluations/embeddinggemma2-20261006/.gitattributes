@@ -1,0 +1,2 @@
+# Preserve the exact benchmark bytes used by recorded dataset fingerprints.
+*.json -text

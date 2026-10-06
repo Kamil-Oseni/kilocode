@@ -6,7 +6,7 @@ The tracker records **23 verified, 35 in progress, 3 planned, 1 maintenance item
 
 The current installed build is `7.4.23-snapshot+57ba592fad.local.1791257813927`. Its payload integrity, upgrade preservation and loaded backend identity were independently checked; eight rollback packages are retained. The latest General workflow failed: it wrote the read tool's display decorations into the output, detected the mismatch, then failed to recover using the existing worker. Its private processes shut down normally.
 
-A file-tool guidance fix passes 19 focused request-preparation tests and has an independent source review. It is not yet installed or proven by the required autonomous workflow. The normal client restored an unsent draft and its saved model choices after ordinary close and reopen; that partial check does not certify the full General or postboot gate.
+A file-tool guidance fix now passes 19 focused tests with 221 assertions, including the actual runtime tool factory and native/OAuth/envelope request preparation. The earlier factory-coverage gap is closed; an independent review is saved in `.tmp/new-pc/file-guidance-actual-factory-independent-review.json`. It is not yet installed or proven by the required autonomous workflow. The normal client restored an unsent draft and its saved model choices after ordinary close and reopen; that partial check does not certify the full General or postboot gate.
 
 Keep conversation, voice, routines, jobs, organizations, goals, coding, memory, activity and recovery in scope. Automatic SecondBrain capture remains off. Decision-model evaluation, video inference, PersonaPlex testing and second-PC migration remain deferred or cancelled.
 

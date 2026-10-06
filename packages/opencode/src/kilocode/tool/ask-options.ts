@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import { RayaAskOptions, type Answer } from "@/kilocode/ask-options"
 import { Question } from "@/question"
 import * as Tool from "@/tool/tool"
+import { KiloQuestionTool } from "@/kilocode/tool/question"
 
 const Option = Schema.Struct({
   id: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -49,39 +50,47 @@ export const AskOptionsTool = Tool.define<typeof Parameters, Metadata, Question.
         "Ask the user one or more discrete questions as clickable in-chat option cards. Each question requires at least two options with stable ids. Set allow_multiple when several choices may be selected. Mark a Hold or Stop option terminal so selecting it ends the current task. An Other free-text choice is always included. Use this instead of asking discrete questions in prose, especially before an unapproved destructive action.",
       parameters: Parameters,
       execute: (params, ctx) =>
-        RayaAskOptions.ask(question, {
-          sessionID: ctx.sessionID,
-          questions: params.questions.map((item) => ({
-            prompt: item.prompt,
-            options: item.options.map((option) => ({
-              id: option.id,
-              label: option.label,
-              terminal: option.terminal,
-            })),
-            allow_multiple: item.allow_multiple,
-          })),
-          tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-        }).pipe(
-          Effect.map((answers) => ({
-            title: `Asked ${params.questions.length} question${params.questions.length === 1 ? "" : "s"}`,
-            output: JSON.stringify({ answers }),
-            metadata: {
-              answers,
-              ...(ctx.agent === "auto" && RayaAskOptions.terminal(params.questions, answers) ? { terminal: true } : {}),
-            },
-          })),
-          Effect.catchTag("QuestionRejectedError", () =>
-            Effect.succeed({
-              title: "Question dismissed",
-              output: "User dismissed the question.",
+        KiloQuestionTool.admit(ctx, "ask_options")
+          .pipe(
+            Effect.andThen(
+              RayaAskOptions.ask(question, {
+                sessionID: ctx.sessionID,
+                questions: params.questions.map((item) => ({
+                  prompt: item.prompt,
+                  options: item.options.map((option) => ({
+                    id: option.id,
+                    label: option.label,
+                    terminal: option.terminal,
+                  })),
+                  allow_multiple: item.allow_multiple,
+                })),
+                tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+              }),
+            ),
+          )
+          .pipe(
+            Effect.map((answers) => ({
+              title: `Asked ${params.questions.length} question${params.questions.length === 1 ? "" : "s"}`,
+              output: JSON.stringify({ answers }),
               metadata: {
-                answers: [],
-                dismissed: true as const,
-                ...(ctx.agent === "auto" ? { terminal: true } : {}),
+                answers,
+                ...(ctx.agent === "auto" && RayaAskOptions.terminal(params.questions, answers)
+                  ? { terminal: true }
+                  : {}),
               },
-            }),
+            })),
+            Effect.catchTag("QuestionRejectedError", () =>
+              Effect.succeed({
+                title: "Question dismissed",
+                output: "User dismissed the question.",
+                metadata: {
+                  answers: [],
+                  dismissed: true as const,
+                  ...(ctx.agent === "auto" ? { terminal: true } : {}),
+                },
+              }),
+            ),
           ),
-        ),
     }
   }),
 )

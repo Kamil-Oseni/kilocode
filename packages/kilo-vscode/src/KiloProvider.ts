@@ -2864,13 +2864,24 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return
     }
 
+    const client = this.client
+    const generation = this.connectionGeneration
+    const workspaceDir = this.getContextDirectory()
+    const project = this.opts.projectQualifier?.()?.projectId
+    const current = () =>
+      this.client === client &&
+      this.connectionGeneration === generation &&
+      this.connectionState === "connected" &&
+      sameDirectory(this.getContextDirectory(), workspaceDir) &&
+      this.opts.projectQualifier?.()?.projectId === project
     try {
-      const workspaceDir = this.getContextDirectory()
-      const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, this.client, workspaceDir)
-      const { data: session } = await this.client.session.create(
+      const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, client, workspaceDir)
+      if (!current()) throw new Error("Session creation interrupted because the connection changed. Please retry.")
+      const { data: session } = await client.session.create(
         { directory: workspaceDir, platform: this.opts.platform, metadata },
         { throwOnError: true },
       )
+      if (!current()) throw new Error("Session creation interrupted because the connection changed. Please retry.")
       if (!draftID) {
         this.stopCurrentSessionProcesses(session.id)
         this.setCurrentSession(session)
@@ -2884,11 +2895,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage({
         type: "sessionCreated",
         draftID,
-        projectId: this.opts.projectQualifier?.()?.projectId,
+        projectId: project,
         session: this.sessionToWebview(session),
       })
     } catch (error) {
       console.error("[Raya] Provider: Failed to create session:", error)
+      if (!current() && !draftID) return
       const message = getErrorMessage(error) || "Failed to create session"
       this.postMessage(
         draftID ? { type: "sendMessageFailed", error: message, text: "", draftID } : { type: "error", message },

@@ -144,6 +144,17 @@ export namespace MemoryDreamInput {
     if (value.sha256 === null || value.text === null) throw new Error("Selected Dream file is unavailable")
     return { path: value.path, sha256: value.sha256, text: value.text }
   }
+  /** Capture a selected target revision, including explicit creation at a currently absent path. */
+  export async function baseline(root: string, name: string, signal?: AbortSignal) {
+    signal?.throwIfAborted()
+    if (!path.isAbsolute(root)) throw new Error("Select an authorized absolute Dream root")
+    const exists = await lstat(path.join(root, relative.parse(name))).catch((err: unknown) => {
+      if (missing(err)) return undefined
+      throw err
+    })
+    const value = await snapshot(root, name, exists ? undefined : null, signal)
+    return { path: value.path, expected: value.sha256 }
+  }
   export async function prepare(root: string, project: string, input: z.input<typeof schema>, signal?: AbortSignal) {
     signal?.throwIfAborted()
     const selected = schema.parse(input)

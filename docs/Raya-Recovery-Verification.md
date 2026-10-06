@@ -128,3 +128,9 @@ The initial documentation append failed because Python selected the Windows lega
 ## Matching base Python runtime backup
 
 Saved the complete pinned base runtime at `D:/RayaBackups/Python-Runtime-3.12.14-20261006-075139-aa8f0441`: 2,294 files and 49,318,662 bytes. Every current source and copy matches the original receipt (SHA-256 `c2108fe3033e045996c45824de7eed7d8c8a698725384e9327c4309f0d39d5ff`), with all sources rechecked after copying and the exact copied file inventory verified. The external recovery guide links it and preserves its prior bytes. Evidence: `.tmp/new-pc/python-runtime-backup-independent.json`. No backup executable was run, environment reconstructed, model imported or service changed; cold runtime/service recovery is still pending.
+
+## Restored base runtime execution and empty environment
+
+The saved Python copy executed successfully in isolation, and a fresh empty venv loaded its restored base with an independent prefix. SQLite, asyncio, SSL context, in-memory WAV serialization and Windows native loading passed; all checked module origins are under the restored base. Both original processes exited 0 and their streams joined without force. Captured outputs and verification are at `D:/RayaBackups/RecoveryTests/Python-Runtime-d824b262df3940a6bf954dc7a8306e49`; independent evidence is `.tmp/new-pc/python-runtime-staged-execution-independent.json`.
+
+The recovery guide preserves its prior bytes and links this test. This advances base-runtime recovery only. Third-party dependency restoration, model inference, service ownership, credentials and installed cold recovery remain unverified. No active service, installed environment, VM or light was changed, and no audio was played.

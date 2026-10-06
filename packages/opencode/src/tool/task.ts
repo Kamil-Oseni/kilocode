@@ -186,6 +186,15 @@ export const TaskTool = Tool.define(
       }
 
       const parent = yield* sessions.get(ctx.sessionID)
+      // kilocode_change start - assigned foreground workers execute their work directly
+      if (!params.task_id && TaskAuthority.direct(parent.metadata, parent.id, parent.parentID))
+        return yield* Effect.fail(
+          new Refusal(
+            "task-access",
+            "This assigned foreground worker must execute its work directly; it cannot delegate a replacement worker",
+          ),
+        )
+      // kilocode_change end
       // kilocode_change start - a saved fanout plan is authoritative for this active goal
       const binding = yield* ChiefTaskBinding.load({
         storage,
@@ -517,7 +526,13 @@ export const TaskTool = Tool.define(
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
-      const canTask = depth + 1 < (cfg.subagent_depth ?? 2) // kilocode_change - honor upstream's opt-in depth limit
+      // kilocode_change start - new unplanned foreground Chief workers cannot redelegate
+      const direct = !resumed && ctx.agent === "auto" && !branch && !runInBackground
+      const canTask =
+        !direct &&
+        !TaskAuthority.direct(resumed?.metadata, resumed?.id ?? "", resumed?.parentID) &&
+        depth + 1 < (cfg.subagent_depth ?? 2)
+      // kilocode_change end
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
 
       // kilocode_change start - reserve an exact edit workspace before Git mutation or child creation
@@ -746,9 +761,10 @@ export const TaskTool = Tool.define(
         },
         access,
       )
+      const assigned = direct ? TaskAuthority.assign(base, nextSession.id, ctx.sessionID, ctx.messageID) : base // kilocode_change
       const bound = computer
-        ? TaskComputer.bind(base, ctx.sessionID, nextSession.id, computer) // kilocode_change
-        : base
+        ? TaskComputer.bind(assigned, ctx.sessionID, nextSession.id, computer) // kilocode_change
+        : assigned
       yield* sessions
         .setMetadata({
           sessionID: nextSession.id,

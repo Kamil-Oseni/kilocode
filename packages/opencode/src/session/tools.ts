@@ -90,7 +90,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const routine = input.session.metadata?.rayaRoutine !== undefined
   TaskAuthority.proof(input.session.metadata, input.session.id, input.session.parentID) // kilocode_change - reject forged child lineage before exposing desktop tools
   const authority = routine ? Permission.merge(input.agent.permission, input.session.permission ?? []) : undefined
+  const direct = TaskAuthority.direct(input.session.metadata, input.session.id, input.session.parentID) // kilocode_change
   const visible = (id: string) =>
+    !(direct && id === "task") && // kilocode_change - match assigned worker execution admission
     TaskAuthority.permits(TaskAuthority.read(input.session.metadata), id, "*") &&
     (!authority || pathVisible(id, authority)) // kilocode_change - execution still checks the concrete authorized path
   const grant = (id: string) => (routine ? id : "read")

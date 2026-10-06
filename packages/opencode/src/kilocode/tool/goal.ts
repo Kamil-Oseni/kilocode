@@ -110,9 +110,14 @@ export function goalTools(
     "get_goal",
     Effect.succeed({
       description:
-        "Read the current persistent goal, status, usage, audit, blocked reason, continuation progress, and the exact IDs of completed tool calls eligible as completion evidence. For update_goal_plan, copy planUpdate.expectedIntent and planUpdate.expectedRevision exactly; the goal's revision is not the plan revision. Evidence comes from recorded goal inputs and delegated inputs linked by saved task metadata. Unrelated work in reused child sessions and older task results without input lineage are excluded. Task handoff reports and child summaries do not prove completion; cite the underlying work or verification results. Artifact metadata is a recorded snapshot, not a current check; completion rechecks recorded read/write/edit/patch revisions and rejects stale or unverifiable files, including recreated deleted paths. A fresh read can verify the current file without editing it; partial-read fingerprints do not prove full content review.",
-      parameters: Schema.Struct({}),
-      execute: (_input: {}, ctx) =>
+        "Read the current persistent goal, status, usage, audit, blocked reason, continuation progress, and the exact IDs of completed tool calls eligible as completion evidence. For update_goal_plan, copy planUpdate.expectedIntent and planUpdate.expectedRevision exactly; the goal's revision is not the plan revision. Evidence comes from recorded goal inputs and delegated inputs linked by saved task metadata. Unrelated work in reused child sessions and older task results without input lineage are excluded. Task handoff reports and child summaries do not prove completion; cite the underlying work or verification results. Artifact metadata is a recorded snapshot, not a current check; completion rechecks recorded read/write/edit/patch revisions and rejects stale or unverifiable files, including recreated deleted paths. A fresh read can verify the current file without editing it; partial-read fingerprints do not prove full content review. Evidence is paged newest first (20 results); pass before=evidencePage.nextBefore to retrieve older results. Pagination does not verify artifact freshness or restrict what the audit may cite.",
+      parameters: Schema.Struct({
+        before: Schema.optional(Schema.String).annotate({
+          description:
+            "Copy evidencePage.nextBefore to retrieve the next page of older evidence; omit for newest results.",
+        }),
+      }),
+      execute: (input: { before?: string }, ctx) =>
         Effect.gen(function* () {
           const goal = yield* goals.get(ctx.sessionID)
           if (!goal) {
@@ -131,6 +136,14 @@ export function goalTools(
             }),
           )
           const resumed = yield* recovery(ctx)
+          const offset = Array.isArray(evidence)
+            ? input.before === undefined
+              ? 0
+              : evidence.findIndex((item) => item.partID === input.before) + 1
+            : 0
+          const missing = input.before !== undefined && offset === 0 && Array.isArray(evidence)
+          const page = Array.isArray(evidence) ? evidence.slice(offset, offset + 20) : undefined
+          const next = page?.at(-1)
           return {
             ...result(
               "Current goal",
@@ -138,7 +151,21 @@ export function goalTools(
                 {
                   planUpdate: { expectedIntent: goal.intent ?? "unset", expectedRevision: goal.plan?.revision ?? null },
                   goal,
-                  eligibleEvidence: evidence,
+                  eligibleEvidence: missing
+                    ? {
+                        error:
+                          "Evidence cursor is unavailable for this goal. Omit before to refresh its newest evidence.",
+                      }
+                    : (page ?? evidence),
+                  evidencePage:
+                    page && !missing
+                      ? {
+                          total: Array.isArray(evidence) ? evidence.length : 0,
+                          returned: page.length,
+                          nextBefore:
+                            Array.isArray(evidence) && offset + page.length < evidence.length ? next?.partID : null,
+                        }
+                      : undefined,
                   recovery: resumed,
                 },
                 null,

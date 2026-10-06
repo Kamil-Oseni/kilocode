@@ -146,6 +146,81 @@ function setup(
 }
 
 describe("RayaGoal", () => {
+  guide.instance("goal evidence pages retain older audit references while prioritizing fresh results", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make("ses_evidence_pages")
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      const armed = yield* goals.create(id, "Verify the original result")
+      yield* Effect.addFinalizer(() => goals.clear(id))
+      const proofs: MessageV2.ToolPart[] = []
+      for (const ordinal of Array.from({ length: 45 }, (_, index) => index)) {
+        const data = transcript({ sessionID: id, tool: "bash", exit: 0 })
+        const proof = completed(data.part)
+        proof.state.time.start = armed.createdAt + ordinal + 1
+        proofs.push(proof.part)
+        rows.push(...data.rows)
+      }
+      const def = yield* (yield* goalTools(goals).get).init()
+      const ctx = {
+        sessionID: id,
+        messageID: MessageID.ascending(),
+        agent: "code",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const first = JSON.parse((yield* def.execute({}, ctx)).output)
+      expect(first.eligibleEvidence).toHaveLength(20)
+      expect(first.eligibleEvidence[0].callID).toBe(proofs[44]!.callID)
+      expect(first.evidencePage.total).toBe(45)
+      // Concurrent newer evidence must not shift the anchor into older results.
+      const appended = transcript({ sessionID: id, tool: "bash", exit: 0 })
+      completed(appended.part).state.time.start = armed.createdAt + 100
+      rows.push(...appended.rows)
+      const second = JSON.parse((yield* def.execute({ before: first.evidencePage.nextBefore }, ctx)).output)
+      expect(second.eligibleEvidence).toHaveLength(20)
+      expect(second.eligibleEvidence[0].callID).toBe(proofs[24]!.callID)
+      const third = JSON.parse((yield* def.execute({ before: second.evidencePage.nextBefore }, ctx)).output)
+      expect(third.eligibleEvidence.map((item: { callID: string }) => item.callID)).toEqual(
+        proofs
+          .slice(0, 5)
+          .reverse()
+          .map((part) => part.callID),
+      )
+      expect(third.evidencePage.nextBefore).toBeNull()
+      const foreign = JSON.parse((yield* def.execute({ before: "foreign-part" }, ctx)).output)
+      expect(foreign.eligibleEvidence.error).toContain("cursor is unavailable")
+      const denied = yield* goals
+        .update(id, {
+          status: "complete",
+          requirements: [
+            {
+              requirement: "Verify the original result",
+              passed: true,
+              evidence: [{ callID: "foreign-call", summary: "Missing" }],
+            },
+          ],
+        })
+        .pipe(Effect.flip)
+      expect(denied.message).toContain(appended.part!.callID)
+      expect(denied.message).not.toContain(proofs[0]!.callID)
+      const accepted = yield* goals.update(id, {
+        status: "complete",
+        requirements: [
+          {
+            requirement: "Verify the original result",
+            passed: true,
+            evidence: [{ callID: proofs[0]!.callID, summary: "Original successful check" }],
+          },
+        ],
+      })
+      expect(accepted.status).toBe("complete")
+    }),
+  )
+
   guide.live("completion guidance names saved criterion IDs while missing-ID audits remain denied", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service
@@ -2075,7 +2150,7 @@ describe("RayaGoal", () => {
 
   it.live("delegated settlement catches late descendants and preserves raced extensions or unavailable evidence", () =>
     Effect.gen(function* () {
-      for (const mode of ["late", "extension", "unavailable", "foreign", "ambiguous"]) {
+      for (const mode of ["late", "racing", "extension", "unavailable", "foreign", "ambiguous"]) {
         const jobs = yield* BackgroundJob.make
         const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
         const child = SessionID.make(`ses_child_${crypto.randomUUID()}`)
@@ -2105,12 +2180,28 @@ describe("RayaGoal", () => {
           },
           run: Effect.never,
         })
+        const failures: string[] = []
         yield* jobs.start({
           id: child,
           type: "task",
           metadata: { parentSessionId: sessionID },
           origin,
-          run: mode === "late" ? Effect.never.pipe(Effect.ensuring(late)) : Effect.never,
+          run:
+            mode === "late"
+              ? Effect.never.pipe(
+                  Effect.ensuring(
+                    late.pipe(
+                      Effect.catchCause((cause) =>
+                        Effect.sync(() => {
+                          const message = Cause.pretty(cause)
+                          expect(message).toContain("Background parent execution is closed or foreign")
+                          failures.push(message)
+                        }),
+                      ),
+                    ),
+                  ),
+                )
+              : Effect.never,
         })
         const result = yield* settle(
           sessionID,
@@ -2124,12 +2215,20 @@ describe("RayaGoal", () => {
           {
             list: jobs.list,
             cancel: (id, revision) =>
-              mode === "extension"
-                ? jobs.extend({ id, run: Effect.never }).pipe(Effect.andThen(jobs.cancel(id, revision)))
-                : jobs.cancel(id, revision),
+              mode === "racing" && id === child
+                ? late.pipe(Effect.andThen(jobs.cancel(id, revision)))
+                : mode === "extension"
+                  ? jobs.extend({ id, run: Effect.never }).pipe(Effect.andThen(jobs.cancel(id, revision)))
+                  : jobs.cancel(id, revision),
           },
         )
         if (mode === "late") {
+          expect(result.jobs).toEqual([])
+          expect(yield* jobs.get(grandchild)).toBeUndefined()
+          expect(failures).toHaveLength(1)
+          continue
+        }
+        if (mode === "racing") {
           expect(result.jobs).toEqual([])
           expect((yield* jobs.get(grandchild))?.status).toBe("cancelled")
           continue

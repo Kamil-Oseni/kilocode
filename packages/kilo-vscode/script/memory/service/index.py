@@ -109,7 +109,7 @@ KEY = Path(os.environ['RAYA_MEMORY_RETRIEVAL_TOKEN_FILE']).read_text().strip()
 RELEASE = os.environ['RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256']
 if not hexadecimal(RELEASE, 64):
     raise Refused('Explicit reviewed downstream release selection is required.')
-SIGNATURE = 'markdown-v3:300tokens:1024:normalized:local-link-labels:' + MODEL['revision']
+SIGNATURE = 'markdown-v4:300tokens:1024:normalized:local-link-labels:' + MODEL['revision']
 
 
 def digest(value):
@@ -342,8 +342,31 @@ def scan(root, policy=None):
     return result
 
 
+def headings(lines, check):
+    result = {}
+    fence = None
+    for index, line in enumerate(lines):
+        check()
+        marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line)
+        if marker:
+            value, tail = marker.groups()
+            if fence is None:
+                if value[0] != '`' or '`' not in tail:
+                    fence = value
+            elif value[0] == fence[0] and len(value) >= len(fence) and not tail.strip():
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        marker = re.match(r'^ {0,3}#{1,6}(?:[ \t]+(.*)|$)', line)
+        if marker:
+            result[index] = re.sub(r'(?:^|[ \t]+)#+[ \t]*$', '', marker.group(1) or '').strip(' \t')
+    return result
+
+
 def split(path, note):
     lines = note['text'].splitlines()
+    sections = headings(lines, remaining)
     heading = ''
     section = []
     result = []
@@ -360,9 +383,9 @@ def split(path, note):
             result.append({'id': digest(f'{path}:{start}:{len(result)}:{source}'.encode()), 'path': path, 'start': start, 'end': end, 'heading': heading, 'text': source, 'filehash': note['hash'], 'contenthash': digest(source.encode())})
         section = []
     for number, line in enumerate(lines, 1):
-        if line.startswith('#') and line.lstrip('#').startswith(' '):
+        if number - 1 in sections:
             emit()
-            heading = line.lstrip('#').strip()
+            heading = sections[number - 1]
         candidate = f'Source: {path}\nSection: {heading}\n' + '\n'.join(value for _, value in section + [(number, line)])
         if tokens(candidate) > 300:
             emit()
@@ -452,21 +475,22 @@ def passage(name, text, query, limit, measure, check):
     lines = text.splitlines()
     if not lines:
         return None
+    sections = headings(lines, check)
     terms = set(re.findall(r'\w+', query.casefold()))
     start = max(range(len(lines)), key=lambda index: len(terms.intersection(re.findall(r'\w+', lines[index].casefold()))))
     # Keep qualifiers around the matched fact in the same paragraph. Returning
     # only its matching line can turn a historical or disputed note into a fact.
     end = start + 1
-    while start > 0 and lines[start - 1].strip() and not re.match(r'^#{1,6} ', lines[start]):
+    while start > 0 and lines[start - 1].strip() and start not in sections:
         check()
         start -= 1
-    while end < len(lines) and lines[end].strip() and not re.match(r'^#{1,6} ', lines[end]):
+    while end < len(lines) and lines[end].strip() and end not in sections:
         check()
         end += 1
     heading = ''
-    for line in lines[:start + 1]:
-        if re.match(r'^#{1,6} ', line):
-            heading = line.lstrip('#').strip()
+    for index in range(start + 1):
+        if index in sections:
+            heading = sections[index]
     prefix = f'Source: {name}\nSection: {heading}\n'
     selected = '\n'.join(lines[start:end])
     check()

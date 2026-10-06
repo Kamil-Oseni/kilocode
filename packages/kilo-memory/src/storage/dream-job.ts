@@ -38,7 +38,19 @@ export namespace MemoryDreamJob {
     let reason: string | undefined
     try {
       controller.signal.throwIfAborted()
-      lease = await ports.admit(selection, controller.signal)
+      const timeout = run.deadline - Date.now()
+      if (timeout <= 0) throw new DOMException("Dream deadline elapsed", "TimeoutError")
+      lease = await ports.admit(
+        {
+          id: run.id,
+          owner: run.owner,
+          model: run.model,
+          sources: run.sources.map((source) => ({ ...source })),
+          budget: { ...run.budget },
+          timeout,
+        },
+        controller.signal,
+      )
       controller.signal.throwIfAborted()
       // Await the original operation after abort too: a race must not release an unjoined model worker.
       const candidates = await lease.generate(controller.signal)

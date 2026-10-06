@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { APICallError } from "ai"
+import { createHash, randomUUID } from "node:crypto"
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { z } from "zod"
+import { MemoryFiles } from "@kilocode/kilo-memory/store"
+import { localFetch, status } from "../../../src/kilocode/provider/local-scheduler"
 import { Effect } from "effect"
 import { ModelNotFoundError, type Provider } from "../../../src/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -392,6 +399,14 @@ describe("memory ports", () => {
 
       expect((seen[0] as { stream?: boolean }).stream).toBe(false)
       expect(result.text).toBe('{"topic":"t","summary":"s"}')
+      await port.run({
+        handle: resolved.handle,
+        system: "system",
+        prompt: "prompt",
+        timeoutMs: 30000,
+        budget: { input: 3000, output: 128 },
+      })
+      expect(seen[1]).toMatchObject({ stream: false, max_tokens: 128 })
     } finally {
       server.stop(true)
     }
@@ -426,6 +441,184 @@ describe("memory ports", () => {
       await port.run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000 })
       expect(calls[0]).toMatchObject({ headers: local ? { "x-raya-inference-lane": "background" } : {} })
       if (!local) expect(JSON.stringify(calls[0])).not.toContain("x-raya-inference-lane")
+    }
+  })
+
+  test("explicit manual model budgets reach the provider while unbudgeted capture stays unchanged", async () => {
+    const calls: unknown[] = []
+    const port = MemoryModel.port({ provider: provider({ calls }) })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    await port.run({
+      handle: resolved.handle,
+      system: "system",
+      prompt: "prompt",
+      timeoutMs: 30000,
+      budget: { input: 3000, output: 512 },
+    })
+    expect(calls[0]).toMatchObject({ maxOutputTokens: 512 })
+    await port.run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000 })
+    expect(JSON.stringify(calls[1])).not.toContain("maxOutputTokens")
+  })
+
+  test("invalid model budgets and oversized prompts refuse before provider dispatch", async () => {
+    const calls: unknown[] = []
+    const port = MemoryModel.port({ provider: provider({ calls }) })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    for (const budget of [
+      { input: 0, output: 100 },
+      { input: 3000, output: 5000 },
+      { input: 3000, output: Number.POSITIVE_INFINITY },
+    ]) {
+      const error = await port
+        .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000, budget })
+        .then(
+          () => undefined,
+          (err: unknown) => err,
+        )
+      expect(error).toBeInstanceOf(Error)
+    }
+    const error = await port
+      .run({
+        handle: resolved.handle,
+        system: "system",
+        prompt: "x".repeat(20000),
+        timeoutMs: 30000,
+        budget: { input: 3000, output: 1000 },
+      })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+    expect(error).toMatchObject({ message: "Memory model prompt exceeds its estimated input budget" })
+    expect(calls).toEqual([])
+  })
+
+  test("oversized returned model text is not admitted to a manual job", async () => {
+    const port = MemoryModel.port({ provider: provider({ outputs: ["x".repeat(10000)] }) })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    const error = await port
+      .run({
+        handle: resolved.handle,
+        system: "system",
+        prompt: "prompt",
+        timeoutMs: 30000,
+        budget: { input: 3000, output: 1000 },
+      })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+    expect(error).toMatchObject({ message: "Memory model output exceeds its estimated output budget" })
+  })
+
+  test("manual Dream job uses the bounded SDK model lease and retains a real pending proposal file", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "raya-dream-sdk-"))
+    const project = path.join(root, "project")
+    await mkdir(project)
+    const source = path.join(project, "approved.md")
+    await writeFile(source, "Approved synthetic preference: use a calm voice.")
+    const sha256 = createHash("sha256")
+      .update(await readFile(source))
+      .digest("hex")
+    const selection = {
+      id: randomUUID(),
+      owner: randomUUID(),
+      model: "test/fake-memory-model",
+      sources: [{ path: "approved.md", sha256 }],
+      timeout: 30000,
+      budget: { input: 3000, output: 512 },
+    }
+    const requests: unknown[] = []
+    const tags: (string | null)[] = []
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: async (request) => {
+        requests.push(await request.json())
+        tags.push(request.headers.get("x-raya-inference-lane"))
+        return Response.json({
+          id: "dream",
+          object: "chat.completion",
+          created: 0,
+          model: "fake-memory-model",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: JSON.stringify({ content: "Use a calm voice.", reason: "Approved evidence." }),
+              },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 },
+        })
+      },
+    })
+    try {
+      const sdk = createOpenAICompatible({
+        name: "test",
+        baseURL: `http://127.0.0.1:${server.port}/v1`,
+        apiKey: "unused",
+        fetch: Object.assign(localFetch({ localInference: true }), { preconnect: fetch.preconnect.bind(fetch) }),
+      })
+      const model = MemoryModel.port({
+        provider: {
+          ...provider({ npm: "@ai-sdk/openai-compatible", local: true }),
+          getLanguage: () => Effect.succeed(sdk.languageModel("fake-memory-model")),
+        },
+      })
+      const run = await MemoryFiles.dreamJob.start(root, project, selection, {
+        admit: (selection, signal) =>
+          MemoryFiles.dreamModel.admit(
+            {
+              model,
+              execute: (effect) => Effect.runPromise(effect),
+              selection,
+              system: "Propose a preference from the approved source. Return JSON content and reason.",
+              prompt: JSON.stringify({
+                sources: selection.sources,
+                text: "Approved synthetic preference: use a calm voice.",
+              }),
+              decode: async (text) => {
+                const value = z.object({ content: z.string(), reason: z.string() }).strict().parse(JSON.parse(text))
+                return [
+                  {
+                    fact: "a".repeat(64),
+                    kind: "memory",
+                    sources: selection.sources,
+                    changes: [{ path: "Preferences/voice.md", expected: null, content: value.content }],
+                    rationale: value.reason,
+                    contradictions: [],
+                  },
+                ]
+              },
+            },
+            signal,
+          ),
+        validate: async (candidate) => {
+          expect(candidate.sources).toEqual(selection.sources)
+          expect(
+            createHash("sha256")
+              .update(await readFile(source))
+              .digest("hex"),
+          ).toBe(sha256)
+        },
+        propose: async (id, candidate) => {
+          await writeFile(path.join(root, `${id}.proposal.json`), JSON.stringify(candidate), { flag: "wx" })
+          return { id, status: "pending" }
+        },
+      })
+      expect(run.phase).toBe("review-pending")
+      const ledger = await MemoryFiles.dream.list(root, project)
+      expect(ledger.rows[0].state).toBe("pending")
+      expect(await MemoryFiles.exists(path.join(root, "Preferences/voice.md"))).toBe(false)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({ stream: false, max_tokens: 512 })
+      expect(tags).toEqual([null])
+      expect(status()).toEqual({ active: 0, queued: 0, bytes: 0 })
+    } finally {
+      await server.stop(true)
     }
   })
 

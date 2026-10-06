@@ -155,3 +155,20 @@ test("generated output cannot exceed the explicit engineering budget", async () 
   expect(f.events).toEqual(["generated", "retired"])
   expect((await MemoryFiles.dream.list(f.root, f.project)).rows).toEqual([])
 })
+
+test("model admission uses the retained run selection instead of mutable caller settings", async () => {
+  const f = await fixture()
+  const admit = f.ports.admit.bind(f.ports)
+  f.ports.admit = async (selected, signal) => {
+    f.selection.model = "changed/model"
+    f.selection.budget.output = 1
+    expect(selected.model).toBe("controlled-file-fixture")
+    expect(selected.budget.output).toBe(1000)
+    expect(selected.timeout).toBeLessThanOrEqual(300000)
+    return admit(selected, signal)
+  }
+  const run = await MemoryFiles.dreamJob.start(f.root, f.project, f.selection, f.ports)
+  expect(run.phase).toBe("review-pending")
+  expect(run.model).toBe("controlled-file-fixture")
+  expect(run.budget.output).toBe(1000)
+})

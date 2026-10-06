@@ -43,6 +43,8 @@ export namespace MemoryPorts {
       prompt: string
       timeoutMs: number
       signal?: AbortSignal
+      /** Explicit manual-job limits; omitted by legacy capture calls. */
+      budget?: { input: number; output: number }
     }) => Promise<{ text: string; usage: unknown }>
   }
 }

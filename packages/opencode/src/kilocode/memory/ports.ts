@@ -5,6 +5,7 @@ import { MemoryError } from "@kilocode/kilo-memory/effect/errors"
 import type { MemoryPorts } from "@kilocode/kilo-memory/effect/ports"
 import { MemoryRedact } from "@kilocode/kilo-memory/redact"
 import { MemoryShared } from "@kilocode/kilo-memory/shared"
+import { MemoryToken } from "@kilocode/kilo-memory/token"
 import * as Log from "@opencode-ai/core/util/log"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Provider } from "@/provider/provider"
@@ -181,8 +182,21 @@ async function memoryText(input: {
   topK?: number
   signal?: AbortSignal
   local: boolean
+  budget?: { input: number; output: number }
 }) {
   input.signal?.throwIfAborted()
+  if (input.budget) {
+    const budget = input.budget
+    const context = input.source.limit.context
+    const output = input.source.limit.output
+    if (!Number.isSafeInteger(budget.input) || budget.input < 1 || budget.input > 12000 ||
+      !Number.isSafeInteger(budget.output) || budget.output < 1 || budget.output > 8000 ||
+      !Number.isFinite(context) || context <= 0 || !Number.isFinite(output) || output <= 0 ||
+      budget.output > output || budget.input + budget.output + 32 > context)
+      throw new Error("Memory model budget is invalid or exceeds its configured model limits")
+    const tokens = Math.ceil(MemoryToken.estimate(`${input.system}\n${input.prompt}`) * 1.3) + 32
+    if (tokens > budget.input) throw new Error("Memory model prompt exceeds its estimated input budget")
+  }
   const ctl = new AbortController()
   const ms = Math.max(1, input.timeoutMs)
   const params = consolidationPrompt({ model: input.source, options: input.options, system: input.system })
@@ -199,6 +213,7 @@ async function memoryText(input: {
     topP: input.topP,
     topK: input.topK,
     maxRetries: 1,
+    ...(input.budget ? { maxOutputTokens: input.budget.output } : {}),
   }
   const work = async () => {
     if (!openai) return generateText(common)
@@ -219,6 +234,8 @@ async function memoryText(input: {
     // Keep the original SDK operation owned until it settles, even after abort.
     const result = await work()
     signal.throwIfAborted()
+    if (input.budget && Math.ceil(MemoryToken.estimate(result.text) * 1.3) > input.budget.output)
+      throw new Error("Memory model output exceeds its estimated output budget")
     return result
   } catch (err) {
     if (signal.aborted) throw signal.reason
@@ -231,8 +248,8 @@ async function memoryText(input: {
 
 function modelOptions(model: Provider.Model, language: LanguageModelV3, local: boolean) {
   const options = consolidationOptions(model)
-  // No explicit output cap: valid output is already bounded by the compact-JSON prompt, the parser's
-  // 64KB guard, and the capture timeout — and some backends reject explicit caps outright.
+  // Legacy capture retains its existing compact-JSON/parser bounds. Explicit manual-job budgets
+  // also carry a provider output cap; incompatible providers must fail rather than silently drop it.
   const temperature = ProviderTransform.temperature(model)
   const topP = ProviderTransform.topP(model)
   const topK = ProviderTransform.topK(model)
@@ -321,7 +338,7 @@ export namespace MemoryModel {
           const provider = yield* input.provider.getProvider(source.providerID)
           return { handle: modelOptions(source, language, localConfig(provider.options).enabled), ...(reason ? { fallback: { reason } } : {}) }
         }).pipe(Effect.mapError(MemoryError.from)),
-      run: ({ handle, system, prompt, timeoutMs, signal }) => {
+      run: ({ handle, system, prompt, timeoutMs, signal, budget }) => {
         const resolved = handle as ModelHandle
         return memoryText({
           source: resolved.source,
@@ -335,6 +352,7 @@ export namespace MemoryModel {
           topK: resolved.topK,
           signal,
           local: resolved.local,
+          budget,
         })
       },
     }

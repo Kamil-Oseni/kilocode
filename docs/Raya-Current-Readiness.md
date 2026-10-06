@@ -8,6 +8,8 @@ The current blocker is installing the matching repairs and verifying complete wo
 
 Keep routines, jobs, organizations, goals, coding, voice, memory, activity and recovery in scope. Automatic SecondBrain capture remains off. Decision-model evaluation, video inference, PersonaPlex testing and second-PC migration remain deferred or cancelled under the existing instructions.
 
+The matching update package is now built: `7.4.23-snapshot+ddccef1e67.local.1791249931251`. Independent verification streamed all 482 archive entries, checked the packaged CLI and native files against their final build outputs, recomputed the native source fingerprint, and matched the executable's debug identifier with its PDB. The Memory adapter retains compatibility with the exact previous helper recipe and accepts the reviewed new recipe. Packaging rebuilt the native executable, so installation checks must use the final archive's hashes rather than the earlier CLI-stage native hashes. Installation, preserved settings, the loaded version and full runtime workflows still require separate evidence; this package check does not increase readiness or passing workflow counts.
+
 Use [the full implementation tracker](Raya-Implementation-Progress.md#findings-and-overhauls) for evidence and remaining acceptance conditions, and [the PC setup checklist](Raya-New-PC-Setup.md) for local integration details. Historical readiness scores in the full tracker do not override this snapshot.
 
 ## Active unfinished requirements

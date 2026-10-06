@@ -1908,10 +1908,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (typeof message.sessionID !== "string" || typeof message.messageID !== "string") return true
       const sid = message.sessionID
       const id = message.messageID
+      const client = this.client
+      if (!client || this.connectionState !== "connected") return true
+      const dir = this.getWorkspaceDirectory(sid)
+      const generation = this.connectionGeneration
+      const current = () =>
+        this.client === client &&
+        this.connectionState === "connected" &&
+        this.connectionGeneration === generation &&
+        sameDirectory(dir, this.getWorkspaceDirectory(sid))
       this.checkpoint(sid, async () => {
+        if (!current()) return
         await this.handleRevertSession(sid, id)
-        const dir = this.getWorkspaceDirectory(sid)
-        const { error } = await this.client!.kilocode.goal.discard({ sessionID: sid, directory: dir })
+        if (!current()) return
+        const { error } = await client.kilocode.goal.discard({ sessionID: sid, directory: dir })
+        if (!current()) return
         if (error) {
           this.postMessage({
             type: "goalState",
@@ -5907,14 +5918,22 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async handleRevertSession(sessionID: string, messageID: string, partID?: string): Promise<void> {
-    if (!this.client) return
+    const client = this.client
+    if (!client || this.connectionState !== "connected") return
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.revert({ sessionID, messageID, partID, directory: dir })
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(dir, this.getWorkspaceDirectory(sessionID))
+    const { data, error } = await client.session.revert({ sessionID, messageID, partID, directory: dir })
     if (error) {
       console.error("[Raya] Provider: Failed to revert session:", error)
-      this.postMessage({ type: "error", message: "Failed to revert session", sessionID })
+      if (current()) this.postMessage({ type: "error", message: "Failed to revert session", sessionID })
       throw error
     }
+    if (!current()) return
     if (!data) throw new Error("Revert returned no session")
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)

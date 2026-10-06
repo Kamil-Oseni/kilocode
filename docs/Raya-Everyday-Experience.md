@@ -4,6 +4,12 @@ Conversation, coding, delegated jobs, routines and goals remain first-class work
 
 ## Source changes
 
+### Goal recovery connection checkpoint, 2026-10-06
+
+Goal discard captures its original client, generation and workspace before queued checkpoint work. It rechecks that scope before rewind, before the subsequent discard request and before publishing its result. Conversation rewind also retains its original client and suppresses stale successful UI updates. Original rewind errors still reject and remain logged; a reconnect does not transfer the discard mutation to the replacement backend.
+
+Eight held requests through the actual SDK reproduce reconnect, generation, directory and disconnection failures during rewind or discard. With the fix, the focused Goal fetch/recovery/rewind cohort passes **29 tests/95 assertions across three files**, including queued-work fencing and three successful original-scope recoveries. The older source-string assertion now expects the captured client while retaining the REST-result requirement. Logs are `.tmp/memory-private/goal-discard-*`. This fences client handoffs and replies; it does not cancel an already-dispatched original request, replay recovery or establish installed file restoration.
+
 ### Combined Memory regression checkpoint, 2026-10-06
 
 After the supervisor/reader merge and metadata fix, current source `a94c1acd895c6c498f0952472d6a9a662879a7ae` passes the full Memory package suite: **211 tests/952 assertions across twenty files**. The retained extension Memory cohort passes **160 tests/1,363 assertions across twenty-eight files**, with no skipped cases. All selected paths were checked for existence before dispatch. The original test processes settled normally; logs are `.tmp/memory-private/memory-combined-current-full.log` and `.tmp/memory-private/memory-combined-extension-full.log`.

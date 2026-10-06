@@ -11,7 +11,8 @@ const Params = Schema.Struct({ query: Recall.fields.query, budget: Schema.option
 
 function cancelled(signal: AbortSignal) {
   return Effect.callback<never, HostError>((resume) => {
-    const fail = () => resume(Effect.fail(new HostError({ code: "cancelled", detail: "Memory recall cancelled" })))
+    const fail = () =>
+      resume(Effect.fail(new HostError({ code: "cancelled", detail: "Memory recall cancelled", operation: "context" })))
     if (signal.aborted) return fail()
     signal.addEventListener("abort", fail, { once: true })
     return Effect.sync(() => signal.removeEventListener("abort", fail))

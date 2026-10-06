@@ -16,8 +16,10 @@ export type Input = WithoutID<Request>
 export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrainHostError", {
   code: ErrorCode,
   detail: Schema.String,
+  operation: Schema.optional(Schema.Literal("context")),
 }) {
   override get message() {
+    if (this.operation === "context") return `${this.detail}. No note changes were requested.`
     return `${this.detail}. Proposal outcome is unconfirmed; do not automatically retry creation. List/read the original proposal ID before deciding what to do next.`
   }
 }
@@ -86,7 +88,11 @@ export function layer(timeout: Duration.Input = "2 minutes") {
                   .pipe(Effect.provideService(InstanceRef, instance))
                 yield* Deferred.fail(
                   entry.deferred,
-                  new HostError({ code: "disconnected", detail: "The Second Brain host disconnected" }),
+                  new HostError({
+                    code: "disconnected",
+                    detail: "The Second Brain host disconnected",
+                    operation: entry.info.command.action === "context" ? "context" : undefined,
+                  }),
                 )
               }
             })
@@ -132,6 +138,7 @@ export function layer(timeout: Duration.Input = "2 minutes") {
           entry.deferred,
           new HostError({
             code: reason,
+            operation: entry.info.command.action === "context" ? "context" : undefined,
             detail:
               reason === "timeout"
                 ? "The Second Brain host request timed out"
@@ -141,25 +148,36 @@ export function layer(timeout: Duration.Input = "2 minutes") {
       })
 
       const request = Effect.fn("SecondBrain.request")(function* (input: Input) {
+        const operation = input.command.action === "context" ? ("context" as const) : undefined
         const pending = (yield* StateService).pending
         if (pending.size >= 32)
-          return yield* new HostError({ code: "unsupported", detail: "Too many pending Second Brain requests" })
+          return yield* new HostError({
+            code: "unsupported",
+            detail: "Too many pending Second Brain requests",
+            operation,
+          })
         if (Buffer.byteLength(JSON.stringify(input), "utf8") > 3000000)
           return yield* new HostError({
             code: "invalid_request",
-            detail: "Proposal request exceeds the bounded review size",
+            operation,
+            detail: "Second Brain request exceeds the bounded review size",
           })
         const ctx = yield* context
         if (input.project !== ctx.directory)
           return yield* new HostError({
             code: "invalid_request",
-            detail: "Proposal project must match the retained session directory",
+            operation,
+            detail: "Second Brain project must match the retained session directory",
           })
         const id = RequestID.make(Identifier.create("sbr", "ascending"))
         const deferred = yield* Deferred.make<Result, HostError>()
         const info = { ...input, id }
         if (!Schema.is(Request)(info))
-          return yield* new HostError({ code: "invalid_request", detail: "Invalid pending proposal request" })
+          return yield* new HostError({
+            code: "invalid_request",
+            detail: "Invalid pending Second Brain request",
+            operation,
+          })
         pending.set(id, { info, deferred })
         return yield* Effect.gen(function* () {
           yield* bus.publish(Event.Requested, info)
@@ -208,7 +226,11 @@ export function layer(timeout: Duration.Input = "2 minutes") {
         pending.delete(input.requestID)
         return yield* Deferred.fail(
           entry.deferred,
-          new HostError({ code: input.error.code, detail: input.error.message }),
+          new HostError({
+            code: input.error.code,
+            detail: input.error.message,
+            operation: entry.info.command.action === "context" ? "context" : undefined,
+          }),
         )
       })
 

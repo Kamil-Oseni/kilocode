@@ -150,7 +150,10 @@ it.instance("context replies retain original budget, provenance and cancellation
       .pipe(Effect.forkChild)
     yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
     yield* brain.cancelSession(chat.id)
-    expect((yield* Fiber.await(cancelled))._tag).toBe("Failure")
+    const failure = yield* Fiber.join(cancelled).pipe(Effect.flip)
+    expect(failure.code).toBe("cancelled")
+    expect(failure.message).toContain("No note changes were requested")
+    expect(failure.message).not.toContain("Proposal outcome")
     expect(yield* brain.list()).toEqual([])
   }),
 )

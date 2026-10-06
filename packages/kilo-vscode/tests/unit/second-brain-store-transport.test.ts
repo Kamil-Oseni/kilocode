@@ -108,7 +108,20 @@ test("real Tool to SDK bridge, BrainService and disposable FastAPI Store creates
       }
     })
     const ready = (await responses.next()) as { origin: string }
-    const client = createKiloClient({ baseUrl: ready.origin, directory: info.project })
+    const arrival = Promise.withResolvers<void>()
+    const gate = Promise.withResolvers<void>()
+    const client = createKiloClient({
+      baseUrl: ready.origin,
+      directory: info.project,
+      async fetch(request, options) {
+        const url = new URL(request instanceof Request ? request.url : String(request))
+        if (url.pathname === "/event") {
+          arrival.resolve()
+          await gate.promise
+        }
+        return fetch(request, options)
+      },
+    })
     const callbacks = new Set<(event: SSEPayload, directory?: string) => void>()
     // Deliberately file-backed host adapter: no fabricated native workspace trust or user confirmation.
     const bridge = new BrainBridge(
@@ -157,11 +170,22 @@ test("real Tool to SDK bridge, BrainService and disposable FastAPI Store creates
       { directory: info.project },
       { sseMaxRetryAttempts: 0, signal: listener.signal },
     )
+    const connected = Promise.withResolvers<void>()
     const events = (async () => {
-      for await (const event of stream.stream)
+      for await (const event of stream.stream) {
+        if (event.type === "server.connected") connected.resolve()
         for (const callback of callbacks) callback(event as SSEPayload, info.project)
+      }
     })()
+    const listening = Promise.race([
+      connected.promise,
+      events.then(() => {
+        throw new Error("Original fixture event stream ended before connecting")
+      }),
+    ])
     cleanup.push(async () => {
+      gate.resolve()
+      await listening
       const ended = await fetch(new URL("/fixture/end-events", ready.origin), { method: "POST" })
       if (!ended.ok) throw new Error("Original fixture event producer did not close")
       const observed = await events.then(
@@ -171,6 +195,12 @@ test("real Tool to SDK bridge, BrainService and disposable FastAPI Store creates
       listener.abort()
       if (observed !== undefined) throw observed
     })
+    await arrival.promise
+    const pending = await client.kilocode.secondBrain.list({ directory: info.project })
+    expect(pending.error).toBeUndefined()
+    expect(pending.data).toEqual([])
+    gate.resolve()
+    await listening
     const id = crypto.randomUUID()
     cli.stdin.write(JSON.stringify({ action: "propose", id }) + "\n")
     const result = await responses.next()

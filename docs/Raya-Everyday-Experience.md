@@ -185,3 +185,19 @@ The focused session/Goal/edit/route cohort passes 79 tests with 284 assertions. 
 ## Reconnect regression expectation corrected — 2026-10-06
 
 Investigation traced the baseline count failure to the earlier committed `3f79e3af42` change: production reconciliation deliberately recovers every tracked transcript in bounded batches rather than abandoning IDs beyond forty. Its dedicated tests already verify all sixty IDs, four concurrent requests, the forty-first ID and cancellation on a newer generation. The provider integration expectation still described the superseded cutoff. Updated that test to require sixty loads, the exact tracked ID set, focused-first ordering and reconcile mode for every publication; production behavior is unchanged. The previously failing test is now included alongside the independent bounded-concurrency and cancellation checks in the passing eight-file cohort. This corrects stale coverage rather than accepting dropped conversations or weakening resource bounds.
+
+## Cross-directory worker cancellation source review — 2026-10-06
+
+Read-only inspection of the build worktree's unfinished cancellation change confirms that its adapter shares a service-owned lineage map and admission semaphore across directory registries while keeping job observations directory-local. Admission validates a live invocation token rather than treating a matching session ID as execution authority. Tree selection marks original controls closed under the shared admission gate, then requests cancellation and joins their settlement outside that gate. The planned-worktree regression exercises an actual reserved edit worktree, nested descendants, revision/session/completed-ancestor retirement and preservation of unrelated work. These are inspected implementation/test contracts, not independently executed or installed acceptance.
+
+Resource follow-up sent to the build chat: the inspected lineage map has insertion sites and no deletion, finalizer or pruning. Its entries retain controls and scopes for the adapter lifetime, including after individual directory retirement. This establishes retention in source, not measured RAM growth. Cleanup must preserve ancestry for completed parents with live descendants and must never retire a replacement or unrelated execution. No concurrent edits, model trials or backend tests were started by this review.
+
+The inspected moving source is identified by SHA-256, not accepted as an immutable final candidate:
+
+| File in build worktree | SHA-256 |
+|---|---|
+| `packages/core/src/kilocode/background-lineage.ts` | `1f41cc3c41ca96560889f730b225d993426c4cbcace872ca03cc7eae0bdf003e` |
+| `packages/core/src/background-job.ts` | `450d3de7a4d4ebc16946e1ef20b9879fba4663f3267438e6faa76e60f8137365` |
+| `packages/opencode/src/background/job.ts` | `d0efd5f0084a1736780914478548c7cbc23ed48968746ad442c26ef9d0a75685` |
+| `packages/core/src/kilocode/background-invocation.ts` | `5992cb75b731e89c5931ce5f23e3363f911a504392e4f5d558d069e885b42cac` |
+| `packages/opencode/test/kilocode/task-cancel-worktree.test.ts` | `31bd3be879401bb27e4510166c333ff62f8020c26537eb715b111b146884aef2` |

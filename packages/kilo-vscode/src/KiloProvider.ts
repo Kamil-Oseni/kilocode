@@ -5950,9 +5950,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     expected?: Record<string, string>,
     requestID?: string,
   ): Promise<void> {
-    if (!this.client) throw new Error("Backend is not connected")
+    const client = this.client
+    if (!client || this.connectionState !== "connected") throw new Error("Backend is not connected")
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.discardChanges({
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(dir, this.getWorkspaceDirectory(sessionID))
+    const { data, error } = await client.session.discardChanges({
       sessionID,
       directory: dir,
       files,
@@ -5961,9 +5968,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     })
     if (error) {
       console.error("[Raya] Provider: Failed to discard session changes:", error)
-      this.postMessage({ type: "error", message: "Failed to undo file changes", sessionID })
+      if (current()) this.postMessage({ type: "error", message: "Failed to undo file changes", sessionID })
       throw error
     }
+    if (!current()) return
     if (!data) throw new Error("Discard returned no session")
     if (this.currentSession?.id === sessionID) this.inEditorReview?.refresh()
     this.lastReviewHash = ""
@@ -5983,9 +5991,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     expected?: Record<string, string>,
     requestID?: string,
   ): Promise<void> {
-    if (!this.client) throw new Error("Backend is not connected")
+    const client = this.client
+    if (!client || this.connectionState !== "connected") throw new Error("Backend is not connected")
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.keepChanges({
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(dir, this.getWorkspaceDirectory(sessionID))
+    const { data, error } = await client.session.keepChanges({
       sessionID,
       directory: dir,
       files,
@@ -5993,20 +6008,29 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       requestID,
     })
     if (error) throw error
+    if (!current()) return
     if (!data) throw new Error("Keep returned no session")
     this.lastReviewHash = ""
     this.scheduleReview(sessionID)
   }
 
   private async handleUnrevertSession(sessionID: string): Promise<void> {
-    if (!this.client) return
+    const client = this.client
+    if (!client || this.connectionState !== "connected") return
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.unrevert({ sessionID, directory: dir })
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(dir, this.getWorkspaceDirectory(sessionID))
+    const { data, error } = await client.session.unrevert({ sessionID, directory: dir })
     if (error) {
       console.error("[Raya] Provider: Failed to unrevert session:", error)
-      this.postMessage({ type: "error", message: "Failed to redo session", sessionID })
+      if (current()) this.postMessage({ type: "error", message: "Failed to redo session", sessionID })
       throw error
     }
+    if (!current()) return
     if (!data) throw new Error("Redo returned no session")
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)

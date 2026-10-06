@@ -4,6 +4,12 @@ Conversation, coding, delegated jobs, routines and goals remain first-class work
 
 ## Source changes
 
+### Edit recovery reply checkpoint, 2026-10-06
+
+Undo file changes, Keep changes and Redo now capture the original SDK client, connection generation and workspace. Replies from a replaced or disconnected scope cannot update the current session, review hash, refresh counters, editor decorations or review schedule. Original request errors still reject, and Undo/Redo failures remain logged; only stale UI error notices are suppressed. Already-dispatched original mutations are not cancelled or replayed.
+
+Actual held SDK requests cover success and 503 failure for each operation across client replacement, generation change, workspace change, disconnection and unchanged scope. Twenty stale cases fail before the fix. The selected edit/Goal/rewind cohort passes **59 tests/231 assertions across four files** afterward, retaining current-scope success and original error outcomes. Evidence is `.tmp/memory-private/session-mutation-*`. These transport/UI-effect checks are not installed file restoration or native process retirement acceptance.
+
 ### Goal recovery connection checkpoint, 2026-10-06
 
 Goal discard captures its original client, generation and workspace before queued checkpoint work. It rechecks that scope before rewind, before the subsequent discard request and before publishing its result. Conversation rewind also retains its original client and suppresses stale successful UI updates. Original rewind errors still reject and remain logged; a reconnect does not transfer the discard mutation to the replacement backend.

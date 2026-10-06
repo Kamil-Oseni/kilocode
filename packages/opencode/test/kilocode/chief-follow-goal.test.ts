@@ -899,6 +899,10 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         const rejection = Effect.gen(function* () {
           const audit = yield* updater.execute(completion, {sessionID:chat.id,messageID:assistant.id,callID:"recovery-audit",agent:"auto",abort:new AbortController().signal,messages:[],ask:()=>Effect.void,metadata:()=>Effect.void})
           expect(audit.title).toBe("Completion audit rejected")
+          expect(audit.output).toContain("A rejected audit is not a request for user approval")
+          expect(audit.output).toContain("fresh eligibleEvidence callIDs")
+          expect(audit.output).toContain("same retained worker")
+          expect(audit.output).toContain("A real permission refusal or explicitly required human review")
           yield* sessions.updatePart({id:PartID.ascending(),sessionID:chat.id,messageID:assistant.id,
             type:"tool",tool:"update_goal",callID:"recovery-audit",state:{status:"completed",input:completion,
               title:audit.title,output:audit.output,metadata:audit.metadata,time:{start:Date.now(),end:Date.now()}},

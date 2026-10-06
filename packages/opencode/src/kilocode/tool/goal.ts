@@ -214,7 +214,9 @@ export function goalTools(
           )
           if (output.title !== "Completion audit rejected") return output
           const resumed = yield* recovery(ctx, true)
-          return resumed ? { ...output, output: `${output.output}\n${resumed.example}` } : output
+          const advice =
+            "A rejected audit is not a request for user approval. Continue within the existing permissions: correct the missing work or stale evidence, then read get_goal again and copy its fresh eligibleEvidence callIDs into the audit. If task_recovery is provided, invoke that Task with its task_id and correction prompt in the same retained worker. Do not block or pause merely to ask the user to repair audit citations. A real permission refusal or explicitly required human review still needs its normal approval path."
+          return { ...output, output: `${output.output}\n${advice}${resumed ? `\n${resumed.example}` : ""}` }
         }),
     }),
   )

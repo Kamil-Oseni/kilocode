@@ -457,7 +457,7 @@ export class BrainHost {
     register(close)
     context.subscriptions.push({
       dispose: () => {
-        void close().catch(() => console.warn("[Kilo New] Memory coordinator cleanup failed"))
+        void close().catch(() => console.warn("[Raya] Memory coordinator cleanup failed"))
       },
     })
   }

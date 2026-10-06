@@ -108,3 +108,11 @@ The mounted QuestionDock fixture now wraps the actual component in the actual VS
 The SSE startup fixture now returns endpoint-specific valid health/build metadata. An incompatible capability catalog must produce only the health and capabilities requests, never open events or expose a client. The reconnect case still fails its first event-stream fetch and passes only after the second event stream opens; health traffic is counted separately rather than accidentally consuming the failure. Actual production code and compatibility policy are unchanged.
 
 The combined cohort passes 14 tests, 32 assertions, with extension/webview typechecks passing and scoped lint zero errors (20 fixture warnings). Evidence: `.tmp/memory-private/question-sse-cohort.log`, `question-sse-types.log`, `question-sse-lint.log` and `sdk-sse-health-fixture.log`. Seven original suffix files plus the original missing-locale gate remain unresolved. This does not certify installed voice, model behavior or recovery.
+
+## Tool-card and product diagnostic qualification
+
+The provider fallback regression now expects the approved Raya Gateway label while retaining the compatibility provider ID kilo and custom backend names. Tool-card regressions retain terminal/edit/MCP preferences, verify read/search/delegation tools stay compact independently of MCP preference, and verify question/suggest/plan_exit action cards remain visible. This matches the intentional production behavior introduced in 87b472e370; no tool-display production policy was changed.
+
+The existing branding regression identified three genuine stale diagnostic labels in Memory coordinator cleanup, session abort and failed saved-canvas opening. Those production messages now use Raya consistently, with unchanged cleanup, cancellation and error behavior. A patch changeset records the user-facing correction.
+
+The combined branding/provider/tool cohort passes 41 tests with 149 assertions. Extension and webview typing, extension ESLint, Knip and forbidden-marker checks pass. Evidence: `.tmp/memory-private/branding-tool-provider-qualified.log`, `branding-types.log`, `branding-lint.log`, `branding-knip.log`. Four original suffix files remain unresolved (Milestone A, Milestone C, prompt connection guard and prompt send contract), together with the original missing-locale gate. No installed workflow gate is claimed.

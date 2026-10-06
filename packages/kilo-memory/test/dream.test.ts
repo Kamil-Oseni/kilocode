@@ -18,6 +18,77 @@ async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "raya-dream-ledger-"))
   return { root, project: path.join(root, "project"), ledger: MemoryFiles.dream }
 }
+function selection() {
+  return {
+    id: crypto.randomUUID(),
+    owner: crypto.randomUUID(),
+    model: "local/test-model",
+    sources: candidate.sources,
+    timeout: 300000,
+    budget: { input: 3000, output: 1000 },
+  }
+}
+
+test("manual run ownership survives reload and concurrent replacement is refused", async () => {
+  const f = await fixture()
+  const first = selection()
+  const second = selection()
+  const results = await Promise.allSettled([
+    f.ledger.begin(f.root, f.project, first),
+    f.ledger.begin(f.root, f.project, second),
+  ])
+  expect(results.filter((item) => item.status === "fulfilled")).toHaveLength(1)
+  const retained = (await f.ledger.list(f.root, f.project)).runs[0]
+  await expect(f.ledger.begin(f.root, f.project, selection())).rejects.toThrow("original active")
+  await expect(
+    f.ledger.advance(f.root, f.project, { id: retained.id, owner: crypto.randomUUID(), phase: "validation" }),
+  ).rejects.toThrow("owner differs")
+  await f.ledger.advance(f.root, f.project, { id: retained.id, owner: retained.owner, phase: "cancelled" })
+  await expect(f.ledger.begin(f.root, f.project, first.id === retained.id ? first : second)).rejects.toThrow(
+    "already been used",
+  )
+  expect((await f.ledger.list(f.root, f.project)).runs[0].sources).toEqual(candidate.sources)
+})
+
+test("run checkpoint requires durable candidates and unknown submission cannot be hidden as completion", async () => {
+  const f = await fixture()
+  const selected = selection()
+  await f.ledger.begin(f.root, f.project, selected)
+  const owner = { id: selected.id, owner: selected.owner }
+  await f.ledger.advance(f.root, f.project, { ...owner, phase: "validation" })
+  await expect(
+    f.ledger.advance(f.root, f.project, { ...owner, phase: "submission", candidates: [digest] }),
+  ).rejects.toThrow("Retain the exact")
+  const [fingerprint] = await f.ledger.stage(f.root, f.project, [candidate])
+  await f.ledger.advance(f.root, f.project, { ...owner, phase: "submission", candidates: [fingerprint] })
+  await f.ledger.submit(f.root, f.project, fingerprint, proposal)
+  await expect(f.ledger.advance(f.root, f.project, { ...owner, phase: "cancelled" })).rejects.toThrow("reconciliation")
+  await f.ledger.advance(f.root, f.project, { ...owner, phase: "reconciliation", reason: "Reply was lost" })
+  await expect(f.ledger.advance(f.root, f.project, { ...owner, phase: "generation" })).rejects.toThrow("replay")
+  await expect(f.ledger.advance(f.root, f.project, { ...owner, phase: "completed" })).rejects.toThrow("reconciliation")
+  await f.ledger.settle(f.root, f.project, { fingerprint, proposal, state: "pending" })
+  await f.ledger.advance(f.root, f.project, { ...owner, phase: "review-pending" })
+  await expect(f.ledger.advance(f.root, f.project, { ...owner, phase: "completed" })).rejects.toThrow("review remains")
+  await f.ledger.settle(f.root, f.project, { fingerprint, proposal, state: "rejected", reason: "Not useful" })
+  await f.ledger.advance(f.root, f.project, { ...owner, phase: "completed" })
+  expect((await f.ledger.list(f.root, f.project)).runs[0]).toMatchObject({
+    phase: "completed",
+    candidates: [fingerprint],
+  })
+})
+
+test("finite run deadline refuses late generation phases while preserving failure recovery", async () => {
+  const f = await fixture()
+  const selected = { ...selection(), timeout: 1 }
+  await f.ledger.begin(f.root, f.project, selected)
+  await Bun.sleep(5)
+  const owner = { id: selected.id, owner: selected.owner }
+  await expect(f.ledger.advance(f.root, f.project, { ...owner, phase: "validation" })).rejects.toThrow(
+    "deadline elapsed",
+  )
+  await f.ledger.advance(f.root, f.project, { ...owner, phase: "failed", reason: "Generation timed out" })
+  expect((await f.ledger.list(f.root, f.project)).runs[0].sources).toEqual(candidate.sources)
+})
 
 test("uncertain submission survives reload and cannot create a replacement", async () => {
   const f = await fixture()

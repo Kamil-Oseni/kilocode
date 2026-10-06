@@ -58,12 +58,36 @@ const row = z
     history: z.array(disposition).min(1).max(8),
   })
   .strict()
+const run = z
+  .object({
+    id: z.string().uuid(),
+    owner: z.string().uuid(),
+    phase: z.enum([
+      "generation",
+      "validation",
+      "submission",
+      "review-pending",
+      "reconciliation",
+      "completed",
+      "cancelled",
+      "failed",
+    ]),
+    model: text,
+    sources: z.array(source).min(1).max(20),
+    candidates: z.array(hash).max(20),
+    started: z.number().int().nonnegative(),
+    deadline: z.number().int().nonnegative(),
+    budget: z.object({ input: z.number().int().min(1).max(12000), output: z.number().int().min(1).max(8000) }).strict(),
+    reason: text.optional(),
+  })
+  .strict()
 const schema = z
   .object({
     version: z.literal(1),
     project: z.string().min(1),
     rows: z.array(row).max(128),
     tombstones: z.array(hash).max(128),
+    runs: z.array(run).max(32).default([]),
   })
   .strict()
 
@@ -88,6 +112,8 @@ function canonical(value: unknown): string {
  */
 export namespace MemoryDream {
   export type Candidate = z.input<typeof candidate>
+  export type Run = z.infer<typeof run>
+  const terminal = new Set<Run["phase"]>(["completed", "cancelled", "failed"])
 
   function queue<T>(root: string, project: string, body: () => Promise<T>) {
     if (!path.isAbsolute(root) || !path.isAbsolute(project))
@@ -139,6 +165,20 @@ export namespace MemoryDream {
       new Set(value.tombstones).size !== value.tombstones.length
     )
       throw new Error("Duplicate Dream ledger identities")
+    if (
+      new Set(value.runs.map((item) => item.id)).size !== value.runs.length ||
+      value.runs.filter((item) => !terminal.has(item.phase)).length > 1
+    )
+      throw new Error("Dream run ownership is inconsistent")
+    for (const item of value.runs) {
+      if (
+        item.deadline <= item.started ||
+        new Set(item.candidates).size !== item.candidates.length ||
+        new Set(item.sources.map((source) => source.path.toLowerCase())).size !== item.sources.length ||
+        item.candidates.some((key) => !value.rows.some((row) => row.fingerprint === key))
+      )
+        throw new Error("Dream selection checkpoint is inconsistent")
+    }
     for (const item of value.rows) {
       if (normalize(item.candidate).fingerprint !== item.fingerprint)
         throw new Error("Dream candidate revision changed")
@@ -166,6 +206,114 @@ export namespace MemoryDream {
 
   export function list(root: string, project: string) {
     return queue(root, project, () => read(root, project))
+  }
+
+  /** Claim a manual run before calling a model. Unresolved runs block replacement after restart. */
+  export function begin(
+    root: string,
+    project: string,
+    input: {
+      id: string
+      owner: string
+      model: string
+      sources: Run["sources"]
+      timeout: number
+      budget: Run["budget"]
+    },
+  ) {
+    return queue(root, project, async () => {
+      const value = await read(root, project)
+      if (value.runs.some((item) => !terminal.has(item.phase)))
+        throw new Error("Reconcile the original active Dream run before starting another")
+      if (value.runs.some((item) => item.id === input.id)) throw new Error("Dream run identity has already been used")
+      const timeout = z.number().int().min(1).max(300000).parse(input.timeout)
+      const started = Date.now()
+      const selected = run.parse({
+        id: input.id,
+        owner: input.owner,
+        model: input.model,
+        sources: input.sources,
+        budget: input.budget,
+        started,
+        deadline: started + timeout,
+        candidates: [],
+        phase: "generation",
+      })
+      if (new Set(selected.sources.map((item) => item.path.toLowerCase())).size !== selected.sources.length)
+        throw new Error("Duplicate Dream source selection")
+      value.runs.push(selected)
+      await save(root, value)
+      return selected
+    })
+  }
+
+  /** Advance the retained owner only. Reconciliation can settle existing candidates, never regenerate. */
+  export function advance(
+    root: string,
+    project: string,
+    input: {
+      id: string
+      owner: string
+      phase: Run["phase"]
+      candidates?: string[]
+      reason?: string
+    },
+  ) {
+    return queue(root, project, async () => {
+      const next = z
+        .object({
+          id: z.string().uuid(),
+          owner: z.string().uuid(),
+          phase: run.shape.phase,
+          candidates: z.array(hash).max(20).optional(),
+          reason: text.optional(),
+        })
+        .strict()
+        .parse(input)
+      const value = await read(root, project)
+      const item = value.runs.find((item) => item.id === next.id)
+      if (!item || item.owner !== next.owner) throw new Error("Original Dream run owner differs")
+      if (terminal.has(item.phase)) throw new Error("Dream run is already terminal")
+      const allowed: Record<Run["phase"], Run["phase"][]> = {
+        generation: ["validation", "reconciliation", "cancelled", "failed"],
+        validation: ["submission", "reconciliation", "cancelled", "failed"],
+        submission: ["review-pending", "reconciliation", "cancelled", "failed"],
+        "review-pending": ["completed", "reconciliation", "cancelled", "failed"],
+        reconciliation: ["review-pending", "completed", "cancelled", "failed"],
+        completed: [],
+        cancelled: [],
+        failed: [],
+      }
+      if (!allowed[item.phase].includes(next.phase)) throw new Error("Dream run cannot replay an earlier phase")
+      if (["validation", "submission"].includes(next.phase) && Date.now() >= item.deadline)
+        throw new Error("Dream generation deadline elapsed; retain cancellation or failure")
+      if (next.candidates && (item.phase !== "validation" || next.phase !== "submission"))
+        throw new Error("Dream candidate checkpoint can only advance after validation")
+      if (next.candidates) {
+        if (
+          new Set(next.candidates).size !== next.candidates.length ||
+          next.candidates.some((key) => !value.rows.some((row) => row.fingerprint === key && row.state === "prepared"))
+        )
+          throw new Error("Retain the exact prepared candidates before advancing selection")
+        item.candidates = next.candidates
+      }
+      if (next.phase === "submission" && !item.candidates.length)
+        throw new Error("Dream submission has no retained candidate checkpoint")
+      const rows = value.rows.filter((row) => item.candidates.includes(row.fingerprint))
+      if (
+        (terminal.has(next.phase) || next.phase === "review-pending") &&
+        rows.some((row) => row.state === "submitting")
+      )
+        throw new Error("Uncertain Dream proposals require original reconciliation")
+      if (next.phase === "review-pending" && rows.some((row) => row.state === "prepared"))
+        throw new Error("Dream proposals have not been submitted")
+      if (next.phase === "completed" && rows.some((row) => ["prepared", "pending"].includes(row.state)))
+        throw new Error("Dream review remains pending")
+      item.phase = next.phase
+      item.reason = next.reason
+      await save(root, value)
+      return item
+    })
   }
 
   /** Durably retain the whole bounded selection before generation can advance its cursor. */

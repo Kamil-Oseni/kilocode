@@ -213,6 +213,39 @@ test("one-slot reservation precedes POST, abort retains debt and restart never r
   }
 })
 
+test("external fade overrides readback without retry or false completion", async () => {
+  const f = await fixture()
+  const controller = new AbortController()
+  f.state.held = true
+  try {
+    const job = f.lights.set(entity, { state: "on", brightness: 120 }, controller.signal)
+    const failure = job.catch((error: unknown) => error)
+    await f.ready.promise
+    const count = f.state.requests.filter((row) => row === "GET /api/states/" + entity).length
+    f.state.brightness = 64
+    f.gate.resolve()
+    const deadline = performance.now() + 5000
+    while (f.state.requests.filter((row) => row === "GET /api/states/" + entity).length <= count) {
+      if (performance.now() >= deadline) throw new Error("Original readback was not observed")
+      await Bun.sleep(5)
+    }
+    controller.abort()
+    expect(await failure).toBeInstanceOf(Error)
+    expect(f.state.posts).toBe(1)
+    expect(f.journal.pending()).toBeDefined()
+    expect(() => f.lights.set(entity, { state: "on", brightness: 120 })).toThrow("prior_action_uncertain")
+    await expect(f.lights.dispose()).rejects.toBeInstanceOf(Error)
+    const restarted = new Lights(token, f.config, new Journal(f.storage))
+    await expect(restarted.reconcile()).rejects.toThrow("readback_does_not_match")
+    expect(f.state.posts).toBe(1)
+    expect(f.journal.pending()).toBeDefined()
+    await expect(restarted.dispose()).rejects.toBeInstanceOf(Error)
+  } finally {
+    controller.abort()
+    await f.close()
+  }
+})
+
 test("named scene accepted and script started are distinct from completed physical change", async () => {
   const f = await fixture()
   try {

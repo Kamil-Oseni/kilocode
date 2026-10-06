@@ -603,9 +603,40 @@ describe("memory ports", () => {
           },
           model,
           execute: (effect) => Effect.runPromise(effect),
-          propose: async (id, candidate) => {
-            await writeFile(path.join(root, `${id}.proposal.json`), JSON.stringify(candidate), { flag: "wx" })
-            return { id, status: "pending" }
+          propose: async (id, candidate, signal) => {
+            if (process.platform !== "win32") {
+              await writeFile(path.join(root, `${id}.proposal.json`), JSON.stringify(candidate), { flag: "wx" })
+              return { id, status: "pending" }
+            }
+            return MemoryFiles.dreamProposal.submit(
+              project,
+              id,
+              candidate,
+              async (command, current) => {
+                current.throwIfAborted()
+                const child = Bun.spawn(
+                  [
+                    "D:/Raya/Services/Packaging/Python/3.12.14/python.exe",
+                    "-I",
+                    "-S",
+                    "-B",
+                    path.resolve(import.meta.dir, "../../../../kilo-memory/test/fixtures/dream-proposal.py"),
+                    path.resolve(import.meta.dir, "../../../../kilo-vscode/script/memory/service"),
+                    root,
+                  ],
+                  { stdin: new Blob([JSON.stringify(command)]), stdout: "pipe", stderr: "pipe" },
+                )
+                const [code, text, error] = await Promise.all([
+                  child.exited,
+                  new Response(child.stdout).text(),
+                  new Response(child.stderr).text(),
+                ])
+                current.throwIfAborted()
+                if (code !== 0) throw new Error(error)
+                return JSON.parse(text)
+              },
+              signal,
+            )
           },
         },
       )
@@ -613,13 +644,26 @@ describe("memory ports", () => {
       expect(run.phase).toBe("review-pending")
       const ledger = await MemoryFiles.dream.list(root, project)
       expect(ledger.rows[0].state).toBe("pending")
-      const proposal = JSON.parse(await readFile(path.join(root, `${ledger.rows[0].proposal}.proposal.json`), "utf8"))
+      const file =
+        process.platform === "win32"
+          ? path.join(root, "System/Proposals", `${ledger.rows[0].proposal}.json`)
+          : path.join(root, `${ledger.rows[0].proposal}.proposal.json`)
+      const proposal = JSON.parse(await readFile(file, "utf8"))
       expect(proposal).toMatchObject({
-        kind: "memory",
-        sources: selection.sources,
+        sources:
+          process.platform === "win32"
+            ? [{ path: source, sha256, kind: "document", event_time: null }]
+            : selection.sources,
         changes: [{ path: "Preferences/voice.md", expected: null, content: "Use a calm voice." }],
       })
-      expect(proposal.fact).toMatch(/^[a-f0-9]{64}$/)
+      expect(ledger.rows[0].candidate.fact).toMatch(/^[a-f0-9]{64}$/)
+      if (process.platform === "win32") {
+        expect(proposal.status).toBe("pending")
+        expect(proposal.id).toBe(ledger.rows[0].proposal)
+        expect(
+          await MemoryFiles.dreamProposal.reconcile(root, project, proposal, new AbortController().signal),
+        ).toEqual({ status: "pending" })
+      }
       expect(await MemoryFiles.exists(path.join(root, "Preferences/voice.md"))).toBe(false)
       expect(requests).toHaveLength(1)
       expect(requests[0]).toMatchObject({ stream: false, max_tokens: 512 })

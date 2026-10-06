@@ -6,6 +6,7 @@ import { render } from "solid-js/web"
 import { StoryProviders } from "../../webview-ui/src/stories/StoryProviders"
 import { AdminView } from "../../webview-ui/src/components/admin/AdminView"
 import { BrainProposals } from "../../webview-ui/src/components/settings/BrainProposals"
+import { SecondBrain } from "../../webview-ui/src/components/settings/SecondBrain"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
 import { createSignal } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
@@ -166,6 +167,25 @@ window.acquireVsCodeApi = () => ({
       emit(reply)
       return
     }
+    if (state === "proposals-index" && message.type === "secondBrain" && message.action === "state") {
+      emit({ type: "secondBrainState", id: message.id, state: { configured: true, status: "ready", results: [] } })
+      return
+    }
+    if (state === "proposals-index" && message.type === "secondBrain" && ["review", "sync"].includes(message.action)) {
+      window.__finishIndex = (code) =>
+        emit({
+          type: "secondBrainState",
+          id: message.id,
+          state: {
+            configured: true,
+            status: code ? "unavailable" : "ready",
+            results: [],
+            ...(code ? { code } : {}),
+            control: { status: code ? "uncertain" : message.action === "review" ? "approved" : "synced" },
+          },
+        })
+      return
+    }
     if (message.type === "secondBrain" && message.action === "proposal") {
       if (message.command.action === "edit")
         proposal = {
@@ -285,7 +305,7 @@ function ProposalFixture() {
   const [root, setRoot] = createSignal("C:/work/raya-feature")
   return (
     <ServerContext.Provider value={{ ...server, workspaceDirectory: root }}>
-      <BrainProposals configured />
+      {state === "proposals-index" ? <SecondBrain /> : <BrainProposals configured />}
       <Button onClick={() => setRoot("C:/work/other")}>Switch fixture workspace</Button>
     </ServerContext.Provider>
   )

@@ -28,16 +28,20 @@ export function SecondBrain() {
   const [state, setState] = createSignal<BrainState>({ configured: false, status: "disconnected", results: [] })
   const [query, setQuery] = createSignal("")
   const [id, setId] = createSignal("")
-  const busy = () => ["checking", "searching"].includes(state().status)
+  const [control, setControl] = createSignal<"review" | "sync">()
+  const searching = () => ["checking", "searching"].includes(state().status)
+  const busy = () => searching() || Boolean(control())
   const request = (
     action: Exclude<
       BrainRequest["action"],
       "proposal" | "dreamStart" | "dreamInspect" | "dreamActivity" | "dreamCancel"
     >,
   ) => {
+    if (control()) return
     const target = id()
     const next = crypto.randomUUID()
     setId(next)
+    if (action === "review" || action === "sync") setControl(action)
     if (action === "cancel") {
       vscode.postMessage({ type: "secondBrain", action, id: next, target })
       return
@@ -56,18 +60,29 @@ export function SecondBrain() {
     vscode.postMessage({ type: "secondBrain", action, id: next })
   }
   const off = vscode.onMessage((message) => {
-    if (message.type === "secondBrainState" && message.id === id()) setState(message.state)
+    if (message.type === "secondBrainState" && message.id === id()) {
+      setControl()
+      setState(message.state)
+    }
   })
   onMount(() => request("state"))
   onCleanup(() => {
     off()
-    if (busy()) vscode.postMessage({ type: "secondBrain", action: "cancel", id: crypto.randomUUID(), target: id() })
+    if (searching())
+      vscode.postMessage({ type: "secondBrain", action: "cancel", id: crypto.randomUUID(), target: id() })
   })
   return (
     <Card>
       <h4>SecondBrain</h4>
       <p>Search your reviewed local notes. Results stay in this panel and are not added to chat.</p>
       <p role="status">{state().configured ? state().status : "Setup required"}</p>
+      <Show when={control()}>
+        {(action) => (
+          <p role="status">
+            {action() === "review" ? "Reviewing sources in native review…" : "Waiting for confirmed index sync…"}
+          </p>
+        )}
+      </Show>
       <Show when={state().code}>
         <p role="alert">{labels[state().code!] ?? "Memory is unavailable. Check the local service."}</p>
       </Show>
@@ -113,7 +128,7 @@ export function SecondBrain() {
       <Button onClick={() => request("context")} disabled={!state().configured || busy() || !query().trim()}>
         Preview linked context
       </Button>
-      <Show when={busy()}>
+      <Show when={searching()}>
         <Button onClick={() => request("cancel")}>Cancel search</Button>
       </Show>
       <For each={state().results}>
@@ -174,7 +189,7 @@ export function SecondBrain() {
         disabled.
       </p>
       <BrainConsolidation configured={state().configured} />
-      <BrainProposals configured={state().configured} />
+      <BrainProposals configured={state().configured} busy={busy()} index={(action) => request(action)} />
     </Card>
   )
 }

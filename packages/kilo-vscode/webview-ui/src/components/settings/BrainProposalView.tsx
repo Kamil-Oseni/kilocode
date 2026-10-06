@@ -23,6 +23,7 @@ export function BrainProposalView(props: {
   pending: boolean
   uncertain?: boolean
   refresh?: () => void
+  index?: (action: "review" | "sync") => void
   apply: () => void
   cancel: () => void
   edit: (changes: { path: string; expected: string | null; content: string | null }[]) => void
@@ -57,6 +58,18 @@ export function BrainProposalView(props: {
       </Show>
       <Show when={props.proposal.status === "applied"}>
         <p>Changes are published. Search-index freshness is not verified by this proposal view.</p>
+        <Show when={props.index}>
+          <p>
+            Review sources to include the current note revisions, then separately confirm sync. Sync does not repeat
+            publication. Search afterward to check the source hashes.
+          </p>
+          <Button disabled={props.pending || props.uncertain} onClick={() => props.index?.("review")}>
+            Review sources for indexing
+          </Button>
+          <Button disabled={props.pending || props.uncertain} onClick={() => props.index?.("sync")}>
+            Confirm index sync
+          </Button>
+        </Show>
       </Show>
       <Show when={props.refresh}>
         <Button disabled={props.pending || (editing() && !props.uncertain)} onClick={props.refresh}>

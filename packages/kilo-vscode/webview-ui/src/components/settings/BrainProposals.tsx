@@ -7,7 +7,11 @@ import type { BrainProposal, BrainProposalCommand, BrainReview } from "../../../
 import { BrainProposalView } from "./BrainProposalView"
 import { groups, project, reason, reviewed } from "./brain-proposal-state"
 
-export function BrainProposals(props: { configured: boolean }) {
+export function BrainProposals(props: {
+  configured: boolean
+  busy?: boolean
+  index?: (action: "review" | "sync") => void
+}) {
   const vscode = useVSCode()
   const server = useServer()
   const [rows, setRows] = createSignal<readonly BrainProposal[]>([])
@@ -19,7 +23,7 @@ export function BrainProposals(props: { configured: boolean }) {
   let request = ""
   let scope = ""
   const send = (command: BrainProposalCommand) => {
-    if (!props.configured || !server.workspaceDirectory() || pending()) return
+    if (!props.configured || !server.workspaceDirectory() || pending() || props.busy) return
     request = crypto.randomUUID()
     setPending(true)
     setError()
@@ -71,7 +75,7 @@ export function BrainProposals(props: { configured: boolean }) {
       <h3>Review learned notes</h3>
       <p>Pending changes belong to the current project. Nothing is automatically applied.</p>
       <Button
-        disabled={!props.configured || !server.workspaceDirectory() || pending()}
+        disabled={!props.configured || !server.workspaceDirectory() || pending() || props.busy}
         onClick={() => send({ action: "list", project: server.workspaceDirectory() })}
       >
         {pending() ? "Checking proposals" : "Refresh proposals"}
@@ -90,7 +94,7 @@ export function BrainProposals(props: { configured: boolean }) {
               <For each={group.items}>
                 {(item) => (
                   <Button
-                    disabled={pending()}
+                    disabled={pending() || props.busy}
                     title={item.changes.map((change) => change.path).join(", ")}
                     aria-label={`Review ${item.changes.map((change) => change.path).join(", ")}`}
                     onClick={() => send({ action: "read", project: item.project, id: item.id })}
@@ -109,8 +113,24 @@ export function BrainProposals(props: { configured: boolean }) {
           <BrainProposalView
             proposal={value()}
             review={review()}
-            pending={pending()}
+            pending={pending() || Boolean(props.busy)}
             uncertain={Boolean(error())}
+            index={
+              props.index
+                ? (action) => {
+                    if (
+                      !props.configured ||
+                      pending() ||
+                      props.busy ||
+                      error() ||
+                      value().status !== "applied" ||
+                      project(value().project) !== project(server.workspaceDirectory())
+                    )
+                      return
+                    props.index?.(action)
+                  }
+                : undefined
+            }
             refresh={() => send({ action: "read", project: value().project, id: value().id })}
             apply={() => act("apply")}
             cancel={() => act("cancel")}

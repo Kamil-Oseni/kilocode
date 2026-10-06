@@ -15,6 +15,7 @@ import posixpath
 import re
 import sys
 import tempfile
+import uuid
 from urllib.parse import unquote
 
 source = Path(sys.argv[1]).resolve(strict=True)
@@ -53,6 +54,42 @@ with tempfile.TemporaryDirectory(prefix='raya-linked-wire-') as tmp:
     for name, text in texts.items():
         (notes / name).write_bytes(text.encode())
     context = retrieve(notes, policy, [], 'Eden', 1000, len, lambda: None)
+    if '--publication' in sys.argv:
+        # The trusted review callback is represented by an explicit fixture Apply;
+        # this does not exercise native consent or source-policy publication.
+        sys.path.insert(0, str(source))
+        from proposals import Proposals
+        project = root / 'project'
+        project.mkdir()
+        evidence = project / 'approved.md'
+        content = '# Eden\nEden now uses warm amber café lighting 日本語 😀.\n'
+        evidence.write_bytes(content.encode())
+        name = 'Projects/Eden.md'
+        previous = hashlib.sha256((notes / name).read_bytes()).hexdigest()
+        store = Proposals(notes)
+        pending = store.execute({'action': 'propose', 'id': str(uuid.uuid4()), 'project': str(project), 'request': {
+            'sources': [{'path': str(evidence), 'sha256': hashlib.sha256(evidence.read_bytes()).hexdigest(),
+                         'kind': 'document', 'event_time': None}],
+            'changes': [{'path': name, 'expected': previous, 'content': content}],
+        }})
+        applied = store.execute({'action': 'apply', 'id': pending['id'], 'project': str(project), 'digest': pending['digest']})
+        ledger = notes / 'System' / 'Proposals' / (pending['id'] + '.json')
+        saved = ledger.read_bytes()
+        published = (notes / name).read_bytes()
+        sha = hashlib.sha256(published).hexdigest()
+        stale = retrieve(notes, policy, [], 'Eden', 1000, len, lambda: None)
+        texts[name] = published.decode()
+        reviewed = Policy({'format': 'raya-general-sources-v1', 'root': str(notes), 'enabled': True, 'revision': 2,
+                           'files': [{'relative': key, 'sha256': hashlib.sha256(text.encode()).hexdigest(),
+                                      'classification': 'general', 'review': 'approved'} for key, text in texts.items()]})
+        fresh = retrieve(notes, reviewed, [{'relative': name, 'sha256': sha}], 'Eden', 1000, len, lambda: None)
+        oldseed = retrieve(notes, reviewed, [{'relative': name, 'sha256': previous}], 'Eden', 1000, len, lambda: None)
+        print(json.dumps({'root': str(notes), 'name': name, 'previous': previous, 'sha256': sha, 'content': content,
+                          'published': base64.b64encode(published).decode(),
+                          'applied': applied, 'stale': stale, 'fresh': fresh, 'oldseed': oldseed,
+                          'proposal_unchanged': ledger.read_bytes() == saved, 'note_unchanged': (notes / name).read_bytes() == published,
+                          'qualification': 'Actual disposable proposal publication and linked reader; explicit fixture policy, character counter; no index, native consent or installed proof'}))
+        sys.exit(0)
     result = {'results': [], 'context': context, 'capture_enabled': False}
     folder = root / 'receipts'
     folder.mkdir()

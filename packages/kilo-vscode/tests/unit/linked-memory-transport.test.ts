@@ -1,10 +1,60 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
+import { createHash } from "node:crypto"
 import { ClientV2 } from "../../src/second-brain/client-v2"
 import { parse } from "../../src/second-brain/operation"
+import { context } from "../../src/second-brain/linked-results"
 
 const python = process.env.RAYA_LINKED_TEST_PYTHON
 const genuine = python ? test : test.skip
+
+genuine(
+  "published note recall refuses old policy and old search seeds before returning the reviewed revision",
+  async () => {
+    const child = Bun.spawn(
+      [
+        python!,
+        "-I",
+        "-S",
+        "-B",
+        path.join(import.meta.dir, "fixtures/linked-memory-producer.py"),
+        path.join(import.meta.dir, "../../script/memory/service"),
+        "--publication",
+      ],
+      { windowsHide: true, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+    )
+    const [code, output, error] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ])
+    expect(error).toBe("")
+    expect(code).toBe(0)
+    const fixture = JSON.parse(output)
+    expect(fixture.applied.status).toBe("applied")
+    expect(fixture.applied.receipt.status).toBe("committed")
+    expect(fixture.applied.changes[0].content).toBe(fixture.content)
+    const published = Buffer.from(fixture.published, "base64")
+    expect(published.toString("utf8").startsWith(fixture.content)).toBe(true)
+    expect(createHash("sha256").update(published).digest("hex")).toBe(fixture.sha256)
+    expect(fixture.applied.receipt.note_sha256[fixture.name]).toBe(fixture.sha256)
+    expect(fixture.sha256).not.toBe(fixture.previous)
+    const stale = context(fixture.stale, fixture.root, 1000)
+    expect(stale.sources.some((row) => row.relative === fixture.name)).toBe(false)
+    expect(stale.diagnostics.some((row) => row.relative === fixture.name)).toBe(true)
+    const seed = context(fixture.oldseed, fixture.root, 1000)
+    expect(seed.sources.some((row) => row.relative === fixture.name)).toBe(false)
+    expect(seed.diagnostics.some((row) => row.reason === "Search seed revision is stale.")).toBe(true)
+    const fresh = context(fixture.fresh, fixture.root, 1000)
+    const note = fresh.sources.find((row) => row.relative === fixture.name)
+    expect(note?.source_sha256).toBe(fixture.sha256)
+    expect(note?.text).toContain("warm amber café lighting 日本語 😀")
+    expect(fresh.tokens).toBeLessThanOrEqual(1000)
+    expect(fresh.capture_enabled).toBe(false)
+    expect(fixture.proposal_unchanged).toBe(true)
+    expect(fixture.note_unchanged).toBe(true)
+  },
+)
 
 genuine("real Python reader and Journal result traverse the original client with explicit budget", async () => {
   const child = Bun.spawn(

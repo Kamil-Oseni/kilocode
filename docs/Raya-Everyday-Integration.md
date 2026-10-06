@@ -46,3 +46,9 @@ The two additional integration runs above completed on the reviewed branch with 
 5. Exercise configured Memory and retrieval with automatic capture disabled, then the remaining ordinary conversation, coding, voice, routine and recovery workflows. Keep test permissions consistent with current user instructions.
 
 The installed fd11 package and preservation evidence does not cover these newer sources. A successful merge or build does not close a workflow gate. Seven installed workflow/recovery gates remain open in `Raya-Current-Readiness.md`; all 38 unfinished implementation requirements remain in scope.
+
+## Additional cancellation feedback repair
+
+The consolidation activity panel previously displayed “Joining cancelled request…” indefinitely when the cancellation response was lost. It now reports “Cancellation unconfirmed” after ten seconds, retains the original pending request, and offers read-only activity refresh or checkpoint inspection without dispatching another Cancel. A foreign reply cannot settle the request; a late reply with its original ID can. This deadline describes missing feedback and does not claim the worker has stopped or release its ownership.
+
+All four mounted Chromium activity tests pass, including this lost-response case and the existing dark/light narrow-screen accessibility and stale activity-read cases. Extension/webview types, lint, bundle, Knip, marker and diff checks pass. Compilation reused the existing bundled CLI and unchanged generated SDK because this repair changes only webview behavior. Evidence: `.tmp/memory-private/consolidation-cancel-current-browser.log`, `consolidation-cancel-compile.log` and `consolidation-cancel-knip.log`. Installed delivery and actual native cancellation remain pending.

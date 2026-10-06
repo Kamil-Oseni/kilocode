@@ -21,12 +21,14 @@ export function BrainDreamActivity() {
   const [run, setRun] = createSignal<Run>()
   const [error, setError] = createSignal(false)
   const [cancelling, setCancelling] = createSignal(false)
+  const [unconfirmed, setUnconfirmed] = createSignal(false)
   const [inspecting, setInspecting] = createSignal(false)
   const [notice, setNotice] = createSignal<string>()
   let query = ""
   let cancel = ""
   let inspect = ""
   let deadline: ReturnType<typeof setTimeout> | undefined
+  let cancellation: ReturnType<typeof setTimeout> | undefined
   const open = () => {
     if (inspecting()) return
     inspect = crypto.randomUUID()
@@ -50,7 +52,14 @@ export function BrainDreamActivity() {
     const current = run()
     if (!current || cancelling() || error() || !["active", "settling"].includes(current.lifecycle)) return
     cancel = crypto.randomUUID()
+    const id = cancel
     setCancelling(true)
+    setUnconfirmed(false)
+    cancellation = setTimeout(() => {
+      if (cancel !== id) return
+      cancellation = undefined
+      setUnconfirmed(true)
+    }, 10000)
     vscode.postMessage({
       type: "secondBrain",
       action: "dreamCancel",
@@ -78,8 +87,11 @@ export function BrainDreamActivity() {
       query = ""
     }
     if (message.id === cancel) {
+      clearTimeout(cancellation)
+      cancellation = undefined
       cancel = ""
       setCancelling(false)
+      setUnconfirmed(false)
     }
     setError(message.state.dream.status === "unavailable")
     if (message.state.dream.status !== "unavailable") {
@@ -91,6 +103,7 @@ export function BrainDreamActivity() {
   onCleanup(() => {
     clearInterval(timer)
     clearTimeout(deadline)
+    clearTimeout(cancellation)
     off()
   })
   return (
@@ -118,7 +131,11 @@ export function BrainDreamActivity() {
             </p>
             <Show when={["active", "settling"].includes(current().lifecycle)}>
               <Button disabled={error() || cancelling()} onClick={stop}>
-                {cancelling() ? "Joining cancelled request…" : "Cancel consolidation"}
+                {unconfirmed()
+                  ? "Cancellation unconfirmed"
+                  : cancelling()
+                    ? "Joining cancelled request…"
+                    : "Cancel consolidation"}
               </Button>
             </Show>
             <Show when={current().phase === "selection" && current().lifecycle === "settling"}>
@@ -129,6 +146,12 @@ export function BrainDreamActivity() {
       </Show>
       <Show when={error()}>
         <p role="alert">Activity is unavailable. Refresh before cancelling; the last displayed run may be stale.</p>
+      </Show>
+      <Show when={unconfirmed()}>
+        <p role="alert">
+          Cancellation has not been confirmed. Refresh activity or inspect the original checkpoint. The request will not
+          be sent again.
+        </p>
       </Show>
       <Button
         onClick={() => {

@@ -160,3 +160,59 @@ test("lost activity read expires without cancelling work and late responses cann
   await expect(view.getByRole("alert")).toHaveCount(0)
   await expect(stop).toBeEnabled()
 })
+
+test("lost cancellation receipt becomes unconfirmed without replay and its original reply still settles", async ({
+  page,
+}) => {
+  await page.goto("/?state=dark-memory-activity")
+  const view = page.getByRole("region", { name: "Consolidation activity" })
+  await expect(view.getByRole("button", { name: "Cancel consolidation" })).toBeEnabled()
+  await page.clock.install()
+  await view.getByRole("button", { name: "Cancel consolidation" }).click()
+  const original = await page.evaluate(() => document.documentElement.dataset.previewDreamCancel!)
+  await page.clock.fastForward(10001)
+  await expect(view.getByRole("button", { name: "Cancellation unconfirmed" })).toBeDisabled()
+  await expect(view.getByRole("alert")).toContainText("Cancellation has not been confirmed")
+  await view.getByRole("button", { name: "Refresh activity" }).click()
+  await expect(view.getByRole("button", { name: "Cancellation unconfirmed" })).toBeDisabled()
+  expect(await page.evaluate(() => document.documentElement.dataset.previewDreamCancel)).toBe(original)
+  const request = JSON.parse(original)
+  const reply = async (id: string) => {
+    await page.evaluate(
+      (id) =>
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: {
+              type: "secondBrainState",
+              id,
+              state: {
+                configured: false,
+                status: "disconnected",
+                results: [],
+                dream: {
+                  status: "closed",
+                  activity: {
+                    id: "11111111-1111-4111-8111-111111111111",
+                    owner: "22222222-2222-4222-8222-222222222222",
+                    project: "C:/Synthetic/ApprovedProject/MemoryConsolidationFixture/LongProjectFolder",
+                    model: "fixture/model",
+                    revision: 3,
+                    phase: "cancelled",
+                    lifecycle: "joined",
+                  },
+                },
+              },
+            },
+          }),
+        ),
+      id,
+    )
+  }
+  await reply("foreign-receipt")
+  await expect(view.getByRole("button", { name: "Cancellation unconfirmed" })).toBeDisabled()
+  await reply(request.id)
+  await expect(view.getByText("Consolidation cancelled", { exact: true })).toBeVisible()
+  await expect(view.getByRole("alert")).toHaveCount(0)
+  await expect(view.getByRole("button", { name: "Cancellation unconfirmed" })).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.dataset.previewDreamCancel)).toBe(original)
+})

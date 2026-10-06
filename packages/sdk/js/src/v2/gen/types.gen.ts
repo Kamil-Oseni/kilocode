@@ -30035,6 +30035,55 @@ export type TelemetrySetEnabledResponses = {
 
 export type TelemetrySetEnabledResponse = TelemetrySetEnabledResponses[keyof TelemetrySetEnabledResponses]
 
+export type MemoryDreamGenerateData = {
+  body?: {
+    id: string
+    owner: string
+    model: string
+    system: string
+    prompt: string
+    timeoutMs: number
+    budget: {
+      input: number
+      output: number
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/memory/dream/generate"
+}
+
+export type MemoryDreamGenerateErrors = {
+  /**
+   * MemoryApiClientError | InvalidRequestError
+   */
+  400: MemoryApiClientError | InvalidRequestError
+  /**
+   * MemoryApiServerError
+   */
+  503: MemoryApiServerError
+}
+
+export type MemoryDreamGenerateError = MemoryDreamGenerateErrors[keyof MemoryDreamGenerateErrors]
+
+export type MemoryDreamGenerateResponses = {
+  /**
+   * Prepared Dream text generation
+   */
+  200: {
+    id: string
+    owner: string
+    configuredModel: string
+    text: string
+    settlement: "sdk"
+  }
+}
+
+export type MemoryDreamGenerateResponse = MemoryDreamGenerateResponses[keyof MemoryDreamGenerateResponses]
+
 export type MemoryStatusData = {
   body?: never
   path?: never

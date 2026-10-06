@@ -18,9 +18,97 @@ import type { Session } from "../../../src/session/session"
 import type { SessionSummary } from "../../../src/session/summary"
 import type { Snapshot } from "../../../src/snapshot"
 import { MemoryModel, MemorySession } from "../../../src/kilocode/memory/ports"
+import { generate } from "../../../src/kilocode/memory/dream-generation"
 
 const pid = ProviderV2.ID.make("test")
 const mid = ModelV2.ID.make("fake-memory-model")
+
+test("Dream Effect transport cancellation joins its original delayed SDK work", async () => {
+  const controller = new AbortController()
+  const ready = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let ended = false
+  const work = Effect.runPromiseExit(
+    generate(
+      provider({
+        wait: async () => {
+          ready.resolve()
+          await release.promise
+        },
+      }),
+      {
+        id: randomUUID(),
+        owner: randomUUID(),
+        model: "test/memory-config-model",
+        system: "Synthetic approved inputs",
+        prompt: "Return bounded text",
+        timeoutMs: 10000,
+        budget: { input: 1000, output: 500 },
+      },
+    ),
+    { signal: controller.signal },
+  ).finally(() => {
+    ended = true
+  })
+  await ready.promise
+  try {
+    controller.abort()
+    await Bun.sleep(10)
+    expect(ended).toBe(false)
+  } finally {
+    release.resolve()
+  }
+  const exit = await work
+  expect(exit._tag).toBe("Failure")
+  expect(ended).toBe(true)
+})
+
+test("Dream transport retains the original prepared payload through asynchronous model resolution", async () => {
+  const calls: unknown[] = []
+  const base = provider({ calls })
+  const ready = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const selected: Provider.Interface = {
+    ...base,
+    getModel: (...args) =>
+      base.getModel(...args).pipe(
+        Effect.tap(() =>
+          Effect.promise(async () => {
+            ready.resolve()
+            await release.promise
+          }),
+        ),
+      ),
+  }
+  const payload = {
+    id: randomUUID(),
+    owner: randomUUID(),
+    model: "test/memory-config-model",
+    system: "Original system",
+    prompt: "Original prepared input",
+    timeoutMs: 10000,
+    budget: { input: 1000, output: 500 },
+  }
+  const original = structuredClone(payload)
+  const work = Effect.runPromise(generate(selected, payload))
+  await ready.promise
+  payload.id = randomUUID()
+  payload.owner = randomUUID()
+  payload.model = "changed/model"
+  payload.system = "Changed system"
+  payload.prompt = "Changed prompt"
+  payload.budget.output = 4000
+  release.resolve()
+  expect(await work).toMatchObject({
+    id: original.id,
+    owner: original.owner,
+    configuredModel: original.model,
+    settlement: "sdk",
+  })
+  expect(calls[0]).toMatchObject({ maxOutputTokens: 500 })
+  expect(JSON.stringify(calls[0])).toContain("Original prepared input")
+  expect(JSON.stringify(calls[0])).not.toContain("Changed prompt")
+})
 
 function mdl(id = mid, npm = "test-provider", providerID = pid): Provider.Model {
   return {

@@ -10,6 +10,14 @@ The source regression uses actual Storage and goal completion/review owners. It 
 
 ## Historical evidence in the repair workflow
 
+## Manual generation transport
+
+The authenticated, workspace-routed `POST /memory/dream/generate` endpoint now invokes the existing provider and MemoryModel port with explicit model identity, prepared text, bounded input/output and an outer deadline that includes resolution. It refuses fallback, captures the original payload before asynchronous resolution, and aborts and joins its original SDK promise on HTTP disconnect/interruption. It reads no notes, creates no input grants, writes no ledger/proposals and enables no capture. Returned run/owner identifiers are request binding metadata; `settlement: sdk` is explicitly not a native inference/GPU retirement receipt. Native selection, manual Start and live activity integration remain unfinished.
+
+The prescribed generator refreshed the SDK method/types and tracked OpenAPI contract. Real generated SDK calls through a private HTTP listener use the configured provider and actual AI SDK against a controlled loopback completion endpoint. Checks cover output-cap propagation, malformed requests, missing models, unchanged Memory state, original HTTP cancellation, delayed SDK joins and immutable selected payloads. The combined port/API checks pass 25 tests / 247 assertions before the extra HTTP cancellation assertions; the final focused HTTP test passes 16 assertions. Memory, CLI and generated SDK types pass. Affected lint has zero errors and 21 existing warnings on unchanged handler/test lines; runtime-facade and shared-annotation guards pass.
+
+A forced Windows CLI rebuild (`0.0.0-codex-raya-everyday-experience-202610061237`) passes version, model-catalog and sandbox mutation smoke checks, followed by extension/webview types, lint and bundling. Checks use private profiles and synthetic inputs. The first HTTP cancellation assertion incorrectly expected the default SDK to throw; its default contract returns an error value, which the corrected test checks along with the original server request joining without a successful response. No local model, normal-profile installation, microphone, lights or VM is exercised. Installed and native worker retirement acceptance are still pending.
+
 ## Proposal outcome review
 
 Confirmed deletion now connects publication to fact suppression. When the existing review owner commits deletion of every target for a candidate, the ledger saves acceptance, its original receipt, deletion history and the fact tombstone together. Cancelled or unconfirmed deletions cannot suppress facts. A mixed deletion/replacement remains an accepted revision, allowing a note move rather than forgetting the whole fact. Reading an original legacy deletion receipt can add the missing tombstone without repeating publication; repeated reads remain idempotent, and a recreated note refuses receipt reconciliation while preserving suppression.

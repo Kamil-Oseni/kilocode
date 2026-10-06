@@ -508,6 +508,8 @@ import type {
   MemoryCorrectResponses,
   MemoryDisableErrors,
   MemoryDisableResponses,
+  MemoryDreamGenerateErrors,
+  MemoryDreamGenerateResponses,
   MemoryEnableErrors,
   MemoryEnableResponses,
   MemoryForgetErrors,
@@ -15013,6 +15015,60 @@ export class Telemetry extends HeyApiClient {
 }
 
 export class Memory extends HeyApiClient {
+  /**
+   * Generate prepared consolidation text
+   *
+   * Use the original selected provider with bounded text, output and deadline. No note reads, publication or automatic capture. SDK settlement does not certify native inference retirement.
+   */
+  public dreamGenerate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      id?: string
+      owner?: string
+      model?: string
+      system?: string
+      prompt?: string
+      timeoutMs?: number
+      budget?: {
+        input: number
+        output: number
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "id" },
+            { in: "body", key: "owner" },
+            { in: "body", key: "model" },
+            { in: "body", key: "system" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "timeoutMs" },
+            { in: "body", key: "budget" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<MemoryDreamGenerateResponses, MemoryDreamGenerateErrors, ThrowOnError>(
+      {
+        url: "/memory/dream/generate",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
   /**
    * Get memory status
    *

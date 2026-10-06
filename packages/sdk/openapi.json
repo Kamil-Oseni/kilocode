@@ -52690,6 +52690,164 @@
         ]
       }
     },
+    "/memory/dream/generate": {
+      "post": {
+        "tags": ["memory"],
+        "operationId": "memory.dreamGenerate",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prepared Dream text generation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "owner": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "configuredModel": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 256000
+                    },
+                    "settlement": {
+                      "type": "string",
+                      "enum": ["sdk"]
+                    }
+                  },
+                  "required": ["id", "owner", "configuredModel", "text", "settlement"],
+                  "additionalProperties": false,
+                  "description": "Prepared Dream text generation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "MemoryApiClientError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MemoryApiClientError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "MemoryApiServerError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryApiServerError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Use the original selected provider with bounded text, output and deadline. No note reads, publication or automatic capture. SDK settlement does not certify native inference retirement.",
+        "summary": "Generate prepared consolidation text",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                    "format": "uuid"
+                  },
+                  "owner": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                    "format": "uuid"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 512,
+                    "pattern": "^[^/\\s]+\\/\\S+$"
+                  },
+                  "system": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16384
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 65536
+                  },
+                  "timeoutMs": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 300000
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 12000
+                      },
+                      "output": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 8000
+                      }
+                    },
+                    "required": ["input", "output"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "owner", "model", "system", "prompt", "timeoutMs", "budget"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.memory.dreamGenerate({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/memory/status": {
       "get": {
         "tags": ["memory"],

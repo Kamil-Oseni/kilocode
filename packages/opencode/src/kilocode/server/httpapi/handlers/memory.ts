@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceState } from "@/effect/instance-state"
 import { MemoryError } from "@kilocode/kilo-memory/effect/errors"
@@ -6,6 +7,9 @@ import { MemoryContract } from "@kilocode/kilo-memory/effect/httpapi"
 import { MemoryService } from "@kilocode/kilo-memory/effect/service"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { InstanceHttpApi } from "@/server/routes/instance/httpapi/api"
+import { Provider } from "@/provider/provider"
+import { generate } from "@/kilocode/memory/dream-generation"
+import { disconnect } from "@/kilocode/server/sse"
 import {
   MemoryConfigurePayload,
   MemoryCorrectPayload,
@@ -27,6 +31,16 @@ function invalidate<T extends { root: string }>(input: T) {
 export const memoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "memory", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* MemoryService.Service
+    const provider = yield* Provider.Service
+    const dreamGenerate = Effect.fn("MemoryHttpApi.dreamGenerate")(function* (req: {
+      query: typeof MemoryQuery.Type
+      payload: typeof MemoryContract.DreamGeneratePayload.Type
+    }) {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      return yield* api(
+        generate(provider, req.payload).pipe(Effect.timeout(req.payload.timeoutMs), Effect.mapError(MemoryError.from)),
+      ).pipe(Effect.raceFirst(disconnect(request).pipe(Effect.andThen(Effect.interrupt))))
+    })
     const status = Effect.fn("MemoryHttpApi.status")(function* (req: { query: typeof MemoryQuery.Type }) {
       const ctx = yield* InstanceState.context
       return MemoryContract.output(yield* api(svc.status({ ctx })))
@@ -122,6 +136,7 @@ export const memoryHandlers = HttpApiBuilder.group(InstanceHttpApi, "memory", (h
     })
 
     return handlers
+      .handle("dreamGenerate", dreamGenerate)
       .handle("status", status)
       .handle("show", show)
       .handle("enable", enable)

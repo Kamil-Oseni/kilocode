@@ -576,8 +576,7 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       throw new OllamaBridgeError()
     const envelope =
       options.localInferenceToolFormat === "completion-envelope-v1" &&
-      (advertised.has("update_goal") ||
-        (data.tool_choice === "required" && advertised.size === 1 && advertised.has("chief_route"))) &&
+      (advertised.has("update_goal") || data.tool_choice === "required") &&
       data.tool_choice !== "none"
         ? (data.tool_choice ?? "auto")
         : undefined

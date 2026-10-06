@@ -30,11 +30,7 @@ export function context(
     ollamaModel: model.api.id,
     ollamaContext: size > 0 ? size : explicit,
   }
-  if (
-    tools &&
-    (Object.hasOwn(tools, "update_goal") || (Object.keys(tools).length === 1 && Object.hasOwn(tools, "chief_route"))) &&
-    options.localInferenceToolFormat === "completion-envelope-v1"
-  ) {
+  if (tools && options.localInferenceToolFormat === "completion-envelope-v1") {
     const entries = Object.entries(tools)
     if (entries.length > 128) throw new Error("Original tool snapshot exceeds bound")
     const state = { bytes: 0 }

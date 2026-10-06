@@ -99,7 +99,7 @@ test("required sole Chief routing sends its actual immutable schema and preserve
   }
 })
 
-test("absent opt-in, automatic choice, multiple tools and a foreign sole tool keep native protocol", async () => {
+test("absent opt-in, automatic choice and disabled tools keep native protocol", async () => {
   const captured: { format?: unknown; tools?: unknown }[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -122,14 +122,6 @@ test("absent opt-in, automatic choice, multiple tools and a foreign sole tool ke
       { cfg: { ...options, localInferenceToolFormat: undefined }, value: request() },
       { cfg: options, value: request("auto") },
       { cfg: options, value: { ...request(), tool_choice: undefined } },
-      {
-        cfg: options,
-        value: { ...request(), tools: [...tools, { type: "function", function: { name: "read", parameters: {} } }] },
-      },
-      {
-        cfg: options,
-        value: { ...request(), tools: [{ type: "function", function: { name: "foreign", parameters: {} } }] },
-      },
       { cfg: options, value: request("none") },
     ]
     for (const item of cases) {

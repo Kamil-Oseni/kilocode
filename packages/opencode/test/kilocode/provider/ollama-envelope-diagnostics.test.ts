@@ -135,7 +135,13 @@ test("non-stop native termination stays refused and valid completed envelopes re
       (err: unknown) => err,
     )
     if (!(error instanceof OllamaBridgeError)) throw new Error("Expected non-stop terminal refusal")
-    expect(error.message).toBe("Unsupported or invalid Ollama bridge request or response")
+    expect(diagnostic(error)).toMatchObject({
+      reason: "required-frame-refusal",
+      refusal: "finish",
+      envelope: true,
+      stage: "frame",
+      finish: "length",
+    })
     state.finish = "stop"
     const response = await send()
     const value = await response.json()

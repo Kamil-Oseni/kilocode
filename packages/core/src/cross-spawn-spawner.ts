@@ -3,6 +3,7 @@ import { NodeFileSystem, NodeSink, NodeStream } from "@effect/platform-node"
 import * as NodePath from "@effect/platform-node/NodePath"
 import { prepareCommand as prepareSandbox } from "@kilocode/sandbox" // kilocode_change
 import { tap as tapStdio, tapped } from "./kilocode/stdio-tap" // kilocode_change - Bun drops buffered stdio on close
+import * as Direct from "./kilocode/direct-attribution" // kilocode_change
 import * as SpawnExit from "./kilocode/spawn-exit" // kilocode_change
 import * as SpawnValidation from "./kilocode/spawn-validation" // kilocode_change
 import { settle } from "./kilocode/exit-code" // kilocode_change - settle signal termination as 128 + signum
@@ -276,7 +277,9 @@ export const make = Effect.gen(function* () {
   ) =>
     Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
+      const clock = Direct.begin() // kilocode_change
       const proc = launch(command.command, command.args, opts)
+      Direct.observe(proc, opts.shell ? "shell" : "spawn", clock) // kilocode_change
       tapStdio(proc) // kilocode_change - must run in the same tick as spawn
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
@@ -307,10 +310,19 @@ export const make = Effect.gen(function* () {
   ) => {
     if (globalThis.process.platform === "win32") {
       return Effect.callback<void, PlatformError.PlatformError>((resume) => {
-        NodeChildProcess.exec(`taskkill /pid ${proc.pid} /T /F`, { windowsHide: true }, (err) => {
-          if (err) return resume(Effect.fail(toPlatformError("kill", toError(err), command)))
-          resume(Effect.void)
-        })
+        const clock = Direct.begin() // kilocode_change
+        // kilocode_change start - observe the existing taskkill callback without another reader
+        const child = NodeChildProcess.exec(
+          `taskkill /pid ${proc.pid} /T /F`,
+          { windowsHide: true },
+          (err, _out, stderr) => {
+            Direct.stderr(child, stderr) // kilocode_change
+            if (err) return resume(Effect.fail(toPlatformError("kill", toError(err), command)))
+            resume(Effect.void)
+          },
+        )
+        // kilocode_change end
+        Direct.observe(child, "taskkill", clock) // kilocode_change
       })
     }
 
@@ -544,6 +556,15 @@ export const make = Effect.gen(function* () {
     },
   )
 
+  // kilocode_change start - passive bounded diagnostics, no child settlement authority
+  if (process.env.RAYA_SOURCE_MEMBER_DIAGNOSTICS === "1")
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        for (const row of Direct.records()) yield* Effect.logInfo("source direct process diagnostic", row)
+        yield* Effect.logInfo("source direct process diagnostic footer", Direct.footer())
+      }),
+    )
+  // kilocode_change end
   return makeSpawner(spawnCommand)
 })
 

@@ -15,6 +15,7 @@ import { formatPatch, structuredPatch } from "diff"
 import { Config } from "./config"
 import type { CaptureMetadata, DeltaEntry, FileEntry } from "./events"
 import { isHighRiskPath } from "./worker/scrub"
+import { findUp } from "@/util/filesystem"
 
 type File = {
   path: string
@@ -222,6 +223,7 @@ async function scan(
 }
 
 async function repository(root: string): Promise<string | undefined> {
+  if (!process.env.GIT_DIR && !(await findUp(".git", path.resolve(root))).length) return undefined
   const proc = Bun.spawn(["git", "rev-parse", "--show-toplevel"], {
     cwd: root,
     stdout: "pipe",

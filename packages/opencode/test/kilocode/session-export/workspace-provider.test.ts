@@ -57,6 +57,27 @@ async function gate(dir: string, name: string) {
 }
 
 describe("workspace provider", () => {
+  test("does not start Git for a nonrepository with no executable PATH", async () => {
+    await using tmp = await tmpdir()
+    const module = resolve(import.meta.dir, "../../../src/kilocode/session-export/workspace-provider.ts")
+    const script = `import { createWorkspaceProvider } from ${JSON.stringify(module)}; const result = await createWorkspaceProvider({root:process.argv[1]}).baseline(); console.log(JSON.stringify({mode:result.capture.mode,count:result.files.length}));`
+    const child = Bun.spawn([process.execPath, "--eval", script, tmp.path], {
+      cwd: resolve(import.meta.dir, "../../.."),
+      env: { ...process.env, PATH: "", Path: "", GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      windowsHide: true,
+    })
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ])
+    expect(code, stderr).toBe(0)
+    expect(JSON.parse(stdout)).toEqual({ mode: "none", count: 0 })
+  })
+
   test("refuses a lock held by another process and recovers after it releases", async () => {
     await using repo = await tmpdir({ git: true })
     await using dir = await tmpdir()
@@ -182,6 +203,49 @@ describe("workspace provider", () => {
       truncated: false,
     })
     expect(baseline.files).toEqual([])
+  })
+
+  test("rechecks malformed markers and later repository creation", async () => {
+    await using tmp = await tmpdir()
+    const provider = createWorkspaceProvider({ root: tmp.path })
+    expect((await provider.baseline()).capture.mode).toBe("none")
+    await writeFile(join(tmp.path, ".git"), "not a git directory\n")
+    expect((await provider.baseline()).capture.mode).toBe("none")
+    const store = join(tmp.path, "store")
+    const repo = join(tmp.path, "checkout")
+    await $`git init --separate-git-dir=${store} ${repo}`.quiet()
+    await mkdir(join(repo, "nested"))
+    await writeFile(join(repo, "nested", "file.txt"), "authorized file\n")
+    const nested = createWorkspaceProvider({ root: join(repo, "nested") })
+    const result = await nested.baseline()
+    expect(result.capture.mode).toBe("git-tracked-and-untracked")
+    expect(result.files.map((file) => file.path)).toEqual(["nested/file.txt"])
+  })
+
+  test("preserves an explicitly configured external Git directory", async () => {
+    await using tmp = await tmpdir()
+    const store = join(tmp.path, "store.git")
+    const root = join(tmp.path, "files")
+    await $`git init --bare ${store}`.quiet()
+    await mkdir(root)
+    await writeFile(join(root, "file.txt"), "authorized file\n")
+    const module = resolve(import.meta.dir, "../../../src/kilocode/session-export/workspace-provider.ts")
+    const script = `import { createWorkspaceProvider } from ${JSON.stringify(module)}; const result = await createWorkspaceProvider({root:process.argv[1]}).baseline(); console.log(JSON.stringify({mode:result.capture.mode,files:result.files.map(file=>file.path)}));`
+    const child = Bun.spawn([process.execPath, "--eval", script, root], {
+      cwd: resolve(import.meta.dir, "../../.."),
+      env: { ...process.env, GIT_DIR: store, GIT_WORK_TREE: root },
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      windowsHide: true,
+    })
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ])
+    expect(code, stderr).toBe(0)
+    expect(JSON.parse(stdout)).toEqual({ mode: "git-tracked-and-untracked", files: ["file.txt"] })
   })
 
   test("captures initial filesystem state and ignores gitignored files", async () => {

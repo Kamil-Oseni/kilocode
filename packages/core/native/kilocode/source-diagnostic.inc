@@ -6,6 +6,21 @@ struct Diagnostic {
   };
   std::map<std::pair<std::wstring, std::wstring>, Row> rows;
   std::map<std::pair<DWORD, uint64_t>, std::pair<std::wstring, std::wstring>> labels;
+  struct Entry {
+    std::wstring image, parent;
+    DWORD pid = 0;
+    uint64_t born = 0;
+    bool finished = false;
+    DWORD code = 0;
+  };
+  std::map<std::pair<DWORD, uint64_t>, Entry> details;
+  uint64_t omitted = 0, conflicts = 0;
+  void retain(DWORD id, uint64_t born, const std::wstring& image, const std::wstring& parent, DWORD pid, uint64_t prior) {
+    const auto key = std::make_pair(id, born);
+    if (details.contains(key)) return;
+    if (details.size() >= 4096) { ++omitted; return; }
+    details.emplace(key, Entry{image, parent, pid, prior, false, 0});
+  }
   uint64_t exited = 0, unmapped = 0, excess = 0, buckets = 0;
   uint64_t observed = 0, unavailable = 0, dropped = 0;
   uint64_t notifications = 0, opened = 0, queried = 0, unassigned = 0, duplicates = 0, settled = 0;
@@ -67,13 +82,20 @@ struct Diagnostic {
       ULONG count = 0;
       const auto query = reinterpret_cast<Query>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationProcess"));
       std::wstring parent = L"unknown";
+      DWORD pid = 0;
+      uint64_t prior = 0;
       if (query && query(handle, 0, &basic, sizeof(basic), &count) >= 0 && count >= sizeof(basic) && basic.pid == id && basic.parent <= MAXDWORD) {
-        const auto found = members.find(static_cast<DWORD>(basic.parent));
-        if (found != members.end() && found->second->born <= born) parent = name(found->second->process.value);
+        pid = static_cast<DWORD>(basic.parent);
+        const auto found = members.find(pid);
+        if (found != members.end() && found->second->born <= born) {
+          parent = name(found->second->process.value);
+          prior = found->second->born;
+        }
       }
       const auto image = name(handle);
       if (image == L"unknown" || parent == L"unknown") ++unavailable;
       add(image, parent, born);
+      retain(id, born, image, parent, pid, prior);
       const auto key = std::make_pair(image, parent);
       // Diagnostic.capacity is a refusal counter, not the authoritative 4096-member bound.
       if (labels.size() < 4096 && rows.contains(key)) labels.emplace(std::make_pair(id, born), key);
@@ -81,6 +103,14 @@ struct Diagnostic {
   }
   void finish(DWORD id, uint64_t born, DWORD code) noexcept {
     try {
+      const auto entry = details.find(std::make_pair(id, born));
+      if (entry != details.end()) {
+        if (entry->second.finished && entry->second.code != code) ++conflicts;
+        if (!entry->second.finished) {
+          entry->second.finished = true;
+          entry->second.code = code;
+        }
+      }
       const auto label = labels.find(std::make_pair(id, born));
       if (label == labels.end()) { ++unmapped; return; }
       const auto found = rows.find(label->second);
@@ -95,6 +125,16 @@ struct Diagnostic {
     } catch (const std::exception&) { failed = true; }
   }
   std::string report() const {
+    std::string members = "[";
+    for (const auto& [key, entry] : details) {
+      if (members.size() > 1) members += ",";
+      members += "{\"pid\":" + std::to_string(key.first) + ",\"birth\":\"" + std::to_string(key.second) +
+        "\",\"image\":" + json(entry.image) + ",\"parentImage\":" + json(entry.parent) +
+        ",\"parentPID\":" + std::to_string(entry.pid) + ",\"parentBirth\":" +
+        (entry.born ? "\"" + std::to_string(entry.born) + "\"" : "null") + ",\"code\":" +
+        (entry.finished ? std::to_string(entry.code) : "null") + "}";
+    }
+    members += "]";
     std::string entries = "[";
     for (const auto& [key, row] : rows) {
       std::string exits = "[";
@@ -124,6 +164,6 @@ struct Diagnostic {
       ",\"retainedMembers\":" + std::to_string(retained) + ",\"memberStructBytes\":" + std::to_string(sizeof(Member)) +
       ",\"processHandles\":" + std::to_string(handles) + ",\"workingSetBytes\":\"" + std::to_string(working) +
       "\",\"peakWorkingSetBytes\":\"" + std::to_string(peak) + "\",\"privateBytes\":\"" + std::to_string(memory) +
-      "\",\"peakPagefileBytes\":\"" + std::to_string(pagefile) + "\"},\"groups\":" + entries + "]}";
+      "\",\"peakPagefileBytes\":\"" + std::to_string(pagefile) + "\"},\"groups\":" + entries + "],\"memberDropped\":" + std::to_string(omitted) + ",\"memberConflicts\":" + std::to_string(conflicts) + ",\"members\":" + members + "}";
   }
 };

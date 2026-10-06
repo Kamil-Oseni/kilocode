@@ -32,6 +32,7 @@ import { MessageID, PartID, SessionID } from "@/session/schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
+import { TaskAuthority } from "@/kilocode/tool/task-authority"
 import { ReadTool } from "@/tool/read"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { RayaChief } from "@/kilocode/chief"
@@ -761,4 +762,78 @@ it.instance(
       expect((yield* reply.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
     }),
   { timeout: 30_000 },
+)
+
+it.instance("assigned foreground worker catalogs retain files and exclude replacement delegation", () =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const agents = yield* Agent.Service
+    const processors = yield* SessionProcessor.Service
+    const prompts = yield* SessionPrompt.Service
+    const ctx = yield* InstanceState.context
+    const agent = yield* agents.get("general")
+    if (!agent) throw new Error("Actual general agent required")
+    const parent = yield* sessions.create()
+    const child = yield* sessions.create({ parentID: parent.id })
+    const user = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      sessionID: child.id,
+      role: "user",
+      agent: "general",
+      model: { providerID: model.providerID, modelID: model.id },
+      time: { created: Date.now() },
+    })
+    const assistant = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      sessionID: child.id,
+      parentID: user.id,
+      role: "assistant",
+      agent: "general",
+      mode: "general",
+      cost: 0,
+      path: { cwd: ctx.directory, root: ctx.directory },
+      providerID: model.providerID,
+      modelID: model.id,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: Date.now() },
+    })
+    const processor = yield* processors.create({ assistantMessage: assistant, sessionID: child.id, model })
+    const resolve = () =>
+      Effect.gen(function* () {
+        return yield* SessionTools.resolve({
+          agent,
+          model,
+          session: yield* sessions.get(child.id),
+          processor,
+          messages: yield* sessions.messages({ sessionID: child.id }),
+          bypassAgentCheck: false,
+          memoryCache: {},
+          promptOps: {
+            cancel: prompts.cancel,
+            resolvePromptParts: prompts.resolvePromptParts,
+            prompt: (input) => prompts.prompt(input).pipe(Effect.orDie),
+          },
+        })
+      })
+    const legacy = yield* resolve()
+    expect(legacy.task).toBeDefined()
+    yield* sessions.setMetadata({
+      sessionID: child.id,
+      metadata: TaskAuthority.assign(TaskAuthority.save({}, "edit"), child.id, parent.id, assistant.id),
+    })
+    const direct = yield* resolve()
+    expect(direct.task).toBeUndefined()
+    expect(direct.read).toBeDefined()
+    expect(direct.write).toBeDefined()
+    expect(["edit", "apply_patch"].filter((id) => id in direct)).toEqual(
+      ["edit", "apply_patch"].filter((id) => id in legacy),
+    )
+    expect(["edit", "apply_patch"].some((id) => id in direct)).toBe(true)
+    yield* sessions.setMetadata({
+      sessionID: child.id,
+      metadata: TaskAuthority.assign({}, child.id, "foreign-parent", assistant.id),
+    })
+    const invalid = yield* Effect.exit(resolve())
+    expect(invalid._tag).toBe("Failure")
+  }),
 )

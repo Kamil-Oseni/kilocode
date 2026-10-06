@@ -87,6 +87,21 @@ if (process.argv[2] === "child") {
           const data = await diagnostic.json()
           const image = path.basename(process.execPath).toLowerCase()
           const order = (a: (string | number)[], b: (string | number)[]) => String(a).localeCompare(String(b))
+          expect(data.memberDropped).toBe(0)
+          expect(data.memberConflicts).toBe(0)
+          expect(data.members).toHaveLength(family.totalProcesses)
+          expect(new Set(data.members.map((row: { pid: number; birth: string }) => `${row.pid}:${row.birth}`)).size).toBe(family.totalProcesses)
+          for (const member of family.members) {
+            const row = data.members.find((value: { pid: number; birth: string }) => value.pid === member.pid && value.birth === member.birth)
+            expect(row).toBeDefined()
+            expect(row.code).toBe(member.code)
+            expect(row.image).toMatch(/^[a-z0-9._-]{1,128}$/)
+            expect(row.parentImage).toMatch(/^[a-z0-9._-]{1,128}$/)
+            if (row.parentBirth !== null) {
+              expect(family.members.some((parent: { pid: number; birth: string }) => parent.pid === row.parentPID && parent.birth === row.parentBirth)).toBe(true)
+              expect(BigInt(row.parentBirth)).toBeLessThanOrEqual(BigInt(row.birth))
+            }
+          }
           expect(data.diagnosticOnly).toBe(true)
           expect(data.retirementAuthority).toBe(false)
           expect(data.failed).toBe(false)

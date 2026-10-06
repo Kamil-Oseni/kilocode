@@ -1574,7 +1574,7 @@ export namespace RayaGoal {
           })
         if (check?.kind === "byte-equality" && !(yield* equality(check, cited)))
           return yield* new AuditError({
-            message: `Criterion ${requirement.criterionID} requires current source and target read evidence with exactly the saved original SHA-256 and byte count.`,
+            message: `Criterion ${requirement.criterionID} requires current source and target read evidence with exactly the saved original SHA-256 and byte count. Cite both successful Read callIDs together in this criterion's evidence array; citing the source only under a different criterion does not satisfy this check. Read get_goal for eligible callIDs, then correct this same criterion without changing its saved check.`,
           })
         verified.push({ ...requirement, evidence: proof })
       }

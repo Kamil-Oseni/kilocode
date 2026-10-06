@@ -14,7 +14,8 @@ export class Refusal extends Error {
       | "task-access"
       | "task-resume"
       | "task-recovery"
-      | "chief-no-eligible",
+      | "chief-no-eligible"
+      | "exact-write",
     message: string,
   ) {
     if (
@@ -26,7 +27,8 @@ export class Refusal extends Error {
       reason !== "task-access" &&
       reason !== "task-resume" &&
       reason !== "task-recovery" &&
-      reason !== "chief-no-eligible"
+      reason !== "chief-no-eligible" &&
+      reason !== "exact-write"
     )
       throw new Error("Invalid tool refusal reason")
     super(message)

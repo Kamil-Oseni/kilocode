@@ -184,6 +184,10 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const ignore = Effect.fnUntraced(function* (files: string[]) {
             if (!files.length) return new Set<string>()
+            // kilocode_change start - preserve protected exclusions without probing a nonexistent source repository
+            const excluded = files.filter(stores.contains)
+            if (state.vcs !== "git") return new Set(excluded)
+            // kilocode_change end
             // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
             const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
             const check = yield* git(
@@ -205,7 +209,6 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               },
             )
             // kilocode_change start - protected runtime files stay excluded without a source repository
-            const excluded = files.filter(stores.contains)
             if (check.code !== 0 && check.code !== 1) return new Set(excluded)
             return new Set([
               ...excluded,
@@ -298,6 +301,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           })
 
           const excludes = Effect.fnUntraced(function* () {
+            if (state.vcs !== "git") return // kilocode_change - source excludes require a workspace repository
             const result = yield* git(["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
               cwd: state.worktree,
             })
@@ -524,16 +528,17 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                         yield* write(["--git-dir", state.gitdir, "config", "core.symlinks", "true"]) // kilocode_change
                         yield* write(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"]) // kilocode_change
                         // kilocode_change start - seed all eligible new snapshots from the worktree index
-                        seeded.value = yield* KiloSnapshotSeed.seed({
-                          dir: state.directory,
-                          worktree: state.worktree,
-                          gitdir: state.gitdir,
-                          limit,
-                          git,
-                          fs,
-                          ownership,
-                          write: mutate,
-                        })
+                        if (state.vcs === "git")
+                          seeded.value = yield* KiloSnapshotSeed.seed({
+                            dir: state.directory,
+                            worktree: state.worktree,
+                            gitdir: state.gitdir,
+                            limit,
+                            git,
+                            fs,
+                            ownership,
+                            write: mutate,
+                          })
                         // kilocode_change end
                         yield* Effect.logInfo("initialized")
                       }

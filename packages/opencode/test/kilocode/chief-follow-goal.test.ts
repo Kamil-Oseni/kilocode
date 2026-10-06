@@ -796,7 +796,27 @@ planned.instance("reserves verification for an authenticated Chief follow from g
       if (mode === "edit") {
         const child = yield* sessions.get(result.value.metadata.sessionId)
         expect(child.metadata?.["raya.task.authority"]).toMatchObject({ access: "edit" })
+        expect(TaskAuthority.direct(child.metadata, child.id, child.parentID)).toBe(true)
+        expect(child.permission).toContainEqual({ permission: "task", pattern: "*", action: "deny" })
+        expect(() => TaskAuthority.direct(child.metadata, child.id, "foreign-parent")).toThrow()
+        expect(() => TaskAuthority.direct(child.metadata, "foreign-child", child.parentID)).toThrow()
+        expect(() => TaskAuthority.direct({ ...child.metadata, "raya.task.execution": { version: 2 } }, child.id, child.parentID)).toThrow()
+        expect(TaskAuthority.direct(undefined, child.id, child.parentID)).toBe(false)
         expect(TaskAuthority.hard(child.metadata, "edit", ["/private/result.txt"])).toEqual([])
+        for (const prompt of ["Write the requested file", "Repair the same assigned output and verify it"]) {
+          const nested = yield* sessions.updateMessage({
+            ...assistant, id: MessageID.ascending(), sessionID: child.id,
+            parentID: MessageID.ascending(), agent: "general", mode: "general",
+          })
+          const denied = yield* Effect.exit(def.execute({ subagent_type: "general", prompt, access: "edit" }, {
+            sessionID: child.id, messageID: nested.id, callID: "nested-direct-work", agent: "general",
+            abort: new AbortController().signal, extra: { promptOps: ops }, messages: [],
+            metadata: () => Effect.void, ask: () => Effect.void,
+          }))
+          expect(Exit.isFailure(denied)).toBe(true)
+          expect(yield* sessions.children(child.id)).toHaveLength(0)
+          expect(started).toBe(1)
+        }
         expect(TaskAuthority.hard(child.metadata, "edit", ["/private/other.txt"])).toEqual([
           { permission: "edit", pattern: "/private/other.txt", action: "deny" },
         ])
@@ -977,6 +997,9 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         yield* ChiefVerification.reuse({...common, agent: "build"})
         const resumed = yield* attempt(handoff.arguments)
         expect(resumed.metadata.sessionId).toBe(id)
+        const retained = yield* sessions.get(id)
+        expect(TaskAuthority.direct(retained.metadata, retained.id, retained.parentID)).toBe(true)
+        expect(retained.permission).toContainEqual({ permission: "task", pattern: "*", action: "deny" })
         expect((yield* sessions.children(chat.id)).length).toBe(count)
         expect(started).toBe(2)
         for (const status of ["error", "cancelled"] as const) {

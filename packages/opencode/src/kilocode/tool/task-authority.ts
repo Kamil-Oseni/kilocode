@@ -7,6 +7,35 @@ import { Refusal } from "../session/tool-refusal"
 export namespace TaskAuthority {
   export const key = "raya.task.authority"
   export const computerKey = "raya.task.computer"
+  const execution = "raya.task.execution"
+
+  function object(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value)
+  }
+
+  /** Only the Task producer records this boundary; legacy children have no record. */
+  export function direct(metadata: Record<string, unknown> | undefined, id: string, parent?: string) {
+    const value = metadata?.[execution]
+    if (value === undefined) return false
+    if (!object(value)) throw new Refusal("task-access", "Invalid assigned worker execution boundary")
+    const record = value
+    if (
+      record.version !== 1 ||
+      record.child !== id ||
+      record.parent !== parent ||
+      !parent ||
+      typeof record.message !== "string" ||
+      !record.message ||
+      Object.keys(record).length !== 4
+    )
+      throw new Refusal("task-access", "Assigned worker execution boundary does not match this child")
+    return true
+  }
+
+  export function assign(metadata: Record<string, unknown>, child: string, parent: string, message: string) {
+    return { ...metadata, [execution]: { version: 1, child, parent, message } }
+  }
+
   export type Access = "read" | "edit" | "computer"
   type Saved = { version: 1; access: Access }
   type Computer = {

@@ -20,10 +20,12 @@ import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilo
 import * as Bom from "@/util/bom"
 import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
+import * as ExactWrite from "@/kilocode/tool/exact-write" // kilocode_change
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
 export const Parameters = Schema.Struct({
+  exact: Schema.optional(ExactWrite.Exact), // kilocode_change - explicit bounded literal UTF-8 with expected evidence
   content: Schema.String.annotate({ description: "The content to write to the file" }),
   filePath: Schema.String.annotate({
     description: "The absolute path to the file to write (must be absolute, not relative)",
@@ -41,8 +43,14 @@ export const WriteTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
-      execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
+      // kilocode_change start - explicit exact write evidence
+      execute: (
+        params: { content: string; filePath: string; exact?: typeof ExactWrite.Exact.Type },
+        ctx: Tool.Context,
+      ) =>
+        // kilocode_change end
         Effect.gen(function* () {
+          ExactWrite.check(params.content, params.exact) // kilocode_change - refuse byte/hash mismatch before mutation
           const instance = yield* InstanceState.context
           const filepath = path.isAbsolute(params.filePath)
             ? params.filePath
@@ -61,7 +69,8 @@ export const WriteTool = Tool.define(
           const source = { bom: pre.encoding === "utf-8-bom", text: pre.text, encoding: pre.encoding }
           // kilocode_change end
           const next = Bom.split(params.content)
-          const desiredBom = source.bom || next.bom
+          const desiredBom = params.exact ? next.bom : source.bom || next.bom // kilocode_change
+          const encoding = params.exact ? "utf-8" : source.encoding // kilocode_change
           const contentOld = source.text
           const contentNew = next.text
 
@@ -81,13 +90,15 @@ export const WriteTool = Tool.define(
           yield* RayaPath.check(fs, filepath, target) // kilocode_change - reject link swaps after approval
           // kilocode_change start - existing files are validated and written through the same
           // open handle, so a stale path, concurrent edit, or hard link is refused without mutation.
-          const final = (yield* format.available(target))
-            ? yield* EncodedIO.stage(fs, target, Bom.join(contentNew, desiredBom), source.encoding, format.file)
-            : contentNew
+          const final =
+            !params.exact && (yield* format.available(target))
+              ? yield* EncodedIO.stage(fs, target, Bom.join(contentNew, desiredBom), encoding, format.file)
+              : contentNew
+          const text = params.exact ? params.content : Bom.join(final, desiredBom)
           if (exists && proof && pre.sha256) {
-            yield* EncodedIO.checked(target, Bom.join(final, desiredBom), source.encoding, proof, pre.sha256)
+            yield* EncodedIO.checked(target, text, encoding, proof, pre.sha256)
           } else {
-            yield* EncodedIO.anchored(target, Bom.join(final, desiredBom), anchor!, source.encoding)
+            yield* EncodedIO.anchored(target, text, anchor!, encoding)
           }
           // kilocode_change end
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
@@ -120,7 +131,7 @@ export const WriteTool = Tool.define(
             fs,
             target,
             target,
-            Artifact.digest(EncodedIO.encode(Bom.join(final, desiredBom), source.encoding)),
+            Artifact.digest(EncodedIO.encode(text, encoding)),
           )
           const confirmation = Artifact.confirmation(revision, output, "Wrote file successfully.")
           // kilocode_change end

@@ -18,7 +18,14 @@ test("forced production listener shutdown joins a live SSE without caching a tim
       expect((await Promise.allSettled([fetch(new URL("/global/health", listener.url))]))[0].status).toBe("rejected")
     })(),
   ])
-  const joined = await Promise.allSettled([stream.reader?.cancel(), listener.stop(true)])
+  const cancelled = await Promise.allSettled([stream.reader?.cancel()])
+  for (const row of cancelled) {
+    if (row.status === "fulfilled") continue
+    // Explicit socket retirement can reset the client; never discard original listener failures.
+    if (!(row.reason instanceof TypeError && "code" in row.reason && row.reason.code === "ECONNRESET"))
+      outcome.push(row)
+  }
+  const joined = await Promise.allSettled([listener.stop(true)])
   const errors = [...outcome, ...joined].flatMap((row) => (row.status === "rejected" ? [row.reason] : []))
   if (errors.length) throw new AggregateError(errors, "Original listener execution or cleanup failed")
 }, 20_000)

@@ -98,7 +98,7 @@ describe("RunScriptManager", () => {
     let disposed = 0
     await ctx.manager.start("wt-1", async () => ({ stop: () => stopped++, dispose: () => disposed++ }))
 
-    ctx.manager.dispose()
+    await ctx.manager.dispose()
 
     expect(stopped).toBe(1)
     expect(disposed).toBe(1)
@@ -114,7 +114,7 @@ describe("RunScriptManager", () => {
     await ctx.manager.start("wt-3", async () => ({ stop: () => stopped++ }))
     ctx.manager.finish("wt-3", { exitCode: 0 })
 
-    ctx.manager.dispose()
+    await ctx.manager.dispose()
 
     expect(stopped).toBe(2)
     expect(ctx.manager.all()).toEqual([])
@@ -145,7 +145,7 @@ describe("RunScriptManager", () => {
     expect(ctx.manager.all()).toEqual([])
   })
 
-  it("dispose tolerates handles that throw on stop", async () => {
+  it("retains failed retirement and refuses new intake when stop throws", async () => {
     const ctx = createManager()
     await ctx.manager.start("wt-1", async () => ({
       stop: () => {
@@ -153,9 +153,43 @@ describe("RunScriptManager", () => {
       },
     }))
 
-    ctx.manager.dispose()
+    const closing = ctx.manager.dispose()
+    expect(ctx.manager.dispose()).toBe(closing)
+    await expect(closing).rejects.toThrow("Run script retirement failed")
 
-    expect(ctx.manager.all()).toEqual([])
+    expect(ctx.manager.all()).toMatchObject([{ worktreeId: "wt-1", state: "running" }])
     expect(ctx.logs.some((m) => m.includes("stop failed"))).toBe(true)
+    await expect(ctx.manager.start("wt-2", async () => ({ stop: () => {} }))).rejects.toThrow(
+      "Run script intake is retired",
+    )
+    expect(ctx.manager.dispose()).toBe(closing)
+  })
+
+  it("joins held shutdown before clearing state and retires intake immediately", async () => {
+    const ctx = createManager()
+    const gate = deferred<void>()
+    let stopped = 0
+    let disposed = 0
+    await ctx.manager.start("wt-1", async () => ({
+      stop: () => {
+        stopped++
+        return gate.promise
+      },
+      dispose: () => disposed++,
+    }))
+
+    const closing = ctx.manager.dispose()
+    expect(ctx.manager.dispose()).toBe(closing)
+    await expect(ctx.manager.start("wt-2", async () => ({ stop: () => {} }))).rejects.toThrow(
+      "Run script intake is retired",
+    )
+    expect(stopped).toBe(1)
+    expect(disposed).toBe(0)
+    expect(ctx.manager.all()).toHaveLength(1)
+
+    gate.resolve()
+    await closing
+    expect(disposed).toBe(1)
+    expect(ctx.manager.all()).toEqual([])
   })
 })

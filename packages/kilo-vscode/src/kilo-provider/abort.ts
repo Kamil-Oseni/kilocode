@@ -11,7 +11,7 @@ export type AbortSource =
   | "unknown-webview"
 
 export function logAbort(sessionID: string, source: AbortSource) {
-  console.info("[Kilo New] Session abort requested", { sessionID, source })
+  console.info("[Raya] Session abort requested", { sessionID, source })
 }
 
 export function webviewAbortSource(value: unknown): AbortSource {

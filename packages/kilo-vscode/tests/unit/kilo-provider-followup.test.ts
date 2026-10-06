@@ -151,6 +151,8 @@ describe("KiloProvider follow-up sessions", () => {
       type: "sessionCreated",
       session: {
         id: sharedID,
+        projectID: "backend-project-b",
+        directory: "/repo/project-b",
         title: "Session",
         createdAt: new Date(1).toISOString(),
         updatedAt: new Date(1).toISOString(),
@@ -285,8 +287,11 @@ describe("KiloProvider follow-up sessions", () => {
     expect(sent).toEqual([
       {
         type: "sessionCreated",
+        projectId: undefined,
         session: {
           id: "ses-followup",
+          projectID: "project-1",
+          directory: "/repo",
           title: "Session",
           createdAt: new Date(1).toISOString(),
           updatedAt: new Date(1).toISOString(),

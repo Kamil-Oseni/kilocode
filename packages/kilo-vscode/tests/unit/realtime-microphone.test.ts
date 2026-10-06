@@ -1,71 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { ConnectionState, LocalAudioTrack, LocalTrackPublication, Room, RoomEvent, Track } from "livekit-client"
+import { ConnectionState, LocalTrackPublication, Room, RoomEvent, Track } from "livekit-client"
 import { RealtimeVoice, type RealtimeConnection } from "../../webview-ui/src/context/realtime-voice"
 
-// Only browser capture and network connection are synthetic. Publication lookup,
-// SDK mute/restart, event dispatch and RealtimeVoice ownership are production code.
-class Native extends EventTarget {
-  readonly id = crypto.randomUUID()
-  readonly kind = "audio"
-  readonly label = "synthetic microphone"
-  enabled = true
-  muted = false
-  readyState: MediaStreamTrackState = "live"
-  getSettings() {
-    return { echoCancellation: true }
-  }
-  getConstraints() {
-    return {}
-  }
-  getCapabilities() {
-    return {}
-  }
-  applyConstraints() {
-    return Promise.resolve()
-  }
-  stop() {
-    this.readyState = "ended"
-    this.dispatchEvent(new Event("ended"))
-  }
-  mute(value: boolean) {
-    this.muted = value
-    this.dispatchEvent(new Event(value ? "mute" : "unmute"))
-  }
-}
-
-class Stream extends EventTarget {
-  readonly id = crypto.randomUUID()
-  constructor(private tracks: MediaStreamTrack[]) {
-    super()
-  }
-  getTracks() {
-    return [...this.tracks]
-  }
-  getAudioTracks() {
-    return this.getTracks()
-  }
-  getVideoTracks() {
-    return []
-  }
-  addTrack(track: MediaStreamTrack) {
-    this.tracks.push(track)
-  }
-  removeTrack(track: MediaStreamTrack) {
-    this.tracks = this.tracks.filter((value) => value !== track)
-  }
-}
-
-function publication(native = new Native()) {
-  const track = new LocalAudioTrack(native as unknown as MediaStreamTrack, {}, true)
-  track.source = Track.Source.Microphone
-  const sid = crypto.randomUUID()
-  // Decoded SFU metadata boundary, without a transport or provider.
-  const info = { sid, name: "microphone", source: 2, mimeType: "audio/opus" } as ConstructorParameters<
-    typeof LocalTrackPublication
-  >[1]
-  const pub = new LocalTrackPublication(Track.Kind.Audio, info, track)
-  return { native, track, pub }
-}
+import { Native, Stream, publication } from "../fixtures/realtime-media"
 
 const connection: RealtimeConnection = {
   id: "microphone-test",

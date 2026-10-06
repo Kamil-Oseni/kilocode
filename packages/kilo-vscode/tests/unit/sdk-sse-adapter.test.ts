@@ -388,7 +388,10 @@ describe("KiloConnectionService SSE startup", () => {
     const paths: string[] = []
     globalThis.fetch = (async (request: RequestInfo | URL) => {
       const url = request instanceof Request ? request.url : String(request)
-      paths.push(new URL(url).pathname)
+      const path = new URL(url).pathname
+      paths.push(path)
+      if (path === "/global/health") return Response.json({ healthy: true, version: "fixture-build" })
+      if (path !== "/kilocode/capabilities") throw new Error(`Unexpected backend request: ${path}`)
       return Response.json({ version: 1, features: { "client.cli": 1 } })
     }) as typeof fetch
     const service = new KiloConnectionService({} as any)
@@ -398,7 +401,7 @@ describe("KiloConnectionService SSE startup", () => {
       await expect(service.connect("/tmp/workspace")).rejects.toThrow(
         "This Raya backend is not compatible with the installed extension. Update or reinstall Raya.",
       )
-      expect(paths).toEqual(["/kilocode/capabilities"])
+      expect(paths.toSorted()).toEqual(["/global/health", "/kilocode/capabilities"])
       expect(service.getConnectionState()).toBe("error")
       expect(() => service.getClient()).toThrow("Not connected")
     } finally {
@@ -415,8 +418,11 @@ describe("KiloConnectionService SSE startup", () => {
     let calls = 0
     globalThis.fetch = (async (request: RequestInfo | URL) => {
       const url = request instanceof Request ? request.url : String(request)
-      if (new URL(url).pathname === "/kilocode/capabilities")
+      const path = new URL(url).pathname
+      if (path === "/global/health") return Response.json({ healthy: true, version: "fixture-build" })
+      if (path === "/kilocode/capabilities")
         return Response.json({ version: 1, features: { "client.vscode": 1 } })
+      if (path !== "/global/event") throw new Error(`Unexpected backend request: ${path}`)
       calls += 1
       if (calls === 1) throw new TypeError("fetch failed")
       return new Response(

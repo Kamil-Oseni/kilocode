@@ -31,11 +31,18 @@ describe("toolDefaultOpen", () => {
     expect(toolDefaultOpen(tool(name), true, true)).toBeUndefined()
   })
 
-  it("leaves unrelated parts unchanged", () => {
-    expect(toolDefaultOpen(tool("read"), true, true, true)).toBeUndefined()
-    expect(toolDefaultOpen(tool("glob"), true, true, true)).toBeUndefined()
-    expect(toolDefaultOpen(tool("grep"), true, true, true)).toBeUndefined()
-    expect(toolDefaultOpen(tool("task"), true, true, true)).toBeUndefined()
+  it.each(["read", "glob", "grep", "task"])("keeps %s compact regardless of the MCP preference", (name) => {
+    expect(toolDefaultOpen(tool(name), true, true, true)).toBe(false)
+    expect(toolDefaultOpen(tool(name), false, false, false)).toBe(false)
+    expect(toolDefaultOpen(tool(name), true, true)).toBe(false)
+  })
+
+  it.each(["question", "suggest", "plan_exit"])("keeps the actionable %s card visible", (name) => {
+    expect(toolDefaultOpen(tool(name), false, false, false)).toBe(true)
+    expect(toolDefaultOpen(tool(name), true, true, true)).toBe(true)
+  })
+
+  it("leaves non-tool parts unchanged", () => {
     expect(toolDefaultOpen({ type: "text" } as Part, true, true, true)).toBeUndefined()
   })
 })

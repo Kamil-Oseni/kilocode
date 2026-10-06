@@ -2,6 +2,9 @@ import { describe, expect, it } from "bun:test"
 import type { Config } from "@kilocode/sdk/v2/client"
 import { fetchSnapshot } from "../../src/kilo-provider/config-snapshot"
 import { canonicalizePath } from "../../src/agent-manager/project/paths"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 // vscode mock is provided by the shared preload (tests/setup/vscode-mock.ts)
 const { KiloProvider } = await import("../../src/KiloProvider")
@@ -289,6 +292,8 @@ describe("KiloProvider indexing refresh", () => {
   })
 
   it("fetchAndSendIndexingStatus writes project consent through the dedicated endpoint", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "raya-indexing-fixture-"))
+    const subscriptions: Array<{ dispose(): unknown }> = []
     const worktree = canonicalizePath("/repo/.kilo/.kilocode/worktrees/feature") // raya_change - host path identity
     const calls: { input: RequestInfo | URL; init?: RequestInit }[] = []
     const original = globalThis.fetch
@@ -318,6 +323,14 @@ describe("KiloProvider indexing refresh", () => {
           getServerConfig: () => ({ baseUrl: "http://127.0.0.1:9999", password: "secret" }),
         } as never,
         {
+          subscriptions,
+          extensionPath: process.cwd(),
+          globalStorageUri: { fsPath: dir },
+          secrets: {
+            get: async () => undefined,
+            store: async () => {},
+            delete: async () => {},
+          },
           globalState: {
             get: () => undefined,
             update: async () => {},
@@ -340,6 +353,8 @@ describe("KiloProvider indexing refresh", () => {
       expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ enabled: false })
     } finally {
       globalThis.fetch = original
+      await Promise.all(subscriptions.map((entry) => entry.dispose()))
+      await rm(dir, { recursive: true, force: true })
     }
   })
 

@@ -65,7 +65,8 @@ describe("providersWithKiloFallback", () => {
       anthropic: { id: "anthropic", name: "Anthropic", env: [], models: {} },
     })
 
-    expect(providers.kilo?.name).toBe("Kilo Gateway")
+    expect(providers.kilo?.name).toBe("Raya Gateway")
+    expect(providers.kilo?.id).toBe("kilo")
     expect(providers.anthropic?.name).toBe("Anthropic")
   })
 

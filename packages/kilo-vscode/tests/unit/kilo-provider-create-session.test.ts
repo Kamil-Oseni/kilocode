@@ -49,9 +49,11 @@ describe("explicit session creation correlation", () => {
       currentSession: { id: string } | null
       contextSessionID: string | undefined
       streams: { focused: string | undefined }
+      connectionState: "connected" | "disconnected"
       handleEvent: (event: unknown) => void
     }
     internal.webview = { postMessage: async (message) => (sent.push(message), true) }
+    internal.connectionState = "connected"
     try {
       for (const draftID of [{ id: "untrusted" }, "x".repeat(1000), ""]) {
         await internal.handleSessionControl({ type: "createSession", draftID })
@@ -92,6 +94,7 @@ describe("explicit session creation correlation", () => {
         text: "",
       })
       state.connected = false
+      internal.connectionState = "disconnected"
       await internal.handleSessionControl({ type: "createSession", draftID: "cfe3f2d8-8844-4db1-84c3-1c5e6df06ba7" })
       expect(sent.at(-1)).toEqual({
         type: "sendMessageFailed",

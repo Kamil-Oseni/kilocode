@@ -21,7 +21,7 @@ Next delivery steps:
 
 All **38 unfinished requirements** remain active: **35 in progress and 3 planned**. The tracker also records **23 verified requirements**, one maintenance item and one deferred item. These are recorded classifications, not fresh certification of every historical result against fd11.
 
-Conversation, jobs, routines, organizations, goals, coding, voice, memory, activity and recovery all remain in scope. Automatic personal capture stays off; cloud workers remain stopped and their reservations released. Decision-model and second-PC work remain canceled. Video inference and PersonaPlex testing remain deferred.
+Conversation, jobs, routines, organizations, goals, coding, voice, memory, activity and recovery all remain in scope. On October 6 the user authorized switching to EmbeddingGemma 2 and enabling automatic capture of Raya conversations and actions; installed migration and capture remain pending verification. Ambient microphone and screen recording are not enabled. Cloud workers remain stopped and their reservations released. Decision-model and second-PC work remain canceled. Video inference and PersonaPlex testing remain deferred.
 
 The detailed implementation tracker is [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md#findings-and-overhauls). Earlier candidate-specific findings and all previous text from this readiness file are preserved verbatim in [Raya-Readiness-History.md](Raya-Readiness-History.md); consult their version qualifications before reusing evidence.
 
@@ -37,7 +37,7 @@ These nine gates come from `docs/Raya-Local-Readiness-Gates.md`. Their scope is 
 | Strict installed Coder | Pending | Complete the exact permitted edit/test task without extra shell calls or final text, and retain the required saved evidence. |
 | Installed Voice and permitted Home Assistant flow | Pending | Fresh-session and repeated capture work without duplicate or stale drafts; later typed drafts survive; Stop, pause and error recovery work; a permitted action is verified and the reply is audibly continuous. |
 | Scheduled routines | Pending | Two genuine scheduled work periods produce the required evidence; pause/stop and cold no-replay pass. |
-| Configured Memory | Pending | Genuine configured sync/search and worker shutdown pass, including pause, ordinary joins and durable debt; automatic personal capture stays off. |
+| Configured Memory | Pending | Genuine configured Gemma sync/search and worker shutdown pass, including pause, ordinary joins and durable debt; verify the authorized conversation/action capture with provenance, exclusions and correction/deletion controls. |
 | Matching-version postboot/service recovery | Pending | After a real Windows boot, preserve saved selections, chats and drafts, reconnect intended services and avoid unsolicited worker replay. |
 | Populated same-candidate reinstall recovery | Pending | Reinstall the same candidate with populated state, then verify cold restoration and no replay; upgrade preservation alone does not satisfy this gate. |
 

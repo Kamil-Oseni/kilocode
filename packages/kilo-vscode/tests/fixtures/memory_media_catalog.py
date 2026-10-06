@@ -102,6 +102,22 @@ class Catalog(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'space changed'):
             self.library.inventory()
 
+    def test_full_catalog_stays_searchable_and_rejects_new_assets(self):
+        self.library.publish([self.row()], space)
+        for index in range(127):
+            self.source.write_bytes(b'\x89PNG\r\n\x1a\n' + str(index).encode())
+            self.library.add(self.source, 'Attachment ' + str(index))
+        before = sorted(path.name for path in self.library.assets.iterdir())
+        self.source.write_bytes(b'\x89PNG\r\n\x1a\noverflow')
+        with self.assertRaisesRegex(ValueError, '128 attachments'):
+            self.library.add(self.source, 'Overflow')
+        self.assertEqual(sorted(path.name for path in self.library.assets.iterdir()), before)
+        self.assertEqual(len(self.library.inventory()), 128)
+        self.assertEqual(self.library.search(self.vector, space)[0]['id'], self.item['id'])
+        self.source.write_bytes(b'\x89PNG\r\n\x1a\nfixture-one')
+        self.assertEqual(self.library.add(self.source, 'Renamed')['title'], 'Renamed')
+        self.assertEqual(len(self.library.inventory()), 128)
+
 
 if __name__ == '__main__':
     unittest.main(argv=[sys.argv[0]], verbosity=2)

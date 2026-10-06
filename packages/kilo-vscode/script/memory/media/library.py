@@ -117,29 +117,32 @@ class Library:
         digest = hashlib.sha256(raw).hexdigest()
         relative = 'Assets/' + digest + suffix
         target = self.root / relative
-        if target.exists():
-            if read(target) != raw:
-                raise ValueError('An existing attachment snapshot differs.')
-        else:
-            with tempfile.NamedTemporaryFile(dir=self.assets, prefix='.snapshot-', delete=False) as file:
-                pending = Path(file.name)
-                try:
-                    file.write(raw)
-                    file.flush()
-                    os.fsync(file.fileno())
-                except BaseException:
-                    file.close()
-                    pending.unlink()
-                    raise
-            try:
-                os.link(pending, target)
-            except FileExistsError:
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT COUNT(*) FROM items').fetchone()[0] >= 128 and not db.execute('SELECT 1 FROM items WHERE id=?', (digest,)).fetchone():
+                raise ValueError('Pilot media library exceeds 128 attachments.')
+            if target.exists():
                 if read(target) != raw:
                     raise ValueError('An existing attachment snapshot differs.')
-            finally:
-                pending.unlink()
-        ordinary(target)
-        with self.connect() as db:
+            else:
+                with tempfile.NamedTemporaryFile(dir=self.assets, prefix='.snapshot-', delete=False) as file:
+                    pending = Path(file.name)
+                    try:
+                        file.write(raw)
+                        file.flush()
+                        os.fsync(file.fileno())
+                    except BaseException:
+                        file.close()
+                        pending.unlink()
+                        raise
+                try:
+                    os.link(pending, target)
+                except FileExistsError:
+                    if read(target) != raw:
+                        raise ValueError('An existing attachment snapshot differs.')
+                finally:
+                    pending.unlink()
+            ordinary(target)
             db.execute('INSERT INTO items VALUES (?,?,?,?,?,?,?,NULL) ON CONFLICT(id) DO UPDATE SET title=excluded.title',
                        (digest, kind, relative, digest, title.strip(), str(source), time.time()))
             db.execute('DELETE FROM tombstones WHERE id=?', (digest,))

@@ -22,7 +22,7 @@ Returned matches include source path, import time, content hash and similarity. 
 
 ## Validation
 
-The Bun test runs eight Python cases against real temporary files and SQLite: import/recall/forget, source revision snapshots, altered snapshot rejection, incompatible model rejection, atomic embedding batches, invalid vectors and limits, database path tampering and changed model metadata. This verifies storage behavior, not retrieval quality.
+The Bun test runs nine Python cases against real temporary files and SQLite: import/recall/forget, source revision snapshots, altered snapshot rejection, incompatible model rejection, atomic embedding batches, invalid vectors and limits, database path tampering, changed model metadata and full-catalog admission. A full catalog rejects new content before creating snapshots while allowing existing attachment titles to change; its existing search remains usable. SQLite serializes the count check and publication. This verifies storage behavior, not retrieval quality.
 
 Run from `packages/kilo-vscode`:
 

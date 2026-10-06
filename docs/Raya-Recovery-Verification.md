@@ -8,6 +8,10 @@ Reviewed 2026-10-05 against the saved recovery records and current local launche
 
 The guide also records the physically verified 58ab installation and the exact pre-upgrade rollback snapshot at `D:/RayaBackups/PackageVault-20261006-before-58ab-exact`. All eight archives and the original index were independently rehashed (1,523,496,799 bytes). This is a recovery snapshot, not a tested restore. The installation monitor failure remains explicit; physical payload and point-in-time preservation checks do not certify continuous writer exclusion or normal loaded workflows. The prior guide is preserved as `D:/RayaBackups/Independent-20261005/RECOVERY-before-58ab-update-20261006.md`; the updated guide SHA-256 is `8441bd47cf2464d747f9f236c84856bdaadea5d386c28b1816282f368c1d356c`. Update evidence is saved in `.tmp/new-pc/recovery-guide-58ab-update-independent.json`.
 
+## October 6 startup configuration check
+
+A fresh read-only check finds Home Assistant VM `c3b9e0c9-1f0f-4a36-ad47-98fd998bdd38` running with 2,048 MiB, two CPUs, EFI and the bridged Intel Wi-Fi adapter. AC automatic sleep and hibernate timeouts are both zero. The enabled logon startup task uses a 45-second delay, StartWhenAvailable, IgnoreNew and a three-minute execution limit; its last run on October 4 returned 0. This verifies current configuration and running state only. It does not prove a new boot, sleep/resume behavior, prevention of earlier guest clock stalls or recovery of the current extension. No settings, VM state or services were changed. Evidence: `.tmp/new-pc/pc-startup-readonly-20261006-current.json`.
+
 ## Separate the restore checks
 
 The saved `D:/RayaBackups/Independent-20261005/final-verification.json` records a completed isolated **file-copy rehearsal**: 145 snapshot files matched after copying into the rehearsal folder, nine curated notes matched their curated snapshot, and no missing local links were recorded. It explicitly records no live restore, no Home Assistant restore, no model/service startup and no automatic capture.

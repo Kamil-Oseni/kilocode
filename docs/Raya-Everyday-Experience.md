@@ -4,6 +4,12 @@ Conversation, coding, delegated jobs, routines and goals remain first-class work
 
 ## Source changes
 
+### Combined Memory regression checkpoint, 2026-10-06
+
+After the supervisor/reader merge and metadata fix, current source `a94c1acd895c6c498f0952472d6a9a662879a7ae` passes the full Memory package suite: **211 tests/952 assertions across twenty files**. The retained extension Memory cohort passes **160 tests/1,363 assertions across twenty-eight files**, with no skipped cases. All selected paths were checked for existence before dispatch. The original test processes settled normally; logs are `.tmp/memory-private/memory-combined-current-full.log` and `.tmp/memory-private/memory-combined-extension-full.log`.
+
+The historical codec fixture uses the independently rehashed original eleven-file producer at `D:/Raya/Services/Memory/Candidates/MemoryWorkerLedger-20261003-v3`, whose review SHA-256 is `f99cc7a0819bb7c2216c727e03620ca56ac3b1e8fc94ef0207ad3e7ccda7d037`; it is not substituted for the current twelve-file managed release. The pinned interpreter matches SHA-256 `b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2`. These disposable-store, actual-codec, controlled-loopback, DOM and nonmodel child checks establish source regression results. They do not establish the configured installed Memory workflow, physical voice continuity or model/GPU retirement. Capture and scheduling remain off, and no cloud worker was assigned or restarted.
+
 ### Non-Git metadata process checkpoint, 2026-10-06
 
 Session remote metadata now checks the current project's Git identity before constructing `simple-git`. Non-Git instances use the global worktree sentinel; repeated metadata reads previously attempted remote discovery there and discarded the failures. The new guard follows the existing Vcs service boundary, preserving actual Git remote selection, URL sanitization and successful cache reuse.

@@ -1,5 +1,15 @@
 # Raya remaining implementation and agent handoff
 
+## Local-only continuation checkpoint, 2026-10-06
+
+Verified readiness48/100; installed workflows2/9; unfinished38 (35 In progress,3 Planned). All cloud reservations are released: Memory contract/service/protocol/tool, retrieval/Dream, lessons/self-heal, Memory UI and General/follow-up defects have no cloud owner. Do not assign/restart cloud workers or transfer source. Decision and second-PC migration remain canceled; full goal active.
+
+Combined local source fixes6bad55a58b/aee8b9bcb9/958b0e1186 are committed, independently reviewed and pass combined CLI typecheck original82024. They address deterministic exact-write refusal retirement, direct execution by assigned foreground workers, and source Git ignore probes in nonrepositories. Focused checks:5/218 plus10/60;4/631 plus55/390;2/19 respectively. Current installed4cdd does not contain these fixes. Build and install the matching standard package next; refresh the actual source cohort rather than assuming old67/163 counts. Back up the actual current eight-package vault including4cdd before rotation; the before4cdd backup is historical.
+
+Actual full Routine original32625/parent837a13ce failed at its first all-member-zero close despite two completed baseline periods, current-session first get_goal and completed Goals. Native accounting:669 complete unique members,550 exit0,92 exit128,27 exit1,no overflow. Git images account for92 exit128 and2 exit1;cmd images25 exit1. Arguments/callers remain unproven. All seven original joins fulfill; closed/settled:false acceptance sentinels do not contradict those joins. Later cold65s, pause/CAS/pending/running/same-run resume/Stop/noReplay and intentional-crash checks were not reached. Independent actual audit9fc5742e preserves the failure. Do not waive exits or claim the snapshot fix explains every recorded failure.
+
+Retain original General13 oracles and complete Routine lifecycle/native4096/all-member-zero checks unchanged. Run matching installed acceptance, then normal-client and all four reported voice failures. Models are unloaded. No microphone/playback/capture/lights/HA/VM actions while the user sleeps.
+
 ## ChatGPT 2026-09-30 15:04 EDT - export database mismatch refusal
 
 The shared session-export parent refuses a second workspace with a different `dbPath` before disturbing the first worker. Focused respawn tests pass 7/7 with 13 assertions; CLI typecheck passes. This protects one identity boundary but does not supply canonical alias/cross-process admission, shared workspace-state merge, failed-envelope retention or a portable capture proof. Readiness stays **47/100**, portable **0/20**.

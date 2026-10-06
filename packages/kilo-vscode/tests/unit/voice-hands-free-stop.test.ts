@@ -33,5 +33,5 @@ test("actual browser local hands-free control remains available and fences late 
     new Response(child.stderr).text(),
   ])
   expect(code, out + err).toBe(0)
-  expect(out).toContain("13 actual hands-free stop assertions passed")
+  expect(out).toContain("Hands-free Stop and voice status accessibility assertions passed")
 }, 30_000)

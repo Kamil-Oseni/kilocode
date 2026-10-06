@@ -128,6 +128,7 @@ globalThis.acquireVsCodeApi = () => ({
 const { createComponent } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { VSCodeProvider } = await import("../../webview-ui/src/context/vscode.tsx")
+const { ServerProvider } = await import("../../webview-ui/src/context/server.tsx")
 const { SecondBrain } = await import("../../webview-ui/src/components/settings/SecondBrain.tsx")
 const node = document.createElement("main")
 document.body.appendChild(node)
@@ -135,7 +136,11 @@ const dispose = render(
   () =>
     createComponent(VSCodeProvider, {
       get children() {
-        return createComponent(SecondBrain, {})
+        return createComponent(ServerProvider, {
+          get children() {
+            return createComponent(SecondBrain, {})
+          },
+        })
       },
     }),
   node,
@@ -192,6 +197,50 @@ try {
     false,
   )
   assert.equal(JSON.stringify(sent).includes("synthetic-private-key"), false)
+  button("Preview linked context").click()
+  const preview = sent.at(-1)
+  assert.equal(preview.action, "context")
+  assert.equal(preview.budget, 3000)
+  assert.equal(preview.query, "Synthetic query")
+  // Controlled display metadata only; the real native context flow is a separate gate.
+  emit(preview.id, {
+    configured: true,
+    status: "ready",
+    results: [],
+    context: {
+      sources: [
+        {
+          relative: "Projects/Eden.md",
+          line: 2,
+          end_line: 4,
+          heading: "Eden",
+          text: "Private synthetic passage",
+          source_sha256: "a".repeat(64),
+          depth: 1,
+          tokens: 12,
+          truncated: true,
+        },
+      ],
+      diagnostics: [{ relative: "Missing.md", reason: "missing <img src=x>" }],
+      tokens: 12,
+      truncated: true,
+      capture_enabled: false,
+    },
+  })
+  assert.match(node.textContent, /12 estimated passage tokens/)
+  assert.match(node.textContent, /Projects\/Eden.md/)
+  assert.match(node.textContent, /Some context was omitted/)
+  assert.match(node.textContent, /Limited passage/)
+  assert.match(node.textContent, /Skipped links/)
+  assert.match(node.textContent, /Missing.md: missing <img src=x>/)
+  assert.equal(node.querySelector('[aria-label="Linked memory context"] img'), null)
+  emit(original.id, {
+    configured: true,
+    status: "ready",
+    results: [],
+    context: { sources: [], diagnostics: [], tokens: 9999 },
+  })
+  assert.equal(node.textContent.includes("9999"), false)
   console.log("SecondBrain real DOM/host/HTTP handshake and cancellation passed")
 } finally {
   held()

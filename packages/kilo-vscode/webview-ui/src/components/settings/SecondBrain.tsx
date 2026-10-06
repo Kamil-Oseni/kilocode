@@ -13,6 +13,7 @@ const labels: Record<string, string> = {
   service_draining: "Memory is draining and cannot accept searches.",
   identity_mismatch: "Memory does not match the selected setup manifest.",
   setup_invalid: "Select a valid reviewed setup manifest and credential.",
+  unsupported: "Linked context requires a reviewed context-capable Memory release. Import its service setup first.",
   setup_changing: "Memory setup is changing. Wait for local requests to finish, then check the service.",
   transport_error: "The local Memory service could not finish the request.",
   control_setup_required: "Import a reviewed local control setup before reviewing sources.",
@@ -37,9 +38,13 @@ export function SecondBrain() {
     }
     if (action === "setup" || action === "check")
       setState({ configured: state().configured, status: "checking", results: [] })
-    if (action === "search") {
+    if (action === "search" || action === "context") {
       setState({ configured: state().configured, status: "searching", results: [] })
-      vscode.postMessage({ type: "secondBrain", action, id: next, query: query() })
+      vscode.postMessage(
+        action === "context"
+          ? { type: "secondBrain", action, id: next, query: query(), budget: 3000 }
+          : { type: "secondBrain", action, id: next, query: query() },
+      )
       return
     }
     vscode.postMessage({ type: "secondBrain", action, id: next })
@@ -99,6 +104,9 @@ export function SecondBrain() {
       <Button onClick={() => request("search")} disabled={!state().configured || busy() || !query().trim()}>
         Search notes
       </Button>
+      <Button onClick={() => request("context")} disabled={!state().configured || busy() || !query().trim()}>
+        Preview linked context
+      </Button>
       <Show when={busy()}>
         <Button onClick={() => request("cancel")}>Cancel search</Button>
       </Show>
@@ -116,6 +124,45 @@ export function SecondBrain() {
           </section>
         )}
       </For>
+      <Show when={state().context}>
+        {(context) => (
+          <section aria-label="Linked memory context">
+            <p>
+              {context().tokens} estimated passage tokens · {context().sources.length} sources
+            </p>
+            <Show when={context().truncated}>
+              <p role="status">Some context was omitted. Narrow your query to retrieve more relevant passages.</p>
+            </Show>
+            <For each={context().sources}>
+              {(source) => (
+                <section>
+                  <h5>
+                    {source.relative} · lines {source.line}–{source.end_line}
+                  </h5>
+                  <Show when={source.heading}>
+                    <p>{source.heading}</p>
+                  </Show>
+                  <pre>{source.text}</pre>
+                  <Show when={source.truncated}>
+                    <small>Limited passage · </small>
+                  </Show>
+                  <small>Source SHA-256: {source.source_sha256}</small>
+                </section>
+              )}
+            </For>
+            <Show when={context().diagnostics.length}>
+              <h5>Skipped links</h5>
+              <For each={context().diagnostics}>
+                {(row) => (
+                  <p>
+                    {row.relative}: {row.reason}
+                  </p>
+                )}
+              </For>
+            </Show>
+          </section>
+        )}
+      </Show>
       <p>
         Review and sync require separate native confirmations. Disconnect joins local transport only. Capture is
         disabled.

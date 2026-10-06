@@ -53,6 +53,7 @@ export type BrainRequest =
     }
   | { type: "secondBrain"; action: "cancel"; id: string; target: string }
   | { type: "secondBrain"; action: "search"; id: string; query: string }
+  | { type: "secondBrain"; action: "context"; id: string; query: string; budget: number }
 
 export type BrainResponse = { type: "secondBrainState"; id: string; state: BrainState }
 

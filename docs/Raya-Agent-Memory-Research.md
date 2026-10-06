@@ -153,3 +153,12 @@ The trusted workspace host now validates the exact context command and calls the
 These checks use private HOME, USERPROFILE, APPDATA, LOCALAPPDATA and XDG profile variables, or the CLI private test preload. Earlier commands did not explicitly isolate the full set; the integration owner reported concurrent normal-profile log changes and is repeating preservation verification after those writers stopped. No process from those earlier runs remains pending.
 
 Next verify the combined supported v2 host/service path, native release compatibility and diagnostics display before handing this off for deployment. No installed recall gate has passed. Dream/review jobs and repair lessons remain unfinished; capture and scheduling stay off.
+
+
+### Linked preview and coordinator verification checkpoint
+
+Memory now provides an explicit Preview linked context action using a 3,000-passage-token engineering budget. It shows source paths and line coordinates, source hashes, passage counts, truncation and skipped-link reasons. This manual preview stays in the panel; conversation recall uses its separately authorized model tool. The host validates the preview query and budget and retains its original cancellation owner. Unsupported service releases return a useful setup message.
+
+The selected twelve-source release now passes the updated host/Journal fixture. Eleven coordinator and real-DOM tests pass with 198 assertions; five actual reader/result-contract tests pass with 52 assertions. The new coordinator context case is a genuine zero-passage Journal transaction with an inert publication sink. It establishes original request/debt settlement across BrainService, OperationOwner and ClientV2, not a native retrieval worker or a successful non-empty source query. The non-empty reader test separately uses real disposable notes and a character counter. DOM checks render controlled sourced metadata, prove diagnostics are escaped and reject stale replies; the fixture now supplies the actual ServerProvider required by proposal UI.
+
+Both extension typechecks, affected ESLint, bundle, Knip and change-marker checks pass using private profiles. No installed gate is earned by these fixtures. Next connect a supported private native service fixture to the complete non-empty host flow, verify release compatibility, and then prepare the combined source handoff. Dream/review jobs and repair lessons remain unfinished.

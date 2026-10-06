@@ -192,7 +192,8 @@ export class BrainService {
       post(empty)
       return
     }
-    if (budget !== undefined && cfg.setup.version !== 2) throw new Error("Reviewed v2 Memory context setup required")
+    if (budget !== undefined && cfg.setup.version !== 2)
+      throw new Failure("unsupported", "Reviewed v2 Memory context setup required", 0)
     post({ configured: true, status: query === undefined ? "checking" : "searching", results: [] })
     if (cfg.setup.version === 2) {
       this.operation ??= new OperationOwner(this.settings, cfg.key, cfg.setup)

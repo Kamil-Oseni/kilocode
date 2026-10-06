@@ -82,6 +82,11 @@ export class BrainHost {
     }
     if (message.action === "search" && typeof message.query === "string")
       await this.handle({ type: "secondBrain", action: "search", id: message.id, query: message.query }, post)
+    if (message.action === "context" && typeof message.query === "string" && typeof message.budget === "number")
+      await this.handle(
+        { type: "secondBrain", action: "context", id: message.id, query: message.query, budget: message.budget },
+        post,
+      )
     if (message.action === "cancel" && typeof message.target === "string")
       await this.handle({ type: "secondBrain", action: "cancel", id: message.id, target: message.target }, post)
     if (
@@ -92,7 +97,7 @@ export class BrainHost {
       await this.handle(
         {
           type: "secondBrain",
-          action: message.action as Exclude<BrainRequest["action"], "search" | "cancel" | "proposal">,
+          action: message.action as Exclude<BrainRequest["action"], "search" | "context" | "cancel" | "proposal">,
           id: message.id,
         },
         post,
@@ -264,12 +269,8 @@ export class BrainHost {
       if (message.action === "disable") await this.control.pause((value) => this.confirm(value, "Disable policy"))
       if (message.action === "cancel" && this.current?.id === message.target)
         await this.service.stop(this.current.owner)
-      if (message.action === "search") {
-        if (typeof message.query !== "string" || !message.query.trim() || message.query.length > 8000)
-          throw new Error("Invalid query")
-        const owner = {}
-        this.current = { id: message.id, owner }
-        await this.service.run(message.query, send, owner)
+      if (message.action === "search" || message.action === "context") {
+        await this.query(message, send)
         return
       }
       if (message.action === "check") {
@@ -291,6 +292,27 @@ export class BrainHost {
         results: [],
       })
     }
+  }
+
+  private async query(
+    message: Extract<BrainRequest, { action: "search" | "context" }>,
+    post: (state: BrainResponse["state"]) => void,
+  ) {
+    if (typeof message.query !== "string" || !message.query.trim() || message.query.length > 8000)
+      throw new Error("Invalid query")
+    const owner = {}
+    this.current = { id: message.id, owner }
+    if (
+      message.action === "context" &&
+      (!Number.isSafeInteger(message.budget) || message.budget < 1 || message.budget > 12000)
+    )
+      throw new Error("Invalid context budget")
+    await this.service.run(
+      message.query,
+      post,
+      owner,
+      message.action === "context" ? { budget: message.budget, parent: new AbortController().signal } : undefined,
+    )
   }
 
   private async setup() {

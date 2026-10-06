@@ -4,6 +4,12 @@ import { createKiloClient } from "@kilocode/sdk/v2/client"
 const { KiloProvider } = await import("../../src/KiloProvider")
 
 type Reply = { type: string; sessionID: string; requestID: string; jobs: unknown[]; error?: string }
+type Stop = {
+  client: ReturnType<typeof createKiloClient>
+  generation: number
+  directory: string
+  done: Promise<unknown>
+}
 type Context = {
   client: { kilocode: { backgroundJobs: () => Promise<{ data: unknown[] }> } }
   connectionState: "connected"
@@ -76,6 +82,7 @@ for (const action of ["refresh", "cancel"] as const)
           connectionGeneration: 1,
           jobsBackoff: 0,
           jobReads: new Map<string, symbol>(),
+          jobStops: new Map<string, Stop>(),
           getWorkspaceDirectory: () => workspace.directory,
           postMessage: (message: Reply) => sent.push(message),
           fetchAndSendBackgroundJobs: async (sessionID: string, requestID: string) =>
@@ -137,6 +144,7 @@ for (const status of [200, 503])
       connectionGeneration: 1,
       jobsBackoff: 0,
       jobReads: new Map<string, symbol>(),
+      jobStops: new Map<string, Stop>(),
       getWorkspaceDirectory: () => "C:/original",
       postMessage: (message: Reply) => sent.push(message),
       fetchAndSendBackgroundJobs: async (sessionID: string, requestID: string) =>
@@ -248,3 +256,64 @@ it("actual SDK worker status reads for independent sessions both complete", asyn
     await server.stop(true)
   }
 })
+
+for (const status of [200, 503])
+  for (const replaced of [false, true])
+    it(`actual SDK pending worker cancellation ${status} ${replaced ? "refuses replacement scope" : "shares its original request"}`, async () => {
+      const entered = Promise.withResolvers<void>()
+      const held = Promise.withResolvers<Response>()
+      const requests: string[] = []
+      const sent: Reply[] = []
+      const server = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch(request) {
+          requests.push(request.method)
+          if (request.method === "GET") return Response.json([])
+          entered.resolve()
+          return held.promise.then((response) => response.clone())
+        },
+      })
+      const state = {
+        client: createKiloClient({ baseUrl: server.url.toString() }),
+        connectionState: "connected" as const,
+        connectionGeneration: 1,
+        jobsBackoff: 0,
+        jobReads: new Map<string, symbol>(),
+        jobStops: new Map<string, Stop>(),
+        getWorkspaceDirectory: () => "C:/original",
+        postMessage: (message: Reply) => sent.push(message),
+        fetchAndSendBackgroundJobs: async (sessionID: string, requestID: string) =>
+          provider.fetchAndSendBackgroundJobs.call(state, sessionID, requestID),
+      }
+      const provider = KiloProvider.prototype as unknown as {
+        fetchAndSendBackgroundJobs: (this: typeof state, sessionID: string, requestID: string) => Promise<void>
+        cancelBackgroundJob: (this: typeof state, jobID: string, sessionID: string, requestID: string) => Promise<void>
+      }
+      const pending = provider.cancelBackgroundJob.call(state, "worker", "parent", "original")
+      let duplicate: Promise<void> | undefined
+      try {
+        await entered.promise
+        if (replaced) state.connectionGeneration++
+        duplicate = provider.cancelBackgroundJob.call(state, "worker", "parent", "duplicate")
+        // A GET barrier observes all HTTP requests dispatched before it without releasing the held cancellation.
+        await state.client.kilocode.backgroundJobs({ directory: "C:/original", sessionID: "barrier" })
+        expect(requests.filter((method) => method === "POST")).toHaveLength(1)
+        expect(state.jobStops.size).toBe(1)
+        if (replaced) {
+          await duplicate
+          expect(sent[0]).toMatchObject({ requestID: "duplicate", error: expect.any(String) })
+        }
+        held.resolve(Response.json(status === 200 ? true : { message: "Cancellation unavailable" }, { status }))
+        await Promise.all([pending, duplicate])
+        expect(state.jobStops.size).toBe(0)
+        expect(requests.filter((method) => method === "POST")).toHaveLength(1)
+        if (replaced) expect(sent).toHaveLength(1)
+        if (!replaced)
+          expect(sent.some((reply) => reply.requestID === "duplicate" && !!reply.error === (status !== 200))).toBe(true)
+      } finally {
+        held.resolve(Response.json({}, { status: 503 }))
+        await Promise.all([pending, duplicate])
+        await server.stop(true)
+      }
+    })

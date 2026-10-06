@@ -517,6 +517,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly streams = new SessionStreamScheduler((msg) => this.postMessage(msg))
   private jobsBackoff = 0
   private readonly jobReads = new Map<string, symbol>()
+  private readonly jobStops = new Map<
+    string,
+    { client: KiloClient; generation: number; directory: string; done: Promise<unknown> }
+  >()
   private readonly visibleTaskStreams = new VisibleTaskStreams((id, visible) => this.streams.setVisible(id, visible))
   private readonly confirmations = new MessageConfirmation()
   private readonly costs = new MaxCostNudge()
@@ -4051,8 +4055,33 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.connectionState === "connected" &&
       this.connectionGeneration === generation &&
       sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
+    const previous = this.jobStops.get(jobID)
+    if (
+      previous &&
+      (previous.client !== client ||
+        previous.generation !== generation ||
+        !sameDirectory(previous.directory, directory))
+    ) {
+      this.postMessage({
+        type: "backgroundJobsLoaded",
+        sessionID,
+        requestID,
+        jobs: [],
+        error: "The original worker cancellation is still pending. Refresh status before trying again.",
+      })
+      return
+    }
+    const stop = previous ?? {
+      client,
+      generation,
+      directory,
+      done: Promise.resolve().then(() =>
+        client.kilocode.backgroundJob.cancel({ jobID, directory }, { throwOnError: true }),
+      ),
+    }
+    this.jobStops.set(jobID, stop)
     try {
-      await client.kilocode.backgroundJob.cancel({ jobID, directory }, { throwOnError: true })
+      await stop.done
       if (!current()) return
       await this.fetchAndSendBackgroundJobs(sessionID, requestID)
     } catch (error) {
@@ -4065,6 +4094,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         jobs: [],
         error: getErrorMessage(error) || "Failed to cancel background job",
       })
+    } finally {
+      if (this.jobStops.get(jobID) === stop) this.jobStops.delete(jobID)
     }
   }
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { MemoryDigest } from "../capture/digest"
 import { MemoryFiles } from "../storage/store"
 import { MemoryIndexer } from "./indexer"
@@ -216,7 +217,9 @@ export namespace MemoryRecall {
     const rows = input.hits.map((hit) => ({
       hit,
       text: [
-        `record id=${label(`${hit.source}:${hit.kind}:${hit.text.slice(0, 32)}`)} type=${label(hit.kind.toLowerCase())} source=${label(hit.source)}${
+        `record id=${label(hit.kind)}_${createHash("sha256")
+          .update(JSON.stringify([hit.source, hit.kind, hit.text]))
+          .digest("hex")} type=${label(hit.kind.toLowerCase())} source=${label(hit.source)}${
           hit.topics?.length ? ` topics=${hit.topics.map(label).join(",")}` : ""
         } updated=${hit.updatedAt ? new Date(hit.updatedAt).toISOString() : "unknown"}`,
         `text: ${body(hit.text)}`,

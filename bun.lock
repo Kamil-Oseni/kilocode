@@ -364,6 +364,7 @@
       "version": "7.4.23",
       "dependencies": {
         "effect": "catalog:",
+        "marked": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {

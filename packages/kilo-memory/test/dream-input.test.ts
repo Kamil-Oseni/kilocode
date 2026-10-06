@@ -58,6 +58,40 @@ test("source revision and target baseline changes require renewed selection", as
   await expect(plan.validate(candidate)).rejects.toThrow("not approved")
 })
 
+test("generated links resolve only to selected note revisions and ignore code examples", async () => {
+  const f = await fixture()
+  const text = "# Eden\nApproved synthetic project note."
+  await mkdir(path.join(f.root, "Projects"))
+  await writeFile(path.join(f.root, "Projects/Eden.md"), text)
+  const plan = await MemoryFiles.dreamInput.prepare(f.root, f.project, {
+    ...f.input,
+    targets: [...f.input.targets, { key: "eden", path: "Projects/Eden.md", expected: hash(text) }],
+  })
+  const [candidate] = await plan.decode(f.output)
+  const revise = (content: string) => ({ ...candidate, changes: [{ ...candidate.changes[0], content }] })
+  await plan.validate(revise("[Eden](../Projects/Eden.md) and [self](#preferences)."))
+  await plan.validate(revise("[Eden][project]\n\n[project]: ../Projects/Eden.md"))
+  await plan.validate(revise("`[example](https://example.com)`\n\n```md\n[example](../../Private/secret.md)\n```"))
+  for (const content of [
+    "[external](https://example.com)",
+    "![external](https://example.com/image.png)",
+    "[foreign](../../project/approved.md)",
+    "[missing](missing.md)",
+    "[private](../Private/secret.md)",
+    "[encoded](%2e%2e/%2e%2e/secret.md)",
+    "[double](%252e%252e/secret.md)",
+    "[absolute](C:/secret.md)",
+    "[network](//host/share.md)",
+    '<a href="../Projects/Eden.md">HTML</a>',
+    "[reference][bad]\n\n[bad]: https://example.com",
+    "[file](../Projects/Eden.md?read=1)",
+  ]) {
+    await expect(plan.validate(revise(content))).rejects.toThrow()
+  }
+  await writeFile(path.join(f.root, "Projects/Eden.md"), "Changed after approval")
+  await expect(plan.validate(revise("[Eden](../Projects/Eden.md)"))).rejects.toThrow("not approved")
+})
+
 test("unapproved keys, citations, extra authority and empty evidence are refused", async () => {
   const f = await fixture()
   const plan = await MemoryFiles.dreamInput.prepare(f.root, f.project, f.input)

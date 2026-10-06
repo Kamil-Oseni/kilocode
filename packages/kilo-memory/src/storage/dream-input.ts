@@ -3,11 +3,13 @@ import { constants } from "node:fs"
 import { lstat, open } from "node:fs/promises"
 import path from "node:path"
 import { z } from "zod"
+import { Marked } from "marked"
 import { MemoryRedact } from "../capture/redact"
 import { MemoryToken } from "../recall/token"
 import type { MemoryDream } from "./dream"
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
+const parser = new Marked()
 const relative = z
   .string()
   .max(512)
@@ -226,6 +228,28 @@ export namespace MemoryDreamInput {
           await snapshot(project, source.path, source.sha256, active)
         }
         await snapshot(root, target.path, target.expected, active)
+        const content = candidate.changes[0].content
+        if (content === null) return
+        const links = new Set<string>()
+        void parser.walkTokens(parser.lexer(content), (token) => {
+          if (token.type === "html") throw new Error("Dream notes cannot introduce unreviewed HTML")
+          if (token.type !== "link" && token.type !== "image") return
+          const href = decodeURIComponent(token.href)
+          if (!href || /[\\:?\x00-\x1f]/.test(href) || href.startsWith("/") || /%[0-9a-f]{2}/i.test(href))
+            throw new Error("Dream links must remain local to the approved note selection")
+          const file = href.split("#")[0]
+          const name = file ? path.posix.normalize(path.posix.join(path.posix.dirname(target.path), file)) : target.path
+          relative.parse(name)
+          links.add(name)
+          if (links.size > 8) throw new Error("Dream link selection exceeds its bound")
+        })
+        for (const name of links) {
+          active?.throwIfAborted()
+          if (name === target.path) continue
+          const linked = selected.targets.find((item) => item.path === name)
+          if (!linked || linked.expected === null) throw new Error("Dream link target is not an approved existing note")
+          await snapshot(root, linked.path, linked.expected, active)
+        }
       },
     }
   }

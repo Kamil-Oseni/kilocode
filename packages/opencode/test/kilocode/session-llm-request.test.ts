@@ -7,8 +7,9 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { Agent } from "@/agent/agent"
 import type { Auth } from "@/auth"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import type { Plugin } from "@/plugin"
-import type { Provider } from "@/provider/provider"
+import { Plugin } from "@/plugin"
+import { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
 import { LLMRequestPrep } from "@/session/llm/request"
 import { MessageID, SessionID } from "@/session/schema"
 import { SystemPrompt } from "@/session/system"
@@ -27,15 +28,135 @@ import { Agent as AgentService } from "@/agent/agent"
 import { Session } from "@/session/session"
 import { Permission } from "@/permission"
 import { ToolRegistry } from "@/tool/registry"
+import { SessionTools } from "@/session/tools"
+import { SessionProcessor } from "@/session/processor"
+import { SessionPrompt } from "@/session/prompt"
+import { InstanceState } from "@/effect/instance-state"
+import { MCP } from "@/mcp"
+import { Config } from "@/config/config"
+import { Truncate } from "@/tool/truncate"
+import { Database } from "@opencode-ai/core/database/database"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Parameters as TaskParameters } from "@/tool/task"
 import { TaskSchema } from "@/kilocode/tool/task-schema"
+import { FileGuidance } from "@/kilocode/tool/file-guidance"
 import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([AgentService.node, Session.node, Permission.node, SessionProjector.node, ToolRegistry.node]),
+    LayerNode.group([
+      AgentService.node,
+      Provider.node,
+      Session.node,
+      Permission.node,
+      SessionProjector.node,
+      ToolRegistry.node,
+      SessionProcessor.node,
+      SessionPrompt.node,
+      Plugin.node,
+      MCP.node,
+      Config.node,
+      Truncate.node,
+      RuntimeFlags.node,
+      Database.node,
+      CrossSpawnSpawner.node,
+      EventV2Bridge.node,
+    ]),
   ),
+)
+
+it.instance("file guidance survives actual native and completion-envelope request preparation", () =>
+  Effect.gen(function* () {
+    const registry = yield* ToolRegistry.Service
+    const items = yield* registry.all()
+    const named = Object.fromEntries(items.map((item) => [item.id, item]))
+    const sessions = yield* Session.Service
+    const agents = yield* AgentService.Service
+    const processors = yield* SessionProcessor.Service
+    const prompts = yield* SessionPrompt.Service
+    const ctx = yield* InstanceState.context
+    const who = yield* agents.get("code")
+    if (!who) throw new Error("Actual code agent required")
+    const session = yield* sessions.create()
+    const user = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      sessionID: session.id,
+      role: "user",
+      agent: who.name,
+      model: { providerID: model.providerID, modelID: model.id },
+      time: { created: Date.now() },
+    })
+    const assistant = yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      parentID: user.id,
+      sessionID: session.id,
+      role: "assistant",
+      mode: who.name,
+      agent: who.name,
+      cost: 0,
+      path: { cwd: ctx.directory, root: ctx.directory },
+      providerID: model.providerID,
+      modelID: model.id,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: Date.now() },
+    })
+    const processor = yield* processors.create({ assistantMessage: assistant, sessionID: session.id, model })
+    const catalog = yield* SessionTools.resolve({
+      agent: who,
+      model,
+      session,
+      processor,
+      messages: yield* sessions.messages({ sessionID: session.id }),
+      bypassAgentCheck: false,
+      promptOps: {
+        cancel: prompts.cancel,
+        resolvePromptParts: prompts.resolvePromptParts,
+        prompt: (input) => prompts.prompt(input).pipe(Effect.orDie),
+      },
+      memoryCache: {},
+    })
+    const tools: Record<string, Tool> = {}
+    for (const id of ["read", "write", "edit", "task"]) {
+      const item = named[id]
+      const schema = ToolJsonSchema.fromTool(item)
+      const value = FileGuidance.description(id, item.description)
+      expect(value.startsWith(item.description)).toBe(true)
+      const description = catalog[id].description
+      if (!description) throw new Error("Actual tool description required")
+      if (id === "task") expect(FileGuidance.description(id, description)).toBe(description)
+      if (id !== "task") expect(catalog[id].description).toBe(value)
+      expect(asSchema(catalog[id].inputSchema).jsonSchema).toEqual(ProviderTransform.schema(model, schema))
+      tools[id] = catalog[id]
+    }
+    expect(FileGuidance.description("custom_read", "Custom tool")).toBe("Custom tool")
+    for (const oauth of [false, true]) {
+      const result = yield* Effect.promise(() => prepare("code", oauth, tools))
+      const definitions = Object.entries(result.tools).map(([id, item]) => ({
+        function: {
+          name: id,
+          description: item.description,
+          parameters: { ...asSchema(item.inputSchema).jsonSchema },
+        },
+      }))
+      const guide = ToolEnvelope.guide(definitions)
+      for (const id of ["read", "write", "edit"]) {
+        const value = result.tools[id].description
+        expect(value).toBe(tools[id].description)
+        expect(value).toContain("Outer display line-number prefixes, XML wrappers")
+        expect(value).toContain("Do not copy these decorations")
+        expect(value).toContain("do not automatically strip file data")
+        expect(value).toContain("does not establish original newline endings, final newline or encoding")
+        expect(value).toContain("say exact byte equality is unverified")
+        expect(value).toContain("report any mismatch or unavailable verification")
+        expect(guide).toContain(JSON.stringify(value))
+        expect(asSchema(result.tools[id].inputSchema).jsonSchema).toEqual(asSchema(tools[id].inputSchema).jsonSchema)
+      }
+      expect(result.tools.task.description).toBe(catalog.task.description)
+      expect(ToolEnvelope.schema(definitions, "required").anyOf).toHaveLength(5)
+    }
+  }),
 )
 
 it.instance("actual Task advertisement requires fresh objectives through native and Ollama envelope preparation", () =>

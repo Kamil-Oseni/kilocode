@@ -12,6 +12,7 @@ import { visible as pathVisible } from "@/kilocode/tool/path-catalog" // kilocod
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { TaskSchema } from "@/kilocode/tool/task-schema" // kilocode_change - preserve only authenticated saved Task objectives
+import { FileGuidance } from "@/kilocode/tool/file-guidance" // kilocode_change - distinguish file text from rendered tool output
 import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - fence the original completed goal dispatch
 import { prepare as goalSchema } from "@/kilocode/goal/completion-schema" // kilocode_change - bind saved goal criteria before model schema transformation
 import { ToolRegistry } from "@/tool/registry"
@@ -208,7 +209,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     const base = yield* goalSchema(item.id, advertised, input.session.id) // kilocode_change - actual original goal owner supplies fresh criterion IDs
     const schema = ProviderTransform.schema(input.model, base)
     tools[item.id] = tool({
-      description: TaskSchema.description(item.description, advertised), // kilocode_change - retain static instructions and authenticated recovery guidance
+      description: FileGuidance.description(item.id, TaskSchema.description(item.description, advertised)), // kilocode_change - retain static/recovery instructions and distinguish rendered file views
       inputSchema: jsonSchema(schema),
       execute(args, options) {
         return run.promise(

@@ -4,7 +4,7 @@ import { canonical, check, child, decode, object, sha } from "./control/frames"
 type Value = ReturnType<typeof decode>["value"]
 type Row = { [key: string]: Value }
 type Identity = Readonly<{ request: string; epoch: string; release: string; digest: string }>
-type Selection = Identity & Readonly<{ kind: "search" | "sync"; downstream?: readonly Identity[] }>
+type Selection = Identity & Readonly<{ kind: "search" | "sync"; downstream?: readonly Identity[]; budget?: number }>
 const counts = ["files", "chunks", "new_embeddings", "reused_embeddings"]
 const common = [
   "format",
@@ -193,11 +193,21 @@ function result(value: Value, selected: Selection) {
     check(!Object.hasOwn(row, "rebuilt") || row.rebuilt === true, "Memory rebuilt result differs")
     return row
   }
-  fields(row, ["results", "capture_enabled"])
+  fields(row, ["results", "capture_enabled", ...(selected.budget === undefined ? [] : ["context"])])
   check(
     row.capture_enabled === false && Array.isArray(row.results) && row.results.length <= 20,
     "Memory search result shape differs",
   )
+  if (selected.budget !== undefined) {
+    check(
+      Number.isSafeInteger(selected.budget) &&
+        selected.budget > 0 &&
+        selected.budget <= 12000 &&
+        row.results.length === 0,
+      "Linked context requires an explicit budget and no unbudgeted search passages",
+    )
+    return row
+  }
   row.results.forEach((item) =>
     fields(item, [
       "path",

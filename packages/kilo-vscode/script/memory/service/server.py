@@ -55,6 +55,15 @@ DRAIN = {'id': None, 'until': 0}
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 
+def search(body):
+    if not isinstance(body, dict) or set(body)-{'query', 'top', 'context_budget'} or not isinstance(body.get('query'), str) or not body['query'].strip() or type(body.get('top', 5)) is not int or not 1 <= body.get('top', 5) <= 10:
+        raise ValueError('Provide a query and integer top between 1 and 10.')
+    budget = body.get('context_budget')
+    if 'context_budget' in body and (type(budget) is not int or not 1 <= budget <= 12000):
+        raise ValueError('Provide an explicit integer linked-context budget from 1 to 12000.')
+    return {'query': body['query'], 'top': body.get('top', 5), **({'context_budget': budget} if budget is not None else {})}
+
+
 async def admit(record, key, kind, body, work):
     def reserve():
         if integrity():
@@ -266,10 +275,9 @@ async def handle(request: Request, path: str):
             raise ValueError('Expected an object.')
         kind = path.rsplit('/', 1)[1]
         if kind == 'search':
-            if set(body)-{'query', 'top'} or not isinstance(body.get('query'), str) or not body['query'].strip() or type(body.get('top', 5)) is not int or not 1 <= body.get('top', 5) <= 10:
-                raise ValueError('Provide a query and integer top between 1 and 10.')
-            body = {'query': body['query'], 'top': body.get('top', 5)}
-            work = lambda: {'results': INDEX.search(body['query'], body['top']), 'capture_enabled': False}
+            body = search(body)
+            budget = body.get('context_budget')
+            work = (lambda: {'results': [], 'context': INDEX.context(body['query'], budget, body['top']), 'capture_enabled': False}) if budget is not None else (lambda: {'results': INDEX.search(body['query'], body['top']), 'capture_enabled': False})
         else:
             if set(body)-{'force_rebuild', 'expected_policy_sha256'} or type(body.get('force_rebuild', False)) is not bool or not hex(body.get('expected_policy_sha256'), 64):
                 raise ValueError('Provide the exact confirmed policy fingerprint and boolean rebuild flag.')

@@ -1,5 +1,5 @@
 export const interpreter = "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2"
-export const supervisor = "6df3d5811cb3d41d131ae95bb053e575e80c98b7d061a33cf06642209293791c"
+export const supervisor = "1cb25adc201daca432765d5e3a107fb2c5961fee219811cb3c2b648cb1437882"
 
 export const retrieval = Object.freeze({
   "bootstrap.py": "18667f8876fb0b04168e804315312ce0b4bb04e56682a44543ae5e3c2d600ab2",

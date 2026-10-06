@@ -10,6 +10,25 @@ export type BrainSource = Readonly<{
   relevance_score: number
 }>
 
+export type BrainContext = Readonly<{
+  sources: readonly Readonly<{
+    path: string
+    relative: string
+    line: number
+    end_line: number
+    heading: string
+    text: string
+    source_sha256: string
+    depth: number
+    tokens: number
+    truncated: boolean
+  }>[]
+  diagnostics: readonly Readonly<{ relative: string; reason: string }>[]
+  tokens: number
+  truncated: boolean
+  capture_enabled: false
+}>
+
 export type BrainState = Readonly<{
   configured: boolean
   status: "disconnected" | "checking" | "ready" | "searching" | "cancelled" | "unavailable"

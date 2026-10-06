@@ -58,6 +58,20 @@ export class OperationOwner {
     return this.run((before, signal, id) => this.#client.search(query, { id, before, signal }), opts)
   }
 
+  context(query: string, budget: number, opts: Options) {
+    if (
+      typeof query !== "string" ||
+      !query.trim() ||
+      query.length > 8000 ||
+      !Number.isSafeInteger(budget) ||
+      budget < 1 ||
+      budget > 12000 ||
+      Buffer.byteLength(JSON.stringify({ query, top: 5, context_budget: budget })) > 16000
+    )
+      return Promise.reject(new Error("Supply a bounded query and explicit linked-context budget"))
+    return this.run((before, signal, id) => this.#client.context(query, budget, { id, before, signal }), opts)
+  }
+
   sync(expected: string, opts: Options & { close: () => Promise<void> }) {
     if (
       typeof expected !== "string" ||

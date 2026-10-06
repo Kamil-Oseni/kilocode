@@ -2,6 +2,10 @@
 
 Cloud workers remain stopped and their former work reservations are released. Continue locally; do not restart cloud assignments.
 
+## Consolidated source build
+
+The 2026-10-06 consolidated extension compile from source `af7ca6dba2` passes a rebuilt Windows CLI, version/model-catalog/sandbox mutation smoke checks, SDK preparation, extension/webview typechecks, lint and production bundling. Generated tracked SDK files remain unchanged and the worktree is clean before this documentation update. The ignored built CLI is 300,386,304 bytes with SHA-256 `d4e215ad738f644f570e9c7414e679206b4378bd032437a0ceb3177ab8c5c91a`. Checks use private HOME/USERPROFILE/APPDATA/LOCALAPPDATA/XDG profiles. No normal-profile installation, live microphone, lights, VM or automatic capture action is performed. The manual start and original-backend transport still need integration; SDK/stream settlement alone is not a native inference retirement receipt. Preserve these distinctions when reviewing or installing the branch.
+
 ## Original review outcomes
 
 Native user edits now explicitly revise the retained candidate under its original pending proposal ID. Earlier content remains as a superseded ledger revision, including its original proposal history; the current run references the corrected fingerprint. Fact identity, evidence and target baselines cannot change, deleted/reviewed revisions cannot reappear, and a repeated identical correction leaves history untouched. Model handlers cannot call this correction path. The ordinary read/receipt reconciler continues refusing changed content until the native edit owner has explicitly registered it. Corrected content remains pending until separately reviewed and published.

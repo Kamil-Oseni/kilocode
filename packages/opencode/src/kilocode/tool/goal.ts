@@ -60,7 +60,7 @@ export function goalTools(
         worker.taskID,
         correction
           ? exact
-            ? "Correct the rejected completion audit in this same worker. Re-read the authorized source and saved target, preserve exact bytes including whether a final newline exists; do not add or remove one. Correct any mismatch and verify the actual saved result before claiming completion."
+            ? "Correct the rejected completion audit in this same worker. Re-read the authorized source and saved target, preserve exact bytes including whether a final newline exists; do not add or remove one. Correct any mismatch and verify the actual saved result before claiming completion. For each byte-equality criterion, cite both current source and target successful Read callIDs together in that criterion's evidence array; a source citation under another criterion does not count. If the files already match, correct the audit citations without rewriting the files."
             : "Correct the rejected completion audit in this same assigned objective. Perform the missing authorized work and verify the actual results before claiming completion."
           : undefined,
       ),

@@ -7,6 +7,9 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
+import { InstanceRef } from "@/effect/instance-ref"
+import { proposal as dreamProposal } from "@/kilocode/memory/dream-host"
+import { MemoryFiles } from "@kilocode/kilo-memory/store"
 import {
   Command,
   Recall,
@@ -70,6 +73,81 @@ function result(request: Request): ProposalResult {
           ],
   }
 }
+
+it.instance("Dream uses the original host request and refuses altered candidate replies", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const brain = yield* SecondBrain.Service
+    const candidate: Parameters<typeof MemoryFiles.dreamProposal.submit>[2] = {
+      fact: "f".repeat(64),
+      kind: "memory",
+      sources: [{ path: "source.txt", sha256: "b".repeat(64) }],
+      changes: [{ path: "Projects/example.md", expected: null, content: "Pending note" }],
+      rationale: "Controlled bridge evidence only.",
+      contradictions: [],
+    }
+    const controller = new AbortController()
+    const propose = dreamProposal({
+      project: inst.directory,
+      sessionID: SessionID.make("ses_dream_host"),
+      brain,
+      execute: (effect, signal) => Effect.runPromise(effect.pipe(Effect.provideService(InstanceRef, inst)), { signal }),
+    })
+    const job = yield* Effect.tryPromise({
+      try: () => propose(id, candidate, controller.signal),
+      catch: (err) => err,
+    }).pipe(Effect.forkChild)
+    const pending = yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    expect(pending[0].sessionID).toBe(SessionID.make("ses_dream_host"))
+    expect(pending[0].command).toMatchObject({
+      action: "propose",
+      id,
+      request: {
+        sources: [
+          { path: path.join(inst.directory, "source.txt"), sha256: "b".repeat(64), kind: "document", event_time: null },
+        ],
+        changes: candidate.changes,
+      },
+    })
+    yield* brain.reply({ requestID: pending[0].id, result: { ...result(pending[0]), action: "propose" } })
+    expect(yield* Fiber.join(job)).toEqual({ id, status: "pending" })
+    expect(yield* brain.list()).toEqual([])
+    const changed = yield* Effect.tryPromise({
+      try: () => propose(id, candidate, controller.signal),
+      catch: (err) => err,
+    }).pipe(Effect.forkChild)
+    const next = yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    const value = result(next[0])
+    yield* brain.reply({
+      requestID: next[0].id,
+      result: {
+        ...value,
+        action: "propose",
+        proposals: value.proposals.map((row) => ({
+          ...row,
+          changes: [{ ...row.changes[0], content: "Unselected note" }],
+        })),
+      },
+    })
+    const failure = yield* Fiber.join(changed).pipe(Effect.flip)
+    expect(String(failure)).toContain("changes or baseline differ")
+    expect(yield* brain.list()).toEqual([])
+    const cancelled = yield* Effect.tryPromise({
+      try: () => propose(id, candidate, controller.signal),
+      catch: (err) => err,
+    }).pipe(Effect.forkChild)
+    yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    controller.abort(new Error("Manual Dream cancelled"))
+    yield* Fiber.join(cancelled).pipe(Effect.flip)
+    expect(yield* brain.list()).toEqual([])
+    const before = yield* Effect.tryPromise({
+      try: () => propose(id, candidate, controller.signal),
+      catch: (err) => err,
+    }).pipe(Effect.flip)
+    expect(String(before)).toContain("Manual Dream cancelled")
+    expect(yield* brain.list()).toEqual([])
+  }),
+)
 
 it.instance("context replies retain original budget, provenance and cancellation ownership", () =>
   Effect.gen(function* () {

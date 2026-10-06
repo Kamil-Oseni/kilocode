@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import path from "node:path"
 import { z } from "zod"
 import { MemoryFs } from "./fs"
@@ -85,6 +85,11 @@ const schema = z
   .object({
     version: z.literal(1),
     project: z.string().min(1),
+    scope: z.string().uuid().optional(),
+    slots: z
+      .array(z.object({ key: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,127}$/), path: relative }).strict())
+      .max(128)
+      .default([]),
     rows: z.array(row).max(128),
     tombstones: z.array(hash).max(128),
     runs: z.array(run).max(32).default([]),
@@ -162,7 +167,10 @@ export namespace MemoryDream {
     if (value.project !== path.resolve(project)) throw new Error("Dream ledger belongs to another project")
     if (
       new Set(value.rows.map((item) => item.fingerprint)).size !== value.rows.length ||
-      new Set(value.tombstones).size !== value.tombstones.length
+      new Set(value.tombstones).size !== value.tombstones.length ||
+      new Set(value.slots.map((item) => item.key)).size !== value.slots.length ||
+      new Set(value.slots.map((item) => item.path.toLowerCase())).size !== value.slots.length ||
+      (value.slots.length > 0 && !value.scope)
     )
       throw new Error("Duplicate Dream ledger identities")
     if (
@@ -206,6 +214,48 @@ export namespace MemoryDream {
 
   export function list(root: string, project: string) {
     return queue(root, project, () => read(root, project))
+  }
+
+  /** Explicit host-selected slots retain fact identity across runs and authorized note moves. */
+  export async function bind(
+    root: string,
+    project: string,
+    input: { key: string; path: string }[],
+    signal: AbortSignal,
+  ) {
+    const slots = schema.shape.slots.unwrap().min(1).max(8).parse(input)
+    return queue(root, project, async () => {
+      signal.throwIfAborted()
+      const value = await read(root, project)
+      if (
+        value.runs.some((item) => !terminal.has(item.phase)) ||
+        value.rows.some((item) => item.state === "submitting")
+      )
+        throw new Error("Reconcile the original Dream work before changing target slots")
+      if (
+        new Set(slots.map((item) => item.key)).size !== slots.length ||
+        new Set(slots.map((item) => item.path.toLowerCase())).size !== slots.length
+      )
+        throw new Error("Duplicate Dream target slot")
+      for (const slot of slots) {
+        if (
+          !slot.path.endsWith(".md") ||
+          slot.path
+            .split("/")
+            .some((part) => [".git", "_system", "private", "credentials", "secrets"].includes(part.toLowerCase()))
+        )
+          throw new Error("Select an ordinary Markdown target slot")
+        const existing = value.slots.find((item) => item.key === slot.key)
+        if (existing) existing.path = slot.path
+        if (!existing) value.slots.push(slot)
+      }
+      if (new Set(value.slots.map((item) => item.path.toLowerCase())).size !== value.slots.length)
+        throw new Error("A Dream note already belongs to another target slot")
+      value.scope ??= randomUUID()
+      signal.throwIfAborted()
+      await save(root, value)
+      return { scope: value.scope, slots: slots.map((item) => ({ ...item })) }
+    })
   }
 
   /** Claim a manual run before calling a model. Unresolved runs block replacement after restart. */

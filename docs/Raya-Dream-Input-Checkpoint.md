@@ -2,6 +2,10 @@
 
 Cloud workers remain stopped and their former work reservations are released. Continue locally; do not restart cloud assignments.
 
+## Persistent target identities
+
+The existing project-bound Dream ledger now retains one scope UUID and up to 128 named target slots. Explicit host selections can bind one to eight slots or move a slot to another note path without changing its fact identity. Case-insensitive path collisions, duplicate keys, foreign projects, private paths, aborted selections and unresolved original work are refused. Existing ledgers load without migration or loss of review history. This records target identity only: it neither authorizes reading a note nor grants publication, and the native target picker/start workflow still needs to consume the mapping and capture current baselines. All 202 Memory tests pass with 879 assertions, along with package typechecking and affected lint. No installed-readiness claim is made.
+
 The source implementation prepares a bounded JSON prompt from explicitly selected Markdown source revisions and note baselines. It verifies ordinary files and directory ancestry, refuses hard links and junctions, checks hashes before and after reading, rejects invalid UTF-8 and known secret patterns, and checks the selected engineering token allowance. Generated items can reference only approved target keys and source paths. The trusted owner assigns stable fact identities using a persisted scope and target key.
 
 Selection labels do not grant consent. The calling host must authorize roots, sources and targets. Source checks do not prove the factual interpretation of generated text. Human review remains required before publication.

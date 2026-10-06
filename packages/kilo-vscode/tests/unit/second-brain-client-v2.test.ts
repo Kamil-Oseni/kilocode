@@ -4,6 +4,7 @@ import { createHash } from "node:crypto"
 import path from "node:path"
 import { ClientV2 } from "../../src/second-brain/client-v2"
 import { object } from "../../src/second-brain/control/frames"
+import { release } from "../../src/second-brain/control/catalog-v2"
 
 type Case = {
   name: string
@@ -14,9 +15,8 @@ type Case = {
   terminal: string
   response: string | null
 }
-const source = process.env.RAYA_MEMORY_OPERATION_SOURCE
 const python = process.env.RAYA_MEMORY_OPERATION_PYTHON
-const genuine = source && python ? test : test.skip
+const genuine = python ? test : test.skip
 const bytes = (value: string) => Buffer.from(value, "base64")
 const digest = (value: Uint8Array) => createHash("sha256").update(value).digest("hex")
 function deferred() {
@@ -30,10 +30,18 @@ const fixture: () => Promise<{ cases: Case[]; source_sha256: { [key: string]: st
   let memo: Promise<{ cases: Case[]; source_sha256: { [key: string]: string } }> | undefined
   return () =>
     (memo ??= (async () => {
-      if (!python || !source) throw new Error("Pinned pure producer dependencies required")
+      if (!python) throw new Error("Pinned pure producer interpreter required")
       expect(digest(await readFile(python))).toBe("b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2")
       const child = Bun.spawn(
-        [python, "-I", "-S", "-B", path.join(import.meta.dir, "fixtures/memory-client-v2-producer.py"), source],
+        [
+          python,
+          "-I",
+          "-S",
+          "-B",
+          path.join(import.meta.dir, "fixtures/memory-client-v2-producer.py"),
+          path.join(import.meta.dir, "../../script/memory/service"),
+          JSON.stringify(release),
+        ],
         {
           windowsHide: true,
           stdin: "ignore",
@@ -52,11 +60,12 @@ const fixture: () => Promise<{ cases: Case[]; source_sha256: { [key: string]: st
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
       ])
-      expect(code).toBe(0)
+      expect(code, err).toBe(0)
       expect(err).toBe("")
       expect(Buffer.byteLength(out)).toBeLessThan(65536)
       const value = JSON.parse(out)
-      expect(value.sourceReviewSHA).toBe("f99cc7a0819bb7c2216c727e03620ca56ac3b1e8fc94ef0207ad3e7ccda7d037")
+      expect(value.sourceReviewSHA).toBeNull()
+      expect(value.source_sha256).toEqual(release)
       return value
     })())
 })()

@@ -171,6 +171,7 @@ try {
     const request = sent.at(-1)
     assert.equal(request.action, action)
     assert.deepEqual(Object.keys(request).sort(), ["action", "id", "type"])
+    await Promise.all(jobs)
   }
   const current = sent.at(-1).id
   emit(current, {

@@ -161,11 +161,14 @@ test("native-host command registers once per real host context and uses its sing
     } as unknown as vscode.ExtensionContext
     new BrainHost(context)
     new BrainHost(context)
-    expect(commands).toHaveLength(1)
-    expect(commands[0].name).toBe("raya.memory.inspectConfiguration")
-    expect((await commands[0].body()) as { status: string }).toHaveProperty("status", "unconfigured")
+    expect(commands.map((command) => command.name)).toEqual([
+      "raya.memory.inspectConfiguration",
+      "raya.memory.inspectDream",
+    ])
+    const command = commands.find((command) => command.name === "raya.memory.inspectConfiguration")!
+    expect((await command.body()) as { status: string }).toHaveProperty("status", "unconfigured")
     await cfg.settings.save(cfg.setup, "private-credential")
-    expect((await commands[0].body()) as { status: string }).toHaveProperty("status", "configured")
+    expect((await command.body()) as { status: string }).toHaveProperty("status", "configured")
   } finally {
     vscode.commands.registerCommand = prior
   }

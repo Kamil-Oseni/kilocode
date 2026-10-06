@@ -4,7 +4,7 @@ Reviewed 2026-10-06. Recommendation: adopt the compact linked-memory format and 
 
 ## Current implementation and acceptance
 
-Status checked against source at `d113c9a1cf17de08ae5692ec521ecd8a59509797`, 2026-10-06. Cloud workers are stopped and all their task/file reservations are released. Local work continues; no acceptance depends on a cloud worker returning.
+Status checked against source at `9d5f0fdf3ac6b80e235cae71f918a5c488ebefea`, 2026-10-06, with the test-fixture corrections recorded below. Cloud workers are stopped and all their task/file reservations are released. Local work continues; no acceptance depends on a cloud worker returning.
 
 | Requirement | Current source state | Still required |
 |---|---|---|
@@ -20,6 +20,14 @@ Status checked against source at `d113c9a1cf17de08ae5692ec521ecd8a59509797`, 202
 The full Memory package now passes **211 tests, 952 assertions, 20 files**. All seven extension Dream suites pass **21 tests, 138 assertions**. The backend's original inspection/settlement suite passes **2 tests, 14 assertions**. Memory typecheck passes. The original test command handles returned exit 0; no test command was restarted after a wait timeout. The package uses disposable ledgers and actual pinned-Python proposal-store fixtures, alongside controlled generation ports. The extension suites cover actual selection/review/transport helpers with synthetic native/HTTP responses. These checks establish the current source cohort, not native inference, installed services, human speech or device behavior.
 
 Logs are retained at `.tmp/memory-private/memory-cohort-full.log`, `dream-cohort-full.log`, `dream-cohort-backend.log` and `memory-cohort-types.log`. The current native UI and missing-reply browser evidence is recorded in [the Dream checkpoint](Raya-Dream-Input-Checkpoint.md). Broader workflow gates and installed readiness remain open; these source counts do not increase the readiness score.
+
+## Combined Memory regression checkpoint, 2026-10-06
+
+After merging the local diagnostic cohort and the recall/health fixes, the full Memory package passes **211 tests, 952 assertions, 20 files**. The explicitly qualified extension SecondBrain cohort passes **160 tests, 1,363 assertions, 28 files, no skips**. Current-client and original-owner fixtures verify all twelve production source images against the current release catalog before loading the real Python Journal/certificate codecs. Historical operation-codec checks retain the original review SHA `f99cc7a0819bb7c2216c727e03620ca56ac3b1e8fc94ef0207ad3e7ccda7d037` and its actual saved source images under `D:/Raya/Services/Memory/Candidates/MemoryWorkerLedger-20261003-v3`. The pinned Python executable SHA is `b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2`. The current-client tests require that pinned interpreter; the historical tests also require the explicit retained source directory.
+
+The broad run exposed stale tests: the DOM fixture advanced before pending review finished, singleton registration expected one command after the separate Dream inspector was added, and an obsolete generated JavaScript test contradicted the authoritative TypeScript version's v2-loading and durable-debt checks. These fixtures are corrected without weakening production release selection. Earlier failed and partially skipped logs remain retained. The initial qualified run used the wrong source directory; the retained-source rerun then exposed the eleven-versus-twelve-pin fixture mismatch. Both current-client and owner fixtures now use an explicit current-catalog mode, while historical mode keeps its unchanged review hash.
+
+Final logs: `.tmp/memory-private/memory-postmerge-full.log` and `memory-postmerge-extension-final.log`. Full extension compile, host/webview typechecks, lint, bundle, Knip and required formatting pass. Pure codec fixtures use an inert publication sink; source/native-helper fixtures use disposable roots and controlled callbacks. This does not prove installed consent, real model output, GPU retirement, foreground priority, personal recall quality or complete everyday readiness. All corresponding acceptance gaps above remain open.
 
 ## Recall qualifier checkpoint, 2026-10-06
 

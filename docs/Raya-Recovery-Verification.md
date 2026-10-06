@@ -80,3 +80,7 @@ Next controlled validation should preserve a current Home Assistant backup and t
 ## Recovery guide formatting correction
 
 The October 6 guide formatting pass removes redundant blank lines, including gaps inside the PowerShell command block. All ordered nonblank lines remain identical. The exact prior guide is preserved at `D:/RayaBackups/Independent-20261005/RECOVERY-before-format-20261006.md` (12,593 bytes; SHA-256 `5393c9db54497f2b45519a8ab42bb90014732c9d6d4c3d77db26c067d4a1fab1`). The current guide is 12,356 bytes with SHA-256 `4d407aa97984b2a4650a889d62c61c845d7ccbd857e1d26a1dd512dc05d1cd29`. Evidence is saved in `.tmp/new-pc/recovery-guide-format-independent-20261006.json`. This changes presentation only; no restore, reboot, credentials or service action was performed.
+
+## October 6 curation recovery supplement
+
+`D:/RayaBackups/Independent-20261006-curation/verification.json` records six stable source/copy matches totaling 89,318 bytes: the updated Raya preferences, their dated October 6 source note, the health review and dashboard screenshot, the current checklist and recovery guide. This supplements the older curated snapshot; it does not replace it. The prior preferences are also preserved at `D:/Raya/SecondBrain/System/Versions/maintenance-20261006/Preferences/Raya.md`. Automatic capture and index rebuilding were not enabled. These are same-PC copies of selected files, not a whole-vault snapshot, software installer, off-PC backup, Home Assistant restore or semantic retrieval test.

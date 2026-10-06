@@ -12,7 +12,13 @@ Snapshot: 2026-10-06. Estimated everyday readiness: **48/100**. Full installed w
 
 The tracker records **23 verified, 35 in progress, 3 planned, 1 maintenance item and 1 deferred item**. The active unfinished queue has **38 requirements**. The classifications below are copied from the implementation tracker; they do not independently recertify its historical evidence against the current installed build.
 
-## Replacement candidate installed; workflow verification pending
+## Current combined candidate installed; workflows pending
+
+The current registered installation is now `7.4.23-snapshot+816610e0b5.local.1791273331598`. Fresh independent inspection rehashes all 481 physical files and matches the exact archive-derived inventory; package.json differs only by the supported VS Code metadata. The manifest matches the previously independently audited pin. All five original physical-audit, pre-scan, post-scan, installer and monitor receipts record exit 0, original process/stream joins and no force; their job/log hashes revalidate. Recorded preservation checks show exact saved profile contents, unrelated extension payloads and unrelated registration. Evidence: `.tmp/new-pc/816610-installed-payload-and-preservation-independent.json`.
+
+This carries the two package/preservation gates to the new candidate, with no additional full-workflow gate credited. Loaded client/backend identity, autonomous General correction, Routine periods, Memory, physical voice continuity and reboot/recovery remain pending. The findings above remain open against this source; do not infer their fixes are already installed.
+
+## Previous 4bfa candidate and workflow history
 
 The supported CLI and extension builds from source `4bfa78703d0828d5113e15deef52ec25b4cdf29e` finished with recorded exit 0, process/stream joins and no force. The replacement archive is `7.4.23-snapshot+4bfa78703d.local.1791266650994`, 190,493,982 bytes, SHA-256 `95e5fd981781e148eb6d9a2ba6b6ad605c2647923b1baf3223cf9d1c4851650f`. Independent review read all 482 ZIP entries fully with CRC validation and matched all 50 bundled binary files to stable build outputs. The Windows x64 native executable and MSF7 PDB have matching debug GUID `55e22467-234d-437b-a5f9-2aa97ecba9b7`, age 1, and exact metadata hashes; the six-input source recipe independently matches `42bca4a2e77642037c051d85b750548e09a3b0cca43d97499961bfca1091f8d9`. Evidence: `.tmp/new-pc/4bfa-archive-stream-and-bin-independent.json` and `.tmp/new-pc/4bfa-native-debug-and-recipe-independent.json`.
 

@@ -64,7 +64,7 @@ Source inspection for this study covered `packages/kilo-memory/src/effect/servic
 
 ## Build design and parallel implementation boundaries
 
-The user has authorized major feature implementation by the Astra cloud workers, with combined testing afterward. This section defines the intended implementation; it does not claim these features are built. Keep current installations usable while patches are prepared in isolated workspaces. One integration lead owns the shared contract and merges compatible patches. Reserve paths before editing; the installed acceptance owner retains installation, runtime trials and release decisions.
+The user has stopped Raya’s cloud workers and released their work reservations. Continue these implementation workstreams locally; do not assign or restart cloud workers. This section defines the intended implementation; it does not claim these features are built. Keep current installations usable while patches are prepared in isolated workspaces. One integration lead owns the shared contract and merges compatible patches. Reserve paths before editing; the installed acceptance owner retains installation, runtime trials and release decisions.
 
 ### Existing boundaries to extend
 
@@ -113,7 +113,7 @@ Keep a visible distinction between “proposals prepared,” “changes publishe
 
 ### Integration and later verification
 
-Workers deliver actual patches against an identified baseline, document contract changes and name reserved paths. Shared backend contracts land before dependent UI patches. A cloud-only patch cannot claim Windows process, installed service or native runtime verification. Follow repository changeset, SDK regeneration, source-link and annotation requirements when applicable. After implementation, run focused actual-implementation checks and the combined installed flows; keep the nine existing acceptance gates intact.
+Local implementation delivers actual patches against an identified baseline and documents contract changes. The former cloud reservations no longer block these workstreams. Shared backend contracts land before dependent UI patches. A cloud-only patch cannot claim Windows process, installed service or native runtime verification. Follow repository changeset, SDK regeneration, source-link and annotation requirements when applicable. After implementation, run focused actual-implementation checks and the combined installed flows; keep the nine existing acceptance gates intact.
 
 Acceptance must include bounded relevant recall; malicious/missing/cyclic/stale links; conflicting revisions; deterministic duplicate suppression; deletion persistence; cancellation during generation and submission; crash after proposal creation and publication; unavailable index/service; unknown outcome without replay; foreground priority; visible pending review; and a verified lesson versus an unsupported hypothesis. Use synthetic/private fixtures first. Personal data, microphone, audible playback, Home Assistant, lights and VM maintenance stay outside these implementation trials.
 

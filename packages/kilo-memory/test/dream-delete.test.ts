@@ -170,9 +170,66 @@ check(
     const saved = await MemoryFiles.dream.list(cfg.root, cfg.project)
     expect(saved.rows[0].state).toBe("accepted")
     expect(saved.tombstones).toEqual([])
-  const note = await readFile(path.join(cfg.root, "Preferences/moved.md"))
-  expect(note.toString()).toStartWith("Keep this remembered preference.")
-  expect(createHash("sha256").update(note).digest("hex")).toBe(applied.receipt.note_sha256["Preferences/moved.md"])
+    const note = await readFile(path.join(cfg.root, "Preferences/moved.md"))
+    expect(note.toString()).toStartWith("Keep this remembered preference.")
+    expect(createHash("sha256").update(note).digest("hex")).toBe(applied.receipt.note_sha256["Preferences/moved.md"])
     await expect(readFile(path.join(cfg.root, "Preferences/preference.md"))).rejects.toThrow()
   },
 )
+
+for (const content of [null, "Keep this remembered preference."]) {
+  check(
+    `reconciliation refuses a receipt contradicting reviewed ${content === null ? "deletion" : "replacement"}`,
+    async () => {
+      const cfg = await fixture()
+      const candidate = { ...cfg.candidate, changes: [{ ...cfg.candidate.changes[0], content }] }
+      const { id, pending } = await cfg.publish(candidate)
+      const applied = await cfg.execute({ action: "apply", id, project: cfg.project, digest: pending.digest })
+      const target = path.join(cfg.root, "Preferences/preference.md")
+      if (content === null) await writeFile(target, "Unexpected remaining note.")
+      if (content !== null) await rm(target)
+      const actual =
+        content === null
+          ? createHash("sha256")
+              .update(await readFile(target))
+              .digest("hex")
+          : null
+      const child = Bun.spawn(
+        [
+          "D:/Raya/Services/Packaging/Python/3.12.14/python.exe",
+          "-I",
+          "-S",
+          "-B",
+          path.join(import.meta.dir, "fixtures/dream-outcome-seal.py"),
+          path.resolve(import.meta.dir, "../../kilo-vscode/script/memory/service"),
+        ],
+        {
+          windowsHide: true,
+          stdin: new Blob([
+            JSON.stringify({
+              ...applied,
+              receipt: { ...applied.receipt, note_sha256: { "Preferences/preference.md": actual } },
+            }),
+          ]),
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      )
+      const [code, output, errors] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      expect(code).toBe(0)
+      expect(errors).toBe("")
+      const before = await readFile(path.join(cfg.root, "dream.json"), "utf8")
+      await expect(
+        MemoryFiles.dreamProposal.reconcile(cfg.root, cfg.project, JSON.parse(output), cfg.signal),
+      ).rejects.toThrow("contradicts the reviewed change")
+      expect(await readFile(path.join(cfg.root, "dream.json"), "utf8")).toBe(before)
+      expect((await MemoryFiles.dream.list(cfg.root, cfg.project)).tombstones).toEqual([])
+      if (content === null) expect(await readFile(target, "utf8")).toBe("Unexpected remaining note.")
+      if (content !== null) await expect(readFile(target)).rejects.toThrow()
+    },
+  )
+}

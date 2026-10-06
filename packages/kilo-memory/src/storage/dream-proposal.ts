@@ -186,6 +186,8 @@ export namespace MemoryDreamProposal {
       )
         throw new Error("Original Dream publication receipt is unavailable")
       for (const item of value.changes) {
+        if ((item.content === null) !== (receipt.note_sha256[item.path] === null))
+          throw new Error("Dream publication receipt contradicts the reviewed change")
         const observed = await MemoryDreamInput.baseline(root, item.path, signal)
         if (observed.expected !== receipt.note_sha256[item.path])
           throw new Error("Published Dream note differs from its receipt")

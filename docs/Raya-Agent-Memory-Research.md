@@ -61,3 +61,58 @@ Concrete example from current work: a goal pause rotates intent, while ordinary 
 5. Consider scheduled idle operation only after those checks and installed recovery/Stop behavior pass. Preserve ordinary conversation priority and the user's device/sleep restrictions.
 
 Source inspection for this study covered `packages/kilo-memory/src/effect/service.ts`, `packages/opencode/src/kilocode/memory/ports.ts`, `packages/opencode/src/kilocode/self-heal/{index,repair,schemas,completion,artifact}.ts`, `packages/kilo-vscode/src/second-brain/host.ts` and the current SecondBrain INDEX.md. It establishes available source structures, not full installed runtime acceptance.
+
+## Build design and parallel implementation boundaries
+
+The user has authorized major feature implementation by the Astra cloud workers, with combined testing afterward. This section defines the intended implementation; it does not claim these features are built. Keep current installations usable while patches are prepared in isolated workspaces. One integration lead owns the shared contract and merges compatible patches. Reserve paths before editing; the installed acceptance owner retains installation, runtime trials and release decisions.
+
+### Existing boundaries to extend
+
+`second_brain_proposal` already permits list/read/propose and deliberately excludes applying, editing or cancelling proposals on the model's authority. It validates project-local source hashes and bounded source snapshots. The extension's `second-brain/host.ts` separates model proposal requests from the human review/apply flow. Reuse those boundaries; a Dream worker cannot become an alternate writer. Existing proposal states include pending, cancelled, applying and applied: a rejected Dream candidate needs its own durable disposition without inventing an incompatible proposal status.
+
+The inherited memory service and `memory/ports.ts` already contain consolidation/model plumbing. Recalled-memory turns are excluded from capture to prevent memory echo. Dream selection must likewise exclude recall-only answers and previously generated proposals as fresh factual evidence. Self-heal already stores source snapshots, repair attempts, verification receipts and completion/artifact records. Lessons cite those records rather than replacing them.
+
+### Shared contracts
+
+| Record | Required content |
+|---|---|
+| Memory source | Authorized root/namespace, normalized root-relative path, content hash, source kind, original event/session identifier and timestamp when available. Missing metadata remains unknown. |
+| Retrieval result | Selected passage, source hash, relevance reason, followed links, truncation/skip reasons and budget consumed. Facts, measurements and hypotheses remain distinguishable. |
+| Dream run | Stable run ID, root and project identity, source-selection checkpoint, input hashes, model/config identity, bounded resource policy, phase and original owner. |
+| Dream candidate | Stable evidence-derived fingerprint, kind, proposed changes, baseline note revisions, source references, explanation and unresolved contradictions. |
+| Review disposition | Candidate and exact reviewed revision, accepted/rejected/superseded/deleted disposition, reason when provided, publication receipt or unresolved outcome. |
+| Repair lesson | Incident references, symptom, source/release/environment applicability, failed approaches, verified fix and regression references, current applicability status. |
+
+Use existing schemas and IDs wherever their meaning matches. Add versioned Kilo-owned contracts only for missing semantics. A checkpoint is a processed selection cursor with per-input dispositions, not permission to forget evidence or a claim that every proposed change was accepted. Record a durable pending proposal before advancing selection past it; later apply/reject outcomes remain separately reconcilable. Unknown creation or publication outcomes block replay until the original identifier is reconciled.
+
+### Workstream A: compact linked retrieval
+
+Extend the configured retrieval owner with an INDEX.md entry point and optional MEMORY.md compatibility alias. Resolve links under the authorized memory root; reject absolute paths, root escapes, foreign roots, symlink escapes and stale source hashes. Follow a bounded graph with cycle detection and a deterministic priority order: relevant topic hits first, related links second. Never load the whole vault merely because it has links.
+
+Initial configurable engineering budgets are 2,000 estimated entry-point tokens, depth two, at most twelve linked documents and 12,000 total retrieved tokens, always capped below the request's remaining context budget. These are starting defaults to measure, not model capacity guarantees. Oversized notes return selected passages with explicit truncation. Missing or invalid links produce diagnostic skips, not fabricated facts. A failed index refresh must not represent an older index as current.
+
+### Workstream B: proposal-only Dream job
+
+Implement a manually started background job selecting only already-authorized summaries, approved notes and verified repair outcomes. It does not enable capture or observe new daily activity. Use the existing resource admission/model routing owner; yield to foreground conversation and voice, bound each batch, and release model residency when idle. Initial limits should be explicit configuration: one active run per root, bounded input/output tokens, at most twenty proposals per run and a finite elapsed-time deadline.
+
+Persist phases for selection, generation, validation, proposal submission, review-pending, reconciliation and terminal outcome. Cancellation stops selection/model work promptly and joins the original worker; already durable proposals remain pending and visible. If submission may have succeeded, record an unknown outcome and inspect the original ID rather than creating a replacement. Restart resumes reconciliation, never uncertain writes. Concurrent runs cannot claim the same input batch without an ownership decision.
+
+Validate evidence, link targets, secrets and baseline revisions before submission. Only the existing review/publication owner may publish. A changed baseline requires regeneration or renewed review of the changed diff. Rejections suppress identical candidate fingerprints; new evidence may produce a distinct candidate. User deletion records a suppression/tombstone so later consolidation cannot silently resurrect the same fact. A changed accepted note remains historical evidence rather than being erased from provenance.
+
+### Workstream C: repair lessons and recurrence
+
+Retrieve system lessons separately from personal preferences and project knowledge. Group recurring symptoms into evidence-backed proposals while retaining individual incidents. Separate suspected cause, reproduced cause and verified repair. A lesson with missing verification is a hypothesis and cannot satisfy completion. Applicability must include the relevant source/release and environment; similarity alone cannot transfer a fix to an unrelated version.
+
+Create or link an existing self-heal backlog item using its normal ownership/permission boundary. Dream may recommend reproduction or a regression, but cannot dispatch an uncertain repair twice, create verification receipts, approve an artifact, install a package or operate devices. Later invalidation marks the lesson stale and links the contradicting evidence.
+
+### Workstream D: review and activity experience
+
+Provide a manual “Review memories”/“Consolidate approved notes” entry in Memory and expose the run through the existing activity panel. Show actual phase, model, bounded progress and a working Cancel action; do not animate progress after ownership is lost. The review lists grouped proposals with readable before/after diffs, original source links, rationale and contradictions. Users can approve the exact revision, reject, edit then review again, or delete a remembered fact through the supported writer.
+
+Keep a visible distinction between “proposals prepared,” “changes published” and “search index refreshed.” Publication without successful refresh must report that state and offer a safe retry of indexing, not repeat the write. Existing trust/read permissions remain meaningful; ordinary conversation should not require navigating technical settings. Automatic capture and idle scheduling remain off until separately enabled by the user.
+
+### Integration and later verification
+
+Workers deliver actual patches against an identified baseline, document contract changes and name reserved paths. Shared backend contracts land before dependent UI patches. A cloud-only patch cannot claim Windows process, installed service or native runtime verification. Follow repository changeset, SDK regeneration, source-link and annotation requirements when applicable. After implementation, run focused actual-implementation checks and the combined installed flows; keep the nine existing acceptance gates intact.
+
+Acceptance must include bounded relevant recall; malicious/missing/cyclic/stale links; conflicting revisions; deterministic duplicate suppression; deletion persistence; cancellation during generation and submission; crash after proposal creation and publication; unavailable index/service; unknown outcome without replay; foreground priority; visible pending review; and a verified lesson versus an unsupported hypothesis. Use synthetic/private fixtures first. Personal data, microphone, audible playback, Home Assistant, lights and VM maintenance stay outside these implementation trials.

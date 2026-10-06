@@ -203,6 +203,49 @@ describe("Kilo post-step compaction safety", () => {
 })
 
 describe("Kilo request estimation", () => {
+  test("keeps minimum output within context when the safety margin is exhausted", () => {
+    const mdl = model({ context: 32_768, output: 4_096 })
+    for (const row of [
+      { messages: [{ role: "user" as const, content: "Hello" }], reported: 31_000 },
+      { messages: [{ role: "user" as const, content: "x".repeat(95_000) }], reported: undefined },
+    ]) {
+      const checked = KiloSessionOverflow.preflight({
+        cfg: cfg({ auto: false }),
+        model: mdl,
+        usable: 28_672,
+        messages: row.messages,
+        tools: {},
+        reported: row.reported,
+        output: 4_096,
+      })
+      expect(checked.compact).toBe(false)
+      expect(checked.irreducible).toBe(false)
+      const cap = KiloLLM.capOutputTokens({
+        model: mdl,
+        messages: row.messages,
+        tools: {},
+        configured: 4_096,
+        usage: checked.usage,
+        reported: row.reported,
+      })
+      expect(cap).toBe(1_024)
+      expect(checked.tokens + (cap ?? 0)).toBeLessThanOrEqual(mdl.limit.context)
+    }
+  })
+
+  test("preserves a smaller configured output and exhausted-input overflow", () => {
+    const mdl = model({ context: 32_768, output: 4_096 })
+    const messages = [{ role: "user" as const, content: "Hello" }]
+    expect(KiloLLM.capOutputTokens({ model: mdl, messages, tools: {}, configured: 512, reported: 31_000 })).toBe(512)
+    expect(KiloLLM.capOutputTokens({ model: mdl, messages, tools: {}, configured: 512, reported: 30_500 })).toBe(512)
+    expect(KiloLLM.capOutputTokens({ model: mdl, messages, tools: {}, configured: 4_096, reported: 30_500 })).toBe(
+      1_024,
+    )
+    expect(KiloLLM.capOutputTokens({ model: mdl, messages, tools: {}, configured: 4_096, reported: 32_768 })).toBe(
+      4_096,
+    )
+  })
+
   test("skips output estimation when no output cap can use it", () => {
     const mdl = model({ context: 200_000, output: 32_000 })
 

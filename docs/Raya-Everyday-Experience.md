@@ -4,6 +4,14 @@ Conversation, coding, delegated jobs, routines and goals remain first-class work
 
 ## Source changes
 
+### Combined-source admission checkpoint, 2026-10-06
+
+The captured integration-owner commit `8cd07fc3c99d95da755cfd677436fcf774664166` is combined with this branch's worker recovery, prompt cancellation and voice announcement fixes. Its completed-Goal recovery and bounded near-limit reply fixes are retained. The one merge conflict was the supervisor digest: the merged supervisor retained the current service release table but still bound the index reader's previous hash. The genuine admission suite failed all three cases before that exact pin was reconciled with the existing reviewed reader at SHA-256 `55d17ba416e1cf187a5497c4257d07a5628a66e30d49ef75e18ca169567315e5`.
+
+The combined supervisor is bound by SHA-256 `017bee22a923eccc59e717422cf6538a579cd1081aa501e97b413dd8db626148`. Its staged Git bytes equal the actual source bytes, and all twelve Memory and seven Retrieval service files match its exact release table. The actual admission function passes three disposable tests without service/native START or model execution; the fixture protection document does not establish Windows ACLs. Managed-owner/pair/restart/dispatch checks pass **28 tests/237 assertions across four files**, and actual Goal recovery/context/exact-write checks pass **50 tests/246 assertions across three files**. CLI typecheck, full extension compile/types/lint/bundle, Knip, required format and affected annotation/facade guards pass. Evidence is retained in `.tmp/memory-private/combined-*`.
+
+This is combined-source proof, not a matching CLI release or installed workflow. Extension compile reuses the ignored CLI binary, native tests use controlled nonmodel gate children, and configured Memory/recovery/model/GPU acceptance remains separate. Historical failures are retained; automatic capture and scheduling remain off.
+
 Cloud workers remain stopped and their former task/file reservations are released. Local implementation continues without assigning, restarting or waiting for them; existing contributions remain available for review.
 
 ### Worker connection recovery checkpoint

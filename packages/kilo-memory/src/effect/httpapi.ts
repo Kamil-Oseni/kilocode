@@ -25,6 +25,16 @@ export namespace MemoryContract {
     text: Schema.String.check(Schema.isMaxLength(256000)),
     settlement: Schema.Literal("sdk"),
   })
+  export const DreamInspectPayload = Schema.Struct({ id: uuid, owner: uuid })
+  export const DreamInspection = Schema.Struct({
+    id: uuid,
+    owner: uuid,
+    configuredModel: Schema.String,
+    settlement: Schema.Literals(["pending", "sdk"]),
+    outcome: Schema.Literals(["running", "completed", "failed", "interrupted"]),
+    startedAt: Schema.Finite,
+    settledAt: Schema.optional(Schema.Finite),
+  })
   const Source = Schema.Literals(MemorySchema.Sources)
   const Section = Schema.String.check(Schema.isMaxLength(80), Schema.isPattern(/^[^\x00-\x1f\x7f]*$/))
 

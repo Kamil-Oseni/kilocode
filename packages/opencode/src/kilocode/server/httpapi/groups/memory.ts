@@ -40,6 +40,19 @@ export const MemoryApi = HttpApi.make("memory")
               "Use the original selected provider with bounded text, output and deadline. No note reads, publication or automatic capture. SDK settlement does not certify native inference retirement.",
           }),
         ),
+        HttpApiEndpoint.post("dreamInspect", "/memory/dream/inspect", {
+          query: MemoryQuery,
+          payload: MemoryContract.DreamInspectPayload,
+          success: described(MemoryContract.DreamInspection, "Original Dream SDK operation"),
+          error: MemoryErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "memory.dreamInspect",
+            summary: "Inspect original consolidation operation",
+            description:
+              "Inspect an exact run and owner on the original routed backend. Keeps at most 32 metadata receipts per workspace, without prompts or generated text. Missing receipts require reconciliation, not replay. SDK settlement does not certify native inference retirement.",
+          }),
+        ),
         HttpApiEndpoint.get("status", MemoryPaths.status, {
           query: MemoryQuery,
           success: described(MemoryContract.Status, "Memory status"),

@@ -510,6 +510,8 @@ import type {
   MemoryDisableResponses,
   MemoryDreamGenerateErrors,
   MemoryDreamGenerateResponses,
+  MemoryDreamInspectErrors,
+  MemoryDreamInspectResponses,
   MemoryEnableErrors,
   MemoryEnableResponses,
   MemoryForgetErrors,
@@ -15067,6 +15069,45 @@ export class Memory extends HeyApiClient {
         },
       },
     )
+  }
+
+  /**
+   * Inspect original consolidation operation
+   *
+   * Inspect an exact run and owner on the original routed backend. Keeps at most 32 metadata receipts per workspace, without prompts or generated text. Missing receipts require reconciliation, not replay. SDK settlement does not certify native inference retirement.
+   */
+  public dreamInspect<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      id?: string
+      owner?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "id" },
+            { in: "body", key: "owner" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<MemoryDreamInspectResponses, MemoryDreamInspectErrors, ThrowOnError>({
+      url: "/memory/dream/inspect",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 
   /**

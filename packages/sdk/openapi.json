@@ -52848,6 +52848,132 @@
         ]
       }
     },
+    "/memory/dream/inspect": {
+      "post": {
+        "tags": ["memory"],
+        "operationId": "memory.dreamInspect",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original Dream SDK operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "owner": {
+                      "type": "string",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                      "format": "uuid"
+                    },
+                    "configuredModel": {
+                      "type": "string"
+                    },
+                    "settlement": {
+                      "type": "string",
+                      "enum": ["pending", "sdk"]
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": ["running", "completed", "failed", "interrupted"]
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "settledAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["id", "owner", "configuredModel", "settlement", "outcome", "startedAt"],
+                  "additionalProperties": false,
+                  "description": "Original Dream SDK operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "MemoryApiClientError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MemoryApiClientError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "MemoryApiServerError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryApiServerError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Inspect an exact run and owner on the original routed backend. Keeps at most 32 metadata receipts per workspace, without prompts or generated text. Missing receipts require reconciliation, not replay. SDK settlement does not certify native inference retirement.",
+        "summary": "Inspect original consolidation operation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                    "format": "uuid"
+                  },
+                  "owner": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                    "format": "uuid"
+                  }
+                },
+                "required": ["id", "owner"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.memory.dreamInspect({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/memory/status": {
       "get": {
         "tags": ["memory"],

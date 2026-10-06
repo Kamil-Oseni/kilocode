@@ -30084,6 +30084,49 @@ export type MemoryDreamGenerateResponses = {
 
 export type MemoryDreamGenerateResponse = MemoryDreamGenerateResponses[keyof MemoryDreamGenerateResponses]
 
+export type MemoryDreamInspectData = {
+  body?: {
+    id: string
+    owner: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/memory/dream/inspect"
+}
+
+export type MemoryDreamInspectErrors = {
+  /**
+   * MemoryApiClientError | InvalidRequestError
+   */
+  400: MemoryApiClientError | InvalidRequestError
+  /**
+   * MemoryApiServerError
+   */
+  503: MemoryApiServerError
+}
+
+export type MemoryDreamInspectError = MemoryDreamInspectErrors[keyof MemoryDreamInspectErrors]
+
+export type MemoryDreamInspectResponses = {
+  /**
+   * Original Dream SDK operation
+   */
+  200: {
+    id: string
+    owner: string
+    configuredModel: string
+    settlement: "pending" | "sdk"
+    outcome: "running" | "completed" | "failed" | "interrupted"
+    startedAt: number
+    settledAt?: number
+  }
+}
+
+export type MemoryDreamInspectResponse = MemoryDreamInspectResponses[keyof MemoryDreamInspectResponses]
+
 export type MemoryStatusData = {
   body?: never
   path?: never

@@ -2,6 +2,12 @@
 
 Checkpoint: October 6, 2026. This handoff identifies source awaiting delivery; it does not certify installed behavior.
 
+## Latest converged source
+
+Merge `f29836b7d869684ae23867b5a5b4b99f367fd737` includes the integration owner's audit guidance and optional Git-lock discovery fix through `791f567bd978aa9a01b4a5ffcf16574ce38c3fdd`, alongside the everyday branch's bounded evidence inspection and full Memory/Dream work. The earlier boundary below remains a historical checkpoint. The current production difference from fd11 spans 58 files, with 2,716 additions and 172 deletions. The duplicated audit-guidance changeset is consolidated into the integration owner's release note.
+
+The combined Git-candidate, retained Chief/goal and goal-state cohort passes **126 tests, 2,040 assertions**, with no failures. Backend typechecking, shared-source annotation, Promise-facade and diff checks pass. Evidence: `.tmp/memory-private/converged-goal-git-tests.log` and `converged-goal-git-types.log`. These use temporary repositories and synthetic goal transcripts; they do not establish the native-process trial, real model recovery or an installed workflow gate. Preserve the integration owner's uncommitted work before merging the full branch.
+
 ## Source boundary
 
 - Integration base: `fd11bde5e956fadb2dd7075b6a5c32b74ba2cf40`.

@@ -120,7 +120,13 @@ export class Moods {
   list() {
     const saved = this.storage.get<unknown>(this.#key) ?? []
     if (!Array.isArray(saved) || saved.length > 32) throw new Failure("mood_store_invalid")
-    return { moods: saved.map((value) => parse(value, this.lights.config.entities)), activity: { ...this.#status } }
+    return {
+      moods: saved.map((value) => parse(value, this.lights.config.entities)),
+      activity: { ...this.#status },
+      ...(this.#status.code === "mood_external_change"
+        ? { notice: "The mood stopped after an external light change. It will not restart unless you start it again." }
+        : {}),
+    }
   }
   save(input: unknown, replace = false) {
     if (this.#closed || this.#changing) return Promise.reject(new Failure("closed_or_busy"))

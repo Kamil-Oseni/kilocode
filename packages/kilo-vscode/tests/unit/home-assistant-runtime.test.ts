@@ -1014,6 +1014,9 @@ test("a one-step external dim retires the mood without undoing a gradual sleep f
     expect(owner.list().activity).toEqual({ name: "cinema", state: "failed", code: "mood_external_change" })
     expect(f.state.posts).toBe(posts)
     expect(f.state.brightness).toBe(63)
+    expect(owner.list().notice).toBe(
+      "The mood stopped after an external light change. It will not restart unless you start it again.",
+    )
   } finally {
     await owner.dispose()
     await f.lights.dispose()
@@ -1033,6 +1036,7 @@ test("mood ownership compares settled readback so device brightness rounding doe
     const posts = f.state.posts
     await Bun.sleep(2200)
     expect(owner.list().activity.state).toBe("running")
+    expect(owner.list().notice).toBeUndefined()
     expect(f.state.posts).toBeGreaterThan(posts)
     expect(f.state.brightness).toBe(63)
     await owner.stop()

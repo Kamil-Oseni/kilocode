@@ -1,3 +1,4 @@
+import { candidate } from "../git-candidate"
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import { isUtf8 } from "node:buffer"
@@ -84,6 +85,7 @@ export namespace ChiefEdits {
     maxBytes?: number
   }): Promise<Preview> {
     const dir = await realpath(input.directory)
+    if (!(await candidate(dir))) throw new Error("Git inspection failed: not a git repository")
     const root = git(dir, ["rev-parse", "--show-toplevel"]).bytes.toString("utf8").trim()
     if (path.normalize(await realpath(root)).toLowerCase() !== path.normalize(dir).toLowerCase())
       throw new Error("Edit preview requires the worktree root")

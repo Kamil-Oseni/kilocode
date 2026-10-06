@@ -19,7 +19,7 @@ from policy import Policy
 # or service runtime. No implementation is copied into this test.
 SOURCE = HERE / 'service/index.py'
 TREE = ast.parse(SOURCE.read_bytes())
-NAMES = {'ordinary', 'image', 'address', 'links', 'passage', 'retrieve'}
+NAMES = {'ordinary', 'image', 'address', 'links', 'passage', 'retrieve', 'headings', 'split', 'digest'}
 CODE = ast.Module(body=[node for node in TREE.body if isinstance(node, ast.FunctionDef) and node.name in NAMES], type_ignores=[])
 exec(compile(ast.fix_missing_locations(CODE), str(SOURCE), 'exec'), globals())
 
@@ -163,6 +163,69 @@ class Tests(unittest.TestCase):
         self.assertIn('Historical preference; replaced', value['text'])
         self.assertIn('Movie lights used blue and cyan.', value['text'])
         self.assertEqual(value['text'], '\n'.join(text.splitlines()[value['line'] - 1:value['end_line']]))
+
+    def test_recall_labels_indented_current_sections(self):
+        for indent in range(4):
+            with self.subTest(indent=indent):
+                text = '# Historical\nOld preference.\n\n' + ' ' * indent + '## Current preference\n\nPrefer amber movie lights.\n'
+                value = passage('Preferences/lights.md', text, 'amber movie lights', 500, len, lambda: None)
+                self.assertEqual(value['heading'], 'Current preference')
+                self.assertEqual(value['text'], '\n'.join(text.splitlines()[value['line'] - 1:value['end_line']]))
+
+    def test_recall_does_not_label_fenced_examples_as_sections(self):
+        for fence in ('```', '~~~~'):
+            with self.subTest(fence=fence):
+                text = '# Current preference\n\n' + fence + 'md\n# Historical example\n' + fence + '\n\nPrefer amber movie lights.\n'
+                value = passage('Preferences/lights.md', text, 'amber movie lights', 500, len, lambda: None)
+                self.assertEqual(value['heading'], 'Current preference')
+
+    def test_recall_does_not_label_indented_code_as_a_section(self):
+        text = '# Current preference\n\n    # Historical example\n\nPrefer amber movie lights.\n'
+        value = passage('Preferences/lights.md', text, 'amber movie lights', 500, len, lambda: None)
+        self.assertEqual(value['heading'], 'Current preference')
+
+    def test_recall_strips_only_valid_closing_heading_markers(self):
+        for title, expected in (('Current preference ###', 'Current preference'), ('Current preference#', 'Current preference#'), ('Current\tpreference\t##', 'Current\tpreference')):
+            with self.subTest(title=title):
+                text = '# Historical\n\n## ' + title + '\n\nPrefer amber movie lights.\n'
+                value = passage('Preferences/lights.md', text, 'amber movie lights', 500, len, lambda: None)
+                self.assertEqual(value['heading'], expected)
+
+    def test_recall_retains_section_until_the_real_fence_closes(self):
+        text = '# Current preference\n\n````md\n```\n# Short fence example\n```` invalid closer\n# Still an example\n````\n\nPrefer amber movie lights.\n'
+        value = passage('Preferences/lights.md', text, 'amber movie lights', 500, len, lambda: None)
+        self.assertEqual(value['heading'], 'Current preference')
+
+    def test_index_and_recall_use_the_same_real_section(self):
+        # Conservative character measurement isolates section provenance; this
+        # does not assert model tokenization or start an embedding service.
+        scope = dict(globals(), tokens=len, remaining=lambda: None)
+        exec(compile(ast.fix_missing_locations(CODE), str(SOURCE), 'exec'), scope)
+        for title in ('## Current preference', '   ## Current preference ###', '##\tCurrent preference'):
+            with self.subTest(title=title):
+                text = '# Historical\nOld preference.\n\n' + title + '\n\n```md\n# Historical example\n```\n\nPrefer amber movie lights.\n'
+                note = {'text': text, 'hash': self.sha(text)}
+                chunks = scope['split']('Preferences/lights.md', note)
+                selected = next(row for row in chunks if 'Prefer amber movie lights.' in row['text'])
+                value = passage('Preferences/lights.md', text, 'amber movie lights', 500, len, lambda: None)
+                self.assertEqual(selected['heading'], 'Current preference')
+                self.assertEqual(value['heading'], selected['heading'])
+                self.assertEqual(selected['filehash'], self.sha(text))
+                self.assertEqual(selected['contenthash'], self.sha(selected['text']))
+
+    def test_heading_scan_cancellation_propagates(self):
+        def cancel():
+            raise TimeoutError('cancelled during heading scan')
+        with self.assertRaisesRegex(TimeoutError, 'heading scan'):
+            headings(['# Current preference', 'Prefer amber movie lights.'], cancel)
+
+    def test_corrected_chunk_labels_have_a_new_index_recipe(self):
+        node = next(row for row in TREE.body if isinstance(row, ast.Assign) and
+                    any(isinstance(target, ast.Name) and target.id == 'SIGNATURE' for target in row.targets))
+        scope = {'MODEL': {'revision': 'synthetic-unchanged-model'}}
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), str(SOURCE), 'exec'), scope)
+        self.assertEqual(scope['SIGNATURE'], 'markdown-v4:300tokens:1024:normalized:local-link-labels:synthetic-unchanged-model')
+        self.assertNotEqual(scope['SIGNATURE'], 'markdown-v3:300tokens:1024:normalized:local-link-labels:synthetic-unchanged-model')
 
     def test_recall_preserves_following_conflict_qualifier(self):
         text = '# Preferences\n\nMovie lights should be blue and cyan.\nUnconfirmed suggestion, not a user preference.\n\nOther notes.\n'

@@ -30,7 +30,7 @@ from retirement import fingerprint, canonical
 
 pins = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in source.glob('*.py')}
 tree = ast.parse((source / 'index.py').read_bytes())
-names = {'ordinary', 'image', 'address', 'links', 'passage', 'retrieve'}
+names = {'ordinary', 'image', 'address', 'links', 'passage', 'retrieve', 'headings'}
 code = ast.Module(body=[node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names], type_ignores=[])
 exec(compile(ast.fix_missing_locations(code), str(source / 'index.py'), 'exec'), globals())
 

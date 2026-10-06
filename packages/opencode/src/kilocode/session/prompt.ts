@@ -535,11 +535,22 @@ export namespace KiloSessionPrompt {
   }
 
   /**
-   * Maximum number of compactions attempted within a single turn before we
+   * Maximum consecutive ineffective compactions before we
    * surface an exhaustion error. Three is enough to cover a normal overflow
    * compaction plus a summary-self-overflow retry without spinning forever.
    */
   export const MAX_COMPACTION_ATTEMPTS = 3
+
+  /** Only persisted usable inference progress ends a failed compaction streak. */
+  export function compactionProgress(message: MessageV2.Assistant, parts: readonly MessageV2.Part[]) {
+    if (message.error || message.summary || !message.time.completed) return false
+    if (message.finish !== "stop" && message.finish !== "length" && message.finish !== "tool-calls") return false
+    return parts.some(
+      (part) =>
+        (part.type === "tool" && part.state.status === "completed") ||
+        (part.type === "text" && !part.ignored && !part.synthetic && !!part.text.trim()),
+    )
+  }
 
   /**
    * Guards a compaction attempt. When the attempt count has already reached

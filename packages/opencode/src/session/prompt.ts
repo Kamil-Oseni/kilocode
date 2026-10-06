@@ -1575,7 +1575,7 @@ export const layer = Layer.effect(
       const envCache: KiloSessionPrompt.EnvCache = {}
       const memoryCache = KiloSessionPrompt.memoryCache() // kilocode_change
       closeReasons.delete(sessionID) // kilocode_change
-      let compactionAttempts = 0 // kilocode_change - cap compaction attempts per turn to avoid infinite loops
+      let compactionAttempts = 0 // kilocode_change - cap consecutive ineffective compactions
       const ctx = yield* InstanceState.context
       let structured: unknown
       let step = 0
@@ -2033,6 +2033,14 @@ export const layer = Layer.effect(
           }
 
           // kilocode_change start
+          if (
+            compactionAttempts > 0 &&
+            KiloSessionPrompt.compactionProgress(
+              handle.message,
+              yield* MessageV2.parts(handle.message.id).pipe(Effect.provideService(Database.Service, database)),
+            )
+          )
+            compactionAttempts = 0
           if (result === "stop") {
             if (handle.message.error) closeReasons.set(sessionID, "error")
             return "break" as const

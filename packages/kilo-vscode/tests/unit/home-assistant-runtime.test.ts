@@ -28,7 +28,7 @@ function deferred() {
   })
   return { promise, resolve }
 }
-async function fixture(stoppable = true) {
+async function fixture(stoppable = true, fade = false) {
   const root = await mkdtemp(join(tmpdir(), "raya-ha-runtime-"))
   const values = new Map<string, unknown>()
   const state = {
@@ -101,7 +101,9 @@ async function fixture(stoppable = true) {
     origin: `http://127.0.0.1:${server.port}`,
     entities: [entity],
     modes: [
-      { name: "sleep_mode", entity: "scene.sleep_mode" },
+      fade
+        ? { name: "sleep_mode", entity: "script.sleep_mode_fade", stop: true }
+        : { name: "sleep_mode", entity: "scene.sleep_mode" },
       ...(stoppable ? [{ name: "wake_mode", entity: "script.wake_mode_sunrise", stop: true }] : []),
     ],
   }
@@ -262,6 +264,31 @@ test("named scene accepted and script started are distinct from completed physic
     expect((await f.lights.mode("wake_mode", "stop")).outcome).toBe("accepted")
     expect(() => f.lights.mode("sleep_mode", "stop")).toThrow()
     expect(f.state.posts).toBe(3)
+    await f.lights.dispose()
+  } finally {
+    await f.close()
+  }
+})
+
+test("Sleep fade uses the reviewed script for start and stop", async () => {
+  const f = await fixture(true, true)
+  try {
+    expect(selection(f.config).modes[0]).toEqual({
+      name: "sleep_mode",
+      entity: "script.sleep_mode_fade",
+      stop: true,
+    })
+    expect(() =>
+      selection({ ...f.config, modes: [{ name: "sleep_mode", entity: "script.unreviewed", stop: true }] }),
+    ).toThrow()
+    expect((await f.lights.mode("sleep_mode")).outcome).toBe("started")
+    expect((await f.lights.mode("sleep_mode", "stop")).outcome).toBe("accepted")
+    expect(f.state.requests.filter((row) => row.startsWith("POST "))).toEqual([
+      "POST /api/services/script/turn_on",
+      "POST /api/services/script/turn_off",
+    ])
+    expect(f.rgb.bodies).toEqual([{ entity_id: "script.sleep_mode_fade" }, { entity_id: "script.sleep_mode_fade" }])
+    expect(f.journal.pending()).toBeUndefined()
     await f.lights.dispose()
   } finally {
     await f.close()

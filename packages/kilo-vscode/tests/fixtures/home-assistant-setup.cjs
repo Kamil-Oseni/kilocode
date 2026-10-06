@@ -49,7 +49,12 @@ const native = {
     },
     async showQuickPick(items) {
       assert.equal(items.length, 16)
-      assert.equal(items.filter((item) => item.mode.entity.startsWith("script.")).length, 2)
+      assert.equal(items.filter((item) => item.mode.entity.startsWith("script.")).length, 3)
+      assert.deepEqual(items.find((item) => item.mode.name === "sleep_mode").mode, {
+        name: "sleep_mode",
+        entity: "script.sleep_mode_fade",
+        stop: true,
+      })
       return items
     },
     async showInformationMessage(text) {

@@ -301,6 +301,7 @@ export const layer: Layer.Layer<Service, never, Requirements> =
           })
 
           const excludes = Effect.fnUntraced(function* () {
+            if (state.vcs !== "git") return // kilocode_change - source excludes require a workspace repository
             const result = yield* git(["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
               cwd: state.worktree,
             })
@@ -527,16 +528,17 @@ export const layer: Layer.Layer<Service, never, Requirements> =
                         yield* write(["--git-dir", state.gitdir, "config", "core.symlinks", "true"]) // kilocode_change
                         yield* write(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"]) // kilocode_change
                         // kilocode_change start - seed all eligible new snapshots from the worktree index
-                        seeded.value = yield* KiloSnapshotSeed.seed({
-                          dir: state.directory,
-                          worktree: state.worktree,
-                          gitdir: state.gitdir,
-                          limit,
-                          git,
-                          fs,
-                          ownership,
-                          write: mutate,
-                        })
+                        if (state.vcs === "git")
+                          seeded.value = yield* KiloSnapshotSeed.seed({
+                            dir: state.directory,
+                            worktree: state.worktree,
+                            gitdir: state.gitdir,
+                            limit,
+                            git,
+                            fs,
+                            ownership,
+                            write: mutate,
+                          })
                         // kilocode_change end
                         yield* Effect.logInfo("initialized")
                       }

@@ -65,6 +65,7 @@ test("nonrepo snapshots preserve protected exclusions without source check-ignor
   const result = await track(tmp.path)
   expect(result.calls.some((cmd) => cmd.includes("write-tree"))).toBe(true)
   expect(result.calls.filter((cmd) => cmd.includes("check-ignore"))).toHaveLength(0)
+  expect(result.calls.filter((cmd) => !cmd.includes("--git-dir") && !cmd.includes("init"))).toEqual([])
   expect(result.files).toContain("work.txt")
   expect(result.files.some((file) => file.includes(".raya-profile-locks"))).toBe(false)
 }, 30_000)
@@ -82,6 +83,8 @@ test("actual repository and linked gitfile snapshots retain source ignore rules"
     await writeFile(path.join(dir, "visible.txt"), "visible bytes")
     const result = await track(dir)
     expect(result.calls.some((cmd) => cmd.includes("check-ignore"))).toBe(true)
+    expect(result.calls.some((cmd) => cmd.includes("--unmerged"))).toBe(true)
+    expect(result.calls.some((cmd) => cmd.includes("info/exclude"))).toBe(true)
     expect(result.files).toContain("visible.txt")
     expect(result.files).not.toContain("ignored.txt")
   }

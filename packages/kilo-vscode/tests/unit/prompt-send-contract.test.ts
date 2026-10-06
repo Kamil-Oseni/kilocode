@@ -305,9 +305,14 @@ describe("sendMessage / sendCommand draft id contract", () => {
     expect(extractFunctionBody(source, "promptAgent")).toContain("return resolvePromptAgent({")
   })
 
-  it("createSession and clearCurrentSession do not pin the provisional default agent", () => {
-    expect(extractFunctionBody(source, "createSession")).toContain("setPendingAgentSelection(null)")
-    expect(extractFunctionBody(source, "createSession")).not.toContain("setPendingAgentSelection(defaultAgent())")
+  it("createSession captures the selected agent and model while clearing a session resets pending selection", () => {
+    const body = extractFunctionBody(source, "createSession")
+    expect(body).toContain("const agent = selectedAgentName()")
+    expect(body).toContain("const model = selected()")
+    expect(body).toContain('setStore("agentSelections", draft, agent)')
+    expect(body).toContain('setStore("sessionOverrides", draft, { ...model })')
+    expect(body).toContain("carryVariant(model, variant, agent, draft)")
+    expect(body).not.toContain("setPendingAgentSelection(defaultAgent())")
     expect(extractFunctionBody(source, "clearCurrentSession")).toContain("setPendingAgentSelection(null)")
     expect(extractFunctionBody(source, "clearCurrentSession")).not.toContain("setPendingAgentSelection(defaultAgent())")
   })

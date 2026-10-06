@@ -48,6 +48,7 @@ import type { GoalBannerProps } from "../src/components/chat/GoalBanner"
 import type { GoalState, GoalStatus } from "../../src/shared/goal"
 import { UsageHistoryView } from "../src/components/chat/UsageHistory"
 import { MemoryProvenance } from "../src/components/chat/MemoryProvenance"
+import { BrainDreamActivity } from "../src/components/settings/BrainDreamActivity"
 import { MemoryActions, WorkLocation } from "../src/components/settings/ContextTab"
 import type { MemoryContextValue } from "../src/context/memory"
 import { provenance } from "../../src/shared/memory-provenance"
@@ -68,6 +69,7 @@ type PvState =
   | "usage"
   | "memory"
   | "memory-legacy"
+  | "memory-activity"
   | "context"
   | "paused"
   | "waiting"
@@ -112,6 +114,7 @@ const states: PvState[] = [
   "usage",
   "memory",
   "memory-legacy",
+  "memory-activity",
   "context",
   "paused",
   "waiting",
@@ -511,6 +514,11 @@ const Fixture: Component<{ id: string; theme: Theme; state: PvState }> = (props)
       </Show>
       <Show when={props.state === "context"}>
         <ContextPreview />
+      </Show>
+      <Show when={props.state === "memory-activity"}>
+        <VSCodeProvider>
+          <BrainDreamActivity />
+        </VSCodeProvider>
       </Show>
       <Show when={props.state === "slash"}>
         <SlashPreview />

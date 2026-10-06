@@ -21,6 +21,7 @@ import { snapshot as dreamSnapshot } from "./dream-view"
 import { explanation } from "./dream-review"
 import { DreamTransport } from "./dream-transport"
 import { entry as dreamEntry } from "./dream-entry"
+import { DreamActivity } from "./dream-activity"
 import { Effect } from "effect"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
@@ -52,13 +53,33 @@ export class BrainHost {
   private closing = false
   private controller?: AbortController
   private debt?: unknown
+  private readonly activity = new DreamActivity()
+
+  dreamActivity() {
+    return this.activity.snapshot()
+  }
+
+  async cancelDream(target: unknown) {
+    const work = this.dream
+    if (!work) throw new Error("Original consolidation is not active")
+    return this.activity.join(target, work)
+  }
 
   startDream(connection: KiloConnectionService) {
     if (this.closing) return Promise.reject(new Error("Memory consolidation intake is retired"))
     if (this.debt)
       return Promise.reject(new Error("Original consolidation cleanup is unconfirmed; inspect its checkpoint"))
     if (this.dream) return this.dream
-    const work = this.consolidate(connection).finally(() => {
+    const controller = new AbortController()
+    this.controller = controller
+    const identity = { id: crypto.randomUUID(), owner: crypto.randomUUID() }
+    const work = (async () => {
+      this.activity.begin({ ...identity, project: "", model: "" }, controller)
+      await this.consolidate(connection, controller, identity)
+    })().finally(() => {
+      controller.abort()
+      this.controller = undefined
+      this.activity.finish(this.debt !== undefined)
       this.dream = undefined
     })
     this.dream = work
@@ -72,15 +93,25 @@ export class BrainHost {
     if (this.debt) throw this.debt
   }
 
-  private async consolidate(connection: KiloConnectionService) {
+  private async consolidate(
+    connection: KiloConnectionService,
+    controller: AbortController,
+    identity: { id: string; owner: string },
+  ) {
+    const signal = controller.signal
+    signal.throwIfAborted()
     if (!vscode.workspace.isTrusted) throw new Error("Trust the selected consolidation workspace")
     const folders = vscode.workspace.workspaceFolders
     if (!folders?.length) throw new Error("Open the project whose approved notes you want to consolidate")
     const folder = folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick()
+    signal.throwIfAborted()
     if (!folder || folder.uri.scheme !== "file") return
     const project = folder.uri.fsPath
+    this.activity.select({ ...identity, project, model: "" })
     const client = await connection.getClientAsync(project)
-    const catalog = await client.provider.list({ directory: project })
+    signal.throwIfAborted()
+    const catalog = await client.provider.list({ directory: project }, { signal })
+    signal.throwIfAborted()
     if (catalog.error || !catalog.data) throw new Error("Original backend model catalog is unavailable")
     if (this.closing) throw new Error("Memory consolidation intake is retired")
     const data = catalog.data
@@ -96,7 +127,9 @@ export class BrainHost {
         ),
       { title: "Choose the consolidation model", matchOnDescription: true },
     )
+    signal.throwIfAborted()
     if (!selected) return
+    this.activity.select({ ...identity, project, model: selected.model })
     if (this.closing) throw new Error("Memory consolidation intake is retired")
     if (connection.getClient() !== client) throw new Error("Original Dream backend changed; review again")
     await vscode.window.withProgress(
@@ -106,15 +139,11 @@ export class BrainHost {
         cancellable: true,
       },
       async (progress, cancellation) => {
-        const controller = new AbortController()
-        this.controller = controller
         if (this.closing) controller.abort()
         const off = cancellation.onCancellationRequested(() => controller.abort())
         if (cancellation.isCancellationRequested) controller.abort()
-        const signal = controller.signal
         let grant: Awaited<ReturnType<BrainHost["selectDream"]>> | undefined
         let model: DreamTransport | undefined
-        const identity = { id: crypto.randomUUID(), owner: crypto.randomUUID() }
         const errors: unknown[] = []
         try {
           progress.report({ message: "Select approved sources and note targets" })
@@ -127,6 +156,7 @@ export class BrainHost {
           model = new DreamTransport(connection, { ...identity, project, model: selected.model })
           const approved = grant.approved
           const authority = grant
+          const transport = model
           progress.report({ message: "Preparing proposals; note publication requires separate review" })
           const result = await MemoryFiles.dreamManual.start(
             grant.root,
@@ -140,9 +170,16 @@ export class BrainHost {
             },
             {
               authorize: authority.authorize,
-              model: model.port,
+              model: {
+                ...transport.port,
+                retire: () => {
+                  this.activity.settling()
+                  return transport.close()
+                },
+              },
               execute: Effect.runPromise,
               observe: (run) => {
+                this.activity.observe(run)
                 const phases = {
                   generation: "Preparing or generating proposals",
                   validation: "Checking sources and changes",
@@ -178,9 +215,9 @@ export class BrainHost {
         } catch (err) {
           errors.push(err)
         } finally {
+          this.activity.settling()
           off.dispose()
           controller.abort()
-          this.controller = undefined
           grant?.close()
           await model?.close().catch((err: unknown) => {
             this.debt = err
@@ -410,7 +447,8 @@ export class BrainHost {
   async accept(message: Record<string, unknown>, post: (value: BrainResponse) => void) {
     if (message.type !== "secondBrain") return false
     if (typeof message.id !== "string") return true
-    if (await dreamEntry(message, (command) => vscode.commands.executeCommand(command), post)) return true
+    if (await dreamEntry(message, (command, target) => vscode.commands.executeCommand(command, target), post))
+      return true
     if (message.action === "proposal") {
       await this.proposal(message, post)
       return true
@@ -434,7 +472,14 @@ export class BrainHost {
           type: "secondBrain",
           action: message.action as Exclude<
             BrainRequest["action"],
-            "search" | "context" | "cancel" | "proposal" | "dreamStart" | "dreamInspect"
+            | "search"
+            | "context"
+            | "cancel"
+            | "proposal"
+            | "dreamStart"
+            | "dreamInspect"
+            | "dreamActivity"
+            | "dreamCancel"
           >,
           id: message.id,
         },

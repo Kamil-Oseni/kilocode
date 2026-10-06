@@ -1,6 +1,7 @@
 import { Show, createSignal, onCleanup } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
+import { BrainDreamActivity } from "./BrainDreamActivity"
 
 export function BrainConsolidation(props: { configured: boolean }) {
   const vscode = useVSCode()
@@ -42,6 +43,7 @@ export function BrainConsolidation(props: { configured: boolean }) {
       <Show when={status() === "unavailable"}>
         <p role="alert">Consolidation could not be confirmed. Inspect the saved checkpoint before starting again.</p>
       </Show>
+      <BrainDreamActivity />
     </section>
   )
 }

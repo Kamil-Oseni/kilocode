@@ -9,6 +9,7 @@ import type { AdminEntry, AdminRow } from "../../../../src/shared/admin"
 import { Resources } from "./Resources"
 import { Recovery } from "./Recovery"
 import { BackgroundAgents } from "../chat/BackgroundAgents"
+import { BrainDreamActivity } from "../settings/BrainDreamActivity"
 
 const ids = [
   "runtime",
@@ -247,6 +248,9 @@ export function AdminView(props: { onBack: () => void }) {
         <h2 id="admin-workers-title">Current conversation workers</h2>
         <BackgroundAgents />
       </section>
+      <Card>
+        <BrainDreamActivity />
+      </Card>
 
       <Show when={error()}>
         <div class="admin-notice" data-kind={kind()} role={kind() === "error" ? "alert" : "status"}>

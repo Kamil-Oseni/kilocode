@@ -29,7 +29,12 @@ export function SecondBrain() {
   const [query, setQuery] = createSignal("")
   const [id, setId] = createSignal("")
   const busy = () => ["checking", "searching"].includes(state().status)
-  const request = (action: Exclude<BrainRequest["action"], "proposal" | "dreamStart" | "dreamInspect">) => {
+  const request = (
+    action: Exclude<
+      BrainRequest["action"],
+      "proposal" | "dreamStart" | "dreamInspect" | "dreamActivity" | "dreamCancel"
+    >,
+  ) => {
     const target = id()
     const next = crypto.randomUUID()
     setId(next)

@@ -1113,6 +1113,30 @@ const respond = (message: WebviewMessage) => {
 }
 
 const reply = (message: WebviewMessage) => {
+  if (message.type === "secondBrain" && message.action === "dreamActivity") {
+    emit({
+      type: "secondBrainState",
+      id: message.id,
+      state: {
+        configured: false,
+        status: "disconnected",
+        results: [],
+        dream: {
+          status: "closed",
+          activity: {
+            id: "11111111-1111-4111-8111-111111111111",
+            owner: "22222222-2222-4222-8222-222222222222",
+            project: "C:/Synthetic/ApprovedProject/MemoryConsolidationFixture/LongProjectFolder",
+            model: "fixture/model",
+            revision: 1,
+            phase: "generation",
+            lifecycle: "active",
+          },
+        },
+      },
+    })
+    return true
+  }
   if (message.type === "routineContactDestination") return destination(message)
   if (message.type === "routineOrganizationArchivedList") return archived(message)
   return initial(message) || respond(message)
@@ -1126,6 +1150,8 @@ export function installMockVsCode() {
   scope.acquireVsCodeApi = () => ({
     postMessage: (message) => {
       document.documentElement.dataset.previewMessage = JSON.stringify(message)
+      if (message.type === "secondBrain" && message.action === "dreamCancel")
+        document.documentElement.dataset.previewDreamCancel = JSON.stringify(message)
       console.info("[raya preview] mock postMessage", message)
       queueMicrotask(() => reply(message))
     },

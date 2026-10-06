@@ -29,6 +29,25 @@ export type BrainContext = Readonly<{
   capture_enabled: false
 }>
 
+export type BrainDreamActivity = Readonly<{
+  id: string
+  owner: string
+  project: string
+  model: string
+  revision: number
+  phase:
+    | "selection"
+    | "generation"
+    | "validation"
+    | "submission"
+    | "review-pending"
+    | "reconciliation"
+    | "completed"
+    | "cancelled"
+    | "failed"
+  lifecycle: "active" | "settling" | "joined" | "uncertain"
+}>
+
 export type BrainState = Readonly<{
   configured: boolean
   status: "disconnected" | "checking" | "ready" | "searching" | "cancelled" | "unavailable"
@@ -37,7 +56,7 @@ export type BrainState = Readonly<{
   review?: BrainReview
   context?: BrainContext
   root?: string
-  dream?: Readonly<{ status: "native-review" | "closed" | "unavailable" }>
+  dream?: Readonly<{ status: "native-review" | "closed" | "unavailable"; activity?: BrainDreamActivity }>
   results: readonly BrainSource[]
   control?: Readonly<{
     status: "unchecked" | "reviewing" | "approved" | "syncing" | "synced" | "policy_disabled" | "uncertain"
@@ -61,8 +80,10 @@ export type BrainRequest =
         | "disable"
         | "dreamStart"
         | "dreamInspect"
+        | "dreamActivity"
       id: string
     }
+  | { type: "secondBrain"; action: "dreamCancel"; id: string; target: { id: string; owner: string } }
   | { type: "secondBrain"; action: "cancel"; id: string; target: string }
   | { type: "secondBrain"; action: "search"; id: string; query: string }
   | { type: "secondBrain"; action: "context"; id: string; query: string; budget: number }

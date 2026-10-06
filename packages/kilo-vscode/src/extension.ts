@@ -143,6 +143,10 @@ export function activate(context: vscode.ExtensionContext) {
   // raya_change start - Milestone E live React canvas panel and host bridge
   const canvasService = new CanvasService(connectionService, context)
   const brain = new BrainHost(context)
+  context.subscriptions.push(
+    vscode.commands.registerCommand("raya.memory.dreamActivity", () => brain.dreamActivity()),
+    vscode.commands.registerCommand("raya.memory.cancelDream", (target: unknown) => brain.cancelDream(target)),
+  )
   context.subscriptions.push(new BrainBridge(connectionService, brain))
   context.subscriptions.push(
     vscode.commands.registerCommand("raya.memory.startDream", () =>

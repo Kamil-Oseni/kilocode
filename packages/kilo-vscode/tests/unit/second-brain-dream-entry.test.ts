@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { entry } from "../../src/second-brain/dream-entry"
 import type { BrainResponse } from "../../src/shared/second-brain"
+import { DreamActivity } from "../../src/second-brain/dream-activity"
 
 test("Memory entry invokes only the fixed native review command and reports closure without success", async () => {
   let release!: () => void
@@ -67,4 +68,47 @@ test("inspection uses its fixed read-only command and failed native reviews rema
   )
   expect(commands).toEqual(["raya.memory.inspectDream"])
   expect(responses.map((response) => response.state.dream?.status)).toEqual(["native-review", "unavailable"])
+})
+
+test("activity queries and exact-run cancellation route to their original native commands", async () => {
+  const view = new DreamActivity()
+  const selected = {
+    id: crypto.randomUUID(),
+    owner: crypto.randomUUID(),
+    project: "C:/Synthetic",
+    model: "fixture/model",
+  }
+  const controller = new AbortController()
+  view.begin(selected, controller)
+  const commands: string[] = []
+  const responses: BrainResponse[] = []
+  const execute: Parameters<typeof entry>[1] = async (command, target) => {
+    commands.push(command)
+    if (command === "raya.memory.cancelDream") view.cancel(target)
+    return view.snapshot()
+  }
+  await entry({ type: "secondBrain", action: "dreamActivity", id: "read" }, execute, (response) =>
+    responses.push(response),
+  )
+  expect(responses.at(-1)?.state.dream?.activity).toMatchObject({ ...selected, lifecycle: "active" })
+  await entry(
+    { type: "secondBrain", action: "dreamCancel", id: "cancel", target: { id: selected.id, owner: selected.owner } },
+    execute,
+    (response) => responses.push(response),
+  )
+  expect(commands).toEqual(["raya.memory.dreamActivity", "raya.memory.cancelDream"])
+  expect(controller.signal.aborted).toBe(true)
+  expect(responses.at(-1)?.state.dream?.activity?.lifecycle).toBe("settling")
+  await entry(
+    {
+      type: "secondBrain",
+      action: "dreamCancel",
+      id: "invalid",
+      target: { id: selected.id, owner: selected.owner, command: "other" },
+    },
+    execute,
+    (response) => responses.push(response),
+  )
+  expect(commands).toHaveLength(2)
+  expect(responses.at(-1)?.state.dream?.status).toBe("unavailable")
 })

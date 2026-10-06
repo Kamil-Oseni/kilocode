@@ -7,6 +7,7 @@ export default defineConfig({
     "activity.browser.ts",
     "context-provenance.browser.ts",
     "memory-preview.browser.ts",
+    "memory-activity.browser.ts",
     "message-time.browser.ts",
     "routines-preview.browser.ts",
     "surfaces-preview.browser.ts",

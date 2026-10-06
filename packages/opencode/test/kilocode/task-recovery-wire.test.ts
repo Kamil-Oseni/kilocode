@@ -38,6 +38,7 @@ import { RayaChief } from "@/kilocode/chief"
 import { ChiefVerification } from "@/kilocode/chief/verification"
 import { RayaGoal } from "@/kilocode/goal"
 import { goalTools } from "@/kilocode/tool/goal"
+import * as GoalGate from "@/kilocode/goal/tool-gate"
 import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 import { context, schemas } from "@/kilocode/provider/ollama-context"
 import { ProviderTest } from "../fake/provider"
@@ -455,6 +456,234 @@ it.instance(
       expect(hint.example).not.toContain("source and saved target")
       yield* storage.replace(["raya", "goal", parent.id], { ...(yield* goals.get(parent.id)), status: "complete" })
       expect(JSON.parse((yield* get.execute({}, opts)).output).recovery).toBeUndefined()
+    }),
+  { timeout: 30_000 },
+)
+
+it.instance(
+  "timer factory requires its own completed goal observation before work",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const storage = yield* Storage.Service
+      const agents = yield* Agent.Service
+      const prompts = yield* SessionPrompt.Service
+      const processors = yield* SessionProcessor.Service
+      const fs = yield* FSUtil.Service
+      const ctx = yield* InstanceState.context
+      const agent = yield* agents.get("auto")
+      if (!agent) throw new Error("Actual Auto agent required")
+      const file = path.join(ctx.directory, "timer.txt")
+      yield* fs.writeFileString(file, "ACTUAL_TIMER_FILE")
+      const goals = RayaGoal.make({ sessions, storage })
+      const factory = Effect.fn(function* (kind: "timer" | "manual", completion?: "reply") {
+        const session = yield* sessions.create({
+          metadata: {
+            rayaRoutine: {
+              version: 2,
+              agentID: "fixture",
+              runID: crypto.randomUUID(),
+              scheduleVersion: 1,
+              trigger:
+                kind === "timer"
+                  ? { kind, id: crypto.randomUUID(), scheduledAt: Date.now(), observedAt: Date.now() }
+                  : { kind },
+            },
+          },
+          permission: [
+            { permission: "*", pattern: "*", action: "deny" },
+            ...["get_goal", "update_goal", "read"].map((permission) => ({
+              permission,
+              pattern: permission === "read" ? file : "*",
+              action: "allow" as const,
+            })),
+            { permission: "read", pattern: path.relative(ctx.worktree, file), action: "allow" },
+          ],
+        })
+        const user = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: session.id,
+          role: "user",
+          agent: "auto",
+          model: { providerID: model.providerID, modelID: model.id },
+          time: { created: Date.now() },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: user.id,
+          type: "text",
+          text: "Read the timer fixture",
+        })
+        yield* goals.create(
+          session.id,
+          "Read the timer fixture",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          completion,
+        )
+        const assistant = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: session.id,
+          parentID: user.id,
+          role: "assistant",
+          agent: "auto",
+          mode: "auto",
+          cost: 0,
+          path: { cwd: ctx.directory, root: ctx.directory },
+          providerID: model.providerID,
+          modelID: model.id,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: Date.now() },
+        })
+        const processor = yield* processors.create({ assistantMessage: assistant, sessionID: session.id, model })
+        const catalog = yield* SessionTools.resolve({
+          agent,
+          model,
+          session: yield* sessions.get(session.id),
+          processor,
+          messages: yield* sessions.messages({ sessionID: session.id }),
+          bypassAgentCheck: false,
+          memoryCache: {},
+          promptOps: {
+            cancel: prompts.cancel,
+            resolvePromptParts: prompts.resolvePromptParts,
+            prompt: (input) => prompts.prompt(input).pipe(Effect.orDie),
+          },
+        })
+        const call = Effect.fn(function* (name: string, input: Record<string, unknown>) {
+          const execute = catalog[name]?.execute
+          if (!execute) throw new Error(`Actual ${name} callback required`)
+          const value = yield* Effect.promise(
+            async () =>
+              await execute(input, { toolCallId: name, messages: [], abortSignal: new AbortController().signal }),
+          )
+          return Schema.decodeUnknownSync(
+            Schema.Struct({
+              title: Schema.String,
+              output: Schema.String,
+              metadata: Schema.Record(Schema.String, Schema.Unknown),
+            }),
+          )(value)
+        })
+        return { session, user, assistant, call }
+      })
+      const first = yield* factory("timer")
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect((yield* first.call("update_goal", { status: "paused", reason: "Test pause" })).title).toBe(
+        "Read goal first",
+      )
+      expect((yield* goals.get(first.session.id))?.status).toBe("active")
+      const observed = yield* first.call("get_goal", {})
+      expect(observed.title).toBe("Current goal")
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      const id = PartID.ascending()
+      const publish = (status: "pending" | "completed", metadata = observed.metadata, output = observed.output) =>
+        sessions.updatePart({
+          id,
+          sessionID: first.session.id,
+          messageID: first.assistant.id,
+          type: "tool",
+          tool: "get_goal",
+          callID: "get_goal",
+          state:
+            status === "pending"
+              ? { status, input: {}, raw: "" }
+              : {
+                  status,
+                  input: {},
+                  title: observed.title,
+                  output,
+                  metadata,
+                  time: { start: Date.now(), end: Date.now() },
+                },
+        })
+      yield* publish("pending")
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      yield* publish("completed", {}, observed.output)
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      yield* sessions.updatePart({
+        id,
+        sessionID: first.session.id,
+        messageID: first.assistant.id,
+        type: "tool",
+        tool: "get_goal",
+        callID: "get_goal",
+        state: {
+          status: "error",
+          input: {},
+          error: "Read refused",
+          metadata: observed.metadata,
+          time: { start: Date.now(), end: Date.now() },
+        },
+      })
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      const proof = Schema.decodeUnknownSync(
+        Schema.Struct({
+          version: Schema.Number,
+          sessionID: Schema.String,
+          messageID: Schema.String,
+          revision: Schema.optional(Schema.String),
+          digest: Schema.String,
+        }),
+      )(observed.metadata[GoalGate.key])
+      yield* publish("completed", {
+        ...observed.metadata,
+        [GoalGate.key]: { ...proof, sessionID: "ses_foreign" },
+      })
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      yield* publish("completed", { ...observed.metadata, [GoalGate.key]: { ...proof, revision: "foreign" } })
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ goal: RayaGoal.State })))(
+        observed.output,
+      )
+      yield* publish(
+        "completed",
+        observed.metadata,
+        JSON.stringify({ goal: { ...parsed.goal, objective: "Foreign objective" } }),
+      )
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      yield* publish("completed")
+      expect((yield* first.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
+      // Actual turn accounting advances the revision without changing the semantic goal.
+      yield* goals.recordTurn(first.session.id, first.assistant.id)
+      expect((yield* goals.get(first.session.id))?.revision).not.toBe(parsed.goal.revision)
+      expect((yield* first.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
+      expect((yield* first.call("update_goal", { status: "paused", reason: "Test pause" })).title).toBe("Goal paused")
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      const second = yield* factory("timer")
+      expect((yield* second.call("read", { filePath: file })).title).toBe("Read goal first")
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: second.session.id,
+        messageID: second.assistant.id,
+        type: "tool",
+        tool: "get_goal",
+        callID: "foreign",
+        state: {
+          status: "completed",
+          input: {},
+          title: observed.title,
+          output: observed.output,
+          metadata: observed.metadata,
+          time: { start: Date.now(), end: Date.now() },
+        },
+      })
+      expect((yield* second.call("read", { filePath: file })).title).toBe("Read goal first")
+      yield* goals.edit(first.session.id, { objective: "Changed current objective" })
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      const refreshed = yield* first.call("get_goal", {})
+      yield* publish("completed", refreshed.metadata, refreshed.output)
+      expect((yield* first.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
+      yield* sessions.updateMessage({ ...first.user, id: MessageID.ascending(), time: { created: Date.now() } })
+      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      const manual = yield* factory("manual")
+      expect((yield* manual.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
+      const reply = yield* factory("timer", "reply")
+      expect((yield* reply.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
     }),
   { timeout: 30_000 },
 )

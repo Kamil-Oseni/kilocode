@@ -131,20 +131,23 @@ export function goalTools(
             }),
           )
           const resumed = yield* recovery(ctx)
-          return result(
-            "Current goal",
-            JSON.stringify(
-              {
-                planUpdate: { expectedIntent: goal.intent ?? "unset", expectedRevision: goal.plan?.revision ?? null },
-                goal,
-                eligibleEvidence: evidence,
-                recovery: resumed,
-              },
-              null,
-              2,
+          return {
+            ...result(
+              "Current goal",
+              JSON.stringify(
+                {
+                  planUpdate: { expectedIntent: goal.intent ?? "unset", expectedRevision: goal.plan?.revision ?? null },
+                  goal,
+                  eligibleEvidence: evidence,
+                  recovery: resumed,
+                },
+                null,
+                2,
+              ),
+              goal.status,
             ),
-            goal.status,
-          )
+            metadata: { status: goal.status, [GoalGate.key]: GoalGate.observation(goal, ctx.sessionID, ctx.messageID) },
+          }
         }),
     }),
   )

@@ -193,6 +193,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         Effect.orDie,
       ),
   )
+  const admit = yield* GoalGate.first(
+    items.find((item) => item.id === "update_goal")?.jsonSchema,
+    input.session,
+    input.processor.message.parentID,
+    sessions,
+  )
   // kilocode_change end
   for (const item of items) {
     // kilocode_change
@@ -511,7 +517,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // kilocode_change end
 
   // kilocode_change start - bind bounded discovery to genuine current-turn execution and completed parts
-  const finish = () => GoalGate.bind(select(), check, run.promise) // kilocode_change - check queued callbacks before original effects
+  const finish = () => GoalGate.bind(select(), check, run.promise, admit) // kilocode_change - check queued callbacks before original effects
   const select = () => {
     // kilocode_change - preserve the original complete catalogue
     if (!LazyTools.eligible(input.agent)) return tools

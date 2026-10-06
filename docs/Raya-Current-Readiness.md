@@ -12,6 +12,8 @@ The matching update package is now built: `7.4.23-snapshot+ddccef1e67.local.1791
 
 Use [the full implementation tracker](Raya-Implementation-Progress.md#findings-and-overhauls) for evidence and remaining acceptance conditions, and [the PC setup checklist](Raya-New-PC-Setup.md) for local integration details. Historical readiness scores in the full tracker do not override this snapshot.
 
+The first installed General run remains a failed gate. Its original controller exited with code 1 and joined its streams without forced termination; the server and guardian retired naturally. The isolated fixture reports `ContextOverflowError`: compaction still exceeded the model limit after three attempts. Its stream also records six distinct General child sessions where the acceptance condition requires one delegated worker. Successful inference steps alone do not satisfy that condition. Investigate continuation context and worker reuse before another unchanged run; neither preserved files nor successful shutdown promotes the full workflow to accepted.
+
 ## Active unfinished requirements
 
 | Requirement | Recorded status |

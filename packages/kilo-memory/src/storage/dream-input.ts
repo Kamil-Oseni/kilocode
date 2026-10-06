@@ -251,11 +251,18 @@ export namespace MemoryDreamInput {
         void parser.walkTokens(parser.lexer(content), (token) => {
           if (token.type === "html") throw new Error("Dream notes cannot introduce unreviewed HTML")
           if (token.type !== "link" && token.type !== "image") return
-          const href = decodeURIComponent(token.href)
-          if (!href || /[\\:?\x00-\x1f]/.test(href) || href.startsWith("/") || /%[0-9a-f]{2}/i.test(href))
+          // Split URI syntax before decoding: an encoded '#' can belong to an approved filename.
+          const [file, ...fragments] = token.href.split("#")
+          const href = decodeURIComponent(file)
+          const fragment = decodeURIComponent(fragments.join("#"))
+          if (
+            (!href && !fragments.length) ||
+            /[\\:?\x00-\x1f]/.test(href + fragment) ||
+            href.startsWith("/") ||
+            /%[0-9a-f]{2}/i.test(href + fragment)
+          )
             throw new Error("Dream links must remain local to the approved note selection")
-          const file = href.split("#")[0]
-          const name = file ? path.posix.normalize(path.posix.join(path.posix.dirname(target.path), file)) : target.path
+          const name = href ? path.posix.normalize(path.posix.join(path.posix.dirname(target.path), href)) : target.path
           relative.parse(name)
           links.add(name)
           if (links.size > 8) throw new Error("Dream link selection exceeds its bound")

@@ -92,6 +92,39 @@ test("generated links resolve only to selected note revisions and ignore code ex
   await expect(plan.validate(revise("[Eden](../Projects/Eden.md)"))).rejects.toThrow("not approved")
 })
 
+test("encoded filename delimiters retain the exact approved note identity", async () => {
+  const f = await fixture()
+  const text = "# Plan\nApproved synthetic project note."
+  const name = "Projects/Plan.md#details.md"
+  await mkdir(path.join(f.root, "Projects"))
+  await writeFile(path.join(f.root, name), text)
+  await writeFile(path.join(f.root, "Projects/Plan.md"), text)
+  const plan = await MemoryFiles.dreamInput.prepare(f.root, f.project, {
+    ...f.input,
+    targets: [...f.input.targets, { key: "plan", path: name, expected: hash(text) }],
+  })
+  const [candidate] = await plan.decode(f.output)
+  const revise = (content: string) => ({ ...candidate, changes: [{ ...candidate.changes[0], content }] })
+  await plan.validate(revise("[Plan](../Projects/Plan.md%23details.md)"))
+  await plan.validate(revise("[Plan heading](../Projects/Plan.md%23details.md#plan)"))
+  await expect(plan.validate(revise("[Unselected](../Projects/Plan.md#details.md)"))).rejects.toThrow("not an approved")
+  await expect(plan.validate(revise("[Double encoded](../Projects/Plan.md%2523details.md)"))).rejects.toThrow("local")
+  const plain = await MemoryFiles.dreamInput.prepare(f.root, f.project, {
+    ...f.input,
+    targets: [...f.input.targets, { key: "plain", path: "Projects/Plan.md", expected: hash(text) }],
+  })
+  const [original] = await plain.decode(f.output)
+  await expect(
+    plain.validate({
+      ...original,
+      changes: [{ ...original.changes[0], content: "[Unselected file](../Projects/Plan.md%23details.md)" }],
+    }),
+  ).rejects.toThrow("not an approved")
+  expect(await readFile(path.join(f.root, name), "utf8")).toBe(text)
+  await writeFile(path.join(f.root, name), "Changed after approval")
+  await expect(plan.validate(revise("[Plan](../Projects/Plan.md%23details.md)"))).rejects.toThrow("not approved")
+})
+
 test("unapproved keys, citations, extra authority and empty evidence are refused", async () => {
   const f = await fixture()
   const plan = await MemoryFiles.dreamInput.prepare(f.root, f.project, f.input)

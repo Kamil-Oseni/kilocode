@@ -173,7 +173,7 @@ export class Moods {
       const abort = () => controller.abort()
       signal.addEventListener("abort", abort, { once: true })
       const started = performance.now()
-      const previous = new Map<string, ReturnType<typeof frame>[number]>()
+      const previous = new Map<string, Awaited<ReturnType<Lights["set"]>>["states"][number]>()
       const step = async () => {
         const targets = frame(mood, (performance.now() - started) / 1000)
         for (const target of targets) {
@@ -183,14 +183,14 @@ export class Moods {
             const actual = await this.lights.state(target.entity, controller.signal)
             if (
               actual.state !== expected.state ||
-              Math.abs((actual.brightness ?? -999) - expected.brightness) > 2 ||
-              expected.rgb_color.some((value, index) => Math.abs((actual.rgb_color?.[index] ?? -999) - value) > 2)
+              actual.brightness !== expected.brightness ||
+              JSON.stringify(actual.rgb_color) !== JSON.stringify(expected.rgb_color)
             )
               throw new Failure("mood_external_change")
           }
           const { entity, ...goal } = target
-          await this.lights.set(entity, goal, controller.signal)
-          previous.set(entity, target)
+          const result = await this.lights.set(entity, goal, controller.signal)
+          for (const state of result.states) previous.set(state.entity, state)
         }
       }
       try {

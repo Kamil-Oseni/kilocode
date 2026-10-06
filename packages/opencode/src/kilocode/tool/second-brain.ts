@@ -143,16 +143,18 @@ export const SecondBrainTool = Tool.define<
                       metadata: { status: "unconfirmed" as const, action: command.action, code: err.code },
                     }),
               onSuccess: (result) =>
-                Effect.succeed({
-                  title: result.action === "propose" ? "Pending Second Brain proposal" : "Second Brain proposals",
-                  output: JSON.stringify(result),
-                  metadata: {
-                    status: result.action === "propose" ? ("pending" as const) : ("inspected" as const),
-                    action: result.action,
-                    count: result.proposals.length,
-                    applied: false,
-                  },
-                }),
+                result.action === "context"
+                  ? Effect.die(new Error("Proposal result required"))
+                  : Effect.succeed({
+                      title: result.action === "propose" ? "Pending Second Brain proposal" : "Second Brain proposals",
+                      output: JSON.stringify(result),
+                      metadata: {
+                        status: result.action === "propose" ? ("pending" as const) : ("inspected" as const),
+                        action: result.action,
+                        count: result.proposals.length,
+                        applied: false,
+                      },
+                    }),
             }),
             Effect.orDie,
           )

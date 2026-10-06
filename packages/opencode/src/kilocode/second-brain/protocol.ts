@@ -27,9 +27,20 @@ export const Command = Schema.Union([
   Schema.Struct({ action: Schema.Literal("propose"), id: ID, request: Draft }),
 ]).annotate({ identifier: "SecondBrainCommand" })
 export type Command = typeof Command.Type
-export const Request = Schema.Struct({ id: RequestID, sessionID: SessionID, project: Path, command: Command }).annotate(
-  { identifier: "SecondBrainRequest" },
-)
+const integer = (min: number, max: number) =>
+  Schema.Int.check(Schema.isGreaterThanOrEqualTo(min), Schema.isLessThanOrEqualTo(max))
+export const Recall = Schema.Struct({
+  action: Schema.Literal("context"),
+  query: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8000), Schema.isPattern(/\S/)),
+  budget: integer(1, 12000),
+}).annotate({ identifier: "SecondBrainRecall" })
+export type Recall = typeof Recall.Type
+export const Request = Schema.Struct({
+  id: RequestID,
+  sessionID: SessionID,
+  project: Path,
+  command: Schema.Union([Command, Recall]),
+}).annotate({ identifier: "SecondBrainRequest" })
 export type Request = typeof Request.Type
 const Proposal = Schema.Struct({
   format: Schema.Literal("raya.memory.proposal.v1"),
@@ -44,11 +55,44 @@ const Proposal = Schema.Struct({
   ).check(Schema.isMinLength(1), Schema.isMaxLength(16)),
   provenance: Schema.String.check(Schema.isMaxLength(4096)),
 })
-export const Result = Schema.Struct({
+export const ProposalResult = Schema.Struct({
   action: Schema.Literals(["list", "read", "propose"]),
   project: Path,
   proposals: Schema.Array(Proposal).check(Schema.isMaxLength(128)),
-}).annotate({ identifier: "SecondBrainResult" })
+}).annotate({ identifier: "SecondBrainProposalResult" })
+export type ProposalResult = typeof ProposalResult.Type
+export const ContextResult = Schema.Struct({
+  action: Schema.Literal("context"),
+  project: Path,
+  root: Path,
+  context: Schema.Struct({
+    sources: Schema.Array(
+      Schema.Struct({
+        path: Schema.String.check(Schema.isMaxLength(8192)),
+        relative: Path,
+        line: integer(1, 256000),
+        end_line: integer(1, 256000),
+        heading: Schema.String.check(Schema.isMaxLength(256000)),
+        text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256000)),
+        source_sha256: Hash,
+        depth: integer(0, 2),
+        tokens: integer(1, 2000),
+        truncated: Schema.Boolean,
+      }),
+    ).check(Schema.isMaxLength(12)),
+    diagnostics: Schema.Array(
+      Schema.Struct({
+        relative: Schema.String.check(Schema.isMaxLength(4096)),
+        reason: Schema.String.check(Schema.isMaxLength(8192)),
+      }),
+    ).check(Schema.isMaxLength(108)),
+    tokens: integer(0, 12000),
+    truncated: Schema.Boolean,
+    capture_enabled: Schema.Literal(false),
+  }),
+}).annotate({ identifier: "SecondBrainContextResult" })
+export type ContextResult = typeof ContextResult.Type
+export const Result = Schema.Union([ProposalResult, ContextResult]).annotate({ identifier: "SecondBrainResult" })
 export type Result = typeof Result.Type
 export const ErrorCode = Schema.Literals([
   "cancelled",

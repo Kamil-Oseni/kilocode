@@ -7,6 +7,7 @@ import { Context, Deferred, Duration, Effect, Layer, LayerMap, Schema } from "ef
 import * as Log from "@opencode-ai/core/util/log"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ErrorCode, Event, type Failure, Request, RequestID, Result } from "./protocol"
+import { valid } from "./reply"
 
 const log = Log.create({ service: "second-brain-host" })
 type WithoutID<T> = T extends unknown ? Omit<T, "id"> : never
@@ -191,16 +192,7 @@ export function layer(timeout: Duration.Input = "2 minutes") {
           return yield* new NotFoundError({ requestID: input.requestID })
         }
         const value = input.result
-        if (
-          !Schema.is(Result)(value) ||
-          Buffer.byteLength(JSON.stringify(value), "utf8") > 3000000 ||
-          entry.info.command.action !== value.action ||
-          entry.info.project !== value.project ||
-          value.proposals.some((row) => row.project !== entry.info.project) ||
-          (entry.info.command.action === "propose" && value.proposals.some((row) => row.status !== "pending")) ||
-          (entry.info.command.action !== "list" &&
-            (value.proposals.length !== 1 || value.proposals[0]?.id !== entry.info.command.id))
-        )
+        if (Buffer.byteLength(JSON.stringify(value), "utf8") > 3000000 || !valid(entry.info, value))
           return yield* new InvalidReplyError({ requestID: input.requestID })
         pending.delete(input.requestID)
         return yield* Deferred.succeed(entry.deferred, input.result)

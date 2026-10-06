@@ -12,7 +12,7 @@ test("actual public OpenAPI preserves proposal nulls and closed read statuses", 
   const spec = OpenApi.fromApi(PublicApi)
   const schemas = spec.components.schemas as Record<string, Node>
   const draft = schemas.SecondBrainCommand.anyOf?.find((row) => row.properties?.request)?.properties?.request
-  const proposal = schemas.SecondBrainResult.properties?.proposals?.items
+  const proposal = schemas.SecondBrainProposalResult.properties?.proposals?.items
   for (const row of [draft, proposal]) {
     expect(row).toBeDefined()
     for (const field of ["expected", "content"]) {

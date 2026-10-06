@@ -1966,11 +1966,17 @@ export type SecondBrainCommand =
       }
     }
 
+export type SecondBrainRecall = {
+  action: "context"
+  query: string
+  budget: number
+}
+
 export type SecondBrainRequest = {
   id: SecondBrainRequestId
   sessionID: string
   project: string
-  command: SecondBrainCommand
+  command: SecondBrainCommand | SecondBrainRecall
 }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
@@ -6831,7 +6837,7 @@ export type DesktopFailure = {
   receipt?: ComputerUseReceipt
 }
 
-export type SecondBrainResult = {
+export type SecondBrainProposalResult = {
   action: "list" | "read" | "propose"
   project: string
   proposals: Array<{
@@ -6856,6 +6862,35 @@ export type SecondBrainResult = {
     provenance: string
   }>
 }
+
+export type SecondBrainContextResult = {
+  action: "context"
+  project: string
+  root: string
+  context: {
+    sources: Array<{
+      path: string
+      relative: string
+      line: number
+      end_line: number
+      heading: string
+      text: string
+      source_sha256: string
+      depth: number
+      tokens: number
+      truncated: boolean
+    }>
+    diagnostics: Array<{
+      relative: string
+      reason: string
+    }>
+    tokens: number
+    truncated: boolean
+    capture_enabled: false
+  }
+}
+
+export type SecondBrainResult = SecondBrainProposalResult | SecondBrainContextResult
 
 export type SecondBrainFailure = {
   code: "cancelled" | "disconnected" | "invalid_request" | "not_found" | "timeout" | "unsupported" | "conflict"

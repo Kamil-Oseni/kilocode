@@ -7,7 +7,14 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { Command, Event, type Request, type Result } from "@/kilocode/second-brain/protocol"
+import {
+  Command,
+  Recall,
+  Event,
+  type Request,
+  type ProposalResult,
+  type ContextResult,
+} from "@/kilocode/second-brain/protocol"
 import { SecondBrain } from "@/kilocode/second-brain/service"
 import { SecondBrainTool } from "@/kilocode/tool/second-brain"
 import { Session } from "@/session/session"
@@ -30,7 +37,8 @@ const it = testEffect(
   ),
 )
 
-function result(request: Request): Result {
+function result(request: Request): ProposalResult {
+  if (request.command.action === "context") throw new Error("Proposal request required")
   return {
     action: request.command.action,
     project: request.project,
@@ -59,6 +67,98 @@ function result(request: Request): Result {
           ],
   }
 }
+
+it.instance("context replies retain original budget, provenance and cancellation ownership", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create()
+    const brain = yield* SecondBrain.Service
+    const fiber = yield* brain
+      .request({
+        sessionID: chat.id,
+        project: inst.directory,
+        command: { action: "context", query: "project preference", budget: 100 },
+      })
+      .pipe(Effect.forkChild)
+    const pending = yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    const root = path.join(inst.directory, "SecondBrain")
+    const value: ContextResult = {
+      action: "context",
+      project: inst.directory,
+      root,
+      context: {
+        sources: [
+          {
+            path: path.join(root, "Projects", "Eden.md"),
+            relative: "Projects/Eden.md",
+            line: 2,
+            end_line: 3,
+            heading: "Preferences",
+            text: "Keep replies concise.",
+            source_sha256: "a".repeat(64),
+            depth: 1,
+            tokens: 20,
+            truncated: false,
+          },
+        ],
+        diagnostics: [{ relative: "missing.md", reason: "missing" }],
+        tokens: 20,
+        truncated: false,
+        capture_enabled: false,
+      },
+    }
+    const source = value.context.sources[0]
+    const invalid: ContextResult[] = [
+      { ...value, project: path.dirname(inst.directory) },
+      { ...value, root: "relative" },
+      { ...value, context: { ...value.context, tokens: 101, sources: [{ ...source, tokens: 101 }] } },
+      { ...value, context: { ...value.context, tokens: 21 } },
+      { ...value, context: { ...value.context, sources: [{ ...source, relative: "../Eden.md" }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, path: path.join(inst.directory, "Eden.md") }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, end_line: 1 }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, truncated: true }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, source_sha256: "bad" }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, text: "" }] } },
+      { ...value, context: { ...value.context, sources: [{ ...source, path: "relative.md" }] } },
+      {
+        ...value,
+        context: {
+          ...value.context,
+          sources: [{ ...source, relative: "Health/note.md", path: path.join(root, "Health", "note.md") }],
+        },
+      },
+      { ...value, context: { ...value.context, sources: [source, source], tokens: 40 } },
+    ]
+    for (const result of invalid) {
+      const rejected = yield* brain.reply({ requestID: pending[0].id, result }).pipe(Effect.flip)
+      expect(rejected._tag).toBe("SecondBrain.InvalidReplyError")
+      expect(yield* brain.list()).toHaveLength(1)
+    }
+    yield* brain.reply({ requestID: pending[0].id, result: value })
+    expect(yield* Fiber.join(fiber)).toEqual(value)
+    expect(yield* brain.list()).toEqual([])
+    const cancelled = yield* brain
+      .request({
+        sessionID: chat.id,
+        project: inst.directory,
+        command: { action: "context", query: "project preference", budget: 100 },
+      })
+      .pipe(Effect.forkChild)
+    yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+    yield* brain.cancelSession(chat.id)
+    expect((yield* Fiber.await(cancelled))._tag).toBe("Failure")
+    expect(yield* brain.list()).toEqual([])
+  }),
+)
+
+test("recall contract refuses empty queries and unbounded budgets", () => {
+  for (const query of ["", "  ", "\n", "x".repeat(8001)])
+    expect(Schema.is(Recall)({ action: "context", query, budget: 100 })).toBe(false)
+  for (const budget of [0, -1, 1.5, 12001])
+    expect(Schema.is(Recall)({ action: "context", query: "preference", budget })).toBe(false)
+  expect(Schema.is(Recall)({ action: "context", query: "preference", budget: 100 })).toBe(true)
+})
 
 it.instance("real tool binds retained session, authorizes actual source and returns only pending creation", () =>
   Effect.gen(function* () {
@@ -192,7 +292,9 @@ it.instance("foreign project refuses before publication and mismatched reply doe
       proposals: result(pending[0]).proposals.map((row) => ({ ...row, status: "applied" as const })),
     }
     yield* brain.reply({ requestID: pending[0].id, result: closed })
-    expect((yield* Fiber.join(fiber)).proposals[0].status).toBe("applied")
+    const replied = yield* Fiber.join(fiber)
+    if (replied.action === "context") throw new Error("Proposal result required")
+    expect(replied.proposals[0].status).toBe("applied")
     const row = closed.proposals[0]
     const create = yield* brain
       .request({

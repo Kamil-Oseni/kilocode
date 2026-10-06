@@ -141,6 +141,7 @@ export namespace MemoryDreamInput {
   /** Read only an explicitly picked file under its authorized root; this does not grant later use. */
   export async function inspect(root: string, name: string, signal?: AbortSignal) {
     const value = await snapshot(root, name, undefined, signal)
+    signal?.throwIfAborted()
     if (value.sha256 === null || value.text === null) throw new Error("Selected Dream file is unavailable")
     return { path: value.path, sha256: value.sha256, text: value.text }
   }
@@ -153,6 +154,7 @@ export namespace MemoryDreamInput {
       throw err
     })
     const value = await snapshot(root, name, exists ? undefined : null, signal)
+    signal?.throwIfAborted()
     return { path: value.path, expected: value.sha256 }
   }
   export async function prepare(root: string, project: string, input: z.input<typeof schema>, signal?: AbortSignal) {
@@ -171,6 +173,7 @@ export namespace MemoryDreamInput {
       evidence.push({ ...(await snapshot(project, item.path, item.sha256, signal)), kind: item.kind })
     for (const item of selected.targets)
       notes.push({ ...(await snapshot(root, item.path, item.expected, signal)), key: item.key })
+    signal?.throwIfAborted()
     const prompt = JSON.stringify({ evidence, notes })
     if (Math.ceil(MemoryToken.estimate(`${system}\n${prompt}`) * 1.3) + 32 > selected.budget)
       throw new Error("Approved Dream selection exceeds its estimated input budget")
@@ -245,6 +248,7 @@ export namespace MemoryDreamInput {
           await snapshot(project, source.path, source.sha256, active)
         }
         await snapshot(root, target.path, target.expected, active)
+        active?.throwIfAborted()
         const content = candidate.changes[0].content
         if (content === null) return
         const links = new Set<string>()
@@ -274,6 +278,7 @@ export namespace MemoryDreamInput {
           if (!linked || linked.expected === null) throw new Error("Dream link target is not an approved existing note")
           await snapshot(root, linked.path, linked.expected, active)
         }
+        active?.throwIfAborted()
       },
     }
   }

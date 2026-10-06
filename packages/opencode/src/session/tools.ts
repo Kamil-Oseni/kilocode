@@ -208,7 +208,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     const base = yield* goalSchema(item.id, advertised, input.session.id) // kilocode_change - actual original goal owner supplies fresh criterion IDs
     const schema = ProviderTransform.schema(input.model, base)
     tools[item.id] = tool({
-      description: item.description,
+      description: TaskSchema.description(item.description, advertised), // kilocode_change - retain static instructions and authenticated recovery guidance
       inputSchema: jsonSchema(schema),
       execute(args, options) {
         return run.promise(

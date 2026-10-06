@@ -1,3 +1,7 @@
+import { asSchema, jsonSchema, tool as aiTool } from "ai"
+import { LLMRequestPrep } from "@/session/llm/request"
+import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
+import { createRequire } from "node:module"
 import { afterEach, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
@@ -42,6 +46,8 @@ import { Question } from "@/question"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
 import { ProviderTest } from "../fake/provider"
+import { goalTools } from "@/kilocode/tool/goal"
+import * as Tool from "@/tool/tool"
 import { TaskSchema } from "@/kilocode/tool/task-schema"
 
 afterEach(async () => {
@@ -492,11 +498,13 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         ].includes(mode)
       ) {
         if (!def.jsonSchema) throw new Error("Actual Task advertisement required")
-        const projected = yield* TaskSchema.prepare("task", def.jsonSchema, chat.id, assistant.id, "auto")
+        const shape = def.jsonSchema
+        if (!shape) throw new Error("Task schema is unavailable")
+        const projected = yield* TaskSchema.prepare("task", shape, chat.id, assistant.id, "auto")
         const valid = ["current", "continuation", "compaction", "compaction-absent"].includes(mode)
         expect(projected === def.jsonSchema).toBe(!valid)
         expect(projected.anyOf).toBe(valid ? undefined : def.jsonSchema.anyOf)
-        expect(yield* TaskSchema.prepare("task", def.jsonSchema, chat.id, assistant.id, "general")).toBe(def.jsonSchema)
+        expect(yield* TaskSchema.prepare("task", shape, chat.id, assistant.id, "general")).toBe(def.jsonSchema)
         const foreign = { ...def.jsonSchema }
         expect(yield* TaskSchema.prepare("task", foreign, chat.id, assistant.id, "auto")).toBe(foreign)
       }
@@ -841,6 +849,60 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           storage: yield* Storage.Service, sessions, background: yield* BackgroundJob.Service,
           sessionID: chat.id, messageID: assistant.id, agent: "auto", planned: false,
         }
+        const require = createRequire(import.meta.url)
+        const Constructor: new (options: { strict: boolean }) => { compile(schema: unknown): (value: unknown) => boolean } = createRequire(require.resolve("effect/package.json"))("ajv/dist/2020")
+        const validator = new Constructor({ strict: false })
+        const shape = def.jsonSchema
+        if (!shape) throw new Error("Task schema is unavailable")
+        const projected = yield* TaskSchema.prepare("task", shape, chat.id, assistant.id, "auto")
+        const valid = validator.compile(projected)
+        expect(valid({background:false})).toBe(false)
+        expect(valid({task_id:id})).toBe(true)
+        expect(valid({task_id:"ses_foreign",prompt:"Repair missing work"})).toBe(false)
+        expect(valid({branch_id:"saved-branch"})).toBe(true)
+        // A real rejected completion audit, not an arbitrary worker narrative, requires corrective context.
+        const updater = yield* goalTools(RayaGoal.make({storage:common.storage,sessions}),sessions).update.pipe(Effect.flatMap(Tool.init))
+        const completion = {status:"complete" as const,summary:"Worker claimed completion",requirements:[]}
+        const audit = yield* updater.execute(completion, {sessionID:chat.id,messageID:assistant.id,callID:"recovery-audit",agent:"auto",abort:new AbortController().signal,messages:[],ask:()=>Effect.void,metadata:()=>Effect.void})
+        expect(audit.title).toBe("Completion audit rejected")
+        yield* sessions.updatePart({id:PartID.ascending(),sessionID:chat.id,messageID:assistant.id,
+          type:"tool",tool:"update_goal",callID:"recovery-audit",state:{status:"completed",input:completion,
+            title:audit.title,output:audit.output,metadata:audit.metadata,time:{start:Date.now(),end:Date.now()}},
+        })
+        const corrected = yield* TaskSchema.prepare("task", shape, chat.id, assistant.id, "auto")
+        const correction = validator.compile(corrected)
+        expect(correction({task_id:id,background:false})).toBe(false)
+        expect(correction({task_id:id,prompt:"   "})).toBe(false)
+        expect(correction({task_id:id,prompt:"Perform the missing write then read the saved file"})).toBe(true)
+        expect(correction({task_id:id,brief:{objective:"Correct missing work and verify it"}})).toBe(true)
+        expect(correction({branch_id:"saved-branch"})).toBe(true)
+        expect(corrected.description).toContain("summary is not verified file evidence")
+        const description = TaskSchema.description("Keep the original Task instructions", corrected)
+        expect(description).toContain("Keep the original Task instructions")
+        expect(TaskSchema.description("Unrelated tool", shape)).toBe("Unrelated tool")
+        const authored = (yield* sessions.messages({sessionID:chat.id})).find(row=>row.info.role==="user")?.info
+        if (authored?.role !== "user") throw new Error("Current authored input required")
+        const native = yield* LLMRequestPrep.prepare({
+          user:authored,
+          sessionID:chat.id, model, agent:{name:"auto",mode:"primary",options:{},permission:[]},
+          system:[],messages:[{role:"user",content:"Correct missing work"}],
+          tools:{task:aiTool({description,inputSchema:jsonSchema(corrected),execute:async()=>"ok"})},
+          provider:catalog[model.providerID],auth:undefined,
+          plugin:{init:()=>Effect.void,trigger:(_name,_input,output)=>Effect.succeed(output),list:()=>Effect.succeed([])},
+          flags:yield* RuntimeFlags.Service,isWorkflow:false,
+        })
+        const final = asSchema(native.tools.task.inputSchema).jsonSchema
+        expect(native.tools.task.description).toContain("Keep the original Task instructions")
+        expect(native.tools.task.description).toContain(`task_id="${id}"`)
+        expect(native.tools.task.description).toContain("supply a concrete correction objective")
+        expect(validator.compile(final)({task_id:id})).toBe(false)
+        const definitions = [{function:{name:"task",description:native.tools.task.description,parameters:{...final}}}]
+        expect(ToolEnvelope.guide(definitions)).toContain("supply a concrete correction objective")
+        expect(ToolEnvelope.guide(definitions)).toContain(id)
+        const envelope = validator.compile(ToolEnvelope.schema(definitions,"required"))
+        expect(envelope({kind:"tool",name:"task",arguments:{task_id:id}})).toBe(false)
+        expect(envelope({kind:"tool",name:"task",arguments:{task_id:id,prompt:"Perform missing write and actual readback"}})).toBe(true)
+
         // A real foreign session cannot stand in for the captured foreground worker.
         const foreign = yield* sessions.create({ title: "Foreign recovery target" })
         const observation = yield* Schema.decodeUnknownEffect(ChiefVerification.Observation)(parent.metadata?.[ChiefVerification.key])

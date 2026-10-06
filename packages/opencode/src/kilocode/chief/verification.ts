@@ -178,13 +178,12 @@ export namespace ChiefVerification {
   }
 
   /** An unplanned foreground recovery retains its authenticated child, regardless of how the brief is reworded. */
-  export function reuse(
+  export function retained(
     input: Omit<Input, "storage" | "callID" | "request"> & {
       storage?: Storage.Interface
-      background: Pick<BackgroundJob.Interface, "get">
+      background?: Pick<BackgroundJob.Interface, "get">
       agent: string
       planned: boolean
-      taskID?: string
     },
   ) {
     return Effect.gen(function* () {
@@ -213,7 +212,7 @@ export namespace ChiefVerification {
       const messages = yield* input.sessions.messages({ sessionID: child.sessionID })
       const initial = messages.find((row) => row.info.id === child.inputID)
       const terminal = messages.find((row) => row.info.id === child.messageID)
-      const job = yield* input.background.get(child.sessionID)
+      const job = input.background ? yield* input.background.get(child.sessionID) : undefined
       if (
         source?.info.role !== "assistant" ||
         source.info.agent !== "auto" ||
@@ -230,37 +229,60 @@ export namespace ChiefVerification {
         terminal.info.error ||
         terminal.info.time.completed !== child.completedAt ||
         terminal.parts.some((row) => row.type === "tool" && ["pending", "running"].includes(row.state.status)) ||
-        !job ||
-        job.status === "running" ||
-        job.metadata?.background === true ||
-        !job.origins?.some((origin) => {
-          if (!origin || origin.sessionID !== input.sessionID || origin.childSessionID !== child.sessionID) return false
-          const owner = rows.find((row) => row.info.id === origin.messageID)
-          const call = owner?.parts.find((row) => row.type === "tool" && row.callID === origin.callID)
-          const initial = messages.find((row) => row.info.id === origin.childMessageID)
-          if (
-            owner?.info.role !== "assistant" ||
-            owner.info.agent !== "auto" ||
-            call?.type !== "tool" ||
-            call.tool !== "task" ||
-            initial?.info.role !== "user"
-          )
-            return false
-          if (
-            origin.messageID === observation.messageID &&
-            origin.callID === observation.callID &&
-            origin.childMessageID === child.inputID
-          )
-            return true
-          return call.state.input.task_id === child.sessionID
-        })
+        (input.background !== undefined &&
+          (!job ||
+            job.status === "running" ||
+            job.metadata?.background === true ||
+            !job.origins?.some((origin) => {
+              if (!origin || origin.sessionID !== input.sessionID || origin.childSessionID !== child.sessionID)
+                return false
+              const owner = rows.find((row) => row.info.id === origin.messageID)
+              const call = owner?.parts.find((row) => row.type === "tool" && row.callID === origin.callID)
+              const initial = messages.find((row) => row.info.id === origin.childMessageID)
+              if (
+                owner?.info.role !== "assistant" ||
+                owner.info.agent !== "auto" ||
+                call?.type !== "tool" ||
+                call.tool !== "task" ||
+                initial?.info.role !== "user"
+              )
+                return false
+              if (
+                origin.messageID === observation.messageID &&
+                origin.callID === observation.callID &&
+                origin.childMessageID === child.inputID
+              )
+                return true
+              return call.state.input.task_id === child.sessionID
+            })))
       )
         throw new Error("Chief foreground recovery child lineage is invalid")
-      if (input.taskID !== child.sessionID)
+      const correction = rows.some((row) =>
+        row.parts.some(
+          (part) =>
+            part.type === "tool" &&
+            part.tool === "update_goal" &&
+            part.state.status === "completed" &&
+            part.state.input.status === "complete" &&
+            part.state.title === "Completion audit rejected" &&
+            part.state.time.end >= observation.at,
+        ),
+      )
+      return { taskID: child.sessionID, correction }
+    })
+  }
+
+  export function reuse(
+    input: Parameters<typeof retained>[0] & { background: Pick<BackgroundJob.Interface, "get">; taskID?: string },
+  ) {
+    return Effect.gen(function* () {
+      const worker = yield* retained(input)
+      if (!worker) return false
+      if (input.taskID !== worker.taskID)
         return yield* Effect.fail(
           new Refusal(
             "task-recovery",
-            `This current Chief request already has a completed worker. Continue or recover that same work with task_id="${child.sessionID}"; do not create a replacement child by rewording the brief. Distinct saved branches or a genuinely new routed request remain separate work.`,
+            `This current Chief request already has a completed worker. Continue or recover that same work with task_id="${worker.taskID}"; do not create a replacement child by rewording the brief. Distinct saved branches or a genuinely new routed request remain separate work.`,
           ),
         )
       return true

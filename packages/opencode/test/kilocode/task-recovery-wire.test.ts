@@ -33,6 +33,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { TaskAuthority } from "@/kilocode/tool/task-authority"
+import * as TaskSchema from "@/kilocode/tool/task-schema"
 import { ReadTool } from "@/tool/read"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { RayaChief } from "@/kilocode/chief"
@@ -456,8 +457,104 @@ it.instance(
       expect(hint.example).toContain("missing authorized work")
       expect(hint.example).not.toContain("final newline")
       expect(hint.example).not.toContain("source and saved target")
-      yield* storage.replace(["raya", "goal", parent.id], { ...(yield* goals.get(parent.id)), status: "complete" })
+      const retained = {
+        sessions,
+        storage,
+        background: jobs,
+        sessionID: parent.id,
+        messageID: current.id,
+        agent: "auto",
+        planned: false,
+      }
+      expect(yield* ChiefVerification.retained(retained)).not.toBe(false)
+      const stale = { ...retained, messageID: MessageID.ascending() }
+      expect((yield* ChiefVerification.retained(stale).pipe(Effect.exit))._tag).toBe("Failure")
+      const other = yield* sessions.updateMessage({ ...assistant(), agent: "code" })
+      expect((yield* ChiefVerification.retained({ ...retained, messageID: other.id }).pipe(Effect.exit))._tag).toBe(
+        "Failure",
+      )
+      const saved = (yield* sessions.get(parent.id)).metadata
+      for (const phase of ["task", "route"] as const) {
+        yield* sessions.setMetadata({ sessionID: parent.id, metadata: { ...saved, [RayaChief.phaseKey]: phase } })
+        expect((yield* ChiefVerification.retained(stale).pipe(Effect.exit))._tag).toBe("Failure")
+      }
+      yield* sessions.setMetadata({ sessionID: parent.id, metadata: { ...saved, [RayaChief.phaseKey]: "done" } })
+      expect(yield* ChiefVerification.retained(stale)).toBe(false)
+      yield* sessions.setMetadata({ sessionID: parent.id, metadata: { ...saved, [RayaChief.phaseKey]: "goal" } })
+      yield* goals.edit(parent.id, {
+        expectedIntent: generic.intent,
+        criteria: [
+          {
+            id: "bytes",
+            description: "Preserve the exact source bytes",
+            verification: "Read both raw files",
+            check: {
+              kind: "byte-equality",
+              source: {
+                path: inputfile,
+                canonical: baseline.canonical,
+                sha256: baseline.sha256,
+                bytes: baseline.bytes,
+              },
+              target: { path: outputfile, canonical: outputfile },
+            },
+          },
+        ],
+      })
+      yield* fs.writeFileString(outputfile, "a".repeat(48))
+      const captured = yield* reader.execute(
+        { filePath: outputfile },
+        {
+          ...opts,
+          sessionID: child.id,
+          messageID: terminal.id,
+          callID: "read-corrected",
+          agent: "code",
+        },
+      )
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: child.id,
+        messageID: terminal.id,
+        type: "tool",
+        tool: "read",
+        callID: "read-corrected",
+        state: {
+          status: "completed",
+          input: { filePath: outputfile },
+          output: captured.output,
+          title: captured.title,
+          metadata: captured.metadata,
+          time: { start: Date.now(), end: Date.now() },
+        },
+      })
+      const accepted = yield* goals.update(parent.id, {
+        status: "complete",
+        summary: "Verified corrected raw files",
+        requirements: [
+          {
+            criterionID: "bytes",
+            requirement: "Preserve the exact source bytes",
+            passed: true,
+            evidence: [
+              { callID: "read-0", sessionID: child.id, messageID: terminal.id, summary: "Actual source Read" },
+              {
+                callID: "read-corrected",
+                sessionID: child.id,
+                messageID: terminal.id,
+                summary: "Actual corrected target Read",
+              },
+            ],
+          },
+        ],
+      })
+      expect(accepted.status).toBe("complete")
+      expect(accepted.audit?.requirements).toHaveLength(1)
+      expect(yield* ChiefVerification.retained(stale)).toBe(false)
+      const schema = TaskSchema.objective({ type: "object", properties: { task_id: { type: "string" } } })
+      expect(yield* TaskSchema.prepare("task", schema, parent.id, stale.messageID, "auto")).toBe(schema)
       expect(JSON.parse((yield* get.execute({}, opts)).output).recovery).toBeUndefined()
+      expect((yield* goals.get(parent.id))?.status).toBe("complete")
     }),
   { timeout: 30_000 },
 )

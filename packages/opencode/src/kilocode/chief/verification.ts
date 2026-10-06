@@ -190,22 +190,24 @@ export namespace ChiefVerification {
     return Effect.gen(function* () {
       if (input.agent !== "auto" || input.planned) return false
       const parent = yield* input.sessions.get(input.sessionID)
+      if (RayaChief.phase(parent.metadata) === "done") return false
       const raw = parent.metadata?.[recovery] ?? parent.metadata?.[key]
       if (raw === undefined) return false
       const observation = yield* Schema.decodeUnknownEffect(Observation)(raw)
       if (observation.kind !== "foreground" || !observation.child || observation.goal.status !== "active") return false
+      const goal = yield* state(input.storage, input.sessionID)
+      if (!goal || goal.status !== "active") return false
       const request = RayaChief.request(parent.metadata)
       const rows = yield* input.sessions.messages({ sessionID: input.sessionID })
       const user = rows.findLast((row) => row.info.role === "user" && !!RayaChief.requestText(row.parts))
       const message = rows.find((row) => row.info.id === input.messageID)
-      const goal = yield* state(input.storage, input.sessionID)
       if (message?.info.role !== "assistant" || message.info.agent !== "auto" || !dispatch(rows, user, message, goal))
         throw new Error("Chief foreground recovery invocation is not current")
       if (!["goal", "verify"].includes(RayaChief.phase(parent.metadata))) return false
       if (!request || user?.info.id !== observation.userID || RayaChief.requestText(user.parts) !== request)
         return false
       if (observation.requestSHA !== digest({ tool: "request", state: request })) return false
-      if (!goal || goal.status !== "active" || goal.intent !== observation.goal.intent) return false
+      if (goal.intent !== observation.goal.intent) return false
       const source = rows.find((row) => row.info.id === observation.messageID)
       const part = source?.parts.find((row) => row.type === "tool" && row.callID === observation.callID)
       const child = observation.child

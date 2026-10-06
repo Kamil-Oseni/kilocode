@@ -3,6 +3,7 @@ import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect } from "effect"
 import { Git } from "../git"
+import { findUp } from "@/util/filesystem"
 
 export const primaryPaths = Effect.fn("PrimaryWorktree.paths")(function* (
   dir: string,
@@ -39,6 +40,8 @@ export const primaryPaths = Effect.fn("PrimaryWorktree.paths")(function* (
 
 export const primaryWorktree = Effect.fn("PrimaryWorktree.find")(function* (dir: string) {
   const cwd = FSUtil.normalizePath(path.resolve(dir))
+  const markers = yield* Effect.promise(() => findUp(".git", cwd))
+  if (!markers.length && !process.env.GIT_DIR) return undefined
   const git = yield* Git.Service
   const run = Effect.fnUntraced(function* (args: string[]) {
     const result = yield* git.run(args, { cwd })

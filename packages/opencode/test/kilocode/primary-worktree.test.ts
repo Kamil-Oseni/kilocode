@@ -66,8 +66,29 @@ describe("primaryWorktree", () => {
   it.live("returns undefined outside a Git repository", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
+      const git = yield* Git.Service
+      const calls: string[][] = []
+      const result = yield* primaryWorktree(dir).pipe(
+        Effect.provideService(Git.Service, {
+          ...git,
+          run: (args, opts) => {
+            calls.push(args)
+            return git.run(args, opts)
+          },
+        }),
+      )
+      expect(result).toBeUndefined()
+      expect(calls).toEqual([])
+    }),
+  )
 
-      expect(yield* primaryWorktree(dir)).toBeUndefined()
+  it.live("validates a malformed ancestor Git file", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(dir, ".git"), "not a git directory\n"))
+      const nested = path.join(dir, "nested")
+      yield* Effect.promise(() => Bun.write(path.join(nested, "file"), ""))
+      expect(yield* primaryWorktree(nested)).toBeUndefined()
     }),
   )
 

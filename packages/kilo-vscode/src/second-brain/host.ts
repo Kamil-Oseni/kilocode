@@ -13,6 +13,7 @@ import { Control, parseCatalog } from "./control/index"
 import { drain, register } from "./retirement"
 import { descriptor, selection, type Descriptor } from "./managed/descriptor"
 import { diagnostic } from "./diagnostic"
+import { selection as dreamSelection } from "./dream-selection"
 
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
   return (
@@ -38,6 +39,47 @@ export class BrainHost {
   private readonly service: BrainService
   private readonly control: BrainControl
   private current: { id: string; owner: object } | undefined
+
+  /** Native manual selection boundary; model/webview messages cannot mint this grant. */
+  async selectDream(project: string, approved: Parameters<typeof dreamSelection>[0]["approved"], signal: AbortSignal) {
+    return dreamSelection(
+      {
+        settings: this.settings,
+        project,
+        approved,
+        trusted: (directory) => {
+          if (!vscode.workspace.isTrusted) return false
+          const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(directory))
+          return !!folder && path.resolve(folder.uri.fsPath) === path.resolve(directory)
+        },
+        review: async (selected, current) => {
+          current.throwIfAborted()
+          const text = JSON.stringify(selected, null, 2)
+          const uri = vscode.Uri.from({
+            scheme: "raya-memory-dream-selection",
+            path: "/" + crypto.randomUUID() + ".txt",
+          })
+          const provider = vscode.workspace.registerTextDocumentContentProvider("raya-memory-dream-selection", {
+            provideTextDocumentContent: (requested) => (requested.toString() === uri.toString() ? text : ""),
+          })
+          try {
+            const document = await vscode.workspace.openTextDocument(uri)
+            await vscode.window.showTextDocument(document, { preview: false })
+            const answer = await vscode.window.showWarningMessage(
+              "Authorize one manual consolidation of the selected source and note revisions shown? This prepares pending proposals; capture remains off and publication requires separate review.",
+              { modal: true },
+              "Authorize selected inputs",
+            )
+            current.throwIfAborted()
+            return answer === "Authorize selected inputs" && !document.isClosed && document.getText() === text
+          } finally {
+            provider.dispose()
+          }
+        },
+      },
+      signal,
+    )
+  }
 
   constructor(private readonly context: vscode.ExtensionContext) {
     const existing = services.get(context)

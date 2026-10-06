@@ -1114,6 +1114,7 @@ const respond = (message: WebviewMessage) => {
 
 const reply = (message: WebviewMessage) => {
   if (message.type === "secondBrain" && message.action === "dreamActivity") {
+    if (document.documentElement.dataset.previewHoldDreamActivity === "true") return true
     emit({
       type: "secondBrainState",
       id: message.id,
@@ -1154,6 +1155,8 @@ export function installMockVsCode() {
         document.documentElement.dataset.previewDreamCancel = JSON.stringify(message)
       if (message.type === "secondBrain" && message.action === "dreamInspect")
         document.documentElement.dataset.previewDreamInspect = JSON.stringify(message)
+      if (message.type === "secondBrain" && message.action === "dreamActivity")
+        document.documentElement.dataset.previewDreamActivity = JSON.stringify(message)
       console.info("[raya preview] mock postMessage", message)
       queueMicrotask(() => reply(message))
     },

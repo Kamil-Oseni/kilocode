@@ -26,6 +26,7 @@ export function BrainDreamActivity() {
   let query = ""
   let cancel = ""
   let inspect = ""
+  let deadline: ReturnType<typeof setTimeout> | undefined
   const open = () => {
     if (inspecting()) return
     inspect = crypto.randomUUID()
@@ -36,6 +37,13 @@ export function BrainDreamActivity() {
   const refresh = () => {
     if (query) return
     query = crypto.randomUUID()
+    const id = query
+    deadline = setTimeout(() => {
+      if (query !== id) return
+      query = ""
+      deadline = undefined
+      setError(true)
+    }, 10000)
     vscode.postMessage({ type: "secondBrain", action: "dreamActivity", id: query })
   }
   const stop = () => {
@@ -64,7 +72,11 @@ export function BrainDreamActivity() {
     }
     if (message.type !== "secondBrainState" || !message.state.dream || (message.id !== query && message.id !== cancel))
       return
-    if (message.id === query) query = ""
+    if (message.id === query) {
+      clearTimeout(deadline)
+      deadline = undefined
+      query = ""
+    }
     if (message.id === cancel) {
       cancel = ""
       setCancelling(false)
@@ -78,6 +90,7 @@ export function BrainDreamActivity() {
   const timer = setInterval(refresh, 2000)
   onCleanup(() => {
     clearInterval(timer)
+    clearTimeout(deadline)
     off()
   })
   return (
@@ -119,6 +132,8 @@ export function BrainDreamActivity() {
       </Show>
       <Button
         onClick={() => {
+          clearTimeout(deadline)
+          deadline = undefined
           query = ""
           refresh()
         }}

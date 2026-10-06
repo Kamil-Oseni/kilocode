@@ -106,3 +106,57 @@ for (const theme of ["dark", "light"]) {
     await page.screenshot({ path: info.outputPath("consolidation-activity.png"), fullPage: true })
   })
 }
+
+test("lost activity read expires without cancelling work and late responses cannot enable Stop", async ({ page }) => {
+  await page.goto("/?state=dark-memory-activity")
+  const view = page.getByRole("region", { name: "Consolidation activity" })
+  const stop = view.getByRole("button", { name: "Cancel consolidation" })
+  await expect(stop).toBeEnabled()
+  await page.clock.install()
+  await page.evaluate(() => {
+    document.documentElement.dataset.previewHoldDreamActivity = "true"
+  })
+  await view.getByRole("button", { name: "Refresh activity" }).click()
+  const request = await page.evaluate(() => JSON.parse(document.documentElement.dataset.previewDreamActivity ?? "{}"))
+  await page.clock.fastForward(10001)
+  await expect(view.getByRole("alert")).toContainText("Activity is unavailable")
+  await expect(stop).toBeDisabled()
+  expect(await page.evaluate(() => document.documentElement.dataset.previewDreamCancel)).toBeUndefined()
+  await page.evaluate(
+    (id) =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            type: "secondBrainState",
+            id,
+            state: {
+              configured: false,
+              status: "disconnected",
+              results: [],
+              dream: {
+                status: "closed",
+                activity: {
+                  id: "11111111-1111-4111-8111-111111111111",
+                  owner: "22222222-2222-4222-8222-222222222222",
+                  project: "C:/Synthetic/late",
+                  model: "late/model",
+                  revision: 99,
+                  phase: "generation",
+                  lifecycle: "active",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    request.id,
+  )
+  await expect(stop).toBeDisabled()
+  await expect(view.getByText("Model: fixture/model")).toBeVisible()
+  await page.evaluate(() => {
+    document.documentElement.dataset.previewHoldDreamActivity = "false"
+  })
+  await view.getByRole("button", { name: "Refresh activity" }).click()
+  await expect(view.getByRole("alert")).toHaveCount(0)
+  await expect(stop).toBeEnabled()
+})

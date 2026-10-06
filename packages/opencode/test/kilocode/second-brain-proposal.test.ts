@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
 import path from "node:path"
-import { Effect, Fiber, Layer, Queue, Schema } from "effect"
+import { Cause, Effect, Fiber, Layer, Queue, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Agent } from "@/agent/agent"
@@ -325,6 +325,101 @@ it.instance("real recall tool requires original frame, permission and sourced bo
         .execute({ query: "Eden" }, { ...ctx, extra: { memoryContext: () => ({ budget: 10000 }) } })
         .pipe(Effect.exit))._tag,
     ).toBe("Failure")
+    expect(yield* Queue.size(events)).toBe(0)
+  }),
+)
+
+it.instance("real recall rejects late replaced or cancelled frames and recovers in the current frame", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create()
+    const brain = yield* SecondBrain.Service
+    const bus = yield* Bus.Service
+    const events = yield* Queue.unbounded<Request>()
+    const off = yield* bus.subscribeCallback(Event.Requested, (event) => Queue.offerUnsafe(events, event.properties))
+    yield* Effect.addFinalizer(() => Effect.sync(off))
+    const owner = MemoryContext.create()
+    const catalog = MemoryContext.bind({ recall: aiTool({ inputSchema: jsonSchema({ type: "object" }) }) }, owner)
+    const frame = {
+      originals: catalog,
+      tools: catalog,
+      messages: [{ role: "system" as const, content: "Use sources." }],
+      context: 8192,
+      output: 1024,
+    }
+    const root = path.join(inst.directory, "SecondBrain")
+    const value: ContextResult = {
+      action: "context",
+      project: inst.directory,
+      root,
+      context: {
+        sources: [
+          {
+            path: path.join(root, "Eden.md"),
+            relative: "Eden.md",
+            line: 1,
+            end_line: 1,
+            heading: "Eden",
+            text: "Synthetic project preference",
+            source_sha256: "a".repeat(64),
+            depth: 0,
+            tokens: 20,
+            truncated: false,
+          },
+        ],
+        diagnostics: [],
+        tokens: 20,
+        truncated: false,
+        capture_enabled: false,
+      },
+    }
+    const recall = yield* BrainRecallTool.pipe(Effect.flatMap(Tool.init))
+    const asks: string[] = []
+    for (const mode of ["replaced", "cancelled", "current"]) {
+      const abort = new AbortController()
+      const ctx: Tool.Context = {
+        sessionID: chat.id,
+        messageID: MessageID.make(`msg_recall_${mode}`),
+        agent: "ask",
+        abort: abort.signal,
+        messages: [],
+        extra: { memoryContext: owner.reserve },
+        metadata: () => Effect.void,
+        ask: (row) =>
+          Effect.sync(() => {
+            asks.push(row.permission)
+          }),
+      }
+      MemoryContext.prepare(frame)
+      const fiber = yield* recall.execute({ query: "Eden", budget: 3000 }, ctx).pipe(Effect.forkChild)
+      const request = yield* Queue.take(events).pipe(Effect.timeout("1 second"))
+      expect(request.command.action).toBe("context")
+      expect(request.sessionID).toBe(chat.id)
+      if (mode === "replaced") MemoryContext.prepare(frame)
+      if (mode === "cancelled") {
+        abort.abort()
+        expect((yield* Fiber.join(fiber).pipe(Effect.exit))._tag).toBe("Failure")
+        expect(yield* brain.list()).toEqual([])
+        expect((yield* brain.reply({ requestID: request.id, result: value }).pipe(Effect.exit))._tag).toBe("Failure")
+        continue
+      }
+      yield* brain.reply({ requestID: request.id, result: value })
+      const outcome = yield* Fiber.join(fiber).pipe(Effect.exit)
+      if (mode === "replaced") {
+        expect(outcome._tag).toBe("Failure")
+        if (outcome._tag !== "Failure") throw new Error("Replaced recall frame was published")
+        expect(Cause.pretty(outcome.cause)).toContain("superseded request")
+      }
+      if (mode === "current") {
+        expect(outcome._tag).toBe("Success")
+        if (outcome._tag !== "Success") throw new Error("Current recall did not recover")
+        expect(JSON.parse(outcome.value.output).context.sources[0].text).toBe("Synthetic project preference")
+        expect(outcome.value.metadata.count).toBe(1)
+      }
+      expect(yield* brain.list()).toEqual([])
+    }
+    expect(asks).toEqual(["second_brain_recall", "second_brain_recall", "second_brain_recall"])
     expect(yield* Queue.size(events)).toBe(0)
   }),
 )

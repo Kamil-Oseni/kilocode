@@ -19,6 +19,7 @@ import { SidebarSearchMenu } from "../../agent-manager/SidebarSearchMenu"
 import { SidebarToggleButton } from "../../agent-manager/SidebarToggleButton"
 import { SideTerminalPanel, createTerminalState } from "../../agent-manager/terminal"
 import { LOCAL } from "../../agent-manager/navigate"
+import { clampPanelWidth } from "../../agent-manager/side-panel-layout"
 import type { SidebarSearchItem } from "../../agent-manager/sidebar-search"
 import { Button } from "@kilocode/kilo-ui/button"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
@@ -1049,10 +1050,10 @@ export const SideTerminalPanelEmpty: Story = {
       <StoryProviders noPadding>
         <div class="am-detail-stack" style={{ height: "420px" }}>
           <div class="am-detail-content am-detail-split">
-            <div class="am-main-pane" style={{ padding: "24px", color: "var(--text-weak)" }}>
-              Agent session stays visible beside the terminal.
+            <div class="am-main-pane" style={{ padding: "8px", color: "var(--text-weak)" }}>
+              Chat
             </div>
-            <div class="am-diff-resize" style={{ width: "320px" }}>
+            <div class="am-diff-resize" style={{ width: `${clampPanelWidth(320, window.innerWidth)}px` }}>
               <div class="am-diff-panel-wrapper">
                 <SideTerminalPanel
                   state={state}

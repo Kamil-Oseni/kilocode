@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { sameDirectory } from "../../src/kilo-provider-utils"
+import { StaleReview } from "../../src/edit-review/unsaved"
 
 const source = await Bun.file(new URL("../../src/KiloProvider.ts", import.meta.url)).text()
 const start = source.indexOf("  private async handleDiscardSessionChanges(")
@@ -10,9 +11,10 @@ const code = new Bun.Transpiler({ loader: "ts" }).transformSync(
   `(class Subject { ${source.slice(start, end).replaceAll("private async", "async")} })`,
 )
 type Method = "handleDiscardSessionChanges" | "handleKeepSessionChanges" | "handleUnrevertSession"
-const Subject = new Function("sameDirectory", "sessionToWebview", `return ${code}`)(
+const Subject = new Function("sameDirectory", "sessionToWebview", "StaleReview", `return ${code}`)(
   sameDirectory,
   (value: unknown) => value,
+  StaleReview,
 ) as {
   new (): Record<Method, (sessionID: string) => Promise<void>>
 }
@@ -20,7 +22,7 @@ const Subject = new Function("sameDirectory", "sessionToWebview", `return ${code
 for (const method of ["handleDiscardSessionChanges", "handleKeepSessionChanges", "handleUnrevertSession"] as const) {
   for (const status of [200, 503]) {
     for (const scope of ["client", "generation", "directory", "disconnected", "current"] as const) {
-      test(`${method} retains ${status} outcome without stale ${scope} UI effects`, async () => {
+      test(`${method} checks ${status} completion ownership for ${scope} scope`, async () => {
         const entered = Promise.withResolvers<void>()
         const release = Promise.withResolvers<Response>()
         const effects: unknown[] = []
@@ -64,13 +66,20 @@ for (const method of ["handleDiscardSessionChanges", "handleKeepSessionChanges",
           )
           const result = await pending
           expect(requests).toHaveLength(1)
-          expect(result.error !== undefined).toBe(status === 503)
+          expect(new URL(requests[0]).searchParams.get("directory")).toBe("C:/original")
+          const stale = scope !== "current" && method !== "handleUnrevertSession"
+          expect(result.error !== undefined).toBe(status === 503 || stale)
+          if (status === 200 && stale) expect(result.error).toBeInstanceOf(StaleReview)
           if (scope !== "current") {
             expect(effects).toHaveLength(0)
             expect(state.refreshes.size).toBe(0)
             expect(state.lastReviewHash).toBe("original")
           }
           if (scope === "current" && status === 200) expect(effects.length).toBeGreaterThan(0)
+          if (status === 503) {
+            expect(state.refreshes.size).toBe(0)
+            expect(state.lastReviewHash).toBe("original")
+          }
         } finally {
           release.resolve(Response.json({ id: "session" }))
           await pending

@@ -68,7 +68,7 @@
   [data-slot="kilo-pass-meter-amounts"] {
     position: relative;
     height: 15px;
-    color: var(--icon-warning-base);
+    color: var(--text-base);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
     font-variant-numeric: tabular-nums;
@@ -94,7 +94,7 @@
   [data-slot="kilo-pass-meter-bonus-amount"] {
     right: 0;
     left: auto !important;
-    color: var(--icon-success-base);
+    color: var(--text-base);
     transform: none !important;
   }
 

@@ -5028,13 +5028,13 @@ body.vscode-high-contrast-light {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--text-weak);
+  color: var(--vscode-terminal-foreground, #d4d4d4);
   font-size: var(--font-size-small);
   background: var(--vscode-terminal-background, #1e1e1e);
 }
 
 .am-side-terminal-empty {
-  color: var(--text-weak);
+  color: inherit;
 }
 
 /* Inspector tab strip — one row of tabs reusing the top bar's

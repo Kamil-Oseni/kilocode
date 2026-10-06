@@ -18,7 +18,19 @@ test("ownership refusal explains verification and failed save keeps explicit ret
     action: "Retry loading",
   })
   expect(draftNotice({ loaded: true, error: "timeout" })).toEqual({
-    text: "Raya could not confirm your draft was saved. Your edits are still here.",
+    text: "Saving your draft took too long to confirm. Your edits are still here. Retry saving.",
     action: "Retry saving",
   })
+})
+
+test("connection changes retain the correct loading or saving recovery phase", () => {
+  const loading = draftNotice({ loaded: false, error: "disconnected" })
+  const saving = draftNotice({ loaded: true, error: "disconnected" })
+  expect(loading.action).toBe("Retry loading")
+  expect(loading.text).toContain("before your saved draft could load")
+  expect(loading.text).not.toContain("Your edits are still here")
+  expect(saving.action).toBe("Retry saving")
+  expect(saving.text).toContain("before your draft save was confirmed")
+  expect(saving.text).toContain("Your edits are still here")
+  expect(draftNotice({ loaded: true, error: "unavailable" }).text).toContain("Check System Health")
 })

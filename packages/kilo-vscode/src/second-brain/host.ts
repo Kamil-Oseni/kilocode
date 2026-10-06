@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { pick as dreamPick } from "./dream-pick"
 import { manifest, metadata } from "./manifest"
 import { BrainSettings } from "./settings"
 import { BrainService } from "./service"
@@ -115,17 +116,20 @@ export class BrainHost {
     if (catalog.error || !catalog.data) throw new Error("Original backend model catalog is unavailable")
     if (this.closing) throw new Error("Memory consolidation intake is retired")
     const data = catalog.data
-    const selected = await vscode.window.showQuickPick(
-      data.all
-        .filter((provider) => data.connected.includes(provider.id))
-        .flatMap((provider) =>
-          Object.values(provider.models).map((model) => ({
-            label: model.name,
-            description: provider.name,
-            model: `${provider.id}/${model.id}`,
-          })),
-        ),
-      { title: "Choose the consolidation model", matchOnDescription: true },
+    const selected = await dreamPick(signal, (token) =>
+      vscode.window.showQuickPick(
+        data.all
+          .filter((provider) => data.connected.includes(provider.id))
+          .flatMap((provider) =>
+            Object.values(provider.models).map((model) => ({
+              label: model.name,
+              description: provider.name,
+              model: `${provider.id}/${model.id}`,
+            })),
+          ),
+        { title: "Choose the consolidation model", matchOnDescription: true },
+        token,
+      ),
     )
     signal.throwIfAborted()
     if (!selected) return
@@ -303,21 +307,32 @@ export class BrainHost {
       if (file.scheme !== "file") throw new Error("Dream targets require local files")
       const name = path.relative(root, file.fsPath).replaceAll(path.sep, "/")
       const existing = saved.slots.find((item) => item.path.toLowerCase() === name.toLowerCase())
-      const key = await vscode.window.showInputBox({
-        title: "Stable note identity",
-        prompt: "Reuse the same identity when moving a note. This preserves earlier review decisions.",
-        value: existing?.key,
-        validateInput: (value) =>
-          /^[a-z0-9][a-z0-9_.-]{0,127}$/.test(value)
-            ? undefined
-            : "Use lowercase letters, digits, dots, dashes or underscores.",
-      })
+      const key = await dreamPick(signal, (token) =>
+        vscode.window.showInputBox(
+          {
+            title: "Stable note identity",
+            prompt: "Reuse the same identity when moving a note. This preserves earlier review decisions.",
+            value: existing?.key,
+            validateInput: (value) =>
+              /^[a-z0-9][a-z0-9_.-]{0,127}$/.test(value)
+                ? undefined
+                : "Use lowercase letters, digits, dots, dashes or underscores.",
+          },
+          token,
+        ),
+      )
       authorize()
       if (!key) return undefined
       selected.push({ key, path: file.fsPath })
-      const action = await vscode.window.showQuickPick(["Finish target selection", "Add another note"], {
-        title: `${selected.length} of 8 note targets selected`,
-      })
+      const action = await dreamPick(signal, (token) =>
+        vscode.window.showQuickPick(
+          ["Finish target selection", "Add another note"],
+          {
+            title: `${selected.length} of 8 note targets selected`,
+          },
+          token,
+        ),
+      )
       authorize()
       if (!action) return undefined
       if (action === "Finish target selection") break
@@ -340,12 +355,15 @@ export class BrainHost {
     })
     signal.throwIfAborted()
     if (!files?.length) return undefined
-    const kind = await vscode.window.showQuickPick(
-      [
-        { label: "Approved summaries", value: "approved-summary" as const },
-        { label: "Approved notes", value: "approved-note" as const },
-      ],
-      { title: "What approved inputs did you select?" },
+    const kind = await dreamPick(signal, (token) =>
+      vscode.window.showQuickPick(
+        [
+          { label: "Approved summaries", value: "approved-summary" as const },
+          { label: "Approved notes", value: "approved-note" as const },
+        ],
+        { title: "What approved inputs did you select?" },
+        token,
+      ),
     )
     signal.throwIfAborted()
     if (!kind) return undefined

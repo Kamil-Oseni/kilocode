@@ -4,6 +4,12 @@ Reviewed 2026-10-06. Recommendation: adopt the compact linked-memory format and 
 
 ## Current implementation and acceptance
 
+### Manual selection cancellation checkpoint, 2026-10-06
+
+The manual model picker, source-kind picker, stable note-identity input and target-selection continuation now receive the original coordinator's cancellation through VS Code's `CancellationTokenSource`. The bridge refuses an already-aborted call, requests prompt cancellation, waits for the original prompt operation, rechecks abort before accepting its result, and disposes its listener/token source afterward. It does not race away from an unresolved native prompt or grant a replacement run authority. The current API does not offer cancellation tokens for workspace/file selection or the modal review warning; those operations still require their original dialogs to settle and remain installed acceptance work.
+
+Fresh private source checks pass **39 package tests/231 assertions across nine files** and **21 extension tests/138 assertions across seven files**, covering original-ID proposals, bounded manual inputs, model leases, selection/review, activity and SDK transport. Package typecheck and extension compile (types, lint and bundle), Knip and required formatting pass. These existing suites exercise the package and transport/review contracts; they do not exercise actual native picker dismissal or certify installed consent, inference, GPU retirement or configured-corpus review. Logs are `.tmp/memory-private/dream-current-*` and `dream-pick-*`. Compile reuses the existing ignored CLI binary and is not a new combined release. Automatic capture and scheduling remain disabled.
+
 Status checked against source at `9d5f0fdf3ac6b80e235cae71f918a5c488ebefea`, 2026-10-06, with the test-fixture corrections recorded below. Cloud workers are stopped and all their task/file reservations are released. Local work continues; no acceptance depends on a cloud worker returning.
 
 | Requirement | Current source state | Still required |

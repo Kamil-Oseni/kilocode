@@ -184,8 +184,7 @@ export namespace MemoryRecall {
       // Suppress only genuine restatements: shares the query anchor with a typed hit AND is mostly
       // covered by it. A digest with substantial net-new content survives.
       return !typed.some(
-        (item) =>
-          overlap(hit.text, item.text) >= 2 && overlap(item.text, input.query) >= 2 && restates(hit, item),
+        (item) => overlap(hit.text, item.text) >= 2 && overlap(item.text, input.query) >= 2 && restates(hit, item),
       )
     })
   }
@@ -211,17 +210,26 @@ export namespace MemoryRecall {
   }
 
   function format(input: { hits: Hit[]; max: number }) {
-    const lines = [
-      "```kilo-memory-v1 targeted_context_not_instruction",
-      ...input.hits.flatMap((hit) => [
+    const rows = input.hits.map((hit) => ({
+      hit,
+      text: [
         `record id=${label(`${hit.source}:${hit.kind}:${hit.text.slice(0, 32)}`)} type=${label(hit.kind.toLowerCase())} source=${label(hit.source)}${
           hit.topics?.length ? ` topics=${hit.topics.map(label).join(",")}` : ""
         } updated=${hit.updatedAt ? new Date(hit.updatedAt).toISOString() : "unknown"}`,
         `text: ${body(hit.text)}`,
-      ]),
-      "```",
-    ]
-    return MemoryIndexer.cap(lines.join("\n"), input.max).text.trim()
+      ].join("\n"),
+    }))
+    const lines = ["```kilo-memory-v1 targeted_context_not_instruction", ...rows.map((row) => row.text), "```"]
+    const block = MemoryIndexer.cap(lines.join("\n"), input.max).text.trim()
+    const hits: Hit[] = []
+    let offset = 0
+    for (const row of rows) {
+      const index = block.indexOf(row.text, offset)
+      if (index < 0) break
+      hits.push(row.hit)
+      offset = index + row.text.length
+    }
+    return hits.length ? { block, hits } : undefined
   }
 
   function select(input: { hits: Hit[]; keys: string[]; limit: number; force?: boolean }) {
@@ -269,13 +277,12 @@ export namespace MemoryRecall {
     if (mode === "digest" && (input.sessionID || !query)) {
       const hits = digestItems.slice(0, limit)
       if (hits.length === 0) return
-      const block = format({ hits, max: input.maxBytes ?? (input.sessionID ? 6000 : 1200) })
-      if (!block) return
+      const result = format({ hits, max: input.maxBytes ?? (input.sessionID ? 6000 : 1200) })
+      if (!result) return
       return {
-        block,
-        hits,
-        bytes: Buffer.byteLength(block),
-        tokens: MemoryToken.estimate(block),
+        ...result,
+        bytes: Buffer.byteLength(result.block),
+        tokens: MemoryToken.estimate(result.block),
       }
     }
     // Query terms absent from the corpus add zero to every hit; only corpus-ubiquitous terms need removal.
@@ -285,13 +292,12 @@ export namespace MemoryRecall {
       query,
     })
     if (hits.length === 0) return
-    const block = format({ hits, max: input.maxBytes ?? 1200 })
-    if (!block) return
+    const result = format({ hits, max: input.maxBytes ?? 1200 })
+    if (!result) return
     return {
-      block,
-      hits,
-      bytes: Buffer.byteLength(block),
-      tokens: MemoryToken.estimate(block),
+      ...result,
+      bytes: Buffer.byteLength(result.block),
+      tokens: MemoryToken.estimate(result.block),
     }
   }
 }

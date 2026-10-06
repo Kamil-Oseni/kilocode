@@ -35,6 +35,7 @@ const layer = Layer.effect(
       promote: (id) => InstanceState.useEffect(state, (jobs) => jobs.promote(id)),
       cancel: (id, revision) => InstanceState.useEffect(state, (jobs) => jobs.cancel(id, revision)), // kilocode_change
       // kilocode_change start
+      cancelOwned: (session) => InstanceState.useEffect(state, (jobs) => jobs.cancelOwned(session)),
       cancelTree: (id, revision) => InstanceState.useEffect(state, (jobs) => jobs.cancelTree(id, revision)),
       cancelInput: (id, revision, message) =>
         InstanceState.useEffect(state, (jobs) => jobs.cancelInput(id, revision, message)),

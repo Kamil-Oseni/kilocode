@@ -120,6 +120,7 @@ export interface Interface {
   readonly waitForPromotion: (id: string) => Effect.Effect<Info>
   readonly promote: (id: string) => Effect.Effect<Info | undefined>
   readonly cancel: (id: string, revision?: string) => Effect.Effect<Info | undefined> // kilocode_change - conditional cancellation
+  readonly cancelOwned: (session: string) => Effect.Effect<void> // kilocode_change - retained admitted origins survive job replacement
   readonly cancelTree: (id: string, revision: string) => Effect.Effect<"missing" | "stale" | "terminal" | "cancelled"> // kilocode_change
   readonly cancelInput: (id: string, revision: string, message: string) => Effect.Effect<boolean> // kilocode_change
 }
@@ -339,6 +340,7 @@ export const make = Effect.gen(function* () {
             const token = {}
             state.lineage.set(invocation.token, {
               control: invocation,
+              origin: copy(input.origin),
               parent: owner._tag === "Some" ? owner.value.token : undefined,
               closed: false,
               finished: false,
@@ -413,6 +415,7 @@ export const make = Effect.gen(function* () {
               return [{ extended: false }, jobs] as readonly [ExtendResult, Map<string, Active>]
             state.lineage.set(invocation.token, {
               control: invocation,
+              origin: copy(input.origin),
               parent: owner._tag === "Some" ? owner.value.token : undefined,
               closed: false,
               finished: false,
@@ -615,7 +618,24 @@ export const make = Effect.gen(function* () {
   )
   // kilocode_change end
 
-  return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel, cancelTree, cancelInput }) // kilocode_change
+  const cancelOwned: Interface["cancelOwned"] = (session) =>
+    Lineage.retire(lineage, session).pipe(
+      Effect.forkIn(state.scope, { startImmediately: true }),
+      Effect.flatMap(Fiber.join),
+    ) // kilocode_change
+  return Service.of({
+    list,
+    get,
+    start,
+    extend,
+    wait,
+    waitForPromotion,
+    promote,
+    cancel,
+    cancelOwned,
+    cancelTree,
+    cancelInput,
+  }) // kilocode_change
 })
 
 const layer = Layer.effect(Service, make)

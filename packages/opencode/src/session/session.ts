@@ -1156,6 +1156,7 @@ const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function*
   background: BackgroundJob.Interface,
   sessionID: SessionID,
 ) {
+  yield* background.cancelOwned(sessionID) // kilocode_change - select retained original admissions before current-row legacy fallback
   const jobs = yield* background.list()
   yield* Effect.forEach(
     jobs.filter((job) => {

@@ -142,6 +142,7 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
   background: BackgroundJob.Interface,
   sessionID: SessionID,
 ) {
+  yield* background.cancelOwned(sessionID) // kilocode_change - select retained original admissions before current-row legacy fallback
   const jobs = yield* background.list()
   const pending = new Set<string>([sessionID])
   const cancelled = new Set<string>()

@@ -70,7 +70,7 @@ const it = testEffect(
   ),
 )
 
-for (const method of ["revision", "session", "completed"] as const)
+for (const method of ["revision", "session", "completed", "replaced"] as const)
   it.instance(
     `real planned Task worktree ${method} Stop joins cross-directory descendants and leaves unrelated work running`,
     () =>
@@ -226,7 +226,9 @@ for (const method of ["revision", "session", "completed"] as const)
                   }
                   return yield* Deferred.succeed(ready, exit.value.metadata.sessionId).pipe(
                     Effect.andThen(
-                      method === "completed" ? Deferred.await(nested).pipe(Effect.as(result)) : Effect.never,
+                      method === "completed" || method === "replaced"
+                        ? Deferred.await(nested).pipe(Effect.as(result))
+                        : Effect.never,
                     ),
                     Effect.ensuring(Deferred.succeed(settled, undefined)),
                   )
@@ -287,16 +289,47 @@ for (const method of ["revision", "session", "completed"] as const)
         expect(yield* jobs.get(descendant)).toBeUndefined()
         expect((yield* store.provide({ directory }, jobs.get(descendant)))?.status).toBe("running")
         expect(yield* store.provide({ directory }, jobs.get(child))).toBeUndefined()
-        if (method === "completed") {
+        if (method === "completed" || method === "replaced") {
           expect((yield* jobs.wait({ id: child, timeout: 10000 })).info?.status).toBe("completed")
           expect(yield* Deferred.isDone(settled)).toBe(true)
           expect(yield* Deferred.isDone(stopped)).toBe(false)
         }
+        const replacement = yield* method === "replaced"
+          ? Effect.gen(function* () {
+              const unrelated = yield* sessions.create({ title: "Unrelated newer parent" })
+              const ready = yield* Deferred.make<void>()
+              const next = yield* jobs.start({
+                id: child,
+                type: "task",
+                metadata: { parentSessionId: unrelated.id, sessionId: child },
+                origin: { sessionID: unrelated.id, messageID: MessageID.ascending(), callID: "new-generation" },
+                run: Deferred.succeed(ready, undefined).pipe(Effect.andThen(Effect.never)),
+              })
+              if (!next.revision) throw new Error("Actual replacement revision required")
+              const observed = next.revision
+              yield* Deferred.await(ready)
+              expect(observed).not.toBe(revision)
+              yield* Effect.addFinalizer(() => jobs.cancelTree(child, observed).pipe(Effect.asVoid))
+              const descendantjob = yield* store.provide({ directory }, jobs.get(descendant))
+              if (!descendantjob?.revision) throw new Error("Actual descendant revision required")
+              const selected = descendantjob.revision
+              yield* Effect.addFinalizer(() =>
+                store.provide({ directory }, jobs.cancelTree(descendant, selected)).pipe(Effect.asVoid),
+              )
+              return next
+            })
+          : Effect.succeed(undefined)
         if (method === "revision") expect(yield* jobs.cancelTree(child, revision)).toBe("cancelled")
         else {
           yield* runs.cancel(root.id)
           expect(yield* Deferred.isDone(done)).toBe(true)
           expect((yield* runs.inspect(root.id)).phase).toBe("idle")
+        }
+        if (replacement) {
+          expect((yield* jobs.get(child))?.revision).toBe(replacement.revision)
+          expect((yield* jobs.get(child))?.status).toBe("running")
+          expect((yield* store.provide({ directory: other }, jobs.get(foreign.id)))?.status).toBe("running")
+          expect(yield* Deferred.isDone(ended)).toBe(false)
         }
         expect(yield* Deferred.isDone(settled)).toBe(true)
         expect(yield* Deferred.isDone(stopped)).toBe(true)

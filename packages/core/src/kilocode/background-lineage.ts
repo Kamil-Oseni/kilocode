@@ -1,5 +1,6 @@
-import { Context, Deferred, Effect, Exit, Scope, Semaphore } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Scope, Semaphore } from "effect"
 import type { Control } from "./background-invocation"
+import type { Origin } from "./background-origin"
 
 export const retirement = (scope: Scope.Closeable) =>
   Effect.gen(function* () {
@@ -9,6 +10,7 @@ export const retirement = (scope: Scope.Closeable) =>
 type Retirement = Effect.Success<ReturnType<typeof retirement>>
 type Entry = {
   control: Control
+  origin?: Origin
   parent?: object
   closed: boolean
   finished: boolean
@@ -80,5 +82,58 @@ export const close = (state: Interface, item: Retirement, cause: Exit.Exit<unkno
     }
     const exit = yield* Deferred.await(item.done)
     if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause)
+    return undefined
+  }).pipe(Effect.uninterruptible)
+
+export const retire = (state: Interface, session: string) =>
+  Effect.gen(function* () {
+    const selected = yield* Semaphore.withPermit(
+      state.lock,
+      Effect.gen(function* () {
+        const tokens = new Set<object>()
+        for (const [token, entry] of state.entries) {
+          const origin = entry.origin
+          if (
+            origin?.sessionID &&
+            origin.messageID &&
+            origin.callID &&
+            origin.childSessionID &&
+            origin.childMessageID &&
+            (origin.sessionID === session || origin.childSessionID === session)
+          )
+            tokens.add(token)
+          if (entry.parent && tokens.has(entry.parent)) tokens.add(token)
+        }
+        const controls = []
+        const groups = new Map<Retirement, object[]>()
+        for (const [token, entry] of state.entries) {
+          groups.set(entry.retirement, [...(groups.get(entry.retirement) ?? []), token])
+          if (!tokens.has(token)) continue
+          entry.closed = true
+          controls.push({ ...entry, settled: yield* Deferred.isDone(entry.control.joined) })
+        }
+        return {
+          controls,
+          scopes: [...groups].filter(([, group]) => group.every((token) => tokens.has(token))).map(([scope]) => scope),
+        }
+      }),
+    )
+    const waits = yield* Effect.forEach(selected.controls, (entry) => entry.control.request)
+    const exits = yield* Effect.forEach(
+      selected.controls,
+      (entry, index) =>
+        Effect.gen(function* () {
+          yield* waits[index]
+          yield* Deferred.await(entry.control.joined)
+          if (!entry.settled) yield* entry.control.join.pipe(Effect.orDie)
+        }).pipe(Effect.exit),
+      { concurrency: "unbounded" },
+    )
+    const closed = yield* Effect.forEach(selected.scopes, (scope) => close(state, scope).pipe(Effect.exit), {
+      concurrency: "unbounded",
+    })
+    const failures = [...exits, ...closed].flatMap((exit) => (Exit.isFailure(exit) ? [exit.cause] : []))
+    if (failures.length)
+      return yield* Effect.failCause(failures.slice(1).reduce((cause, next) => Cause.combine(cause, next), failures[0]))
     return undefined
   }).pipe(Effect.uninterruptible)

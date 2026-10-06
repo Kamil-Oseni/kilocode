@@ -3,6 +3,16 @@ import { KiloSessionOverflow } from "@/kilocode/session/overflow"
 import type { ModelMessage, Tool } from "ai"
 
 const owners = new WeakMap<object, ReturnType<typeof create>>()
+const reservations = new WeakMap<
+  object,
+  (
+    budget: number,
+    signal: AbortSignal,
+  ) => {
+    budget: number
+    check: (value: unknown) => string
+  }
+>()
 const MAX = 12_000
 const MARGIN = 1024
 
@@ -14,7 +24,7 @@ function valid(value: unknown): value is number {
 export function create() {
   let generation = 0
   let remaining: number | undefined
-  return {
+  const owner = {
     frame(value: number | undefined) {
       generation++
       remaining = value
@@ -44,6 +54,14 @@ export function create() {
       }
     },
   }
+  reservations.set(owner.reserve, owner.reserve)
+  return owner
+}
+
+export function reserve(callback: unknown, budget: number, signal: AbortSignal) {
+  const take = typeof callback === "function" ? reservations.get(callback) : undefined
+  if (!take) throw new Error("Original request context owner required for Memory recall")
+  return take(budget, signal)
 }
 
 export function bind(tools: Record<string, Tool>, owner: ReturnType<typeof create>) {

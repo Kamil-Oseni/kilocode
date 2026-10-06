@@ -89,7 +89,9 @@ export class BrainBridge {
           error: {
             code: "conflict",
             message:
-              "The original Memory proposal request could not be confirmed. Review its pending ledger; do not replay a write.",
+              request.command.action === "context"
+                ? "Memory recall could not be confirmed. Check the reviewed context-capable Memory release and service status; no note changes were requested."
+                : "The original Memory proposal request could not be confirmed. Review its pending ledger; do not replay a write.",
           },
         },
         { signal },

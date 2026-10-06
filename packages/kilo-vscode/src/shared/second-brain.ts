@@ -34,6 +34,8 @@ export type BrainState = Readonly<{
   status: "disconnected" | "checking" | "ready" | "searching" | "cancelled" | "unavailable"
   code?: string
   proposals?: BrainProposalResult
+  context?: BrainContext
+  root?: string
   results: readonly BrainSource[]
   control?: Readonly<{
     status: "unchecked" | "reviewing" | "approved" | "syncing" | "synced" | "policy_disabled" | "uncertain"

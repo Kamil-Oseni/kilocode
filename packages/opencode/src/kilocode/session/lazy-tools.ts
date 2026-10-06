@@ -37,7 +37,7 @@ type Binding = {
 const catalogs = new WeakMap<Tool, Binding>()
 // Ephemeral execution evidence deliberately cannot be restored from serialized tool history.
 const instances = new WeakMap<object, Map<string, Binding>>()
-const core = ["read", "glob", "grep", "question", "ask_options"]
+const core = ["read", "glob", "grep", "question", "ask_options", "second_brain_recall"]
 const coding = ["read", "edit", "bash", "glob", "grep", "question", "ask_options"]
 
 function latest(messages: SessionV1.WithParts[]) {

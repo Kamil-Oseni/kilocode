@@ -138,7 +138,7 @@ function recalledMemory(turn: Turn) {
   return [turn.user, ...turn.assistants].flatMap((item) => item.parts).some((part) => {
     if (part.type === "tool") {
       return (
-        part.tool === "kilo_memory_recall" &&
+        ["kilo_memory_recall", "second_brain_recall"].includes(part.tool) &&
         part.state.status === "completed" &&
         typeof part.state.metadata.count === "number" &&
         part.state.metadata.count > 0

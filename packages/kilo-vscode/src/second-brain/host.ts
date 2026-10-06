@@ -14,6 +14,15 @@ import { drain, register } from "./retirement"
 import { descriptor, selection, type Descriptor } from "./managed/descriptor"
 import { diagnostic } from "./diagnostic"
 
+function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
+  return (
+    Object.keys(row).sort().join("|") === "action|budget|query" &&
+    typeof row.query === "string" &&
+    typeof row.budget === "number" &&
+    row.action === "context"
+  )
+}
+
 const services = new WeakMap<
   vscode.ExtensionContext,
   { settings: BrainSettings; service: BrainService; control: BrainControl }
@@ -91,7 +100,7 @@ export class BrainHost {
     return true
   }
 
-  /** Model requests can prepare proposals, never authorize their application. */
+  /** Model requests can read approved context or prepare proposals, never authorize application. */
   async model(request: { project: string; command: unknown }, directory: string, signal: AbortSignal) {
     signal.throwIfAborted()
     const project = path.resolve(directory)
@@ -103,6 +112,21 @@ export class BrainHost {
     if (!request.command || typeof request.command !== "object" || Array.isArray(request.command))
       throw new Error("Proposal command required")
     const row = request.command as Record<string, unknown>
+    if (row.action === "context") {
+      if (!recall(row)) throw new Error("Bounded context command required")
+      const result = await this.service.context(row.query, row.budget, signal)
+      signal.throwIfAborted()
+      return {
+        action: "context" as const,
+        project,
+        root: result.root,
+        context: {
+          ...result.context,
+          sources: result.context.sources.map((source) => ({ ...source })),
+          diagnostics: result.context.diagnostics.map((row) => ({ ...row })),
+        },
+      }
+    }
     if ("project" in row || !["list", "read", "propose"].includes(String(row.action)))
       throw new Error("Model requests cannot edit, cancel or apply proposals")
     const command = { ...row, project } as BrainProposalCommand

@@ -1,5 +1,5 @@
 import { BrainClient, Failure } from "./client"
-import type { BrainState, BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
+import type { BrainState, BrainContext, BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 import { ClientV2 } from "./client-v2"
 import type { BrainSettings } from "./settings"
 import { join } from "./join"
@@ -48,6 +48,24 @@ export class BrainService {
       if (this.managed && !this.managed.valid()) throw new Error("Original managed generation is unavailable")
     }, false)
     if (!result.value) throw new Error("Proposal publication was not observed")
+    return result.value
+  }
+
+  async context(query: string, budget: number, parent: AbortSignal): Promise<{ root: string; context: BrainContext }> {
+    if (!query.trim() || query.length > 8000 || !Number.isSafeInteger(budget) || budget < 1 || budget > 12000)
+      throw new Error("Supply a bounded Memory context query")
+    const result: { value?: { root: string; context: BrainContext } } = {}
+    await this.run(
+      query,
+      (state) => {
+        if (state.status === "ready" && state.context && state.root)
+          result.value = { root: state.root, context: state.context }
+      },
+      {},
+      { budget, parent },
+    )
+    parent.throwIfAborted()
+    if (!result.value) throw new Error("Memory context result was not confirmed")
     return result.value
   }
 
@@ -119,7 +137,13 @@ export class BrainService {
     }
   }
 
-  run(query: string | undefined, post: (state: BrainState) => void, owner?: object): Promise<void> {
+  run(
+    query: string | undefined,
+    post: (state: BrainState) => void,
+    owner?: object,
+    recall?: { budget: number; parent: AbortSignal },
+  ): Promise<void> {
+    if (recall?.parent.aborted) return Promise.reject(recall.parent.reason)
     if (this.closed) return Promise.reject(new Error("Memory coordinator is closed"))
     if (this.changing) return Promise.reject(new Failure("setup_changing", "Memory setup is changing", 0))
     if (this.settings.version() === 2 && this.pending.size)
@@ -127,6 +151,8 @@ export class BrainService {
     if (this.settings.pending())
       return Promise.reject(new Failure("control_uncertain", "Memory publication requires reconciliation", 0))
     const signal = new AbortController()
+    const abort = () => signal.abort(recall?.parent.reason)
+    recall?.parent.addEventListener("abort", abort, { once: true })
     this.current?.abort()
     this.current = signal
     this.owner = owner
@@ -135,9 +161,9 @@ export class BrainService {
       this.state = Object.freeze(state)
       post(this.state)
     }
-    const job = this.work(query, signal.signal, send)
+    const job = this.work(query, signal.signal, send, recall?.budget)
       .catch((err: unknown) => {
-        if (this.settings.version() === 2) throw err
+        if (recall || this.settings.version() === 2) throw err
         if (this.operation) return
         send({
           configured: this.state.configured,
@@ -146,36 +172,32 @@ export class BrainService {
           results: [],
         })
       })
-      .finally(() => this.pending.delete(job))
+      .finally(() => {
+        recall?.parent.removeEventListener("abort", abort)
+        this.pending.delete(job)
+      })
     this.pending.add(job)
     return job
   }
 
-  private async work(query: string | undefined, signal: AbortSignal, post: (state: BrainState) => void) {
+  private async work(
+    query: string | undefined,
+    signal: AbortSignal,
+    post: (state: BrainState) => void,
+    budget?: number,
+  ) {
     const cfg = await this.prepare(signal)
     signal.throwIfAborted()
     if (!cfg) {
       post(empty)
       return
     }
+    if (budget !== undefined && cfg.setup.version !== 2) throw new Error("Reviewed v2 Memory context setup required")
     post({ configured: true, status: query === undefined ? "checking" : "searching", results: [] })
     if (cfg.setup.version === 2) {
       this.operation ??= new OperationOwner(this.settings, cfg.key, cfg.setup)
       const original = this.operation
-      try {
-        if (query === undefined) {
-          await this.operation.health(signal)
-          signal.throwIfAborted()
-          post({ configured: true, status: "ready", results: [] })
-          return
-        }
-        const result = await this.operation.search(query, { id: crypto.randomUUID().replaceAll("-", ""), signal })
-        signal.throwIfAborted()
-        post({ configured: true, status: "ready", results: result.results })
-      } catch (err) {
-        await this.failure(original, err, signal, post)
-        throw err
-      }
+      await this.search(query, budget, signal, post, cfg.setup.root, original)
       return
     }
     const client = new BrainClient(cfg.key, cfg.setup)
@@ -204,6 +226,36 @@ export class BrainService {
         code: cancelled ? undefined : code,
         results: [],
       })
+    }
+  }
+  private async search(
+    query: string | undefined,
+    budget: number | undefined,
+    signal: AbortSignal,
+    post: (state: BrainState) => void,
+    root: string,
+    original: OperationOwner,
+  ) {
+    try {
+      if (query === undefined) {
+        await original.health(signal)
+        signal.throwIfAborted()
+        post({ configured: true, status: "ready", results: [] })
+        return
+      }
+      if (budget !== undefined) {
+        const context = await original.context(query, budget, { id: crypto.randomUUID().replaceAll("-", ""), signal })
+        signal.throwIfAborted()
+        if (this.managed && !this.managed.valid()) throw new Error("Original managed generation is unavailable")
+        post({ configured: true, status: "ready", results: [], root, context })
+        return
+      }
+      const result = await original.search(query, { id: crypto.randomUUID().replaceAll("-", ""), signal })
+      signal.throwIfAborted()
+      post({ configured: true, status: "ready", results: result.results })
+    } catch (err) {
+      await this.failure(original, err, signal, post)
+      throw err
     }
   }
   private async prepare(signal?: AbortSignal) {

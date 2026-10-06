@@ -2,4 +2,4 @@
 "@kilocode/cli": minor
 ---
 
-Preserve source provenance and request budget bounds in Second Brain context replies without granting note-edit authority.
+Recall approved Second Brain notes within the current request budget, retaining source provenance without granting note-edit authority.

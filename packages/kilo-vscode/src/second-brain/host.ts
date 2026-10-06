@@ -17,6 +17,7 @@ import { selection as dreamSelection } from "./dream-selection"
 import { picked as dreamSources } from "./dream-sources"
 import { targets as dreamTargets } from "./dream-sources"
 import { MemoryFiles } from "@kilocode/kilo-memory/store"
+import { snapshot as dreamSnapshot } from "./dream-view"
 
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
   return (
@@ -42,6 +43,36 @@ export class BrainHost {
   private readonly service: BrainService
   private readonly control: BrainControl
   private current: { id: string; owner: object } | undefined
+
+  private async inspectDream() {
+    if (!vscode.workspace.isTrusted) throw new Error("Trust the selected workspace before inspecting its memory")
+    const folders = vscode.workspace.workspaceFolders
+    if (!folders?.length) throw new Error("Open the Dream workspace to inspect its saved checkpoint")
+    const folder =
+      folders.length === 1
+        ? folders[0]
+        : await vscode.window.showWorkspaceFolderPick({ placeHolder: "Select the Dream project" })
+    if (!folder || folder.uri.scheme !== "file") return
+    const cfg = await this.settings.load()
+    if (!cfg || cfg.setup.version !== 2) throw new Error("Select a reviewed SecondBrain configuration")
+    const text = await dreamSnapshot(cfg.setup.root, folder.uri.fsPath, new AbortController().signal)
+    if (
+      !vscode.workspace.isTrusted ||
+      !this.settings.current(cfg.setup) ||
+      !vscode.workspace.getWorkspaceFolder(folder.uri)
+    )
+      throw new Error("Original Dream configuration changed during inspection")
+    const uri = vscode.Uri.from({ scheme: "raya-memory-dream-checkpoint", path: "/" + crypto.randomUUID() + ".json" })
+    const provider = vscode.workspace.registerTextDocumentContentProvider(uri.scheme, {
+      provideTextDocumentContent: (selected) => (selected.toString() === uri.toString() ? text : ""),
+    })
+    try {
+      const document = await vscode.workspace.openTextDocument(uri)
+      await vscode.window.showTextDocument(document, { preview: true })
+    } finally {
+      provider.dispose()
+    }
+  }
 
   async pickDreamTargets(project: string, signal: AbortSignal) {
     signal.throwIfAborted()
@@ -198,6 +229,7 @@ export class BrainHost {
       vscode.commands.registerCommand("raya.memory.inspectConfiguration", () =>
         diagnostic(this.settings, context.globalState),
       ),
+      vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
     )
     const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
     register(close)

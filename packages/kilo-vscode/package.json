@@ -115,6 +115,11 @@
     },
     "commands": [
       {
+        "command": "raya.memory.inspectDream",
+        "title": "Inspect Saved Memory Consolidation",
+        "category": "Raya"
+      },
+      {
         "command": "kilo-code.new.setupHomeAssistant",
         "title": "Connect Home Assistant",
         "category": "Raya"

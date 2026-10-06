@@ -2,6 +2,10 @@
 
 Cloud workers remain stopped and their former work reservations are released. Continue locally; do not restart cloud assignments.
 
+## Saved checkpoint inspection
+
+The extension now contributes `Raya: Inspect Saved Memory Consolidation`. It selects the trusted workspace and original configured root, reads the existing ledger, rechecks authority and presents a read-only JSON snapshot. The view includes persisted run phases/models/budgets, stable slots, exact proposed changes, evidence hashes, rationale, contradictions, proposal IDs and disposition history. It explicitly labels saved phases as history rather than live worker/GPU status; it cannot publish, retry, cancel, enable capture or certify a repair. An actual-filesystem test checks an uncertain submission and confirms unchanged ledger bytes and no published note. The test passes with nine assertions; extension build, types, lint, Knip and marker guards pass. This command is source-registered at activation; native display and installed acceptance remain unverified.
+
 ## Persistent target identities
 
 The native host target picker now consumes that mapping. It selects one to eight local existing/new Markdown paths under the configured root, asks for stable note keys, captures existing hashes or absent baselines through the guarded reader, and persists only slot metadata. It rechecks workspace trust and the original configuration across native dialogs and preparation. Cancellation before binding leaves metadata untouched; cancellation or authority change after metadata binding refuses the returned selection, without publishing any note. Four selection/picker tests pass with 32 assertions, nine input/slot tests pass with 47 assertions, and extension types, lint, bundle, Knip and change-marker checks pass. These methods remain unconnected to a user-facing manual start command pending the bounded backend transport; native dialog behavior and the installed workflow are not yet verified.

@@ -125,7 +125,10 @@ test("actual HTTP envelope auto/required stream/nonstream metadata and preflight
 })
 
 test("envelope history exposes the original transport call ID without changing evidence or native history", async () => {
-  const rows: { messages: { role: string; content: string; tool_name?: string }[]; format?: unknown }[] = []
+  const rows: {
+    messages: { role: string; content: string; tool_name?: string; tool_calls?: unknown }[]
+    format?: unknown
+  }[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -144,10 +147,11 @@ test("envelope history exposes the original transport call ID without changing e
     const call = (await first.json()).choices[0].message.tool_calls[0]
     expect(call.id).toMatch(/^chatcmpl-.+-tool-0$/)
     const output = 'Error: real read required. Preserve C:\\fixture\\note.md and "verified".\nNot eligible.'
+    const note = 'Preserve "quoted" reasoning and C:\\fixture\\note.md.\nDo not claim completion.'
     const history = {
       ...request(),
       messages: [
-        { role: "assistant", tool_calls: [{ id: call.id, type: call.type, function: call.function }] },
+        { role: "assistant", content: note, tool_calls: [{ id: call.id, type: call.type, function: call.function }] },
         { role: "tool", tool_call_id: call.id, content: output },
       ],
     }
@@ -156,6 +160,13 @@ test("envelope history exposes the original transport call ID without changing e
     const result = rows.at(-1)!.messages.find((message) => message.role === "tool")!
     expect(JSON.parse(result.content)).toEqual({ toolCallId: call.id, output })
     expect(result.tool_name).toBe("update_goal")
+    const assistant = rows.at(-1)!.messages.find((message) => message.role === "assistant")!
+    expect(assistant.tool_calls).toBeUndefined()
+    expect(JSON.parse(assistant.content)).toEqual({
+      kind: "tools",
+      calls: [{ name: call.function.name, arguments: JSON.parse(call.function.arguments) }],
+      content: note,
+    })
     expect(rows.at(-1)!.messages[0].content).toContain("never invent an ID")
     const native = await ollama({ ...options, localInferenceToolFormat: undefined }, fetch)(
       `${server.url}v1/chat/completions`,
@@ -163,6 +174,8 @@ test("envelope history exposes the original transport call ID without changing e
     )
     await native.text()
     expect(rows.at(-1)!.messages.find((message) => message.role === "tool")!.content).toBe(output)
+    expect(rows.at(-1)!.messages.find((message) => message.role === "assistant")!.content).toBe(note)
+    expect(rows.at(-1)!.messages.find((message) => message.role === "assistant")!.tool_calls).toBeDefined()
     expect(rows.at(-1)!.format).toBeUndefined()
   } finally {
     await server.stop()

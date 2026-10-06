@@ -620,11 +620,13 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       return {
         role: message.role,
         content:
-          envelope && message.role === "tool" && message.tool_call_id
-            ? JSON.stringify({ toolCallId: message.tool_call_id, output: content })
-            : content,
+          envelope && message.role === "assistant" && calls?.length
+            ? JSON.stringify({ kind: "tools", calls: calls.map((call) => call.function), content })
+            : envelope && message.role === "tool" && message.tool_call_id
+              ? JSON.stringify({ toolCallId: message.tool_call_id, output: content })
+              : content,
         ...(message.reasoning_content !== undefined ? { thinking: message.reasoning_content } : {}),
-        ...(calls ? { tool_calls: calls } : {}),
+        ...(calls && !(envelope && message.role === "assistant") ? { tool_calls: calls } : {}),
         ...(name ? { tool_name: name } : {}),
       }
     })

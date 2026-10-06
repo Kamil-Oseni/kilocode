@@ -20,6 +20,8 @@ All fifty direct references in the original installation-chain peer review rehas
 
 These checks support the two package/preservation gates for this candidate. They do not prove a loaded normal client, matching running backend, autonomous model tasks, physical voice continuity, configured Memory, boot recovery or restoration. Readiness remains 48/100, with seven workflow/recovery gates pending. The full implementation scope and 38 unfinished requirements remain active.
 
+The everyday source branch now combines fd11 worker fixes with newer Memory queue and delayed-notification ownership fixes. Its existing Memory/Dream/context/self-heal additions also remain ahead of fd11; do not assume the installed candidate contains them. Source compilation and focused merged tests pass, while 33 native prerequisite-dependent extension cases explicitly skip. Integration and matching installed acceptance remain required; [the everyday record](Raya-Everyday-Experience.md) preserves the exact results and scope.
+
 ## Previous 4de84 registered candidate
 
 A read-only registry comparison matches the retained installation packet's version `7.4.23-snapshot+4de84ec4d2.local.1791296630477`. The packet SHA-256 is `556d2718778aaf696228c6dfb896d79482e7e6cb62f35dbeae96b46a3b683f96`; its referenced physical-review file still matches the recorded digest `d1b6ac562efbc555053b1aa7eef6ae41c242887278ccd1705243446a9c95eb68`. The packet reports installation/preservation acceptance but explicitly leaves runtime and loaded-normal-window acceptance false. Evidence: the integration worktree's `.tmp/new-pc/current-4de84-node-cli-upgrade-actual-archive-packet-installed-pending-shape-qualified-next.json`, with this comparison saved in `.tmp/memory-private/readiness-reconciliation.json`.

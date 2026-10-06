@@ -2899,14 +2899,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   /** Non-blocking: refresh session metadata + status for the webview after switching. */
   private refreshSessionDetails(sessionID: string, dir: string, signal?: AbortSignal): void {
     if (!this.client) return
+    const client = this.client
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionGeneration === generation &&
+      this.connectionState === "connected" &&
+      sameDirectory(this.getWorkspaceDirectory(sessionID), dir)
     void this.refreshGitStatus(this.sessionGitDirectories.get(sessionID) ?? dir, sessionID)
     const revision = this.revisions.get(sessionID)
     const refresh = (this.refreshes.get(sessionID) ?? 0) + 1
     this.refreshes.set(sessionID, refresh)
-    this.client.session
+    client.session
       .get({ sessionID, directory: dir })
       .then((r) => {
-        if (!r.data || signal?.aborted || this.contextSessionID !== sessionID) return
+        if (!current() || !r.data || signal?.aborted || this.contextSessionID !== sessionID) return
         if (this.refreshes.get(sessionID) !== refresh) {
           if (this.revisions.get(sessionID) !== revision) this.refreshSessionDetails(sessionID, dir, signal)
           return
@@ -2921,10 +2928,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       })
       .catch((e: unknown) => console.warn("[Raya] Provider: getSession failed (non-critical):", e))
     this.postMessage({ type: "workspaceDirectoryChanged", directory: this.getWorkspaceDirectory(sessionID) })
-    this.client.session
+    client.session
       .status({ directory: dir })
       .then((r) => {
-        if (!r.data || signal?.aborted) return
+        if (!current() || !r.data || signal?.aborted) return
         for (const [sid, info] of Object.entries(r.data) as [string, SessionStatus][]) {
           if (!this.trackedSessionIds.has(sid)) continue
           this.postMessage({

@@ -2,6 +2,8 @@ import { Context, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import * as Cause from "effect/Cause" // kilocode_change
+import * as Attribution from "./kilocode/process-attribution" // kilocode_change
 import { CrossSpawnSpawner } from "./cross-spawn-spawner"
 import { makeGlobalNode } from "./effect/app-node"
 
@@ -140,18 +142,43 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
+    // kilocode_change start - bounded diagnostic completeness footer, no process authority
+    if (process.env.RAYA_SOURCE_MEMBER_DIAGNOSTICS === "1")
+      yield* Effect.addFinalizer(() => Effect.logInfo("source process diagnostic footer", Attribution.footer()))
+    // kilocode_change end
 
     const runCommand = (command: ChildProcess.Command, options?: RunOptions) => {
       const description = describeCommand(command)
+      const enabled = process.env.RAYA_SOURCE_MEMBER_DIAGNOSTICS === "1" // kilocode_change
+      if (enabled) Attribution.attempt(true) // kilocode_change
       const collect = Effect.scoped(
         Effect.gen(function* () {
+          // kilocode_change start - diagnostic-only original spawn identity; no argv or result changes
+          const diagnostic = process.env.RAYA_SOURCE_MEMBER_DIAGNOSTICS === "1"
+          const start = diagnostic ? Date.now() : 0
+          const tick = diagnostic ? performance.now() : 0
           const handle = yield* spawner.spawn(command)
+          const observed = diagnostic ? Date.now() : 0
+          const elapsed = diagnostic ? performance.now() - tick : 0
+          const spans = diagnostic ? yield* Attribution.context() : undefined
+          const report =
+            diagnostic && spans
+              ? (result: RunResult) =>
+                  Effect.gen(function* () {
+                    const row = diagnostic
+                      ? Attribution.safe(command, Number(handle.pid), start, observed, spans, result, elapsed)
+                      : undefined
+                    if (row) yield* Effect.logInfo("source process diagnostic", row)
+                    return result
+                  })
+              : undefined
+          // kilocode_change end
           if (options?.combineOutput) {
             const [output, exitCode] = yield* Effect.all(
               [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
               { concurrency: "unbounded" },
             )
-            return {
+            const result /* kilocode_change */ = {
               command: description,
               exitCode,
               output: output.buffer,
@@ -161,6 +188,7 @@ const layer = Layer.effect(
               stdoutTruncated: false,
               stderrTruncated: false,
             } satisfies RunResult
+            return report ? yield* report(result) : result // kilocode_change
           }
           const [stdout, stderr, exitCode] = yield* Effect.all(
             [
@@ -170,7 +198,7 @@ const layer = Layer.effect(
             ],
             { concurrency: "unbounded" },
           )
-          return {
+          const result /* kilocode_change */ = {
             command: description,
             exitCode,
             stdout: stdout.buffer,
@@ -178,6 +206,7 @@ const layer = Layer.effect(
             stdoutTruncated: stdout.truncated,
             stderrTruncated: stderr.truncated,
           } satisfies RunResult
+          return report ? yield* report(result) : result // kilocode_change
         }),
       )
       const timed = options?.timeout
@@ -193,7 +222,22 @@ const layer = Layer.effect(
             ),
           )
         : timed
-      return aborted.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
+      // kilocode_change start - enabled only; preserve original failure/interruption
+      const recorded = enabled
+        ? aborted.pipe(
+            Effect.onExit((exit) =>
+              Effect.sync(() =>
+                Attribution.settle(
+                  true,
+                  exit._tag === "Failure",
+                  exit._tag === "Failure" && Cause.hasInterrupts(exit.cause),
+                ),
+              ),
+            ),
+          )
+        : aborted
+      // kilocode_change end
+      return recorded.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause)))) // kilocode_change
     }
 
     const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {

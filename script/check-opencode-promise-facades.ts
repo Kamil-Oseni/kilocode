@@ -93,6 +93,11 @@ const testAllow: Record<string, { count: number; reason: string }> = {
   },
   "server/experimental-session-list.test.ts": { count: 2, reason: "Kilo session list integration test" },
   "kilocode/server/cloud-session-import.test.ts": { count: 5, reason: "full app cloud import transaction integration" },
+  "kilocode/server/listener-workspace-stop.test.ts": {
+    count: 2,
+    reason:
+      "real production listener and routed workspace SSE share the application graph; persisted blocked Goal and Session setup must use that same InstanceRef and runtime before original transport shutdown",
+  },
   "kilocode/server/listener-runtime.test.ts": {
     count: 6,
     reason: "listener and shared terminal archive AppRuntime integration test",

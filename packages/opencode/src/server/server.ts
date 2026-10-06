@@ -225,7 +225,7 @@ function serverLayer(opts: { port: number; hostname: string }) {
       ListenerServerService.of({
         closeAll: Effect.sync(() => {
           serverRef.forceStop = true
-          if (serverRef.closeStarted) server.closeAllConnections()
+          server.closeAllConnections() // kilocode_change - retire HTTP streams before joining listener scope finalizers
         }),
       }),
     ),

@@ -517,8 +517,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // kilocode_change end
 
   // kilocode_change start - bind bounded discovery to genuine current-turn execution and completed parts
+  const initial = yield* GoalGate.select(tools, admit)
   const finish = () => GoalGate.bind(select(), check, run.promise, admit) // kilocode_change - check queued callbacks before original effects
   const select = () => {
+    if (initial !== tools) return initial // kilocode_change - timer observation precedes discovery/code/MCP advertisement
     // kilocode_change - preserve the original complete catalogue
     if (!LazyTools.eligible(input.agent)) return tools
     const user = input.messages.findLast((row) => row.info.role === "user")

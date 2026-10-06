@@ -144,6 +144,7 @@ export namespace LazyTools {
   }): Promise<Record<string, Tool>> {
     if (!eligible({ name: input.agent, mode: input.mode })) return input.tools
     if (!Object.keys(input.tools).length) return input.tools
+    if (Object.keys(input.tools).length === 1 && input.tools.get_goal) return input.tools
     const state = Object.values(input.tools)
       .map((item) => catalogs.get(item))
       .find((item) => item !== undefined)

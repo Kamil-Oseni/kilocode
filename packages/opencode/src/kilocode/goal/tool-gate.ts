@@ -84,9 +84,9 @@ export const first = Effect.fn("GoalToolGate.first")(function* (
   sessions: Pick<Session.Interface, "get" | "messages">,
 ) {
   const timer = Option.getOrUndefined(Schema.decodeUnknownOption(record)(session.metadata?.rayaRoutine))
-  if (timer?.trigger.kind !== "timer") return (_id: string) => Effect.succeed(true)
+  if (timer?.trigger.kind !== "timer") return (_id?: string) => Effect.succeed(true)
   const read = schema && owners.get(schema)
-  return (id: string) =>
+  return (id?: string) =>
     Effect.gen(function* () {
       if (id === "get_goal") return true
       if (!read) return false
@@ -141,6 +141,12 @@ export const first = Effect.fn("GoalToolGate.first")(function* (
         after.findLast((row) => row.info.role === "user")?.info.id === message
       )
     })
+})
+
+/** Per-step advertisement; a new resolve observes the original durable get_goal result. */
+export const select = Effect.fn("GoalToolGate.select")(function* (tools: Record<string, AITool>, ready: Check) {
+  if (yield* ready()) return tools
+  return tools.get_goal ? { get_goal: tools.get_goal } : {}
 })
 
 export function bind(

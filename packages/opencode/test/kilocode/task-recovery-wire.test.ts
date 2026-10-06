@@ -39,6 +39,7 @@ import { ChiefVerification } from "@/kilocode/chief/verification"
 import { RayaGoal } from "@/kilocode/goal"
 import { goalTools } from "@/kilocode/tool/goal"
 import * as GoalGate from "@/kilocode/goal/tool-gate"
+import { KiloSessionOverflow } from "@/kilocode/session/overflow"
 import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 import { context, schemas } from "@/kilocode/provider/ollama-context"
 import { ProviderTest } from "../fake/provider"
@@ -466,6 +467,7 @@ it.instance(
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const storage = yield* Storage.Service
+      const plugin = yield* Plugin.Service
       const agents = yield* Agent.Service
       const prompts = yield* SessionPrompt.Service
       const processors = yield* SessionProcessor.Service
@@ -540,22 +542,25 @@ it.instance(
           time: { created: Date.now() },
         })
         const processor = yield* processors.create({ assistantMessage: assistant, sessionID: session.id, model })
-        const catalog = yield* SessionTools.resolve({
-          agent,
-          model,
-          session: yield* sessions.get(session.id),
-          processor,
-          messages: yield* sessions.messages({ sessionID: session.id }),
-          bypassAgentCheck: false,
-          memoryCache: {},
-          promptOps: {
-            cancel: prompts.cancel,
-            resolvePromptParts: prompts.resolvePromptParts,
-            prompt: (input) => prompts.prompt(input).pipe(Effect.orDie),
-          },
+        const resolve = Effect.fn(function* () {
+          return yield* SessionTools.resolve({
+            agent,
+            model,
+            session: yield* sessions.get(session.id),
+            processor,
+            messages: yield* sessions.messages({ sessionID: session.id }),
+            bypassAgentCheck: false,
+            memoryCache: {},
+            promptOps: {
+              cancel: prompts.cancel,
+              resolvePromptParts: prompts.resolvePromptParts,
+              prompt: (input) => prompts.prompt(input).pipe(Effect.orDie),
+            },
+          })
         })
-        const call = Effect.fn(function* (name: string, input: Record<string, unknown>) {
-          const execute = catalog[name]?.execute
+        const catalog = yield* resolve()
+        const call = Effect.fn(function* (name: string, input: Record<string, unknown>, tools = catalog) {
+          const execute = tools[name]?.execute
           if (!execute) throw new Error(`Actual ${name} callback required`)
           const value = yield* Effect.promise(
             async () =>
@@ -569,17 +574,79 @@ it.instance(
             }),
           )(value)
         })
-        return { session, user, assistant, call }
+        return { session, user, assistant, call, catalog, resolve }
       })
       const first = yield* factory("timer")
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
-      expect((yield* first.call("update_goal", { status: "paused", reason: "Test pause" })).title).toBe(
-        "Read goal first",
+      expect(Object.keys(first.catalog)).toEqual(["get_goal"])
+      expect(first.catalog.read).toBeUndefined()
+      expect(first.catalog.update_goal).toBeUndefined()
+      const prepared = yield* LLMRequestPrep.prepare({
+        user: first.user,
+        sessionID: first.session.id,
+        model,
+        agent,
+        tools: first.catalog,
+        system: [],
+        messages: [{ role: "user", content: "Read the timer fixture" }],
+        provider: ProviderTest.info({}, model),
+        auth: undefined,
+        plugin,
+        flags: yield* RuntimeFlags.Service,
+        isWorkflow: true,
+      })
+      expect(Object.keys(prepared.tools)).toEqual(["get_goal"])
+      const definitions = Object.entries(prepared.tools).map(([name, tool]) => ({
+        function: { name, description: tool.description, parameters: { ...asSchema(tool.inputSchema).jsonSchema } },
+      }))
+      const require = createRequire(import.meta.url)
+      const Constructor: new (opts: { strict: boolean }) => { compile(schema: unknown): (input: unknown) => boolean } =
+        createRequire(require.resolve("effect/package.json"))("ajv/dist/2020")
+      const validate = new Constructor({ strict: false }).compile(ToolEnvelope.schema(definitions, "required"))
+      expect(validate({ kind: "tool", name: "get_goal", arguments: {} })).toBe(true)
+      expect(validate({ kind: "tool", name: "read", arguments: { filePath: file } })).toBe(false)
+      const eligible = yield* agents.get("code")
+      if (!eligible) throw new Error("Actual eligible Code agent required")
+      const bounded = yield* LLMRequestPrep.prepare({
+        user: { ...first.user, agent: "code" },
+        sessionID: first.session.id,
+        model,
+        agent: eligible,
+        tools: first.catalog,
+        system: ["x ".repeat(model.limit.context * 4)],
+        messages: [{ role: "user", content: "Read the timer fixture" }],
+        provider: ProviderTest.info({}, model),
+        auth: undefined,
+        plugin,
+        flags: yield* RuntimeFlags.Service,
+        isWorkflow: true,
+      })
+      expect(Object.keys(bounded.tools)).toEqual(["get_goal"])
+      expect(bounded.tools.discover_tools).toBeUndefined()
+      expect(
+        KiloSessionOverflow.measure({
+          messages: bounded.system.map((content) => ({ role: "system", content })),
+          tools: {},
+        }).normalized,
+      ).toBeGreaterThan(model.limit.context)
+      const envelope = new Constructor({ strict: false }).compile(
+        ToolEnvelope.schema(
+          Object.entries(bounded.tools).map(([name, tool]) => ({
+            function: { name, description: tool.description, parameters: { ...asSchema(tool.inputSchema).jsonSchema } },
+          })),
+          "required",
+        ),
       )
+      expect(envelope({ kind: "tool", name: "get_goal", arguments: {} })).toBe(true)
+      expect(envelope({ kind: "tool", name: "discover_tools", arguments: {} })).toBe(false)
+      expect(
+        (yield* sessions.messages({ sessionID: first.session.id }))
+          .flatMap((row) => row.parts)
+          .some((part) => part.type === "tool"),
+      ).toBe(false)
       expect((yield* goals.get(first.session.id))?.status).toBe("active")
       const observed = yield* first.call("get_goal", {})
       expect(observed.title).toBe("Current goal")
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       const id = PartID.ascending()
       const publish = (status: "pending" | "completed", metadata = observed.metadata, output = observed.output) =>
         sessions.updatePart({
@@ -602,9 +669,9 @@ it.instance(
                 },
         })
       yield* publish("pending")
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       yield* publish("completed", {}, observed.output)
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       yield* sessions.updatePart({
         id,
         sessionID: first.session.id,
@@ -620,7 +687,7 @@ it.instance(
           time: { start: Date.now(), end: Date.now() },
         },
       })
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       const proof = Schema.decodeUnknownSync(
         Schema.Struct({
           version: Schema.Number,
@@ -634,9 +701,9 @@ it.instance(
         ...observed.metadata,
         [GoalGate.key]: { ...proof, sessionID: "ses_foreign" },
       })
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       yield* publish("completed", { ...observed.metadata, [GoalGate.key]: { ...proof, revision: "foreign" } })
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ goal: RayaGoal.State })))(
         observed.output,
       )
@@ -645,17 +712,23 @@ it.instance(
         observed.metadata,
         JSON.stringify({ goal: { ...parsed.goal, objective: "Foreign objective" } }),
       )
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       yield* publish("completed")
-      expect((yield* first.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
+      const allowed = yield* first.resolve()
+      expect(allowed.read).toBeDefined()
+      expect(allowed.update_goal).toBeDefined()
+      expect((yield* first.call("read", { filePath: file }, allowed)).output).toContain("ACTUAL_TIMER_FILE")
       // Actual turn accounting advances the revision without changing the semantic goal.
       yield* goals.recordTurn(first.session.id, first.assistant.id)
       expect((yield* goals.get(first.session.id))?.revision).not.toBe(parsed.goal.revision)
-      expect((yield* first.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
-      expect((yield* first.call("update_goal", { status: "paused", reason: "Test pause" })).title).toBe("Goal paused")
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect((yield* first.call("read", { filePath: file }, allowed)).output).toContain("ACTUAL_TIMER_FILE")
+      expect((yield* first.call("update_goal", { status: "paused", reason: "Test pause" }, allowed)).title).toBe(
+        "Goal paused",
+      )
+      expect((yield* first.call("read", { filePath: file }, allowed)).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       const second = yield* factory("timer")
-      expect((yield* second.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* second.resolve())).toEqual(["get_goal"])
       yield* sessions.updatePart({
         id: PartID.ascending(),
         sessionID: second.session.id,
@@ -672,14 +745,16 @@ it.instance(
           time: { start: Date.now(), end: Date.now() },
         },
       })
-      expect((yield* second.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect(Object.keys(yield* second.resolve())).toEqual(["get_goal"])
       yield* goals.edit(first.session.id, { objective: "Changed current objective" })
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect((yield* first.call("read", { filePath: file }, allowed)).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       const refreshed = yield* first.call("get_goal", {})
       yield* publish("completed", refreshed.metadata, refreshed.output)
-      expect((yield* first.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
+      expect((yield* first.call("read", { filePath: file }, allowed)).output).toContain("ACTUAL_TIMER_FILE")
       yield* sessions.updateMessage({ ...first.user, id: MessageID.ascending(), time: { created: Date.now() } })
-      expect((yield* first.call("read", { filePath: file })).title).toBe("Read goal first")
+      expect((yield* first.call("read", { filePath: file }, allowed)).title).toBe("Read goal first")
+      expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       const manual = yield* factory("manual")
       expect((yield* manual.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
       const reply = yield* factory("timer", "reply")

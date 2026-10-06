@@ -404,6 +404,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private contextSessionID: string | undefined
   private connectionState: "connecting" | "connected" | "disconnected" | "error" = "connecting"
   private connectionGeneration = 0
+  private readonly goalReads = new Map<string, symbol>()
   private composerRevision = 0
   private composerSignature?: string
   private composerReady = false
@@ -5648,29 +5649,36 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (!client) return
     const directory = this.getWorkspaceDirectory(sessionID)
     const generation = this.connectionGeneration
+    const id = Symbol()
+    this.goalReads.set(sessionID, id)
     const current = () =>
+      this.goalReads.get(sessionID) === id &&
       this.client === client &&
       this.connectionGeneration === generation &&
       sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
-    const response = await client.kilocode.goal.get({ sessionID, directory }).catch(() => undefined)
-    if (!current()) return
-    if (!response?.response || (response.error && response.response.status !== 404)) {
+    try {
+      const response = await client.kilocode.goal.get({ sessionID, directory }).catch(() => undefined)
+      if (!current()) return
+      if (!response?.response || (response.error && response.response.status !== 404)) {
+        this.postMessage({
+          type: "goalState",
+          sessionID,
+          notice: "Raya could not read the current goal. Retry after the backend reconnects.",
+        })
+        return
+      }
       this.postMessage({
         type: "goalState",
         sessionID,
-        notice: "Raya could not read the current goal. Retry after the backend reconnects.",
+        goal: response.data as GoalState | undefined,
+        notice,
       })
-      return
-    }
-    this.postMessage({
-      type: "goalState",
-      sessionID,
-      goal: response.data as GoalState | undefined,
-      notice,
-    })
-    if (response.response.status === 404 && !notice) {
-      const saved = await stopResult(client, sessionID, directory)
-      if (saved && current()) this.postMessage({ type: "goalStopResult", sessionID, notice: saved })
+      if (response.response.status === 404 && !notice) {
+        const saved = await stopResult(client, sessionID, directory)
+        if (saved && current()) this.postMessage({ type: "goalStopResult", sessionID, notice: saved })
+      }
+    } finally {
+      if (this.goalReads.get(sessionID) === id) this.goalReads.delete(sessionID)
     }
   }
 

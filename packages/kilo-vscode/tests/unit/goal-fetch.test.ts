@@ -7,12 +7,14 @@ const source = await Bun.file(new URL("../../src/KiloProvider.ts", import.meta.u
 const start = source.indexOf("  private async fetchAndSendGoal(")
 const end = source.indexOf("  private async handleGoalControl(", start)
 if (start < 0 || end < 0) throw new Error("Production goal fetch method not found")
+const field = source.match(/^  private readonly goalReads.*$/m)?.[0]
+if (!field) throw new Error("Production goal read identity field not found")
 const code = new Bun.Transpiler({ loader: "ts" }).transformSync(
-  `(class Subject { ${source.slice(start, end).replace("private async", "async")} })`,
+  `(class Subject { ${field.replace("private ", "")};\n${source.slice(start, end).replace("private async", "async")} })`,
 )
 const create = (stop: typeof stopResult) =>
   new Function("stopResult", "sameDirectory", `return ${code}`)(stop, sameDirectory) as {
-    new (): { fetchAndSendGoal(sessionID: string): Promise<void> }
+    new (): { goalReads: Map<string, symbol>; fetchAndSendGoal(sessionID: string): Promise<void> }
   }
 const Subject = create(async () => "Saved stop result")
 
@@ -111,3 +113,65 @@ for (const kind of ["client", "generation", "directory", "stop"] as const) {
     }
   })
 }
+
+for (const kind of ["state", "stop"] as const)
+  test(`actual SDK overlapping Goal ${kind} reads keep the newest state and independent sessions`, async () => {
+    const entered = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<Response>()
+    const messages: Record<string, unknown>[] = []
+    let reads = 0
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        const path = new URL(request.url).pathname
+        if (path.includes("/other/")) return Response.json({ objective: "Independent goal", status: "active" })
+        if (path.endsWith("/stop")) {
+          entered.resolve()
+          return held.promise
+        }
+        reads++
+        if (reads === 1) {
+          if (kind === "stop") return Response.json({ error: "Missing goal" }, { status: 404 })
+          entered.resolve()
+          return held.promise
+        }
+        return Response.json({ objective: "Current goal", status: "active" })
+      },
+    })
+    const Subject = create(stopResult)
+    const state = Object.assign(new Subject(), {
+      client: createKiloClient({ baseUrl: server.url.toString() }),
+      connectionGeneration: 1,
+      getWorkspaceDirectory: () => "C:/original",
+      postMessage: (message: Record<string, unknown>) => messages.push(message),
+    })
+    const pending = state.fetchAndSendGoal("session")
+    try {
+      await entered.promise
+      await state.fetchAndSendGoal("other")
+      await state.fetchAndSendGoal("session")
+      expect(messages.filter((message) => message.goal)).toMatchObject([
+        { sessionID: "other", goal: { objective: "Independent goal" } },
+        { sessionID: "session", goal: { objective: "Current goal" } },
+      ])
+      const count = messages.length
+      held.resolve(
+        Response.json(
+          kind === "stop"
+            ? { sessionID: "session", intent: "old", at: 1, phase: "cleared" }
+            : { objective: "Old goal", status: "active" },
+        ),
+      )
+      await pending
+      expect(messages).toHaveLength(count)
+      await state.fetchAndSendGoal("session")
+      expect(messages).toHaveLength(count + 1)
+      expect(messages.at(-1)).toMatchObject({ sessionID: "session", goal: { objective: "Current goal" } })
+      expect(state.goalReads.size).toBe(0)
+    } finally {
+      held.resolve(Response.json({}, { status: 503 }))
+      await pending
+      await server.stop(true)
+    }
+  })

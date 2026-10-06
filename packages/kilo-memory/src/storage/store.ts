@@ -4,9 +4,11 @@ import { MemoryFs } from "./fs"
 import { MemorySessions } from "./sessions"
 import { MemorySources } from "./sources"
 import { MemoryState } from "./state"
+import { MemoryDream } from "./dream"
 
 /** Low-level raw-root APIs. Callers must pass a project-owned root from MemoryPaths.root(ctx). */
 export namespace MemoryFiles {
+  export const dream = MemoryDream
   export const configure = MemoryOperation.configure
   export const hosted = MemoryOperation.hosted
 

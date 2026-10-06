@@ -2,7 +2,7 @@
 
 Reviewed October 6, 2026. Use [current readiness](Raya-Current-Readiness.md) for the authoritative installed gates: **48/100, two of nine gates accepted**. The records below retain earlier candidates, resource snapshots, scores and private test configurations; they are historical evidence, not instructions to reinstall an older candidate or replace the current model configuration.
 
-The current audited installation is `7.4.23-snapshot+58ab585cd3.local.1791262907180`. Its autonomous General workflow failed exact-content copying and recovery; source repairs are committed in the integration worktree as `7d27bdd07f`, but a matching replacement build and unchanged installed workflow test remain pending. Do not credit these source repairs as installed acceptance.
+The current audited installation is `7.4.23-snapshot+4bfa78703d.local.1791266650994`. Its full General workflow failed exact-content copying (48 bytes became 49 with an extra LF) and autonomous worker recovery. Ordinary cancellation and launch-correlated backend/family retirement passed in that failed run. A worker-recovery source repair is being prepared in the integration worktree; it is not installed acceptance. See the current readiness record for the independently verified scope. Lighting and audible checks are deferred while the user sleeps.
 
 Home Assistant Sleep mode now turns the ceiling off immediately and fades the other three bedroom bulbs plus PC RGB over 90 minutes. The saved script and active dashboard states were verified. The extension adapter mapping fix is independently tested in commit `5b60816089ceaddd57b047e8aa7f2d24c0a04aec`; inclusion in the next combined build and supported settings migration remain pending. Leave the running fade undisturbed.
 

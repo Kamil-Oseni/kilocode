@@ -20,6 +20,12 @@ The proposal interface requires the matching native/backend contract; do not ins
 
 ## Health read recovery, 2026-10-06
 
+### Voice source regression checkpoint
+
+The selected playback model/voice label now uses an ASCII-escaped middle-dot separator instead of corrupted encoded text. The mounted metadata test confirms the exact readable fallback label and rejects stopped-request updates. The local fallback fixture explicitly activates hands-free mode before its fallback result; it still checks that credential changes cannot authorize the wrong output engine and that the policy transition does not capture or play audio. The native-provider fixture now supplies every required public credential-presence boolean, preserving the production refusal of incomplete settings. Its timeout diagnostic includes only public phase/error information.
+
+The complete selected voice/speech unit cohort passes **174 tests, 967 assertions, 39 files, no skips**, including mounted session/composer behavior, initialization, Stop, sequential handoffs, reload, cancellation, local STT, fallback, playback correlation and controlled streaming latency. Full extension compile, host/webview types, lint, bundle, Knip and required formatting pass. Logs are `.tmp/memory-private/voice-postmerge-*`; the initial 171-pass/three-failure run and focused failure evidence remain retained. These fixtures use synthetic media and loopback providers; they establish source behavior, not actual microphone transcription, local synthesis quality, audible continuity or installed workflow readiness. No personal credentials or device state were accessed.
+
 The health panel now expires a missing read-only reply after 15 seconds, clears unavailable readings and enables a fresh request. Exact request IDs fence expired replies, completed duplicate replies and replies from before disconnection or workspace replacement. Unmount clears the UI timer and listener. This timeout does not cancel native probes or claim their completion. The complete mounted health-panel browser suite passes 22 cases, including timeout/retry, old replies, disconnect/reconnect, existing worker Stop, Memory publication controls, resources, rollback and narrow accessible layouts. Host/webview types, full lint, production bundle and Knip pass. Fixture replies are synthetic native-transport responses; these checks do not prove installed service recovery. Logs: `.tmp/memory-private/admin-health-*`.
 
 ## Validation recorded on 2026-10-05

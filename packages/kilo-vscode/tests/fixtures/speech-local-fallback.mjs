@@ -168,6 +168,8 @@ try {
   const settings = await store.load()
   check(settings.hasLocalKey === true && settings.hasTtsKey === false, "only the actual local key is present")
   check(voiceFallback(settings) === "cascade-v1", "actual local settings permit cascade")
+  voice.setMode("hands-free")
+  check(voice.cascade() === false, "explicit activation precedes the fallback result")
   window.dispatchEvent(
     new window.MessageEvent("message", {
       data: {

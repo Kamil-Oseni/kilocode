@@ -1056,7 +1056,7 @@ describe("KiloProvider.handleLoadMessages / focus mode freshness", () => {
     expect(sent.some((item) => (item as { type?: string }).type === "messagesLoaded")).toBe(false)
   })
 
-  it("reconciles at most 40 tracked transcript tails after reconnect", async () => {
+  it("reconciles every tracked transcript tail after reconnect", async () => {
     const client = createClient()
     const { internal, sent } = makeProvider(client)
     internal.connectionGeneration = 7
@@ -1069,10 +1069,11 @@ describe("KiloProvider.handleLoadMessages / focus mode freshness", () => {
     const loaded = sent.filter(
       (message) => typeof message === "object" && message && (message as { type?: unknown }).type === "messagesLoaded",
     ) as Array<{ sessionID: string; mode: string }>
-    expect(loaded).toHaveLength(40)
+    expect(loaded).toHaveLength(60)
     expect(loaded[0]).toMatchObject({ sessionID: "s20", mode: "reconcile" })
-    expect(new Set(loaded.map((message) => message.sessionID)).size).toBe(40)
-    expect(client.calls).toHaveLength(40)
+    expect(new Set(loaded.map((message) => message.sessionID))).toEqual(internal.trackedSessionIds)
+    expect(loaded.every((message) => message.mode === "reconcile")).toBe(true)
+    expect(client.calls).toHaveLength(60)
   })
 
   it("drops active and queued transcript recovery after a newer connection generation", async () => {

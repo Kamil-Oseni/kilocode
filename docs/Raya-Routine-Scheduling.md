@@ -2,9 +2,15 @@
 
 ## Current installed validation
 
+The corrected 2026-10-05 private trial passed on installed snapshot `7.4.23-snapshot+8db2d6bd4e.local.1791240779706`: two distinct UTC timer sessions completed, then the disabled routine and exact history survived cold reopening through the 65-second no-replay observation. Both backend hosts closed. Independent result binding matched all 752 saved API response hashes and settled stream bytes; both recorded source/guardian join groups fulfilled with exit code zero and family-zero observations.
+
+Passing result: `routine-current-8db2-two-period-cold-list-actual-f84624eb138d40b9a0219c27386a0910.json`, 464393 bytes, SHA256 `1127decb405d021eb370dfc282e3733f35913604d9d1c64abbd97a59ba9813c9`. Independent binding receipt: `.tmp/new-pc/routine-cold-list-independent-result-binding.json`. This verifies the tested scheduling/disabled cold-reopen scenario; pause/resume, live Stop, crash recovery, normal-profile UX and later build compatibility remain pending. The binding review does not replace signed-retirement verification or advance the full Routine readiness gate.
+
+### Retained predecessor failure
+
 The 2026-10-05 private two-period trial on installed snapshot `7.4.23-snapshot+8db2d6bd4e.local.1791240779706` reached two distinct UTC timer sessions. Its saved baseline records both runs as complete after actual full-file reads and accepted goal completion. This validates those two scheduled executions only.
 
-The full trial remains failed: the cold-reopen check requested `GET /kilocode/agent/{id}` and received HTTP 404. Current production source registers the list GET plus item PATCH/DELETE, but no item GET. Before another trial, confirm the installed API contract and correct the driver to select the exact retained worker from the list response. Preserve the disabled-state assertion, history equality, and full no-replay observation; this diagnosis does not prove persistence or recovery.
+The predecessor trial remains failed: the cold-reopen check requested `GET /kilocode/agent/{id}` and received HTTP 404. Current production source registers the list GET plus item PATCH/DELETE, but no item GET. The corrected successor selects the exact retained worker from the supported list response. Preserve the disabled-state assertion, history equality, and full no-replay observation; this diagnosis does not prove persistence or recovery.
 
 Retained result: `routine-current-8db2-two-period-actual-556ff89e023e499ca5bd675a63ae054b.json`, 372076 bytes, SHA256 `a2ecb68d96de13cd9b37a217f52f35f26237dbf2114f5ac0797a8bed61bed81d`. Independent source diagnosis is saved in `.tmp/new-pc/routine-8db2-cold-reopen-independent-source-diagnosis.json`. No readiness gate is advanced by this partial result.
 

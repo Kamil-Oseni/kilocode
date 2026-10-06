@@ -18,6 +18,7 @@ import { picked as dreamSources } from "./dream-sources"
 import { targets as dreamTargets } from "./dream-sources"
 import { MemoryFiles } from "@kilocode/kilo-memory/store"
 import { snapshot as dreamSnapshot } from "./dream-view"
+import { explanation } from "./dream-review"
 
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
   return (
@@ -347,7 +348,13 @@ export class BrainHost {
       }
       const proposals = await this.service.proposal(body)
       await this.trackDream(body, proposals, cfg.setup.root, () => this.settings.current(cfg.setup))
-      post({ type: "secondBrainState", id: message.id, state: { ...(await this.service.status()), proposals } })
+      const review =
+        "proposals" in proposals
+          ? undefined
+          : await explanation(cfg.setup.root, body.project, proposals, AbortSignal.timeout(15000))
+      const status = await this.service.status()
+      if (!this.authorized(cfg.setup, folder)) throw new Error("Original Memory review authority changed")
+      post({ type: "secondBrainState", id: message.id, state: { ...status, proposals, review } })
     } catch {
       post({
         type: "secondBrainState",
@@ -355,6 +362,12 @@ export class BrainHost {
         state: { configured: true, status: "unavailable", code: "proposal_review_required", results: [] },
       })
     }
+  }
+
+  private authorized(setup: Parameters<BrainSettings["current"]>[0], folder: vscode.WorkspaceFolder) {
+    return (
+      this.settings.current(setup) && vscode.workspace.isTrusted && !!vscode.workspace.getWorkspaceFolder(folder.uri)
+    )
   }
 
   private async trackDream(

@@ -1,6 +1,44 @@
 import { expect, test } from "bun:test"
-import { groups, project, reviewed } from "../../webview-ui/src/components/settings/brain-proposal-state"
+import { groups, project, reason, reviewed } from "../../webview-ui/src/components/settings/brain-proposal-state"
 import type { BrainProposal } from "../../src/shared/second-brain"
+
+test("explanations require the selected revision and bounded plain-text reasons", () => {
+  const proposal: BrainProposal = {
+    format: "raya.memory.proposal.v1",
+    id: "original",
+    project: "C:/work/raya",
+    digest: "a".repeat(64),
+    status: "pending",
+    capture_enabled: false,
+    provenance: "Source",
+    sources: [{ path: "C:/work/raya/source.md", sha256: "b".repeat(64), kind: "document", event_time: null }],
+    changes: [{ path: "Preferences/lights.md", expected: null, before: null, content: "Slow cycle." }],
+  }
+  const detail = {
+    id: proposal.id,
+    digest: proposal.digest,
+    fingerprint: "c".repeat(64),
+    kind: "hypothesis",
+    rationale: "Source-based suggestion",
+    contradictions: ["Needs human review"],
+  }
+  expect(reason(detail, proposal)).toBe(detail)
+  for (const value of [
+    undefined,
+    { ...detail, id: "other" },
+    { ...detail, digest: "d".repeat(64) },
+    { ...detail, fingerprint: "invalid" },
+    { ...detail, kind: "verified" },
+    { ...detail, rationale: " " },
+    { ...detail, rationale: "a".repeat(8001) },
+    { ...detail, contradictions: null },
+    { ...detail, contradictions: [7] },
+    { ...detail, contradictions: [" "] },
+    { ...detail, contradictions: ["a".repeat(8001)] },
+    { ...detail, contradictions: Array(17).fill("conflict") },
+  ])
+    expect(reason(value, proposal)).toBeUndefined()
+})
 
 test("review groups retain the original proposal identities and keep unresolved writes distinct from publication", () => {
   const rows: BrainProposal[] = (["applied", "pending", "cancelled", "applying", "pending"] as const).map(

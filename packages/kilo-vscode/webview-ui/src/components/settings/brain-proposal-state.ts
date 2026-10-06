@@ -1,4 +1,4 @@
-import type { BrainProposal, BrainProposalResult } from "../../../../src/shared/second-brain"
+import type { BrainProposal, BrainProposalResult, BrainReview } from "../../../../src/shared/second-brain"
 
 export function groups(rows: readonly BrainProposal[]) {
   const titles = {
@@ -19,6 +19,26 @@ export function project(value: string) {
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+export function reason(value: unknown, proposal: BrainProposal): BrainReview | undefined {
+  if (
+    !record(value) ||
+    value.id !== proposal.id ||
+    value.digest !== proposal.digest ||
+    typeof value.fingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(value.fingerprint) ||
+    typeof value.kind !== "string" ||
+    !["memory", "hypothesis", "lesson"].includes(value.kind) ||
+    typeof value.rationale !== "string" ||
+    !value.rationale.trim() ||
+    value.rationale.length > 8000 ||
+    !Array.isArray(value.contradictions) ||
+    value.contradictions.length > 16 ||
+    value.contradictions.some((item) => typeof item !== "string" || !item.trim() || item.length > 8000)
+  )
+    return undefined
+  return value as BrainReview
 }
 function proposal(value: unknown): value is BrainProposal {
   if (!record(value) || value.format !== "raya.memory.proposal.v1" || value.capture_enabled !== false) return false

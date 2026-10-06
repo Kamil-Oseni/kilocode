@@ -3,15 +3,16 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Card } from "@kilocode/kilo-ui/card"
 import { useVSCode } from "../../context/vscode"
 import { useServer } from "../../context/server"
-import type { BrainProposal, BrainProposalCommand } from "../../../../src/shared/second-brain"
+import type { BrainProposal, BrainProposalCommand, BrainReview } from "../../../../src/shared/second-brain"
 import { BrainProposalView } from "./BrainProposalView"
-import { groups, project, reviewed } from "./brain-proposal-state"
+import { groups, project, reason, reviewed } from "./brain-proposal-state"
 
 export function BrainProposals(props: { configured: boolean }) {
   const vscode = useVSCode()
   const server = useServer()
   const [rows, setRows] = createSignal<readonly BrainProposal[]>([])
   const [selected, setSelected] = createSignal<BrainProposal>()
+  const [review, setReview] = createSignal<BrainReview>()
   const [pending, setPending] = createSignal(false)
   const [loaded, setLoaded] = createSignal(false)
   const [error, setError] = createSignal<string>()
@@ -22,6 +23,7 @@ export function BrainProposals(props: { configured: boolean }) {
     request = crypto.randomUUID()
     setPending(true)
     setError()
+    setReview()
     vscode.postMessage({ type: "secondBrain", action: "proposal", id: request, command })
   }
   createEffect(() => {
@@ -31,6 +33,7 @@ export function BrainProposals(props: { configured: boolean }) {
     request = ""
     setRows([])
     setSelected()
+    setReview()
     setPending(false)
     setLoaded(false)
     setError()
@@ -54,6 +57,7 @@ export function BrainProposals(props: { configured: boolean }) {
       return
     }
     setSelected(result)
+    setReview(reason(message.state.review, result))
     setRows((items) => [...items.filter((item) => item.id !== result.id), result])
   })
   onCleanup(off)
@@ -104,6 +108,7 @@ export function BrainProposals(props: { configured: boolean }) {
         {(value) => (
           <BrainProposalView
             proposal={value()}
+            review={review()}
             pending={pending()}
             uncertain={Boolean(error())}
             refresh={() => send({ action: "read", project: value().project, id: value().id })}

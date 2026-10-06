@@ -3,6 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Card } from "@kilocode/kilo-ui/card"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { Switch } from "@kilocode/kilo-ui/switch"
+import type { BrainReview } from "../../../../src/shared/second-brain"
 
 /** Presentation contract only; the native host owns project/source and apply authority. */
 type Proposal = {
@@ -18,6 +19,7 @@ type Proposal = {
 
 export function BrainProposalView(props: {
   proposal: Proposal
+  review?: BrainReview
   pending: boolean
   uncertain?: boolean
   refresh?: () => void
@@ -62,6 +64,30 @@ export function BrainProposalView(props: {
         </Button>
       </Show>
       <p>{props.proposal.provenance}</p>
+      <Show
+        when={props.review?.id === props.proposal.id && props.review?.digest === props.proposal.digest && props.review}
+      >
+        {(review) => (
+          <section aria-label="Suggestion explanation">
+            <h4>Why this was suggested</h4>
+            <p>{review().rationale}</p>
+            <p>Original suggestion rationale; your edits require a fresh review.</p>
+            <Show when={review().kind !== "memory"}>
+              <p>This is a proposed {review().kind}. It does not verify a repair or establish a fact.</p>
+            </Show>
+            <h4>Conflicts to review</h4>
+            <Show
+              when={review().contradictions.length > 0}
+              fallback={<p>No conflicts were recorded by this suggestion.</p>}
+            >
+              <ul>
+                <For each={review().contradictions}>{(item) => <li>{item}</li>}</For>
+              </ul>
+            </Show>
+            <p>These explanations are suggestions, not independently verified evidence.</p>
+          </section>
+        )}
+      </Show>
       <details>
         <summary>Sources and revision</summary>
         <p>Proposal: {props.proposal.id}</p>

@@ -34,6 +34,7 @@ export type BrainState = Readonly<{
   status: "disconnected" | "checking" | "ready" | "searching" | "cancelled" | "unavailable"
   code?: string
   proposals?: BrainProposalResult
+  review?: BrainReview
   context?: BrainContext
   root?: string
   results: readonly BrainSource[]
@@ -56,6 +57,16 @@ export type BrainRequest =
   | { type: "secondBrain"; action: "context"; id: string; query: string; budget: number }
 
 export type BrainResponse = { type: "secondBrainState"; id: string; state: BrainState }
+
+/** Read-only explanation from the matching saved candidate, outside the signed publication record. */
+export type BrainReview = Readonly<{
+  id: string
+  digest: string
+  fingerprint: string
+  kind: "memory" | "hypothesis" | "lesson"
+  rationale: string
+  contradictions: readonly string[]
+}>
 
 export type BrainProposal = Readonly<{
   format: "raya.memory.proposal.v1"

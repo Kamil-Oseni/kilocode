@@ -57,6 +57,7 @@ const [proposal, setProposal] = createSignal({
 })
 const [pending, setPending] = createSignal(false)
 const [uncertain, setUncertain] = createSignal(false)
+const [review, setReview] = createSignal()
 const node = document.createElement("main")
 document.body.appendChild(node)
 const dispose = render(
@@ -71,6 +72,9 @@ const dispose = render(
       get uncertain() {
         return uncertain()
       },
+      get review() {
+        return review()
+      },
       apply: () => actions.push("apply"),
       cancel: () => actions.push("cancel"),
       edit: () => actions.push("edit"),
@@ -81,6 +85,28 @@ const dispose = render(
 const button = (label) => [...node.querySelectorAll("button")].find((item) => item.textContent.trim() === label)
 try {
   await Promise.resolve()
+  assert.equal(node.querySelector('[aria-label="Suggestion explanation"]'), null)
+  const detail = {
+    id: proposal().id,
+    digest: proposal().digest,
+    fingerprint: "c".repeat(64),
+    kind: "lesson",
+    rationale: "Compare the failed run with the reviewed note.",
+    contradictions: ["<script>Unverified recovery</script>"],
+  }
+  setReview(detail)
+  assert.match(node.textContent, /Why this was suggested/)
+  assert.match(node.textContent, /Compare the failed run/)
+  assert.match(node.textContent, /does not verify a repair/)
+  assert.match(node.textContent, /<script>Unverified recovery<\/script>/)
+  assert.equal(node.querySelector("script"), null)
+  setReview({ ...detail, digest: "d".repeat(64) })
+  assert.equal(node.querySelector('[aria-label="Suggestion explanation"]'), null)
+  setReview({ ...detail, id: "another-proposal" })
+  assert.equal(node.querySelector('[aria-label="Suggestion explanation"]'), null)
+  setReview({ ...detail, kind: "memory", contradictions: [] })
+  assert.match(node.textContent, /No conflicts were recorded by this suggestion/)
+  assert.doesNotMatch(node.textContent, /does not verify a repair/)
   assert.equal(button("Open full review and apply").disabled, false)
   button("Edit proposed changes").click()
   await Promise.resolve()

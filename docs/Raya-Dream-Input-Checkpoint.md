@@ -12,6 +12,10 @@ The source regression uses actual Storage and goal completion/review owners. It 
 
 ## Proposal outcome review
 
+The native proposal response now carries a separate read-only explanation from the matching saved candidate. It binds the original proposal ID, exact evidence, change content and target baselines to the returned proposal digest; altered evidence or a superseded revision omits the explanation. The signed proposal and publication record stay unchanged. The review UI shows rationale and recorded contradictions as plain text, labels hypotheses/lessons as unverified, and hides explanations with a different selected ID/digest. Transport metadata is bounded and cleared on new requests or workspace changes. Native workspace trust and configuration are checked again before returning the review response.
+
+Actual ledger, rendered-component, transport-state, saved-inspection, DOM handshake and original SDK bridge checks pass 14 tests / 75 assertions. The extension compile, types, lint, bundle, Knip and marker guards pass using private profiles. The initial compile found the existing host complexity limit; extracting its final authority predicate fixed that failure without changing the guard. These checks do not prove installed native review behavior or the unfinished manual generation transport.
+
 The Memory review panel groups saved proposals into Awaiting review, Needs reconciliation, Published changes and Discarded proposals. Buttons show note paths and preserve their full paths as accessible labels. The original proposal ID and digest remain available in revision details. A completed empty list has an explicit empty state.
 
 The selected proposal can read its current outcome without repeating apply. Unconfirmed replies disable editing, saving, applying and discarding until a successful outcome read; an uncertain edit keeps that read available. An applying proposal remains unresolved. Published notes explicitly leave search-index freshness unverified. These presentation states do not add a writer or claim index refresh.

@@ -22,3 +22,11 @@ The current `D:/Raya/Services/runtime.py` checks ownership, refuses active work 
 Use the accepted installed lifecycle owner for ordinary recovery. If exceptional manual launcher recovery is selected, verify the owner and idle state first, preserve the diagnostic result, and disclose any forced termination. Do not infer that a successful launcher exit proves all work and streams finished naturally.
 
 These findings require checklist and guide updates when consolidated. They do not promote the full recovery requirement to complete.
+
+## Current PC reliability observation
+
+A fresh read-only check found Home Assistant's HTTP origin returning 200 and the VirtualBox VM running with 2,048 MiB, two CPUs and bridged networking on the Intel Wi-Fi adapter. The enabled Home Assistant startup task uses a logon trigger with a 45-second delay; its last result is zero. This supports current availability and configuration, not a successful controlled reboot rehearsal.
+
+The active Windows Balanced plan has AC sleep and hibernation timeouts set to zero. DC sleep remains ten minutes. The temperature task is running. The RGB bridge task is enabled with a 30-second logon delay, but its last result is 267014 (`0x41306`, task terminated) and it is currently Ready. Task state alone does not establish whether a separately started bridge is alive or whether Home Assistant's PC RGB entity is available.
+
+The recent System log contains Kernel-Power 41 and EventLog 6008 at the October 4 unexpected shutdown. The selected Kernel-Power fields report bugcheck code zero, no sleep in progress and no recorded power-button timestamp. Those fields do not identify the cause or prove the earlier virtual-machine clock stalls are fixed. No power plan, task, VM, service or light was changed during these observations.

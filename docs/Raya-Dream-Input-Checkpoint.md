@@ -10,6 +10,16 @@ The source regression uses actual Storage and goal completion/review owners. It 
 
 ## Historical evidence in the repair workflow
 
+## Proposal outcome review
+
+The Memory review panel groups saved proposals into Awaiting review, Needs reconciliation, Published changes and Discarded proposals. Buttons show note paths and preserve their full paths as accessible labels. The original proposal ID and digest remain available in revision details. A completed empty list has an explicit empty state.
+
+The selected proposal can read its current outcome without repeating apply. Unconfirmed replies disable editing, saving, applying and discarding until a successful outcome read; an uncertain edit keeps that read available. An applying proposal remains unresolved. Published notes explicitly leave search-index freshness unverified. These presentation states do not add a writer or claim index refresh.
+
+Targeted state, actual rendered component, DOM/host handshake and original SDK bridge checks pass 10 tests / 37 assertions. The full extension compile rebuilt the CLI and passed its version/model-catalog/sandbox smoke checks, SDK preparation, extension/webview types, lint and bundling; a final compile reused the unchanged CLI/SDK and passed again. Knip and marker checks pass. All checks use private profiles and synthetic UI/loopback fixtures. The first bridge check overlapped SDK generation and saw a temporarily absent generated module; after the original build finished, the bridge and combined targeted suite passed. Installed visuals and end-to-end native review acceptance remain pending.
+
+## Historical evidence in the repair workflow
+
 The existing `refine_self_heal` tool retrieves a recurring incident's previous completion through the original self-heal owner. Its compact result retains the prior item/attempt/session, source root/commit, audit summary and up to three requirements with three evidence references each, alongside total counts. It compares the current owned attempt's source identity and explicitly leaves environment compatibility unverified. Missing original completion yields hypothesis guidance. These records do not establish the new incident's cause, completion, release or installation, and no new personal-memory store or verification writer is introduced.
 
 Refinement now refuses verified, duplicate or cancelled items as duplicate targets. It also preserves omitted classification fields instead of overwriting required values with `undefined`. The real tool wrapper, Agent/Truncate services and private instance fixture exercise same/different-source history, preserved evidence, omitted/blank fields, closed-target refusal, missing-proof fallback and valid open-target deduplication. Completion/ownership suites pass 25 tests / 228 assertions; CLI types pass and affected lint has no warnings or errors. Installed repair workflow acceptance remains pending.

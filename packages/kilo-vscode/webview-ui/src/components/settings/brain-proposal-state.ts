@@ -1,5 +1,17 @@
 import type { BrainProposal, BrainProposalResult } from "../../../../src/shared/second-brain"
 
+export function groups(rows: readonly BrainProposal[]) {
+  const titles = {
+    pending: "Awaiting review",
+    applying: "Needs reconciliation",
+    applied: "Published changes",
+    cancelled: "Discarded proposals",
+  }
+  return (["pending", "applying", "applied", "cancelled"] as const)
+    .map((status) => ({ status, title: titles[status], items: rows.filter((row) => row.status === status) }))
+    .filter((group) => group.items.length > 0)
+}
+
 export function project(value: string) {
   const path = value.replaceAll("\\", "/").replace(/\/+$/, "")
   return /^[a-z]:\//i.test(path) || path.startsWith("//") ? path.toLowerCase() : path

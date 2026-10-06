@@ -19,6 +19,8 @@ type Proposal = {
 export function BrainProposalView(props: {
   proposal: Proposal
   pending: boolean
+  uncertain?: boolean
+  refresh?: () => void
   apply: () => void
   cancel: () => void
   edit: (changes: { path: string; expected: string | null; content: string | null }[]) => void
@@ -32,7 +34,7 @@ export function BrainProposalView(props: {
   })
   const update = (path: string, content: string | null) =>
     setDraft((items) => items.map((item) => (item.path === path ? { ...item, content } : item)))
-  const writable = () => !props.pending && props.proposal.status === "pending"
+  const writable = () => !props.pending && !props.uncertain && props.proposal.status === "pending"
   const invalid = () => draft().some((item) => item.content !== null && !item.content.trim())
   const clipped = (text: string | null) =>
     text === null
@@ -45,9 +47,24 @@ export function BrainProposalView(props: {
       <h3>Proposed memory changes</h3>
       <p>Project: {props.proposal.project}</p>
       <p role="status">{props.proposal.status} · Automatic capture is off</p>
+      <Show when={props.proposal.status === "applying"}>
+        <p role="alert">Publication is unresolved. Read the current outcome before taking another action.</p>
+      </Show>
+      <Show when={props.uncertain}>
+        <p role="alert">The last reply is unconfirmed. Read the current outcome before editing or applying again.</p>
+      </Show>
+      <Show when={props.proposal.status === "applied"}>
+        <p>Changes are published. Search-index freshness is not verified by this proposal view.</p>
+      </Show>
+      <Show when={props.refresh}>
+        <Button disabled={props.pending || (editing() && !props.uncertain)} onClick={props.refresh}>
+          Read current outcome
+        </Button>
+      </Show>
       <p>{props.proposal.provenance}</p>
       <details>
         <summary>Sources and revision</summary>
+        <p>Proposal: {props.proposal.id}</p>
         <p>Proposal revision: {props.proposal.digest}</p>
         <For each={props.proposal.sources}>
           {(source) => (

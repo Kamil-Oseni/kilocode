@@ -1,6 +1,25 @@
 # Agent Memory Repo: adoption study for Raya
 
-Reviewed 2026-10-06. Recommendation: adopt the compact linked-memory format and add a bounded consolidation worker that proposes memory updates and evidence-backed self-heal lessons. This is a design proposal; automatic capture, scheduled Dreaming and repair execution were not enabled.
+Reviewed 2026-10-06. Recommendation: adopt the compact linked-memory format and add a bounded consolidation worker that proposes memory updates and evidence-backed self-heal lessons. This document contains the design and historical implementation checkpoints. Use the current status below rather than older statements that a source feature remains unfinished. Automatic capture, scheduled Dreaming and repair execution remain disabled.
+
+## Current implementation and acceptance
+
+Status checked against source at `d113c9a1cf17de08ae5692ec521ecd8a59509797`, 2026-10-06. Cloud workers are stopped and all their task/file reservations are released. Local work continues; no acceptance depends on a cloud worker returning.
+
+| Requirement | Current source state | Still required |
+|---|---|---|
+| Bounded linked retrieval | Existing context/recall paths validate roots, link targets, source hashes and request budgets. Source and host preview plumbing are implemented. | Configured installed-corpus recall, held-out preference/contradiction quality and resource measurements. |
+| Explicit consolidation | Native approved-source/target/model selection connects the manual job to the original SDK client and existing pending-proposal owner. It does not publish notes. | Matching installed Start, consent, real model output, cancellation and original process/GPU retirement. |
+| Review, correction and deletion | Revision-aware review, rationale/conflict presentation, durable dispositions and deleted-fact suppression are implemented. Saved original IDs support outcome reconciliation without replay. | Installed review/edit/reject/apply/delete and restart acceptance against the configured service. |
+| Activity and saved recovery | Memory/Admin show the original run and lifecycle; exact-run Cancel joins its original host promise. Read-only checkpoints explain pending and unconfirmed outcomes. Missing activity replies expire and permit a fresh read. | Installed host-reload/transport-failure presentation and native cleanup evidence. A saved phase is not cleanup proof. |
+| Publication and retrieval freshness | The proposal view distinguishes published notes from unverified search-index freshness. The existing separately confirmed source-sync flow remains available. | A clear transition from publication to safe indexing/retry, then source-hash-matching retrieval evidence. Never retry publication to repair indexing. |
+| Repair lessons | Existing self-heal evidence/applicability and recurrence boundaries remain the owners; hypotheses cannot mint verified repair or delivery receipts. Earlier source checks are retained below and in the Dream checkpoint record. | Held-out repeated-failure reduction and installed repair/lesson acceptance. No automatic repair dispatch. |
+| Foreground priority and resources | Existing scheduler/model contracts supply bounded background admission and original SDK settlement/retirement handling. | Real foreground conversation under consolidation load and native model/unload measurements. |
+| Automatic capture and idle schedules | Disabled by policy. The manual workflow grants no authority to enable them. | Separate user decision after the required readiness checks. |
+
+The full Memory package now passes **211 tests, 952 assertions, 20 files**. All seven extension Dream suites pass **21 tests, 138 assertions**. The backend's original inspection/settlement suite passes **2 tests, 14 assertions**. Memory typecheck passes. The original test command handles returned exit 0; no test command was restarted after a wait timeout. The package uses disposable ledgers and actual pinned-Python proposal-store fixtures, alongside controlled generation ports. The extension suites cover actual selection/review/transport helpers with synthetic native/HTTP responses. These checks establish the current source cohort, not native inference, installed services, human speech or device behavior.
+
+Logs are retained at `.tmp/memory-private/memory-cohort-full.log`, `dream-cohort-full.log`, `dream-cohort-backend.log` and `memory-cohort-types.log`. The current native UI and missing-reply browser evidence is recorded in [the Dream checkpoint](Raya-Dream-Input-Checkpoint.md). Broader workflow gates and installed readiness remain open; these source counts do not increase the readiness score.
 
 ## What Cognition released
 

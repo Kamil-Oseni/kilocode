@@ -290,8 +290,17 @@ export namespace MemoryRecall {
     }
     // Query terms absent from the corpus add zero to every hit; only corpus-ubiquitous terms need removal.
     const keys = MemoryTopics.expand(MemoryShared.terms(query, { drop: noise([...typedItems, ...digestItems]) }))
+    const selected = select({ hits: [...typedItems, ...digestItems], keys, force: input.force })
     const hits = dedupe({
-      hits: select({ hits: [...typedItems, ...digestItems], keys, force: input.force }),
+      // A frequently saved topic can itself be ubiquitous. If noise filtering
+      // finds nothing, retry the original query rather than hiding that topic.
+      hits: selected.length
+        ? selected
+        : select({
+            hits: [...typedItems, ...digestItems],
+            keys: MemoryTopics.expand(MemoryShared.terms(query)),
+            force: input.force,
+          }),
       query,
       limit,
     })

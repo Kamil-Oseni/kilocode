@@ -31,7 +31,15 @@ function deferred() {
 async function fixture(stoppable = true) {
   const root = await mkdtemp(join(tmpdir(), "raya-ha-runtime-"))
   const values = new Map<string, unknown>()
-  const state = { value: "off", brightness: 0 as unknown, posts: 0, fail: false, held: false, requests: [] as string[] }
+  const state = {
+    value: "off",
+    brightness: 0 as unknown,
+    offset: 0,
+    posts: 0,
+    fail: false,
+    held: false,
+    requests: [] as string[],
+  }
   const rgb = {
     value: undefined as unknown,
     modes: undefined as unknown,
@@ -66,7 +74,7 @@ async function fixture(stoppable = true) {
         if (body.rgb_color !== undefined && !rgb.mismatch) rgb.value = body.rgb_color
         if (body.entity_id === entity) {
           state.value = path.endsWith("turn_on") ? "on" : "off"
-          state.brightness = typeof body.brightness === "number" ? body.brightness : 255
+          state.brightness = typeof body.brightness === "number" ? body.brightness + state.offset : 255
         }
         if (state.held) {
           ready.resolve()
@@ -986,6 +994,48 @@ test("an external colour override retires the mood instead of overwriting the ne
     expect(owner.list().activity).toEqual({ name: "cinema", state: "failed", code: "mood_external_change" })
     expect(f.state.posts).toBe(posts)
     expect(f.rgb.value).toEqual([255, 0, 0])
+  } finally {
+    await owner.dispose()
+    await f.lights.dispose()
+    await f.close()
+  }
+}, 10000)
+
+test("a one-step external dim retires the mood without undoing a gradual sleep fade", async () => {
+  const f = await fixture()
+  const owner = new Moods(f.lights, f.storage)
+  try {
+    f.rgb.modes = ["rgb"]
+    await owner.save(palette)
+    await owner.start("cinema", new AbortController().signal)
+    f.state.brightness = 63
+    const posts = f.state.posts
+    await Bun.sleep(2200)
+    expect(owner.list().activity).toEqual({ name: "cinema", state: "failed", code: "mood_external_change" })
+    expect(f.state.posts).toBe(posts)
+    expect(f.state.brightness).toBe(63)
+  } finally {
+    await owner.dispose()
+    await f.lights.dispose()
+    await f.close()
+  }
+}, 10000)
+
+test("mood ownership compares settled readback so device brightness rounding does not interrupt it", async () => {
+  const f = await fixture()
+  const owner = new Moods(f.lights, f.storage)
+  try {
+    f.rgb.modes = ["rgb"]
+    f.state.offset = -1
+    await owner.save(palette)
+    await owner.start("cinema", new AbortController().signal)
+    expect(f.state.brightness).toBe(63)
+    const posts = f.state.posts
+    await Bun.sleep(2200)
+    expect(owner.list().activity.state).toBe("running")
+    expect(f.state.posts).toBeGreaterThan(posts)
+    expect(f.state.brightness).toBe(63)
+    await owner.stop()
   } finally {
     await owner.dispose()
     await f.lights.dispose()

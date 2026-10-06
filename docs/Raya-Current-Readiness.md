@@ -1,5 +1,13 @@
 # Raya current readiness
 
+## Current execution findings awaiting implementation
+
+The October 6 cloud audit and independent current-source review corroborate two separate issues. `ChiefVerification.retained` returns a correction-required flag, but `reuse` authenticates the retained ID without enforcing that flag against raw `prompt`/`brief.objective`; both TaskTool reuse sites omit those fields. A held executor can therefore fall back to the original assignment despite advertised correction requirements. A narrow patch must validate explicit correction at both preflight and locked admission, while retaining ordinary noncorrection ID-only resumes and saved-branch behavior.
+
+Ordinary Write preserves target encoding/BOM and uses available formatting. Its artifact proves the encoded/formatted intended result, not equality to a literal incoming source. An explicit bounded exact-UTF8 mode is now approved for implementation as a separate change, keeping normal editing defaults and all existing permission, canonical-path, stale-identity and artifact protections. Verify actual raw bytes for BOM presence/absence, final newline, mixed endings, non-ASCII and byte-changing formatters.
+
+These findings are source evidence, not proof of the historical LF cause or an installed correction run. The recovery wire test checks real rejected-audit mechanics and advertised schemas; it does not execute the complete correction/write/fresh-read/success loop or establish autonomous one-worker recovery. Evidence: `.tmp/new-pc/general-correction-and-write-source-independent.json`. Cloud feature work and these narrow fixes are assigned separately; neither patches nor installed acceptance are credited before delivery and verification.
+
 Snapshot: 2026-10-06. Estimated everyday readiness: **48/100**. Full installed workflow acceptance: **2 of 9**. These are separate measures; the estimate is not a percentage of passing tests.
 
 The tracker records **23 verified, 35 in progress, 3 planned, 1 maintenance item and 1 deferred item**. The active unfinished queue has **38 requirements**. The classifications below are copied from the implementation tracker; they do not independently recertify its historical evidence against the current installed build.

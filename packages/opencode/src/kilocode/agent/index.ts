@@ -1014,6 +1014,7 @@ export function addAuto(
         notebook_execute: "allow",
         // raya_change end
       }),
+      user,
       HomeAssistant.rules(Permission.merge(defaults, user)),
     ),
     model,

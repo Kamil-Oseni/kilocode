@@ -3,7 +3,7 @@ import { jsonSchema, tool } from "ai"
 import { context, schemas } from "@/kilocode/provider/ollama-context"
 import { ollama, OllamaBridgeError } from "@/kilocode/provider/ollama-bridge"
 
-test("required continuation tools retain the configured envelope and immutable schemas", async () => {
+test("required and automatic continuation tools retain the configured envelope and immutable schemas", async () => {
   const original = {
     type: "object" as const,
     properties: { task_id: { type: "string" as const } },
@@ -35,33 +35,35 @@ test("required continuation tools retain the configured envelope and immutable s
       )
     },
   })
-  const request = (stream: boolean) => ({
+  const request = (stream: boolean, choice: "required" | "auto" | undefined) => ({
     method: "POST",
     body: JSON.stringify({
       model: "fixture",
       messages: [{ role: "user", content: "Continue the delegated task" }],
       tools: Object.keys(tools).map((name) => ({ type: "function", function: { name, parameters: {} } })),
-      tool_choice: "required",
+      tool_choice: choice,
       stream,
     }),
   })
   try {
-    for (const stream of [false, true]) {
-      const response = await ollama(cfg, fetch)(`${server.url}v1/chat/completions`, request(stream))
-      const text = await response.text()
-      const value = stream ? JSON.parse(text.split("\n")[0].slice(6)) : JSON.parse(text)
-      const call = value.choices[0][stream ? "delta" : "message"].tool_calls[0]
-      expect(call.function.name).toBe("inspect_task")
-      expect(JSON.parse(call.function.arguments)).toEqual({ task_id: "fixture" })
-      expect(rows.at(-1)!.tools).toBeUndefined()
-      expect(rows.at(-1)!.format!.anyOf[0].properties.arguments).toEqual(original)
+    for (const choice of ["required", "auto", undefined] as const) {
+      for (const stream of [false, true]) {
+        const response = await ollama(cfg, fetch)(`${server.url}v1/chat/completions`, request(stream, choice))
+        const text = await response.text()
+        const value = stream ? JSON.parse(text.split("\n")[0].slice(6)) : JSON.parse(text)
+        const call = value.choices[0][stream ? "delta" : "message"].tool_calls[0]
+        expect(call.function.name).toBe("inspect_task")
+        expect(JSON.parse(call.function.arguments)).toEqual({ task_id: "fixture" })
+        expect(rows.at(-1)!.tools).toBeUndefined()
+        expect(rows.at(-1)!.format!.anyOf[0].properties.arguments).toEqual(original)
+      }
     }
     expect(schemas(cfg)).toEqual([
       { name: "inspect_task", parameters: original },
       { name: "get_goal", parameters: { type: "object", properties: {} } },
     ])
     state.content = JSON.stringify({ kind: "text", content: "premature completion" })
-    const err = await ollama(cfg, fetch)(`${server.url}v1/chat/completions`, request(true)).then(
+    const err = await ollama(cfg, fetch)(`${server.url}v1/chat/completions`, request(true, "required")).then(
       () => undefined,
       (err: unknown) => err,
     )

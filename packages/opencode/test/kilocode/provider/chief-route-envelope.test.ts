@@ -99,7 +99,7 @@ test("required sole Chief routing sends its actual immutable schema and preserve
   }
 })
 
-test("absent opt-in, automatic choice and disabled tools keep native protocol", async () => {
+test("absent opt-in, absent tools and disabled tools keep native protocol", async () => {
   const captured: { format?: unknown; tools?: unknown }[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -112,7 +112,9 @@ test("absent opt-in, automatic choice and disabled tools keep native protocol", 
         message: {
           role: "assistant",
           content: "native",
-          tool_calls: body.tools ? [{ function: { name: body.tools[0].function.name, arguments: {} } }] : undefined,
+          tool_calls: body.tools?.length
+            ? [{ function: { name: body.tools[0].function.name, arguments: {} } }]
+            : undefined,
         },
       })
     },
@@ -120,8 +122,8 @@ test("absent opt-in, automatic choice and disabled tools keep native protocol", 
   try {
     const cases = [
       { cfg: { ...options, localInferenceToolFormat: undefined }, value: request() },
-      { cfg: options, value: request("auto") },
-      { cfg: options, value: { ...request(), tool_choice: undefined } },
+      { cfg: options, value: { ...request("auto"), tools: undefined } },
+      { cfg: options, value: { ...request("auto"), tools: [] } },
       { cfg: options, value: request("none") },
     ]
     for (const item of cases) {

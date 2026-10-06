@@ -3,6 +3,7 @@ import { Desktop } from "@/kilocode/desktop/service"
 import { SelectedWindowTarget } from "@/kilocode/desktop/protocol"
 import type { Request } from "@/kilocode/desktop/protocol"
 import { TaskAuthority } from "./task-authority"
+import { Refusal } from "../session/tool-refusal"
 
 export namespace TaskComputer {
   type Proof = {
@@ -21,7 +22,7 @@ export namespace TaskComputer {
   }) {
     return Effect.gen(function* () {
       if (input.target && input.access !== "computer")
-        throw new Error("A selected desktop target requires computer access")
+        throw new Refusal("task-access", "A selected desktop target requires computer access")
       if (input.access !== "computer") return
       if (!input.desktop) throw new Error("Computer Use is unavailable in this client")
       if (TaskAuthority.read(input.parent.metadata) === "computer")
@@ -60,9 +61,7 @@ export namespace TaskComputer {
         throw new Error("Computer Use child target differs from the requested versioned binding")
       if (
         prior &&
-        (prior.grantID !== result.grantID ||
-          prior.windowID !== result.windowID ||
-          prior.identity !== result.identity)
+        (prior.grantID !== result.grantID || prior.windowID !== result.windowID || prior.identity !== result.identity)
       )
         throw new Error("Computer Use grant changed; the existing child cannot be rebound")
       return { grantID: result.grantID, windowID: result.windowID, identity: result.identity, binding: result.binding }

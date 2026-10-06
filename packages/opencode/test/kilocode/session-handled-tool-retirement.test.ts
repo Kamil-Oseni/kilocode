@@ -383,6 +383,16 @@ it.effect(
             },
             { call: "objective", spec: task, args: { access: "read" }, reason: "task-objective" },
             {
+              call: "file-desktop-target",
+              spec: task,
+              args: {
+                access: "read",
+                brief: { objective: "Inspect the requested file" },
+                computer_target: { version: 1, windowID: "0x111" },
+              },
+              reason: "task-access",
+            },
+            {
               call: "work",
               spec: task,
               args: { access: "read", brief: { objective: "Write the requested file" } },

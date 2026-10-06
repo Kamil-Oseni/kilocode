@@ -184,6 +184,10 @@ export const layer: Layer.Layer<Service, never, Requirements> =
 
           const ignore = Effect.fnUntraced(function* (files: string[]) {
             if (!files.length) return new Set<string>()
+            // kilocode_change start - preserve protected exclusions without probing a nonexistent source repository
+            const excluded = files.filter(stores.contains)
+            if (state.vcs !== "git") return new Set(excluded)
+            // kilocode_change end
             // check-ignore treats a leading colon as pathspec magic but accepts and echoes a protective ./ prefix.
             const checkIgnorePaths = files.map((item) => (item.startsWith(":") ? `./${item}` : item))
             const check = yield* git(
@@ -205,7 +209,6 @@ export const layer: Layer.Layer<Service, never, Requirements> =
               },
             )
             // kilocode_change start - protected runtime files stay excluded without a source repository
-            const excluded = files.filter(stores.contains)
             if (check.code !== 0 && check.code !== 1) return new Set(excluded)
             return new Set([
               ...excluded,

@@ -508,7 +508,20 @@ export namespace MemoryDream {
         receipt: item.receipt,
         reason: item.reason,
       })
-      if (next.state === "deleted" && !value.tombstones.includes(item.candidate.fact))
+      // A committed deletion retires the whole fact, with its receipt and acceptance retained.
+      // Persist both transitions together so a crash cannot reopen a generation between them.
+      if (next.state === "accepted" && item.candidate.changes.every((change) => change.content === null)) {
+        item.state = "deleted"
+        item.reason = "Original review published deletion of every fact target"
+        item.history.push({
+          state: item.state,
+          at: Date.now(),
+          proposal: item.proposal,
+          receipt: item.receipt,
+          reason: item.reason,
+        })
+      }
+      if (item.state === "deleted" && !value.tombstones.includes(item.candidate.fact))
         value.tombstones.push(item.candidate.fact)
       for (const run of value.runs) {
         // review-pending is recorded only after the original model lease has retired.

@@ -191,7 +191,20 @@ export namespace MemoryDreamProposal {
           throw new Error("Published Dream note differs from its receipt")
       }
       const fingerprint = createHash("sha256").update(canonical(receipt)).digest("hex")
-      if (row.state === "accepted" && row.receipt === fingerprint) return { status: "accepted" as const }
+      const deleted = row.candidate.changes.every((item) => item.content === null)
+      if (row.state === "deleted" && row.receipt === fingerprint) return { status: "deleted" as const }
+      if (row.state === "accepted" && row.receipt === fingerprint) {
+        if (!deleted) return { status: "accepted" as const }
+        // Reconcile a receipt saved before deletion suppression was connected, without replay.
+        signal.throwIfAborted()
+        await ledger.settle(root, project, {
+          fingerprint: row.fingerprint,
+          proposal: value.id,
+          state: "deleted",
+          reason: "Original review published deletion of every fact target",
+        })
+        return { status: "deleted" as const }
+      }
       signal.throwIfAborted()
       await ledger.settle(root, project, {
         fingerprint: row.fingerprint,
@@ -199,7 +212,7 @@ export namespace MemoryDreamProposal {
         state: "accepted",
         receipt: fingerprint,
       })
-      return { status: "accepted" as const }
+      return deleted ? { status: "deleted" as const } : { status: "accepted" as const }
     })
   }
   export async function submit(

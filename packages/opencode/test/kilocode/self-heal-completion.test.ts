@@ -120,8 +120,11 @@ const seed = Effect.fn(function* (
   storage: Storage.Interface,
   sessionID: SessionID,
   source?: { root: string; commit: string },
+  description?: string,
 ) {
-  const item = yield* RayaSelfHeal.make(storage).create({ description: `Completion fixture ${crypto.randomUUID()}` })
+  const item = yield* RayaSelfHeal.make(storage).create({
+    description: description ?? `Completion fixture ${crypto.randomUUID()}`,
+  })
   const outcome = {
     id: crypto.randomUUID(),
     itemID: item.id,
@@ -161,6 +164,85 @@ const audit = (callID: string) => ({
     { criterionID: "result", requirement: "Result", passed: true, evidence: [{ callID, summary: "Successful check" }] },
   ],
 })
+
+for (const same of [false, true])
+  it.instance(`repair refinement retains historical proof without transferring completion: same source ${same}`, () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      yield* instance(directory, (storage) =>
+        Effect.gen(function* () {
+          const sessionID = SessionID.make("ses_history")
+          const original = yield* seed(storage, sessionID)
+          const rows: MessageV2.WithParts[] = []
+          const service = goals(storage, rows)
+          yield* service.create(sessionID, "Result", undefined, undefined, original.item.id)
+          const proof = transcript({ sessionID, tool: "bash", exit: 0 })
+          rows.push(...proof.rows)
+          yield* service.update(sessionID, { status: "complete", audit: audit(proof.part!.callID) })
+          const healing = RayaSelfHeal.make(storage)
+          const receipt = (yield* healing.get(original.item.id))!.completion!
+          const current = SessionID.make("ses_history_current")
+          const repeated = yield* seed(
+            storage,
+            current,
+            same ? original.outcome.source : { root: "/different/raya", commit: "b".repeat(40) },
+            original.item.description,
+          )
+          const owner = goals(storage, [])
+          yield* owner.create(current, "Result", undefined, undefined, repeated.item.id)
+          const info = yield* selfHealTools(owner, healing).refine
+          const tool = yield* info.init()
+          const ctx = {
+            sessionID: current,
+            messageID: MessageID.ascending(),
+            agent: "chief",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          }
+          const refused = yield* tool.execute({ duplicateOf: original.item.id }, ctx)
+          expect(refused.title).toBe("Duplicate target missing")
+          expect((yield* healing.get(repeated.item.id))?.status).toBe("triaged")
+          const result = yield* tool.execute({}, ctx)
+          expect(result.output).toContain(original.item.id)
+          expect(result.output).toContain(receipt.attemptID)
+          expect(result.output).toContain(receipt.source.commit)
+          expect(result.output).toContain(proof.part!.callID)
+          expect(result.output).toContain(receipt.goal.audit.requirements[0].evidence[0].record.digest)
+          expect(result.output).toContain(same ? "Same recorded source" : "Different source version or project")
+          expect(result.output).toContain("environment compatibility is unverified")
+          expect(result.output).toContain("Collect fresh evidence")
+          expect((yield* healing.get(repeated.item.id))?.completion).toBeUndefined()
+          expect((yield* healing.get(original.item.id))?.completion).toEqual(receipt)
+          const retained = (yield* healing.get(repeated.item.id))!
+          expect(retained.title).toBe(repeated.item.title)
+          expect(retained.category).toBe(repeated.item.category)
+          expect(retained.severity).toBe(repeated.item.severity)
+          expect(retained.explanation).toBe(repeated.item.explanation)
+          yield* tool.execute({ title: "  Revised incident  ", approach: "  " }, ctx)
+          const changed = (yield* healing.get(repeated.item.id))!
+          expect(changed.title).toBe("Revised incident")
+          expect(changed.approach).toBe(repeated.item.approach)
+          const cancelled = yield* healing.create({ description: "Explicitly closed historical target" })
+          yield* healing.update(cancelled.id, { status: "cancelled" })
+          expect((yield* tool.execute({ duplicateOf: cancelled.id }, ctx)).title).toBe("Duplicate target missing")
+          yield* storage.remove([
+            "raya",
+            "self-heal",
+            "completion",
+            createHash("sha256").update(original.item.id).digest("hex"),
+          ])
+          const missing = yield* tool.execute({}, ctx)
+          expect(missing.output).toContain("Treat its explanation as a hypothesis")
+          expect(missing.output).not.toContain("Historical repair evidence")
+          const open = yield* healing.create({ description: "Matching open repair target" })
+          expect((yield* tool.execute({ duplicateOf: open.id }, ctx)).title).toBe("Marked duplicate")
+          expect((yield* healing.get(repeated.item.id))?.duplicateOf).toBe(open.id)
+        }),
+      )
+    }),
+  )
 
 for (const changed of [false, true])
   it.live(

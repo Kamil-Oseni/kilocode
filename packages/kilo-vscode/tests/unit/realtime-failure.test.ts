@@ -1,6 +1,22 @@
-import { expect, test } from "bun:test"
-import { Room, RoomEvent } from "livekit-client"
+import { afterEach, beforeEach, expect, test } from "bun:test"
+import { ConnectionState, Room, RoomEvent } from "livekit-client"
 import { RealtimeVoice, type RealtimeConnection } from "../../webview-ui/src/context/realtime-voice"
+import { Stream, publication } from "../fixtures/realtime-media"
+
+const active: RealtimeVoice[] = []
+let saved: PropertyDescriptor | undefined
+beforeEach(() => {
+  saved = Object.getOwnPropertyDescriptor(globalThis, "MediaStream")
+  Object.defineProperty(globalThis, "MediaStream", { configurable: true, value: Stream })
+})
+afterEach(async () => {
+  try {
+    for (const voice of active.splice(0)) await voice.stop()
+  } finally {
+    if (saved) Object.defineProperty(globalThis, "MediaStream", saved)
+    if (!saved) Reflect.deleteProperty(globalThis, "MediaStream")
+  }
+})
 
 function connection(id: string): RealtimeConnection {
   return {
@@ -28,22 +44,28 @@ function fixture(connect?: (index: number) => Promise<void>) {
     },
     (options) => {
       const room = new Room(options)
+      const audio = publication()
+      room.localParticipant.trackPublications.set(audio.pub.trackSid, audio.pub)
+      room.localParticipant.audioTrackPublications.set(audio.pub.trackSid, audio.pub)
       room.connect = async () => {
         await connect?.(rooms.indexOf(room))
+        room.state = ConnectionState.Connected
       }
       room.startAudio = async () => {}
       room.localParticipant.setMicrophoneEnabled = async (enabled) => {
         if (!enabled) calls.disabled++
-        return undefined
+        return enabled ? audio.pub : undefined
       }
       room.disconnect = async () => {
         calls.disconnected++
+        room.state = ConnectionState.Disconnected
         room.emit(RoomEvent.Disconnected)
       }
       rooms.push(room)
       return room
     },
   )
+  active.push(voice)
   return { voice, rooms, statuses, errors, fallback, calls }
 }
 

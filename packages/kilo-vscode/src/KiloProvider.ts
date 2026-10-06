@@ -15,7 +15,7 @@ import type {
 import { fingerprint } from "./edit-review/revision"
 // raya_change - Raya extension namespace
 import * as path from "path"
-import { assertSaved, failure } from "./edit-review/unsaved"
+import { assertSaved, failure, StaleReview } from "./edit-review/unsaved"
 import { forget, remember } from "./edit-review/attempts"
 import { apply, forget as erase, listed, record, reopen, scoped } from "./edit-review/undone"
 import { existsSync } from "fs"
@@ -6008,7 +6008,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (current()) this.postMessage({ type: "error", message: "Failed to undo file changes", sessionID })
       throw error
     }
-    if (!current()) return
+    if (!current()) throw new StaleReview()
     if (!data) throw new Error("Discard returned no session")
     if (this.currentSession?.id === sessionID) this.inEditorReview?.refresh()
     this.lastReviewHash = ""
@@ -6045,7 +6045,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       requestID,
     })
     if (error) throw error
-    if (!current()) return
+    if (!current()) throw new StaleReview()
     if (!data) throw new Error("Keep returned no session")
     this.lastReviewHash = ""
     this.scheduleReview(sessionID)

@@ -8,8 +8,15 @@ export class UnsavedReview extends Error {
   }
 }
 
+export class StaleReview extends Error {
+  constructor() {
+    super("Review connection or workspace changed before completion. Refresh review before retrying.")
+    this.name = "StaleReview"
+  }
+}
+
 export function failure(error: unknown, fallback: string) {
-  if (error instanceof UnsavedReview) return error.message
+  if (error instanceof UnsavedReview || error instanceof StaleReview) return error.message
   if (
     error &&
     typeof error === "object" &&

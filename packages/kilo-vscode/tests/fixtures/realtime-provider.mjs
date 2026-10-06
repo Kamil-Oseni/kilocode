@@ -115,6 +115,7 @@ try {
     },
   })
   await tick()
+  voice.setMode("hands-free")
   cleanup = 0
   sent.length = 0
   ready("old")

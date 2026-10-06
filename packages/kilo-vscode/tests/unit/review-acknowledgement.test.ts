@@ -8,6 +8,15 @@ import { tmpdir } from "node:os"
 import { forget, remember } from "../../src/edit-review/attempts"
 import { forget as erase, listed, record } from "../../src/edit-review/undone"
 
+function connected(client: unknown) {
+  const provider = new KiloProvider(
+    {} as never,
+    { getClient: () => client, unregisterVisible: () => {}, unregisterAttached: () => {} } as never,
+  )
+  Object.assign(provider, { connectionState: "connected" })
+  return provider
+}
+
 describe("host review acknowledgements", () => {
   test("transient diff failure still loads revisions for Keep all and Undo all", async () => {
     let calls = 0
@@ -19,7 +28,7 @@ describe("host review acknowledgements", () => {
         return Response.json([{ file: "chat.txt", patch: "+hello", additions: 1, deletions: 0, reviewed: "" }])
       },
     })
-    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const provider = connected(client)
     const messages: unknown[] = []
     provider.postMessage = (message) => messages.push(message)
     const host = provider as unknown as {
@@ -51,7 +60,7 @@ describe("host review acknowledgements", () => {
         return Response.json({ message: "invalid session" }, { status: 404 })
       },
     })
-    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const provider = connected(client)
     const messages: unknown[] = []
     provider.postMessage = (message) => messages.push(message)
     const host = provider as unknown as { loadReview: (session: string) => Promise<void> }
@@ -64,7 +73,7 @@ describe("host review acknowledgements", () => {
 
   test("Git-only fallback reports its workspace scope and full file count", async () => {
     const client = { session: { diff: async () => ({ data: [] }) } }
-    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const provider = connected(client)
     const messages: unknown[] = []
     provider.postMessage = (message) => messages.push(message)
     const host = provider as unknown as {
@@ -96,7 +105,7 @@ describe("host review acknowledgements", () => {
         diff: async () => ({ data: [{ file: "chat.txt", before: "", after: "hello", additions: 1, deletions: 0 }] }),
       },
     }
-    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const provider = connected(client)
     const messages: unknown[] = []
     provider.postMessage = (message) => messages.push(message)
     const host = provider as unknown as {
@@ -129,7 +138,7 @@ describe("host review acknowledgements", () => {
         },
       },
     }
-    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const provider = connected(client)
     const messages: unknown[] = []
     provider.postMessage = (message) => messages.push(message)
     const host = provider as unknown as {
@@ -225,6 +234,111 @@ describe("host review acknowledgements", () => {
   })
 
   for (const action of ["keep", "undo"] as const) {
+    test(`${action} refuses disconnected review without dispatching or accepting`, async () => {
+      let calls = 0
+      let accepted = 0
+      const client = createKiloClient({
+        baseUrl: "http://review.test",
+        fetch: async () => {
+          calls++
+          return Response.json({ id: "session-a" })
+        },
+      })
+      const provider = connected(client)
+      const messages: unknown[] = []
+      provider.postMessage = (message) => messages.push(message)
+      provider.setInEditorReview({
+        refresh() {},
+        dismissAll() {},
+        reset() {},
+        capture: () => () => accepted++,
+      })
+      const host = provider as unknown as {
+        connectionState: "disconnected"
+        scheduleReview(): void
+        reviewAction(sid: string, action: "keep" | "undo", request: string): Promise<void>
+      }
+      host.connectionState = "disconnected"
+      host.scheduleReview = () => {}
+      try {
+        await host.reviewAction("session-a", action, "request-a")
+        expect(calls).toBe(0)
+        expect(accepted).toBe(0)
+        expect(messages).toContainEqual({
+          type: "editReviewResult",
+          sessionID: "session-a",
+          requestID: "request-a",
+          action,
+          error: `Could not ${action} file changes. Review remains available.`,
+        })
+      } finally {
+        provider.dispose()
+      }
+    })
+
+    for (const change of ["connection", "generation", "workspace"] as const)
+      test(`${action} refuses a stale completed review after ${change} changes`, async () => {
+        const arrival = Promise.withResolvers<void>()
+        const reply = Promise.withResolvers<Response>()
+        let calls = 0
+        const client = createKiloClient({
+          baseUrl: "http://review.test",
+          fetch: async () => {
+            calls++
+            arrival.resolve()
+            return reply.promise
+          },
+        })
+        const provider = connected(client)
+        const messages: unknown[] = []
+        const scope = { dir: process.cwd() }
+        let accepted = 0
+        provider.postMessage = (message) => messages.push(message)
+        provider.setInEditorReview({
+          refresh() {},
+          dismissAll() {},
+          reset() {},
+          capture: () => () => accepted++,
+        })
+        const host = provider as unknown as {
+          connectionState: "connected" | "disconnected"
+          connectionGeneration: number
+          getWorkspaceDirectory(): string
+          scheduleReview(): void
+          reviewAction(sid: string, action: "keep" | "undo", request: string): Promise<void>
+        }
+        host.getWorkspaceDirectory = () => scope.dir
+        host.scheduleReview = () => {}
+        try {
+          const pending = host.reviewAction("session-a", action, "request-a")
+          await arrival.promise
+          if (change === "connection") host.connectionState = "disconnected"
+          if (change === "generation") host.connectionGeneration++
+          if (change === "workspace") scope.dir = path.join(scope.dir, "changed")
+          reply.resolve(Response.json({ id: "session-a", title: "Task", time: { created: 1, updated: 2 } }))
+          await pending
+          expect(calls).toBe(1)
+          expect(accepted).toBe(0)
+          expect(messages).not.toContainEqual({
+            type: "editReviewResult",
+            sessionID: "session-a",
+            requestID: "request-a",
+            action,
+          })
+          expect(messages).toContainEqual({
+            type: "editReviewResult",
+            sessionID: "session-a",
+            requestID: "request-a",
+            action,
+            error: "Review connection or workspace changed before completion. Refresh review before retrying.",
+          })
+          expect(messages).not.toContainEqual(expect.objectContaining({ type: "sessionUpdated" }))
+        } finally {
+          reply.resolve(Response.json({ id: "session-a" }))
+          provider.dispose()
+        }
+      })
+
     test(`${action} retains the persisted ID until the matching webview acknowledges delivery`, async () => {
       const directory = await mkdtemp(path.join(tmpdir(), "raya-delivery-"))
       const file = path.join(directory, "workspace.json")
@@ -246,7 +360,7 @@ describe("host review acknowledgements", () => {
             values[key] = value
           },
         }
-        const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+        const provider = connected(client)
         const messages: unknown[] = []
         provider.postMessage = (message) => {
           messages.push(message)
@@ -323,7 +437,7 @@ describe("host review acknowledgements", () => {
           return Response.json({ id: "session-a" })
         },
       })
-      const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+      const provider = connected(client)
       const messages: unknown[] = []
       provider.postMessage = (message) => {
         messages.push(message)
@@ -368,7 +482,7 @@ describe("host review acknowledgements", () => {
           return Response.json({ id: "session-a", title: "Task", time: { created: 1, updated: 2 } })
         },
       })
-      const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+      const provider = connected(client)
       const messages: unknown[] = []
       provider.postMessage = (message) => {
         messages.push(message)
@@ -408,7 +522,7 @@ describe("host review acknowledgements", () => {
         baseUrl: "http://review.test",
         fetch: async () => Response.json({ message: "failure" }, { status: 500 }),
       })
-      const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+      const provider = connected(client)
       const messages: unknown[] = []
       let accepted = 0
       provider.postMessage = (message) => {
@@ -450,7 +564,7 @@ describe("host review acknowledgements", () => {
           })
         },
       })
-      const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+      const provider = connected(client)
       const messages: unknown[] = []
       let accepted = 0
       provider.postMessage = (message) => {
@@ -520,7 +634,7 @@ describe("host review acknowledgements", () => {
         values[key] = value
       },
     }
-    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const provider = connected(client)
     const messages: unknown[] = []
     provider.postMessage = (message) => {
       messages.push(message)
@@ -580,7 +694,7 @@ describe("host review acknowledgements", () => {
       baseUrl: "http://review.test",
       fetch: async () => Response.json({ id: "session-a", title: "Task", time: { created: 1, updated: 2 } }),
     })
-    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const provider = connected(client)
     const messages: unknown[] = []
     let accepted = 0
     provider.postMessage = (message) => {
@@ -660,7 +774,7 @@ describe("host review acknowledgements", () => {
         return Response.json([])
       },
     })
-    const provider = new KiloProvider({} as never, { getClient: () => client } as never)
+    const provider = connected(client)
     const host = provider as unknown as {
       extensionContext: { workspaceState: typeof state }
       refreshReview(sessionID?: string): Promise<void>

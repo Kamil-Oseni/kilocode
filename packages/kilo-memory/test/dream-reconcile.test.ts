@@ -81,7 +81,28 @@ check("actual proposal cancellation and committed receipts reconcile original Dr
   expect(await MemoryFiles.dreamProposal.reconcile(root, project, pending, signal)).toEqual({ status: "pending" })
   expect(await MemoryFiles.dreamProposal.reconcile(root, project, pending, signal)).toEqual({ status: "pending" })
   await MemoryFiles.dream.advance(root, project, { id: run.id, owner: run.owner, phase: "review-pending" })
-  const applied = await execute({ action: "apply", id, project, digest: pending.digest })
+  const edited = await execute({
+    action: "edit",
+    id,
+    project,
+    digest: pending.digest,
+    request: {
+      sources: pending.sources,
+      changes: [{ ...candidate.changes[0], content: "Use a calm and warm voice." }],
+    },
+  })
+  await expect(MemoryFiles.dreamProposal.reconcile(root, project, edited, signal)).rejects.toThrow("candidate changed")
+  expect((await MemoryFiles.dreamProposal.revise(root, project, edited, signal)).status).toBe("pending")
+  const revisions = await MemoryFiles.dream.list(root, project)
+  expect(revisions.rows.map((item) => item.state)).toEqual(["superseded", "pending"])
+  expect(revisions.rows[0].history.some((item) => item.proposal === id)).toBe(true)
+  expect(revisions.rows[1].proposal).toBe(id)
+  expect(revisions.runs[0].candidates).toEqual([revisions.rows[1].fingerprint])
+  const checkpoint = await readFile(path.join(root, "dream.json"), "utf8")
+  await MemoryFiles.dreamProposal.revise(root, project, edited, signal)
+  expect(await readFile(path.join(root, "dream.json"), "utf8")).toBe(checkpoint)
+  await expect(MemoryFiles.dreamProposal.revise(root, project, pending, signal)).rejects.toThrow("already reviewed")
+  const applied = await execute({ action: "apply", id, project, digest: edited.digest })
   expect(applied.receipt.status).toBe("committed")
   await expect(
     MemoryFiles.dreamProposal.reconcile(root, project, { ...applied, digest: "b".repeat(64) }, signal),
@@ -113,6 +134,27 @@ check("actual proposal cancellation and committed receipts reconcile original Dr
   expect(await MemoryFiles.dreamProposal.reconcile(root, project, cancelled, signal)).toEqual({ status: "rejected" })
   expect(await MemoryFiles.dream.stage(root, project, [changed])).toEqual([])
   await expect(readFile(path.join(root, "Preferences/walk.md"))).rejects.toThrow()
+  const unicode = {
+    ...candidate,
+    fact: "d".repeat(64),
+    changes: ["Preferences/😀.md", "Preferences/\uE000.md"].map((path) => ({
+      path,
+      expected: null,
+      content: "Synthetic Unicode receipt check.",
+    })),
+  }
+  const [key] = await MemoryFiles.dream.stage(root, project, [unicode])
+  const identity = randomUUID()
+  await MemoryFiles.dream.submit(root, project, key, identity)
+  const preview = await execute({
+    action: "propose",
+    id: identity,
+    project,
+    request: { sources: pending.sources, changes: unicode.changes },
+  })
+  await MemoryFiles.dreamProposal.reconcile(root, project, preview, signal)
+  const published = await execute({ action: "apply", id: identity, project, digest: preview.digest })
+  expect(await MemoryFiles.dreamProposal.reconcile(root, project, published, signal)).toEqual({ status: "accepted" })
   expect(
     await MemoryFiles.dreamProposal.reconcile(root, project, { id: randomUUID(), project, status: "pending" }, signal),
   ).toEqual({ status: "untracked" })

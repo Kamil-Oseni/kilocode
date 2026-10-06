@@ -216,6 +216,48 @@ export namespace MemoryDream {
     return queue(root, project, () => read(root, project))
   }
 
+  /** The native review owner may correct content under the same original pending proposal ID. */
+  export function revise(root: string, project: string, proposal: string, input: Candidate) {
+    const selected = normalize(input)
+    return queue(root, project, async () => {
+      z.string().uuid().parse(proposal)
+      const value = await read(root, project)
+      const prior = value.rows.find((item) => item.proposal === proposal)
+      if (!prior || prior.state !== "pending") throw new Error("Original pending Dream proposal is unavailable")
+      if (selected.fingerprint === prior.fingerprint) return prior.fingerprint
+      if (
+        selected.candidate.fact !== prior.candidate.fact ||
+        selected.candidate.kind !== prior.candidate.kind ||
+        canonical(selected.candidate.sources) !== canonical(prior.candidate.sources) ||
+        canonical(selected.candidate.changes.map((item) => ({ path: item.path, expected: item.expected }))) !==
+          canonical(prior.candidate.changes.map((item) => ({ path: item.path, expected: item.expected })))
+      )
+        throw new Error("Dream correction cannot change original fact, evidence or target baselines")
+      if (
+        value.tombstones.includes(prior.candidate.fact) ||
+        value.rows.some((item) => item.fingerprint === selected.fingerprint)
+      )
+        throw new Error("Dream correction was already reviewed or deleted")
+      prior.state = "superseded"
+      prior.proposal = undefined
+      prior.reason = "User corrected the original pending proposal"
+      prior.history.push({ state: "superseded", at: Date.now(), reason: prior.reason })
+      value.rows.push({
+        ...selected,
+        state: "pending",
+        proposal,
+        history: [
+          { state: "pending", at: Date.now(), proposal, reason: "User correction; publication still requires review" },
+        ],
+        reason: "User correction; publication still requires review",
+      })
+      for (const run of value.runs)
+        run.candidates = run.candidates.map((key) => (key === prior.fingerprint ? selected.fingerprint : key))
+      await save(root, value)
+      return selected.fingerprint
+    })
+  }
+
   /** Explicit host-selected slots retain fact identity across runs and authorized note moves. */
   export async function bind(
     root: string,

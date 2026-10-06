@@ -3,7 +3,7 @@ import { manifest, metadata } from "./manifest"
 import { BrainSettings } from "./settings"
 import { BrainService } from "./service"
 import { Failure } from "./client"
-import type { BrainRequest, BrainResponse, BrainProposalCommand, BrainProposal } from "../shared/second-brain"
+import type { BrainRequest, BrainResponse, BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 import { isDeepStrictEqual } from "node:util"
 import * as path from "node:path"
 import { BrainControl, type Review } from "./control"
@@ -346,10 +346,7 @@ export class BrainHost {
         }
       }
       const proposals = await this.service.proposal(body)
-      if (["read", "cancel", "apply"].includes(body.action) && !("proposals" in proposals)) {
-        if (!this.settings.current(cfg.setup)) throw new Error("Memory setup changed before Dream reconciliation")
-        await MemoryFiles.dreamProposal.reconcile(cfg.setup.root, body.project, proposals, AbortSignal.timeout(15000))
-      }
+      await this.trackDream(body, proposals, cfg.setup.root, () => this.settings.current(cfg.setup))
       post({ type: "secondBrainState", id: message.id, state: { ...(await this.service.status()), proposals } })
     } catch {
       post({
@@ -358,6 +355,18 @@ export class BrainHost {
         state: { configured: true, status: "unavailable", code: "proposal_review_required", results: [] },
       })
     }
+  }
+
+  private async trackDream(
+    body: BrainProposalCommand,
+    result: BrainProposalResult,
+    root: string,
+    current: () => boolean,
+  ) {
+    if (!["read", "cancel", "apply", "edit"].includes(body.action) || "proposals" in result) return
+    if (!current()) throw new Error("Memory setup changed before Dream review reconciliation")
+    const settle = body.action === "edit" ? MemoryFiles.dreamProposal.revise : MemoryFiles.dreamProposal.reconcile
+    await settle(root, body.project, result, AbortSignal.timeout(15000))
   }
 
   private async approve(

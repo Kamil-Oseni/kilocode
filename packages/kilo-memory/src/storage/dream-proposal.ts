@@ -6,6 +6,7 @@ import type { MemoryDream } from "./dream"
 import { MemoryDream as ledger } from "./dream"
 import { MemoryDreamInput } from "./dream-input"
 import { MemoryFs } from "./fs"
+import { MemoryRedact } from "../capture/redact"
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const relative = z
@@ -72,14 +73,60 @@ function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`
   if (value && typeof value === "object")
     return `{${Object.entries(value)
-      .sort(([one], [two]) => (one < two ? -1 : one > two ? 1 : 0))
+      .sort(([one], [two]) => Buffer.compare(Buffer.from(one), Buffer.from(two)))
       .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
       .join(",")}}`
   return JSON.stringify(value)
 }
 
-/** Trusted host supplies its existing proposal owner. This adapter creates pending review only. */
+function ordered<T extends { path: string }>(items: readonly T[]): T[] {
+  return [...items].sort((one, two) => (one.path < two.path ? -1 : one.path > two.path ? 1 : 0))
+}
+
+/** Trusted host supplies its existing proposal owner. Review outcomes never authorize replay. */
 export namespace MemoryDreamProposal {
+  /** Only the native user edit flow calls this; a model cannot revise review history. */
+  export async function revise(root: string, project: string, input: unknown, signal: AbortSignal) {
+    signal.throwIfAborted()
+    if (Buffer.byteLength(JSON.stringify(input) ?? "") > 3000000) throw new Error("Dream correction exceeds its bound")
+    const identity = z.object({ id: z.string().uuid(), project: z.string() }).parse(input)
+    if (identity.project !== project) throw new Error("Original Dream correction project differs")
+    return MemoryFs.queue(path.resolve(root), async () => {
+      const saved = await ledger.list(root, project)
+      const row = saved.rows.find((item) => item.proposal === identity.id)
+      if (!row) return { status: "untracked" as const }
+      const value = proposal.parse(input)
+      const { digest, ...proof } = value
+      if (createHash("sha256").update(canonical(proof)).digest("hex") !== digest)
+        throw new Error("Dream correction digest differs")
+      if (
+        !isDeepStrictEqual(
+          ordered(value.sources),
+          ordered(
+            row.candidate.sources.map((item) => ({
+              path: path.join(project, item.path),
+              sha256: item.sha256,
+              kind: "document",
+              event_time: null,
+            })),
+          ),
+        )
+      )
+        throw new Error("Dream correction cannot change original evidence")
+      for (const item of value.changes)
+        if (
+          (item.before === null ? null : createHash("sha256").update(item.before).digest("hex")) !== item.expected ||
+          (item.content !== null && MemoryRedact.text(item.content) !== item.content)
+        )
+          throw new Error("Dream correction baseline differs or contains a secret")
+      signal.throwIfAborted()
+      const fingerprint = await ledger.revise(root, project, value.id, {
+        ...row.candidate,
+        changes: value.changes.map((item) => ({ path: item.path, expected: item.expected, content: item.content })),
+      })
+      return { status: "pending" as const, fingerprint }
+    })
+  }
   /** Reconcile a retained original proposal; this never retries a write or certifies a repair. */
   export async function reconcile(root: string, project: string, input: unknown, signal: AbortSignal) {
     signal.throwIfAborted()
@@ -102,10 +149,10 @@ export namespace MemoryDreamProposal {
         event_time: null,
       }))
       if (
-        !isDeepStrictEqual(sources, value.sources) ||
+        !isDeepStrictEqual(ordered(sources), ordered(value.sources)) ||
         !isDeepStrictEqual(
-          row.candidate.changes,
-          value.changes.map((item) => ({ path: item.path, expected: item.expected, content: item.content })),
+          ordered(row.candidate.changes),
+          ordered(value.changes.map((item) => ({ path: item.path, expected: item.expected, content: item.content }))),
         )
       )
         throw new Error("Reviewed Dream candidate changed; retain original reconciliation")
@@ -195,14 +242,14 @@ export namespace MemoryDreamProposal {
     if (
       reply.id !== selected.id ||
       reply.project !== selected.project ||
-      !isDeepStrictEqual(reply.sources, selected.request.sources) ||
+      !isDeepStrictEqual(ordered(reply.sources), ordered(selected.request.sources)) ||
       reply.changes.length !== selected.request.changes.length
     )
       throw new Error("Original Dream proposal reply differs")
-    for (const [index, item] of reply.changes.entries()) {
+    for (const [index, item] of ordered(reply.changes).entries()) {
       const { before, ...actual } = item
       if (
-        !isDeepStrictEqual(actual, selected.request.changes[index]) ||
+        !isDeepStrictEqual(actual, ordered(selected.request.changes)[index]) ||
         (before === null ? null : createHash("sha256").update(before).digest("hex")) !== item.expected
       )
         throw new Error("Original Dream proposal changes or baseline differ")

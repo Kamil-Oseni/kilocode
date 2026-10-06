@@ -84,3 +84,9 @@ The October 6 guide formatting pass removes redundant blank lines, including gap
 ## October 6 curation recovery supplement
 
 `D:/RayaBackups/Independent-20261006-curation/verification.json` records six stable source/copy matches totaling 89,318 bytes: the updated Raya preferences, their dated October 6 source note, the health review and dashboard screenshot, the current checklist and recovery guide. This supplements the older curated snapshot; it does not replace it. The prior preferences are also preserved at `D:/Raya/SecondBrain/System/Versions/maintenance-20261006/Preferences/Raya.md`. Automatic capture and index rebuilding were not enabled. These are same-PC copies of selected files, not a whole-vault snapshot, software installer, off-PC backup, Home Assistant restore or semantic retrieval test.
+
+## Audited replacement candidate retained outside temporary storage
+
+The exact `4bfa78703d` candidate and its three independent archive/bin, native-debug/recipe and full expected-inventory proofs are saved in `D:/RayaBackups/ValidatedCandidates/4bfa78703d-1791266650994`. The VSIX is 190,493,982 bytes with SHA-256 `95e5fd981781e148eb6d9a2ba6b6ad605c2647923b1baf3223cf9d1c4851650f`. Source and copy were independently rehashed and matched. This is a same-PC recovery copy; it does not change the active rollback vault or demonstrate installation, rollback or an off-PC backup.
+
+The original copy attempt exited 1 after writing and flushing the archive because it required cross-interface ctime equality. Python's path stat and held-handle stat reported different ctime values on Windows. Revalidation retained every field within each interface, required stable path and handle fields, and matched device/inode/size/mtime/link count across interfaces. Both actual ctime values and the earlier failures are preserved in `verification.json` and `.tmp/new-pc/4bfa-candidate-recovery-copy-independent.json`; the original failed attempt is not credited as passing.

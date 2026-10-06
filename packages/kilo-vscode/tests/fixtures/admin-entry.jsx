@@ -165,6 +165,16 @@ window.acquireVsCodeApi = () => ({
         window.__confirmStop = () => emit(reply)
         return
       }
+      if (["workers-failed", "workers-longerror"].includes(state) && message.type === "cancelBackgroundJob") {
+        emit({
+          ...reply,
+          error:
+            state === "workers-longerror"
+              ? "x".repeat(2000)
+              : "Worker cancellation could not be confirmed. Refresh status.",
+        })
+        return
+      }
       emit(reply)
       return
     }

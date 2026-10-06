@@ -15,7 +15,6 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { getToolInfo } from "@kilocode/kilo-ui/message-part"
-import type { BackgroundJobInfo } from "../../types/messages"
 import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
 import { costLabel } from "../../context/accounting"
@@ -34,6 +33,7 @@ import {
   reconcileBackgroundAgents,
   showBackgroundAgent,
   type BackgroundAgent,
+  type BackgroundAgentSnapshot,
 } from "./background-agents"
 import { openSubagent } from "./open-subagent"
 import { loadAgentView, saveAgentView } from "./background-agent-state"
@@ -46,7 +46,8 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const vscode = useVSCode()
   const worktree = useWorktreeMode()
   const [open, setOpen] = createSignal(false)
-  const [snapshot, setSnapshot] = createSignal({ jobs: [] as BackgroundJobInfo[], loaded: false, unavailable: false })
+  const [snapshot, setSnapshot] = createSignal<BackgroundAgentSnapshot>({ jobs: [], loaded: false, unavailable: false })
+  const [refreshing, setRefreshing] = createSignal(false)
   const [hidden, setHidden] = createSignal<Set<string>>(new Set())
   const [mounted, setMounted] = createSignal(false)
   const [now, setNow] = createSignal(Date.now())
@@ -63,6 +64,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       setHidden(new Set(saved.hidden))
       setSnapshot({ jobs: [], loaded: false, unavailable: false })
       pending = undefined
+      setRefreshing(false)
       setCancelling()
       if (mounted()) requestJobs()
     }),
@@ -78,6 +80,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     }
     pending = `${id}:${++revision}`
     deadline = Date.now() + 15_000
+    setRefreshing(true)
     vscode.postMessage({ type: "requestBackgroundJobs", sessionID: id, requestID: pending })
   }
 
@@ -88,6 +91,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       if (message.sessionID !== session.currentSessionID()) return
       if (message.requestID !== pending) return
       pending = undefined
+      setRefreshing(false)
       setCancelling()
       setSnapshot((state) => reconcileBackgroundAgents(state, message))
     })
@@ -234,6 +238,18 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
               />
             </button>
           </Show>
+          <Show when={snapshot().unavailable}>
+            <Button
+              icon="refresh"
+              variant="ghost"
+              size="small"
+              disabled={refreshing()}
+              aria-label={language.t("common.refresh")}
+              onClick={requestJobs}
+            >
+              {language.t("common.refresh")}
+            </Button>
+          </Show>
           <Show
             when={!props.readonly && !snapshot().unavailable && visible().some((agent) => agent.status !== "running")}
           >
@@ -252,6 +268,12 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
         </div>
         <Show when={open()}>
           <div data-slot="task-header-todos-list">
+            <Show when={snapshot().unavailable}>
+              <div data-slot="task-header-agent-attention" role="status">
+                <Icon name="warning" size="small" />
+                <span>{snapshot().error || language.t("task.backgroundAgents.unavailable")}</span>
+              </div>
+            </Show>
             <Show when={!snapshot().unavailable && visible().some((agent) => agent.permission || agent.question)}>
               <div data-slot="task-header-agent-attention">
                 <Icon name="warning" size="small" />

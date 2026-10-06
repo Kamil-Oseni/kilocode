@@ -117,6 +117,38 @@ test("a lost Stop receipt refreshes observed worker state without replaying canc
   await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
 })
 
+test("worker failure explains uncertainty and refreshes without replaying Stop", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.clock.install()
+  await page.goto("/?state=workers-failed")
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  await workers.getByRole("button", { name: "Stop: Code", exact: true }).click()
+  await expect(workers.getByRole("status")).toHaveText("Worker cancellation could not be confirmed. Refresh status.")
+  await expect(workers.getByText("Cancelled", { exact: true })).toHaveCount(0)
+  await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toHaveCount(0)
+  await audit(page)
+  await workers.getByRole("button", { name: "Refresh", exact: true }).click()
+  await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
+  await expect(workers.getByRole("status")).toHaveCount(0)
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toHaveLength(1)
+  expect(sent.filter((message: { type: string }) => message.type === "requestBackgroundJobs")).toHaveLength(2)
+})
+
+test("long worker failure details stay bounded and wrap at narrow widths", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.clock.install()
+  await page.goto("/?state=workers-longerror")
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  await workers.getByRole("button", { name: "Stop: Code", exact: true }).click()
+  const notice = workers.getByRole("status")
+  await expect(notice).toHaveText("x".repeat(800))
+  expect(await notice.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await audit(page)
+})
+
 test("Activity and health exposes the actual worker strip and scoped Stop command", async ({ page }) => {
   await page.goto("/?state=workers-delayed")
   const workers = page.getByRole("region", { name: "Current conversation workers" })

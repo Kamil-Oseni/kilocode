@@ -79,7 +79,7 @@ describe("backgroundAgents", () => {
     const initial = { jobs: [], loaded: false, unavailable: false }
     const first = reconcileBackgroundAgents(initial, message([running]))
     const failed = reconcileBackgroundAgents(first, message([], "backend unavailable"))
-    expect(failed).toEqual({ jobs: [running], loaded: true, unavailable: true })
+    expect(failed).toEqual({ jobs: [running], loaded: true, unavailable: true, error: "backend unavailable" })
     expect(reconcileBackgroundAgents(failed, message([{ ...running, status: "completed" }]))).toEqual({
       jobs: [{ ...running, status: "completed" }],
       loaded: true,
@@ -89,7 +89,29 @@ describe("backgroundAgents", () => {
       jobs: [],
       loaded: false,
       unavailable: true,
+      error: "backend unavailable",
     })
+  })
+
+  it("bounds failure detail while preserving last-known workers", () => {
+    const state = { jobs: [], loaded: true, unavailable: false }
+    const failed = reconcileBackgroundAgents(state, {
+      type: "backgroundJobsLoaded",
+      sessionID: "parent",
+      requestID: "request",
+      jobs: [],
+      error: `  ${"x".repeat(2000)}  `,
+    })
+    expect(failed.error).toHaveLength(800)
+    expect(failed.jobs).toBe(state.jobs)
+    expect(
+      reconcileBackgroundAgents(failed, {
+        type: "backgroundJobsLoaded",
+        sessionID: "parent",
+        requestID: "fresh",
+        jobs: [],
+      }).error,
+    ).toBeUndefined()
   })
 
   it("keeps the specialist name separate from the task in the activity row", () => {

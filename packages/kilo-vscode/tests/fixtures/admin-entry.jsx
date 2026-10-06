@@ -8,7 +8,7 @@ import { AdminView } from "../../webview-ui/src/components/admin/AdminView"
 import { BrainProposals } from "../../webview-ui/src/components/settings/BrainProposals"
 import { SecondBrain } from "../../webview-ui/src/components/settings/SecondBrain"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
-import { createSignal } from "solid-js"
+import { createSignal, Show } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 
 const params = new URLSearchParams(location.search)
@@ -160,6 +160,16 @@ window.acquireVsCodeApi = () => ({
               },
             ]
           : [],
+      }
+      if (state === "workers-held") {
+        window.__workerReplies ??= []
+        window.__workerReplies.push((status) =>
+          emit({
+            ...reply,
+            jobs: reply.jobs.map((job) => ({ ...job, status })),
+          }),
+        )
+        return
       }
       if (state === "workers-delayed" && message.type === "cancelBackgroundJob") {
         window.__confirmStop = () => emit(reply)
@@ -331,10 +341,23 @@ function ProposalFixture() {
   )
 }
 
+function AdminFixture() {
+  const [visible, setVisible] = createSignal(true)
+  window.__workersRemount = () => {
+    setVisible(false)
+    queueMicrotask(() => setVisible(true))
+  }
+  return (
+    <Show when={visible()}>
+      <AdminView onBack={() => record({ type: "back" })} />
+    </Show>
+  )
+}
+
 render(
   () => (
     <StoryProviders noPadding config={{}}>
-      {state.startsWith("proposals") ? <ProposalFixture /> : <AdminView onBack={() => record({ type: "back" })} />}
+      {state.startsWith("proposals") ? <ProposalFixture /> : <AdminFixture />}
       <output data-messages hidden>
         {JSON.stringify(messages)}
       </output>

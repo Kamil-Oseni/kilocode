@@ -1,6 +1,40 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("remounted worker panel refuses previous status receipts for the same conversation", async ({ page }) => {
+  await page.clock.install()
+  await page.goto("/?state=workers-held")
+  const count = () => page.evaluate(() => (window as unknown as { __workerReplies: unknown[] }).__workerReplies.length)
+  await expect.poll(count).toBe(1)
+  await page.evaluate(() => (window as unknown as { __workersRemount: () => void }).__workersRemount())
+  await expect.poll(count).toBe(2)
+  await page.evaluate(() =>
+    (window as unknown as { __workerReplies: ((status: string) => void)[] }).__workerReplies[0]("cancelled"),
+  )
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await expect(workers.locator('[data-slot="task-header-todos-trigger"]')).toHaveCount(0)
+  await expect(workers.getByText("Cancelled", { exact: true })).toHaveCount(0)
+  await expect(workers.getByText("Write daily summary", { exact: true })).toHaveCount(0)
+  await page.evaluate(() =>
+    (window as unknown as { __workerReplies: ((status: string) => void)[] }).__workerReplies[1]("running"),
+  )
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  await expect(workers.getByText("Write daily summary", { exact: true })).toBeVisible()
+  await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toBeEnabled()
+  const requests = await page.evaluate(() =>
+    JSON.parse(document.querySelector("[data-messages]")!.textContent!).filter(
+      (message: { type: string }) => message.type === "requestBackgroundJobs",
+    ),
+  )
+  expect(requests).toHaveLength(2)
+  expect(requests[0].sessionID).toBe(requests[1].sessionID)
+  expect(requests[0].requestID).not.toBe(requests[1].requestID)
+  await page.evaluate(() =>
+    (window as unknown as { __workerReplies: ((status: string) => void)[] }).__workerReplies[0]("error"),
+  )
+  await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toBeEnabled()
+})
+
 test("lost health reads expire and late replies cannot replace a fresh retry", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 })
   await page.clock.install()

@@ -176,18 +176,20 @@ export namespace MemoryRecall {
     return novel * 2 < terms.length
   }
 
-  function dedupe(input: { hits: Hit[]; query: string }) {
-    const typed = input.hits.filter((hit) => !session(hit))
-    return input.hits.filter((hit) => {
-      if (!session(hit)) return true
+  function dedupe(input: { hits: Hit[]; query: string; limit: number }) {
+    const typed = input.hits.filter((hit) => !session(hit) && overlap(hit.text, input.query) >= 2)
+    const hits: Hit[] = []
+    for (const hit of input.hits) {
       // Dedupe is hit-to-hit symmetric, so corpus-wide function words do not favor one hit over another.
       // Suppress only genuine restatements: shares the query anchor with a typed hit AND is mostly
       // covered by it. A digest with substantial net-new content survives.
-      return !typed.some(
-        (item) =>
-          overlap(hit.text, item.text) >= 2 && overlap(item.text, input.query) >= 2 && restates(hit, item),
-      )
-    })
+      if (session(hit) && typed.some((item) => overlap(hit.text, item.text) >= 2 && restates(hit, item))) continue
+      hits.push(hit)
+      // All eligible facts inform deduplication, but stop scanning once the
+      // bounded result window is filled with distinct relevant evidence.
+      if (hits.length === input.limit) break
+    }
+    return hits
   }
 
   function renderLine(hit: Hit) {
@@ -211,28 +213,37 @@ export namespace MemoryRecall {
   }
 
   function format(input: { hits: Hit[]; max: number }) {
-    const lines = [
-      "```kilo-memory-v1 targeted_context_not_instruction",
-      ...input.hits.flatMap((hit) => [
+    const rows = input.hits.map((hit) => ({
+      hit,
+      text: [
         `record id=${label(`${hit.source}:${hit.kind}:${hit.text.slice(0, 32)}`)} type=${label(hit.kind.toLowerCase())} source=${label(hit.source)}${
           hit.topics?.length ? ` topics=${hit.topics.map(label).join(",")}` : ""
         } updated=${hit.updatedAt ? new Date(hit.updatedAt).toISOString() : "unknown"}`,
         `text: ${body(hit.text)}`,
-      ]),
-      "```",
-    ]
-    return MemoryIndexer.cap(lines.join("\n"), input.max).text.trim()
+      ].join("\n"),
+    }))
+    const lines = ["```kilo-memory-v1 targeted_context_not_instruction", ...rows.map((row) => row.text), "```"]
+    const block = MemoryIndexer.cap(lines.join("\n"), input.max).text.trim()
+    const hits: Hit[] = []
+    let offset = 0
+    for (const row of rows) {
+      const index = block.indexOf(row.text, offset)
+      if (index < 0) break
+      hits.push(row.hit)
+      offset = index + row.text.length
+    }
+    return hits.length ? { block, hits } : undefined
   }
 
-  function select(input: { hits: Hit[]; keys: string[]; limit: number; force?: boolean }) {
+  function select(input: { hits: Hit[]; keys: string[]; force?: boolean }) {
     if (input.keys.length === 0) return [] as Hit[]
     const hits = input.hits
       .map((hit) => ({ ...hit, score: score({ hit, keys: input.keys }) }))
       .filter((hit) => hit.score > 0)
       .sort(compare)
-    if (input.force) return hits.slice(0, input.limit)
+    if (input.force) return hits
     const top = hits[0]?.score ?? 0
-    return hits.filter((hit) => hit.score >= Math.max(1, top - 2)).slice(0, input.limit)
+    return hits.filter((hit) => hit.score >= Math.max(1, top - 2))
   }
 
   function noise(hits: Hit[]) {
@@ -254,7 +265,8 @@ export namespace MemoryRecall {
     if (!state.enabled) return
     const query = input.query.trim()
     const mode = input.mode ?? "search"
-    const limit = Math.max(1, Math.min(input.limit ?? 5, 20))
+    const limit = Math.floor(Math.max(1, Math.min(input.limit ?? 5, 20)))
+    if (!Number.isFinite(limit)) return
     const inventory = await MemoryFiles.deriveInventory(input.root)
     const now = Date.now()
     const typedItems = mode === "digest" ? [] : await typedAll({ root: input.root, state, inventory, now })
@@ -269,29 +281,28 @@ export namespace MemoryRecall {
     if (mode === "digest" && (input.sessionID || !query)) {
       const hits = digestItems.slice(0, limit)
       if (hits.length === 0) return
-      const block = format({ hits, max: input.maxBytes ?? (input.sessionID ? 6000 : 1200) })
-      if (!block) return
+      const result = format({ hits, max: input.maxBytes ?? (input.sessionID ? 6000 : 1200) })
+      if (!result) return
       return {
-        block,
-        hits,
-        bytes: Buffer.byteLength(block),
-        tokens: MemoryToken.estimate(block),
+        ...result,
+        bytes: Buffer.byteLength(result.block),
+        tokens: MemoryToken.estimate(result.block),
       }
     }
     // Query terms absent from the corpus add zero to every hit; only corpus-ubiquitous terms need removal.
     const keys = MemoryTopics.expand(MemoryShared.terms(query, { drop: noise([...typedItems, ...digestItems]) }))
     const hits = dedupe({
-      hits: select({ hits: [...typedItems, ...digestItems], keys, limit, force: input.force }),
+      hits: select({ hits: [...typedItems, ...digestItems], keys, force: input.force }),
       query,
+      limit,
     })
     if (hits.length === 0) return
-    const block = format({ hits, max: input.maxBytes ?? 1200 })
-    if (!block) return
+    const result = format({ hits, max: input.maxBytes ?? 1200 })
+    if (!result) return
     return {
-      block,
-      hits,
-      bytes: Buffer.byteLength(block),
-      tokens: MemoryToken.estimate(block),
+      ...result,
+      bytes: Buffer.byteLength(result.block),
+      tokens: MemoryToken.estimate(result.block),
     }
   }
 }

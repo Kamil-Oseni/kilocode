@@ -54,7 +54,6 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const [cancelling, setCancelling] = createSignal<string>()
   let pending: string | undefined
   let deadline = 0
-  let revision = 0
 
   createEffect(
     on(session.currentSessionID, () => {
@@ -78,7 +77,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       setSnapshot((state) => ({ ...state, unavailable: true }))
       setCancelling()
     }
-    pending = `${id}:${++revision}`
+    pending = `${id}:${crypto.randomUUID()}`
     deadline = Date.now() + 15_000
     setRefreshing(true)
     vscode.postMessage({ type: "requestBackgroundJobs", sessionID: id, requestID: pending })
@@ -181,7 +180,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     if (agent.status !== "running" || !agent.revision) return
     const id = session.currentSessionID()
     if (!id) return
-    pending = `${id}:${++revision}`
+    pending = `${id}:${crypto.randomUUID()}`
     deadline = Date.now() + 15_000
     setCancelling(agent.jobID)
     const message = backgroundAgentCancellation(agent, id, pending)

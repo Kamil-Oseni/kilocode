@@ -90,6 +90,7 @@ test.skipIf(process.platform !== "win32")(
     const evidence: { stage: string; [key: string]: unknown }[] = []
     const work: Promise<unknown>[] = []
     let forced = false
+    let qualified = false
     try {
       await session.start()
       const deadline = Date.now() + 60000
@@ -251,6 +252,7 @@ test.skipIf(process.platform !== "win32")(
           archiveSHA: hash(await readFile(output)),
           memory: !!memory,
         })
+        qualified = true
       } finally {
         released.resolve()
       }
@@ -267,7 +269,7 @@ test.skipIf(process.platform !== "win32")(
           path.join(root, "receipt.json"),
           JSON.stringify({
             root,
-            sourceQualified: true,
+            sourceQualified: qualified && !forced,
             helperSHA: hash(await readFile(executable)),
             forced,
             output,

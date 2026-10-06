@@ -16,6 +16,8 @@ import type { Snapshot } from "@/snapshot"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionID } from "@/session/schema"
+import { headers } from "../provider/inference-lane"
+import { localConfig } from "../provider/local-scheduler"
 
 const log = Log.create({ service: "memory.ports" })
 
@@ -178,17 +180,21 @@ async function memoryText(input: {
   topP?: number
   topK?: number
   signal?: AbortSignal
+  local: boolean
 }) {
+  input.signal?.throwIfAborted()
   const ctl = new AbortController()
   const ms = Math.max(1, input.timeoutMs)
   const params = consolidationPrompt({ model: input.source, options: input.options, system: input.system })
   const openai = input.source.providerID === "openai" && input.source.api.npm === "@ai-sdk/openai"
+  const signal = input.signal ? AbortSignal.any([ctl.signal, input.signal]) : ctl.signal
   const common = {
     model: input.language,
     ...(params.system ? { system: params.system } : {}),
     prompt: input.prompt,
     providerOptions: params.providerOptions,
-    abortSignal: input.signal ? AbortSignal.any([ctl.signal, input.signal]) : ctl.signal,
+    abortSignal: signal,
+    headers: headers({}, "background", input.local),
     temperature: input.temperature,
     topP: input.topP,
     topK: input.topK,
@@ -208,29 +214,29 @@ async function memoryText(input: {
     }
     return { text: text.join(""), usage }
   }
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      ctl.abort()
-      reject(new DOMException("memory model timed out", "TimeoutError"))
-    }, ms)
-  })
+  const timer = setTimeout(() => ctl.abort(new DOMException("memory model timed out", "TimeoutError")), ms)
   try {
-    return await Promise.race([work(), timeout])
+    // Keep the original SDK operation owned until it settles, even after abort.
+    const result = await work()
+    signal.throwIfAborted()
+    return result
+  } catch (err) {
+    if (signal.aborted) throw signal.reason
+    throw err
   } finally {
-    if (timer) clearTimeout(timer)
+    clearTimeout(timer)
     ctl.abort()
   }
 }
 
-function modelOptions(model: Provider.Model, language: LanguageModelV3) {
+function modelOptions(model: Provider.Model, language: LanguageModelV3, local: boolean) {
   const options = consolidationOptions(model)
   // No explicit output cap: valid output is already bounded by the compact-JSON prompt, the parser's
   // 64KB guard, and the capture timeout — and some backends reject explicit caps outright.
   const temperature = ProviderTransform.temperature(model)
   const topP = ProviderTransform.topP(model)
   const topK = ProviderTransform.topK(model)
-  return { source: model, language, options, temperature, topP, topK }
+  return { source: model, language, options, temperature, topP, topK, local }
 }
 
 type ModelHandle = ReturnType<typeof modelOptions>
@@ -312,7 +318,8 @@ export namespace MemoryModel {
           }
           if (reason) log.warn("memory model config ignored", { reason, model: configured })
           const language = yield* input.provider.getLanguage(source)
-          return { handle: modelOptions(source, language), ...(reason ? { fallback: { reason } } : {}) }
+          const provider = yield* input.provider.getProvider(source.providerID)
+          return { handle: modelOptions(source, language, localConfig(provider.options).enabled), ...(reason ? { fallback: { reason } } : {}) }
         }).pipe(Effect.mapError(MemoryError.from)),
       run: ({ handle, system, prompt, timeoutMs, signal }) => {
         const resolved = handle as ModelHandle
@@ -327,6 +334,7 @@ export namespace MemoryModel {
           topP: resolved.topP,
           topK: resolved.topK,
           signal,
+          local: resolved.local,
         })
       },
     }

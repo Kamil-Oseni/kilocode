@@ -33,7 +33,12 @@ function mdl(id = mid, npm = "test-provider", providerID = pid): Provider.Model 
   } as unknown as Provider.Model
 }
 
-function lang(outputs: (string | Error)[] = ["{}"], calls?: unknown[], hang?: boolean): LanguageModelV3 {
+function lang(
+  outputs: (string | Error)[] = ["{}"],
+  calls?: unknown[],
+  hang?: boolean,
+  wait?: (signal?: AbortSignal) => Promise<void>,
+): LanguageModelV3 {
   let idx = 0
   const next = () => {
     const item = outputs[idx++] ?? outputs.at(-1) ?? "{}"
@@ -47,7 +52,13 @@ function lang(outputs: (string | Error)[] = ["{}"], calls?: unknown[], hang?: bo
     supportedUrls: {},
     doGenerate: async (...args: Parameters<LanguageModelV3["doGenerate"]>) => {
       calls?.push(args[0])
-      if (hang) return new Promise(() => {})
+      if (hang)
+        return new Promise<never>((_, reject) => {
+          const signal = args[0].abortSignal
+          if (signal?.aborted) return reject(signal.reason)
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true })
+        })
+      if (wait) await wait(args[0].abortSignal)
       const text = next()
       return {
         content: [{ type: "text", text }],
@@ -74,6 +85,8 @@ function provider(
     hang?: boolean
     npm?: string
     providerID?: ProviderV2.ID
+    wait?: (signal?: AbortSignal) => Promise<void>
+    local?: boolean
   } = {},
 ): Provider.Interface {
   const providerID = input.providerID ?? pid
@@ -84,7 +97,7 @@ function provider(
     name: "Test",
     source: "config",
     env: [],
-    options: {},
+    options: { localInference: input.local === true },
     models: { [base.id]: base, [mem.id]: mem },
   } satisfies Provider.Info
   return {
@@ -97,7 +110,7 @@ function provider(
     },
     getLanguage: (model) => {
       input.seen?.push(model.id)
-      return Effect.succeed(lang(input.outputs, input.calls, input.hang))
+      return Effect.succeed(lang(input.outputs, input.calls, input.hang, input.wait))
     },
     closest: () => Effect.succeed({ providerID: pid, modelID: base.id }),
     getSmallModel: () => Effect.succeed(mem),
@@ -289,9 +302,7 @@ describe("memory ports", () => {
     const seen: string[] = []
     const port = MemoryModel.port({ provider: provider({ seen }) })
 
-    const configured = await Effect.runPromise(
-      port.resolve({ configured: "test/memory-config-model", session: ref }),
-    )
+    const configured = await Effect.runPromise(port.resolve({ configured: "test/memory-config-model", session: ref }))
     const fallback = await Effect.runPromise(port.resolve({ configured: "test/missing-memory-model", session: ref }))
 
     expect(configured.fallback).toBeUndefined()
@@ -407,6 +418,17 @@ describe("memory ports", () => {
     expect(opts.providerOptions?.test?.stream).toBeUndefined()
   })
 
+  test("consolidation requests use the background lane only for explicitly local providers", async () => {
+    for (const local of [true, false]) {
+      const calls: unknown[] = []
+      const port = MemoryModel.port({ provider: provider({ local, calls }) })
+      const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+      await port.run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000 })
+      expect(calls[0]).toMatchObject({ headers: local ? { "x-raya-inference-lane": "background" } : {} })
+      if (!local) expect(JSON.stringify(calls[0])).not.toContain("x-raya-inference-lane")
+    }
+  })
+
   test("model port emits a structured timeout error", async () => {
     const port = MemoryModel.port({ provider: provider({ hang: true }) })
     const resolved = await Effect.runPromise(port.resolve({ session: ref }))
@@ -414,6 +436,110 @@ describe("memory ports", () => {
     await expect(
       port.run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 1 }),
     ).rejects.toMatchObject({ name: "TimeoutError", message: "memory model timed out" })
+  })
+
+  test("model timeout joins its original delayed provider completion before returning", async () => {
+    const events: string[] = []
+    const port = MemoryModel.port({
+      provider: provider({
+        wait: async (signal) => {
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) return resolve()
+            signal?.addEventListener("abort", () => resolve(), { once: true })
+          })
+          events.push("aborted")
+          await Bun.sleep(20)
+          events.push("provider-joined")
+        },
+      }),
+    })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    const error = await port
+      .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 5 })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      .finally(() => {
+        events.push("returned")
+      })
+    expect(error).toMatchObject({ name: "TimeoutError" })
+    expect(events).toEqual(["aborted", "provider-joined", "returned"])
+  })
+
+  test("parent cancellation joins delayed provider completion and discards its late output", async () => {
+    const ctl = new AbortController()
+    const events: string[] = []
+    const port = MemoryModel.port({
+      provider: provider({
+        wait: async () => {
+          ctl.abort(new DOMException("User cancelled memory", "AbortError"))
+          await Bun.sleep(20)
+          events.push("provider-joined")
+        },
+      }),
+    })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    const error = await port
+      .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000, signal: ctl.signal })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      .finally(() => {
+        events.push("returned")
+      })
+    expect(error).toMatchObject({ name: "AbortError", message: "User cancelled memory" })
+    expect(events).toEqual(["provider-joined", "returned"])
+  })
+
+  test("already cancelled model work never starts a provider request", async () => {
+    const calls: unknown[] = []
+    const ctl = new AbortController()
+    ctl.abort(new DOMException("Already cancelled", "AbortError"))
+    const port = MemoryModel.port({ provider: provider({ calls }) })
+    const resolved = await Effect.runPromise(port.resolve({ session: ref }))
+    const error = await port
+      .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 30000, signal: ctl.signal })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+    expect(error).toMatchObject({ name: "AbortError" })
+    expect(calls).toEqual([])
+  })
+
+  test("streaming timeout retains its original provider opening until completion", async () => {
+    const events: string[] = []
+    const language = lang()
+    language.doStream = async (opts) => {
+      await new Promise<void>((resolve) => {
+        if (opts.abortSignal?.aborted) return resolve()
+        opts.abortSignal?.addEventListener("abort", () => resolve(), { once: true })
+      })
+      events.push("aborted")
+      await Bun.sleep(20)
+      events.push("provider-joined")
+      return { stream: new ReadableStream({ start: (controller) => controller.close() }) }
+    }
+    const port = MemoryModel.port({
+      provider: {
+        ...provider({ npm: "@ai-sdk/openai", providerID: ProviderV2.ID.make("openai") }),
+        getLanguage: () => Effect.succeed(language),
+      },
+    })
+    const resolved = await Effect.runPromise(port.resolve({ session: { providerID: "openai", modelID: mid } }))
+    const error = await port
+      .run({ handle: resolved.handle, system: "system", prompt: "prompt", timeoutMs: 5 })
+      .then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      .finally(() => {
+        events.push("returned")
+      })
+    expect(error).toMatchObject({ name: "TimeoutError" })
+    expect(events).toEqual(["aborted", "provider-joined", "returned"])
   })
 
   test("model port clears its timeout after successful output", async () => {

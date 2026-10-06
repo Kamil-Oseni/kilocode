@@ -64,7 +64,7 @@ async function ancestry(file: string) {
   return result
 }
 
-async function snapshot(root: string, name: string, expected: string | null, signal?: AbortSignal) {
+async function snapshot(root: string, name: string, expected: string | null | undefined, signal?: AbortSignal) {
   signal?.throwIfAborted()
   if (!path.isAbsolute(root)) throw new Error("Select an authorized absolute Dream root")
   const authority = await lstat(root, { bigint: true })
@@ -127,7 +127,7 @@ async function snapshot(root: string, name: string, expected: string | null, sig
     }
     const raw = buffer.subarray(0, count)
     const sha256 = createHash("sha256").update(raw).digest("hex")
-    if (sha256 !== expected) throw new Error("Dream source revision is not approved")
+    if (expected !== undefined && sha256 !== expected) throw new Error("Dream source revision is not approved")
     const text = new TextDecoder("utf-8", { fatal: true }).decode(raw)
     if (MemoryRedact.text(text) !== text) throw new Error("Dream evidence contains a secret")
     return { path: name, sha256, text }
@@ -138,6 +138,12 @@ async function snapshot(root: string, name: string, expected: string | null, sig
 
 /** Reads an explicit selection supplied by the trusted host. Labels alone do not grant read consent. */
 export namespace MemoryDreamInput {
+  /** Read only an explicitly picked file under its authorized root; this does not grant later use. */
+  export async function inspect(root: string, name: string, signal?: AbortSignal) {
+    const value = await snapshot(root, name, undefined, signal)
+    if (value.sha256 === null || value.text === null) throw new Error("Selected Dream file is unavailable")
+    return { path: value.path, sha256: value.sha256, text: value.text }
+  }
   export async function prepare(root: string, project: string, input: z.input<typeof schema>, signal?: AbortSignal) {
     signal?.throwIfAborted()
     const selected = schema.parse(input)

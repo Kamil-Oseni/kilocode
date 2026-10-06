@@ -14,6 +14,7 @@ import { drain, register } from "./retirement"
 import { descriptor, selection, type Descriptor } from "./managed/descriptor"
 import { diagnostic } from "./diagnostic"
 import { selection as dreamSelection } from "./dream-selection"
+import { picked as dreamSources } from "./dream-sources"
 
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
   return (
@@ -39,6 +40,43 @@ export class BrainHost {
   private readonly service: BrainService
   private readonly control: BrainControl
   private current: { id: string; owner: object } | undefined
+
+  async pickDreamSources(project: string, signal: AbortSignal) {
+    signal.throwIfAborted()
+    const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project))
+    if (!vscode.workspace.isTrusted || !folder || path.resolve(folder.uri.fsPath) !== path.resolve(project))
+      throw new Error("Select an exact trusted Dream workspace")
+    const files = await vscode.window.showOpenDialog({
+      title: "Select already approved summaries or notes for consolidation",
+      defaultUri: folder.uri,
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: true,
+      filters: { Markdown: ["md"] },
+    })
+    signal.throwIfAborted()
+    if (!files?.length) return undefined
+    const kind = await vscode.window.showQuickPick(
+      [
+        { label: "Approved summaries", value: "approved-summary" as const },
+        { label: "Approved notes", value: "approved-note" as const },
+      ],
+      { title: "What approved inputs did you select?" },
+    )
+    signal.throwIfAborted()
+    if (!kind) return undefined
+    if (!vscode.workspace.isTrusted || !vscode.workspace.getWorkspaceFolder(folder.uri))
+      throw new Error("Workspace trust changed during selection")
+    return dreamSources(
+      project,
+      files.map((file) => {
+        if (file.scheme !== "file") throw new Error("Dream sources require local files")
+        return file.fsPath
+      }),
+      kind.value,
+      signal,
+    )
+  }
 
   /** Native manual selection boundary; model/webview messages cannot mint this grant. */
   async selectDream(project: string, approved: Parameters<typeof dreamSelection>[0]["approved"], signal: AbortSignal) {

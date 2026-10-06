@@ -1111,6 +1111,7 @@ export namespace RayaGoal {
     const eligibleMenu = (messages: SessionV1.WithParts[], createdAt: number) =>
       tools(messages)
         .filter((part) => part.state.status === "completed" && started(part) >= createdAt && supports(part))
+        .sort((a, b) => started(b) - started(a))
         .map((part) => `${part.callID} (${part.tool}; messageID=${part.messageID}; partID=${part.id})`)
         .slice(0, 20)
         .join(", ") || "none yet — perform and verify concrete work before completing"
@@ -1122,6 +1123,7 @@ export namespace RayaGoal {
         .filter(
           (part) => part.state.status === "completed" && part.state.time.start >= state.createdAt && supports(part),
         )
+        .sort((a, b) => started(b) - started(a))
         .map((part) => ({
           messageID: part.messageID,
           partID: part.id,

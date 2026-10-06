@@ -454,13 +454,24 @@ def passage(name, text, query, limit, measure, check):
         return None
     terms = set(re.findall(r'\w+', query.casefold()))
     start = max(range(len(lines)), key=lambda index: len(terms.intersection(re.findall(r'\w+', lines[index].casefold()))))
+    # Keep qualifiers around the matched fact in the same paragraph. Returning
+    # only its matching line can turn a historical or disputed note into a fact.
+    end = start + 1
+    while start > 0 and lines[start - 1].strip() and not re.match(r'^#{1,6} ', lines[start]):
+        check()
+        start -= 1
+    while end < len(lines) and lines[end].strip() and not re.match(r'^#{1,6} ', lines[end]):
+        check()
+        end += 1
     heading = ''
     for line in lines[:start + 1]:
         if re.match(r'^#{1,6} ', line):
             heading = line.lstrip('#').strip()
     prefix = f'Source: {name}\nSection: {heading}\n'
-    end = start
-    selected = ''
+    selected = '\n'.join(lines[start:end])
+    check()
+    if measure(prefix + selected) > limit:
+        return None
     while end < len(lines):
         check()
         candidate = '\n'.join(lines[start:end + 1])
@@ -550,7 +561,7 @@ def retrieve(root, policy, seeds, query, budget, measure, check, *, depth=2, cou
             check()
             # Count navigation attempts as well as returned notes; a hostile
             # document cannot cause an unbounded queue or diagnostic list.
-            if len(queue) + len(seen) >= count * 8:
+            if len(queue) + len(seen) + len(diagnostics) >= count * 8:
                 diagnostics.append({'relative': selected, 'reason': 'Navigation attempt budget exhausted.'})
                 break
             try:

@@ -21,6 +21,14 @@ The full Memory package now passes **211 tests, 952 assertions, 20 files**. All 
 
 Logs are retained at `.tmp/memory-private/memory-cohort-full.log`, `dream-cohort-full.log`, `dream-cohort-backend.log` and `memory-cohort-types.log`. The current native UI and missing-reply browser evidence is recorded in [the Dream checkpoint](Raya-Dream-Input-Checkpoint.md). Broader workflow gates and installed readiness remain open; these source counts do not increase the readiness score.
 
+## Recall qualifier checkpoint, 2026-10-06
+
+The linked reader previously began at the highest query-overlap line. Actual reader regressions showed it could omit a preceding historical/replaced qualifier, or fit a matching fact while dropping its following unconfirmed-suggestion qualifier. Selection now includes the complete matched paragraph before extending the passage. If that paragraph cannot fit with its source/section labels, the reader omits it with explicit budget diagnostics rather than returning an orphan fact. Source hashes, exact contiguous line coordinates, immutable reviewed notes, cancellation and capture-disabled behavior are preserved. Navigation admission also accounts for existing diagnostics so an omitted passage cannot overflow the bounded diagnostic list.
+
+The context release catalog pins the newly reviewed `index.py` bytes; it does not allow arbitrary source revisions. A configured old release requires the existing explicit native release-selection workflow before this new reader is used. This is a local reader-quality fix, not a semantic model benchmark or proof that every contradiction is resolved correctly. Installed source selection, corpus quality, foreground resource measurements and the acceptance gaps above remain open.
+
+Validation: the production-reader Python suite passes 19 tests, the request decoder passes three, and the qualified transport/result/release/control cohort passes 19 tests with 150 assertions. The three qualifier regressions failed against the previous selector before the change. Extension compile, lint, Knip, required formatting and source/table guards pass. Logs are `.tmp/memory-private/recall-qualifiers-*`; the initial stale-release refusal is retained. Final `index.py` SHA-256 is `55d17ba416e1cf187a5497c4257d07a5628a66e30d49ef75e18ca169567315e5`.
+
 ## What Cognition released
 
 [Cognition's page](https://cognition.com/agent-memory-repo) describes durable linked notes and periodic Dreaming: finding patterns across sessions and maintaining existing memory. The public implementation is substantially smaller than a complete memory service.

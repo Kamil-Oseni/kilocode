@@ -156,6 +156,54 @@ class Tests(unittest.TestCase):
         self.assertTrue(value['truncated'])
         self.assertIn('No passage fits', str(value['diagnostics']))
 
+    def test_recall_preserves_preceding_historical_qualifier(self):
+        text = '# Preferences\n\nHistorical preference; replaced on 2026-10-05.\nMovie lights used blue and cyan.\n\nCurrent preference: warm amber.\n'
+        value = passage('Preferences/lights.md', text, 'movie lights blue cyan', 1000, len, lambda: None)
+        self.assertEqual(value['line'], 3)
+        self.assertIn('Historical preference; replaced', value['text'])
+        self.assertIn('Movie lights used blue and cyan.', value['text'])
+        self.assertEqual(value['text'], '\n'.join(text.splitlines()[value['line'] - 1:value['end_line']]))
+
+    def test_recall_preserves_following_conflict_qualifier(self):
+        text = '# Preferences\n\nMovie lights should be blue and cyan.\nUnconfirmed suggestion, not a user preference.\n\nOther notes.\n'
+        prefix = 'Source: Preferences/lights.md\nSection: Preferences\n'
+        limit = len(prefix + 'Movie lights should be blue and cyan.')
+        self.assertIsNone(passage('Preferences/lights.md', text, 'movie blue cyan', limit, len, lambda: None))
+        value = passage('Preferences/lights.md', text, 'movie blue cyan', 1000, len, lambda: None)
+        self.assertIn('Unconfirmed suggestion, not a user preference.', value['text'])
+
+    def test_oversized_qualified_paragraph_does_not_return_orphan_fact(self):
+        text = '# Preferences\n\n' + 'Historical detail. ' * 80 + '\nMovie lights used blue cyan.\n'
+        self.assertIsNone(passage('Preferences/lights.md', text, 'movie lights blue cyan', 150, len, lambda: None))
+
+    def test_paragraph_selection_cancellation_remains_observable(self):
+        text = '# Preferences\n\nHistorical detail.\nMovie lights used blue cyan.\n'
+        def cancel():
+            raise TimeoutError('cancelled')
+        with self.assertRaisesRegex(TimeoutError, 'cancelled'):
+            passage('Preferences/lights.md', text, 'movie lights blue cyan', 1000, len, cancel)
+
+    def test_reviewed_recall_keeps_qualifiers_hashes_and_diagnostics(self):
+        name = 'Preferences/lights.md'
+        text = '# Lights\n\nHistorical preference; replaced yesterday.\nMovie lights used blue cyan.\n\nCurrent preference is warm amber.\n'
+        raw = text.encode()
+        (self.root / name).write_bytes(raw)
+        self.policy.files[name.casefold()]['sha256'] = self.sha(text)
+        seed = {'relative': name, 'sha256': self.sha(text)}
+        value = retrieve(self.root, self.policy, [seed], 'movie lights blue cyan', 1000, len, lambda: None)
+        note = next(row for row in value['sources'] if row['relative'] == name)
+        self.assertIn('Historical preference; replaced yesterday.', note['text'])
+        self.assertIn('Current preference is warm amber.', note['text'])
+        self.assertEqual(note['source_sha256'], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(note['text'], '\n'.join(text.splitlines()[note['line'] - 1:note['end_line']]))
+        self.assertLessEqual(value['tokens'], 1000)
+        self.assertFalse(value['capture_enabled'])
+        small = retrieve(self.root, self.policy, [seed], 'movie lights blue cyan', 90, len, lambda: None)
+        self.assertNotIn(name, [row['relative'] for row in small['sources']])
+        self.assertTrue(small['truncated'])
+        self.assertIn('No passage fits', str(small['diagnostics']))
+        self.assertEqual((self.root / name).read_bytes(), raw)
+
     def test_exclusions_changed_during_selection_refuses_all_results(self):
         def measure(text):
             (self.root / '.rayaignore').write_text('Projects/\n', encoding='utf-8')

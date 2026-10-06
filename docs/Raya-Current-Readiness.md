@@ -26,6 +26,22 @@ Two follow-up repairs are committed in the integration worktree: `37f860b159` ch
 
 That replacement package has now built: `7.4.23-snapshot+57ba592fad.local.1791257813927`. Independent inspection streamed every archive entry and matched all 482 sizes and digests to the processed packaging manifest. Parsing the actual native executable's PE debug directory and the PDB information stream confirms the same debug GUID and age; the metadata names their exact digests and the reviewed recipe. The archive SHA256 is `9fff04a3fe8b12c2d7cf72740d4cddfd3160aad203310c525f563388826dc9ef`. Evidence is saved in `.tmp/new-pc/57ba-independent-archive-integrity.json`. The package is now installed. An independent check matches all 479 non-package.json payload files, the package manifest apart from its three expected installer fields, and the extra VS Code manifest. Repeated inventories contain exactly 481 files. The CLI and native helper have actual x64 PE headers; VS Code's platform metadata remains the literal undefined, as in the previous installation, and is not used as platform evidence. Independent comparison of the recorded pre/post snapshots matches all 1,731 profile files, 19,400 unrelated extension files and every unrelated registry row. The original installer, post-snapshot scanner and monitor exited successfully and joined their process and streams without forced termination. The monitor observed only the sole installer in its samples and stopped normally; this is not kernel-event completeness. Evidence is saved in `.tmp/new-pc/57ba-installed-independent-current.json` and `.tmp/new-pc/57ba-install-preservation-closure-independent.json`. The rollback vault now contains the new active package plus all seven unchanged earlier packages; all eight archive digests and the preserved prior rows were independently checked. The live normal backend's process birth, installed path and stable on-disk CLI digest match the new package. Evidence is saved in `.tmp/new-pc/57ba-vault-retention-independent-current.json` and `.tmp/new-pc/57ba-loaded-backend-independent.json`. These checks do not establish the unchanged full workflows, so readiness and accepted gate counts remain unchanged.
 
+## Installed workflow gates
+
+These nine gates come from `docs/Raya-Local-Readiness-Gates.md`. Their scope is retained across candidate updates. The installed package and preservation checks above cover the first two gates for the current build. Source tests and isolated installed-CLI fixtures do not establish normal-client persistence, physical voice quality, configured personal Memory or recovery after a real Windows boot.
+
+| Gate | Current status | Required evidence |
+|---|---|---|
+| Audited combined candidate | Passed | Actual installed files and manifest match the reviewed current package. |
+| Normal installation preservation | Passed | Saved profile and unrelated extension contents and registration survive the upgrade; original installer and streams join. |
+| Installed local General/tool turn | Pending | Finish the permitted task with actual tool evidence, then preserve the reply, selected model and draft through ordinary close and reopen. The current worker test additionally retains one worker, actual write/readback and autonomous goal completion. |
+| Strict installed Coder | Pending | Complete the exact permitted edit/test task without extra shell calls or final text, and retain the required saved evidence. |
+| Installed Voice and permitted Home Assistant flow | Pending | Fresh-session and repeated capture work without duplicate or stale drafts; later typed drafts survive; Stop, pause and error recovery work; a permitted action is verified and the reply is audibly continuous. |
+| Scheduled routines | Pending | Two genuine scheduled work periods produce the required evidence; pause/stop and cold no-replay pass. |
+| Configured Memory | Pending | Genuine configured sync/search and worker shutdown pass, including pause, ordinary joins and durable debt; automatic personal capture stays off. |
+| Matching-version postboot/service recovery | Pending | After a real Windows boot, preserve saved selections, chats and drafts, reconnect intended services and avoid unsolicited worker replay. |
+| Populated same-candidate reinstall recovery | Pending | Reinstall the same candidate with populated state, then verify cold restoration and no replay; upgrade preservation alone does not satisfy this gate. |
+
 ## Active unfinished requirements
 
 | Requirement | Recorded status |

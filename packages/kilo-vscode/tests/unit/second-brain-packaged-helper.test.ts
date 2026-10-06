@@ -33,8 +33,8 @@ test("Memory refuses a foreign recipe even when executable and symbols hashes ma
   }
 })
 
-for (const variant of ["retained", "version", "executable", "symbols"] as const)
-  test(`Memory ${variant === "retained" ? "accepts" : "refuses"} ${variant} metadata with actual packaged files`, async () => {
+for (const variant of ["retained", "previous", "reviewed", "version", "executable", "symbols"] as const)
+  test(`Memory ${["retained", "previous", "reviewed"].includes(variant) ? "accepts" : "refuses"} ${variant} metadata with actual packaged files`, async () => {
     const root = await mkdtemp(path.join(tmpdir(), "raya-memory-helper-metadata-"))
     try {
       const bin = path.join(root, "bin")
@@ -48,12 +48,19 @@ for (const variant of ["retained", "version", "executable", "symbols"] as const)
         ...(variant === "retained"
           ? { recipe: "fb46d5ad1ef444acaaa7307fe48b04b62352a7b205384129dede17a50f04bc3f" }
           : {}),
+        ...(variant === "previous"
+          ? { recipe: "42bca4a2e77642037c051d85b750548e09a3b0cca43d97499961bfca1091f8d9" }
+          : {}),
+        ...(variant === "reviewed"
+          ? { recipe: "7ee9b6893912140187a3feaaee83fa1058c0b4f1d82f48d0690fce751af6ac5b" }
+          : {}),
         ...(variant === "version" ? { version: 2 } : {}),
         ...(variant === "executable" ? { exe: "0".repeat(64) } : {}),
         ...(variant === "symbols" ? { pdb: "0".repeat(64) } : {}),
       }
       await writeFile(file, JSON.stringify(row))
-      if (variant === "retained") {
+      // These metadata fixtures exercise admission, not a newly compiled producer or native protocol.
+      if (["retained", "previous", "reviewed"].includes(variant)) {
         const accepted = await packaged(root)
         expect(accepted.digest).toBe(current.digest)
         expect(accepted.files[1].digest).toBe(current.files[1].digest)

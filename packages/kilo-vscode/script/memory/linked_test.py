@@ -1,0 +1,168 @@
+"""Real note files and reviewed Policy; no model, capture or service starts."""
+import hashlib
+import ast
+import fnmatch
+import os
+from pathlib import Path
+from pathlib import PurePosixPath
+import posixpath
+import re
+import sys
+import tempfile
+import unittest
+from urllib.parse import unquote
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / 'service'))
+from policy import Policy
+# Execute the actual production reader without importing model catalogs, tokens
+# or service runtime. No implementation is copied into this test.
+SOURCE = HERE / 'service/index.py'
+TREE = ast.parse(SOURCE.read_bytes())
+NAMES = {'ordinary', 'image', 'address', 'links', 'passage', 'retrieve'}
+CODE = ast.Module(body=[node for node in TREE.body if isinstance(node, ast.FunctionDef) and node.name in NAMES], type_ignores=[])
+exec(compile(ast.fix_missing_locations(CODE), str(SOURCE), 'exec'), globals())
+
+
+class Tests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='raya-linked-')
+        self.root = Path(self.tmp.name).resolve()
+        self.notes = {'INDEX.md': '# Memory\n[Preferences](Preferences/lights.md)\n',
+                      'Projects/eden.md': '# Eden\nEden builds workplace tools.\n[Lights](../Preferences/lights.md)\n',
+                      'Preferences/lights.md': '# Lights\nPrefer slow warm lighting.\n[Project](../Projects/eden.md)\n[Daily](../Daily/today.md)\n',
+                      'Daily/today.md': '# Today\nAn evening walk is planned.\n[Too deep](../People/next.md)\n',
+                      'People/next.md': '# Next\nThis is beyond depth two.\n'}
+        for name, text in self.notes.items():
+            path = self.root / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(text.encode())
+        self.policy = Policy({'format': 'raya-general-sources-v1', 'root': str(self.root),
+                              'enabled': True, 'revision': 1, 'files': [
+                                  {'relative': name, 'sha256': self.sha(text), 'classification': 'general', 'review': 'approved'}
+                                  for name, text in self.notes.items()]})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def sha(self, text):
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    def recall(self, **opts):
+        seed = {'relative': 'Projects/eden.md', 'sha256': self.sha(self.notes['Projects/eden.md'])}
+        return retrieve(self.root, self.policy, opts.pop('seeds', [seed]), 'Eden',
+                        opts.pop('budget', 1000), opts.pop('measure', len), opts.pop('check', lambda: None), **opts)
+
+    def test_relevant_first_entry_links_cycles_and_depth(self):
+        value = self.recall()
+        self.assertEqual([row['relative'] for row in value['sources']],
+                         ['Projects/eden.md', 'INDEX.md', 'Preferences/lights.md', 'Daily/today.md'])
+        self.assertEqual([row['depth'] for row in value['sources']], [0, 0, 1, 2])
+        self.assertFalse(value['capture_enabled'])
+        for row in value['sources']:
+            raw = (self.root / row['relative']).read_bytes()
+            self.assertEqual(row['source_sha256'], hashlib.sha256(raw).hexdigest())
+            self.assertEqual(row['text'], '\n'.join(raw.decode().splitlines()[row['line'] - 1:row['end_line']]))
+
+    def test_budget_and_explicit_truncation(self):
+        value = self.recall(budget=85)
+        self.assertLessEqual(value['tokens'], 85)
+        self.assertTrue(value['truncated'])
+        self.assertEqual(value['tokens'], sum(row['tokens'] for row in value['sources']))
+        self.assertEqual(len(self.recall(count=1)['sources']), 1)
+
+    def test_stale_seed_is_diagnostic_and_not_returned(self):
+        value = self.recall(seeds=[{'relative': 'Projects/eden.md', 'sha256': '0' * 64}], depth=0)
+        self.assertEqual([row['relative'] for row in value['sources']], ['INDEX.md'])
+        self.assertIn('stale', value['diagnostics'][0]['reason'])
+
+    def test_changed_approved_file_is_never_returned(self):
+        (self.root / 'Preferences/lights.md').write_text('unreviewed private facts', encoding='utf-8')
+        value = self.recall()
+        self.assertNotIn('Preferences/lights.md', [row['relative'] for row in value['sources']])
+        self.assertIn('revision changed', str(value['diagnostics']))
+
+    def test_excluded_and_unapproved_link(self):
+        (self.root / '.rayaignore').write_text('Preferences/\n', encoding='utf-8')
+        value = self.recall()
+        self.assertNotIn('Preferences/lights.md', [row['relative'] for row in value['sources']])
+        self.policy.files['preferences/lights.md']['review'] = 'proposed'
+        (self.root / '.rayaignore').unlink()
+        self.assertNotIn('Preferences/lights.md', [row['relative'] for row in self.recall()['sources']])
+
+    def test_absolute_encoded_foreign_missing_and_fenced_links(self):
+        text = '# Memory\n' + '\n'.join('[bad](' + value + ')' for value in
+                                        ('../../secret.md', '/secret.md', 'C:/secret.md',
+                                         '%2e%2e/%2e%2e/secret.md', 'https://example.com/a.md',
+                                         'missing.md', 'System/private.md'))
+        text += '\n```md\n[Example](People/next.md)\n```\n'
+        (self.root / 'INDEX.md').write_bytes(text.encode())
+        self.policy.files['index.md']['sha256'] = self.sha(text)
+        value = self.recall(seeds=[])
+        self.assertEqual([row['relative'] for row in value['sources']], ['INDEX.md'])
+        self.assertEqual(len(value['diagnostics']), 7)
+
+    def test_links_do_not_bypass_policy_for_same_named_foreign_root(self):
+        with tempfile.TemporaryDirectory() as foreign:
+            with self.assertRaisesRegex(ValueError, 'different root'):
+                retrieve(foreign, self.policy, [], '', 100, len, lambda: None)
+
+    def test_mutation_during_selection_refuses_all_results(self):
+        calls = 0
+        def measure(text):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                (self.root / 'Projects/eden.md').write_text('changed', encoding='utf-8')
+            return len(text)
+        with self.assertRaisesRegex(ValueError, 'revision changed'):
+            self.recall(measure=measure)
+
+    def test_cancellation_propagates_without_publication(self):
+        before = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*.md')}
+        def cancel():
+            raise TimeoutError('cancelled')
+        with self.assertRaisesRegex(TimeoutError, 'cancelled'):
+            self.recall(check=cancel)
+        self.assertEqual(before, {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*.md')})
+
+    def test_hardlinked_source_is_refused(self):
+        import os
+        path = self.root / 'Preferences/lights.md'
+        os.link(path, self.root / 'duplicate.md')
+        self.assertNotIn('Preferences/lights.md', [row['relative'] for row in self.recall()['sources']])
+
+    def test_disabled_and_invalid_budgets(self):
+        self.policy.enabled = False
+        with self.assertRaisesRegex(ValueError, 'disabled'):
+            self.recall()
+        self.policy.enabled = True
+        for opts in ({'budget': True}, {'budget': 12001}, {'count': 13}, {'depth': 3}, {'entry': 2001}):
+            with self.assertRaises(ValueError):
+                self.recall(**opts)
+
+    def test_navigation_attempts_are_bounded(self):
+        text = '# Memory\n' + '\n'.join(f'[link](missing-{index}.md)' for index in range(1000))
+        (self.root / 'INDEX.md').write_bytes(text.encode())
+        self.policy.files['index.md']['sha256'] = self.sha(text)
+        value = self.recall(seeds=[], count=2)
+        self.assertLessEqual(len(value['diagnostics']), 16)
+        self.assertIn('Navigation attempt budget exhausted', str(value['diagnostics']))
+
+    def test_no_passage_fits_reports_truncation(self):
+        value = self.recall(seeds=[], budget=1)
+        self.assertEqual(value['sources'], [])
+        self.assertEqual(value['tokens'], 0)
+        self.assertTrue(value['truncated'])
+        self.assertIn('No passage fits', str(value['diagnostics']))
+
+    def test_exclusions_changed_during_selection_refuses_all_results(self):
+        def measure(text):
+            (self.root / '.rayaignore').write_text('Projects/\n', encoding='utf-8')
+            return len(text)
+        with self.assertRaisesRegex(ValueError, 'exclusions changed'):
+            self.recall(measure=measure)
+
+
+if __name__ == '__main__':
+    unittest.main()

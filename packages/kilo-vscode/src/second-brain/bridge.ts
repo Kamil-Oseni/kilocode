@@ -15,6 +15,8 @@ export class BrainBridge {
   private closed = false
   private recovery?: Promise<void>
   private generation = 0
+  private connected = false
+  private queued = false
 
   constructor(
     private readonly connection: CanvasConnection,
@@ -23,20 +25,30 @@ export class BrainBridge {
     this.off = [
       connection.onEvent((event, directory) => this.event(event, directory)),
       connection.onStateChange((state) => {
-        if (state === "connected" && !this.closed && !this.recovery) {
-          const job = this.recover(this.generation).finally(() => {
-            this.recovery = undefined
-          })
-          this.recovery = job
-          this.hold(job)
-        }
+        this.connected = state === "connected"
+        if (this.connected && !this.closed) this.resume()
         if (state !== "connected") {
+          this.queued = false
           this.generation++
           for (const value of this.active.values()) value.signal.abort()
         }
       }),
     ]
     register(() => this.close())
+  }
+
+  private resume() {
+    if (this.recovery) {
+      this.queued = true
+      return
+    }
+    this.queued = false
+    const job = this.recover(this.generation).finally(() => {
+      this.recovery = undefined
+      if (this.queued && this.connected && !this.closed) this.resume()
+    })
+    this.recovery = job
+    this.hold(job)
   }
 
   private event(event: SSEPayload, directory?: string) {
@@ -73,15 +85,18 @@ export class BrainBridge {
 
   private async run(request: SecondBrainRequest, directory: string, signal: AbortSignal) {
     const client = this.connection.getClient()
+    const generation = this.generation
     try {
+      if (!this.current(client, generation)) return
       if (path.resolve(directory).toLowerCase() !== path.resolve(request.project).toLowerCase())
         throw new Error("Project context differs")
       const result = await this.host.model(request, directory, signal)
       signal.throwIfAborted()
+      if (!this.current(client, generation)) return
       const response = await client.kilocode.secondBrain.reply({ requestID: request.id, directory, result }, { signal })
       if (response.error) throw new Error("Reply refused")
     } catch (error) {
-      if (signal.aborted) return
+      if (signal.aborted || !this.current(client, generation)) return
       const response = await client.kilocode.secondBrain.reject(
         {
           requestID: request.id,
@@ -101,15 +116,26 @@ export class BrainBridge {
     }
   }
 
+  private current(client: ReturnType<CanvasConnection["getClient"]>, generation: number) {
+    if (this.closed || generation !== this.generation) return false
+    try {
+      return this.connection.getClient() === client
+    } catch {
+      // Disconnected intake cannot authorize publication or recovery on the retained client.
+      return false
+    }
+  }
+
   private async recover(generation: number) {
+    const client = this.connection.getClient()
     for (const directory of this.connection.getKnownDirectories()) {
-      if (this.closed) return
-      const client = this.connection.getClient()
+      if (!this.current(client, generation)) return
       const response = await client.kilocode.secondBrain.list({ directory })
-      if (this.closed || generation !== this.generation) return
+      if (!this.current(client, generation)) return
       if (response.error) throw new Error("Memory request inspection refused")
       for (const request of response.data ?? []) {
-        if (this.closed || this.seen.has(request.id)) continue
+        if (!this.current(client, generation)) return
+        if (this.seen.has(request.id)) continue
         if (request.command.action !== "propose") {
           this.start(request, directory)
           continue
@@ -123,6 +149,7 @@ export class BrainBridge {
             message: "A recovered proposal creation has an unknown outcome. Inspect the ledger without replaying it.",
           },
         })
+        if (!this.current(client, generation)) return
         if (rejected.error) throw new Error("Recovered proposal refusal unconfirmed")
       }
     }

@@ -18,22 +18,41 @@ async function fixture() {
   const replies: unknown[] = []
   const rejects: unknown[] = []
   const queued: SecondBrainRequest[] = []
+  const reads: string[] = []
   const state = { failed: false }
+  const gates = new Map<
+    string,
+    { entered: ReturnType<typeof Promise.withResolvers<void>>; held: ReturnType<typeof Promise.withResolvers<void>> }
+  >()
+  const wait = async (action: string) => {
+    const gate = gates.get(action)
+    if (!gate) return
+    gate.entered.resolve()
+    await gate.held.promise
+  }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const url = new URL(request.url)
-      if (request.method === "GET") return Response.json(queued)
+      if (request.method === "GET") {
+        reads.push(url.toString())
+        await wait("list")
+        return Response.json(queued)
+      }
       const body: unknown = await request.json()
       if (url.pathname.endsWith("/reply")) replies.push(body)
-      if (url.pathname.endsWith("/reject")) rejects.push(body)
+      if (url.pathname.endsWith("/reject")) {
+        rejects.push(body)
+        await wait("reject")
+      }
       return Response.json(state.failed ? { error: { code: "unconfirmed" } } : { ok: true }, {
         status: state.failed ? 503 : 200,
       })
     },
   })
   cleanup.push(async () => {
+    for (const gate of gates.values()) gate.held.resolve()
     await server.stop()
     if (
       path.dirname(path.resolve(root)) !== path.resolve(tmpdir()) ||
@@ -43,10 +62,15 @@ async function fixture() {
     await rm(root, { recursive: true })
   })
   const client = createKiloClient({ baseUrl: server.url.toString() })
+  let selected = client
+  let online = true
   const events = new Set<(event: SSEPayload, directory?: string) => void>()
   const states = new Set<Parameters<CanvasConnection["onStateChange"]>[0]>()
   const connection: CanvasConnection = {
-    getClient: () => client,
+    getClient: () => {
+      if (!online) throw new Error("Controlled connection disconnected")
+      return selected
+    },
     getKnownDirectories: () => [root],
     onEvent: (listener) => {
       events.add(listener)
@@ -66,7 +90,20 @@ async function fixture() {
     replies,
     rejects,
     queued,
+    reads,
     connection,
+    hold(action: "list" | "reject") {
+      const gate = { entered: Promise.withResolvers<void>(), held: Promise.withResolvers<void>() }
+      gates.set(action, gate)
+      return gate
+    },
+    replace(value: typeof client) {
+      selected = value
+    },
+    disconnect() {
+      online = false
+      for (const listener of states) listener("disconnected")
+    },
     fail() {
       state.failed = true
     },
@@ -74,6 +111,7 @@ async function fixture() {
       for (const listener of events) listener(value as SSEPayload, root)
     },
     connected() {
+      online = true
       for (const listener of states) listener("connected")
     },
   }
@@ -203,4 +241,106 @@ test("original reply and rejection failures remain retained after active work en
   await expect(bridge.close()).rejects.toBeInstanceOf(AggregateError)
   expect(cfg.replies).toHaveLength(1)
   expect(cfg.rejects).toHaveLength(1)
+})
+
+test("retained host work cannot reply or reject after SDK client replacement", async () => {
+  const cfg = await fixture()
+  const next = await fixture()
+  const held = Promise.withResolvers<void>()
+  const entered = Promise.withResolvers<void>()
+  const bridge = new BrainBridge(cfg.connection, {
+    model: async (request) => {
+      entered.resolve()
+      await held.promise
+      return { action: "list", project: request.project, proposals: [] }
+    },
+  })
+  try {
+    cfg.event({
+      type: "kilocode.second_brain.requested",
+      properties: { id: "req-replaced", sessionID: "ses-original", project: cfg.root, command: { action: "list" } },
+    })
+    await entered.promise
+    cfg.replace(next.connection.getClient())
+    held.resolve()
+    await until(() => Reflect.get(bridge, "jobs").size === 0)
+    await bridge.close()
+    expect(cfg.replies).toEqual([])
+    expect(cfg.rejects).toEqual([])
+    expect(next.replies).toEqual([])
+    expect(next.rejects).toEqual([])
+  } finally {
+    held.resolve()
+    await bridge.close()
+  }
+})
+
+test("a delayed recovery list cannot enter the host after SDK client replacement", async () => {
+  const cfg = await fixture()
+  const next = await fixture()
+  const gate = cfg.hold("list")
+  const entries: string[] = []
+  cfg.queued.push({ id: "req-stale", sessionID: "ses-original", project: cfg.root, command: { action: "list" } })
+  const bridge = new BrainBridge(cfg.connection, {
+    model: async (request) => {
+      entries.push(request.id)
+      return { action: "list", project: request.project, proposals: [] }
+    },
+  })
+  try {
+    cfg.connected()
+    await gate.entered.promise
+    cfg.replace(next.connection.getClient())
+    gate.held.resolve()
+    // Let the actual original SDK list settle before closing; disposal must not mask stale recovery.
+    await until(() => Reflect.get(bridge, "recovery") === undefined)
+    expect(entries).toEqual([])
+    await bridge.close()
+    expect(cfg.replies).toEqual([])
+    expect(next.replies).toEqual([])
+  } finally {
+    gate.held.resolve()
+    await bridge.close()
+  }
+})
+
+test("recovery stops after a held original rejection across disconnect and reconnect", async () => {
+  const cfg = await fixture()
+  const gate = cfg.hold("reject")
+  const entries: string[] = []
+  cfg.queued.push(
+    {
+      id: "req-unknown-held",
+      sessionID: "ses-original",
+      project: cfg.root,
+      command: { action: "propose", id: crypto.randomUUID(), request: { changes: [], sources: [] } },
+    },
+    { id: "req-after-disconnect", sessionID: "ses-original", project: cfg.root, command: { action: "list" } },
+  )
+  const bridge = new BrainBridge(cfg.connection, {
+    model: async (request) => {
+      entries.push(request.id)
+      return { action: "list", project: request.project, proposals: [] }
+    },
+  })
+  try {
+    cfg.connected()
+    await gate.entered.promise
+    cfg.disconnect()
+    const fresh = cfg.hold("list")
+    cfg.connected()
+    gate.held.resolve()
+    await until(() => cfg.reads.length === 2)
+    expect(entries).toEqual([])
+    expect(cfg.rejects).toHaveLength(1)
+    fresh.held.resolve()
+    await until(() => cfg.replies.length === 1)
+    await bridge.close()
+    expect(cfg.rejects).toHaveLength(1)
+    expect(entries).toEqual(["req-after-disconnect"])
+    expect(cfg.replies).toEqual([{ result: { action: "list", project: cfg.root, proposals: [] } }])
+  } finally {
+    gate.held.resolve()
+    await bridge.close()
+  }
 })

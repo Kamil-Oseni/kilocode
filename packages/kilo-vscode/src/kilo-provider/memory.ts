@@ -341,10 +341,14 @@ export class KiloProviderMemory {
         if (!api) throw new Error("Memory unavailable in CLI backend")
         const directory = this.input.dir(sessionID ?? this.input.session()?.id)
         if (!directory) throw new Error(NO_PROJECT)
-        const { data: status } = await retry(() => api.status({ directory }, { throwOnError: true }))
-        if (!current()) return undefined
-        const operation = status.state.enabled ? "disable" : "enable"
-        return (await this.execute({ operation, sessionID }, current)) ? operation : undefined
+        const response = await retry(() => api.status({ directory }, { throwOnError: true })).catch((err: unknown) => {
+          if (!current()) return undefined
+          throw err
+        })
+        if (!current() || !response) return undefined
+        const operation = response.data.state.enabled ? "disable" : "enable"
+        const applied = await this.execute({ operation, sessionID }, current)
+        return current() && applied ? operation : undefined
       },
       sessionID,
       () => undefined,

@@ -5644,9 +5644,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   // raya_change start - Milestone A persistent goal state and user controls
   private async fetchAndSendGoal(sessionID: string, notice?: string): Promise<void> {
-    if (!this.client) return
+    const client = this.client
+    if (!client) return
     const directory = this.getWorkspaceDirectory(sessionID)
-    const response = await this.client.kilocode.goal.get({ sessionID, directory }).catch(() => undefined)
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionGeneration === generation &&
+      sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
+    const response = await client.kilocode.goal.get({ sessionID, directory }).catch(() => undefined)
+    if (!current()) return
     if (!response?.response || (response.error && response.response.status !== 404)) {
       this.postMessage({
         type: "goalState",
@@ -5662,8 +5669,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       notice,
     })
     if (response.response.status === 404 && !notice) {
-      const saved = await stopResult(this.client, sessionID, directory)
-      if (saved) this.postMessage({ type: "goalStopResult", sessionID, notice: saved })
+      const saved = await stopResult(client, sessionID, directory)
+      if (saved && current()) this.postMessage({ type: "goalStopResult", sessionID, notice: saved })
     }
   }
 

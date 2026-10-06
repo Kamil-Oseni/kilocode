@@ -30,6 +30,12 @@ The health panel now expires a missing read-only reply after 15 seconds, clears 
 
 ## Validation recorded on 2026-10-05
 
+### Goal read scope recovery, 2026-10-06
+
+Actual generated-SDK loopback tests reproduce outdated Goal responses after a client replacement, connection-generation change or workspace switch, and an outdated saved Stop result after reconnection. All four tests fail against the original method. The repaired method captures its original client, generation and directory, fences the Goal response before publication and uses that same client for the Stop lookup. It rechecks scope after that lookup before displaying a saved result. The five focused tests pass, including current-scope missing/error handling and successful fresh reads after stale responses are discarded. This is read-only response fencing, not a cancellation, Goal mutation or backend repair.
+
+The initial wider task/routine/Goal cohort finishes with 183 passes and two failures across 53 files. The unresolved mounted routine delegation and editing tests are retained in `.tmp/memory-private/tasks-postmerge-full.log`; this checkpoint does not claim that the whole suite passes. The repaired Goal read/edit/Stop/start cohort passes 14 tests with 144 assertions. Full extension compile, host/webview types, lint, bundle, Knip and required formatting pass. Goal reproduction and repair logs are `.tmp/memory-private/goal-read-scope-*`. No real model, installed-profile, microphone, playback or device action was performed.
+
 ### Combined context and resource source checks, 2026-10-06
 
 The current combined source passes 29 CLI context, routing and recall tests (232 assertions), plus 63 extension live-context, activity and session-queue tests (143 assertions). Real request preparation estimates fixed input at 7,624 tokens for Ask, 5,772 for Auto and 13,351 for Code against the configured 32,768-token window and 1,024-token output allowance. These are estimator results for the isolated test configuration, not measured model tokens or available space in a personal workspace. Indexed recall checks cover all pages/batches, worktree boundaries, current-turn exclusion, prior assistant tails, literal queries, bounded snippets and cancellation. The explicit local-context transport checks preserve configured 65,536/131,072 windows without silent truncation; they do not establish model support, usable latency or RAM/VRAM capacity at those sizes.

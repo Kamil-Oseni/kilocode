@@ -125,12 +125,12 @@
         "category": "Raya"
       },
       {
-        "command": "kilo-code.new.setupHomeAssistant",
+        "command": "raya.setupHomeAssistant",
         "title": "Connect Home Assistant",
         "category": "Raya"
       },
       {
-        "command": "kilo-code.new.reviewHomeAssistantAction",
+        "command": "raya.reviewHomeAssistantAction",
         "title": "Review Home Assistant Action",
         "category": "Raya"
       },

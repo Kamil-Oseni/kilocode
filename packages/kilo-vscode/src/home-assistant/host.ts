@@ -21,7 +21,7 @@ export function register(context: vscode.ExtensionContext, connection: KiloConne
   })
   const jobs = new Set<Promise<unknown>>()
   const state = { closed: false }
-  const review = vscode.commands.registerCommand("kilo-code.new.reviewHomeAssistantAction", () => {
+  const run = () => {
     if (state.closed) return
     const job = (async () => {
       const debt = journal.pending()
@@ -49,7 +49,9 @@ export function register(context: vscode.ExtensionContext, connection: KiloConne
       })
     jobs.add(job)
     return job
-  })
+  }
+  const review = vscode.commands.registerCommand("raya.reviewHomeAssistantAction", run)
+  const alias = vscode.commands.registerCommand("kilo-code.new.reviewHomeAssistantAction", run)
   let closing: Promise<void> | undefined
   const dispose = () => {
     state.closed = true
@@ -64,6 +66,7 @@ export function register(context: vscode.ExtensionContext, connection: KiloConne
     closing ??= (async () => {
       const results = await Promise.allSettled([
         start(() => review.dispose()),
+        start(() => alias.dispose()),
         start(() => command.dispose()),
         start(() => owner.dispose()),
         ...jobs,

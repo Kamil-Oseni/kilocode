@@ -32,7 +32,7 @@ export function register(context: vscode.ExtensionContext, apply?: (config: Conf
   const jobs = new Set<Promise<void>>()
   const failures = new Set<unknown>()
   const state = { closed: false, active: false }
-  const command = vscode.commands.registerCommand("kilo-code.new.setupHomeAssistant", () => {
+  const run = () => {
     if (state.closed || state.active) return
     state.active = true
     const job = setup(settings, state, apply)
@@ -48,10 +48,13 @@ export function register(context: vscode.ExtensionContext, apply?: (config: Conf
       })
     jobs.add(job)
     return job
-  })
+  }
+  const command = vscode.commands.registerCommand("raya.setupHomeAssistant", run)
+  const alias = vscode.commands.registerCommand("kilo-code.new.setupHomeAssistant", run)
   const dispose = async () => {
     state.closed = true
     command.dispose()
+    alias.dispose()
     const results = await Promise.allSettled([...jobs])
     const errors = [
       ...new Set([...failures, ...results.flatMap((value) => (value.status === "rejected" ? [value.reason] : []))]),

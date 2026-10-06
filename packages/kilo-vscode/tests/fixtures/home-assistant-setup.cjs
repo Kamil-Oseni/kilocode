@@ -26,8 +26,9 @@ global.fetch = () => {
 const native = {
   commands: {
     registerCommand(name, callback) {
-      assert.equal(name, "kilo-code.new.setupHomeAssistant")
-      handler = callback
+      assert.ok(["raya.setupHomeAssistant", "kilo-code.new.setupHomeAssistant"].includes(name))
+      if (name === "raya.setupHomeAssistant") handler = callback
+      if (name === "kilo-code.new.setupHomeAssistant") assert.equal(callback, handler)
       return {
         dispose() {
           removed = true

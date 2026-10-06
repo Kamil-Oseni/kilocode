@@ -56,7 +56,13 @@ test("a lost Stop receipt refreshes observed worker state without replaying canc
   await page.clock.fastForward(20_000)
   await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
   const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
-  expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toHaveLength(1)
+  expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toEqual([
+    expect.objectContaining({
+      jobID: "synthetic-worker",
+      revision: "synthetic-worker-revision",
+      sessionID: "story-session-001",
+    }),
+  ])
   expect(sent.filter((message: { type: string }) => message.type === "requestBackgroundJobs").length).toBeGreaterThan(1)
   await page.evaluate(() => (window as unknown as { __confirmStop: () => void }).__confirmStop())
   await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
@@ -76,9 +82,23 @@ test("Activity and health exposes the actual worker strip and scoped Stop comman
   await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toHaveCount(0)
   const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
   expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toEqual([
-    expect.objectContaining({ jobID: "synthetic-worker", sessionID: "story-session-001" }),
+    expect.objectContaining({
+      jobID: "synthetic-worker",
+      revision: "synthetic-worker-revision",
+      sessionID: "story-session-001",
+    }),
   ])
   await audit(page)
+})
+
+test("workers without a registry revision remain visible but cannot dispatch Stop", async ({ page }) => {
+  await page.goto("/?state=workers-legacy")
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  await expect(workers.getByText("Write daily summary", { exact: true })).toBeVisible()
+  await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toBeDisabled()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toEqual([])
 })
 
 test("shared resource observations render without claiming worker or GPU attribution", async ({ page }) => {

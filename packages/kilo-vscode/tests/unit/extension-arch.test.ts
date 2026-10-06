@@ -114,6 +114,15 @@ describe("Extension — package.json command sync", () => {
     expect(registered).toContain("kilo-code.new.openBrowser")
   })
 
+  it("declares Raya Home Assistant commands and retains their activation aliases", () => {
+    for (const name of ["setupHomeAssistant", "reviewHomeAssistantAction"]) {
+      expect(declared).toContain(`raya.${name}`)
+      expect(declared).not.toContain(`kilo-code.new.${name}`)
+      expect(registered).toContain(`raya.${name}`)
+      expect(registered).toContain(`kilo-code.new.${name}`)
+    }
+  })
+
   // raya_change - Raya owns the explicit browser shortcut on both platforms
   it("opens the Raya browser with the cross-platform browser shortcut", () => {
     const bindings = pkg.contributes?.keybindings ?? []

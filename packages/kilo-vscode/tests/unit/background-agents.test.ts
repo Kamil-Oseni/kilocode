@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import {
   backgroundAgentActivity,
+  backgroundAgentCancellation,
   backgroundAgentDuration,
   backgroundAgentElapsed,
   backgroundAgentIdentity,
@@ -430,4 +431,34 @@ describe("backgroundAgents", () => {
 
     expect(foregroundAgent(tools, { child_background: busy, child_foreground: busy })).toBe("child_foreground")
   })
+})
+
+it("captures only the displayed registry revision for Stop, including a stale row kept after a failed refresh", () => {
+  const jobs: BackgroundJobInfo[] = [
+    {
+      id: "job",
+      revision: "displayed",
+      type: "task",
+      status: "running",
+      started_at: 1,
+      metadata: { parentSessionId: "parent", sessionId: "child", background: true },
+    },
+  ]
+  const snapshot = reconcileBackgroundAgents(
+    { jobs, loaded: true, unavailable: false },
+    { type: "backgroundJobsLoaded", sessionID: "parent", requestID: "refresh", jobs: [], error: "Unavailable" },
+  )
+  const [agent] = backgroundJobAgents(snapshot.jobs, "parent")
+  expect(backgroundAgentCancellation(agent, "parent", "stop")).toEqual({
+    type: "cancelBackgroundJob",
+    jobID: "job",
+    revision: "displayed",
+    sessionID: "parent",
+    requestID: "stop",
+  })
+  expect(backgroundAgentCancellation({ ...agent, revision: undefined }, "parent", "stop")).toBeUndefined()
+  expect(backgroundAgentCancellation({ ...agent, status: "completed" }, "parent", "stop")).toBeUndefined()
+  const [next] = backgroundJobAgents([{ ...jobs[0], revision: "newer" }], "parent")
+  expect(backgroundAgentCancellation(agent, "parent", "stop")?.revision).toBe("displayed")
+  expect(backgroundAgentCancellation(next, "parent", "next")?.revision).toBe("newer")
 })

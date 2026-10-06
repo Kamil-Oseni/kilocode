@@ -9320,13 +9320,14 @@ export class BackgroundJob extends HeyApiClient {
   /**
    * Cancel background job
    *
-   * Cancel one background subagent job and its session tree.
+   * Cancel the observed background execution revision and its authenticated descendants.
    */
   public cancel<ThrowOnError extends boolean = false>(
     parameters: {
       jobID: string
       directory?: string
       workspace?: string
+      revision?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -9338,6 +9339,7 @@ export class BackgroundJob extends HeyApiClient {
             { in: "path", key: "jobID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "revision" },
           ],
         },
       ],
@@ -9350,6 +9352,11 @@ export class BackgroundJob extends HeyApiClient {
       url: "/kilocode/background-jobs/{jobID}/cancel",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

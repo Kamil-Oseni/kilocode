@@ -439,6 +439,7 @@ export interface RequestBackgroundJobsMessage {
 export interface CancelBackgroundJobMessage {
   type: "cancelBackgroundJob"
   jobID: string
+  revision: string
   sessionID: string
   requestID: string
 }

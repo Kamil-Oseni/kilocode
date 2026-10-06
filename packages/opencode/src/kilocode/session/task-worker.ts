@@ -35,6 +35,15 @@ export const make = (runs: Runs) =>
         }),
       ).pipe(Effect.uninterruptible, Effect.flatten)
     return {
+      current: Effect.gen(function* () {
+        const execution = yield* Effect.serviceOption(Execution)
+        if (execution._tag === "None") return undefined
+        const current = yield* SynchronizedRef.get(state)
+        const binding = current.bindings.get(execution.value.id)
+        if (!binding || current.cancelled.has(key(binding.sessionID, binding.messageID))) return undefined
+        const observed = yield* runs.inspect(binding.sessionID)
+        return observed.phase === "running" && observed.id === execution.value.id ? { ...binding } : undefined
+      }),
       stop,
       bind: (sessionID: SessionID, messageID: MessageID) =>
         Effect.gen(function* () {
@@ -69,6 +78,7 @@ const scoped = (runs: Runs) =>
   Effect.gen(function* () {
     const state = yield* InstanceState.make(() => make(runs))
     return {
+      current: InstanceState.useEffect(state, (workers) => workers.current),
       stop: (sessionID: SessionID, messages: readonly MessageID[]) =>
         InstanceState.useEffect(state, (workers) => workers.stop(sessionID, messages)),
       bind: (sessionID: SessionID, messageID: MessageID) =>

@@ -74,7 +74,10 @@ try {
     const until = async (condition) => {
       const start = Date.now()
       while (!condition()) {
-        if (Date.now() - start > 10_000) throw new Error("Synthetic provider condition timed out")
+        if (Date.now() - start > 10_000)
+          throw new Error(
+            `Synthetic provider condition timed out: ${window.fixture.voice.status()} / ${window.fixture.voice.error()}`,
+          )
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
     }
@@ -156,7 +159,14 @@ try {
       await until(() => peer.iceGatheringState === "complete")
       return peer.localDescription.sdp
     }
-    const settings = { ...Provider.DEFAULT_SPEECH_SETTINGS, voiceEngine: "openai-realtime", hasOpenAIKey: true }
+    const settings = {
+      ...Provider.DEFAULT_SPEECH_SETTINGS,
+      voiceEngine: "openai-realtime",
+      hasOpenAIKey: true,
+      hasRealtimeKey: false,
+      hasSttKey: false,
+      hasTtsKey: false,
+    }
     const mount = () => {
       const dispose = Provider.mount(document.getElementById("root"))
       send({ type: "speechSettingsLoaded", settings })

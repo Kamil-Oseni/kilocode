@@ -6,6 +6,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
+import { retire } from "@/kilocode/session/background-retirement" // kilocode_change
 import { Decimal } from "decimal.js"
 import * as Accounting from "@/kilocode/session/accounting" // kilocode_change
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
@@ -157,9 +158,7 @@ export function toRow(info: Info) {
     tokens_cache_read: (info.tokens ?? EmptyTokens).cache.read,
     tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
     // kilocode_change - re-brand the v1 messageID to the shared Revert.State brand for the column
-    revert: info.revert
-      ? { ...info.revert, messageID: SessionMessage.ID.make(info.revert.messageID) }
-      : null,
+    revert: info.revert ? { ...info.revert, messageID: SessionMessage.ID.make(info.revert.messageID) } : null,
     permission: info.permission,
     time_created: info.time.created,
     time_updated: info.time.updated,
@@ -603,7 +602,12 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service | ReviewGate.Service | SessionRetention.Service // kilocode_change
+  | BackgroundJob.Service
+  | RuntimeFlags.Service
+  | Database.Service
+  | EventV2Bridge.Service
+  | ReviewGate.Service
+  | SessionRetention.Service // kilocode_change
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -760,13 +764,15 @@ export const layer: Layer.Layer<
               )
             }
             // Cancel jobs before taking the gate: cancellation may await their checkpoint cleanup.
-            yield* gate.withWorkspace(session.directory)(Effect.gen(function* () {
-              yield* retention.reviews(sessionID).pipe(Effect.orDie) // kilocode_change - drain review work before receipt erasure
-              yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
-              const workspaceKey = hasInstance ? yield* InstanceState.directory : undefined
-              yield* Effect.promise(() => SessionExport.onSessionClose(sessionID, workspaceKey))
-              yield* events.remove(sessionID)
-            }))
+            yield* gate.withWorkspace(session.directory)(
+              Effect.gen(function* () {
+                yield* retention.reviews(sessionID).pipe(Effect.orDie) // kilocode_change - drain review work before receipt erasure
+                yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
+                const workspaceKey = hasInstance ? yield* InstanceState.directory : undefined
+                yield* Effect.promise(() => SessionExport.onSessionClose(sessionID, workspaceKey))
+                yield* events.remove(sessionID)
+              }),
+            )
           }),
         )
         // kilocode_change end
@@ -1153,12 +1159,12 @@ const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function*
   const jobs = yield* background.list()
   yield* Effect.forEach(
     jobs.filter((job) => {
-      if (job.status !== "running") return false
+      if (job.status !== "running" && !job.origins?.length) return false // kilocode_change - include retained ancestors with owned execution lineage
       if (job.id === sessionID) return true
       if (job.metadata?.sessionId === sessionID) return true
       return job.metadata?.parentSessionId === sessionID
     }),
-    (job) => background.cancel(job.id),
+    (job) => retire(background, job), // kilocode_change - exact observed revision and shared execution tree
     { concurrency: "unbounded", discard: true },
   )
 })
@@ -1256,7 +1262,14 @@ export const fork = kiloSessionFork
 export const node = LayerNode.make({
   service: Service,
   layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node, ReviewGate.node, SessionRetention.node], // kilocode_change
+  deps: [
+    BackgroundJob.node,
+    RuntimeFlags.node,
+    Database.node,
+    EventV2Bridge.node,
+    ReviewGate.node,
+    SessionRetention.node,
+  ], // kilocode_change
 })
 
 export * as Session from "./session"

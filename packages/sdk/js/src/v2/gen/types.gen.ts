@@ -22546,6 +22546,7 @@ export type KilocodeBackgroundJobsResponses = {
    */
   200: Array<{
     id: string
+    revision?: string
     type: string
     title?: string
     status: "running" | "completed" | "error" | "cancelled"
@@ -22561,7 +22562,9 @@ export type KilocodeBackgroundJobsResponses = {
 export type KilocodeBackgroundJobsResponse = KilocodeBackgroundJobsResponses[keyof KilocodeBackgroundJobsResponses]
 
 export type KilocodeBackgroundJobCancelData = {
-  body?: never
+  body?: {
+    revision: string
+  }
   path: {
     jobID: string
   }
@@ -22581,6 +22584,10 @@ export type KilocodeBackgroundJobCancelErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict
+   */
+  409: EffectHttpApiErrorConflict
 }
 
 export type KilocodeBackgroundJobCancelError =
@@ -22588,7 +22595,7 @@ export type KilocodeBackgroundJobCancelError =
 
 export type KilocodeBackgroundJobCancelResponses = {
   /**
-   * Background job cancelled
+   * Selected background execution and its owned work joined
    */
   200: boolean
 }

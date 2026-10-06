@@ -115,6 +115,7 @@ const Scope = Schema.Literals(["global", "project"])
 
 export const BackgroundJobInfo = Schema.Struct({
   id: Schema.String,
+  revision: Schema.optional(Schema.String),
   type: Schema.String,
   title: Schema.optional(Schema.String),
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
@@ -123,6 +124,8 @@ export const BackgroundJobInfo = Schema.Struct({
   error: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 })
+
+export const BackgroundJobCancelPayload = Schema.Struct({ revision: Schema.String.check(Schema.isMinLength(1)) })
 
 export const BackgroundJobMetadata = {
   clean(value: Record<string, unknown> | undefined) {
@@ -337,6 +340,24 @@ export const KilocodePaths = {
   agentDelegateChain: `${root}/agent/:agentID/delegate/:id/chain`,
   agentDelegateCancel: `${root}/agent/:agentID/delegate/:id/cancel`,
 } as const
+
+export const BackgroundJobCancelEndpoint = HttpApiEndpoint.post(
+  "backgroundJobCancel",
+  KilocodePaths.backgroundJobCancel,
+  {
+    params: { jobID: Schema.String },
+    payload: BackgroundJobCancelPayload,
+    query: WorkspaceRoutingQuery,
+    success: described(Schema.Boolean, "Selected background execution and its owned work joined"),
+    error: [HttpApiError.NotFound, HttpApiError.Conflict],
+  },
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "kilocode.backgroundJob.cancel",
+    summary: "Cancel background job",
+    description: "Cancel the observed background execution revision and its authenticated descendants.",
+  }),
+)
 
 export const KilocodeApi = HttpApi.make("kilocode")
   .add(
@@ -734,18 +755,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
             description: "List background subagent jobs owned by one parent session.",
           }),
         ),
-        HttpApiEndpoint.post("backgroundJobCancel", KilocodePaths.backgroundJobCancel, {
-          params: { jobID: Schema.String },
-          query: WorkspaceRoutingQuery,
-          success: described(Schema.Boolean, "Background job cancelled"),
-          error: HttpApiError.NotFound,
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "kilocode.backgroundJob.cancel",
-            summary: "Cancel background job",
-            description: "Cancel one background subagent job and its session tree.",
-          }),
-        ),
+        BackgroundJobCancelEndpoint,
         // raya_change start - Milestone A session-scoped goal API
         HttpApiEndpoint.post("goalCreate", KilocodePaths.goal, {
           params: { sessionID: SessionID },

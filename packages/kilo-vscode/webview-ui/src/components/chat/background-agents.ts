@@ -16,6 +16,7 @@
 
 import type {
   BackgroundJobInfo,
+  CancelBackgroundJobMessage,
   BackgroundJobsLoadedMessage,
   PermissionRequest,
   QuestionRequest,
@@ -49,8 +50,19 @@ export interface BackgroundAgent {
   startedAt: number
   completedAt?: number
   jobID: string
+  revision?: string
   permission?: PermissionRequest
   question?: QuestionRequest
+}
+
+/** Capture the displayed invocation; never select a newer revision while stopping. */
+export function backgroundAgentCancellation(
+  agent: BackgroundAgent,
+  sessionID: string,
+  requestID: string,
+): CancelBackgroundJobMessage | undefined {
+  if (agent.status !== "running" || !agent.revision || !sessionID) return undefined
+  return { type: "cancelBackgroundJob", jobID: agent.jobID, revision: agent.revision, sessionID, requestID }
 }
 
 export interface BackgroundAgentUsage {
@@ -172,6 +184,7 @@ export function backgroundJobAgents(
         startedAt: job.started_at,
         completedAt: job.completed_at,
         jobID: job.id,
+        revision: text(job.revision),
         permission: permissions.find((item) => item.sessionID === id),
         question: questions.find((item) => item.sessionID === id),
       }

@@ -447,7 +447,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   function selection(message: ExtensionMessage) {
     if (message.type === "speechPlaybackVoice") {
       if (loop.paused()) return true
-      const text = `${message.model} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${message.voice}${message.fallback ? ` (fallback${message.reason ? `: ${message.reason}` : ""})` : ""}`
+      const text = `${message.model} \u00b7 ${message.voice}${message.fallback ? ` (fallback${message.reason ? `: ${message.reason}` : ""})` : ""}`
       if (message.requestId === state.request && choice.expected === message.requestId) setOutput(text)
       return true
     }

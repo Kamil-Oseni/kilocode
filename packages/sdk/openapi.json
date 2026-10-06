@@ -21195,6 +21195,9 @@
                       "id": {
                         "type": "string"
                       },
+                      "revision": {
+                        "type": "string"
+                      },
                       "type": {
                         "type": "string"
                       },
@@ -21319,12 +21322,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Background job cancelled",
+            "description": "Selected background execution and its owned work joined",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "boolean",
-                  "description": "Background job cancelled"
+                  "description": "Selected background execution and its owned work joined"
                 }
               }
             }
@@ -21348,10 +21351,37 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_Conflict"
+                }
+              }
+            }
           }
         },
-        "description": "Cancel one background subagent job and its session tree.",
+        "description": "Cancel the observed background execution revision and its authenticated descendants.",
         "summary": "Cancel background job",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["revision"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "x-codeSamples": [
           {
             "lang": "js",

@@ -1,3 +1,4 @@
+import { cancel as cancelBackground } from "../background-cancel"
 import { Cause, Effect, Result, Schema } from "effect"
 import { composerHandlers } from "./composer-drafts"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
@@ -501,6 +502,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .filter((job) => job.metadata?.parentSessionId === ctx.query.sessionID)
         .map((job) => ({
           id: job.id,
+          revision: job.revision,
           type: job.type,
           title: job.title,
           status: job.status,
@@ -512,15 +514,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         })) satisfies (typeof BackgroundJobInfo.Type)[]
     })
 
-    const backgroundJobCancel = Effect.fn("KilocodeHttpApi.backgroundJobCancel")(function* (ctx: {
-      params: { jobID: string }
-    }) {
-      const job = yield* background.get(ctx.params.jobID)
-      if (!job) return yield* new HttpApiError.NotFound({})
-      const sessionID = SessionID.make(typeof job.metadata?.sessionId === "string" ? job.metadata.sessionId : job.id)
-      yield* runState.cancel(sessionID)
-      return true
-    })
+    const backgroundJobCancel = cancelBackground(background)
 
     // raya_change start - Milestone A session-scoped goal API
     const goalCreate = Effect.fn("KilocodeHttpApi.goalCreate")(function* (ctx: {

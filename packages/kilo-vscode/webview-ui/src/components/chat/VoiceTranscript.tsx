@@ -41,10 +41,8 @@ export const VoiceTranscript: Component = () => {
         class="prompt-realtime-voice"
         data-slot="voice-transcript"
         data-partial={transcript()?.stable === false && !transcript()?.interruption}
-        role="status"
-        aria-live="polite"
       >
-        <span class="prompt-realtime-voice__state">
+        <span class="prompt-realtime-voice__state" role="status" aria-live="polite" aria-atomic="true">
           {state()}
           {voice.aec() ? " · AEC" : ""}
         </span>
@@ -75,7 +73,9 @@ export const VoiceTranscript: Component = () => {
           <span data-slot="voice-transcript-caption">{caption()}</span>
         </Show>
         <Show when={voice.error()}>
-          <span class="prompt-realtime-voice__text">{voice.error()}</span>
+          <span class="prompt-realtime-voice__text" role="alert">
+            {voice.error()}
+          </span>
         </Show>
         <Show when={!transcript()?.interruption && transcript()?.text}>
           <span class="prompt-realtime-voice__text">{transcript()?.text}</span>

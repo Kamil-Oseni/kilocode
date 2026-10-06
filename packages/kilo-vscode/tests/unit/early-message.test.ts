@@ -59,8 +59,8 @@ describe("routeEarlyMessage background jobs", () => {
   it("forwards cancellation through the owning parent session", async () => {
     const calls: unknown[] = []
     const ctx = {
-      cancelBackgroundJob: async (jobID: string, sessionID: string, requestID: string) =>
-        calls.push([jobID, sessionID, requestID]),
+      cancelBackgroundJob: async (jobID: string, sessionID: string, requestID: string, revision: string) =>
+        calls.push([jobID, sessionID, requestID, revision]),
     } as Ctx
 
     expect(
@@ -68,13 +68,14 @@ describe("routeEarlyMessage background jobs", () => {
         {
           type: "cancelBackgroundJob",
           jobID: "ses_child",
+          revision: "displayed",
           sessionID: "ses_parent",
           requestID: "request-2",
         },
         ctx,
       ),
     ).toBe(true)
-    expect(calls).toEqual([["ses_child", "ses_parent", "request-2"]])
+    expect(calls).toEqual([["ses_child", "ses_parent", "request-2", "displayed"]])
   })
 })
 
@@ -96,3 +97,20 @@ describe("routeEarlyMessage child steering", () => {
     expect(calls).toEqual([message])
   })
 })
+
+for (const revision of [undefined, "", 1])
+  it(`does not dispatch a Stop without a displayed revision (${String(revision)})`, async () => {
+    const calls: unknown[] = []
+    const ctx = {
+      cancelBackgroundJob: async (...args: unknown[]) => {
+        calls.push(args)
+      },
+    } as Ctx
+    expect(
+      await routeEarlyMessage(
+        { type: "cancelBackgroundJob", jobID: "child", sessionID: "parent", requestID: "stop", revision },
+        ctx,
+      ),
+    ).toBe(true)
+    expect(calls).toEqual([])
+  })

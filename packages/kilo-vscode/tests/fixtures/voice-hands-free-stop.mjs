@@ -55,6 +55,7 @@ const { VSCodeProvider } = await import("../../webview-ui/src/context/vscode.tsx
 const { SessionContext } = await import("../../webview-ui/src/context/session.tsx")
 const { VoiceProvider, useVoice } = await import("../../webview-ui/src/context/voice.tsx")
 const { NativeVoiceControls } = await import("../../webview-ui/src/components/chat/NativeVoiceControls.tsx")
+const { VoiceTranscript } = await import("../../webview-ui/src/components/chat/VoiceTranscript.tsx")
 const { DEFAULT_SPEECH_SETTINGS } = await import("../../src/shared/speech.ts")
 let audio = 0
 globalThis.AudioContext = class {
@@ -74,17 +75,27 @@ const dispose = render(
     createComponent(VSCodeProvider, {
       get children() {
         return createComponent(SessionContext.Provider, {
-          value: { currentSessionID: () => "synthetic-voice" },
+          value: {
+            currentSessionID: () => "synthetic-voice",
+            status: () => "idle",
+            visibleMessages: () => [],
+            getSessionToolParts: () => [],
+            scopedPermissions: () => [],
+            scopedQuestions: () => [],
+          },
           get children() {
             return createComponent(VoiceProvider, {
               get children() {
                 voice = useVoice()
-                return createComponent(NativeVoiceControls, {
-                  end: () => {
-                    voice.stop()
-                    voice.setMode("off")
-                  },
-                })
+                return [
+                  createComponent(NativeVoiceControls, {
+                    end: () => {
+                      voice.stop()
+                      voice.setMode("off")
+                    },
+                  }),
+                  createComponent(VoiceTranscript, {}),
+                ]
               },
             })
           },
@@ -113,6 +124,18 @@ try {
   const contexts = audio
   voice.wait("synthetic-voice")
   assert.equal(voice.status(), "thinking")
+  const transcript = root.querySelector('[data-slot="voice-transcript"]')
+  assert.ok(transcript)
+  assert.equal(
+    transcript.getAttribute("aria-live"),
+    null,
+    "changing transcript history must not be one live announcement",
+  )
+  const phase = transcript.querySelector(".prompt-realtime-voice__state")
+  assert.equal(phase.getAttribute("role"), "status")
+  assert.equal(phase.getAttribute("aria-live"), "polite")
+  assert.equal(phase.getAttribute("aria-atomic"), "true")
+  assert.equal(phase.textContent, "Thinking")
   const stop = root.querySelector('button[aria-label="Stop hands-free listening"]')
   assert.ok(stop, "local hands-free stop must remain visible while thinking")
   assert.equal(stop.disabled, false)
@@ -139,6 +162,7 @@ try {
   voice.setMode("hands-free")
   voice.wait("synthetic-voice")
   voice.pause("Capture failed")
+  assert.equal(root.querySelector('[data-slot="voice-transcript"] [role="alert"]').textContent, "Capture failed")
   assert.ok(
     root.querySelector('button[aria-label="Stop hands-free listening"]'),
     "capture failure must retain stop control",
@@ -148,7 +172,7 @@ try {
   send({ type: "speechSettingsLoaded", settings })
   await tick()
   assert.equal(listens, paused, "passive settings cannot restart a stopped/paused capture")
-  console.log("13 actual hands-free stop assertions passed")
+  console.log("Hands-free Stop and voice status accessibility assertions passed")
 } finally {
   dispose()
   await tick()

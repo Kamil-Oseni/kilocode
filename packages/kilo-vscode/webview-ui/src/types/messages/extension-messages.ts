@@ -36,6 +36,7 @@ export interface BackgroundJobsLoadedMessage {
 
 export interface BackgroundJobInfo {
   id: string
+  revision?: string
   type: string
   title?: string
   status: "running" | "completed" | "error" | "cancelled"

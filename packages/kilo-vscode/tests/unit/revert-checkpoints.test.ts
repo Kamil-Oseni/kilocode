@@ -47,8 +47,10 @@ describe("revert session synchronization", () => {
     const revert = method("handleRevertSession", "handleUnrevertSession")
     const unrevert = method("handleUnrevertSession", "handleCompact")
 
-    expect(revert).toContain("await this.client.session.revert")
-    expect(unrevert).toContain("await this.client.session.unrevert")
+    expect(revert).toContain("const client = this.client")
+    expect(revert).toContain("await client.session.revert")
+    expect(unrevert).toContain("const client = this.client")
+    expect(unrevert).toContain("await client.session.unrevert")
     expect(revert).toContain('type: "sessionUpdated"')
     expect(unrevert).toContain('type: "sessionUpdated"')
   })

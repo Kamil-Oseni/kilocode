@@ -86,5 +86,5 @@ test("local cascade reaches the actual browser provider without a MiniMax key", 
     new Response(child.stderr).text(),
   ]).finally(() => clearTimeout(timer))
   expect(code, stdout + stderr).toBe(0)
-  expect(stdout).toContain("Speech local fallback passed: 8 assertions")
+  expect(stdout).toContain("Speech local fallback passed: 9 assertions")
 }, 20000)

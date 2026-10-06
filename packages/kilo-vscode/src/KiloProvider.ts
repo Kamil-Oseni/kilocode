@@ -404,6 +404,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private contextSessionID: string | undefined
   private connectionState: "connecting" | "connected" | "disconnected" | "error" = "connecting"
   private connectionGeneration = 0
+  private readonly goalReads = new Map<string, symbol>()
   private composerRevision = 0
   private composerSignature?: string
   private composerReady = false
@@ -515,6 +516,18 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private noticed = new Set<string>()
   private readonly streams = new SessionStreamScheduler((msg) => this.postMessage(msg))
   private jobsBackoff = 0
+  private readonly jobReads = new Map<string, symbol>()
+  private readonly jobStops = new Map<
+    string,
+    {
+      client: KiloClient
+      generation: number
+      directory: string
+      jobID: string
+      revision: string
+      done: Promise<{ response: Response; error?: unknown }>
+    }
+  >()
   private readonly visibleTaskStreams = new VisibleTaskStreams((id, visible) => this.streams.setVisible(id, visible))
   private readonly confirmations = new MessageConfirmation()
   private readonly costs = new MaxCostNudge()
@@ -1282,7 +1295,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           speechToTextModels: () => this.fetchAndSendSpeechToTextModels(),
           modelUsage: (msg) => handleModelUsageMessage(msg, this.extensionContext, (value) => this.postMessage(value)),
           backgroundJobs: (sessionID, requestID) => this.fetchAndSendBackgroundJobs(sessionID, requestID),
-          cancelBackgroundJob: (jobID, sessionID, requestID) => this.cancelBackgroundJob(jobID, sessionID, requestID),
+          cancelBackgroundJob: (jobID, sessionID, requestID, revision) =>
+            this.cancelBackgroundJob(jobID, sessionID, requestID, revision),
           backgroundSubagents: (sessionID) => this.backgroundSubagents(sessionID),
           chiefNotes: (input) => this.readChiefNotes(input),
           childSteer: (message) => this.steerChild(message),
@@ -1832,7 +1846,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         ...(this.extensionContext
           ? {
               recovery: () =>
-              availability({
+                availability({
                   root: this.extensionContext!.globalStorageUri.fsPath,
                   state: this.extensionContext!.globalState,
                   version: String(this.extensionContext!.extension.packageJSON.version),
@@ -1902,10 +1916,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (typeof message.sessionID !== "string" || typeof message.messageID !== "string") return true
       const sid = message.sessionID
       const id = message.messageID
+      const client = this.client
+      if (!client || this.connectionState !== "connected") return true
+      const dir = this.getWorkspaceDirectory(sid)
+      const generation = this.connectionGeneration
+      const current = () =>
+        this.client === client &&
+        this.connectionState === "connected" &&
+        this.connectionGeneration === generation &&
+        sameDirectory(dir, this.getWorkspaceDirectory(sid))
       this.checkpoint(sid, async () => {
+        if (!current()) return
         await this.handleRevertSession(sid, id)
-        const dir = this.getWorkspaceDirectory(sid)
-        const { error } = await this.client!.kilocode.goal.discard({ sessionID: sid, directory: dir })
+        if (!current()) return
+        const { error } = await client.kilocode.goal.discard({ sessionID: sid, directory: dir })
+        if (!current()) return
         if (error) {
           this.postMessage({
             type: "goalState",
@@ -2847,13 +2872,24 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return
     }
 
+    const client = this.client
+    const generation = this.connectionGeneration
+    const workspaceDir = this.getContextDirectory()
+    const project = this.opts.projectQualifier?.()?.projectId
+    const current = () =>
+      this.client === client &&
+      this.connectionGeneration === generation &&
+      this.connectionState === "connected" &&
+      sameDirectory(this.getContextDirectory(), workspaceDir) &&
+      this.opts.projectQualifier?.()?.projectId === project
     try {
-      const workspaceDir = this.getContextDirectory()
-      const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, this.client, workspaceDir)
-      const { data: session } = await this.client.session.create(
+      const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, client, workspaceDir)
+      if (!current()) throw new Error("Session creation interrupted because the connection changed. Please retry.")
+      const { data: session } = await client.session.create(
         { directory: workspaceDir, platform: this.opts.platform, metadata },
         { throwOnError: true },
       )
+      if (!current()) throw new Error("Session creation interrupted because the connection changed. Please retry.")
       if (!draftID) {
         this.stopCurrentSessionProcesses(session.id)
         this.setCurrentSession(session)
@@ -2867,11 +2903,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage({
         type: "sessionCreated",
         draftID,
-        projectId: this.opts.projectQualifier?.()?.projectId,
+        projectId: project,
         session: this.sessionToWebview(session),
       })
     } catch (error) {
       console.error("[Raya] Provider: Failed to create session:", error)
+      if (!current() && !draftID) return
       const message = getErrorMessage(error) || "Failed to create session"
       this.postMessage(
         draftID ? { type: "sendMessageFailed", error: message, text: "", draftID } : { type: "error", message },
@@ -2882,14 +2919,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   /** Non-blocking: refresh session metadata + status for the webview after switching. */
   private refreshSessionDetails(sessionID: string, dir: string, signal?: AbortSignal): void {
     if (!this.client) return
+    const client = this.client
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionGeneration === generation &&
+      this.connectionState === "connected" &&
+      sameDirectory(this.getWorkspaceDirectory(sessionID), dir)
     void this.refreshGitStatus(this.sessionGitDirectories.get(sessionID) ?? dir, sessionID)
     const revision = this.revisions.get(sessionID)
     const refresh = (this.refreshes.get(sessionID) ?? 0) + 1
     this.refreshes.set(sessionID, refresh)
-    this.client.session
+    client.session
       .get({ sessionID, directory: dir })
       .then((r) => {
-        if (!r.data || signal?.aborted || this.contextSessionID !== sessionID) return
+        if (!current() || !r.data || signal?.aborted || this.contextSessionID !== sessionID) return
         if (this.refreshes.get(sessionID) !== refresh) {
           if (this.revisions.get(sessionID) !== revision) this.refreshSessionDetails(sessionID, dir, signal)
           return
@@ -2904,10 +2948,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       })
       .catch((e: unknown) => console.warn("[Raya] Provider: getSession failed (non-critical):", e))
     this.postMessage({ type: "workspaceDirectoryChanged", directory: this.getWorkspaceDirectory(sessionID) })
-    this.client.session
+    client.session
       .status({ directory: dir })
       .then((r) => {
-        if (!r.data || signal?.aborted) return
+        if (!current() || !r.data || signal?.aborted) return
         for (const [sid, info] of Object.entries(r.data) as [string, SessionStatus][]) {
           if (!this.trackedSessionIds.has(sid)) continue
           this.postMessage({
@@ -4005,14 +4049,23 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       })
       return
     }
+    const directory = this.getWorkspaceDirectory(sessionID)
+    const generation = this.connectionGeneration
+    const id = Symbol()
+    this.jobReads.set(sessionID, id)
+    const current = () =>
+      this.jobReads.get(sessionID) === id &&
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
     try {
-      const { data } = await client.kilocode.backgroundJobs(
-        { directory: this.getWorkspaceDirectory(sessionID), sessionID },
-        { throwOnError: true },
-      )
+      const { data } = await client.kilocode.backgroundJobs({ directory, sessionID }, { throwOnError: true })
+      if (!current()) return
       this.jobsBackoff = 0
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: data })
     } catch (error) {
+      if (!current()) return
       this.jobsBackoff = Date.now() + 15_000
       console.warn("[Raya] Provider: Failed to fetch background jobs:", getErrorMessage(error))
       this.postMessage({
@@ -4022,22 +4075,64 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         jobs: [],
         error: "Background agent status is temporarily unavailable",
       })
+    } finally {
+      if (this.jobReads.get(sessionID) === id) this.jobReads.delete(sessionID)
     }
   }
 
-  private async cancelBackgroundJob(jobID: string, sessionID: string, requestID: string): Promise<void> {
+  private async cancelBackgroundJob(
+    jobID: string,
+    sessionID: string,
+    requestID: string,
+    revision: string,
+  ): Promise<void> {
     const client = this.client
     if (!client || this.connectionState !== "connected") {
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: [], error: "Not connected" })
       return
     }
+    const directory = this.getWorkspaceDirectory(sessionID)
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
+    if (!revision) {
+      await this.fetchAndSendBackgroundJobs(sessionID, requestID)
+      return
+    }
+    const entry = [...this.jobStops.entries()].find(
+      ([, stop]) =>
+        stop.jobID === jobID &&
+        stop.client === client &&
+        stop.generation === generation &&
+        sameDirectory(stop.directory, directory),
+    )
+    const previous = entry?.[1]
+    if (previous && previous.revision !== revision) {
+      await this.fetchAndSendBackgroundJobs(sessionID, requestID)
+      return
+    }
+    const stop = previous ?? {
+      client,
+      generation,
+      directory,
+      jobID,
+      revision,
+      done: Promise.resolve().then(() =>
+        client.kilocode.backgroundJob.cancel({ jobID, directory, revision }, { throwOnError: false }),
+      ),
+    }
+    const key = entry?.[0] ?? JSON.stringify([generation, directory, jobID, revision, crypto.randomUUID()])
+    this.jobStops.set(key, stop)
     try {
-      await client.kilocode.backgroundJob.cancel(
-        { jobID, directory: this.getWorkspaceDirectory(sessionID) },
-        { throwOnError: true },
-      )
+      const result = await stop.done
+      if (!current()) return
+      if (result.error && result.response?.status !== 409) throw result.error
       await this.fetchAndSendBackgroundJobs(sessionID, requestID)
     } catch (error) {
+      if (!current()) return
       console.error("[Raya] Provider: Failed to cancel background job:", error)
       this.postMessage({
         type: "backgroundJobsLoaded",
@@ -4046,6 +4141,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         jobs: [],
         error: getErrorMessage(error) || "Failed to cancel background job",
       })
+    } finally {
+      if (this.jobStops.get(key) === stop) this.jobStops.delete(key)
     }
   }
 
@@ -5644,26 +5741,40 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   // raya_change start - Milestone A persistent goal state and user controls
   private async fetchAndSendGoal(sessionID: string, notice?: string): Promise<void> {
-    if (!this.client) return
+    const client = this.client
+    if (!client) return
     const directory = this.getWorkspaceDirectory(sessionID)
-    const response = await this.client.kilocode.goal.get({ sessionID, directory }).catch(() => undefined)
-    if (!response?.response || (response.error && response.response.status !== 404)) {
+    const generation = this.connectionGeneration
+    const id = Symbol()
+    this.goalReads.set(sessionID, id)
+    const current = () =>
+      this.goalReads.get(sessionID) === id &&
+      this.client === client &&
+      this.connectionGeneration === generation &&
+      sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
+    try {
+      const response = await client.kilocode.goal.get({ sessionID, directory }).catch(() => undefined)
+      if (!current()) return
+      if (!response?.response || (response.error && response.response.status !== 404)) {
+        this.postMessage({
+          type: "goalState",
+          sessionID,
+          notice: "Raya could not read the current goal. Retry after the backend reconnects.",
+        })
+        return
+      }
       this.postMessage({
         type: "goalState",
         sessionID,
-        notice: "Raya could not read the current goal. Retry after the backend reconnects.",
+        goal: response.data as GoalState | undefined,
+        notice,
       })
-      return
-    }
-    this.postMessage({
-      type: "goalState",
-      sessionID,
-      goal: response.data as GoalState | undefined,
-      notice,
-    })
-    if (response.response.status === 404 && !notice) {
-      const saved = await stopResult(this.client, sessionID, directory)
-      if (saved) this.postMessage({ type: "goalStopResult", sessionID, notice: saved })
+      if (response.response.status === 404 && !notice) {
+        const saved = await stopResult(client, sessionID, directory)
+        if (saved && current()) this.postMessage({ type: "goalStopResult", sessionID, notice: saved })
+      }
+    } finally {
+      if (this.goalReads.get(sessionID) === id) this.goalReads.delete(sessionID)
     }
   }
 
@@ -5843,14 +5954,22 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async handleRevertSession(sessionID: string, messageID: string, partID?: string): Promise<void> {
-    if (!this.client) return
+    const client = this.client
+    if (!client || this.connectionState !== "connected") return
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.revert({ sessionID, messageID, partID, directory: dir })
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(dir, this.getWorkspaceDirectory(sessionID))
+    const { data, error } = await client.session.revert({ sessionID, messageID, partID, directory: dir })
     if (error) {
       console.error("[Raya] Provider: Failed to revert session:", error)
-      this.postMessage({ type: "error", message: "Failed to revert session", sessionID })
+      if (current()) this.postMessage({ type: "error", message: "Failed to revert session", sessionID })
       throw error
     }
+    if (!current()) return
     if (!data) throw new Error("Revert returned no session")
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)
@@ -5867,9 +5986,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     expected?: Record<string, string>,
     requestID?: string,
   ): Promise<void> {
-    if (!this.client) throw new Error("Backend is not connected")
+    const client = this.client
+    if (!client || this.connectionState !== "connected") throw new Error("Backend is not connected")
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.discardChanges({
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(dir, this.getWorkspaceDirectory(sessionID))
+    const { data, error } = await client.session.discardChanges({
       sessionID,
       directory: dir,
       files,
@@ -5878,9 +6004,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     })
     if (error) {
       console.error("[Raya] Provider: Failed to discard session changes:", error)
-      this.postMessage({ type: "error", message: "Failed to undo file changes", sessionID })
+      if (current()) this.postMessage({ type: "error", message: "Failed to undo file changes", sessionID })
       throw error
     }
+    if (!current()) return
     if (!data) throw new Error("Discard returned no session")
     if (this.currentSession?.id === sessionID) this.inEditorReview?.refresh()
     this.lastReviewHash = ""
@@ -5900,9 +6027,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     expected?: Record<string, string>,
     requestID?: string,
   ): Promise<void> {
-    if (!this.client) throw new Error("Backend is not connected")
+    const client = this.client
+    if (!client || this.connectionState !== "connected") throw new Error("Backend is not connected")
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.keepChanges({
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(dir, this.getWorkspaceDirectory(sessionID))
+    const { data, error } = await client.session.keepChanges({
       sessionID,
       directory: dir,
       files,
@@ -5910,20 +6044,29 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       requestID,
     })
     if (error) throw error
+    if (!current()) return
     if (!data) throw new Error("Keep returned no session")
     this.lastReviewHash = ""
     this.scheduleReview(sessionID)
   }
 
   private async handleUnrevertSession(sessionID: string): Promise<void> {
-    if (!this.client) return
+    const client = this.client
+    if (!client || this.connectionState !== "connected") return
     const dir = this.getWorkspaceDirectory(sessionID)
-    const { data, error } = await this.client.session.unrevert({ sessionID, directory: dir })
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(dir, this.getWorkspaceDirectory(sessionID))
+    const { data, error } = await client.session.unrevert({ sessionID, directory: dir })
     if (error) {
       console.error("[Raya] Provider: Failed to unrevert session:", error)
-      this.postMessage({ type: "error", message: "Failed to redo session", sessionID })
+      if (current()) this.postMessage({ type: "error", message: "Failed to redo session", sessionID })
       throw error
     }
+    if (!current()) return
     if (!data) throw new Error("Redo returned no session")
     this.refreshes.set(sessionID, (this.refreshes.get(sessionID) ?? 0) + 1)
     if (this.currentSession?.id === sessionID) this.setCurrentSession(data)

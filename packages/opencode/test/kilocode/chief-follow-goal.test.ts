@@ -3,7 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { Agent } from "@/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -437,6 +437,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
       }
       yield* sessions.updatePart(part)
       let started = 0
+      let failure: "error" | "cancelled" | undefined
       const ops: TaskPromptOps = {
         cancel: () => Effect.void,
         resolvePromptParts: (text) => Effect.succeed([{ type: "text" as const, text }]),
@@ -460,6 +461,8 @@ planned.instance("reserves verification for an authenticated Chief follow from g
                   sessionID: input.sessionID,
                 })
             }
+            if (failure === "error") return yield* Effect.die(new Error("Controlled recovery failure"))
+            if (failure === "cancelled") return yield* Effect.interrupt
             const result = reply(input, "Inspected the fixture")
             if (result.info.role !== "assistant") throw new Error("Expected assistant")
             yield* sessions.updateMessage({ ...result.info, time: { ...result.info.time, completed: Date.now() } })
@@ -804,6 +807,166 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         userID: authored,
         child: { sessionID: result.value.metadata.sessionId },
       })
+      if (["continuation", "compaction"].includes(mode)) {
+        const id = result.value.metadata.sessionId
+        const count = (yield* sessions.children(chat.id)).length
+        const attempt = Effect.fn(function* (input: Parameters<typeof def.execute>[0], message = assistant, publication = Effect.void) {
+          const retry = {...part,messageID:message.id,id:PartID.ascending(),callID:`recovery-${PartID.ascending()}`,
+            state:{status:"running" as const,input,time:{start:Date.now()}},
+          }
+          yield* sessions.updatePart(retry)
+          return yield* def.execute(input, {
+            sessionID: chat.id, messageID: message.id, callID: retry.callID, agent: "auto",
+            abort: new AbortController().signal, messages: [], extra: { promptOps: ops },
+            ask: () => publication,
+            metadata: (value) => sessions.updatePart({...retry,state:{...retry.state,metadata:value.metadata}}).pipe(Effect.asVoid),
+          })
+        })
+        for (const input of [
+          { brief: { objective: "Inspect the fixture again" } },
+          { description: "A completely reworded label", prompt: "Recover the same assigned work" },
+          { task_id: SessionID.make("ses_wrong_recovery_child"), prompt: "Continue the same work" },
+        ]) {
+          const refused = yield* Effect.exit(attempt(input))
+          if (!Exit.isFailure(refused)) throw new Error("Expected retained-worker refusal")
+          const error = Cause.squash(refused.cause)
+          expect(error).toBeInstanceOf(Refusal)
+          if (!(error instanceof Refusal)) throw error
+          expect(error.reason).toBe("task-recovery")
+          expect(error.message).toContain(`task_id="${id}"`)
+          expect((yield* sessions.children(chat.id)).length).toBe(count)
+          expect(started).toBe(1)
+        }
+        const common = {
+          storage: yield* Storage.Service, sessions, background: yield* BackgroundJob.Service,
+          sessionID: chat.id, messageID: assistant.id, agent: "auto", planned: false,
+        }
+        // A real foreign session cannot stand in for the captured foreground worker.
+        const foreign = yield* sessions.create({ title: "Foreign recovery target" })
+        const observation = yield* Schema.decodeUnknownEffect(ChiefVerification.Observation)(parent.metadata?.[ChiefVerification.key])
+        yield* sessions.setMetadata({sessionID: chat.id, metadata: {...parent.metadata,
+          [ChiefVerification.recovery]: {...observation, child: {...observation.child!, sessionID: foreign.id}},
+        }})
+        const rejected = yield* Effect.exit(attempt({prompt: "Recover", task_id: foreign.id}))
+        expect(Exit.isFailure(rejected)).toBe(true)
+        expect((yield* sessions.children(chat.id)).length).toBe(count)
+        expect(started).toBe(1)
+        yield* sessions.setMetadata({sessionID: chat.id, metadata: parent.metadata!})
+        // Synthesis updates presentation evidence without erasing the authenticated worker.
+        const goals = RayaGoal.make({storage: common.storage, sessions})
+        expect((yield* goals.get(chat.id))?.status).toBe("active")
+        const synthesis = {...part,id:PartID.ascending(),callID:"recover-synthesis",tool:"chief_synthesize",
+          state:{status:"running" as const,input:{},time:{start:Date.now()}},
+        }
+        yield* sessions.updatePart(synthesis)
+        yield* ChiefVerification.synthesis({...common,callID:synthesis.callID,request,goals})
+        expect((yield* sessions.get(chat.id)).metadata?.[ChiefVerification.key]).toMatchObject({kind:"synthesis"})
+        const bypass = yield* Effect.exit(attempt({prompt:"Start another worker after synthesis"}))
+        if (!Exit.isFailure(bypass)) throw new Error("Synthesis erased the recovery fence")
+        expect(Cause.squash(bypass.cause)).toBeInstanceOf(Refusal)
+        expect((yield* sessions.children(chat.id)).length).toBe(count)
+        expect(started).toBe(1)
+        // Saved branch admission is owned by ChiefTaskBinding, not the unplanned recovery fence.
+        yield* ChiefVerification.reuse({...common, planned: true})
+        yield* ChiefVerification.reuse({...common, agent: "build"})
+        const resumed = yield* attempt({task_id: id, prompt: "Continue the same assigned work"})
+        expect(resumed.metadata.sessionId).toBe(id)
+        expect((yield* sessions.children(chat.id)).length).toBe(count)
+        expect(started).toBe(2)
+        for (const status of ["error", "cancelled"] as const) {
+          failure = status
+          const failed = yield* Effect.exit(attempt({task_id:id,prompt:"Recover the same worker"}))
+          expect(Exit.isFailure(failed)).toBe(true)
+          expect((yield* common.background.get(id))?.status).toBe(status)
+          const replacement = yield* Effect.exit(attempt({prompt:"Replace after failed recovery"}))
+          if (!Exit.isFailure(replacement)) throw new Error("Failed resume admitted a replacement")
+          expect(Cause.squash(replacement.cause)).toBeInstanceOf(Refusal)
+          failure = undefined
+          const recovered = yield* attempt({task_id:id,prompt:"Repair the failed recovery"})
+          expect(recovered.metadata.sessionId).toBe(id)
+          expect((yield* sessions.children(chat.id)).length).toBe(count)
+        }
+        expect(started).toBe(6)
+        if (mode === "continuation") {
+          // Complete the real parent dispatch, then create a later durable dispatch for the same request/intent.
+          const current = yield* sessions.messages({sessionID:chat.id})
+          for (const row of current) for (const value of row.parts) {
+            if (value.type !== "tool" || value.state.status !== "running") continue
+            yield* sessions.updatePart({...value,state:{status:"completed",input:value.state.input,
+              output:"Controlled turn settled",title:"Settled",metadata:value.state.metadata??{},
+              time:{start:value.state.time.start,end:Date.now()}},
+            })
+          }
+          yield* sessions.updateMessage({...assistant,finish:"stop",time:{...assistant.time,completed:Date.now()}})
+          const settled = yield* goals.finished(chat.id, assistant.id, "completed")
+          expect(settled?.dispatch?.phase).toBe("finished")
+          const queued = yield* goals.continued(chat.id)
+          if (!queued?.dispatch) throw new Error("Expected later queued dispatch")
+          const active = yield* goals.dispatched(chat.id,queued.dispatch.id)
+          if (!active?.dispatch?.messageID) throw new Error("Expected later admitted dispatch")
+          const intake = yield* sessions.updateMessage({id:active.dispatch.messageID,sessionID:chat.id,
+            role:"user",agent:"auto",model:ref,time:{created:Date.now()},
+          })
+          yield* sessions.updatePart({id:PartID.ascending(),messageID:intake.id,sessionID:chat.id,
+            type:"text",synthetic:true,text:RayaGoalContinuation.expected(request),
+          })
+          const bound = yield* goals.bound(chat.id,active.dispatch.id,"later-controlled-worker")
+          expect(bound?.dispatch?.worker).toBe("later-controlled-worker")
+          expect(bound?.inputs).toContain(intake.id)
+          if (!bound) throw new Error("Later dispatch was not admitted")
+          const saved = (yield* sessions.messages({sessionID:chat.id})).find((row)=>row.info.id === intake.id)
+          if (!saved) throw new Error("Missing actual later intake")
+          expect(RayaGoalContinuation.matches(saved,chat.id,intake.id,bound)).toBe(true)
+          const later = {...assistant,id:MessageID.ascending(),parentID:intake.id,time:{created:Date.now()}}
+          yield* sessions.updateMessage(later)
+          const next = yield* Effect.exit(attempt({prompt:"Repeat the same work in a later dispatch"},later))
+          expect(Exit.isFailure(next)).toBe(true)
+          expect((yield* sessions.children(chat.id)).length).toBe(count)
+          expect(started).toBe(6)
+        }
+        // A genuine new authored request is not deduplicated against old completed work.
+        const user = yield* sessions.updateMessage({id: MessageID.ascending(),role: "user",sessionID:chat.id,
+          agent: "auto",model:ref,time:{created:Date.now()},
+        })
+        yield* sessions.updatePart({id:PartID.ascending(),sessionID:chat.id,messageID:user.id,type:"text",text:"Inspect a distinct new request"})
+        const fresh = {...assistant,id:MessageID.ascending(),parentID:user.id,agent:"auto",mode:"auto"}
+        yield* sessions.updateMessage(fresh)
+        yield* sessions.setMetadata({sessionID:chat.id,metadata:{...(yield* sessions.get(chat.id)).metadata,
+          [RayaChief.requestKey]:"Inspect a distinct new request",[RayaChief.phaseKey]:"task",
+        }})
+        const stale = yield* Effect.exit(ChiefVerification.reuse(common))
+        expect(Exit.isFailure(stale)).toBe(true)
+        expect((yield* sessions.children(chat.id)).length).toBe(count)
+        yield* ChiefVerification.reuse({...common,messageID:fresh.id})
+        yield* sessions.setMetadata({sessionID:chat.id,metadata:{...(yield* sessions.get(chat.id)).metadata,
+          [RayaChief.phaseKey]:"route",
+        }})
+        const route = {...part,messageID:fresh.id,id:PartID.ascending(),callID:"fresh-recovery-route",tool:"chief_route",
+          state:{status:"running" as const,input:{access:"read"},time:{start:Date.now()}},
+        }
+        yield* sessions.updatePart(route)
+        const router = yield* (yield* ChiefRouteTool).init()
+        yield* router.execute({access:"read",objective:"Inspect a distinct new request"},{
+          sessionID:chat.id,messageID:fresh.id,callID:route.callID,agent:"auto",abort:new AbortController().signal,
+          messages:[],metadata:()=>Effect.void,ask:()=>Effect.void,
+        })
+        const publication = Effect.gen(function* () {
+          const latest = yield* sessions.updateMessage({id:MessageID.ascending(),role:"user",sessionID:chat.id,
+            agent:"auto",model:ref,time:{created:Date.now()},
+          })
+          yield* sessions.updatePart({id:PartID.ascending(),sessionID:chat.id,messageID:latest.id,
+            type:"text",text:"A newer authored request published during task permission admission",
+          })
+          yield* sessions.setMetadata({sessionID:chat.id,metadata:{...(yield* sessions.get(chat.id)).metadata,
+            [RayaChief.requestKey]:"A newer authored request published during task permission admission",
+          }})
+        })
+        const raced = yield* Effect.exit(attempt({prompt:"Inspect the new request",access:"read"},fresh,publication))
+        expect(Exit.isFailure(raced)).toBe(true)
+        expect(RayaChief.request((yield* sessions.get(chat.id)).metadata)).toBe("A newer authored request published during task permission admission")
+        expect((yield* sessions.children(chat.id)).length).toBe(count)
+        expect(started).toBe(6)
+      }
     }
   }),
   30_000,

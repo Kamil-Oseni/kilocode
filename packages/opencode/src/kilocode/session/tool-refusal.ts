@@ -13,6 +13,7 @@ export class Refusal extends Error {
       | "read-missing"
       | "task-access"
       | "task-resume"
+      | "task-recovery"
       | "chief-no-eligible",
     message: string,
   ) {
@@ -24,6 +25,7 @@ export class Refusal extends Error {
       reason !== "read-missing" &&
       reason !== "task-access" &&
       reason !== "task-resume" &&
+      reason !== "task-recovery" &&
       reason !== "chief-no-eligible"
     )
       throw new Error("Invalid tool refusal reason")

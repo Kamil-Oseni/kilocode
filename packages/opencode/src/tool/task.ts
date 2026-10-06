@@ -48,6 +48,7 @@ import { Git } from "@/git" // kilocode_change - pin editing branches to the par
 import { Worktree } from "@/worktree" // kilocode_change - isolated Chief edit workspaces
 import { InstanceStore } from "@/project/instance-store" // kilocode_change - run edit children in their worktree
 import { InstanceState } from "@/effect/instance-state" // kilocode_change - record the parent directory
+import { gate } from "@/kilocode/session/input-gate" // kilocode_change - fence foreground recovery at child admission
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID, messageID?: MessageID): Effect.Effect<void> // kilocode_change
@@ -196,6 +197,18 @@ export const TaskTool = Tool.define(
         callID: ctx.callID,
         params,
       })
+      // kilocode_change start - retain the authenticated foreground worker for unplanned recovery
+      const recovery = yield* ChiefVerification.reuse({
+        storage,
+        sessions,
+        background,
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        agent: ctx.agent,
+        planned: !!binding.branch,
+        taskID: params.task_id,
+      })
+      // kilocode_change end
       const plan = binding.plan
       const requestPlan = binding.request // kilocode_change - dormant request-bound plan
       const branch = binding.branch
@@ -209,7 +222,12 @@ export const TaskTool = Tool.define(
         )
       }
       // kilocode_change end
-      const follow = ctx.agent === "auto" ? RayaChief.follow(parent.metadata) : undefined
+      // kilocode_change start - exact-child recovery retains the authenticated logged contract
+      const follow =
+        ctx.agent === "auto"
+          ? RayaChief.follow(recovery ? { ...parent.metadata, [RayaChief.phaseKey]: "goal" } : parent.metadata)
+          : undefined // kilocode_change - only authenticated exact-child recovery retains the logged work contract
+      // kilocode_change end
       const continued = ctx.agent === "auto" && !follow ? RayaChief.continuation(parent.metadata) : undefined
       if (ctx.agent === "auto" && !branch && !follow && !continued) {
         return yield* Effect.fail(new Error("Auto must call chief_route on a new request before delegating with task"))
@@ -591,7 +609,8 @@ export const TaskTool = Tool.define(
       if (
         ctx.agent === "auto" &&
         !branch &&
-        (RayaChief.phase(parent.metadata) === "task" ||
+        (recovery ||
+          RayaChief.phase(parent.metadata) === "task" ||
           (ctx.callID !== undefined && RayaChief.phase(parent.metadata) === "goal"))
       ) {
         yield* ChiefVerification.reserve({
@@ -627,6 +646,18 @@ export const TaskTool = Tool.define(
       const created = yield* TaskName.gate
         .withLock(ctx.sessionID)(
           Effect.gen(function* () {
+            // kilocode_change start - recheck current request and retained child under the input publication gate
+            yield* ChiefVerification.reuse({
+              storage,
+              sessions,
+              background,
+              sessionID: ctx.sessionID,
+              messageID: ctx.messageID,
+              agent: ctx.agent,
+              planned: !!branch,
+              taskID: params.task_id,
+            })
+            // kilocode_change end
             if (session) {
               const identity = TaskName.read(session.metadata?.[TaskName.key])
               return { session, displayName: identity?.displayName ?? session.title }
@@ -653,7 +684,7 @@ export const TaskTool = Tool.define(
             })
             const child = yield* edit && store ? store.provide({ directory: edit.directory }, create) : create // kilocode_change
             return { session: child, displayName: identity.displayName }
-          }),
+          }).pipe(gate.withLock(ctx.sessionID)), // kilocode_change - no stale fresh child after request publication
         )
         .pipe(Effect.tapError(() => lease.release))
       const nextSession = created.session

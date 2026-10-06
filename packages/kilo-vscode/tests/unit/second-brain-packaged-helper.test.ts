@@ -32,3 +32,37 @@ test("Memory refuses a foreign recipe even when executable and symbols hashes ma
     await rm(root, { recursive: true, force: true })
   }
 })
+
+for (const variant of ["retained", "version", "executable", "symbols"] as const)
+  test(`Memory ${variant === "retained" ? "accepts" : "refuses"} ${variant} metadata with actual packaged files`, async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "raya-memory-helper-metadata-"))
+    try {
+      const bin = path.join(root, "bin")
+      await mkdir(bin)
+      const current = await packaged(path.resolve("."))
+      for (const file of current.names) await copyFile(file, path.join(bin, path.basename(file)))
+      const file = path.join(bin, "raya-process-host.json")
+      const metadata = JSON.parse(await readFile(file, "utf8"))
+      const row = {
+        ...metadata,
+        ...(variant === "retained"
+          ? { recipe: "fb46d5ad1ef444acaaa7307fe48b04b62352a7b205384129dede17a50f04bc3f" }
+          : {}),
+        ...(variant === "version" ? { version: 2 } : {}),
+        ...(variant === "executable" ? { exe: "0".repeat(64) } : {}),
+        ...(variant === "symbols" ? { pdb: "0".repeat(64) } : {}),
+      }
+      await writeFile(file, JSON.stringify(row))
+      if (variant === "retained") {
+        const accepted = await packaged(root)
+        expect(accepted.digest).toBe(current.digest)
+        expect(accepted.files[1].digest).toBe(current.files[1].digest)
+        return
+      }
+      await expect(packaged(root)).rejects.toThrow("Packaged helper fingerprint refused")
+    } finally {
+      expect(path.dirname(path.resolve(root))).toBe(path.resolve(tmpdir()))
+      expect(path.basename(root).startsWith("raya-memory-helper-metadata-")).toBe(true)
+      await rm(root, { recursive: true, force: true })
+    }
+  })

@@ -372,6 +372,7 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
         for (const auto& [id, member] : members) {
           const ULONGLONG remaining = finish > GetTickCount64() ? finish - GetTickCount64() : 0;
           if (!member->close(static_cast<DWORD>(remaining))) { ++observations.unsettled; unknown = true; complete = false; }
+          if (diagnostic && member->settled) observations.finish(id, member->born, member->code);
           const auto status = member->code;
           if (capture && status != 0) unknown = true;
           if (descendants.size() > 1) descendants += ",";

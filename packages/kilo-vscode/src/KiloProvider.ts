@@ -4006,14 +4006,20 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       })
       return
     }
+    const directory = this.getWorkspaceDirectory(sessionID)
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
     try {
-      const { data } = await client.kilocode.backgroundJobs(
-        { directory: this.getWorkspaceDirectory(sessionID), sessionID },
-        { throwOnError: true },
-      )
+      const { data } = await client.kilocode.backgroundJobs({ directory, sessionID }, { throwOnError: true })
+      if (!current()) return
       this.jobsBackoff = 0
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: data })
     } catch (error) {
+      if (!current()) return
       this.jobsBackoff = Date.now() + 15_000
       console.warn("[Raya] Provider: Failed to fetch background jobs:", getErrorMessage(error))
       this.postMessage({
@@ -4032,13 +4038,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: [], error: "Not connected" })
       return
     }
+    const directory = this.getWorkspaceDirectory(sessionID)
+    const generation = this.connectionGeneration
+    const current = () =>
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
     try {
-      await client.kilocode.backgroundJob.cancel(
-        { jobID, directory: this.getWorkspaceDirectory(sessionID) },
-        { throwOnError: true },
-      )
+      await client.kilocode.backgroundJob.cancel({ jobID, directory }, { throwOnError: true })
+      if (!current()) return
       await this.fetchAndSendBackgroundJobs(sessionID, requestID)
     } catch (error) {
+      if (!current()) return
       console.error("[Raya] Provider: Failed to cancel background job:", error)
       this.postMessage({
         type: "backgroundJobsLoaded",

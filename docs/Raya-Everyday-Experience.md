@@ -4,6 +4,14 @@ Conversation, coding, delegated jobs, routines and goals remain first-class work
 
 ## Source changes
 
+Cloud workers remain stopped and their former task/file reservations are released. Local implementation continues without assigning, restarting or waiting for them; existing contributions remain available for review.
+
+### Worker connection recovery checkpoint
+
+Worker status and cancellation replies now retain their original client, connection generation and workspace. Outdated status failures cannot put a replacement connection into backoff, and outdated cancellation replies cannot refresh through a replacement client or publish an old error. Current-scope cancellation still performs one cancellation request followed by a status read; cancellation failure reports its error without retrying the mutation. This fences replies and follow-up reads; it does not establish real worker retirement.
+
+Twelve held HTTP requests through the generated SDK reproduce the failures against the previous source. With the fix, the selected worker/activity cohort passes **66 tests and 209 assertions across nine files**, including two current-scope cancellation checks. The original failure evidence remains in `.tmp/memory-private/workers-scope-before.log`. These controlled source checks do not establish installed cancellation, model unloading or process retirement.
+
 | Area | Implemented behavior | Acceptance still needed |
 |---|---|---|
 | Navigation | Conversation, Tasks, Routines, Memory, Activity and health, and Settings are directly accessible. Opening Conversation does not create another session. | Integrated installed-window check. |

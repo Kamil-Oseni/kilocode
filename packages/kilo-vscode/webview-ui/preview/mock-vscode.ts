@@ -1152,6 +1152,8 @@ export function installMockVsCode() {
       document.documentElement.dataset.previewMessage = JSON.stringify(message)
       if (message.type === "secondBrain" && message.action === "dreamCancel")
         document.documentElement.dataset.previewDreamCancel = JSON.stringify(message)
+      if (message.type === "secondBrain" && message.action === "dreamInspect")
+        document.documentElement.dataset.previewDreamInspect = JSON.stringify(message)
       console.info("[raya preview] mock postMessage", message)
       queueMicrotask(() => reply(message))
     },

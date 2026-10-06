@@ -21,8 +21,18 @@ export function BrainDreamActivity() {
   const [run, setRun] = createSignal<Run>()
   const [error, setError] = createSignal(false)
   const [cancelling, setCancelling] = createSignal(false)
+  const [inspecting, setInspecting] = createSignal(false)
+  const [notice, setNotice] = createSignal<string>()
   let query = ""
   let cancel = ""
+  let inspect = ""
+  const open = () => {
+    if (inspecting()) return
+    inspect = crypto.randomUUID()
+    setInspecting(true)
+    setNotice()
+    vscode.postMessage({ type: "secondBrain", action: "dreamInspect", id: inspect })
+  }
   const refresh = () => {
     if (query) return
     query = crypto.randomUUID()
@@ -41,6 +51,17 @@ export function BrainDreamActivity() {
     })
   }
   const off = vscode.onMessage((message) => {
+    if (message.type === "secondBrainState" && message.id === inspect && message.state.dream) {
+      if (message.state.dream.status === "native-review") return
+      inspect = ""
+      setInspecting(false)
+      setNotice(
+        message.state.dream.status === "unavailable"
+          ? "Saved checkpoint inspection could not finish. Keep the original run and proposal IDs for trusted inspection."
+          : "Inspection command returned. Saved history does not clear unresolved cleanup or publish proposals.",
+      )
+      return
+    }
     if (message.type !== "secondBrainState" || !message.state.dream || (message.id !== query && message.id !== cancel))
       return
     if (message.id === query) query = ""
@@ -104,6 +125,10 @@ export function BrainDreamActivity() {
       >
         Refresh activity
       </Button>
+      <Button disabled={inspecting()} onClick={open}>
+        {inspecting() ? "Opening checkpoint…" : "Inspect saved checkpoint"}
+      </Button>
+      <Show when={notice()}>{(text) => <p role="status">{text()}</p>}</Show>
     </section>
   )
 }

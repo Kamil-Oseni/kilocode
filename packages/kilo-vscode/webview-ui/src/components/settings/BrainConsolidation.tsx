@@ -7,11 +7,11 @@ export function BrainConsolidation(props: { configured: boolean }) {
   const vscode = useVSCode()
   const [status, setStatus] = createSignal<"native-review" | "closed" | "unavailable">()
   let id = ""
-  const open = (action: "dreamStart" | "dreamInspect") => {
+  const open = () => {
     if (!props.configured || status() === "native-review") return
     id = crypto.randomUUID()
     setStatus("native-review")
-    vscode.postMessage({ type: "secondBrain", action, id })
+    vscode.postMessage({ type: "secondBrain", action: "dreamStart", id })
   }
   const off = vscode.onMessage((message) => {
     if (message.type !== "secondBrainState" || message.id !== id || !message.state.dream) return
@@ -24,11 +24,8 @@ export function BrainConsolidation(props: { configured: boolean }) {
       <p>
         Select approved notes, targets and a model in native review. Generated changes need separate proposal approval.
       </p>
-      <Button disabled={!props.configured || status() === "native-review"} onClick={() => open("dreamStart")}>
+      <Button disabled={!props.configured || status() === "native-review"} onClick={open}>
         Consolidate approved memories
-      </Button>
-      <Button disabled={!props.configured || status() === "native-review"} onClick={() => open("dreamInspect")}>
-        Inspect saved checkpoint
       </Button>
       <Show when={status() === "native-review"}>
         <p role="status">

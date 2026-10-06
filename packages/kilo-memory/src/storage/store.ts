@@ -8,6 +8,7 @@ import { MemoryDream } from "./dream"
 import { MemoryDreamJob } from "./dream-job"
 import { MemoryDreamModel } from "./dream-model"
 import { MemoryDreamInput } from "./dream-input"
+import { MemoryDreamProposal } from "./dream-proposal"
 
 /** Low-level raw-root APIs. Callers must pass a project-owned root from MemoryPaths.root(ctx). */
 export namespace MemoryFiles {
@@ -15,6 +16,7 @@ export namespace MemoryFiles {
   export const dreamJob = MemoryDreamJob
   export const dreamModel = MemoryDreamModel
   export const dreamInput = MemoryDreamInput
+  export const dreamProposal = MemoryDreamProposal
   export const configure = MemoryOperation.configure
   export const hosted = MemoryOperation.hosted
 

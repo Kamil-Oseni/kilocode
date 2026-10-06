@@ -270,6 +270,7 @@ for (const status of [200, 503])
   for (const replaced of [false, true])
     it(`actual SDK pending worker cancellation ${status} ${replaced ? "keeps replacement scope independent" : "shares its original request"}`, async () => {
       const entered = Promise.withResolvers<void>()
+      const second = Promise.withResolvers<void>()
       const held = Promise.withResolvers<Response>()
       const requests: string[] = []
       const sent: Reply[] = []
@@ -280,6 +281,7 @@ for (const status of [200, 503])
           requests.push(request.method)
           if (request.method === "GET") return Response.json([])
           entered.resolve()
+          if (requests.filter((method) => method === "POST").length === 2) second.resolve()
           return held.promise.then((response) => response.clone())
         },
       })
@@ -311,8 +313,8 @@ for (const status of [200, 503])
         await entered.promise
         if (replaced) state.connectionGeneration++
         duplicate = provider.cancelBackgroundJob.call(state, "worker", "parent", "duplicate", "shown-revision")
-        // A GET barrier observes all HTTP requests dispatched before it without releasing the held cancellation.
-        await state.client.kilocode.backgroundJobs({ directory: "C:/original", sessionID: "barrier" })
+        // Independent HTTP requests can arrive out of order. Observe the replacement POST itself.
+        if (replaced) await second.promise
         expect(requests.filter((method) => method === "POST")).toHaveLength(replaced ? 2 : 1)
         expect(state.jobStops.size).toBe(replaced ? 2 : 1)
         held.resolve(Response.json(status === 200 ? true : { message: "Cancellation unavailable" }, { status }))

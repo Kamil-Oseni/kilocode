@@ -25,7 +25,7 @@ type Ctx = {
   speechToTextModels: () => Promise<void>
   modelUsage: (message: ModelUsageMessage) => Promise<void>
   backgroundJobs: (sessionID: string, requestID: string) => Promise<void>
-  cancelBackgroundJob: (jobID: string, sessionID: string, requestID: string) => Promise<void>
+  cancelBackgroundJob: (jobID: string, sessionID: string, requestID: string, revision: string) => Promise<void>
   backgroundSubagents: (sessionID: string) => Promise<void>
   chiefNotes: (input: ChiefNotesRequest) => Promise<void>
   childSteer: (message: ChildSteerMessage) => Promise<void>
@@ -34,7 +34,7 @@ type Ctx = {
 }
 
 async function routeBackgroundMessage(
-  message: { type: string; sessionID?: unknown; jobID?: unknown; requestID?: unknown },
+  message: { type: string; sessionID?: unknown; jobID?: unknown; requestID?: unknown; revision?: unknown },
   ctx: Ctx,
 ): Promise<boolean | undefined> {
   if (message.type === "chiefNotesRead") {
@@ -58,10 +58,12 @@ async function routeBackgroundMessage(
   if (message.type === "cancelBackgroundJob") {
     if (
       typeof message.jobID === "string" &&
+      typeof message.revision === "string" &&
+      message.revision.length > 0 &&
       typeof message.sessionID === "string" &&
       typeof message.requestID === "string"
     ) {
-      await ctx.cancelBackgroundJob(message.jobID, message.sessionID, message.requestID)
+      await ctx.cancelBackgroundJob(message.jobID, message.sessionID, message.requestID, message.revision)
     }
     return true
   }

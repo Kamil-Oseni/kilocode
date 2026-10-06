@@ -8,6 +8,7 @@ import { admission } from "@/kilocode/session/admission" // kilocode_change - sh
 import { ReviewGate } from "@/kilocode/session/review-gate" // kilocode_change
 import { WorkspaceOccupancy } from "@/kilocode/session/workspace-occupancy" // kilocode_change
 import { BackgroundJob } from "@/background/job"
+import { retire } from "@/kilocode/session/background-retirement" // kilocode_change
 import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
@@ -141,11 +142,12 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
   background: BackgroundJob.Interface,
   sessionID: SessionID,
 ) {
+  yield* background.cancelOwned(sessionID) // kilocode_change - select retained original admissions before current-row legacy fallback
   const jobs = yield* background.list()
   const pending = new Set<string>([sessionID])
   const cancelled = new Set<string>()
   const matches = (job: BackgroundJob.Info) => {
-    if (job.status !== "running") return false
+    if (job.status !== "running" && !job.origins?.length) return false // kilocode_change - retained ancestors can still own active isolated descendants
     if (cancelled.has(job.id)) return false
     if (pending.has(job.id)) return true
     if (typeof job.metadata?.sessionId === "string" && pending.has(job.metadata.sessionId)) return true
@@ -153,10 +155,11 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
   }
   let batch = jobs.filter(matches)
   while (batch.length > 0) {
+    // kilocode_change start - retire only the observed execution and its owned tree
     yield* Effect.forEach(
       batch,
       (job) =>
-        background.cancel(job.id).pipe(
+        retire(background, job).pipe(
           Effect.tap(() =>
             Effect.sync(() => {
               cancelled.add(job.id)
@@ -167,6 +170,7 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
         ),
       { concurrency: "unbounded", discard: true },
     )
+    // kilocode_change end
     batch = jobs.filter(matches)
   }
 })

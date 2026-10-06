@@ -519,7 +519,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly jobReads = new Map<string, symbol>()
   private readonly jobStops = new Map<
     string,
-    { client: KiloClient; generation: number; directory: string; done: Promise<unknown> }
+    {
+      client: KiloClient
+      generation: number
+      directory: string
+      jobID: string
+      revision: string
+      done: Promise<{ response: Response; error?: unknown }>
+    }
   >()
   private readonly visibleTaskStreams = new VisibleTaskStreams((id, visible) => this.streams.setVisible(id, visible))
   private readonly confirmations = new MessageConfirmation()
@@ -1289,7 +1296,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           speechToTextModels: () => this.fetchAndSendSpeechToTextModels(),
           modelUsage: (msg) => handleModelUsageMessage(msg, this.extensionContext, (value) => this.postMessage(value)),
           backgroundJobs: (sessionID, requestID) => this.fetchAndSendBackgroundJobs(sessionID, requestID),
-          cancelBackgroundJob: (jobID, sessionID, requestID) => this.cancelBackgroundJob(jobID, sessionID, requestID),
+          cancelBackgroundJob: (jobID, sessionID, requestID, revision) =>
+            this.cancelBackgroundJob(jobID, sessionID, requestID, revision),
           backgroundSubagents: (sessionID) => this.backgroundSubagents(sessionID),
           chiefNotes: (input) => this.readChiefNotes(input),
           childSteer: (message) => this.steerChild(message),
@@ -1839,7 +1847,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         ...(this.extensionContext
           ? {
               recovery: () =>
-              availability({
+                availability({
                   root: this.extensionContext!.globalStorageUri.fsPath,
                   state: this.extensionContext!.globalState,
                   version: String(this.extensionContext!.extension.packageJSON.version),
@@ -4073,7 +4081,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
   }
 
-  private async cancelBackgroundJob(jobID: string, sessionID: string, requestID: string): Promise<void> {
+  private async cancelBackgroundJob(
+    jobID: string,
+    sessionID: string,
+    requestID: string,
+    revision: string,
+  ): Promise<void> {
     const client = this.client
     if (!client || this.connectionState !== "connected") {
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: [], error: "Not connected" })
@@ -4086,34 +4099,38 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.connectionState === "connected" &&
       this.connectionGeneration === generation &&
       sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
-    const previous = this.jobStops.get(jobID)
-    if (
-      previous &&
-      (previous.client !== client ||
-        previous.generation !== generation ||
-        !sameDirectory(previous.directory, directory))
-    ) {
-      this.postMessage({
-        type: "backgroundJobsLoaded",
-        sessionID,
-        requestID,
-        jobs: [],
-        error: "The original worker cancellation is still pending. Refresh status before trying again.",
-      })
+    if (!revision) {
+      await this.fetchAndSendBackgroundJobs(sessionID, requestID)
+      return
+    }
+    const entry = [...this.jobStops.entries()].find(
+      ([, stop]) =>
+        stop.jobID === jobID &&
+        stop.client === client &&
+        stop.generation === generation &&
+        sameDirectory(stop.directory, directory),
+    )
+    const previous = entry?.[1]
+    if (previous && previous.revision !== revision) {
+      await this.fetchAndSendBackgroundJobs(sessionID, requestID)
       return
     }
     const stop = previous ?? {
       client,
       generation,
       directory,
+      jobID,
+      revision,
       done: Promise.resolve().then(() =>
-        client.kilocode.backgroundJob.cancel({ jobID, directory }, { throwOnError: true }),
+        client.kilocode.backgroundJob.cancel({ jobID, directory, revision }, { throwOnError: false }),
       ),
     }
-    this.jobStops.set(jobID, stop)
+    const key = entry?.[0] ?? JSON.stringify([generation, directory, jobID, revision, crypto.randomUUID()])
+    this.jobStops.set(key, stop)
     try {
-      await stop.done
+      const result = await stop.done
       if (!current()) return
+      if (result.error && result.response?.status !== 409) throw result.error
       await this.fetchAndSendBackgroundJobs(sessionID, requestID)
     } catch (error) {
       if (!current()) return
@@ -4126,7 +4143,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         error: getErrorMessage(error) || "Failed to cancel background job",
       })
     } finally {
-      if (this.jobStops.get(jobID) === stop) this.jobStops.delete(jobID)
+      if (this.jobStops.get(key) === stop) this.jobStops.delete(key)
     }
   }
 

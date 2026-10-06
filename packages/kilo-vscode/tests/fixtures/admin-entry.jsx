@@ -137,7 +137,7 @@ window.acquireVsCodeApi = () => ({
   postMessage: (message) => {
     record(message)
     if (message.type === "requestBackgroundJobs" || message.type === "cancelBackgroundJob") {
-      if (message.type === "cancelBackgroundJob") stopped = true
+      if (message.type === "cancelBackgroundJob" && message.revision === "synthetic-worker-revision") stopped = true
       const reply = {
         type: "backgroundJobsLoaded",
         sessionID: message.sessionID,
@@ -146,6 +146,7 @@ window.acquireVsCodeApi = () => ({
           ? [
               {
                 id: "synthetic-worker",
+                revision: state === "workers-legacy" ? undefined : "synthetic-worker-revision",
                 type: "task",
                 title: "Write daily summary",
                 status: stopped ? "cancelled" : "running",

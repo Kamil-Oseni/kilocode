@@ -1,3 +1,4 @@
+import { check as ancestry } from "@/kilocode/tool/task-ancestry" // kilocode_change - authenticate the executing parent before admitting descendants
 import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
 import { ToolJsonSchema } from "./json-schema"
@@ -178,6 +179,7 @@ export const TaskTool = Tool.define(
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context,
     ) {
+      yield* ancestry(ctx.sessionID) // kilocode_change - no session-only execution ownership
       const label = params.description ?? "Delegated task" // kilocode_change - fixed label never derives from user text
       const cfg = yield* config.get()
       const runInBackground = params.background === true
@@ -928,6 +930,13 @@ export const TaskTool = Tool.define(
             }),
         )
 
+      // kilocode_change start - cancellation must find the original runner in its selected worker instance
+      const cancel =
+        edit && store
+          ? store.provide({ directory: edit.directory }, ops.cancel(nextSession.id, message))
+          : ops.cancel(nextSession.id, message)
+      // kilocode_change end
+
       // kilocode_change start - settle the exact planned child on every terminal path
       const work = () =>
         (edit && store ? store.provide({ directory: edit.directory }, runTask()) : runTask()).pipe(
@@ -959,9 +968,7 @@ export const TaskTool = Tool.define(
           Effect.ensuring(lease.release.pipe(Effect.orDie)),
         )
       // kilocode_change end
-      const backgroundRun = withCostPropagation(
-        work().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))),
-      ) // kilocode_change
+      const backgroundRun = withCostPropagation(work().pipe(Effect.onInterrupt(() => cancel))) // kilocode_change
       // kilocode_change end
 
       // kilocode_change start - retain the exact parent invocation for every admitted task run
@@ -982,7 +989,7 @@ export const TaskTool = Tool.define(
             origin, // kilocode_change
             id: nextSession.id,
             // kilocode_change - extended background work also propagates its cost
-            run: withCostPropagation(work().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message)))), // kilocode_change
+            run: withCostPropagation(work().pipe(Effect.onInterrupt(() => cancel))), // kilocode_change
           })
           .pipe(Effect.tapError(() => lease.release))
       ) {
@@ -1021,9 +1028,7 @@ export const TaskTool = Tool.define(
           ]),
           // kilocode_change - only the initial-background start needs its own cost bracket; the
           // foreground/promoted path below is already wrapped by the acquireUseRelease at the bottom of run()
-          run: runInBackground
-            ? backgroundRun
-            : work().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id, message))), // kilocode_change
+          run: runInBackground ? backgroundRun : work().pipe(Effect.onInterrupt(() => cancel)), // kilocode_change
         })
         .pipe(Effect.tapError(() => lease.release))
 
@@ -1050,7 +1055,6 @@ export const TaskTool = Tool.define(
       }
 
       const runCancel = yield* EffectBridge.make()
-      const cancel = ops.cancel(nextSession.id, message) // kilocode_change
 
       function onAbort() {
         runCancel.fork(cancel)

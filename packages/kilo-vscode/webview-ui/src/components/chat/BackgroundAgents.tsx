@@ -24,6 +24,7 @@ import { useWorktreeMode } from "../../context/worktree-mode"
 import {
   backgroundAgents,
   backgroundAgentActivity,
+  backgroundAgentCancellation,
   backgroundAgentDuration,
   backgroundAgentElapsed,
   backgroundAgentIdentity,
@@ -173,13 +174,14 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     event.stopPropagation()
     if (cancelling()) return
     if (snapshot().unavailable) return
-    if (agent.status !== "running") return
+    if (agent.status !== "running" || !agent.revision) return
     const id = session.currentSessionID()
     if (!id) return
     pending = `${id}:${++revision}`
     deadline = Date.now() + 15_000
     setCancelling(agent.jobID)
-    vscode.postMessage({ type: "cancelBackgroundJob", jobID: agent.jobID, sessionID: id, requestID: pending })
+    const message = backgroundAgentCancellation(agent, id, pending)
+    if (message) vscode.postMessage(message)
   }
 
   const hideFinished = () => {
@@ -366,7 +368,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                         variant="ghost"
                         size="small"
                         aria-label={`${language.t("task.backgroundAgents.cancel")}: ${label(agent)}`}
-                        disabled={cancelling() !== undefined}
+                        disabled={cancelling() !== undefined || !agent.revision}
                         onClick={(event: MouseEvent) => cancelAgent(event, agent)}
                       >
                         <span data-slot="task-header-agent-action-label">

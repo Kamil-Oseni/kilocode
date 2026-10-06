@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background-job"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer } from "effect"
+import * as Lineage from "@opencode-ai/core/kilocode/background-lineage" // kilocode_change
 
 export {
   Service,
@@ -18,7 +19,12 @@ export {
 const layer = Layer.effect(
   CoreBackgroundJob.Service,
   Effect.gen(function* () {
-    const state = yield* InstanceState.make(() => CoreBackgroundJob.make)
+    // kilocode_change start - keep local observations while sharing one service-owned execution tree
+    const lineage = yield* Lineage.make
+    const state = yield* InstanceState.make(() =>
+      CoreBackgroundJob.make.pipe(Effect.provideService(Lineage.Service, lineage)),
+    )
+    // kilocode_change end
     return CoreBackgroundJob.Service.of({
       list: () => InstanceState.useEffect(state, (jobs) => jobs.list()),
       get: (id) => InstanceState.useEffect(state, (jobs) => jobs.get(id)),
@@ -29,6 +35,8 @@ const layer = Layer.effect(
       promote: (id) => InstanceState.useEffect(state, (jobs) => jobs.promote(id)),
       cancel: (id, revision) => InstanceState.useEffect(state, (jobs) => jobs.cancel(id, revision)), // kilocode_change
       // kilocode_change start
+      cancelOwned: (session) => InstanceState.useEffect(state, (jobs) => jobs.cancelOwned(session)),
+      cancelTree: (id, revision) => InstanceState.useEffect(state, (jobs) => jobs.cancelTree(id, revision)),
       cancelInput: (id, revision, message) =>
         InstanceState.useEffect(state, (jobs) => jobs.cancelInput(id, revision, message)),
       // kilocode_change end

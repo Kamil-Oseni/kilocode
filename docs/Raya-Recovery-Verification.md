@@ -2,6 +2,10 @@
 
 Reviewed 2026-10-05 against the saved recovery records and current local launcher source. This supplements `D:/RayaBackups/RECOVERY.md`; it does not authorize a restore or restart.
 
+## October 6 recovery update
+
+`D:/RayaBackups/RECOVERY.md` now points to the verified October 6 `c1dce02b` lighting backup and the bounded 7149 rollback vault. Its previous bytes are preserved in `D:/RayaBackups/Independent-20261005/RECOVERY-before-20261006.md`. The lighting export contains `script.sleep_mode_fade` with the ceiling off first and excluded from the 540-step fade. The current vault contains eight hash-verified archives; all eight packages from before rotation and the byte-exact index remain in `D:/RayaBackups/PackageVault-20261006-before-7149-exact`. The earlier backup folder’s reformatted index is a logical record only. No live restore, registry replacement, reinstall or reboot was performed. See [current readiness](Raya-Current-Readiness.md) for installed-workflow limits.
+
 ## Separate the restore checks
 
 The saved `D:/RayaBackups/Independent-20261005/final-verification.json` records a completed isolated **file-copy rehearsal**: 145 snapshot files matched after copying into the rehearsal folder, nine curated notes matched their curated snapshot, and no missing local links were recorded. It explicitly records no live restore, no Home Assistant restore, no model/service startup and no automatic capture.

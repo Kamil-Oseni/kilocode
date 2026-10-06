@@ -30,8 +30,12 @@ git diff --name-only fd11bde5e956fadb2dd7075b6a5c32b74ba2cf40 fdf8fbb4f26b5d5487
 | `.tmp/memory-private/worker-retry-unit.log` | 53 tests, 174 assertions: worker state and controlled SDK failures |
 | `.tmp/memory-private/worker-retry-browser-qualified.log` | Five mounted Chromium checks: failure details, bounded text, Refresh and revision-scoped Stop |
 | `.tmp/memory-private/worker-retry-compile.log` | SDK regeneration, extension/webview types, lint and complete source compilation |
+| `.tmp/memory-private/integration-linked-current.log` | 12 tests, 95 assertions: actual Python note publication/reader through the client, stale policy and seed refusal, bounded context, diagnostic races |
+| `.tmp/memory-private/integration-self-heal-current.log` | 15 tests, 172 assertions: actual temporary snapshot checks and durable Storage receipts; stale source, goal and audit refusal |
 
 Logs are local evidence in the everyday worktree, not tracked release artifacts. Preserve failed reproductions alongside final results. The required pure Python producer is `D:/Raya/Services/Packaging/Python/3.12.14/python.exe`, selected using `RAYA_MEMORY_OPERATION_PYTHON`; missing this prerequisite skips ownership coverage. It does not load a personal model or enable capture.
+
+The two additional integration runs above completed on the reviewed branch with zero failures and no skips. Linked transport additionally requires `RAYA_LINKED_TEST_PYTHON` pointing at that interpreter. Its producer exercises the actual service reader/publication implementation in temporary data. Self-heal cases execute checks in temporary Git snapshots and verify persisted receipts; their transcripts and delivery fixtures are synthetic. Neither run proves configured personal Memory, autonomous model repair, installed delivery or recovery after a real boot.
 
 ## Delivery sequence
 

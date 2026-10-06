@@ -12,6 +12,7 @@ import { gate } from "@/kilocode/session/input-gate"
 import { RayaChief } from "."
 import { ChiefRefinement } from "./refinement"
 import { Refusal } from "@/kilocode/session/tool-refusal"
+import { example } from "@/kilocode/task-resume"
 
 export namespace ChiefVerification {
   export const key = "raya.chief.verification"
@@ -282,7 +283,8 @@ export namespace ChiefVerification {
         return yield* Effect.fail(
           new Refusal(
             "task-recovery",
-            `This current Chief request already has a completed worker. Continue or recover that same work with task_id="${worker.taskID}"; do not create a replacement child by rewording the brief. Distinct saved branches or a genuinely new routed request remain separate work.`,
+            `This current Chief request already has a completed worker. Continue or recover that same work with task_id="${worker.taskID}"; do not create a replacement child by rewording the brief. Distinct saved branches or a genuinely new routed request remain separate work. Put the ID in arguments.task_id, not only in the objective text. Supply a concrete continuation or correction in prompt or brief.objective.
+${example(worker.taskID)}`,
           ),
         )
       return true

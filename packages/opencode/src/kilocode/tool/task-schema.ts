@@ -5,6 +5,7 @@ import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { MessageID, SessionID } from "@/session/schema"
 import { ChiefVerification } from "@/kilocode/chief/verification"
+import { example } from "@/kilocode/task-resume"
 
 const originals = new WeakMap<JSONSchema7, JSONSchema7>()
 const instructions = new WeakMap<JSONSchema7, string>()
@@ -71,7 +72,8 @@ export const prepare = Effect.fn("TaskSchema.prepare")(function* (
           }
         : {}),
     }
-    const guide = `${original.description ?? ""} Recover this same worker with task_id="${worker.taskID}". Its summary is not verified file evidence.${worker.correction ? " The completion audit was rejected: supply a concrete correction objective describing the missing work and actual verification, not a progress query or repeated success claim." : ""}`
+    const guide = `${original.description ?? ""} Recover this same worker with task_id="${worker.taskID}". Its summary is not verified file evidence.${worker.correction ? " The completion audit was rejected: supply a concrete correction objective describing the missing work and actual verification, not a progress query or repeated success claim." : ""} Put the retained ID in arguments.task_id, not only in prompt or brief text. The following is a call example: replace its prompt with the concrete continuation or correction; existing permissions still govern execution.
+${example(worker.taskID)}`
     const result: JSONSchema7 = {
       ...original,
       description: guide,

@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { asSchema } from "ai"
 import { createRequire } from "node:module"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -24,7 +24,7 @@ import { SessionPrompt } from "@/session/prompt"
 import { SessionProcessor } from "@/session/processor"
 import { SessionTools } from "@/session/tools"
 import { LLMRequestPrep } from "@/session/llm/request"
-import { MessageID, PartID } from "@/session/schema"
+import { MessageID, PartID, SessionID } from "@/session/schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
@@ -223,6 +223,15 @@ it.instance(
       })
       expect(catalog.task.description).toContain(`task_id="${child.id}"`)
       expect(catalog.task.description).toContain("supply a concrete correction objective")
+      const raw = catalog.task.description?.match(/<task_recovery>([^\n]+)<\/task_recovery>/)?.[1]
+      if (!raw) throw new Error("Actual Task factory omitted its structured recovery call")
+      const handoff = Schema.decodeUnknownSync(
+        Schema.Struct({
+          kind: Schema.Literal("tool"),
+          name: Schema.Literal("task"),
+          arguments: Schema.Struct({ task_id: SessionID, prompt: Schema.String }),
+        }),
+      )(JSON.parse(raw))
       const prepared = yield* LLMRequestPrep.prepare({
         user,
         sessionID: parent.id,
@@ -270,6 +279,10 @@ it.instance(
       expect(validate(correction)).toBe(true)
       expect(local(correction)).toBe(true)
       expect(envelope({ kind: "tool", name: "task", arguments: correction })).toBe(true)
+      expect(prepared.tools.task.description).toContain(raw)
+      expect(validate(handoff.arguments)).toBe(true)
+      expect(local(handoff.arguments)).toBe(true)
+      expect(envelope(handoff)).toBe(true)
       expect(ToolEnvelope.guide(definitions)).toContain(child.id)
       expect(ToolEnvelope.guide(definitions)).toContain("supply a concrete correction objective")
       expect(yield* sessions.children(parent.id)).toHaveLength(1)

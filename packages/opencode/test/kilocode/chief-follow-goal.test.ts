@@ -817,6 +817,17 @@ planned.instance("reserves verification for an authenticated Chief follow from g
       })
       if (["continuation", "compaction"].includes(mode)) {
         const id = result.value.metadata.sessionId
+        const decode = (text: string) => {
+          const raw = text.match(/<task_recovery>([^\n]+)<\/task_recovery>/)?.[1]
+          if (!raw) throw new Error("Task did not expose a structured recovery call")
+          return Schema.decodeUnknownSync(Schema.Struct({
+            kind: Schema.Literal("tool"), name: Schema.Literal("task"),
+            arguments: Schema.Struct({task_id: SessionID, prompt: Schema.String}),
+          }))(JSON.parse(raw))
+        }
+        const handoff = decode(result.value.output)
+        expect(handoff.arguments.task_id).toBe(id)
+        expect(handoff.arguments.prompt.trim().length).toBeGreaterThan(0)
         const count = (yield* sessions.children(chat.id)).length
         const attempt = Effect.fn(function* (input: Parameters<typeof def.execute>[0], message = assistant, publication = Effect.void) {
           const retry = {...part,messageID:message.id,id:PartID.ascending(),callID:`recovery-${PartID.ascending()}`,
@@ -842,6 +853,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           if (!(error instanceof Refusal)) throw error
           expect(error.reason).toBe("task-recovery")
           expect(error.message).toContain(`task_id="${id}"`)
+          expect(decode(error.message)).toEqual(handoff)
           expect((yield* sessions.children(chat.id)).length).toBe(count)
           expect(started).toBe(1)
         }
@@ -931,7 +943,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         // Saved branch admission is owned by ChiefTaskBinding, not the unplanned recovery fence.
         yield* ChiefVerification.reuse({...common, planned: true})
         yield* ChiefVerification.reuse({...common, agent: "build"})
-        const resumed = yield* attempt({task_id: id, prompt: "Continue the same assigned work"})
+        const resumed = yield* attempt(handoff.arguments)
         expect(resumed.metadata.sessionId).toBe(id)
         expect((yield* sessions.children(chat.id)).length).toBe(count)
         expect(started).toBe(2)

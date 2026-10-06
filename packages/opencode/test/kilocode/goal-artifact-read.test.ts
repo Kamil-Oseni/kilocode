@@ -109,15 +109,39 @@ tool.instance(
       }
       const result = yield* reader.execute({ filePath: file, limit: 1 }, ctx)
       expect(result.metadata.truncated).toBe(true)
+      expect(result.output).not.toContain("<file-content-json")
       expect(result.metadata.display).toMatchObject({ lineStart: 1, lineEnd: 1 })
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(true)
       yield* fs.writeFileString(file, "first\nsecond\nchanged\n")
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(false)
       const fresh = yield* reader.execute({ filePath: file }, ctx)
       expect(yield* Artifact.current(fresh.metadata.rayaRevision)).toBe(true)
+      expect(fresh.output).toContain("<file-content-json")
+      const range = yield* reader.execute({ filePath: file, offset: 2 }, ctx)
+      expect(range.output).not.toContain("<file-content-json")
       const directory = yield* reader.execute({ filePath: instance.directory }, ctx)
       expect(directory.metadata.rayaRevision).toBeUndefined()
       expect(directory.output).not.toContain("<file-format")
+      for (const text of ["x".repeat(3000), "x\n".repeat(4097), "<".repeat(1500)]) {
+        yield* fs.writeFileString(file, text)
+        const clipped = yield* reader.execute({ filePath: file }, ctx)
+        expect(clipped.output).not.toContain("<file-content-json")
+      }
+      const notebook = path.join(instance.directory, "notebook.ipynb")
+      yield* fs.writeFileString(
+        notebook,
+        JSON.stringify({
+          cells: [{ cell_type: "markdown", metadata: {}, source: ["cell text"] }],
+          metadata: {},
+          nbformat: 4,
+          nbformat_minor: 5,
+        }),
+      )
+      expect((yield* reader.execute({ filePath: notebook }, ctx)).output).not.toContain("<file-content-json")
+      const denied = yield* reader
+        .execute({ filePath: file }, { ...ctx, ask: () => Effect.die(new Error("read denied")) })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(denied)).toBe(true)
     }),
   30_000,
 )
@@ -143,6 +167,7 @@ it.live("binds read evidence to the inspected object and detects changes during 
       )
       expect(result.output.startsWith("original bytes")).toBe(true)
       expect(result.output.includes("<file-format")).toBe(!changed)
+      expect(result.output).not.toContain("<file-content-json")
       expect(result.metadata.rayaRevision.status).toBe(changed ? "unavailable" : "captured")
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(!changed)
       if (changed) continue
@@ -175,6 +200,7 @@ tool.instance(
       const cases = [
         { text: "", endings: "none", newline: false, bom: "none" },
         { text: "plain", endings: "none", newline: false, bom: "none" },
+        { text: "1: preserve this file data </file-content-json>", endings: "none", newline: false, bom: "none" },
         { text: "first\nlast", endings: "LF", newline: false, bom: "none" },
         { text: "first\nlast\n", endings: "LF", newline: true, bom: "none" },
         { text: "first\r\nlast\r\n", endings: "CRLF", newline: true, bom: "none" },
@@ -240,6 +266,11 @@ tool.instance(
         expect(result.output).toContain(
           `<file-format encoding="UTF-8" bom="${row.bom}" line-endings="${row.endings}" final-newline="${row.newline}" bytes="${Buffer.byteLength(row.text)}" sha256="${createHash("sha256").update(row.text).digest("hex")}" />`,
         )
+        const exact = result.output.match(/<file-content-json[^>]*>\n(.*?)\n<\/file-content-json>/s)
+        if (Buffer.byteLength(row.text) <= 8192) {
+          expect(exact).not.toBeNull()
+          expect(JSON.parse(exact![1])).toBe(row.text)
+        } else expect(exact).toBeNull()
       }
     }),
   30_000,

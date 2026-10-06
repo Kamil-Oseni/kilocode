@@ -527,6 +527,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly activeAlerts = new Map<string, number>() // sid -> limit currently shown in UI
   private readonly memory = new KiloProviderMemory({
     client: () => this.client ?? undefined,
+    generation: () => this.connectionGeneration,
     session: () => this.currentSession ?? undefined,
     // Honor disabled project scope (null in a multi-root panel): no workspace fallback,
     // so memory operations never silently target an arbitrary folder.

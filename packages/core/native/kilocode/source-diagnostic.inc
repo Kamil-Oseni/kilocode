@@ -5,7 +5,27 @@ struct Diagnostic {
   };
   std::map<std::pair<std::wstring, std::wstring>, Row> rows;
   uint64_t observed = 0, unavailable = 0, dropped = 0;
+  uint64_t notifications = 0, opened = 0, queried = 0, unassigned = 0, duplicates = 0, settled = 0;
+  uint64_t replaced = 0, capacity = 0, unsettled = 0, accounting = 0;
+  DWORD first = 0, last = 0;
+  DWORD handles = 0;
+  uint64_t retained = 0, working = 0, peak = 0, memory = 0, pagefile = 0;
+  bool measured = false;
   bool failed = false;
+  void measure(size_t members) noexcept {
+    retained = members;
+    PROCESS_MEMORY_COUNTERS_EX value{};
+    value.cb = sizeof(value);
+    using Memory = BOOL(WINAPI*)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
+    const auto query = reinterpret_cast<Memory>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "K32GetProcessMemoryInfo"));
+    measured = query && query(GetCurrentProcess(), reinterpret_cast<PPROCESS_MEMORY_COUNTERS>(&value), sizeof(value)) &&
+      GetProcessHandleCount(GetCurrentProcess(), &handles);
+    if (!measured) return;
+    working = value.WorkingSetSize;
+    peak = value.PeakWorkingSetSize;
+    memory = value.PrivateUsage;
+    pagefile = value.PeakPagefileUsage;
+  }
   static std::wstring name(HANDLE handle) {
     wchar_t text[32768]{};
     DWORD size = 32768;
@@ -65,6 +85,16 @@ struct Diagnostic {
     }
     return "{\"version\":1,\"diagnosticOnly\":true,\"retirementAuthority\":false,\"observations\":" + std::to_string(observed) +
       ",\"unavailable\":" + std::to_string(unavailable) + ",\"dropped\":" + std::to_string(dropped) +
-      ",\"failed\":" + (failed ? "true" : "false") + ",\"groups\":" + entries + "]}";
+      ",\"failed\":" + (failed ? "true" : "false") + ",\"coverage\":{\"newProcess\":" + std::to_string(notifications) +
+      ",\"openFailed\":" + std::to_string(opened) + ",\"firstOpenError\":" + std::to_string(first) +
+      ",\"lastOpenError\":" + std::to_string(last) + ",\"queryFailed\":" + std::to_string(queried) +
+      ",\"unassigned\":" + std::to_string(unassigned) + ",\"duplicateLive\":" + std::to_string(duplicates) +
+      ",\"duplicateSettled\":" + std::to_string(settled) + ",\"replacedBirth\":" + std::to_string(replaced) +
+      ",\"capacityRefused\":" + std::to_string(capacity) + ",\"unsettled\":" + std::to_string(unsettled) +
+      ",\"accountingMismatch\":" + std::to_string(accounting) + "},\"resources\":{\"available\":" + (measured ? "true" : "false") +
+      ",\"retainedMembers\":" + std::to_string(retained) + ",\"memberStructBytes\":" + std::to_string(sizeof(Member)) +
+      ",\"processHandles\":" + std::to_string(handles) + ",\"workingSetBytes\":\"" + std::to_string(working) +
+      "\",\"peakWorkingSetBytes\":\"" + std::to_string(peak) + "\",\"privateBytes\":\"" + std::to_string(memory) +
+      "\",\"peakPagefileBytes\":\"" + std::to_string(pagefile) + "\"},\"groups\":" + entries + "]}";
   }
 };

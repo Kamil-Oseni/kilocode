@@ -27,6 +27,7 @@ type Record = {
   entry?: DraftEntry
   error?: DraftCode
   uncertain?: { mutation: string; content: DraftContent; revision: number }
+  clearing?: { mutation: string; revision: number }
   held?: DraftCapture
   captured?: number
   sent?: DraftContent
@@ -104,7 +105,7 @@ const target = (entry: DraftEntry): DraftTarget => {
     pendingID: entry.identity.pendingID,
   }
 }
-async function digest(content: DraftContent) {
+async function digest(content: DraftContent | null) {
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(content)))
   return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
 }
@@ -241,15 +242,28 @@ export class DurableDrafts {
     record.moving = true
     const mutation = crypto.randomUUID()
     const job = (async () => {
-      let reply = await this.request({ type: "composerDraftClear", identity, expected: token, mutation }, record.owner)
-      if (reply.error === "timeout" || reply.error === "disconnected" || reply.error === "stale") {
-        reply = await this.request({ type: "composerDraftLoad", identity }, record.owner)
-        if (reply.entry?.mutation !== mutation || reply.entry.content !== null) {
-          record.error = "unavailable"
-          return false
-        }
+      const reply = await this.request(
+        { type: "composerDraftClear", identity, expected: token, mutation },
+        record.owner,
+      )
+      const unknown =
+        reply.error === "timeout" ||
+        reply.error === "disconnected" ||
+        reply.error === "stale" ||
+        reply.error === "unavailable"
+      if (
+        unknown ||
+        (!reply.error &&
+          (!reply.entry ||
+            reply.entry.content !== null ||
+            reply.entry.mutation !== mutation ||
+            reply.entry.digest !== (await digest(null))))
+      ) {
+        record.clearing = { mutation, revision }
+        await this.cleared(record, record.clearing)
+        return !record.error && !record.clearing && record.revision === 0
       }
-      if (reply.error || !reply.entry || reply.entry.content !== null || reply.entry.mutation !== mutation) {
+      if (reply.error || !reply.entry) {
         record.error = reply.error ?? "unavailable"
         return false
       }
@@ -408,6 +422,35 @@ export class DurableDrafts {
     )
   }
 
+  private async cleared(record: Record, clearing: { mutation: string; revision: number }) {
+    const reply = await this.request({ type: "composerDraftLoad", identity: record.identity }, record.owner)
+    if (reply.error) {
+      record.error = reply.error
+      return
+    }
+    const entry = reply.entry
+    if (
+      !entry ||
+      entry.mutation !== clearing.mutation ||
+      entry.content !== null ||
+      entry.digest !== (await digest(null))
+    ) {
+      record.error = "conflict"
+      return
+    }
+    record.entry = entry
+    record.loaded = true
+    record.error = undefined
+    record.clearing = undefined
+    record.saved = clearing.revision
+    if (record.revision === clearing.revision) {
+      record.content = empty()
+      record.revision = 0
+      record.saved = 0
+    }
+    this.notify()
+  }
+
   private async load(record: Record) {
     const revision = record.revision
     const reply = await this.request({ type: "composerDraftLoad", identity: record.identity }, record.owner)
@@ -455,7 +498,8 @@ export class DurableDrafts {
   }
 
   private async persist(record: Record) {
-    if (!record.loaded || record.uncertain) await this.load(record)
+    if (!record.loaded || record.uncertain || record.clearing)
+      await (record.clearing ? this.cleared(record, record.clearing) : this.load(record))
     if (record.error) return
     while (
       record.saved !== cutoff(record) &&
@@ -479,12 +523,18 @@ export class DurableDrafts {
       )
       if (reply.error || !reply.entry) {
         record.error = reply.error ?? "unavailable"
-        if (record.error === "timeout" || record.error === "disconnected" || record.error === "stale")
+        if (
+          record.error === "timeout" ||
+          record.error === "disconnected" ||
+          record.error === "stale" ||
+          record.error === "unavailable"
+        )
           record.uncertain = { mutation, content, revision }
         return
       }
       if (!(await this.exact(reply.entry, mutation, content))) {
         record.error = "unavailable"
+        record.uncertain = { mutation, content, revision }
         return
       }
       record.entry = reply.entry

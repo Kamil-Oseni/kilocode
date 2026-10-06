@@ -113,6 +113,10 @@ function pane(
     load?: ReturnType<typeof gate>
     clear?: ReturnType<typeof gate>
     drop?: boolean
+    unavailable?: "before" | "after"
+    clearing?: boolean
+    mismatch?: boolean
+    unavailableLoad?: boolean
     owner?: string
   } = {}
   const emit = (message: ComposerDraftExtensionMessage) => {
@@ -153,7 +157,34 @@ function pane(
                 : undefined
         void (async () => {
           if (pause) await pause.wait
+          if (message.type === "composerDraftLoad" && controls.unavailableLoad) {
+            controls.unavailableLoad = false
+            emit({ ...message, type: "composerDraftResult", operation: message.type, error: "unavailable" })
+            return
+          }
+          const unavailable =
+            message.type === "composerDraftSave" || (message.type === "composerDraftClear" && controls.clearing)
+              ? controls.unavailable
+              : undefined
+          if (unavailable) controls.unavailable = undefined
+          if (unavailable === "before") {
+            emit({ ...message, type: "composerDraftResult", operation: message.type, error: "unavailable" })
+            return
+          }
           const result = await (owners?.get(message.owner) ?? storage).handle(message)
+          if (unavailable === "after") {
+            emit({ ...message, type: "composerDraftResult", operation: message.type, error: "unavailable" })
+            return
+          }
+          if (
+            controls.mismatch &&
+            (message.type === "composerDraftSave" || (message.type === "composerDraftClear" && controls.clearing)) &&
+            result.entry
+          ) {
+            controls.mismatch = false
+            emit({ ...result, entry: { ...result.entry, digest: "0".repeat(64) } })
+            return
+          }
           if (message.type === "composerDraftSave" && controls.drop) {
             controls.drop = false
             return
@@ -366,6 +397,236 @@ test("lost committed ACK reconciles normalized digest and exact mutation without
   expect(await view.controller.retry(identity)).toBe(true)
   expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(1)
   expect(view.controller.view(identity).content).toEqual(rich)
+})
+
+test("reconnect reads an unavailable committed save without replaying its mutation", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controls.unavailable = "after"
+  view.controller.edit(identity, rich)
+  await until(() => view.controller.view(identity).error === "unavailable")
+  view.emit({
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 2,
+    connected: true,
+    owners: [{ box: identity.box, owner: storage.root }],
+  })
+  await until(() => !view.controller.view(identity).error)
+  expect(view.controller.view(identity).content).toEqual(rich)
+  expect(view.requests.map((request) => request.type)).toEqual([
+    "composerDraftLoad",
+    "composerDraftSave",
+    "composerDraftLoad",
+  ])
+  expect(await view.controller.retry(identity)).toBe(true)
+  expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(1)
+})
+
+test("reconnect refuses an unavailable uncommitted save without a new write", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controls.unavailable = "before"
+  view.controller.edit(identity, rich)
+  await until(() => view.controller.view(identity).error === "unavailable")
+  view.emit({
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 2,
+    connected: true,
+    owners: [{ box: identity.box, owner: storage.root }],
+  })
+  await until(() => view.controller.view(identity).error === "conflict")
+  expect(view.controller.view(identity).content).toEqual(rich)
+  expect(await view.controller.retry(identity)).toBe(false)
+  expect(view.requests.map((request) => request.type)).toEqual([
+    "composerDraftLoad",
+    "composerDraftSave",
+    "composerDraftLoad",
+  ])
+  using next = pane(storage)
+  await until(() => next.controller.ready())
+  expect((await next.controller.hydrate(identity)).content.text).toBe("")
+})
+
+test("retry reads an unavailable committed save before saving a later local edit", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controls.unavailable = "after"
+  view.controller.edit(identity, rich)
+  await until(() => view.controller.view(identity).error === "unavailable")
+  expect(await view.controller.retry(identity)).toBe(true)
+  expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(1)
+  view.controller.edit(identity, { ...rich, text: "Later local revision" })
+  expect(await view.controller.retry(identity)).toBe(true)
+  expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(2)
+  expect(view.controller.view(identity).content.text).toBe("Later local revision")
+})
+
+test("reconnect preserves a competing committed draft after an unavailable save", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controls.unavailable = "after"
+  view.controller.edit(identity, rich)
+  await until(() => view.controller.view(identity).error === "unavailable")
+  using other = pane(storage)
+  await until(() => other.controller.ready())
+  await other.controller.hydrate(identity)
+  other.controller.edit(identity, { ...rich, text: "Competing saved revision" })
+  expect(await other.controller.capture(identity)).toBeDefined()
+  view.emit({
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 2,
+    connected: true,
+    owners: [{ box: identity.box, owner: storage.root }],
+  })
+  await until(() => view.controller.view(identity).error === "conflict")
+  expect(view.controller.view(identity).content).toEqual(rich)
+  expect(await view.controller.retry(identity)).toBe(false)
+  expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(1)
+  using next = pane(storage)
+  await until(() => next.controller.ready())
+  expect((await next.controller.hydrate(identity)).content.text).toBe("Competing saved revision")
+})
+
+test("reconnect does not reconcile an unavailable save under a foreign owner", async () => {
+  await using storage = await draftStorage()
+  await using foreign = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controls.unavailable = "after"
+  view.controller.edit(identity, rich)
+  await until(() => view.controller.view(identity).error === "unavailable")
+  view.emit({
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 2,
+    connected: true,
+    owners: [{ box: identity.box, owner: foreign.root }],
+  })
+  await Bun.sleep(10)
+  expect(view.requests).toHaveLength(2)
+  expect(view.controller.view(identity).content.text).toBe("")
+  view.emit({
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 3,
+    connected: true,
+    owners: [{ box: identity.box, owner: storage.root }],
+  })
+  await until(() => !view.controller.view(identity).error)
+  expect(view.controller.view(identity).content).toEqual(rich)
+  expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(1)
+})
+
+test("retry verifies a malformed committed save acknowledgement without another write", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controls.mismatch = true
+  view.controller.edit(identity, rich)
+  await until(() => view.controller.view(identity).error === "unavailable")
+  expect(await view.controller.retry(identity)).toBe(true)
+  expect(view.controller.view(identity).content).toEqual(rich)
+  expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(1)
+})
+
+test("discard verifies an unavailable committed tombstone without repeating clear", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controller.edit(identity, rich)
+  expect(await view.controller.retry(identity)).toBe(true)
+  view.controls.clearing = true
+  view.controls.unavailable = "after"
+  expect(await view.controller.discard(identity)).toBe(true)
+  expect(view.controller.view(identity).content.text).toBe("")
+  expect(await view.controller.retry(identity)).toBe(true)
+  expect(view.requests.filter((request) => request.type === "composerDraftClear")).toHaveLength(1)
+  using next = pane(storage)
+  await until(() => next.controller.ready())
+  expect((await next.controller.hydrate(identity)).content.text).toBe("")
+})
+
+test("discard keeps an unavailable uncommitted tombstone unconfirmed on retry", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controller.edit(identity, rich)
+  expect(await view.controller.retry(identity)).toBe(true)
+  view.controls.clearing = true
+  view.controls.unavailable = "before"
+  expect(await view.controller.discard(identity)).toBe(false)
+  expect(view.controller.view(identity).content).toEqual(rich)
+  expect(await view.controller.retry(identity)).toBe(false)
+  expect(view.requests.filter((request) => request.type === "composerDraftClear")).toHaveLength(1)
+})
+
+test("retry reads the exact unavailable clear after its first reconciliation also fails", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controller.edit(identity, rich)
+  expect(await view.controller.retry(identity)).toBe(true)
+  view.controls.clearing = true
+  view.controls.unavailable = "after"
+  view.controls.unavailableLoad = true
+  expect(await view.controller.discard(identity)).toBe(false)
+  expect(view.controller.view(identity)).toMatchObject({ error: "unavailable", content: rich })
+  expect(await view.controller.retry(identity)).toBe(true)
+  expect(view.controller.view(identity).content.text).toBe("")
+  expect(view.requests.filter((request) => request.type === "composerDraftClear")).toHaveLength(1)
+  expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(1)
+})
+
+test("discard reads a malformed committed tombstone acknowledgement", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controller.edit(identity, rich)
+  expect(await view.controller.retry(identity)).toBe(true)
+  view.controls.clearing = true
+  view.controls.mismatch = true
+  expect(await view.controller.discard(identity)).toBe(true)
+  expect(view.controller.view(identity).content.text).toBe("")
+  expect(view.requests.filter((request) => request.type === "composerDraftClear")).toHaveLength(1)
+})
+
+test("discard reconciliation preserves typing after the attempted clear", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  await view.controller.hydrate(identity)
+  view.controller.edit(identity, rich)
+  expect(await view.controller.retry(identity)).toBe(true)
+  view.controls.clearing = true
+  view.controls.unavailable = "after"
+  const held = gate()
+  view.controls.load = held
+  const clearing = view.controller.discard(identity)
+  await until(() => view.requests.filter((request) => request.type === "composerDraftLoad").length === 2)
+  view.controller.edit(identity, { ...rich, text: "New typing while clear is verified" })
+  held.open()
+  expect(await clearing).toBe(false)
+  expect(await view.controller.retry(identity)).toBe(true)
+  expect(view.controller.view(identity).content.text).toBe("New typing while clear is verified")
+  expect(view.requests.filter((request) => request.type === "composerDraftClear")).toHaveLength(1)
+  expect(view.requests.filter((request) => request.type === "composerDraftSave")).toHaveLength(2)
 })
 
 test("real CAS conflict retains local content and refuses blind retry", async () => {

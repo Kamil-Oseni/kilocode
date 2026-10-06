@@ -170,7 +170,7 @@ def load(file, expected, managed=False):
         reject('Selected Python image differs')
     source = Path(plan['source'])
     pins = plan['source_sha256']
-    expected = 11 if plan['kind'] == 'memory' else 7
+    expected = 12 if plan['kind'] == 'memory' else 7
     if len(pins) != expected or pins != RELEASES[plan['kind']]:
         reject('Exact selected service release required')
     selected = {source / name for name in pins}

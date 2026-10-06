@@ -2,6 +2,58 @@ import { expect, test } from "bun:test"
 import { ollama, OllamaBridgeError } from "@/kilocode/provider/ollama-bridge"
 import { localFetch, status } from "@/kilocode/provider/local-scheduler"
 import { terminal } from "@/kilocode/provider/native-admission"
+import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
+
+for (const disabled of [false, true]) {
+  test(`local envelope final text retains reply guidance after tools are ${disabled ? "disabled" : "removed"}`, async () => {
+    const rows: Record<string, unknown>[] = []
+    const text = "RaYA_Ω_007\n"
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        rows.push(await req.json())
+        return Response.json({
+          model: "fixture",
+          message: { role: "assistant", content: text },
+          done: true,
+          done_reason: "stop",
+        })
+      },
+    })
+    try {
+      const send = ollama(
+        { localInference: true, localInferenceAPI: "ollama", localInferenceToolFormat: "completion-envelope-v1" },
+        globalThis.fetch,
+      )
+      const response = await send(`${server.url}v1/chat/completions`, {
+        method: "POST",
+        body: JSON.stringify({
+          model: "fixture",
+          messages: [
+            { role: "system", content: "Existing agent instructions" },
+            { role: "user", content: `Reply exactly ${JSON.stringify(text)}` },
+          ],
+          tools: disabled
+            ? [{ type: "function", function: { name: "update_goal", parameters: { type: "object" } } }]
+            : [],
+          ...(disabled ? { tool_choice: "none" } : {}),
+        }),
+      })
+      const body = await response.json()
+      expect(body.choices[0].message.content).toBe(text)
+      expect(rows).toHaveLength(1)
+      expect(rows[0].format).toBeUndefined()
+      expect(rows[0].tools).toEqual(disabled ? undefined : [])
+      expect(rows[0].messages).toEqual([
+        { role: "system", content: "Existing agent instructions\n\n" + ToolEnvelope.reply() },
+        { role: "user", content: `Reply exactly ${JSON.stringify(text)}` },
+      ])
+    } finally {
+      await server.stop()
+    }
+  })
+}
 
 test("real HTTP bridge forwards refusal flags and converts split tool/thinking NDJSON with usage", async () => {
   const rows: Record<string, unknown>[] = []

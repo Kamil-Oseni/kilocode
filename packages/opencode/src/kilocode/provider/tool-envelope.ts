@@ -10,6 +10,10 @@ const wire = z.discriminatedUnion("kind", [
 
 /** Outer protocol validation only. Tool execution retains semantic/evidence authority. */
 export namespace ToolEnvelope {
+  export function reply() {
+    return "After successful work, obey the user's final-response format. If an exact reply is requested, copy it verbatim, preserving capitalization and whitespace, with no status announcement, summary, or explanation. A Goal complete tool result does not change that reply requirement."
+  }
+
   export function schema(tools: readonly Tool[], choice: "auto" | "required") {
     if (!tools.length || tools.length > 128 || new Set(tools.map((tool) => tool.function.name)).size !== tools.length)
       throw new Error("Invalid envelope tool definitions")
@@ -57,7 +61,9 @@ export namespace ToolEnvelope {
 
   export function guide(tools: readonly Tool[]) {
     const value =
-      "Return one JSON envelope matching the response schema. Use kind tool (name and arguments), tools (ordered calls), or text (content, only when allowed). Preserve exact tool arguments. Tool results include their original toolCallId and output. Cite only the exact ID of an eligible successful result; never invent an ID. Preserve saved goal requirement strings as decoded text, without adding JSON escapes. Tool definitions: " +
+      "Return one JSON envelope matching the response schema. Use kind tool (name and arguments), tools (ordered calls), or text (content, only when allowed). Preserve exact tool arguments. Tool results include their original toolCallId and output. Cite only the exact ID of an eligible successful result; never invent an ID. Copy goal criterion IDs and requirement strings from the current get_goal result as decoded text, without rewriting paths, capitalization, or adding JSON escapes. A rejected completion audit leaves the goal active: correct the audit using actual eligible evidence; do not resume an already active goal. " +
+      reply() +
+      " Tool definitions: " +
       JSON.stringify(
         tools.map((tool) => ({
           name: tool.function.name,

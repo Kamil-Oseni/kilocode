@@ -637,8 +637,8 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       if (system) system.content += "\n\n" + guide
       if (!system) messages.unshift({ role: "system", content: guide })
     }
-    if (envelope) {
-      const guide = ToolEnvelope.guide(data.tools!)
+    if (envelope || options.localInferenceToolFormat === "completion-envelope-v1") {
+      const guide = envelope ? ToolEnvelope.guide(data.tools!) : ToolEnvelope.reply()
       const system = messages.find((message) => message.role === "system")
       if (system) system.content += "\n\n" + guide
       if (!system) messages.unshift({ role: "system", content: guide })

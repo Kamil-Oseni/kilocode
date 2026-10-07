@@ -100,6 +100,16 @@ The paired descriptor now explicitly selects either the legacy seven-image retri
 
 The focused paired checks now include source-byte/fingerprint validation and refusal of mixed protocols, stale release, missing entry image, foreign source directory and uncertain/draining health. These checks validate selection and correlation, not successful inference or native ownership from HTTP. Protected provisioning, actual supervised START/STOP, peak tracing, successful warm inference transport and installed acceptance are still required.
 
+## Actual protected supervisor acceptance
+
+The opt-in `retrieval_reuse_supervised_test.py` copies the independently hashed Gemma candidate dependency inventory into a disposable capsule with the fixed interpreter and selected source release. It verifies copied dependency hashes and observes the actual Windows owner/DACL of every capsule path before publishing its provisioning receipt. It then runs the genuine isolated supervisor, sends literal START on its original input, reads authenticated loopback health, and sends STOP. The original process and both output readers are joined; no model request is made.
+
+The first successful run checked 23,347 dependency images and 26,416 ACL paths. Genuine service readiness occurred at 9.391 seconds, followed by STOP and a passed supervisor closure at 9.875 seconds with exit 0. Evidence is saved at `D:/Raya/Tools/Readiness-20261005/RETRIEVAL-REUSE-SUPERVISED-95dc0e0d323c4b9694fec264a0759f02.json`. This proves the disposable protected startup/health/control/closure path. It does not prove model loading, warm reuse, native inference worker retirement, paired Memory HTTP success or installed acceptance. The capsule is disposable, so permanent cohort provisioning remains pending.
+
+The repeated run with the 30-second bound and retained failure evidence also passed; its evidence is `D:/Raya/Tools/Readiness-20261005/RETRIEVAL-REUSE-SUPERVISED-08187a9eb4794fe6b5fc3a94714eb485.json`.
+
+The test requires `RAYA_REUSE_API_TEST_ADMITTED=GemmaText-20261006-root`; otherwise it skips and must not count as acceptance. Failed observations retain evidence and ordinary original cleanup. The startup observation bound is 30 seconds, and expiration does not start another process.
+
 ## Required integration
 
 1. Add a reusable bootstrap path only to a newly selected and protected release containing the codec. Validate the same source/catalog/checkpoint dependency images before constructing a model. Cache one selected CPU model per worker; retain the existing finite path for rollback.

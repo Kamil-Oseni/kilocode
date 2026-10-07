@@ -5,7 +5,7 @@ provisioning receipt before admitting any service import or model-free test.
 No installed service, original credentials, personal root or existing ledger is
 adopted. The selected external sources are unchanged.
 
-The wrapper executes the original retained `server.py` as `__main__`, including
+For legacy selection, the wrapper executes the original retained `server.py` as `__main__`, including
 its original `finally` hooks. It substitutes only `uvicorn.run` with a retained
 `uvicorn.Server`. A non-daemon original input reader accepts literal `STOP` or
 stdin EOF and sets `server.should_exit`. Signals are not intercepted; there is
@@ -39,9 +39,13 @@ requires a separately reviewed, fresh admitted plan.
 The plan selects an exclusively fresh canonical `raya-memory-disposable-*` root,
 its separately reviewed native ACL/protection receipt, and all admitted directory
 dev/inode/ctime generations. All files carry exact bytes/SHA and original
-dev/inode/size/mtime/ctime/nlink tuples. The source map is fixed to Memory v3.1
-(nine sources) or Retrieval WorkerIntegration-v5 (seven sources); no arbitrary
-release is permitted. The Python image SHA is fixed, and the complete selected
+dev/inode/size/mtime/ctime/nlink tuples. The source map is fixed to the twelve
+Memory sources, seven legacy Retrieval sources, or sixteen reusable Retrieval
+sources pinned in `supervise.py`. Reusable Retrieval requires explicit
+`retrieval_protocol` selection of `raya.retrieval.request.settlement.v2` and
+executes `retrieval_reuse/entry.py`. An absent protocol selects legacy;
+explicitly invalid values are refused. No arbitrary release is permitted.
+The Python image SHA is fixed, and the complete selected
 site-packages/runtime/catalog input closure must be independently reviewed.
 The wrapper validates it before adding the selected dependency path or importing
 service code. Directory and dependency checks do not attest loaded image memory
@@ -67,6 +71,11 @@ does load its local tokenizer; native namespace observation occurs at import.
 These effects require Root admission despite the absence of inference.
 
 ## Gates still pending
+
+The October 7 deployment handoff and current evidence are in
+[Raya-Memory-Release-Handoff.md](../../../../docs/Raya-Memory-Release-Handoff.md).
+The historical October 4 observations below remain retained evidence; they do
+not describe the complete current source release or establish installed acceptance.
 
 On 2026-10-04, two fresh Retrieval health cases passed with ordinary STOP and EOF
 shutdown, original process and both streams joined, and no force. Health took

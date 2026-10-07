@@ -56,10 +56,11 @@ export const prepare = Effect.fn("TaskSchema.prepare")(function* (
     planned: false,
   }).pipe(Effect.orDie)
   if (worker) {
+    // Retained recovery is admitted only in goal/verify; planned branches execute in task phase.
     const text = { type: "string" as const, minLength: 1, pattern: "\\S" }
     const resumed: JSONSchema7 = {
-      required: ["task_id"],
-      properties: { task_id: { const: worker.taskID } },
+      required: [...new Set([...(original.required ?? []), "task_id"])],
+      properties: { ...original.properties, task_id: { type: "string", const: worker.taskID } },
       ...(worker.correction
         ? {
             anyOf: [
@@ -76,8 +77,8 @@ export const prepare = Effect.fn("TaskSchema.prepare")(function* (
 ${example(worker.taskID)}`
     const result: JSONSchema7 = {
       ...original,
+      ...resumed,
       description: guide,
-      anyOf: [resumed, { required: ["branch_id"], properties: { branch_id: text } }],
     }
     instructions.set(result, guide)
     return result

@@ -365,7 +365,11 @@ it.instance(
       const Constructor: new (opts: { strict: boolean }) => { compile(schema: unknown): (input: unknown) => boolean } =
         createRequire(require.resolve("effect/package.json"))("ajv/dist/2020")
       const validator = new Constructor({ strict: false })
-      const parameters = asSchema(prepared.tools.task.inputSchema).jsonSchema
+      const parameters = yield* Effect.promise(() =>
+        Promise.resolve(asSchema(prepared.tools.task.inputSchema).jsonSchema),
+      )
+      expect(parameters.required).toContain("task_id")
+      expect(parameters.properties?.task_id).toEqual({ type: "string", enum: [child.id] })
       expect(prepared.tools.update_goal).toBeDefined()
       const options = context(
         { localInference: true, localInferenceAPI: "ollama", localInferenceToolFormat: "completion-envelope-v1" },
@@ -385,6 +389,8 @@ it.instance(
         { brief: { objective: "Perform the missing write" } },
         { task_id: child.id },
         { task_id: "ses_foreign", prompt: "Correct the saved work" },
+        { branch_id: "unsaved-branch", prompt: "Create replacement work" },
+        { branch_id: "unsaved-branch", task_id: "ses_foreign", prompt: "Replace the retained worker" },
       ]) {
         expect(validate(input)).toBe(false)
         expect(local(input)).toBe(false)
@@ -474,9 +480,13 @@ it.instance(
         "Failure",
       )
       const saved = (yield* sessions.get(parent.id)).metadata
+      const fresh = TaskSchema.objective({ type: "object", properties: { task_id: { type: "string" } } })
       for (const phase of ["task", "route"] as const) {
         yield* sessions.setMetadata({ sessionID: parent.id, metadata: { ...saved, [RayaChief.phaseKey]: phase } })
         expect((yield* ChiefVerification.retained(stale).pipe(Effect.exit))._tag).toBe("Failure")
+        const advertised = yield* TaskSchema.prepare("task", fresh, parent.id, current.id, "auto")
+        expect(advertised.properties?.task_id).toEqual({ type: "string" })
+        expect(advertised.required?.includes("task_id")).not.toBe(true)
       }
       yield* sessions.setMetadata({ sessionID: parent.id, metadata: { ...saved, [RayaChief.phaseKey]: "done" } })
       expect(yield* ChiefVerification.retained(stale)).toBe(false)

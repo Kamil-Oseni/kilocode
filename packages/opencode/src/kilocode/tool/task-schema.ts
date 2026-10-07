@@ -53,10 +53,13 @@ export function description(value: string, schema: JSONSchema7) {
 /** Advertise fresh objectives without changing legacy execution or saved-task authority. */
 export function objective(schema: JSONSchema7): JSONSchema7 {
   const text = { type: "string" as const, minLength: 1, pattern: "\\S" }
+  const fresh = schema.properties?.access
+    ? { ...schema, required: [...new Set([...(schema.required ?? []), "access"])] }
+    : schema
   const result: JSONSchema7 = {
     ...schema,
     anyOf: [
-      ...alternatives(schema),
+      ...alternatives(fresh),
       {
         ...schema,
         required: [...new Set([...(schema.required ?? []), "task_id"])],

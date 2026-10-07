@@ -184,6 +184,8 @@ it.instance("actual Task advertisement requires fresh objectives through native 
     )
     const invalid = [
       {},
+      { prompt: "Write and verify the result" },
+      { brief: { objective: "Read the source" } },
       { description: "Label only", access: "edit" },
       { prompt: " \n\t" },
       { brief: { objective: " " } },
@@ -191,13 +193,19 @@ it.instance("actual Task advertisement requires fresh objectives through native 
       { branch_id: "" },
     ]
     const valid = [
-      { prompt: "Read the source" },
+      { prompt: "Read the source", access: "read" },
+      { prompt: "Write and verify the result", access: "edit" },
+      { brief: { objective: "Use the selected window" }, access: "computer" },
       { brief: { objective: "Write and verify the result" }, access: "edit" },
       { task_id: "ses_saved" },
       { branch_id: "saved-branch" },
     ]
     for (const shape of shapes) {
       expect(shape.anyOf).toHaveLength(4)
+      for (const branch of shape.anyOf?.slice(0, 2) ?? []) {
+        if (typeof branch !== "object") throw new Error("Fresh Task object alternative required")
+        expect(branch.required).toContain("access")
+      }
       for (const branch of shape.anyOf ?? []) {
         if (typeof branch !== "object") throw new Error("Complete Task object alternative required")
         expect(branch.type).toBe("object")
@@ -219,7 +227,10 @@ it.instance("actual Task advertisement requires fresh objectives through native 
     expect(Schema.decodeUnknownSync(TaskParameters)({})).toEqual({})
     const background = validator.compile(TaskSchema.objective(ToolJsonSchema.fromSchema(TaskParameters)))
     expect(background({ background: true })).toBe(false)
-    expect(background({ background: true, brief: { objective: "Complete the assigned subwork" } })).toBe(true)
+    expect(background({ background: true, brief: { objective: "Complete the assigned subwork" } })).toBe(false)
+    expect(
+      background({ background: true, brief: { objective: "Complete the assigned subwork" }, access: "read" }),
+    ).toBe(true)
   }),
 )
 

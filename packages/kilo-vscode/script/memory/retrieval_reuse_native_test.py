@@ -116,6 +116,8 @@ class Tests(unittest.TestCase):
         self.assertTrue(pool.quiet())
         self.assertIsNone(pool.owner)
         self.joined(self.owner.state)
+        self.assertEqual(self.owner.state['root_exit'], 0)
+        self.assertFalse(self.owner.cancel.is_set())
         pool.resume()
         self.assertIs(pool.thread, original)
         self.assertTrue(original.is_alive())

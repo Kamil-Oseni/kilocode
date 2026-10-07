@@ -228,7 +228,9 @@ class Pool:
                         self.condition.wait(0.1)
                 if ticket is None:
                     if self.draining:
-                        self.retire(True)
+                        # Active cancellation settles before this idle branch.
+                        # Close the original input instead of terminating finished work.
+                        self.retire(False)
                         with self.condition:
                             if self.draining and not self.stop.is_set():
                                 self.drained.set()

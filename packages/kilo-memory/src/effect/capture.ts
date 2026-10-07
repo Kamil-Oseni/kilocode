@@ -1,6 +1,5 @@
 import { Cause, Effect } from "effect"
 import {
-  cap,
   capturePlan,
   digestPrompt,
   digestSchema,
@@ -227,14 +226,14 @@ export namespace MemoryCapture {
         : undefined
     const digestEffect = digestDue
       ? Effect.gen(function* () {
-          const body = cap(
-            evidence([
+          const body = evidence(
+            [
               { title: "latest_user", body: user },
               { title: "latest_assistant", body: assistant || "(no assistant text)" },
               { title: "diff_summary", body: changed || "(none)" },
               ...(prior?.summary && !prior.fallback ? [{ title: "previous_digest", body: prior.summary }] : []),
               { title: "max_characters", body: String(MemorySchema.maxStoredDigestSummary) },
-            ]),
+            ],
             state.limits.maxConsolidationInputBytes,
           )
           const result = yield* Effect.tryPromise({
@@ -336,11 +335,9 @@ export namespace MemoryCapture {
             limit: state.limits.maxSessionFiles,
             max: state.limits.maxSessionLineChars,
           })
-          // Dedup context (existing_memory + recent_memory_digests) leads the transcript fields so tail
-          // truncation by cap() sheds the assistant/diff bulk first — the model keeps the memory it must
-          // not re-save even as stored memory grows.
-          const body = cap(
-            evidence([
+          // Keep dedup context and the current result in separately bounded evidence sections.
+          const body = evidence(
+            [
               { title: "close_reason", body: input.reason ?? "completed" },
               { title: "latest_user", body: user },
               { title: "existing_memory", body: existing },
@@ -353,7 +350,7 @@ export namespace MemoryCapture {
               { title: "latest_assistant", body: assistant || "(no assistant text)" },
               { title: "diff_summary", body: changed || "(none)" },
               { title: "recent_session_context", body: recent },
-            ]),
+            ],
             state.limits.maxConsolidationInputBytes,
           )
           const result = yield* Effect.tryPromise({

@@ -21,12 +21,42 @@ function body(input: string | undefined, fallback = "(empty)") {
   return text || fallback
 }
 
-export function evidence(sections: { title: string; body?: string }[]) {
-  return [
-    "```kilo-memory-evidence-v1",
-    ...sections.flatMap((section) => [`## ${section.title}`, body(section.body)]),
-    "```",
-  ].join("\n")
+export function evidence(sections: { title: string; body?: string }[], max?: number) {
+  if (max !== undefined && (!Number.isSafeInteger(max) || max < 0))
+    throw new RangeError("invalid memory evidence budget")
+  const parts = sections.map((section) => ({ title: section.title, text: body(section.body) }))
+  const render = (texts: string[]) =>
+    ["```kilo-memory-evidence-v1", ...parts.flatMap((part, n) => [`## ${part.title}`, texts[n]]), "```"].join("\n")
+  const complete = render(parts.map((part) => part.text))
+  if (max === undefined || Buffer.byteLength(complete) <= max) return complete
+  const overhead = Buffer.byteLength(render(parts.map(() => "")))
+  if (overhead > max) throw new RangeError("memory evidence budget cannot fit section boundaries")
+  const budgets = parts.map(() => 0)
+  const pending = new Set(parts.map((_, n) => n))
+  let remaining = max - overhead
+  // Share the body budget across fields; short fields donate unused space to long ones.
+  // Whole-prompt clipping would let a growing archive erase the current turn or closing fence.
+  while (pending.size) {
+    const share = Math.floor(remaining / pending.size)
+    const short = [...pending].filter((n) => Buffer.byteLength(parts[n].text) <= share)
+    if (!short.length) {
+      for (const n of pending) budgets[n] = share
+      break
+    }
+    for (const n of short) {
+      budgets[n] = Buffer.byteLength(parts[n].text)
+      remaining -= budgets[n]
+      pending.delete(n)
+    }
+  }
+  const marker = "\n[truncated]"
+  return render(
+    parts.map((part, n) => {
+      if (Buffer.byteLength(part.text) <= budgets[n]) return part.text
+      const suffix = cap(marker, budgets[n])
+      return cap(part.text, budgets[n] - Buffer.byteLength(suffix)) + suffix
+    }),
+  )
 }
 
 export function summarize(input: { user: string; assistant: string; max: number }) {

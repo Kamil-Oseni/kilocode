@@ -334,7 +334,9 @@ describe("MemoryCapture (fake ports)", () => {
       await KiloMemory.configure({ root: t.root, settings: { autoConsolidate: true } })
       await KiloMemory.apply({
         root: t.root,
-        ops: [{ action: "add", file: "project.md", section: "Facts", key: "deploy_target", text: "Deploy to staging." }],
+        ops: [
+          { action: "add", file: "project.md", section: "Facts", key: "deploy_target", text: "Deploy to staging." },
+        ],
       })
 
       const result = await run({
@@ -745,18 +747,19 @@ describe("MemoryCapture (fake ports)", () => {
     }
   })
 
-  test("typed evidence leads with dedup context so tail truncation keeps it", async () => {
+  test("typed evidence preserves dedup context before the current result", async () => {
     const t = await tmp()
     try {
       await KiloMemory.enable({ root: t.root })
       await KiloMemory.configure({ root: t.root, settings: { autoConsolidate: true } })
       await KiloMemory.apply({
         root: t.root,
-        ops: [{ action: "add", file: "project.md", section: "Facts", key: "deploy_target", text: "Deploy to staging." }],
+        ops: [
+          { action: "add", file: "project.md", section: "Facts", key: "deploy_target", text: "Deploy to staging." },
+        ],
       })
 
-      // P1.7: existing_memory / recent_memory_digests must precede latest_assistant so cap() sheds the
-      // transcript bulk first and the model keeps the context that prevents re-saving duplicates.
+      // Dedup context remains present before the current result; each has its own body budget.
       let typedSeen = ""
       const recording: MemoryPorts.ModelPort = {
         resolve: () => Effect.succeed({ handle: {} }),
@@ -779,6 +782,50 @@ describe("MemoryCapture (fake ports)", () => {
       expect(assistant).toBeGreaterThanOrEqual(0)
       expect(existing).toBeLessThan(assistant)
       expect(typedSeen).toContain("deploy_target")
+    } finally {
+      await t.done()
+    }
+  })
+
+  test("large stored memory cannot displace the latest result from capture evidence", async () => {
+    const t = await tmp()
+    try {
+      await KiloMemory.enable({ root: t.root })
+      await MemoryFiles.writeSource(
+        t.root,
+        "project.md",
+        [
+          "# Project",
+          "## Facts",
+          ...Array.from({ length: 60 }, (_, n) => `- archive_${n} :: ${"Historical project detail. ".repeat(50)}`),
+        ].join("\n"),
+      )
+      const prompts: string[] = []
+      const recording: MemoryPorts.ModelPort = {
+        resolve: () => Effect.succeed({ handle: {} }),
+        run: async ({ system, prompt }) => {
+          prompts.push(prompt)
+          return {
+            text:
+              system === digestPrompt
+                ? '{"topic":"release","summary":"Release moved to Saturday."}'
+                : '{"operations":[],"skipped":[]}',
+            usage: USAGE,
+          }
+        },
+      }
+      await run({
+        root: t.root,
+        session: session(view({ assistant: "Verified: Eden release moved to Saturday." })),
+        model: recording,
+      })
+      expect(prompts).toHaveLength(2)
+      for (const prompt of prompts) {
+        expect(Buffer.byteLength(prompt)).toBeLessThanOrEqual(MemorySchema.create().limits.maxConsolidationInputBytes)
+        expect(prompt).toContain("## latest_assistant\nVerified: Eden release moved to Saturday.")
+        expect(prompt).toContain("## diff_summary")
+        expect(prompt.endsWith("\n```")).toBe(true)
+      }
     } finally {
       await t.done()
     }

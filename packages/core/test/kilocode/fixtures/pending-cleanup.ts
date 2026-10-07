@@ -76,7 +76,7 @@ try {
         actualTaskkillCodes: kills.map((row) => row.code),
         pending: Direct.footer().pending,
       }
-      console.log(JSON.stringify(packet))
+      console.error(JSON.stringify(packet))
       assert.equal(code, 0)
       assert.equal(output, text)
       assert(result.stopped)
@@ -86,6 +86,7 @@ try {
     }).pipe(Effect.scoped, Effect.provide(live)),
   )
   assert.equal(result.originalCloseCode, 0)
+  console.log(JSON.stringify(result))
 } finally {
   library.close()
   if (fs.existsSync(marker)) fs.unlinkSync(marker)

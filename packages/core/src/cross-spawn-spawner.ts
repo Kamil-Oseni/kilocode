@@ -309,23 +309,27 @@ export const make = Effect.gen(function* () {
     signal: NodeJS.Signals,
   ) => {
     if (globalThis.process.platform === "win32") {
-      return Effect.callback<void, PlatformError.PlatformError>((resume) => {
-        // kilocode_change - an original exit can precede close while buffered pipes drain
-        if (proc.exitCode !== null || proc.signalCode !== null) return resume(Effect.void) // kilocode_change
-        const clock = Direct.begin() // kilocode_change
-        // kilocode_change start - observe the existing taskkill callback without another reader
-        const child = NodeChildProcess.exec(
-          `taskkill /pid ${proc.pid} /T /F`,
-          { windowsHide: true },
-          (err, _out, stderr) => {
-            Direct.stderr(child, stderr) // kilocode_change
-            if (err) return resume(Effect.fail(toPlatformError("kill", toError(err), command)))
-            resume(Effect.void)
-          },
-        )
-        // kilocode_change end
-        Direct.observe(child, "taskkill", clock) // kilocode_change
-      })
+      return SpawnExit.cleanup(
+        // kilocode_change - skip a redundant helper without settling original exit/output
+        proc.pid, // kilocode_change
+        Effect.callback<void, PlatformError.PlatformError>((resume) => {
+          // kilocode_change - an original exit can precede close while buffered pipes drain
+          if (proc.exitCode !== null || proc.signalCode !== null) return resume(Effect.void) // kilocode_change
+          const clock = Direct.begin() // kilocode_change
+          // kilocode_change start - observe the existing taskkill callback without another reader
+          const child = NodeChildProcess.exec(
+            `taskkill /pid ${proc.pid} /T /F`,
+            { windowsHide: true },
+            (err, _out, stderr) => {
+              Direct.stderr(child, stderr) // kilocode_change
+              if (err) return resume(Effect.fail(toPlatformError("kill", toError(err), command)))
+              resume(Effect.void)
+            },
+          )
+          // kilocode_change end
+          Direct.observe(child, "taskkill", clock) // kilocode_change
+        }), // kilocode_change
+      ) // kilocode_change
     }
 
     return Effect.try({

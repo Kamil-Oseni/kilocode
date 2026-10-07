@@ -22963,6 +22963,7 @@ export type KilocodeGoalGetResponses = {
           }
     }>
     startMessageID?: string
+    startAfter?: string
     startSnapshot?: string
     selfHealAttempt?: string
     selfHealID?: string
@@ -23744,6 +23745,7 @@ export type KilocodeGoalUpdateResponses = {
           }
     }>
     startMessageID?: string
+    startAfter?: string
     startSnapshot?: string
     selfHealAttempt?: string
     selfHealID?: string
@@ -24492,6 +24494,7 @@ export type KilocodeGoalCreateResponses = {
           }
     }>
     startMessageID?: string
+    startAfter?: string
     startSnapshot?: string
     selfHealAttempt?: string
     selfHealID?: string

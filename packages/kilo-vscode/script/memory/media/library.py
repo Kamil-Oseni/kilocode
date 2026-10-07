@@ -119,6 +119,8 @@ class Library:
         target = self.root / relative
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT 1 FROM items JOIN tombstones USING(id) WHERE id=?', (digest,)).fetchone():
+                raise ValueError('Attachment cleanup is pending; retry forgetting before re-import.')
             if db.execute('SELECT COUNT(*) FROM items').fetchone()[0] >= 128 and not db.execute('SELECT 1 FROM items WHERE id=?', (digest,)).fetchone():
                 raise ValueError('Pilot media library exceeds 128 attachments.')
             if target.exists():
@@ -148,7 +150,7 @@ class Library:
             db.execute('DELETE FROM tombstones WHERE id=?', (digest,))
         return self.item(digest)
 
-    def item(self, key):
+    def record(self, key):
         with self.connect() as db:
             row = db.execute('SELECT id,kind,relative,sha256,title,origin,imported FROM items WHERE id=?', (key,)).fetchone()
         if row is None:
@@ -158,6 +160,13 @@ class Library:
         kinds = {'image': {'.png', '.jpg'}, 'audio': {'.wav'}, 'video': {'.avi', '.mp4'}}
         if not re.fullmatch('[a-f0-9]{64}', value['id']) or suffix not in kinds.get(value['kind'], set()) or value['relative'] != 'Assets/' + value['id'] + suffix or value['id'] != value['sha256']:
             raise ValueError('Attachment address differs from its content identity.')
+        return value
+
+    def item(self, key):
+        value = self.record(key)
+        with self.connect() as db:
+            if db.execute('SELECT 1 FROM tombstones WHERE id=?', (key,)).fetchone():
+                raise ValueError('Attachment is absent or forgotten.')
         raw = read(self.root / value['relative'])
         if hashlib.sha256(raw).hexdigest() != value['sha256'] or format(raw)[0] != value['kind']:
             raise ValueError('Attachment snapshot changed; import the new revision.')
@@ -165,7 +174,7 @@ class Library:
 
     def inventory(self):
         with self.connect() as db:
-            keys = [row[0] for row in db.execute('SELECT id FROM items ORDER BY id')]
+            keys = [row[0] for row in db.execute('SELECT id FROM items WHERE id NOT IN (SELECT id FROM tombstones) ORDER BY id')]
         if len(keys) > 128:
             raise ValueError('Pilot media library exceeds 128 attachments.')
         return [self.item(key) for key in keys]
@@ -198,7 +207,7 @@ class Library:
             raise ValueError('Media search top must be from one to ten.')
         query = struct.unpack('<' + 'f' * DIMENSIONS, vector(query))
         with self.connect() as db:
-            rows = list(db.execute('SELECT id,vector FROM items WHERE vector IS NOT NULL ORDER BY id'))
+            rows = list(db.execute('SELECT id,vector FROM items WHERE vector IS NOT NULL AND id NOT IN (SELECT id FROM tombstones) ORDER BY id'))
         if len(rows) > 128:
             raise ValueError('Pilot media library exceeds 128 attachments.')
         ranked = []
@@ -214,11 +223,25 @@ class Library:
         return result
 
     def forget(self, key):
-        item = self.item(key)
         with self.connect() as db:
+            present = db.execute('SELECT 1 FROM items WHERE id=?', (key,)).fetchone()
+            pending = db.execute('SELECT 1 FROM tombstones WHERE id=?', (key,)).fetchone()
+        if not present:
+            if pending:
+                return {'id': key, 'forgotten': True}
+            raise ValueError('Attachment is absent or forgotten.')
+        item = self.record(key)
+        if not pending:
+            self.item(key)
+        with self.connect() as db:
+            db.execute('INSERT OR IGNORE INTO tombstones VALUES (?,?)', (key, time.time()))
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            target = self.root / item['relative']
+            if target.exists() or target.is_symlink():
+                raw = read(target)
+                if hashlib.sha256(raw).hexdigest() != item['sha256'] or format(raw)[0] != item['kind']:
+                    raise ValueError('Attachment snapshot changed; preserve it for review.')
+                target.unlink()
             db.execute('DELETE FROM items WHERE id=?', (key,))
-            db.execute('INSERT OR REPLACE INTO tombstones VALUES (?,?)', (key, time.time()))
-        target = self.root / item['relative']
-        ordinary(target)
-        target.unlink()
         return {'id': key, 'forgotten': True}

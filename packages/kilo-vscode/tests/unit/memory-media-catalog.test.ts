@@ -20,6 +20,6 @@ test("media catalog preserves snapshots, validates model space and retires forgo
     child.exited,
   ])
   expect(code, output + error).toBe(0)
-  expect(error).toContain("Ran 9 tests")
+  expect(error).toContain("Ran 10 tests")
   expect(error).toContain("OK")
 }, 30_000)

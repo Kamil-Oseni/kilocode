@@ -1,6 +1,8 @@
 """Real temporary files and SQLite catalog tests; no inference quality claim."""
 import importlib.util
 from contextlib import closing
+import ctypes
+from ctypes import wintypes
 from pathlib import Path
 import sqlite3
 import sys
@@ -41,6 +43,7 @@ class Catalog(unittest.TestCase):
         self.assertTrue(self.library.forget(self.item['id'])['forgotten'])
         self.assertEqual(self.library.search(self.vector, space), [])
         self.assertFalse(Path(result[0]['path']).exists())
+        self.assertTrue(self.library.forget(self.item['id'])['forgotten'])
         with closing(sqlite3.connect(self.library.path)) as db, db:
             self.assertIsNotNone(db.execute('SELECT id FROM tombstones').fetchone())
         self.library.add(self.source, 'Explicit re-import')
@@ -117,6 +120,35 @@ class Catalog(unittest.TestCase):
         self.source.write_bytes(b'\x89PNG\r\n\x1a\nfixture-one')
         self.assertEqual(self.library.add(self.source, 'Renamed')['title'], 'Renamed')
         self.assertEqual(len(self.library.inventory()), 128)
+
+    def test_locked_file_forgetting_hides_recall_and_retries_cleanup(self):
+        self.library.publish([self.row()], space)
+        target = self.folder/self.item['relative']
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
+        handle = kernel.CreateFileW(str(target), 0x80000000, 1, None, 3, 0x80, None)
+        self.assertNotEqual(handle, ctypes.c_void_p(-1).value)
+        try:
+            with self.assertRaises(PermissionError):
+                self.library.forget(self.item['id'])
+            self.assertTrue(target.exists())
+            self.assertEqual(self.library.search(self.vector, space), [])
+            self.assertEqual(self.library.inventory(), [])
+            with self.assertRaisesRegex(ValueError, 'forgotten'):
+                self.library.item(self.item['id'])
+            with self.assertRaisesRegex(ValueError, 'cleanup is pending'):
+                self.library.add(self.source, 'Cannot resurrect during cleanup')
+        finally:
+            self.assertTrue(kernel.CloseHandle(handle))
+        self.library = module.Library(self.folder)
+        self.assertEqual(self.library.search(self.vector, space), [])
+        self.assertTrue(self.library.forget(self.item['id'])['forgotten'])
+        self.assertFalse(target.exists())
+        self.assertEqual(self.library.search(self.vector, space), [])
+        self.assertTrue(self.library.forget(self.item['id'])['forgotten'])
 
 
 if __name__ == '__main__':

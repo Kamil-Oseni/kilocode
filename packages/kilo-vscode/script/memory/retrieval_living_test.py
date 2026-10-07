@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).parent / 'retrieval'))
+sys.path.insert(0, str(Path(__file__).parent / 'retrieval_reuse'))
 from lease import Lease
 from living import accept, observe
 from owner import api, checked, Extended, identity, Process, selected, SIZE

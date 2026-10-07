@@ -327,15 +327,26 @@ class Owner:
             self.causes.append(error)
             row['errors'].append({'type': type(error).__name__, 'code': getattr(error, 'errno', None)})
 
+    def images(self):
+        return {'interpreter': BASE, 'bootstrap': BOOT, 'worker': HERE/'worker.py', 'models': HERE/'models.py'}, PINS
+
+    def command(self, selection):
+        return [str(BASE), '-I', '-S', '-B', '-u', str(BOOT), str(self.handles['control_read']), self.request, self.epoch, selection]
+
+    def admission(self, selection):
+        return (json.dumps({'format': 'raya.worker.start', 'version': 1,
+                            'request': self.request, 'owner_epoch': self.epoch,
+                            'selection_sha256': selection}, separators=(',', ':'))+'\n').encode()
+
     def spawn(self):
         if HERE.name != 'retrieval' or HERE.parent.name != 'source' or not ROOT.name.startswith('raya-memory-managed-'):
             raise ValueError('private_source_layout')
         library = self.library
         if self.cancel.is_set() or time.monotonic() >= self.until:
             raise ValueError('precreation_admission_closed')
-        paths = {'interpreter': BASE, 'bootstrap': BOOT, 'worker': HERE/'worker.py', 'models': HERE/'models.py'}
-        self.state['sources'] = {name: selected(path, PINS[name]) for name, path in paths.items()}
-        selection = hashlib.sha256(json.dumps(PINS, sort_keys=True).encode()).hexdigest()
+        paths, pins = self.images()
+        self.state['sources'] = {name: selected(path, pins[name]) for name, path in paths.items()}
+        selection = hashlib.sha256(json.dumps(pins, sort_keys=True).encode()).hexdigest()
         self.state['selection_sha256'] = selection
         self.state['owner'] = dict(identity(library, library.GetCurrentProcess()), pid=os.getpid())
         self.handles['job'] = checked(library.CreateJobObjectW(None, None), 'CreateJobObjectW')
@@ -369,8 +380,7 @@ class Owner:
             startup.startup.input, startup.startup.output, startup.startup.error = inherited[:3]
             startup.attributes = ctypes.cast(buffer, w.LPVOID)
             process = Process()
-            command = ctypes.create_unicode_buffer(subprocess.list2cmdline([
-                str(BASE), '-I', '-S', '-B', '-u', str(BOOT), str(self.handles['control_read']), self.request, self.epoch, selection]))
+            command = ctypes.create_unicode_buffer(subprocess.list2cmdline(self.command(selection)))
             env = ctypes.create_unicode_buffer('\0'.join(key+'='+value for key, value in sorted(ENV.items()))+'\0\0')
             self.publish()
             if self.cancel.is_set() or time.monotonic() >= self.until:
@@ -401,7 +411,7 @@ class Owner:
         if not member.value:
             raise ValueError('job_membership')
         for name, path in paths.items():
-            if selected(path, PINS[name]) != self.state['sources'][name]:
+            if selected(path, pins[name]) != self.state['sources'][name]:
                 raise ValueError('source_generation')
         if self.errors:
             raise ValueError('prework_cleanup_debt')
@@ -410,11 +420,8 @@ class Owner:
         self.publish()
         if self.cancel.is_set() or time.monotonic() >= self.until:
             raise ValueError('work_admission_closed')
-        frame = (json.dumps({'format': 'raya.worker.start', 'version': 1,
-                             'request': self.request, 'owner_epoch': self.epoch,
-                             'selection_sha256': selection}, separators=(',', ':'))+'\n').encode()
         self.state['work_admitted'] = 'unknown'
-        self.frame = frame
+        self.frame = self.admission(selection)
         self.writer = threading.Thread(target=self.send, daemon=False)
         self.writer.start()
 
@@ -488,6 +495,9 @@ class Owner:
             self.spawn()
         except Exception as error:
             self.failure(error, 'operation')
+        return self.cleanup()
+
+    def cleanup(self):
         for name in ('input_read', 'control_read', 'output_write', 'error_write'):
             self.close(name)
         if self.writer is None or self.writer.ident is None:

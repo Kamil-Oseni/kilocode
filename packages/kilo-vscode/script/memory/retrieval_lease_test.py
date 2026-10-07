@@ -6,6 +6,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).parent / 'retrieval'))
+sys.path.insert(0, str(Path(__file__).parent / 'retrieval_reuse'))
 from lease import Lease, INPUT, read, write
 from validation import fingerprint
 

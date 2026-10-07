@@ -335,7 +335,7 @@ it.live("startup pins its resolved instructions before session creation and refu
       const agent = yield* runner.tasks.create({
         name: "Pinned",
         output,
-        objective: "Original instructions",
+        objective: "Original instructions. After completion reply exactly RaYA_007 and nothing else.",
         schedule: { kind: "manual" },
         memoryScope: "role",
       })
@@ -345,12 +345,17 @@ it.live("startup pins its resolved instructions before session creation and refu
       if (!snapshot) throw new Error("Expected snapshot before session creation")
       expect((yield* runner.preview(Date.now()))[0]?.execution).toEqual({ state: "recovery", runID: snapshot.runID })
       expect(yield* runner.tasks.runsFor(agent.id)).toEqual([])
-      expect(snapshot.definition.objective).toBe("Original instructions")
+      expect(snapshot.definition.objective).toBe(agent.objective)
       expect(snapshot.objective).toContain("Original context")
       expect(snapshot.definition.output).toEqual(output)
       expect(snapshot.objective).toContain("Required output (deliver in this run's conversation)")
       expect(snapshot.objective).toContain("[sources] Identify each reviewed document")
       expect(snapshot.objective).toContain(output.criteria[0].verification)
+      expect(snapshot.objective).toContain(
+        "Report evidence for each criterion by its ID in the update_goal completion audit",
+      )
+      expect(snapshot.objective).toContain("Preserve any final-response format specified in the worker's objective")
+      expect(snapshot.objective).toContain(agent.objective)
       const rejected = yield* runner.tasks.update(agent.id, { output: { ...output, criteria: [] } }).pipe(Effect.flip)
       expect(rejected.message).toContain("criteria")
       expect((yield* runner.tasks.get(agent.id)).output).toEqual(output)

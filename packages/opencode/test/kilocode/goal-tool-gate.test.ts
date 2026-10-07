@@ -1,7 +1,7 @@
 import { afterAll, expect } from "bun:test"
 import path from "node:path"
 import { writeFile } from "node:fs/promises"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import { RayaGoal } from "@/kilocode/goal"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -156,6 +156,15 @@ it.instance(
         .flatMap((row) => row.parts)
         .filter((row) => row.type === "tool")
       expect(tools.map((row) => row.tool)).toEqual(["create_goal", "read", "update_goal"])
+      const completed = tools.find((row) => row.tool === "update_goal")
+      if (!completed || completed.state.status !== "completed") throw new Error("Accepted Goal result missing")
+      expect(completed.state.output).toContain("Preserve the user's requested final response")
+      expect(completed.state.output).toContain(`Original goal objective: ${JSON.stringify(saved.objective)}`)
+      const wire = Schema.decodeUnknownSync(
+        Schema.Array(Schema.Struct({ role: Schema.String, content: Schema.String })),
+      )(requests[3]?.messages)
+      const returned = wire.findLast((row) => row.role === "tool")
+      expect(returned?.content).toBe(completed.state.output)
       // Exercise a genuine already queued callback through the original processor,
       // then let SessionPrompt finish the dispatch without retaining its refusal.
       const agents = yield* Agent.Service

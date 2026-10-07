@@ -229,7 +229,7 @@ export function goalTools(
                   goal.review?.status === "pending"
                     ? "Evidence is ready for review. The goal is paused until its reviewed acceptance is recorded through goal controls."
                     : goal.status === "complete"
-                      ? "The requirement-by-requirement completion audit passed against persisted tool evidence."
+                      ? `The requirement-by-requirement completion audit passed against persisted tool evidence. Preserve the user's requested final response, including any exact wording, capitalization and whitespace. Do not replace that response with a status report about this audit. Original goal objective: ${JSON.stringify(goal.objective)}`
                       : goal.status === "blocked"
                         ? `Goal blocked: ${goal.blockedReason}`
                         : goal.status === "paused"

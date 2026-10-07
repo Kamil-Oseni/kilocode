@@ -118,6 +118,12 @@ The no-inference sampling run passed with 102 samples and a minimum sampled avai
 
 A combined edit-and-model-inference command was rejected by automatic approval review with “blocked by policy”; no part of that command ran. Model inference remains unproven. The subsequent source change and verification use only the original no-inference START/health/STOP path.
 
+## Supervised lifecycle transport accepted
+
+The genuine protected service also passed drain/resume over its loopback HTTP API. Wrong-epoch drain was refused, drain closed admission, health became unready without uncertainty, and an unsupported-model request was refused while paused. Resume retained the original service epoch and restored readiness. Both lifecycle acknowledgements reported retained coordinator, no worker, confirmed publication and joined admissions. The original service then exited 0 with control, output readers and memory sampler joined. Evidence: `D:/Raya/Tools/Readiness-20261005/RETRIEVAL-REUSE-SUPERVISED-c04369c8857043c697ad0d15aa3af3d5.json`.
+
+This run loaded no model. Lifecycle acknowledgement fields are service correlation metadata; they do not independently authenticate native worker retirement. Live inference, paired Memory success and installed acceptance remain open. Reuse these completed checks for unchanged behavior; repeat the full copied-dependency/ACL run only when deployment or a substantive affected change requires it.
+
 ## Required integration
 
 1. Add a reusable bootstrap path only to a newly selected and protected release containing the codec. Validate the same source/catalog/checkpoint dependency images before constructing a model. Cache one selected CPU model per worker; retain the existing finite path for rollback.

@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 import urllib.request
+import urllib.error
 import uuid
 import retrieval_reuse_entry_test as entry
 
@@ -141,6 +142,7 @@ class Tests(unittest.TestCase):
         sampler.start()
         phases = []
         health = None
+        lifecycle = []
         failure = None
         try:
             until = time.monotonic()+30
@@ -163,6 +165,43 @@ class Tests(unittest.TestCase):
             self.assertEqual(health['source_sha256'], pins)
             self.assertEqual(health['selected_release_sha256'], self.env['RAYA_RETRIEVAL_RELEASE_SHA256'])
             self.assertEqual(health['active'], 0)
+            def exchange(route, body=None, epoch=None):
+                headers = {'Authorization': 'Bearer '+token.read_text(),
+                           'X-Raya-Owner-Epoch': epoch or health['owner_epoch'],
+                           'Content-Type': 'application/json', 'X-Raya-Request-Id': uuid.uuid4().hex}
+                request = urllib.request.Request('http://127.0.0.1:59943/'+route,
+                            data=None if body is None else json.dumps(body).encode(), headers=headers)
+                try:
+                    with urllib.request.urlopen(request, timeout=20) as response:
+                        return response.status, json.load(response)
+                except urllib.error.HTTPError as error:
+                    with error:
+                        return error.code, json.load(error)
+            status, value = exchange('v2/drain', {}, 'f'*32)
+            self.assertEqual(status, 409)
+            self.assertEqual(value, {'error': {'code': 'owner_epoch_changed'}})
+            for route in ('v2/drain', 'v2/resume'):
+                status, value = exchange(route, {})
+                lifecycle.append({'route': route, 'status': status, 'response': value})
+                self.assertEqual(status, 200, value)
+                self.assertEqual(value['owner_epoch'], health['owner_epoch'])
+                self.assertEqual(value['selected_release_sha256'], health['selected_release_sha256'])
+                self.assertEqual(value['draining'], route == 'v2/drain')
+                for name in ('original_coordinator_retained', 'original_worker_retired',
+                             'request_publications_confirmed', 'request_admissions_joined'):
+                    self.assertTrue(value[name])
+                self.assertIsNone(child.poll())
+                status, observed = exchange('health')
+                self.assertEqual(status, 200)
+                self.assertEqual(observed['owner_epoch'], health['owner_epoch'])
+                self.assertEqual(observed['ready'], route == 'v2/resume')
+                self.assertEqual(observed['active'], 0)
+                self.assertFalse(observed['retirement_unconfirmed'])
+                if route == 'v2/drain':
+                    # Unsupported model prevents inference even if intake closure regresses.
+                    status, value = exchange('v2/embeddings', {'model': 'unselected-test-model', 'input': ['test']})
+                    self.assertEqual(status, 503)
+                    self.assertEqual(value, {'error': {'code': 'admission_closed'}})
         except BaseException as error:
             failure = error
         finally:
@@ -185,7 +224,7 @@ class Tests(unittest.TestCase):
         report = {'passed': failure is None and not faults and child.returncode == 0 and len(closed) == 1 and closed[0]['passed'],
                   'models_admitted': False, 'installed_acceptance': False,
                   'protected_paths': len(paths), 'dependency_files': len(inventory['images']),
-                  'health': health, 'phases': values, 'exit': child.returncode,
+                  'health': health, 'lifecycle': lifecycle, 'phases': values, 'exit': child.returncode,
                   'observation_failure': type(failure).__name__ if failure is not None else None,
                   'memory_samples': samples, 'sample_interval_seconds': 0.1,
                   'minimum_sampled_available_bytes': min((item['available_bytes'] for item in samples), default=None),

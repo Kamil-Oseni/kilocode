@@ -1,6 +1,7 @@
-import { afterAll, describe, expect, test } from "bun:test"
+import { afterAll, beforeEach, describe, expect, test } from "bun:test"
 import { Cause, Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { createHash } from "node:crypto"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
@@ -25,12 +26,16 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Git } from "@/git"
 
 const scope = await Effect.runPromise(Scope.make())
-const database = Context.get(
-  await Effect.runPromise(
-    Layer.build(Database.layerFromPath(":memory:")).pipe(Effect.provideService(Scope.Scope, scope)),
-  ),
-  Database.Service,
-)
+let database: Database.Interface
+
+beforeEach(async () => {
+  database = Context.get(
+    await Effect.runPromise(
+      Layer.build(Database.layerFromPath(":memory:")).pipe(Effect.provideService(Scope.Scope, scope)),
+    ),
+    Database.Service,
+  )
+})
 afterAll(() => Effect.runPromise(Scope.close(scope, Exit.succeed(undefined))))
 
 function memory() {
@@ -701,43 +706,32 @@ describe("RayaTask store", () => {
 
   test("closing a routine subscription interrupts a permission callback already in progress", async () => {
     const storage = memory()
-    const polled = await Effect.runPromise(Deferred.make<void>())
+    await Effect.runPromise(storage.replace(["raya", "agent"], []))
     const entered = await Effect.runPromise(Deferred.make<void>())
     const release = await Effect.runPromise(Deferred.make<void>())
     const finished = await Effect.runPromise(Deferred.make<void>())
     const interrupted: boolean[] = []
-    let reads = 0
-    let armed = false
     try {
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             yield* RayaTaskRunner.subscribe({
-              storage: {
-                ...storage,
-                read: <T>(key: string[]) =>
-                  Effect.gen(function* () {
-                    if (key[1] === "agent" && !armed && ++reads === 2) yield* Deferred.succeed(polled, undefined)
-                    if (key[1] === "agent" && armed) {
-                      yield* Deferred.succeed(entered, undefined).pipe(
-                        Effect.andThen(Deferred.await(release)),
-                        Effect.onInterrupt(() => Effect.sync(() => interrupted.push(true))),
-                        Effect.ensuring(Deferred.succeed(finished, undefined)),
-                      )
-                    }
-                    return yield* storage.read<T>(key)
-                  }),
-              },
+              database,
+              storage,
               bus: { subscribeCallback: () => Effect.succeed(() => undefined) },
               sessions: {
                 create: () => Effect.die("unused"),
-                get: () => Effect.die("unused"),
+                get: () =>
+                  Deferred.succeed(entered, undefined).pipe(
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.onInterrupt(() => Effect.sync(() => interrupted.push(true))),
+                    Effect.ensuring(Deferred.succeed(finished, undefined)),
+                    Effect.andThen(Effect.die("callback must be interrupted before session lookup completes")),
+                  ),
                 messages: () => Effect.succeed([]),
                 children: () => Effect.succeed([]),
               },
             })
-            yield* Deferred.await(polled).pipe(Effect.timeout("5 seconds"))
-            armed = true
             GlobalBus.emit("event", {
               payload: { type: "permission.asked", properties: { sessionID: "ses_callback" } },
             })
@@ -1355,7 +1349,16 @@ describe("RayaTask store", () => {
       storage: memory(),
       sessions: {
         create: () => Effect.die("unused"),
-        get: () => Effect.die("unused"),
+        get: () =>
+          Effect.succeed({
+            id: sid,
+            slug: "ordinary",
+            projectID: ProjectV2.ID.make("ordinary"),
+            directory: process.cwd(),
+            title: "Ordinary routine",
+            version: "test",
+            time: { created: 0, updated: 0 },
+          }),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       },
@@ -1797,15 +1800,15 @@ describe("RayaTask store", () => {
       expect(Permission.evaluate(permission, "file", selected).action).toBe("deny")
     const empty = RayaTask.rules({ role: "briefer", tools: [] })
     expect(Permission.evaluate("read", "file", empty).action).toBe("deny")
-    expect(Permission.evaluate("question", "prompt", empty).action).toBe("allow")
-    for (const tool of ["get_goal", "update_goal", "update_goal_plan"])
-      expect(Permission.evaluate(tool, "*", empty).action).toBe("allow")
+    expect(Permission.evaluate("question", "prompt", empty).action).toBe("deny")
+    expect(Permission.evaluate("update_goal_plan", "*", empty).action).toBe("deny")
+    for (const tool of ["get_goal", "update_goal"]) expect(Permission.evaluate(tool, "*", empty).action).toBe("allow")
     const full = RayaTask.rules({ role: "generalist", access: "full", tools: [] })
     expect(Permission.evaluate("read", "file", full).action).toBe("deny")
     expect(Permission.evaluate("bash", "command", full).action).toBe("deny")
-    expect(Permission.evaluate("question", "prompt", full).action).toBe("allow")
-    for (const tool of ["get_goal", "update_goal", "update_goal_plan"])
-      expect(Permission.evaluate(tool, "*", full).action).toBe("allow")
+    expect(Permission.evaluate("question", "prompt", full).action).toBe("deny")
+    expect(Permission.evaluate("update_goal_plan", "*", full).action).toBe("deny")
+    for (const tool of ["get_goal", "update_goal"]) expect(Permission.evaluate(tool, "*", full).action).toBe("allow")
     const provisioner = RayaTask.rules({ role: "briefer", capabilities: ["organization:provision"] })
     expect(Permission.evaluate("create_subordinate", "organization:org_1", provisioner).action).toBe("allow")
     expect(Permission.evaluate("edit", "file", provisioner).action).toBe("deny")

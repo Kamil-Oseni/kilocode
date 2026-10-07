@@ -410,9 +410,20 @@ export namespace RayaTask {
         question: agent.tools === undefined ? "allow" : "deny",
         get_goal: "allow",
         update_goal: "allow",
-        update_goal_plan: "allow",
+        update_goal_plan: agent.tools === undefined ? "allow" : "deny",
       }
-      const reads = ["read", "glob", "grep", "list", "skill", "question", "todoread", "todowrite", "inspect_team"]
+      const reads = [
+        "read",
+        "glob",
+        "grep",
+        "list",
+        "skill",
+        "question",
+        "todoread",
+        "todowrite",
+        "inspect_team",
+        "update_goal_plan",
+      ]
       const selected =
         agent.tools !== undefined
           ? Permission.fromConfig(Object.fromEntries(agent.tools.map((tool) => [tool, "allow" as const])))
@@ -429,7 +440,6 @@ export namespace RayaTask {
         "*": "deny",
         get_goal: "allow",
         update_goal: "allow",
-        update_goal_plan: "allow",
       }
       for (const tool of agent.tools) cfg[tool] = "allow"
       if (agent.capabilities?.some((item) => item.toLowerCase() === "organization:provision"))

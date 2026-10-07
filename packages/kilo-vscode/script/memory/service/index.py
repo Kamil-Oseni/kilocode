@@ -841,7 +841,7 @@ class Index:
         scores = matrix @ vector
         indexes = np.argsort(scores)[::-1][:min(10, len(rows))].tolist()
         self.rows(rows, self.guard(snapshot))
-        ranked = api('/v1/rerank', {'query': query, 'documents': [semantic(rows[index][4]) for index in indexes], 'top_n': min(top, len(indexes))}, gate=lambda: self.guard(snapshot))
+        ranked = api('/v1/rerank', {'model': 'qwen3-reranker-0.6b', 'query': query, 'documents': [semantic(rows[index][4]) for index in indexes], 'top_n': min(top, len(indexes))}, gate=lambda: self.guard(snapshot))
         if ranked.get('revision') != RANKER['revision']:
             raise RuntimeError('Reranker revision changed.')
         clean(self.root)

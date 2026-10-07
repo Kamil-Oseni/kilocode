@@ -23,6 +23,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / 'service'))
 from policy import Policy
 from admission import Store, entry, Refused
+from notes import clean
+sys.path.insert(0, str(HERE / "retrieval"))
+sys.path.insert(0, str(HERE / "retrieval_reuse"))
+from resident import Resident
 
 SOURCE = HERE / 'service/index.py'
 TREE = ast.parse(SOURCE.read_bytes())
@@ -33,11 +37,16 @@ METHOD = next(node for node in OWNER.body if isinstance(node, ast.FunctionDef) a
 # Admission/deadline decorators are outside this disposable cache fixture.
 METHOD.decorator_list = []
 BODY.append(METHOD)
+for name in ('search', 'rows'):
+    method = next(node for node in OWNER.body if isinstance(node, ast.FunctionDef) and node.name == name)
+    method.decorator_list = []
+    BODY.append(method)
 INIT = next(node for node in OWNER.body if isinstance(node, ast.FunctionDef) and node.name == '__init__')
 BODY.append(ast.ClassDef(name='Index', bases=[], keywords=[], body=[INIT], decorator_list=[]))
 BODY.extend(node for node in TREE.body if isinstance(node, ast.Assign)
             and any(isinstance(target, ast.Name) and target.id == 'SIGNATURE' for target in node.targets))
 MODEL = {'revision': 'controlled-cache-test'}
+RANKER = {'revision': 'controlled-ranker-test'}
 SPACE = {'model': 'qwen3-embedding-0.6b', 'dimensions': 1024, 'stem': 'search'}
 remaining = lambda: None
 tokens = len
@@ -75,6 +84,32 @@ class Tests(unittest.TestCase):
         globals()['api'] = self.embedding
         self.addCleanup(self.restore)
 
+    def test_actual_search_selects_the_strict_reusable_reranker(self):
+        self.owner.sync = lambda: rebuild(self.owner)
+        self.owner.rows = lambda value, snapshot: rows(self.owner, value, snapshot)
+        calls = []
+        original = globals()['api']
+        def request(route, body, gate):
+            gate()
+            if route == '/v1/embeddings' and body['input_type'] == 'document':
+                return self.embedding(route, body, gate)
+            if route == '/v1/embeddings':
+                return {'revision': MODEL['revision'], 'dimensions': SPACE['dimensions'],
+                        'data': [{'embedding': [1 / 32] * 1024}]}
+            self.assertEqual(route, '/v1/rerank')
+            Resident('rerank', 'qwen3-reranker-0.6b').check(body)
+            calls.append(body)
+            return {'revision': RANKER['revision'], 'results': [{'index': 0, 'relevance_score': 0.9}]}
+        globals()['api'] = request
+        try:
+            result = search(self.owner, 'Current preference', 1)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0]['model'], 'qwen3-reranker-0.6b')
+            self.assertEqual(result[0]['relative'], 'note.md')
+            self.assertEqual(result[0]['source_sha256'], digest(self.raw))
+        finally:
+            globals()['api'] = original
+
     def restore(self):
         if self.original is None:
             globals().pop('api', None)
@@ -83,6 +118,7 @@ class Tests(unittest.TestCase):
 
     def guard(self, snapshot):
         self.assertEqual(snapshot, scan(self.root, self.policy))
+        return snapshot
 
     @contextmanager
     def connect(self):

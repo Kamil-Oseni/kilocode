@@ -18,13 +18,28 @@ from retirement import decode, fingerprint
 
 
 class Tests(Base):
-    def journal(self):
+    def journal(self, protocol="raya.retrieval.retirement.v1"):
         self.folder.rmdir()
         names = ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py',
                  'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py')
         self.source = {name: hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest() for name in names}
         self.generations = {name: MODULE.generation(self.root if name == 'root' else self.root / name) for name in ('root', 'Runs', 'Requests')}
-        return Journal(str(self.root), self.sid, self.generations, 'e' * 32, fingerprint(self.source))
+        return Journal(str(self.root), self.sid, self.generations, 'e' * 32, fingerprint(self.source), protocol)
+
+    def test_reusable_operation_preserves_original_dispatch(self):
+        journal = self.journal('raya.retrieval.request.settlement.v2')
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            result = dispatch(journal, '1' * 32, 'sync', {'force_rebuild': False}, self.source,
+                              executor, lambda pending: {'files': 1, 'chunks': 0,
+                                                        'new_embeddings': 0, 'reused_embeddings': 0})
+            reply = result['future'].result()
+        self.assertEqual(result['pending']['format'], 'raya.memory.operation.v2')
+        journal.complete(result['pending'], reply, 'completed', [])
+        self.assertEqual(inspect(result['selection'])['operation']['format'], journal.format)
+        from historical import capture
+        pending = dict(result['pending'], format='raya.memory.operation.v1')
+        with self.assertRaises(ValueError):
+            capture(journal, pending, self.source)
 
     def sticky(self, journal):
         pending = journal.folder / ('1' * 32 + '-pending.json')

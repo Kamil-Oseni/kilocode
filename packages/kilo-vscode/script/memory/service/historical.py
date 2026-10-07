@@ -21,7 +21,7 @@ FIELDS = {'format', 'request', 'owner_epoch', 'selected_release_sha256', 'kind',
 
 
 def request(value):
-    if not isinstance(value, dict) or set(value) != FIELDS or value['format'] != 'raya.memory.operation.v1' or value['status'] != 'pending' or value['kind'] not in ('sync', 'search') or not hex(value['request'], 32) or not hex(value['owner_epoch'], 32) or not hex(value['request_sha256'], 64) or not hex(value['selected_release_sha256'], 64):
+    if not isinstance(value, dict) or set(value) != FIELDS or value['format'] not in ('raya.memory.operation.v1', 'raya.memory.operation.v2') or value['status'] != 'pending' or value['kind'] not in ('sync', 'search') or not hex(value['request'], 32) or not hex(value['owner_epoch'], 32) or not hex(value['request_sha256'], 64) or not hex(value['selected_release_sha256'], 64):
         raise ValueError('Historical original request differs.')
 
 
@@ -80,7 +80,7 @@ def capture(journal, pending, source):
     # Validate every caller field before constructing any receipt path.
     request(pending)
     sources(source)
-    if not isinstance(journal, Journal) or pending.get('owner_epoch') != journal.epoch or pending.get('selected_release_sha256') != journal.release or fingerprint(source) != journal.release:
+    if not isinstance(journal, Journal) or pending['format'] != journal.format or pending.get('owner_epoch') != journal.epoch or pending.get('selected_release_sha256') != journal.release or fingerprint(source) != journal.release:
         raise ValueError('Original Journal selection differs.')
     namespace = journal.namespace
     with namespace.lock:

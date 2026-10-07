@@ -9,7 +9,7 @@ export const release = Object.freeze({
   "operations.py": "385a248e4f4e93f9e9849cc630412957428994b89e228dcf84c9833495c06296",
   "retirement.py": "f31e2535b7793f93ce0c556eb50c9bf774270bce6e86582e1c47ef661794a1da",
   "namespace.py": "0df00525c58bc5c57bb11dbee48cb71785a6c40ee178a011c90a5883dbe26a72",
-  "historical.py": "9e62995e30d8a5df8880803597792a92b9a2684cd0723bcdc91efd23d3807d1f",
+  "historical.py": "54c171bd12735ed04c0aa08ced0778b4f4de3284c1fd1dac47cdd6a2f429c524",
   "dispatch.py": "50c6c5ab29519e3cdad4f226b8d5f0c5e30fc407966dd0706a10bd328f96dc35",
   "proposals.py": "fbfd07c0bbe71439d21399d06eac37f8712aff1f24f509697e01f39802c301e0",
 })

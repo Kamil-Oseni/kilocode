@@ -41,6 +41,7 @@ class Tests(Base):
                      UNCERTAIN=False, SLOTS=threading.BoundedSemaphore(1),
                      POOL=pool, STORAGE=storage,
                      INDEX=SimpleNamespace(store=SimpleNamespace(pending=lambda: [])),
+                     PROPOSALS=SimpleNamespace(pending=lambda: []),
                      contextmanager=contextmanager)
         scope['SLOTS'].acquire()
         for name in ('CANCEL', 'DEADLINE', 'CORRELATION', 'PROOFS'):
@@ -65,8 +66,8 @@ class Tests(Base):
         self.assertTrue(record['publication'].done())
         return record['terminal']
 
-    def test_actual_server_admission_fsync_original_future_and_terminal(self):
-        journal = self.journal()
+    def test_actual_server_admission_fsync_original_future_and_terminal(self, protocol='raya.retrieval.retirement.v1'):
+        journal = self.journal(protocol)
         record = self.record()
         flushes = []
         original = os.fsync
@@ -90,6 +91,9 @@ class Tests(Base):
                 self.assertTrue(scope['SLOTS'].acquire(blocking=False))
         finally:
             os.fsync = original
+
+    def test_reusable_server_admission_keeps_original_future_and_terminal(self):
+        self.test_actual_server_admission_fsync_original_future_and_terminal('raya.retrieval.request.settlement.v2')
 
     def test_actual_server_cancel_between_reservation_and_submission(self):
         journal = self.journal()
@@ -131,9 +135,11 @@ class Tests(Base):
         with ThreadPoolExecutor(max_workers=1) as pool, ThreadPoolExecutor(max_workers=1) as storage:
             blocker = pool.submit(gate.wait)
             scope = self.scope(journal, pool, storage)
-            future = asyncio.run(scope['admit'](record, '1'*32, 'search', {'query':'synthetic','top':5}, lambda: self.fail('Body admitted')))
-            record['cancel'].set()
-            gate.set()
+            try:
+                future = asyncio.run(scope['admit'](record, '1'*32, 'search', {'query':'synthetic','top':5}, lambda: self.fail('Body admitted')))
+                record['cancel'].set()
+            finally:
+                gate.set()
             blocker.result()
             with self.assertRaises(Exception):
                 future.result()

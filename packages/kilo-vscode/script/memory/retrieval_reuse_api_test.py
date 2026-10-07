@@ -80,13 +80,15 @@ class Tests(unittest.TestCase):
         pool = Pool(uuid.uuid4().hex, release, {'qwen3-embedding-0.6b': 'b' * 40}, self.namespace, reserve=1 << 50)
         self.runtime = Runtime(pool, self.namespace, images, catalogs, 'synthetic-test-token-'+'x' * 32)
         self.app = create(self.runtime)
+        self.confirmed = True
         self.addCleanup(self.join)
 
     def join(self):
         result = self.runtime.close()
         self.assertTrue(result['closed'])
         self.assertTrue(result['original_coordinator_joined'])
-        self.assertTrue(result['request_publications_confirmed'])
+        self.assertEqual(result['request_publications_confirmed'], self.confirmed)
+        self.assertTrue(result['request_admissions_joined'])
         self.assertIsNone(self.runtime.pool.owner)
 
     async def request(self, method, path, raw=b'', headers=None, gate=None):
@@ -274,6 +276,60 @@ class Tests(unittest.TestCase):
                     os.environ.pop(name, None)
                 else:
                     os.environ[name] = value
+
+    def test_drain_waits_for_original_body_admission_then_resumes_same_coordinator(self):
+        async def run():
+            async with self.app.router.lifespan_context(self.app):
+                original = self.runtime.pool.thread
+                gate = asyncio.Event()
+                post = asyncio.create_task(self.request('POST', 'v2/embeddings', self.body(), gate=gate))
+                await asyncio.sleep(0.03)
+                self.assertEqual(self.runtime.admissions, 1)
+                drain = asyncio.create_task(self.request('POST', 'v2/drain'))
+                try:
+                    await asyncio.sleep(0.03)
+                    self.assertTrue(self.runtime.draining)
+                    self.assertFalse(drain.done())
+                    status, _ = await self.request('POST', 'v2/resume')
+                    self.assertEqual(status, 503)
+                    status, value = await self.request('GET', 'health')
+                    self.assertFalse(value['ready'])
+                    self.assertTrue(value['draining'])
+                finally:
+                    gate.set()
+                    results = await asyncio.gather(post, drain)
+                self.assertEqual([row[0] for row in results], [503, 200])
+                self.assertEqual(self.runtime.records, {})
+                receipt = results[1][1]
+                self.assertTrue(receipt['request_admissions_joined'])
+                self.assertTrue(receipt['original_coordinator_retained'])
+                self.assertTrue(receipt['original_worker_retired'])
+                status, value = await self.request('POST', 'v2/resume')
+                self.assertEqual(status, 200)
+                self.assertFalse(value['draining'])
+                self.assertIs(self.runtime.pool.thread, original)
+                status, _ = await self.request('POST', 'v2/embeddings', self.body())
+                self.assertEqual(status, 503)  # Actual RAM guard still applies after resume.
+                self.assertEqual(self.runtime.admissions, 0)
+        asyncio.run(run())
+
+    def test_lifecycle_requires_original_epoch_and_does_not_resume_fenced_owner(self):
+        async def run():
+            async with self.app.router.lifespan_context(self.app):
+                status, _ = await self.request('POST', 'v2/drain', headers={'x-raya-owner-epoch': 'f'*32})
+                self.assertEqual(status, 409)
+                self.assertFalse(self.runtime.draining)
+                status, _ = await self.request('POST', 'v2/resume')
+                self.assertEqual(status, 503)
+                self.assertFalse(self.runtime.draining)
+                status, _ = await self.request('POST', 'v2/drain')
+                self.assertEqual(status, 200)
+                self.confirmed = False
+                self.runtime.pool.fence()
+                status, _ = await self.request('POST', 'v2/resume')
+                self.assertEqual(status, 503)
+                self.assertTrue(self.runtime.draining)
+        asyncio.run(run())
 
 
 if __name__ == '__main__':

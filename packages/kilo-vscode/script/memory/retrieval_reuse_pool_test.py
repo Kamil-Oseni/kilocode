@@ -90,6 +90,30 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'pool_already_started_or_closed'):
             self.pool.start()
 
+    def test_pause_cancels_original_queue_and_resume_does_not_replay_it(self):
+        self.pool.reserve = 1 << 50
+        tickets = [self.pool.submit('embeddings', self.body(), time.monotonic()+2) for _ in range(4)]
+        with self.pool.condition:
+            self.pool.start()
+            original = self.pool.thread
+            self.pool.pause()
+        self.assertTrue(self.pool.drained.wait(1))
+        self.assertTrue(self.pool.quiet())
+        for ticket in tickets:
+            self.assertTrue(ticket.done.is_set())
+            self.assertTrue(ticket.cancel.is_set())
+            self.assertIsNone(ticket.body)
+            self.assertIsNone(ticket.owner)
+        with self.assertRaisesRegex(ValueError, 'pool_admission_closed'):
+            self.pool.submit('embeddings', self.body(), time.monotonic()+2)
+        self.pool.resume()
+        self.assertIs(self.pool.thread, original)
+        self.assertTrue(original.is_alive())
+        current = self.pool.submit('embeddings', self.body(), time.monotonic()+2)
+        self.assertTrue(current.done.wait(1))
+        self.assertEqual(current.error, 'pool_memory_reserve')
+        self.assertIsNone(current.owner)
+
 
 if __name__ == '__main__':
     unittest.main()

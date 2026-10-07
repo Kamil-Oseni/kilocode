@@ -66,6 +66,8 @@ class Pool:
         self.thread = None
         self.stop = threading.Event()
         self.fenced = False
+        self.draining = False
+        self.drained = threading.Event()
         self.errors = deque(maxlen=16)
 
     def pressure(self):
@@ -96,14 +98,14 @@ class Pool:
         if type(until) not in (int, float) or not time.monotonic() < until <= time.monotonic() + 150:
             raise ValueError('pool_deadline')
         with self.condition:
-            if self.stop.is_set() or self.fenced:
+            if self.stop.is_set() or self.fenced or self.draining:
                 raise ValueError('pool_admission_closed')
             if not self.slots.acquire(blocking=False):
                 raise ValueError('pool_capacity')
         try:
             snapshot = self.prepare(kind, body)
             with self.condition:
-                if self.stop.is_set() or self.fenced:
+                if self.stop.is_set() or self.fenced or self.draining:
                     raise ValueError('pool_admission_closed')
                 ticket = Ticket(kind, snapshot, until, request)
                 self.queue.append(ticket)
@@ -186,6 +188,31 @@ class Pool:
             ticket.cancel.set()
             self.complete(ticket, 'pool_closed')
 
+    def pause(self):
+        with self.condition:
+            if self.stop.is_set() or self.fenced or self.thread is None or not self.thread.is_alive():
+                raise ValueError('pool_pause_unavailable')
+            self.draining = True
+            if self.active is not None:
+                self.active.cancel.set()
+            for ticket in self.queue:
+                ticket.cancel.set()
+            self.condition.notify_all()
+
+    def quiet(self):
+        with self.condition:
+            return (self.draining and self.drained.is_set() and self.owner is None and
+                    self.active is None and not self.queue and not self.fenced and not self.stop.is_set() and
+                    self.thread is not None and self.thread.is_alive())
+
+    def resume(self):
+        with self.condition:
+            if not self.quiet():
+                raise ValueError('pool_original_drain_unconfirmed')
+            self.draining = False
+            self.drained.clear()
+            self.condition.notify_all()
+
     def serve(self):
         try:
             while True:
@@ -193,11 +220,20 @@ class Pool:
                     if self.stop.is_set():
                         self.drain()
                         break
-                    ticket = self.queue.popleft() if self.queue else None
+                    if self.draining:
+                        self.drain()
+                    ticket = self.queue.popleft() if self.queue and not self.draining else None
                     self.active = ticket
                     if ticket is None:
                         self.condition.wait(0.1)
                 if ticket is None:
+                    if self.draining:
+                        self.retire(True)
+                        with self.condition:
+                            if self.draining and not self.stop.is_set():
+                                self.drained.set()
+                                self.condition.wait(0.1)
+                        continue
                     if self.owner is not None:
                         if self.pressure():
                             self.retire(True)

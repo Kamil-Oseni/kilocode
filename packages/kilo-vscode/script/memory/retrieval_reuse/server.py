@@ -46,6 +46,7 @@ class Runtime:
         self.port = port
         self.lock = threading.RLock()
         self.slots = threading.BoundedSemaphore(4)
+        self.admissions = 0
         self.records = {}
         self.errors = deque(maxlen=16)
         self.fenced = False
@@ -82,7 +83,7 @@ class Runtime:
                 self.publish(ticket.request, proof)
                 record['settlement'] = proof
                 record['ticket'] = None
-                self.slots.release()
+                self.release()
             except Exception:
                 self.fence()
                 raise
@@ -91,6 +92,37 @@ class Runtime:
         with self.lock:
             for record in self.records.values():
                 self.settle(record)
+
+    def release(self):
+        with self.lock:
+            if self.admissions <= 0:
+                self.fence()
+                raise ValueError('reuse_admission_ownership')
+            self.slots.release()
+            self.admissions -= 1
+
+    def pause(self):
+        with self.lock:
+            self.integrity()
+            self.reap()
+            if self.fenced or self.pool.fenced:
+                raise ValueError('reuse_drain_unavailable')
+            self.draining = True
+            self.pool.pause()
+
+    def quiet(self):
+        with self.lock:
+            self.integrity()
+            self.reap()
+            return (self.draining and self.pool.quiet() and self.admissions == 0 and not self.fenced and
+                    all(record.get('settlement') is not None for record in self.records.values()))
+
+    def resume(self):
+        with self.lock:
+            if not self.quiet():
+                raise ValueError('reuse_original_drain_unconfirmed')
+            self.pool.resume()
+            self.draining = False
 
     def health(self):
         try:
@@ -115,9 +147,10 @@ class Runtime:
             self.reap()
         except Exception:
             self.fence()
-        if not value['closed'] or value['ownership_retained']:
+        if not value['closed'] or value['fenced'] or value['ownership_retained'] or self.admissions != 0:
             self.fence()
-        return dict(value, request_publications_confirmed=not self.fenced)
+        return dict(value, request_publications_confirmed=not self.fenced,
+                    request_admissions_joined=self.admissions == 0)
 
 
 def create(runtime):
@@ -152,6 +185,28 @@ def create(runtime):
             return reply(runtime.health())
         if request.headers.get('x-raya-owner-epoch') != runtime.pool.epoch:
             return fail('owner_epoch_changed', 409)
+        if request.method == 'POST' and path in ('v2/drain', 'v2/resume'):
+            try:
+                if path == 'v2/resume':
+                    runtime.resume()
+                else:
+                    runtime.pause()
+                    until = time.monotonic()+15
+                    while not runtime.quiet():
+                        if runtime.fenced or runtime.pool.fenced:
+                            return fail('drain_unconfirmed', 503)
+                        if time.monotonic() >= until:
+                            runtime.fence()
+                            return fail('drain_observation_expired', 503)
+                        await asyncio.sleep(0.01)
+                return reply({'format': 'raya.retrieval.lifecycle.v2', 'owner_epoch': runtime.pool.epoch,
+                              'selected_release_sha256': runtime.pool.release, 'draining': runtime.draining,
+                              'original_coordinator_retained': runtime.pool.thread.is_alive(),
+                              'original_worker_retired': runtime.pool.owner is None,
+                              'request_publications_confirmed': not runtime.fenced,
+                              'request_admissions_joined': runtime.admissions == 0})
+            except Exception:
+                return fail('lifecycle_unconfirmed', 503)
         if request.method in ('GET', 'DELETE') and path.startswith('v2/requests/'):
             key = path.removeprefix('v2/requests/')
             if not re.fullmatch('[a-f0-9]{32}', key):
@@ -191,8 +246,12 @@ def create(runtime):
         if (runtime.fenced or runtime.pool.fenced or runtime.draining or runtime.pool.thread is None or
                 not runtime.pool.thread.is_alive() or runtime.pool.stop.is_set()):
             return fail('admission_closed', 503)
-        if not runtime.slots.acquire(blocking=False):
-            return fail('queue_full', 429)
+        with runtime.lock:
+            if runtime.draining or runtime.fenced or runtime.pool.fenced:
+                return fail('admission_closed', 503)
+            if not runtime.slots.acquire(blocking=False):
+                return fail('queue_full', 429)
+            runtime.admissions += 1
         ticket = None
         record = None
         try:
@@ -211,6 +270,8 @@ def create(runtime):
             body = runtime.pool.prepare(kind, body)
             until = time.monotonic() + int(budget)/1000
             with runtime.lock:
+                if runtime.draining or runtime.fenced or runtime.pool.fenced:
+                    return fail('admission_closed', 503)
                 if key in runtime.records or len(runtime.records) >= 256:
                     return fail('request_reserved_or_capacity', 409)
                 record = {'identity': {'request': key, 'owner_epoch': runtime.pool.epoch,
@@ -255,7 +316,7 @@ def create(runtime):
             return fail('settlement_unconfirmed', 503)
         finally:
             if ticket is None:
-                runtime.slots.release()
+                runtime.release()
             elif ticket.done.is_set():
                 try:
                     runtime.settle(record)

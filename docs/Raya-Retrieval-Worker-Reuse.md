@@ -76,7 +76,15 @@ The TypeScript parser, retained client setup and uncertainty metadata now preser
 
 Four additional checks consume output from the actual Python Journal published into a disposable protected namespace. Their downstream live/retired observations are synthetic metadata, not native worker proof. Signed malformed receipts (with recomputed checksums) remain refused, and changed Python numeric spellings cannot retain the original result hash. All 49 focused legacy/new codec, retained client and original owner checks pass. The older client tests use their existing transport fixtures; successful end-to-end v2 TypeScript HTTP inference remains unproven.
 
-Protected provisioning, entrypoint selection, drain/resume integration, a live successful inference API exchange and installed acceptance remain unfinished. The running v1 service remains unchanged. Automatic capture and multimedia retrieval remain separate unfinished requirements.
+Protected provisioning, entrypoint selection, installed drain/resume acceptance, a live successful inference API exchange and installed acceptance remain unfinished. The running v1 service remains unchanged. Automatic capture and multimedia retrieval remain separate unfinished requirements.
+
+## Candidate drain and resume implemented
+
+The reusable coordinator now has a separate pause state. Pausing closes intake, cancels original queued/active tickets and retires the original native owner through the existing joined-handle checks. Its original coordinator remains alive and parked. Resume is permitted only after the queue, active ticket and native owner are gone, the original coordinator is still alive, and no fence or stop condition exists. It never restarts a coordinator, clears a fence, or replays cancelled tickets.
+
+The epoch-bound `/v2/drain` and `/v2/resume` endpoints preserve the token/origin/source checks. HTTP admission accounting includes body reads as well as queued/active requests and unconfirmed publication. A drain acknowledgment waits for all original admissions to settle and all reserved request receipts to be published. A body upload admitted before drain is rejected before reservation after its read ends, and its slot is released. An observation timeout fences reuse while retaining the original coordinator cleanup. Shutdown propagates a scheduler fence rather than claiming confirmed cleanup from joined threads alone.
+
+One new native test starts a real disposable worker, pauses the real scheduler, verifies original process/job/stream/handle retirement, then resumes the same coordinator. One scheduler test cancels four original queued tickets and proves a fresh admission after resume does not replay them. Two additional actual ASGI tests cover the admitted-body race, closed intake, original epoch refusal, premature resume and persistent fencing. The complete suites now contain 11 native, seven scheduler and eight API checks. They load no model and do not prove drain during successful inference or installed lifecycle behavior.
 
 ## Required integration
 

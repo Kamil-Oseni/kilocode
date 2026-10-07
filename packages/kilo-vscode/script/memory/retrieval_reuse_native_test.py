@@ -92,6 +92,36 @@ class Tests(unittest.TestCase):
         self.assertEqual(value['root_exit'], 1)
         self.assertTrue(self.owner.cancel.is_set())
 
+    def test_pause_retires_original_native_owner_and_resumes_original_coordinator(self):
+        spec = importlib.util.spec_from_file_location('selected_pool',
+                self.capsule/'source'/'retrieval_reuse'/'pool.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.owner.idle = 90
+        self.owner.start()
+        pool = module.Pool(self.owner.lease.epoch, self.owner.lease.release,
+                           {'qwen3-embedding-0.6b': 'b'*40}, self.namespace)
+        pool.owner = self.owner
+
+        def close():
+            value = pool.close()
+            self.assertTrue(value['original_coordinator_joined'])
+            self.assertFalse(value['ownership_retained'])
+
+        self.addCleanup(close)
+        pool.start()
+        original = pool.thread
+        pool.pause()
+        self.assertTrue(pool.drained.wait(5))
+        self.assertTrue(pool.quiet())
+        self.assertIsNone(pool.owner)
+        self.joined(self.owner.state)
+        pool.resume()
+        self.assertIs(pool.thread, original)
+        self.assertTrue(original.is_alive())
+        self.assertFalse(pool.draining)
+        self.assertFalse(pool.drained.is_set())
+
     def test_actual_idle_expiry(self):
         self.owner.start()
         time.sleep(0.06)

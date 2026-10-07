@@ -891,7 +891,8 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect(valid({background:false})).toBe(false)
         expect(valid({task_id:id})).toBe(true)
         expect(valid({task_id:"ses_foreign",prompt:"Repair missing work"})).toBe(false)
-        expect(valid({branch_id:"saved-branch"})).toBe(true)
+        // Planned branches are unavailable during retained-worker goal/verify recovery.
+        expect(valid({branch_id:"saved-branch"})).toBe(false)
         expect(yield* ChiefVerification.reuse({...common, taskID: id})).toBe(true)
         // A real rejected completion audit, not an arbitrary worker narrative, requires corrective context.
         const updater = yield* goalTools(RayaGoal.make({storage:common.storage,sessions}),sessions).update.pipe(Effect.flatMap(Tool.init))
@@ -943,7 +944,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect(correction({task_id:id,prompt:"   "})).toBe(false)
         expect(correction({task_id:id,prompt:"Perform the missing write then read the saved file"})).toBe(true)
         expect(correction({task_id:id,brief:{objective:"Correct missing work and verify it"}})).toBe(true)
-        expect(correction({branch_id:"saved-branch"})).toBe(true)
+        expect(correction({branch_id:"saved-branch"})).toBe(false)
         expect(corrected.description).toContain("summary is not verified file evidence")
         const description = TaskSchema.description("Keep the original Task instructions", corrected)
         expect(description).toContain("Keep the original Task instructions")

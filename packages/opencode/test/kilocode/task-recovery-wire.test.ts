@@ -3,6 +3,7 @@ import { asSchema, streamText } from "ai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createRequire } from "node:module"
 import path from "node:path"
+import { writeFile } from "node:fs/promises"
 import { Effect, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
@@ -372,6 +373,16 @@ it.instance(
       const parameters = yield* Effect.promise(() => Promise.resolve(asSchema(sanitized.task.inputSchema).jsonSchema))
       expect(parameters.required).toContain("task_id")
       expect(parameters.properties?.task_id).toEqual({ type: "string", enum: [child.id] })
+      expect(parameters.anyOf).toHaveLength(2)
+      for (const branch of parameters.anyOf ?? []) {
+        if (typeof branch !== "object") throw new Error("Complete recovery object alternative required")
+        expect(branch.type).toBe("object")
+        expect(branch.required).toContain("task_id")
+        expect(branch.properties?.task_id).toEqual({ type: "string", enum: [child.id] })
+      }
+      const report = process.env.RAYA_RECOVERY_SCHEMA_REPORT
+      if (report)
+        yield* Effect.promise(() => writeFile(report, JSON.stringify({ parameters }, null, 2) + "\n", { flag: "wx" }))
       expect(prepared.tools.update_goal).toBeDefined()
       const options = context(
         { localInference: true, localInferenceAPI: "ollama", localInferenceToolFormat: "completion-envelope-v1" },

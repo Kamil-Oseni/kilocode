@@ -175,11 +175,13 @@ it.instance("actual Task advertisement requires fresh objectives through native 
     const validator = new Constructor({ strict: false })
     // The original model advertisement was the unchanged optional runtime schema.
     expect(validator.compile(ToolJsonSchema.fromSchema(TaskParameters))({ access: "edit" })).toBe(true)
-    const shapes = [
-      schema,
-      asSchema(native.tools.task.inputSchema).jsonSchema,
-      asSchema(oauth.tools.task.inputSchema).jsonSchema,
-    ]
+    const shapes = yield* Effect.promise(() =>
+      Promise.all([
+        schema,
+        asSchema(native.tools.task.inputSchema).jsonSchema,
+        asSchema(oauth.tools.task.inputSchema).jsonSchema,
+      ]),
+    )
     const invalid = [
       {},
       { description: "Label only", access: "edit" },
@@ -195,6 +197,15 @@ it.instance("actual Task advertisement requires fresh objectives through native 
       { branch_id: "saved-branch" },
     ]
     for (const shape of shapes) {
+      expect(shape.anyOf).toHaveLength(4)
+      for (const branch of shape.anyOf ?? []) {
+        if (typeof branch !== "object") throw new Error("Complete Task object alternative required")
+        expect(branch.type).toBe("object")
+        expect(Object.keys(branch.properties ?? {})).toEqual(Object.keys(shape.properties ?? {}))
+        const alternative = validator.compile(branch)
+        expect(alternative({ prompt: "Read the source", task_id: "" })).toBe(false)
+        expect(alternative({ prompt: "Read the source", access: "unknown" })).toBe(false)
+      }
       const check = validator.compile(shape)
       for (const value of invalid) expect(check(value)).toBe(false)
       for (const value of valid) expect(check(value)).toBe(true)

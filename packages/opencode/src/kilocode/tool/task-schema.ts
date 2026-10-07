@@ -10,6 +10,40 @@ import { example } from "@/kilocode/task-resume"
 const originals = new WeakMap<JSONSchema7, JSONSchema7>()
 const instructions = new WeakMap<JSONSchema7, string>()
 
+/** Ollama's grammar parser selects alternatives before reading sibling object constraints. */
+function alternatives(schema: JSONSchema7): JSONSchema7[] {
+  const text = { type: "string" as const, minLength: 1, pattern: "\\S" }
+  const prompt = schema.properties?.prompt
+  const brief = schema.properties?.brief
+  const object: JSONSchema7 = brief && typeof brief === "object" ? brief : { type: "object" }
+  const objective = object.properties?.objective
+  return [
+    {
+      ...schema,
+      required: [...new Set([...(schema.required ?? []), "prompt"])],
+      properties: {
+        ...schema.properties,
+        prompt: { ...(prompt && typeof prompt === "object" ? prompt : {}), ...text },
+      },
+    },
+    {
+      ...schema,
+      required: [...new Set([...(schema.required ?? []), "brief"])],
+      properties: {
+        ...schema.properties,
+        brief: {
+          ...object,
+          required: [...new Set([...(object.required ?? []), "objective"])],
+          properties: {
+            ...object.properties,
+            objective: { ...(objective && typeof objective === "object" ? objective : {}), ...text },
+          },
+        },
+      },
+    },
+  ]
+}
+
 /** Preserve static tool instructions and append only authenticated recovery guidance. */
 export function description(value: string, schema: JSONSchema7) {
   const instruction = instructions.get(schema)
@@ -22,13 +56,16 @@ export function objective(schema: JSONSchema7): JSONSchema7 {
   const result: JSONSchema7 = {
     ...schema,
     anyOf: [
-      { required: ["prompt"], properties: { prompt: text } },
+      ...alternatives(schema),
       {
-        required: ["brief"],
-        properties: { brief: { type: "object", required: ["objective"], properties: { objective: text } } },
+        ...schema,
+        required: [...new Set([...(schema.required ?? []), "task_id"])],
       },
-      { required: ["task_id"] },
-      { required: ["branch_id"], properties: { branch_id: text } },
+      {
+        ...schema,
+        required: [...new Set([...(schema.required ?? []), "branch_id"])],
+        properties: { ...schema.properties, branch_id: text },
+      },
     ],
   }
   originals.set(result, schema)
@@ -57,27 +94,16 @@ export const prepare = Effect.fn("TaskSchema.prepare")(function* (
   }).pipe(Effect.orDie)
   if (worker) {
     // Retained recovery is admitted only in goal/verify; planned branches execute in task phase.
-    const text = { type: "string" as const, minLength: 1, pattern: "\\S" }
     const resumed: JSONSchema7 = {
+      ...original,
       required: [...new Set([...(original.required ?? []), "task_id"])],
       properties: { ...original.properties, task_id: { type: "string", const: worker.taskID } },
-      ...(worker.correction
-        ? {
-            anyOf: [
-              { required: ["prompt"], properties: { prompt: text } },
-              {
-                required: ["brief"],
-                properties: { brief: { type: "object", required: ["objective"], properties: { objective: text } } },
-              },
-            ],
-          }
-        : {}),
     }
     const guide = `${original.description ?? ""} Recover this same worker with task_id="${worker.taskID}". Its summary is not verified file evidence.${worker.correction ? " The completion audit was rejected: supply a concrete correction objective describing the missing work and actual verification, not a progress query or repeated success claim." : ""} Put the retained ID in arguments.task_id, not only in prompt or brief text. The following is a call example: replace its prompt with the concrete continuation or correction; existing permissions still govern execution.
 ${example(worker.taskID)}`
     const result: JSONSchema7 = {
-      ...original,
       ...resumed,
+      ...(worker.correction ? { anyOf: alternatives(resumed) } : {}),
       description: guide,
     }
     instructions.set(result, guide)

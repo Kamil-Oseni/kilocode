@@ -14,6 +14,14 @@ Five additional tests exercise actual empty-input, selection-mismatch, invalid-i
 
 These modules are not selected by the current protected release or imported by the running service. Version 1 remains unchanged. The full implementation is still required; these components must not be deployed as a completed reuse feature.
 
+## Native completion observation implemented
+
+`retrieval/living.py` checks the caller's retained original process and job handles without finding or adopting a PID. It requires a running process, the captured creation time and executable image, membership in the original job, and unchanged authenticated source images. It checks the process and job again after verifying images. `accept` additionally validates the pending request identity, body hash, exact completion fields and model result before observing the native owner. Only success consumes the pending request. Its observation receipt deliberately has no process-retirement claim.
+
+Five tests use actual Windows child processes attached to jobs at creation through `PROC_THREAD_ATTRIBUTE_JOB_LIST`. They cover positive live observation, wrong birth/job refusal, an exited process through its original handle, source changes, and completion/result/request binding against those live handles. Test cleanup terminates only its own job, observes original child exit and closes its original handles. No model is imported or substituted. The completion payload is a synthetic normalized vector fixture; these tests establish the acceptance boundary, not inference correctness or installed reuse. All five tests pass.
+
+The service must call this observer under its own ownership/request lock and retain those exact handles and source baselines throughout observation and delivery. This module does not create an owner, authenticate a release, fence a failed lease, manage cancellation, or prove retirement; the caller still must implement those lifecycle operations. None of these observations enables version 1 to accept a live worker result.
+
 ## Required integration
 
 1. Add a reusable bootstrap path only to a newly selected and protected release containing the codec. Validate the same source/catalog/checkpoint dependency images before constructing a model. Cache one selected CPU model per worker; retain the existing finite path for rollback.

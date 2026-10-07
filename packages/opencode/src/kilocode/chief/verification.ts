@@ -234,7 +234,6 @@ export namespace ChiefVerification {
         terminal.parts.some((row) => row.type === "tool" && ["pending", "running"].includes(row.state.status)) ||
         (input.background !== undefined &&
           (!job ||
-            job.status === "running" ||
             job.metadata?.background === true ||
             !job.origins?.some((origin) => {
               if (!origin || origin.sessionID !== input.sessionID || origin.childSessionID !== child.sessionID)
@@ -260,6 +259,13 @@ export namespace ChiefVerification {
             })))
       )
         throw new Error("Chief foreground recovery child lineage is invalid")
+      if (job?.status === "running")
+        return yield* Effect.fail(
+          new Refusal(
+            "task-recovery",
+            "The retained Task is still running. Wait for that same Task to finish before reading its recovery state; do not start or replace its worker.",
+          ),
+        )
       const correction = rows.some((row) =>
         row.parts.some(
           (part) =>

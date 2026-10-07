@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect, Exit, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Schema } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -9,6 +9,8 @@ import { BackgroundJob } from "@/background/job"
 import { RayaChief } from "@/kilocode/chief"
 import { RayaGoal } from "@/kilocode/goal"
 import { ChiefVerification } from "@/kilocode/chief/verification"
+import { Refusal } from "@/kilocode/session/tool-refusal"
+import { SessionRetirement } from "@/kilocode/session/retirement"
 import { Session } from "@/session/session"
 import { MessageID, PartID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
@@ -149,6 +151,102 @@ const verify = (state: Effect.Success<ReturnType<typeof setup>>, opts: { callID?
     inputID: opts.inputID ?? state.input.id,
     request: state.request,
   })
+
+it.instance(
+  "authenticated running recovery refuses normally and retains its worker until actual completion",
+  () =>
+    Effect.gen(function* () {
+      for (const mode of ["owned", "foreign", "background"] as const) {
+        const state = yield* setup()
+        yield* state.goals.create(state.parent.id, state.request)
+        yield* verify(state)
+        const before = yield* state.sessions.get(state.parent.id)
+        const input = yield* state.sessions.updateMessage({ ...state.input, id: MessageID.ascending() })
+        const call = `continued-${PartID.ascending()}`
+        yield* state.sessions.updatePart({
+          ...state.part,
+          id: PartID.ascending(),
+          callID: call,
+          state: {
+            status: "running",
+            input: { task_id: state.child.id },
+            time: { start: Date.now() },
+            metadata: { sessionId: state.child.id, childMessageID: input.id },
+          },
+        })
+        const done = yield* Deferred.make<string>()
+        yield* state.background.start({
+          id: state.child.id,
+          type: "task",
+          metadata: { background: mode === "background" },
+          origin: {
+            sessionID: state.parent.id,
+            messageID: state.assistant.id,
+            callID: mode === "foreign" ? "foreign-call" : call,
+            childSessionID: state.child.id,
+            childMessageID: input.id,
+          },
+          run: Deferred.await(done),
+        })
+        const query = {
+          storage: state.storage,
+          sessions: state.sessions,
+          background: state.background,
+          sessionID: state.parent.id,
+          messageID: state.assistant.id,
+          agent: "auto",
+          planned: false,
+        }
+        const owner = SessionRetirement.make()
+        const receipt = `${call}-goal`
+        const busy = yield* Effect.exit(owner.tool(state.parent.id, receipt, ChiefVerification.retained(query)))
+        expect(Exit.isFailure(busy)).toBe(true)
+        if (!Exit.isFailure(busy)) throw new Error("Running recovery was accepted")
+        const error = Cause.squash(busy.cause)
+        expect(error instanceof Refusal).toBe(mode === "owned")
+        if (error instanceof Refusal) {
+          expect(error.reason).toBe("task-recovery")
+          expect(error.message).toContain("still running")
+          expect(Exit.isFailure(yield* Effect.exit(owner.drain))).toBe(true)
+          yield* state.sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: state.assistant.id,
+            sessionID: state.parent.id,
+            type: "tool",
+            tool: "get_goal",
+            callID: receipt,
+            state: {
+              status: "error",
+              input: {},
+              error: error.message,
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
+          expect(owner.completed(state.parent.id, receipt, error)).toBe(true)
+          expect(Exit.isSuccess(yield* Effect.exit(owner.drain))).toBe(true)
+        }
+        expect((yield* state.sessions.get(state.parent.id)).metadata).toEqual(before.metadata)
+        expect((yield* state.background.get(state.child.id))?.status).toBe("running")
+        expect(yield* state.sessions.children(state.parent.id)).toHaveLength(1)
+        const final = yield* state.sessions.updateMessage({
+          ...state.final,
+          id: MessageID.ascending(),
+          parentID: input.id,
+          time: { created: Date.now(), completed: Date.now() },
+        })
+        yield* Deferred.succeed(done, "Actual continued fixture result")
+        yield* state.background.wait({ id: state.child.id })
+        if (mode !== "owned") continue
+        yield* state.sessions.setMetadata({
+          sessionID: state.parent.id,
+          metadata: { ...before.metadata, [RayaChief.phaseKey]: "verify" },
+        })
+        yield* verify({ ...state, input, final, callID: call })
+        expect(yield* ChiefVerification.retained(query)).toEqual({ taskID: state.child.id, correction: false })
+      }
+    }),
+  { config: { formatter: false, lsp: false, enabled_providers: [] } },
+)
 
 it.instance(
   "runtime verification reads actual goal state after exact completed foreground work",

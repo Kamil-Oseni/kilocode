@@ -18,8 +18,8 @@ BASE = ROOT/'python'/'python.exe'
 ENV = {'SystemRoot': 'C:\\Windows', 'HOME': str(ROOT/'home'), 'USERPROFILE': str(ROOT/'home'), 'TEMP': str(ROOT/'tmp'), 'TMP': str(ROOT/'tmp'), 'HF_HOME': str(ROOT/'hf'), 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_PROGRESS_BARS': '1', 'CUDA_VISIBLE_DEVICES': '-1'}
 BOOT = HERE/'bootstrap.py'
 PINS = {'interpreter': 'b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2',
-        'bootstrap': 'f07ce77f8a4358ffb8852b0f4228976695e95820ca558306b5a0c81794b3b3c6',
-        'worker': 'a0fef291bd0e9b40151f4f3842bb6bddb87e127dd6ed15f73bd8f9cac8b5a599',
+        'bootstrap': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d',
+        'worker': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721',
         'models': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873'}
 SIZE = ctypes.c_size_t
 REGISTRY = {}

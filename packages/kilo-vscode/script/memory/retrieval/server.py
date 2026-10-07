@@ -32,10 +32,12 @@ RESERVE = max(6, int(os.environ.get('RAYA_RETRIEVAL_MIN_RAM_GIB', '6'))) * 1024 
 DEADLINE = max(1, min(150, int(os.environ.get('RAYA_RETRIEVAL_TIMEOUT', '150'))))
 CATALOG = Path(r'D:\Raya\Models\Catalog')
 CATALOGS = {'Qwen--Qwen3-Embedding-0.6B.json': '60cae741077a5b3f79f531c139674a1461bda80a5fb8ca767ec1a9ba25975b7d',
-            'Qwen--Qwen3-Reranker-0.6B.json': 'ef8b5bbc099e513ad2ddcd0d20e1ce0006a87e1701228631652d278eecb3f0a3'}
+            'Qwen--Qwen3-Reranker-0.6B.json': 'ef8b5bbc099e513ad2ddcd0d20e1ce0006a87e1701228631652d278eecb3f0a3',
+            'google--embeddinggemma-2.json': '7f28a34d9d8e9cc67372be2bc8d1c5ad4e386914e59aa18ae7351e1e95646f54'}
 IMAGES = {name: selected(CATALOG/name, digest, include=True)[1] for name, digest in CATALOGS.items()}
 RELEASE = fingerprint({'source_sha256': SOURCE, 'catalog_sha256': CATALOGS}, 65536)
 MODELS = {
+    'embeddinggemma-2': decode(IMAGES['google--embeddinggemma-2.json'], 65536),
     'qwen3-embedding-0.6b': decode(IMAGES['Qwen--Qwen3-Embedding-0.6B.json'], 65536),
     'qwen3-reranker-0.6b': decode(IMAGES['Qwen--Qwen3-Reranker-0.6B.json'], 65536),
 }
@@ -174,7 +176,7 @@ def infer(key, kind, body, until, cancel):
         raise ValueError('Selected model input validation failed.')
     if not isinstance(reply, dict) or set(reply) != {'result'}:
         raise RuntimeError('Selected inference reply schema differs.')
-    model = 'qwen3-embedding-0.6b' if kind == 'embeddings' else 'qwen3-reranker-0.6b'
+    model = body.get('model', 'qwen3-embedding-0.6b') if kind == 'embeddings' else 'qwen3-reranker-0.6b'
     value = validated(reply['result'], kind, body, MODELS[model]['revision'])
     with GUARD:
         RECORDS[key]['result_sha256'] = fingerprint(value, 2097152)
@@ -333,8 +335,9 @@ async def handle(request: Request, path: str):
     if set(body)-allowed:
         return fail('invalid_request', 'Unsupported model input fields.', 422)
     expected = 'qwen3-embedding-0.6b' if kind == 'embeddings' else 'qwen3-reranker-0.6b'
-    if body.get('model', expected) != expected:
-        return fail('unsupported_model', 'Use ' + expected + '.', 422)
+    choices = ('qwen3-embedding-0.6b', 'embeddinggemma-2') if kind == 'embeddings' else (expected,)
+    if body.get('model', expected) not in choices:
+        return fail('unsupported_model', 'Use ' + ' or '.join(choices) + '.', 422)
     values = body.get('input') if kind == 'embeddings' else body.get('documents')
     if kind == 'embeddings' and isinstance(values, str):
         values = [values]

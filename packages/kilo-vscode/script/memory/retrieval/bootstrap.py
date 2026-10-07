@@ -11,14 +11,15 @@ import time
 import types
 
 HERE = Path(__file__).resolve().parent
-PINS = {'worker.py': 'a0fef291bd0e9b40151f4f3842bb6bddb87e127dd6ed15f73bd8f9cac8b5a599',
+PINS = {'worker.py': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721',
         'models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873'}
 ROOT = HERE.parent.parent
 DEPENDENCIES = ROOT/'dependencies'
 ENV = {'SystemRoot': 'C:\\Windows', 'HOME': str(ROOT/'home'), 'USERPROFILE': str(ROOT/'home'), 'TEMP': str(ROOT/'tmp'), 'TMP': str(ROOT/'tmp'), 'HF_HOME': str(ROOT/'hf'), 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_PROGRESS_BARS': '1', 'CUDA_VISIBLE_DEVICES': '-1'}
 CATALOG = Path(r'D:\Raya\Models\Catalog')
 MANIFESTS = {'Qwen--Qwen3-Embedding-0.6B.json': '60cae741077a5b3f79f531c139674a1461bda80a5fb8ca767ec1a9ba25975b7d',
-             'Qwen--Qwen3-Reranker-0.6B.json': 'ef8b5bbc099e513ad2ddcd0d20e1ce0006a87e1701228631652d278eecb3f0a3'}
+             'Qwen--Qwen3-Reranker-0.6B.json': 'ef8b5bbc099e513ad2ddcd0d20e1ce0006a87e1701228631652d278eecb3f0a3',
+             'google--embeddinggemma-2.json': '7f28a34d9d8e9cc67372be2bc8d1c5ad4e386914e59aa18ae7351e1e95646f54'}
 
 
 def fields(pairs):
@@ -55,6 +56,42 @@ def image(path, expected):
     if hashlib.sha256(raw).hexdigest() != expected:
         raise ValueError('source_selection')
     return raw
+
+
+def checkpoint(manifest):
+    revision = '914f7f89142e33e77833254d9c9b90c3cef7303b'
+    root = Path(r'D:\Raya\Models\HuggingFace\google--embeddinggemma-2')/revision
+    if manifest.get('source') != 'google/embeddinggemma-2' or manifest.get('revision') != revision or manifest.get('status') != 'downloaded_verified' or Path(manifest.get('path', '')) != root:
+        raise ValueError('gemma_checkpoint_selection')
+    files = manifest.get('files')
+    if not isinstance(files, list) or len(files) != 15:
+        raise ValueError('gemma_checkpoint_inventory')
+    seen = set()
+    keys = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_nlink')
+    for item in files:
+        name = item.get('name') if isinstance(item, dict) else None
+        if not isinstance(name, str) or not name or '\\' in name or ':' in name or any(part in ('', '.', '..') for part in name.split('/')) or name.startswith('/') or name in seen:
+            raise ValueError('gemma_checkpoint_name')
+        seen.add(name)
+        path = root/name
+        for parent in path.parents:
+            info = parent.lstat()
+            if not stat.S_ISDIR(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
+                raise ValueError('gemma_checkpoint_parent')
+        before = path.lstat()
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or getattr(before, 'st_file_attributes', 0) & 0x400 or type(item.get('bytes')) is not int or not 0 < item['bytes'] <= 2147483648 or before.st_size != item['bytes']:
+            raise ValueError('gemma_checkpoint_file')
+        digest = hashlib.sha256()
+        with path.open('rb') as file:
+            opened = os.fstat(file.fileno())
+            for raw in iter(lambda: file.read(1048576), b''):
+                digest.update(raw)
+            final = os.fstat(file.fileno())
+        after = path.lstat()
+        signature = tuple(getattr(before, key) for key in keys)
+        if any(tuple(getattr(info, key) for key in keys) != signature for info in (opened, final, after)) or before.st_ctime_ns != after.st_ctime_ns or opened.st_ctime_ns != final.st_ctime_ns or digest.hexdigest() != item.get('sha256'):
+            raise ValueError('gemma_checkpoint_changed')
+    return manifest
 
 
 def read(library, handle, bound):
@@ -138,6 +175,8 @@ def main():
         raise ValueError('model_payload')
     sources = {name: image(HERE/name, digest) for name, digest in PINS.items()}
     manifests = {name: decode(image(CATALOG/name, digest)) for name, digest in MANIFESTS.items()}
+    if payload['kind'] == 'embeddings' and payload['body'].get('model') == 'embeddinggemma-2':
+        checkpoint(manifests['google--embeddinggemma-2.json'])
     for parent in (DEPENDENCIES, *DEPENDENCIES.parents):
         row = parent.lstat()
         if not stat.S_ISDIR(row.st_mode) or getattr(row, 'st_file_attributes', 0) & 0x400:
@@ -146,7 +185,8 @@ def main():
     sys.path.append(str(DEPENDENCIES))
     module = types.ModuleType('models')
     module.__file__ = str(HERE/'models.py')
-    module.MANIFESTS = {'qwen3-embedding-0.6b': manifests['Qwen--Qwen3-Embedding-0.6B.json'],
+    module.MANIFESTS = {'embeddinggemma-2': manifests['google--embeddinggemma-2.json'],
+                        'qwen3-embedding-0.6b': manifests['Qwen--Qwen3-Embedding-0.6B.json'],
                         'qwen3-reranker-0.6b': manifests['Qwen--Qwen3-Reranker-0.6B.json']}
     sys.modules['models'] = module
     exec(compile(sources['models.py'], module.__file__, 'exec'), module.__dict__)

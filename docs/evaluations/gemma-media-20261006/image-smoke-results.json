@@ -1,0 +1,58 @@
+{
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "source_sha256": "d2fc538fbdc95bcf83f5949946b8a46e683a68c13758c07d565b945cf1a0e66a",
+  "device": "cpu",
+  "dtype": "float32",
+  "parameters": 438760448,
+  "load_seconds": 2.2865128999983426,
+  "cases": [
+    {
+      "stage": "image",
+      "color": "red",
+      "seconds": 2.4079303999897093,
+      "sha256": "8cd751ba4b95bc2b9b958717cd3dd27e89e6709057787196a19c61f63ebf9374",
+      "dimensions": 768
+    },
+    {
+      "stage": "image",
+      "color": "blue",
+      "seconds": 2.4758964000211563,
+      "sha256": "d6d17ffe11deac7022bc4af854e50c019a0ab47f9ea4c5de6e8527a86f11fe9d",
+      "dimensions": 768
+    },
+    {
+      "stage": "recall",
+      "color": "red",
+      "seconds": 0.07603100000414997,
+      "correct": true,
+      "scores": [
+        {
+          "id": "8cd751ba4b95bc2b9b958717cd3dd27e89e6709057787196a19c61f63ebf9374",
+          "score": 0.7669024561354281
+        },
+        {
+          "id": "d6d17ffe11deac7022bc4af854e50c019a0ab47f9ea4c5de6e8527a86f11fe9d",
+          "score": 0.6675181554840026
+        }
+      ]
+    },
+    {
+      "stage": "recall",
+      "color": "blue",
+      "seconds": 0.07299690000945702,
+      "correct": true,
+      "scores": [
+        {
+          "id": "d6d17ffe11deac7022bc4af854e50c019a0ab47f9ea4c5de6e8527a86f11fe9d",
+          "score": 0.7659995371138338
+        },
+        {
+          "id": "8cd751ba4b95bc2b9b958717cd3dd27e89e6709057787196a19c61f63ebf9374",
+          "score": 0.6486137716787941
+        }
+      ]
+    }
+  ],
+  "scope": "Two simple synthetic color pictures; no personal data, no general multimodal quality claim and no installed service acceptance.",
+  "rss": 2621464576
+}

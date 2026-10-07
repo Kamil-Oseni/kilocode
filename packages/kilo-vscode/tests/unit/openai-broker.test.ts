@@ -977,7 +977,15 @@ test("64 retained jobs refuse a successor's 65th admission before backend submis
         response: { id, metadata, status: "completed", output: [] },
       })
     }
-    await until(() => f.state.requests.filter((request) => request.body.phase === "generated").length === 64)
+    await until(
+      () => f.state.requests.filter((request) => request.body.phase === "generated").length === 64,
+      () => ({
+        responses: generated(f.state).length,
+        accepted: f.state.requests.filter((request) => request.body.phase === "accepted").length,
+        generated: f.state.requests.filter((request) => request.body.phase === "generated").length,
+        errors: f.state.errors,
+      }),
+    )
     const handoff = {
       version: 1 as const,
       id: "bounded_handoff",
@@ -1096,10 +1104,11 @@ test("oversized UTF-8 task context fails before creating a paid provider call", 
   }
 })
 
-async function until(check: () => boolean) {
+async function until(check: () => boolean, detail?: () => unknown) {
   const deadline = Date.now() + 3000
   while (!check()) {
-    if (Date.now() > deadline) throw new Error("Expected transport event did not arrive")
+    if (Date.now() > deadline)
+      throw new Error(`Expected transport event did not arrive${detail ? ": " + JSON.stringify(detail()) : ""}`)
     await Bun.sleep(10)
   }
 }

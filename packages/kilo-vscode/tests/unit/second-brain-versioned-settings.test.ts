@@ -46,6 +46,8 @@ function metadata(op: "sync" | "search") {
 
 test("separate v2 setup schema refuses cross-version, paged and incomplete maps", () => {
   expect(parse(setup)).toEqual(setup)
+  const selected = { ...setup, protocol: "raya.memory.operation.v2" }
+  expect(parse(selected)).toEqual(selected)
   const prior = Object.fromEntries(
     Object.entries(pins).filter(([name]) => !["historical.py", "dispatch.py", "proposals.py"].includes(name)),
   )
@@ -62,7 +64,7 @@ test("separate v2 setup schema refuses cross-version, paged and incomplete maps"
   expect(() => parse({ ...legacy, protocol: setup.protocol })).toThrow()
   expect(() => parse({ ...setup, version: 1 })).toThrow()
   expect(() => parse({ ...setup, source_sha256: legacy.source_sha256 })).toThrow()
-  expect(() => parse({ ...setup, protocol: "raya.memory.operation.v2" })).toThrow()
+  expect(() => parse({ ...setup, protocol: "raya.memory.operation.v3" })).toThrow()
   expect(() => parse({ ...setup, source_sha256: { ...pins, extra: "a".repeat(64) } })).toThrow()
   expect(() => parse({ ...setup, source_sha256: { ...pins, "server.py": "a".repeat(64) + "\n" } })).toThrow()
   expect(() => parse({ ...setup, origin: "http://localhost:8874" })).toThrow()
@@ -73,6 +75,8 @@ test("v2 sync and search debts preserve exact root and refuse replay-shaped meta
   for (const op of ["sync", "search"] as const) {
     const value = metadata(op)
     expect(journal(value)).toEqual(value)
+    const selected = { ...value, protocol: "raya.memory.operation.v2" }
+    expect(journal(selected)).toEqual(selected)
     for (const change of [
       { op: ["search"] },
       { op: { value: "search" } },
@@ -88,7 +92,7 @@ test("v2 sync and search debts preserve exact root and refuse replay-shaped meta
       { replay: true },
     ])
       expect(() => journal({ ...value, request: { ...value.request, ...change } })).toThrow()
-    expect(() => journal({ ...value, protocol: "raya.memory.operation.v2" })).toThrow()
+    expect(() => journal({ ...value, protocol: "raya.memory.operation.v3" })).toThrow()
     expect(() => journal({ ...value, version: 1 })).toThrow()
   }
   const search = metadata("search")

@@ -74,6 +74,8 @@ with tempfile.TemporaryDirectory(prefix='raya-memory-operation-codec-') as temp:
     journal.namespace = Files()
     journal.folder = Path(temp)
     journal.epoch = 'a'*32
+    journal.protocol = 'raya.retrieval.retirement.v1'
+    journal.format = 'raya.memory.operation.v1'
     pins = {row['name']: row['sha256'] for row in sources if row['name'].endswith('.py')}
     journal.release = fingerprint(pins)
     for index, (kind, outcome, rebuilt, invalid) in enumerate([

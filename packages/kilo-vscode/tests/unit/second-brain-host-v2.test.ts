@@ -120,7 +120,7 @@ async function fixture() {
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
       ])
-      expect(code).toBe(0)
+      expect(code, err).toBe(0)
       expect(err).toBe("")
       const value = JSON.parse(out)
       frames.set(id, value.terminal)

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse
-from index import Index, execute, Cancelled
+from index import Index, execute, Cancelled, PROTOCOL
 from admission import Retirement, failures
 from operations import Journal
 from dispatch import prepare, submit
@@ -35,7 +35,7 @@ RELEASE = fingerprint(SOURCE)
 EPOCH = secrets.token_hex(16)
 JOURNAL = Journal(os.environ['RAYA_MEMORY_OPERATION_ROOT'],
                   os.environ['RAYA_MEMORY_OPERATION_SID'],
-                  decode(os.environ['RAYA_MEMORY_OPERATION_GENERATIONS'].encode()), EPOCH, RELEASE)
+                  decode(os.environ['RAYA_MEMORY_OPERATION_GENERATIONS'].encode()), EPOCH, RELEASE, PROTOCOL)
 GENERATIONS = decode(os.environ['RAYA_MEMORY_NOTE_GENERATIONS'].encode())
 if not isinstance(GENERATIONS, dict) or set(GENERATIONS) != {'root', 'system'} or any(not isinstance(value, list) or len(value) != 3 or any(type(item) is not int for item in value) for value in GENERATIONS.values()):
     raise ValueError('Explicit existing note namespace generations are required.')
@@ -169,7 +169,7 @@ async def handle(request: Request, path: str):
                      'draining': DRAIN['until'] > time.monotonic(), 'capture_enabled': False,
                      'admission_required': True, 'root': str(NOTES), 'source_sha256': SOURCE,
                      'owner_epoch': EPOCH, 'selected_release_sha256': RELEASE,
-                     'operation_protocol': 'raya.memory.operation.v1'}
+                     'operation_protocol': JOURNAL.format}
         return JSONResponse(value, headers={'Cache-Control': 'no-store'})
     if request.headers.get('x-raya-memory-owner-epoch') != EPOCH:
         return fail('owner_epoch_changed', 'Select the original Memory owner epoch.', 409)

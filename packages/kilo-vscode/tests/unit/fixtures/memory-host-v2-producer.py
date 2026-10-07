@@ -36,6 +36,8 @@ with tempfile.TemporaryDirectory(prefix='raya-memory-host-codec-') as temp:
     owner.folder = Path(temp)
     owner.epoch = cfg['epoch']
     owner.release = fingerprint(pins)
+    owner.protocol = 'raya.retrieval.retirement.v1'
+    owner.format = 'raya.memory.operation.v1'
     pending = owner.reserve(cfg['id'], cfg['kind'], cfg['body'])
     result = {'files': 1, 'chunks': 2, 'new_embeddings': 1, 'reused_embeddings': 1}
     if cfg['kind'] == 'search':

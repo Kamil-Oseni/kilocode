@@ -16,7 +16,7 @@ export const sources = [
 
 export function setup(value: Record<string, unknown>, url: string) {
   if (
-    value.protocol !== "raya.memory.operation.v1" ||
+    (value.protocol !== "raya.memory.operation.v1" && value.protocol !== "raya.memory.operation.v2") ||
     typeof value.root !== "string" ||
     !/^[a-z]:[/\\]/i.test(value.root) ||
     /[\x00-\x1f]/.test(value.root) ||
@@ -39,7 +39,7 @@ export function setup(value: Record<string, unknown>, url: string) {
   return Object.freeze({
     format: "raya.memory.setup" as const,
     version: 2 as const,
-    protocol: "raya.memory.operation.v1" as const,
+    protocol: value.protocol,
     origin: url,
     root: value.root,
     source_sha256: Object.freeze(Object.fromEntries(sources.map((name) => [name, rows[name] as string]))),

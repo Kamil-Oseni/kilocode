@@ -1,0 +1,10 @@
+{
+  "label": "qwen-cold",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 6.892798599990783,
+  "sampled_peak_rss": 2924392448,
+  "minimum_free_ram": 11858173952,
+  "remaining_owned_pids": []
+}

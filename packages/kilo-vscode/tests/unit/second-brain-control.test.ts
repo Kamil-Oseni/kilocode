@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises"
+import { mkdtemp, mkdir, writeFile, readFile, copyFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { BrainControl } from "../../src/second-brain/control"
@@ -32,6 +32,39 @@ const catalog = parseCatalog({
   bridge_sha256: "d135c8c3f6a0ca8c2a746f5c7ac74f65909ff4ee4a7df8a1459a31ddb1c1abe5",
   source_sha256: sources,
 })
+
+test("qualified collector recipe admits actual images and refuses changed release metadata", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "raya-memory-helper-recipe-"))
+  try {
+    await mkdir(path.join(root, "bin"))
+    await Promise.all(
+      ["exe", "pdb", "json"].map((suffix) =>
+        copyFile(
+          path.resolve("bin", `raya-process-host.${suffix}`),
+          path.join(root, "bin", `raya-process-host.${suffix}`),
+        ),
+      ),
+    )
+    const file = path.join(root, "bin", "raya-process-host.json")
+    const row = JSON.parse(await readFile(file, "utf8"))
+    expect(row.recipe).toBe("7b5d46b56cb26d18041272f351e6e9cf5167cfc7747e39d33a68926e220f71ef")
+    expect((await packaged(root)).digest).toBe(row.exe)
+    for (const change of [
+      { recipe: "f".repeat(64) },
+      { exe: "f".repeat(64) },
+      { pdb: "f".repeat(64) },
+      { extra: true },
+    ]) {
+      await writeFile(file, JSON.stringify({ ...row, ...change }))
+      await expect(packaged(root)).rejects.toThrow("Packaged helper fingerprint refused")
+    }
+  } finally {
+    expect(path.isAbsolute(root)).toBe(true)
+    expect(path.dirname(root)).toBe(path.resolve(tmpdir()))
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => {

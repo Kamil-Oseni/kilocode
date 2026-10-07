@@ -1,0 +1,10 @@
+{
+  "label": "qwen-current-v2",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 17.33110600002692,
+  "sampled_peak_rss": 3959812096,
+  "minimum_free_ram": 7894163456,
+  "remaining_owned_pids": []
+}

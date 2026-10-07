@@ -1,0 +1,27 @@
+{
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "parameters": 744371488,
+  "load_seconds": 2.8031921999936458,
+  "modalities": {
+    "image": {
+      "seconds": 2.454840399994282,
+      "dimensions": 768,
+      "finite": true,
+      "normalized": true
+    },
+    "audio": {
+      "seconds": 0.4460794000187889,
+      "dimensions": 768,
+      "finite": true,
+      "normalized": true
+    },
+    "video": {
+      "seconds": 2.3333768000011332,
+      "dimensions": 768,
+      "finite": true,
+      "normalized": true
+    }
+  },
+  "scope": "Synthetic valid input/output smoke test, not semantic accuracy or installed service acceptance.",
+  "rss": 3914035200
+}

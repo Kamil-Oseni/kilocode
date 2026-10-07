@@ -1,0 +1,10 @@
+{
+  "label": "qwen-matched",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 15.561225799989188,
+  "sampled_peak_rss": 2966224896,
+  "minimum_free_ram": 9695158272,
+  "remaining_owned_pids": []
+}

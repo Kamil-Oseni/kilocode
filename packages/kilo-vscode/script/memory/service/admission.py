@@ -209,7 +209,7 @@ class Store:
         try:
             from retirement import decode, ledger
             value = ledger(decode(image(self.retirement)))
-            return value['status'] != 'retired'
+            return value['status'] not in ('retired', 'settled')
         except (OSError, ValueError):
             return True
 
@@ -219,12 +219,15 @@ class Store:
             image(self.retirement)
         publish(self.retirement, (json.dumps(value, sort_keys=True) + '\n').encode(), self.check)
 
-    def begin(self, key, port, epoch, release, parent, digest):
+    def begin(self, key, port, epoch, release, parent, digest, protocol='raya.retrieval.retirement.v1'):
         # Caller holds the admission lease; persist before any POST submission.
         if self.pending():
             raise Retirement('Prior retrieval retirement requires trusted local inspection.')
         from retirement import ledger
-        value = ledger({'format': 'raya-retrieval-retirement-v2', 'request': key,
+        if protocol not in ('raya.retrieval.retirement.v1', 'raya.retrieval.request.settlement.v2'):
+            raise Retirement('Explicit downstream protocol selection differs.')
+        format = 'raya-retrieval-settlement-v3' if protocol.endswith('.v2') else 'raya-retrieval-retirement-v2'
+        value = ledger({'format': format, 'request': key,
                         'port': port, 'status': 'pending', 'owner_epoch': epoch,
                         'selected_release_sha256': release, 'parent_request': parent,
                         'request_sha256': digest})
@@ -235,8 +238,10 @@ class Store:
         from retirement import decode, ledger, certificate
         if ledger(decode(image(self.retirement))) != value:
             raise Retirement('Retrieval retirement record changed.')
-        certificate(proof, value['request'], value['owner_epoch'], value['selected_release_sha256'], value['request_sha256'])
-        self.record(ledger(dict(value, status='retired', certificate=proof)))
+        reusable = value['format'] == 'raya-retrieval-settlement-v3'
+        certificate(proof, value['request'], value['owner_epoch'], value['selected_release_sha256'], value['request_sha256'],
+                    'raya.retrieval.request.settlement.v2' if reusable else 'raya.retrieval.retirement.v1')
+        self.record(ledger(dict(value, status='settled' if reusable else 'retired', certificate=proof)))
 
     @contextmanager
     def locked(self):

@@ -1,0 +1,10 @@
+{
+  "label": "paraphrase",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 38.583510299999034,
+  "sampled_peak_rss": 3960291328,
+  "minimum_free_ram": 7710982144,
+  "remaining_owned_pids": []
+}

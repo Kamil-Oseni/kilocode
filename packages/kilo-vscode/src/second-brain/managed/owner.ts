@@ -10,6 +10,7 @@ import { packaged } from "../control/index"
 import { descriptor, selection, type Descriptor } from "./descriptor"
 import type { Setup } from "../settings"
 import { Pair } from "./pair"
+import { readiness } from "./reuse-catalog"
 import { generation } from "./generation"
 import type { Launch } from "./restart"
 
@@ -461,6 +462,8 @@ export class ManagedOwner {
               /^[a-f0-9]{32}$/.test(health.owner_epoch),
             "Selected Retrieval readiness differs",
           )
+          if (plan.retrieval_protocol === "raya.retrieval.request.settlement.v2")
+            readiness(health, env.RAYA_RETRIEVAL_RELEASE_SHA256)
           return
         }
       }

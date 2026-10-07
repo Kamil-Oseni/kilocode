@@ -1,0 +1,180 @@
+{
+  "source_sha256": "554212518ebcce7b7853ea622f1662eae264bedada0f3fa7864fb635a6121fc1",
+  "load_seconds": 11.203042700013611,
+  "images": [
+    {
+      "query": "red circle",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.13850639999145642
+    },
+    {
+      "query": "red square",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.1217428999952972
+    },
+    {
+      "query": "red triangle",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.12911359997815453
+    },
+    {
+      "query": "blue circle",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.12281979998806491
+    },
+    {
+      "query": "blue square",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.1243794999900274
+    },
+    {
+      "query": "blue triangle",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.1307801999791991
+    }
+  ],
+  "speech": [
+    {
+      "query": "Which recording discusses launching an ad and analyzing what users said about Eden?",
+      "expected": "Marketing and Eden customer feedback",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.21470390001195483
+    },
+    {
+      "query": "I need reminders to move more and rest at night.",
+      "expected": "Fitness, walking, steps and sleep",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.22359249999863096
+    },
+    {
+      "query": "Where is the trip arrangement discussion?",
+      "expected": "Travel, flights, hotels and packing",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.21246870001778007
+    },
+    {
+      "query": "Find the part about checking a code change before saving it to version control.",
+      "expected": "Software coding, tests and Git",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.2208667999948375
+    },
+    {
+      "query": "What are the ingredients for dinner?",
+      "expected": "Cooking soup with tomatoes and onions",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.2281022000242956
+    },
+    {
+      "query": "Where did we discuss managing living costs and buying hardware?",
+      "expected": "Budget, rent, expenses and computer memory",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.21549259999301285
+    }
+  ],
+  "clip": [
+    {
+      "query": "red circle",
+      "correct": true,
+      "start": 0.0,
+      "end": 1.0,
+      "seconds": 0.11302650001016445
+    },
+    {
+      "query": "blue square",
+      "correct": true,
+      "start": 1.0,
+      "end": 2.0,
+      "seconds": 0.11435779999010265
+    },
+    {
+      "query": "green triangle",
+      "correct": true,
+      "start": 2.0,
+      "end": 3.0,
+      "seconds": 0.1178201999864541
+    }
+  ],
+  "mixed": [
+    {
+      "query": "Which recording discusses launching an ad and analyzing what users said about Eden?",
+      "expected": "Marketing and Eden customer feedback",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.7366102171120547,
+      "rank": 1
+    },
+    {
+      "query": "I need reminders to move more and rest at night.",
+      "expected": "Fitness, walking, steps and sleep",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.6788981000207879,
+      "rank": 1
+    },
+    {
+      "query": "Where is the trip arrangement discussion?",
+      "expected": "Travel, flights, hotels and packing",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.6104970930425128,
+      "rank": 1
+    },
+    {
+      "query": "Find the part about checking a code change before saving it to version control.",
+      "expected": "Software coding, tests and Git",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.7065134391981076,
+      "rank": 1
+    },
+    {
+      "query": "What are the ingredients for dinner?",
+      "expected": "Cooking soup with tomatoes and onions",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.6543065926801348,
+      "rank": 1
+    },
+    {
+      "query": "Where did we discuss managing living costs and buying hardware?",
+      "expected": "Budget, rent, expenses and computer memory",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.7058215439723765,
+      "rank": 1
+    }
+  ],
+  "scope": "Generated shape/topic/timestamp checks; not personal-media quality or installed acceptance.",
+  "forgotten_excluded": true,
+  "seconds": 37.23450760002015,
+  "totals": {
+    "images": {
+      "correct": 6,
+      "cases": 6
+    },
+    "speech": {
+      "correct": 6,
+      "cases": 6
+    },
+    "clip": {
+      "correct": 3,
+      "cases": 3
+    },
+    "mixed": {
+      "correct": 6,
+      "cases": 6
+    }
+  }
+}

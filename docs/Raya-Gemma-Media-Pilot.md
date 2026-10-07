@@ -1,0 +1,86 @@
+# Gemma media pilot and capture integration
+
+The user authorized switching to EmbeddingGemma 2 and enabling automatic capture on October 6, 2026. The communicated scope is Raya conversations and actions. Ambient microphone and screen recording are not enabled by this instruction.
+
+## Runtime handoff
+
+The build chat owns the installed embedding service, model-aware admission, text reindexing, bounded worker reuse and automatic conversation/action capture. Preserve the Qwen index for rollback. Gemma uses 768-dimensional vectors at revision `914f7f89142e33e77833254d9c9b90c3cef7303b`; never mix these with the existing 1,024-dimensional Qwen vectors. The existing Qwen reranker accepts text only.
+
+A reusable inference process needs separate evidence for completed requests and retired processes. A warm worker cannot produce a receipt claiming that its original process has exited. Keep one inference active at a time, bound idle residency, and retire owned workers under memory pressure, cancellation or service shutdown.
+
+Capture must retain source identifiers and support correction and deletion. Exclude credentials and restricted sources. The user's authorization removes the earlier capture-off preference; it does not make unverified installed configuration changes complete.
+
+## Source pilot
+
+`packages/kilo-vscode/script/memory/media/library.py` provides an isolated catalog for explicitly selected files. It copies approved input into content-addressed snapshots and stores vectors in a separate revision-bound SQLite index. It does not scan directories or record devices. Caller-side admission and supervised decoding/inference are required before indexing.
+
+The pilot accepts PNG, JPEG, WAV, AVI and MP4 signatures, up to 32 MiB per file and 128 cataloged attachments. Signature detection is not media decoding or a guarantee that a file is valid. Use a real bounded decoder before inference. Snapshots are published without overwriting existing files. Queries and publications require normalized finite 768-dimensional vectors and matching model metadata. Recall rechecks snapshot content and rejects changed index metadata or altered file addresses.
+
+Deleting an original file does not delete its imported snapshot. `forget` first persists a tombstone that excludes the item from inventory, recall and new embeddings, then deletes the validated snapshot and finishes catalog cleanup. A locked file raises an error without claiming completed cleanup. Reopening the catalog keeps it hidden, and retrying `forget` finishes cleanup after the lock clears. Re-import is blocked during pending cleanup; explicit re-import after completion removes the tombstone. Repeated completed forgetting succeeds idempotently. Corrupted or externally modified snapshots fail validation; callers must preserve unexpected files for review rather than claim successful forgetting. Automatic startup reconciliation and complete multi-process admission remain integration work.
+
+Returned matches include source path, import time, content hash and similarity. `inspect(path)` separately decodes an immutable bounded byte snapshot, validates its format and returns the same content hash. Images are limited to a single frame, 4 megapixels and 4,096 pixels on either axis. Audio currently accepts mono 16 kHz PCM16 WAV up to 60 seconds, with exact ranges of at most 30 seconds. Video accepts one video stream and at most one audio stream, with declared duration up to 30 seconds and decoded visual samples spaced at least one second apart. Pixel bounds, timestamp validity, a frame-count bound and an elapsed-time bound are checked. Embedded video audio is reported but not extracted or indexed by this function.
+
+`publish_segments` accepts a complete recording/clip segment batch, validates its model space, file hash and exact decoded timestamps, and replaces the segment vectors atomically. `search_segments` returns ranked matches with the approved snapshot, origin and start/end range; selected results are decoded again to validate their timestamps, and forgotten items are excluded. The pilot limits publication to 32 segments per attachment and search to 4,096 indexed segments. Decoding selected clips during search is currently a performance cost, not a proven interactive path.
+
+Audio conversion, embedded video audio extraction, OCR/transcripts, capture UI, installed endpoints and automatic media admission are still integration work. Inspection and segment search must run inside an externally owned process with memory and time supervision: checks between frames cannot interrupt a native decoder call. The trusted indexing caller must match the inspection hash against the approved catalog snapshot before publishing vectors. No personal media was imported during testing.
+
+## Validation
+
+The Bun test runs twelve Python cases against real temporary files and SQLite: import/recall/forget, source revision snapshots, altered snapshot rejection, incompatible model rejection, atomic embedding batches, invalid vectors and limits, database path tampering, changed model metadata, full-catalog admission, locked-file deletion recovery and inference-manifest rejection before model loading. The Windows case opens a real handle that permits reading but denies deletion; no filesystem failure is mocked. A full catalog rejects new content before creating snapshots while allowing existing attachment titles to change; its existing search remains usable. SQLite serializes the count check and publication. This verifies storage behavior, not retrieval quality.
+
+Run from `packages/kilo-vscode`:
+
+```powershell
+bun test tests/unit/memory-media-catalog.test.ts
+```
+
+The fixture currently uses the pinned local packaging Python runtime. An absent runtime is a test failure, not a skipped success.
+
+Nine additional real decoder/segment cases passed separately using Pillow 12.3.0 and PyAV 19.0.1: valid image/content identity, invalid image signature payload, image size rejection, exact audio ranges, audio rate/duration/truncation rejection, a generated MP4 with decoded timestamps, timestamped recall after reopening followed by deletion, invalid/partial publication preserving the prior index, and altered stored timestamp rejection. These use synthetic media and controlled normalized vectors; they do not establish semantic retrieval or model inference. Decoder dependencies are pinned in `script/memory/media/requirements-media.txt`; they are not installed into the existing service by this commit. Run `tests/fixtures/memory_media_decode.py` with that isolated Python environment and pass `script/memory/media/library.py` as its argument.
+
+An initial full-multimodal CPU smoke probe was aborted by its 6 GiB available-RAM guard after 26.97 seconds, before completing any modality. The sampled process peak was 3.61 GiB; minimum system available RAM was 5.99 GiB. Its original process exited and all observed owned children were joined. This remains incomplete historical evidence, not a passed test or proof that the model alone caused the system pressure. The later small-input result below uses the same reserve and does not erase this failure.
+
+### Actual image encoder check
+
+A later selective text/image run loaded 438,760,448 parameters with the audio encoder omitted. It used the pinned checkpoint, float32 CPU inference, six threads and a 512-token bound. Two generated 224-by-224 red/blue pictures were decoded, embedded, published through the actual catalog and retrieved correctly by their corresponding text queries. Image encoding took 2.41 and 2.48 seconds; the two text-query-plus-catalog searches took 76 and 73 milliseconds. This is a two-color smoke test, not a photorealistic, document or general visual retrieval evaluation.
+
+The original probe exited naturally with code zero after 13.61 seconds; no observed owned child remained. Sampled peak process RAM was 2.51 GiB and minimum system available RAM was 11.32 GiB. Inference used CPU, not CUDA. The test imported no personal data and left the installed services unchanged. All 15 cataloged checkpoint files were subsequently rehashed, matching all 1,525,810,123 bytes. Scripts, results, lifecycle/resource receipt, the earlier aborted full-media receipt and integrity record are retained under `docs/evaluations/gemma-media-20261006/`. Source hash in the result identifies the catalog code tested; later source revisions need their own qualification.
+
+### Full small-input encoder smoke test
+
+After system headroom improved, a new original process completed image and audio inference but failed on path-based video loading: Transformers expected `torchcodec`, which was not installed. That failed process exited with code one and was joined; its source, log and resource receipt are preserved. Instead of changing installed codec dependencies, the successor supplied two PyAV-decoded RGB frames and explicit original frame indices/FPS metadata, with additional processor frame sampling disabled.
+
+The successor loaded 744,371,488 parameters in 2.80 seconds and produced finite normalized 768-dimensional embeddings for all three synthetic inputs: a 224-by-224 red picture (2.45 seconds), one second of mono 16 kHz tone audio (0.45 seconds), and two sampled frames from a two-second red clip (2.33 seconds). It exited naturally with code zero after 14.90 seconds and left no observed owned child. Sampled peak process RAM was 3.70 GiB; minimum system available RAM was 9.65 GiB. The same 6 GiB reserve remained active.
+
+This proves these small input paths run on this PC under the observed load. It does not measure speech understanding, personal media recall, long recording/clip quality, semantic audio/video search or installed service acceptance. The checked-in `full_media_pyav_probe.py`, results and receipt retain the actual finite experiment. The user-authorized installed Gemma migration, bounded reuse and automatic capture still require their own verification.
+
+### Finite production inference adapter
+
+`script/memory/media/encoder.py` connects the approved catalog to the actual pinned model. Its constructor verifies checkpoint revision, file containment, sizes and hashes before importing inference libraries. The caller must supply a trusted manifest and supervise admission, memory, cancellation and process retirement; manifest consistency checks do not authenticate an arbitrary manifest. This adapter does not launch a service, scan sources or enable capture.
+
+The CPU adapter uses a 1,024-token encoding bound for image/audio/video inputs and a 512-token bound for search queries. Audio indexes validated 30-second ranges. Video indexes one decoded visual frame per inspected range; those previews do not establish temporal understanding or include the embedded audio track. Catalog publication and retrieval preserve source hashes, model identity and exact decoded timestamps.
+
+An actual generated-fixture workflow indexed two pictures, one second of silence and a two-second clip through this adapter. Both picture queries matched correctly. Segment search returned three validated ranges; it did not evaluate semantic audio/video ranking. Checkpoint validation plus model loading took 9.38 seconds. The original process exited naturally with code zero after 19.11 seconds, with 3.66 GiB sampled peak process RAM, 9.06 GiB minimum system available RAM and no observed owned child remaining. The 6 GiB reserve was retained. No personal media, GPU inference or installed service changes were involved.
+
+`adapter_probe.py`, `adapter-smoke-results.json` and `adapter-smoke-receipt.json` preserve this experiment, including the exact encoder source hash. The adapter can be reused inside an admitted worker, but bounded reuse, native ownership evidence, installed endpoints and capture acceptance remain the build owner's integration work.
+### Generated semantic retrieval check
+
+A subsequent finite CPU run exercised the same production encoder source hash with more distinctive generated inputs. Six red/blue circle/square/triangle queries retrieved the correct picture first. Six synthetic spoken topic recordings retrieved the correct audio range first: marketing/customer feedback, fitness/sleep, travel, coding/tests, cooking and budgeting. The recordings were generated to files with Windows SAPI; nothing was played or recorded. A three-scene clip returned the correct one-second range for each red circle, blue square and green triangle query. These were 15 successful checks, using the actual catalog and model rather than mocked embeddings.
+
+Warm searches took 100–187 milliseconds. Checkpoint validation and loading took 23.24 seconds; the original supervised process exited naturally with code zero after 51.59 seconds, with 3.66 GiB sampled peak process RAM, 10.25 GiB minimum system available RAM and no observed owned child remaining. The same 6 GiB reserve stayed active. Results and the lifecycle receipt are in `semantic-results.json` and `semantic-receipt.json`. Exact original probe, generated speech files, texts and hashes are preserved in `D:/Raya/Models/Tests/GemmaMediaSemantic-20261006`; the probe's original execution directory was the private embedding-comparison folder in this worktree.
+
+This supports simple topic-level speech recall and visual timestamp retrieval. It does not establish recognition of personal accents, conversational speech, music, environmental audio, temporal action understanding, large collections or installed capture acceptance. Video remains one-frame visual previews and excludes embedded audio. These narrow successes do not replace a broader user-media evaluation.
+### Paraphrases, long audio and missing evidence
+
+The follow-up runs kept the same encoder source and all original fixture types. Six paraphrased visual queries, six paraphrased spoken-topic queries and three clip ranges ranked correctly. Merging the actual image and segment candidates also placed all six intended audio sources first. A forgotten recording was excluded. The `boundaries` run additionally indexed a generated 60-second WAV as two complete 30-second segments and retrieved the marketing and cooking ranges correctly. It passed 23 positive checks plus forgetting validation. Warm segment queries took 79–202 milliseconds in this run. The process exited naturally and joined after 41.06 seconds, with 3.76 GiB sampled peak RAM and 6.25 GiB minimum system available RAM; it remained above the unchanged 6 GiB guard, with narrow headroom.
+
+Ten unrelated queries exposed a limitation: nearest-neighbor search always offered a candidate, even without relevant evidence. The highest negative cosine was 0.6063, close to the weakest tested true topic match at 0.6105. These are small-fixture observations, not calibrated confidence probabilities. Do not install a global cosine cutoff chosen between these numbers or let nearest rank alone establish a fact. Media recall needs source-content validation and an explicit no-relevant-evidence path; transcripts/OCR/captions can help verify candidates, but this pilot does not generate those artifacts yet.
+
+The original `paraphrase` results label visual queries by their expected image name; the actual paraphrases are defined in its preserved probe. The successor `boundaries` results record the actual visual query strings. Both result/receipt pairs are checked in. Exact original probes and generated speech references remain in the external evidence folder described above. These tests do not prove installed capture, bounded worker reuse or broad personal-media accuracy.
+### Text verification on generated speech references
+
+A separate original CPU process used the existing production Qwen reranker against the six known SAPI reference texts. It ranked all six paraphrased positive topics first. The weakest true-match score was 0.004116 and the strongest unrelated-query score was 0.00008231. Several true matches were below 0.5, so a generic 0.5 cutoff would incorrectly discard them. These scores are not calibrated probabilities, and this tiny corpus does not establish a deployable threshold.
+
+The reranker took 1.29–1.64 seconds per query against six reference documents. Its process exited naturally and joined after 30.05 seconds, with 2.74 GiB sampled peak RAM, 8.10 GiB minimum system available RAM and no observed owned child. All manifest-listed reranker files were rehashed before loading. Results and the receipt identify the exact production reranker source and pinned checkpoint. This run followed Gemma retirement rather than keeping both inference processes resident.
+
+This supports retaining the text-only Qwen reranker to verify media candidates when trusted source text is available. The probe used known generated reference text, not actual STT/OCR/caption outputs; their generation and validation remain pending. A model-aware no-evidence policy needs held-out calibration, source validation and explicit handling of ambiguous questions. Do not treat either cosine rank or reranker score alone as a verified factual answer. Original probes and fixtures are hash-listed in the external evidence folder.

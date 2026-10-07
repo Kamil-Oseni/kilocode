@@ -1,0 +1,10 @@
+{
+  "label": "reranker",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 260.5178719999967,
+  "sampled_peak_rss": 3821551616,
+  "minimum_free_ram": 6551830528,
+  "remaining_owned_pids": []
+}

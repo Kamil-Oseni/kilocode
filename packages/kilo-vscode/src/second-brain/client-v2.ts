@@ -173,6 +173,7 @@ export class ClientV2 {
       epoch: health.epoch,
       release: health.release,
       kind,
+      protocol: this.#setup.protocol,
       digest: fingerprint(body),
       ...(budget === undefined ? {} : { budget }),
       ...(downstream ? { downstream } : {}),

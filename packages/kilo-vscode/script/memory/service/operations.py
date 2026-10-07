@@ -4,12 +4,18 @@ from retirement import canonical, certificate, fingerprint, hex
 
 
 class Journal:
-    def __init__(self, root, principal, generations, epoch, release):
+    def __init__(self, root, principal, generations, epoch, release,
+                 protocol='raya.retrieval.retirement.v1'):
         if not hex(epoch, 32) or not hex(release, 64):
             raise ValueError('Selected Memory identity differs.')
+        if protocol not in ('raya.retrieval.retirement.v1', 'raya.retrieval.request.settlement.v2'):
+            raise ValueError('Selected downstream ownership protocol differs.')
         self.namespace = Namespace(root, principal, generations)
         self.epoch = epoch
         self.release = release
+        self.protocol = protocol
+        self.format = ('raya.memory.operation.v2' if protocol == 'raya.retrieval.request.settlement.v2'
+                       else 'raya.memory.operation.v1')
         if any(self.namespace.root.joinpath('Requests').iterdir()):
             raise ValueError('Prior Memory operations require their original owner.')
         self.folder = self.namespace.folder('Requests', epoch)
@@ -17,14 +23,15 @@ class Journal:
     def reserve(self, request, kind, body):
         if not hex(request, 32) or kind not in ('search', 'sync'):
             raise ValueError('Memory operation identity differs.')
-        value = {'format': 'raya.memory.operation.v1', 'request': request,
+        value = {'format': self.format, 'request': request,
                  'owner_epoch': self.epoch, 'selected_release_sha256': self.release,
                  'kind': kind, 'request_sha256': fingerprint(body), 'status': 'pending'}
         self.namespace.publish(self.folder, request+'-pending.json', canonical(value))
         return value
 
     def complete(self, pending, result, outcome, proofs):
-        if pending['owner_epoch'] != self.epoch or pending['selected_release_sha256'] != self.release:
+        if (pending['format'] != self.format or pending['status'] != 'pending' or
+                pending['owner_epoch'] != self.epoch or pending['selected_release_sha256'] != self.release):
             raise ValueError('Original Memory operation selection differs.')
         if outcome not in ('completed', 'failed', 'cancelled'):
             raise ValueError('Memory operation outcome differs.')
@@ -35,7 +42,7 @@ class Journal:
                 raise ValueError('Duplicate downstream request certificate.')
             requests.add(item['request'])
             refs.append(certificate(item, item['request'], item['owner_epoch'],
-                                    item['selected_release_sha256'], item['request_sha256']))
+                                    item['selected_release_sha256'], item['request_sha256'], self.protocol))
         value = dict(pending, status='terminal', operation_outcome=outcome,
                      downstream=refs)
         if outcome == 'completed':

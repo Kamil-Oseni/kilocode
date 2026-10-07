@@ -1,0 +1,10 @@
+{
+  "label": "gemma-cold",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 7.735790100006852,
+  "sampled_peak_rss": 1962942464,
+  "minimum_free_ram": 13121937408,
+  "remaining_owned_pids": []
+}

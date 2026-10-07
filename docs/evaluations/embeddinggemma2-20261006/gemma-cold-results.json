@@ -1,0 +1,22 @@
+{
+  "model": "gemma",
+  "label": "gemma-cold",
+  "device": "cpu",
+  "dtype": "float32",
+  "threads": 6,
+  "max_tokens": 512,
+  "batch_size": 2,
+  "torch": "2.14.1+cpu",
+  "transformers": "5.19.0",
+  "dataset_sha256": "97ab3bfe5abc361d2ddec3ab7af69b37105812191b634f0d8101fbbd35aee15e",
+  "scope": "Fixed representative synthetic setup notes plus real source function snippets. Archived distractors are deliberate. This is not live personal-memory indexing or general benchmark certification.",
+  "code_instruction": false,
+  "baseline_rss": 236208128,
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "sentence_transformers": "6.1.0",
+  "load_seconds": 4.655108499980997,
+  "loaded_rss": 1788874752,
+  "single_query_seconds": 0.04704410000704229,
+  "dimensions": 768,
+  "peak_wset": 1961934848
+}

@@ -1,0 +1,22 @@
+{
+  "model": "qwen",
+  "label": "qwen-cold",
+  "device": "cpu",
+  "dtype": "float32",
+  "threads": 6,
+  "max_tokens": 512,
+  "batch_size": 2,
+  "torch": "2.14.1+cpu",
+  "transformers": "5.19.0",
+  "dataset_sha256": "97ab3bfe5abc361d2ddec3ab7af69b37105812191b634f0d8101fbbd35aee15e",
+  "scope": "Fixed representative synthetic setup notes plus real source function snippets. Archived distractors are deliberate. This is not live personal-memory indexing or general benchmark certification.",
+  "code_instruction": false,
+  "baseline_rss": 236457984,
+  "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+  "source_sha256": "c0cfec605b11efc4a3ff641a9c61be01e830fbabe63048b55e8783780c723345",
+  "load_seconds": 3.6125637000077404,
+  "loaded_rss": 2913521664,
+  "single_query_seconds": 0.10196330002509058,
+  "dimensions": 1024,
+  "peak_wset": 2919358464
+}

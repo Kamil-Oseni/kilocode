@@ -23,7 +23,7 @@ export function debt(input: unknown) {
   if (
     value.format !== "raya.memory.control.uncertainty" ||
     value.version !== 2 ||
-    value.protocol !== "raya.memory.operation.v1" ||
+    !["raya.memory.operation.v1", "raya.memory.operation.v2"].some((protocol) => value.protocol === protocol) ||
     !absolute(value.root) ||
     Buffer.byteLength(JSON.stringify(input)) > 16384
   )

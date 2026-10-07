@@ -1,0 +1,275 @@
+{
+  "source_sha256": "554212518ebcce7b7853ea622f1662eae264bedada0f3fa7864fb635a6121fc1",
+  "load_seconds": 8.693965899990872,
+  "images": [
+    {
+      "query": "A crimson round disk",
+      "expected": "red circle",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.12298770001507364
+    },
+    {
+      "query": "A scarlet block with four equal straight sides",
+      "expected": "red square",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.1092505999840796
+    },
+    {
+      "query": "A red three-sided figure",
+      "expected": "red triangle",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.10574450000422075
+    },
+    {
+      "query": "An azure round disk",
+      "expected": "blue circle",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.10775700001977384
+    },
+    {
+      "query": "A blue four-sided shape with equal edges",
+      "expected": "blue square",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.10593049999442883
+    },
+    {
+      "query": "A blue three-sided figure",
+      "expected": "blue triangle",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.11009820000617765
+    }
+  ],
+  "speech": [
+    {
+      "query": "Which recording discusses launching an ad and analyzing what users said about Eden?",
+      "expected": "Marketing and Eden customer feedback",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.1798308999859728
+    },
+    {
+      "query": "I need reminders to move more and rest at night.",
+      "expected": "Fitness, walking, steps and sleep",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.1863215999910608
+    },
+    {
+      "query": "Where is the trip arrangement discussion?",
+      "expected": "Travel, flights, hotels and packing",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.1839793999970425
+    },
+    {
+      "query": "Find the part about checking a code change before saving it to version control.",
+      "expected": "Software coding, tests and Git",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.19250170001760125
+    },
+    {
+      "query": "What are the ingredients for dinner?",
+      "expected": "Cooking soup with tomatoes and onions",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.20245330000761896
+    },
+    {
+      "query": "Where did we discuss managing living costs and buying hardware?",
+      "expected": "Budget, rent, expenses and computer memory",
+      "correct": true,
+      "rank": 1,
+      "seconds": 0.19533280000905506
+    }
+  ],
+  "clip": [
+    {
+      "query": "red circle",
+      "correct": true,
+      "start": 0.0,
+      "end": 1.0,
+      "seconds": 0.0963288999919314
+    },
+    {
+      "query": "blue square",
+      "correct": true,
+      "start": 1.0,
+      "end": 2.0,
+      "seconds": 0.09233369998401031
+    },
+    {
+      "query": "green triangle",
+      "correct": true,
+      "start": 2.0,
+      "end": 3.0,
+      "seconds": 0.09397210000315681
+    }
+  ],
+  "mixed": [
+    {
+      "query": "Which recording discusses launching an ad and analyzing what users said about Eden?",
+      "expected": "Marketing and Eden customer feedback",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.7366102171120547,
+      "rank": 1
+    },
+    {
+      "query": "I need reminders to move more and rest at night.",
+      "expected": "Fitness, walking, steps and sleep",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.6788981000207879,
+      "rank": 1
+    },
+    {
+      "query": "Where is the trip arrangement discussion?",
+      "expected": "Travel, flights, hotels and packing",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.6104970930425128,
+      "rank": 1
+    },
+    {
+      "query": "Find the part about checking a code change before saving it to version control.",
+      "expected": "Software coding, tests and Git",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.7065134391981076,
+      "rank": 1
+    },
+    {
+      "query": "What are the ingredients for dinner?",
+      "expected": "Cooking soup with tomatoes and onions",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.6543065926801348,
+      "rank": 1
+    },
+    {
+      "query": "Where did we discuss managing living costs and buying hardware?",
+      "expected": "Budget, rent, expenses and computer memory",
+      "correct": true,
+      "kind": "audio",
+      "similarity": 0.7058215439723765,
+      "rank": 1
+    }
+  ],
+  "scope": "Generated shape/topic/timestamp checks; not personal-media quality or installed acceptance.",
+  "forgotten_excluded": true,
+  "unrelated": [
+    {
+      "query": "A recording about dinosaurs from the Jurassic period.",
+      "top_similarity": 0.5511892744521931,
+      "top_kind": "audio",
+      "has_candidate": true
+    },
+    {
+      "query": "Instructions for assembling a telescope.",
+      "top_similarity": 0.606307950687345,
+      "top_kind": "audio",
+      "has_candidate": true
+    },
+    {
+      "query": "A discussion of inheritance tax regulations.",
+      "top_similarity": 0.5789189522032316,
+      "top_kind": "audio",
+      "has_candidate": true
+    },
+    {
+      "query": "An elephant trumpeting in a jungle.",
+      "top_similarity": 0.5604294911483992,
+      "top_kind": "video",
+      "has_candidate": true
+    },
+    {
+      "query": "Who won the chess championship?",
+      "top_similarity": 0.5380648399768206,
+      "top_kind": "audio",
+      "has_candidate": true
+    },
+    {
+      "query": "An explanation of earthquakes and tectonic plates.",
+      "top_similarity": 0.53421802543306,
+      "top_kind": "video",
+      "has_candidate": true
+    },
+    {
+      "query": "A lesson about ancient Roman emperors.",
+      "top_similarity": 0.5344765651320871,
+      "top_kind": "audio",
+      "has_candidate": true
+    },
+    {
+      "query": "Audio of rain hitting a metal roof.",
+      "top_similarity": 0.547590923656249,
+      "top_kind": "audio",
+      "has_candidate": true
+    },
+    {
+      "query": "The visual clip showing a dog running along a beach.",
+      "top_similarity": 0.5810073031542345,
+      "top_kind": "audio",
+      "has_candidate": true
+    },
+    {
+      "query": "Find a picture of a steam locomotive.",
+      "top_similarity": 0.5679381084312298,
+      "top_kind": "video",
+      "has_candidate": true
+    }
+  ],
+  "unrelated_max": 0.606307950687345,
+  "positive_min": 0.6104970930425128,
+  "long_index": {
+    "id": "dc7ea42e50ad99ea6dc203e066d3ca78bbbe18532ff2d413d3802138262c0dad",
+    "indexed": true,
+    "segments": 2
+  },
+  "long_audio": [
+    {
+      "query": "A marketing campaign and customer feedback",
+      "correct": true,
+      "start": 0.0,
+      "end": 30.0,
+      "seconds": 0.08320110000204295
+    },
+    {
+      "query": "Cooking soup with tomatoes and onions",
+      "correct": true,
+      "start": 30.0,
+      "end": 60.0,
+      "seconds": 0.07873750000726432
+    }
+  ],
+  "seconds": 39.83240210000076,
+  "totals": {
+    "images": {
+      "correct": 6,
+      "cases": 6
+    },
+    "speech": {
+      "correct": 6,
+      "cases": 6
+    },
+    "clip": {
+      "correct": 3,
+      "cases": 3
+    },
+    "mixed": {
+      "correct": 6,
+      "cases": 6
+    },
+    "long_audio": {
+      "correct": 2,
+      "cases": 2
+    }
+  }
+}

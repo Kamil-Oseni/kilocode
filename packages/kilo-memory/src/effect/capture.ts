@@ -62,16 +62,9 @@ function editsInstructionDocs(diffs: { file?: string }[]) {
   })
 }
 
-function typedExisting(memory: MemoryService.Interface, root: string) {
-  return memory.sources({ root }).pipe(
-    Effect.map((sources) => {
-      const blocks = MemorySchema.Sources.map((file) => {
-        const body = sources[file].trim()
-        if (!body) return ""
-        return [`### source ${file}`, body].join("\n")
-      })
-      return blocks.filter(Boolean).join("\n")
-    }),
+function typedExisting(memory: MemoryService.Interface, root: string, query: string, max: number) {
+  return memory.search({ root, query, mode: "typed", limit: 20, maxBytes: max }).pipe(
+    Effect.map((result) => result?.block ?? "No matching stored project facts in this bounded excerpt."),
   )
 }
 
@@ -326,7 +319,12 @@ export namespace MemoryCapture {
               existingKeys: [] as string[],
             }
           }
-          const existing = yield* typedExisting(memory, root)
+          const existing = yield* typedExisting(
+            memory,
+            root,
+            [user, assistant, changed].filter(Boolean).join("\n"),
+            Math.floor(state.limits.maxConsolidationInputBytes / 4),
+          )
           const items = yield* typedItems(memory, root)
           // Exact existing entry ids + keys, for reconciling auto removes/supersedes downstream.
           const inventoryKeys = [...new Set(items.flatMap((item) => [item.id, ...(item.key ? [item.key] : [])]))]

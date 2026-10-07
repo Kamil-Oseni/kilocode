@@ -1,5 +1,6 @@
 """Real temporary files and SQLite catalog tests; no inference quality claim."""
 import importlib.util
+import json
 from contextlib import closing
 import ctypes
 from ctypes import wintypes
@@ -12,6 +13,8 @@ import unittest
 spec = importlib.util.spec_from_file_location('media_library', Path(sys.argv[1]))
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+sys.path.insert(0, str(Path(sys.argv[1]).parent))
+from encoder import Encoder
 space = dict(model=module.MODEL, revision=module.REVISION, dimensions=module.DIMENSIONS)
 
 
@@ -104,6 +107,24 @@ class Catalog(unittest.TestCase):
             db.execute('UPDATE meta SET value=? WHERE key=?', ('1024', 'dimensions'))
         with self.assertRaisesRegex(ValueError, 'space changed'):
             self.library.inventory()
+
+    def test_encoder_rejects_unapproved_manifest_before_loading(self):
+        path = self.root/'manifest.json'
+        path.write_text(json.dumps(dict(source=module.MODEL, revision='other', status='downloaded_verified')))
+        with self.assertRaisesRegex(ValueError, 'pinned Gemma'):
+            Encoder(path)
+
+    def test_encoder_rejects_checkpoint_drift_and_root_escape(self):
+        path = self.root/'manifest.json'
+        cfg = dict(source=module.MODEL, revision=module.REVISION, status='downloaded_verified', path=str(self.folder),
+                   files=[dict(name=self.item['relative'], bytes=self.source.stat().st_size, sha256='0'*64)])
+        path.write_text(json.dumps(cfg))
+        with self.assertRaisesRegex(ValueError, 'hash differs'):
+            Encoder(path)
+        cfg['files'][0]['name'] = '../fixture.png'
+        path.write_text(json.dumps(cfg))
+        with self.assertRaisesRegex(ValueError, 'leaves the approved model root'):
+            Encoder(path)
 
     def test_full_catalog_stays_searchable_and_rejects_new_assets(self):
         self.library.publish([self.row()], space)

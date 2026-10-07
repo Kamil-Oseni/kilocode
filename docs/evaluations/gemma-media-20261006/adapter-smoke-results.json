@@ -1,0 +1,30 @@
+{
+  "load_seconds": 9.379993900016416,
+  "source_sha256": "554212518ebcce7b7853ea622f1662eae264bedada0f3fa7864fb635a6121fc1",
+  "cases": [
+    {
+      "id": "8cd751ba4b95bc2b9b958717cd3dd27e89e6709057787196a19c61f63ebf9374",
+      "indexed": true,
+      "segments": 0
+    },
+    {
+      "id": "d6d17ffe11deac7022bc4af854e50c019a0ab47f9ea4c5de6e8527a86f11fe9d",
+      "indexed": true,
+      "segments": 0
+    },
+    {
+      "id": "643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc",
+      "indexed": true,
+      "segments": 1
+    },
+    {
+      "id": "102242643eb8d819e5ad36932356c340f0421f90db1b35b55221224403be8c63",
+      "indexed": true,
+      "segments": 2
+    }
+  ],
+  "scope": "Finite generated-fixture production adapter workflow, not installed capture or general semantic quality.",
+  "image_recall": 2,
+  "segment_matches": 3,
+  "seconds": 17.938447200023802
+}

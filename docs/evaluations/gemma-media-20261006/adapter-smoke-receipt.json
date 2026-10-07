@@ -1,0 +1,10 @@
+{
+  "label": "adapter-smoke",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 19.11312380002346,
+  "sampled_peak_rss": 3925843968,
+  "minimum_free_ram": 9726119936,
+  "remaining_owned_pids": []
+}

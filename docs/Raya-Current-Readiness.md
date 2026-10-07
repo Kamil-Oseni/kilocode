@@ -10,6 +10,8 @@ The latest complete General trial on prior installed1e produced the exact48-byte
 
 The everyday source branch contains newer Memory/Dream/context/self-heal work, request-ownership fixes, worker failure/Refresh feedback, consolidation cancellation feedback and audit-recovery guidance. These require full branch integration, a matching build and configured workflow testing. [The integration handoff](Raya-Everyday-Integration.md) records the source boundary, qualified checks and delivery sequence.
 
+Local-only continuation, October 7: cloud work remains stopped with released reservations and zero assignments. The exact pending Memory tree from `0ed28f662f38a8158190bbe36d8b92ac0275f00c` was frozen in a disposable directory inside the integration worktree; all source files and the Python image were hashed before each original test process. Durable settlement tests pass6/6 and receipt codec tests pass8/8, both original exit0 with process and streams joined, no force and one attempt. Evidence: `.tmp/new-pc/memory-settlement-local-75357ca8b3544785b034c40463c7a8f1/preparation.json` and its two original-parent receipts. Synthetic metadata tests establish source behavior only; they do not establish native ownership, model quality, integration or installed Memory acceptance. Root review is not independent. No models, personal capture or hardware were started. Available RAM was9.70GiB; the full General admission still requires its original10GiB minimum. Readiness remains48/100 with38 unfinished requirements.
+
 Next delivery steps:
 
 1. Finish the current failure diagnosis without weakening evidence, permission or lifecycle checks.

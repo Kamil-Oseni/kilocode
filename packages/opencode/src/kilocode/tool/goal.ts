@@ -4,6 +4,7 @@ import * as Tool from "@/tool/tool"
 import { RayaGoal } from "@/kilocode/goal"
 import { Update } from "@/kilocode/goal/plan"
 import { owned } from "@/kilocode/goal/completion-schema"
+import { citations } from "@/kilocode/goal/byte-equality"
 import * as GoalGate from "@/kilocode/goal/tool-gate"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { Session } from "@/session/session"
@@ -30,6 +31,9 @@ const failure = (err: unknown) => {
   if (err instanceof RayaGoal.NotFoundError) return "No goal is armed for this session."
   return err instanceof Error ? err.message : String(err)
 }
+
+const uncited = (reason: string | undefined, id: string) =>
+  reason?.startsWith(`Criterion ${id} requires current source and target read evidence`)
 
 export function goalTools(
   goals: Goals,
@@ -135,7 +139,12 @@ export function goalTools(
               onSuccess: (items) => items,
             }),
           )
-          const resumed = yield* recovery(ctx)
+          const hints = Array.isArray(evidence) ? yield* citations(goal.criteria, evidence) : []
+          const correction =
+            goal.auditAttempt?.accepted === false
+              ? hints.filter((hint) => uncited(goal.auditAttempt?.reason, hint.criterionID))
+              : []
+          const resumed = correction.length ? undefined : yield* recovery(ctx)
           const offset = Array.isArray(evidence)
             ? input.before === undefined
               ? 0
@@ -151,6 +160,7 @@ export function goalTools(
                 {
                   planUpdate: { expectedIntent: goal.intent ?? "unset", expectedRevision: goal.plan?.revision ?? null },
                   goal,
+                  criterionEvidence: hints,
                   eligibleEvidence: missing
                     ? {
                         error:
@@ -241,6 +251,21 @@ export function goalTools(
           )
           if (output.title !== "Completion audit rejected") return output
           if ((yield* goals.get(ctx.sessionID))?.pause === "user-control") return output
+          const saved = yield* goals.get(ctx.sessionID)
+          const evidence = yield* goals
+            .evidence(ctx.sessionID)
+            .pipe(Effect.match({ onFailure: (err) => ({ error: failure(err) }), onSuccess: (items) => items }))
+          const hints =
+            saved?.auditAttempt?.accepted === false
+              ? (Array.isArray(evidence) ? yield* citations(saved.criteria, evidence) : []).filter((hint) =>
+                  uncited(saved.auditAttempt?.reason, hint.criterionID),
+                )
+              : []
+          if (hints.length)
+            return {
+              ...output,
+              output: `${output.output}\n${JSON.stringify({ audit_correction: hints })}\nRead get_goal for the remaining criteria, then correct this same audit with these exact eligible receipts. A rejected citation audit does not require another Task or user approval.`,
+            }
           const resumed = yield* recovery(ctx, true)
           const advice =
             "A rejected audit is not a request for user approval. Continue within the existing permissions: correct the missing work or stale evidence, then read get_goal again and copy its fresh eligibleEvidence callIDs into the audit. If task_recovery is provided, invoke that Task with its task_id and correction prompt in the same retained worker. Do not block or pause merely to ask the user to repair audit citations. A real permission refusal or explicitly required human review still needs its normal approval path."

@@ -11,6 +11,10 @@ import { RayaGoal } from "@/kilocode/goal"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { KiloReadObject } from "@/kilocode/tool/read-object"
 import { read } from "@/kilocode/goal/read-artifact"
+import { citations } from "@/kilocode/goal/byte-equality"
+import { goalTools } from "@/kilocode/tool/goal"
+import { Agent } from "@/agent/agent"
+import { Truncate } from "@/tool/truncate"
 import { MessageV2 } from "@/session/message-v2"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -18,7 +22,11 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
+const it = testEffect(
+  LayerNode.compile(
+    LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node]),
+  ),
+)
 
 const scenario = (mode: string) =>
   Effect.gen(function* () {
@@ -140,6 +148,77 @@ const scenario = (mode: string) =>
         part.state.time.start = goal.createdAt - 1
       }
     }
+    const hints = yield* citations((yield* goals.get(sid))?.criteria, yield* goals.evidence(sid))
+    const ready = ["equal", "empty", "review", "reviewstale", "broader", "citations"].includes(mode)
+    expect(hints.length).toBe(ready ? 1 : 0)
+    if (ready) {
+      expect(hints[0]?.criterionID).toBe("bytes")
+      expect(hints[0]?.evidence.map((row) => row.callID)).toEqual(parts.map((part) => part.callID))
+      expect((yield* goals.get(sid))?.status).toBe("active")
+    }
+    if (mode === "citations") {
+      const ctx = {
+        sessionID: sid,
+        messageID: assistant.id,
+        agent: "auto",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const get = yield* (yield* goalTools(goals).get).init()
+      const observed = JSON.parse((yield* get.execute({}, ctx)).output)
+      expect(observed.criterionEvidence[0].evidence.map((row: { callID: string }) => row.callID)).toEqual(
+        parts.map((part) => part.callID),
+      )
+      const update = yield* (yield* goalTools(goals).update).init()
+      const rejected = yield* update.execute(
+        {
+          status: "complete",
+          summary: "Incomplete citations",
+          requirements: [
+            {
+              criterionID: "bytes",
+              requirement: "Source and target have identical original bytes",
+              passed: true,
+              evidence: [{ callID: parts[1].callID, summary: "Target only" }],
+            },
+          ],
+        },
+        ctx,
+      )
+      expect(rejected.title).toBe("Completion audit rejected")
+      expect(rejected.output).toContain('"audit_correction"')
+      expect(rejected.output).toContain(parts[0].callID)
+      expect(rejected.output).toContain(parts[1].callID)
+      expect(rejected.output).not.toContain("<task_recovery>")
+      expect((yield* goals.get(sid))?.status).toBe("active")
+      const correction = JSON.parse((yield* get.execute({}, ctx)).output)
+      expect(correction.recovery).toBeUndefined()
+      expect(correction.criterionEvidence[0].evidence.map((row: { callID: string }) => row.callID)).toEqual(
+        parts.map((part) => part.callID),
+      )
+      yield* fs.writeFileString(target, "changed after guidance")
+      expect(yield* citations((yield* goals.get(sid))?.criteria, yield* goals.evidence(sid))).toEqual([])
+      const stale = yield* update.execute(
+        {
+          status: "complete",
+          summary: "Stale citations",
+          requirements: [
+            {
+              criterionID: "bytes",
+              requirement: "Source and target have identical original bytes",
+              passed: true,
+              evidence: parts.map((part) => ({ callID: part.callID, summary: "Previously equal" })),
+            },
+          ],
+        },
+        ctx,
+      )
+      expect(stale.title).toBe("Completion audit rejected")
+      expect(stale.output).not.toContain('"audit_correction"')
+      expect((yield* goals.get(sid))?.status).toBe("active")
+    }
     const result = yield* goals
       .update(sid, {
         status: "complete",
@@ -199,6 +278,8 @@ for (const mode of [
 ]) {
   it.live(`saved byte equality checks actual current file evidence: ${mode}`, () => scenario(mode))
 }
+
+it.instance("current read pairs correct rejected audit citations without repeating work", () => scenario("citations"))
 
 it.live("saved equality schema rejects malformed baselines while model controls cannot select checks", () =>
   Effect.gen(function* () {

@@ -527,6 +527,71 @@ it.instance(
       })
       expect(JSON.parse((yield* get.execute({}, opts)).output).recovery).toBeUndefined()
       yield* sessions.setMetadata({ sessionID: parent.id, metadata })
+      const held = yield* ChiefVerification.retained({
+        sessions,
+        storage,
+        background: jobs,
+        sessionID: parent.id,
+        messageID: current.id,
+        agent: "auto",
+        planned: false,
+      })
+      expect(held && held.taskID).toBe(child.id)
+      yield* fs.writeFileString(outputfile, "a".repeat(48))
+      const capture = yield* reader.execute(
+        { filePath: outputfile },
+        {
+          ...opts,
+          sessionID: child.id,
+          messageID: terminal.id,
+          callID: "read-guidance",
+          agent: "code",
+        },
+      )
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: child.id,
+        messageID: terminal.id,
+        type: "tool",
+        tool: "read",
+        callID: "read-guidance",
+        state: {
+          status: "completed",
+          input: { filePath: outputfile },
+          title: capture.title,
+          output: capture.output,
+          metadata: capture.metadata,
+          time: { start: Date.now(), end: Date.now() },
+        },
+      })
+      const paired = yield* update.execute(
+        {
+          ...input,
+          requirements: [
+            {
+              ...input.requirements[0],
+              evidence: [{ callID: "read-guidance", summary: "Target only" }],
+            },
+          ],
+        },
+        opts,
+      )
+      expect(paired.title).toBe("Completion audit rejected")
+      expect(paired.output).toContain('"audit_correction"')
+      expect(paired.output).not.toContain("<task_recovery>")
+      const grouped = JSON.parse((yield* get.execute({}, opts)).output)
+      expect(grouped.recovery).toBeUndefined()
+      expect(grouped.criterionEvidence[0].evidence.map((row: { callID: string }) => row.callID)).toEqual([
+        "read-0",
+        "read-guidance",
+      ])
+      expect((yield* goals.get(parent.id))?.status).toBe("active")
+      expect(yield* sessions.children(parent.id)).toHaveLength(1)
+      yield* fs.writeFileString(outputfile, "a".repeat(48) + "\n")
+      const changed = JSON.parse((yield* get.execute({}, opts)).output)
+      expect(changed.criterionEvidence).toEqual([])
+      expect(changed.recovery.task_id).toBe(child.id)
+      expect(changed.recovery.example).toContain("final newline")
       yield* goals.edit(parent.id, {
         expectedIntent: selected.intent,
         criteria: [{ id: "research", description: "Verify the research", verification: "Cite authorized results" }],

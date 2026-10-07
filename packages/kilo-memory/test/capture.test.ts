@@ -200,7 +200,7 @@ describe("memory capture parsing", () => {
     })
 
     expect(reconciled.ops.map((op) => op.key)).toEqual(["kept_fact", "replaced", " replaced_file "])
-    expect(reconciled.removes).toEqual([{ action: "remove", query: "stale_fact" }])
+    expect(reconciled.removes).toEqual([{ action: "remove", query: "project.md:Facts:stale_fact" }])
   })
 
   test("merges fallback typed operations without duplicates", () => {
@@ -666,12 +666,10 @@ describe("memory capture parsing", () => {
     expect(
       guardReason(Object.assign(new Error("request failed"), { cause: { code: "UND_ERR_HEADERS_TIMEOUT" } })),
     ).toBe("transient")
-    expect(guardReason(Object.assign(new Error("request failed"), { cause: { code: "ETIMEDOUT" } }))).toBe(
+    expect(guardReason(Object.assign(new Error("request failed"), { cause: { code: "ETIMEDOUT" } }))).toBe("transient")
+    expect(guardReason(Object.assign(new Error("failed after 2 attempts"), { errors: [{ statusCode: 504 }] }))).toBe(
       "transient",
     )
-    expect(
-      guardReason(Object.assign(new Error("failed after 2 attempts"), { errors: [{ statusCode: 504 }] })),
-    ).toBe("transient")
     expect(guardReason(new Error("set request timeout to 30000"))).toBeUndefined()
     expect(guardReason(new Error("request timed out"))).toBe("transient")
     expect(guardReason(Object.assign(new Error("request failed"), { cause: new Error("connect timeout") }))).toBe(

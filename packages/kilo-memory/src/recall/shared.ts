@@ -42,7 +42,7 @@ export namespace MemoryShared {
 
   export function source(input: { file: MemorySchema.Source; text: string }): SourceItem[] {
     return MemoryMarkdown.parse(input.text).map((item) => ({
-      id: `${input.file}:${item.section}:${item.key}`,
+      id: MemoryFiles.inventoryKey({ file: input.file, section: item.section, key: item.key }),
       file: input.file,
       section: item.section,
       key: item.key,

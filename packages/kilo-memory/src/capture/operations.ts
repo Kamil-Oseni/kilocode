@@ -97,7 +97,7 @@ export namespace MemoryOperations {
 
   /** Canonical stored id for an add op: same file/section/key normalization apply uses to write the line. */
   export function id(input: Add) {
-    return `${source(input)}:${heading(input)}:${key(input.key)}`
+    return MemoryFiles.inventoryKey({ file: source(input), section: heading(input), key: key(input.key) })
   }
 
   type Target = {
@@ -329,14 +329,31 @@ export namespace MemoryOperations {
   /** Resolve an auto-capture batch into safe-to-apply adds plus the removes worth honoring.
    * - adds pass through (an upsert on an existing key updates it in place during apply);
    * - a remove superseded by a same-batch add on the same key is dropped (the add already updates it);
-   * - a remove whose query exactly matches an existing entry key/id is kept (bounded, auditable);
+   * - a remove matching one existing entry is bound to its full stored id;
+   * - ambiguous bare keys are dropped so unrelated facts sharing a key survive;
    * - any fuzzy remove that matches no existing key is dropped (hard removes stay explicit-only). */
   export function reconcile(input: { ops: Op[]; keys: Iterable<string> }): { ops: Add[]; removes: Remove[] } {
     const keys = new Set(input.keys)
+    const aliases = new Map<string, Set<string>>()
+    for (const id of keys) {
+      const split = id.indexOf(":")
+      const end = id.lastIndexOf(":")
+      if (split < 0 || end <= split) continue
+      const file = id.slice(0, split)
+      if (!(MemorySchema.Sources as readonly string[]).includes(file)) continue
+      const name = id.slice(end + 1)
+      for (const alias of [id, name, `${file}:${name}`]) {
+        const matches = aliases.get(alias) ?? new Set<string>()
+        matches.add(id)
+        aliases.set(alias, matches)
+      }
+    }
     const adds = input.ops.filter((item): item is Add => item.action === "add")
     const superseded = new Set<string>()
     for (const add of adds) {
       if (add.key) superseded.add(add.key.trim())
+      superseded.add(id(add))
+      superseded.add(key(add.key))
       if (add.file) superseded.add(`${add.file}:${add.section ?? ""}:${add.key.trim()}`)
     }
     const seen = new Set<string>()
@@ -347,8 +364,12 @@ export namespace MemoryOperations {
       if (!query || seen.has(query)) continue
       if (superseded.has(query)) continue
       if (!keys.has(query)) continue
-      seen.add(query)
-      removes.push({ action: "remove", query })
+      const matches = aliases.get(query)
+      if (matches?.size !== 1) continue
+      const exact = [...matches][0]
+      if (superseded.has(exact) || seen.has(exact)) continue
+      seen.add(exact)
+      removes.push({ action: "remove", query: exact })
     }
     return { ops: adds, removes }
   }

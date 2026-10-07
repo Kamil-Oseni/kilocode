@@ -156,6 +156,7 @@ class Library:
             db.executemany('INSERT OR IGNORE INTO meta VALUES (?,?)', expected.items())
             db.execute('CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, kind TEXT NOT NULL, relative TEXT NOT NULL, sha256 TEXT NOT NULL, title TEXT NOT NULL, origin TEXT NOT NULL, imported REAL NOT NULL, vector BLOB)')
             db.execute('CREATE TABLE IF NOT EXISTS tombstones (id TEXT PRIMARY KEY, removed REAL NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS segments (id TEXT NOT NULL, start REAL NOT NULL, end REAL NOT NULL, vector BLOB NOT NULL, PRIMARY KEY(id,start,end))')
 
     @contextmanager
     def connect(self):
@@ -288,6 +289,66 @@ class Library:
             self.item(item['id'])
         return result
 
+    def publish_segments(self, key, rows, space):
+        if not isinstance(space, dict) or type(space.get('dimensions')) is not int or space != {'model': MODEL, 'revision': REVISION, 'dimensions': DIMENSIONS}:
+            raise ValueError('Media embeddings belong to a different model space.')
+        if not isinstance(rows, list) or not 1 <= len(rows) <= 32:
+            raise ValueError('Supply at most 32 timestamped media embeddings.')
+        item = self.item(key)
+        decoded = inspect(self.root / item['relative'])
+        if decoded['sha256'] != item['sha256'] or decoded['kind'] not in ('audio', 'video'):
+            raise ValueError('Segment source differs from the approved recording or clip.')
+        expected = {(row['start'], row['end']) for row in decoded['segments']}
+        values = []
+        seen = set()
+        for row in rows:
+            if not isinstance(row, dict) or set(row) != {'start', 'end', 'sha256', 'vector'} or any(type(row[field]) not in (int, float) or not math.isfinite(row[field]) for field in ('start', 'end')):
+                raise ValueError('Malformed media segment.')
+            span = (row['start'], row['end'])
+            if row['sha256'] != item['sha256'] or span not in expected or span in seen:
+                raise ValueError('Media segment differs from decoded source timestamps.')
+            values.append((key, *span, vector(row['vector'])))
+            seen.add(span)
+        if seen != expected:
+            raise ValueError('Publish all decoded segments together.')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self.item(key)
+            db.execute('DELETE FROM segments WHERE id=?', (key,))
+            db.executemany('INSERT INTO segments VALUES (?,?,?,?)', values)
+
+    def search_segments(self, query, space, top=5):
+        if not isinstance(space, dict) or type(space.get('dimensions')) is not int or space != {'model': MODEL, 'revision': REVISION, 'dimensions': DIMENSIONS}:
+            raise ValueError('Query belongs to a different embedding space.')
+        if type(top) is not int or not 1 <= top <= 10:
+            raise ValueError('Media search top must be from one to ten.')
+        query = struct.unpack('<' + 'f' * DIMENSIONS, vector(query))
+        with self.connect() as db:
+            rows = list(db.execute('SELECT segments.id,start,end,segments.vector FROM segments JOIN items USING(id) WHERE id NOT IN (SELECT id FROM tombstones) ORDER BY id,start,end LIMIT 4097'))
+        if len(rows) > 4096:
+            raise ValueError('Pilot media library exceeds 4096 segments.')
+        ranked = []
+        for key, start, end, raw in rows:
+            if not all(type(value) in (int, float) and math.isfinite(value) for value in (start, end)) or not 0 <= start < end <= 60:
+                raise ValueError('Stored segment timestamp is invalid.')
+            values = list(struct.unpack('<' + 'f' * DIMENSIONS, raw))
+            vector(values)
+            ranked.append(dict(id=key, start=start, end=end, similarity=sum(a * b for a, b in zip(query, values))))
+        ranked.sort(key=lambda row: (-row['similarity'], row['id'], row['start']))
+        result = []
+        decoded = {}
+        for row in ranked[:top]:
+            item = self.item(row['id'])
+            if row['id'] not in decoded:
+                decoded[row['id']] = inspect(self.root / item['relative'])
+            source = decoded[row['id']]
+            if source['sha256'] != item['sha256'] or dict(start=row['start'], end=row['end']) not in source['segments']:
+                raise ValueError('Stored segment differs from decoded source timestamps.')
+            result.append(dict(item, **row, path=str(self.root / item['relative'])))
+        for item in result:
+            self.item(item['id'])
+        return result
+
     def forget(self, key):
         with self.connect() as db:
             present = db.execute('SELECT 1 FROM items WHERE id=?', (key,)).fetchone()
@@ -310,4 +371,5 @@ class Library:
                     raise ValueError('Attachment snapshot changed; preserve it for review.')
                 target.unlink()
             db.execute('DELETE FROM items WHERE id=?', (key,))
+            db.execute('DELETE FROM segments WHERE id=?', (key,))
         return {'id': key, 'forgotten': True}

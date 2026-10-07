@@ -28,6 +28,51 @@ class Decode(unittest.TestCase):
             file.writeframes(b'\x00\x00' * (rate * seconds))
         return path
 
+    def catalog(self):
+        root = self.root/'library'
+        root.mkdir()
+        library = module.Library(root)
+        item = library.add(self.audio(), 'Approved recording')
+        rows = [dict(start=0, end=30, sha256=item['sha256'], vector=[0.0, 1.0] + [0.0] * 766),
+                dict(start=30, end=31, sha256=item['sha256'], vector=[1.0] + [0.0] * 767)]
+        space = dict(model=module.MODEL, revision=module.REVISION, dimensions=module.DIMENSIONS)
+        return library, item, rows, space
+
+    def test_timestamped_recall_reopens_and_forgets(self):
+        library, item, rows, space = self.catalog()
+        library.publish_segments(item['id'], rows, space)
+        library = module.Library(library.root)
+        result = library.search_segments(rows[1]['vector'], space, top=1)
+        self.assertEqual((result[0]['start'], result[0]['end']), (30, 31))
+        self.assertEqual(result[0]['sha256'], item['sha256'])
+        self.assertEqual(result[0]['origin'], str(self.root/'audio.wav'))
+        self.assertTrue(Path(result[0]['path']).exists())
+        library.forget(item['id'])
+        self.assertEqual(library.search_segments(rows[1]['vector'], space), [])
+        with library.connect() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM segments').fetchone()[0], 0)
+
+    def test_invalid_segment_publication_preserves_prior_index(self):
+        library, item, rows, space = self.catalog()
+        library.publish_segments(item['id'], rows, space)
+        for invalid in ([rows[0]], [rows[0], dict(rows[1], end=32)],
+                        [rows[0], dict(rows[1], sha256='other')],
+                        [rows[0], dict(rows[1], vector=[0.0] * 768)]):
+            with self.assertRaises(ValueError):
+                library.publish_segments(item['id'], invalid, space)
+            result = library.search_segments(rows[1]['vector'], space, top=1)
+            self.assertEqual((result[0]['start'], result[0]['end']), (30, 31))
+        with self.assertRaisesRegex(ValueError, 'different model space'):
+            library.publish_segments(item['id'], rows, dict(space, dimensions=1024))
+
+    def test_altered_segment_timestamps_are_refused(self):
+        library, item, rows, space = self.catalog()
+        library.publish_segments(item['id'], rows, space)
+        with library.connect() as db:
+            db.execute('UPDATE segments SET end=32 WHERE start=30')
+        with self.assertRaisesRegex(ValueError, 'decoded source timestamps'):
+            library.search_segments(rows[1]['vector'], space, top=1)
+
     def test_decoded_image_has_content_identity(self):
         path = self.root/'image.png'
         Image.new('RGB', (128, 64), 'red').save(path)

@@ -13,7 +13,7 @@ export const images = Object.freeze({
   "retrieval_reuse/entry.py": "88d9a50d99e1ed1930847b38f79142d13e4d443b180eb616956a8d8b3b6292ce",
   "retrieval_reuse/lease.py": "308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d",
   "retrieval_reuse/living.py": "bc75c4be4d9ced06e9bca4c2408430a1d1fb084a827762e81a3b5ec0043d261a",
-  "retrieval_reuse/pool.py": "09593bba893a8bdc002f8a85bed2feec2669748fc33e22c7e8ebdc9e9ce842d2",
+  "retrieval_reuse/pool.py": "4a0c0c12964ae99ae0a949d9d561c78226a71d42e2404052abc3c8760040db1c",
   "retrieval_reuse/receipts.py": "cab18d5ac5461e045eb283f480eefbd175fa96b8b4fefe8e0353af5f4269ffa3",
   "retrieval_reuse/resident.py": "f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039",
   "retrieval_reuse/server.py": "f1cee409152d2a5832411087dea53ae8fe92857aceee86947de27ee60c8258ee",
@@ -26,7 +26,7 @@ export const catalogs = Object.freeze({
   "google--embeddinggemma-2.json": "7f28a34d9d8e9cc67372be2bc8d1c5ad4e386914e59aa18ae7351e1e95646f54",
 })
 
-export const fingerprint = "3b55eb2b3dee4e08913382792bfcfa6f0956624a89071754ee5508205dc6814d"
+export const fingerprint = "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b"
 
 /** Health correlates the selected release; original process ownership stays with the launcher. */
 export function readiness(health: Record<string, unknown>, release: unknown) {

@@ -16,7 +16,7 @@ from validation import canonical, decode, fingerprint
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGES = {'retrieval/'+name+'.py' for name in ('bootstrap', 'models', 'namespace', 'owner', 'server', 'validation', 'worker')}
-IMAGES |= {'retrieval_reuse/'+name+'.py' for name in ('bootstrap', 'lease', 'living', 'pool', 'receipts', 'resident', 'server', 'session')}
+IMAGES |= {'retrieval_reuse/'+name+'.py' for name in ('bootstrap', 'entry', 'lease', 'living', 'pool', 'receipts', 'resident', 'server', 'session')}
 CATALOGS = {'Qwen--Qwen3-Embedding-0.6B.json': '60cae741077a5b3f79f531c139674a1461bda80a5fb8ca767ec1a9ba25975b7d',
             'Qwen--Qwen3-Reranker-0.6B.json': 'ef8b5bbc099e513ad2ddcd0d20e1ce0006a87e1701228631652d278eecb3f0a3',
             'google--embeddinggemma-2.json': '7f28a34d9d8e9cc67372be2bc8d1c5ad4e386914e59aa18ae7351e1e95646f54'}

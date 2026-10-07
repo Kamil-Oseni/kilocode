@@ -190,7 +190,7 @@ def api(path, body, gate=None):
     images = {'server.py', 'owner.py', 'bootstrap.py', 'worker.py', 'models.py', 'validation.py', 'namespace.py'}
     if reuse:
         images = {'retrieval/'+name for name in images} | {'retrieval_reuse/'+name+'.py' for name in
-                  ('bootstrap', 'lease', 'living', 'pool', 'receipts', 'resident', 'server', 'session')}
+                  ('bootstrap', 'entry', 'lease', 'living', 'pool', 'receipts', 'resident', 'server', 'session')}
         selected = extended
     if not isinstance(sources, dict) or set(sources) != images or not isinstance(catalogs, dict) or (set(catalogs) != selected and not (not reuse and SPACE['model'] == 'qwen3-embedding-0.6b' and set(catalogs) == extended)) or not all(hexadecimal(item, 64) for item in (*sources.values(), *catalogs.values())) or fingerprint({'source_sha256': sources, 'catalog_sha256': catalogs}) != RELEASE:
         raise Retirement('Selected downstream release map differs.')

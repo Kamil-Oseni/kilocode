@@ -21,11 +21,27 @@ BEGUN = time.monotonic()
 PHASE = threading.Lock()
 
 
-RELEASES = {'memory': {'server.py': '544647a72b12536dcd7223d3bec10c49f547ead30feb36f10f9a66f14b13418e', 'index.py': 'b2059e813e6bd1a12e3ee73d5a9e3bc9c249db09688574b07ee46a44250f7f3c', 'notes.py': '59488d324200d95b0974bfa119215de627bc1b17dd3233fc6b02ab137b651923', 'policy.py': '87c931cfa7cceb7386e6d2b4b05fdacf916360fd2cb0ff590d0fccf5dd334ae2', 'admission.py': '347561aafc7467a24f7871714fc08f511e1f1509c3ade56fbfa00d71a30eae86', 'host.py': '4854ab90b06085450136e764ec1f70034ae27c597af9b6fa98a99860aa049a97', 'operations.py': '385a248e4f4e93f9e9849cc630412957428994b89e228dcf84c9833495c06296', 'retirement.py': 'f31e2535b7793f93ce0c556eb50c9bf774270bce6e86582e1c47ef661794a1da', 'namespace.py': '0df00525c58bc5c57bb11dbee48cb71785a6c40ee178a011c90a5883dbe26a72', 'dispatch.py': '50c6c5ab29519e3cdad4f226b8d5f0c5e30fc407966dd0706a10bd328f96dc35', 'historical.py': '9e62995e30d8a5df8880803597792a92b9a2684cd0723bcdc91efd23d3807d1f', 'proposals.py': 'fbfd07c0bbe71439d21399d06eac37f8712aff1f24f509697e01f39802c301e0'}, 'retrieval': {'worker.py': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721', 'models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873', 'validation.py': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2', 'server.py': '6bba99a267420d0e519d8db1f26848af16999ac7b339487f2da4fd0261e73ecb', 'namespace.py': '5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3', 'bootstrap.py': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d', 'owner.py': 'fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446'}}
+RELEASES = {'memory': {'server.py': '544647a72b12536dcd7223d3bec10c49f547ead30feb36f10f9a66f14b13418e', 'index.py': 'd0541a5861b25e13c8c6844dcf2eae85d304c547a9683db9e19640f1e1a8f49e', 'notes.py': '59488d324200d95b0974bfa119215de627bc1b17dd3233fc6b02ab137b651923', 'policy.py': '87c931cfa7cceb7386e6d2b4b05fdacf916360fd2cb0ff590d0fccf5dd334ae2', 'admission.py': '347561aafc7467a24f7871714fc08f511e1f1509c3ade56fbfa00d71a30eae86', 'host.py': '4854ab90b06085450136e764ec1f70034ae27c597af9b6fa98a99860aa049a97', 'operations.py': '385a248e4f4e93f9e9849cc630412957428994b89e228dcf84c9833495c06296', 'retirement.py': 'f31e2535b7793f93ce0c556eb50c9bf774270bce6e86582e1c47ef661794a1da', 'namespace.py': '0df00525c58bc5c57bb11dbee48cb71785a6c40ee178a011c90a5883dbe26a72', 'dispatch.py': '50c6c5ab29519e3cdad4f226b8d5f0c5e30fc407966dd0706a10bd328f96dc35', 'historical.py': '9e62995e30d8a5df8880803597792a92b9a2684cd0723bcdc91efd23d3807d1f', 'proposals.py': 'fbfd07c0bbe71439d21399d06eac37f8712aff1f24f509697e01f39802c301e0'}, 'retrieval': {'worker.py': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721', 'models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873', 'validation.py': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2', 'server.py': '6bba99a267420d0e519d8db1f26848af16999ac7b339487f2da4fd0261e73ecb', 'namespace.py': '5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3', 'bootstrap.py': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d', 'owner.py': 'fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446'}}
+
+
+REUSE = {'retrieval/bootstrap.py': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d', 'retrieval/models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873', 'retrieval/namespace.py': '5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3', 'retrieval/owner.py': 'fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446', 'retrieval/server.py': '6bba99a267420d0e519d8db1f26848af16999ac7b339487f2da4fd0261e73ecb', 'retrieval/validation.py': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2', 'retrieval/worker.py': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721', 'retrieval_reuse/bootstrap.py': 'cc424607c0b6d9b8565602d11027a4e1c65e769d06af8eaa89b581ec7ff30a6a', 'retrieval_reuse/entry.py': '88d9a50d99e1ed1930847b38f79142d13e4d443b180eb616956a8d8b3b6292ce', 'retrieval_reuse/lease.py': '308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d', 'retrieval_reuse/living.py': 'bc75c4be4d9ced06e9bca4c2408430a1d1fb084a827762e81a3b5ec0043d261a', 'retrieval_reuse/pool.py': '09593bba893a8bdc002f8a85bed2feec2669748fc33e22c7e8ebdc9e9ce842d2', 'retrieval_reuse/receipts.py': 'cab18d5ac5461e045eb283f480eefbd175fa96b8b4fefe8e0353af5f4269ffa3', 'retrieval_reuse/resident.py': 'f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039', 'retrieval_reuse/server.py': 'f1cee409152d2a5832411087dea53ae8fe92857aceee86947de27ee60c8258ee', 'retrieval_reuse/session.py': '487cbfdb0724162b1772e685350c212d16328eaa800d644a18a4de009793fb5c'}
 
 
 def reject(message):
     raise ValueError(message)
+
+
+def reusable(plan):
+    protocol = plan.get('retrieval_protocol', 'raya.retrieval.retirement.v1')
+    if protocol not in ('raya.retrieval.retirement.v1', 'raya.retrieval.request.settlement.v2'):
+        reject('Explicit retrieval protocol selection differs')
+    if 'retrieval_protocol' in plan and plan['kind'] != 'retrieval':
+        reject('Retrieval protocol belongs to Retrieval only')
+    return protocol == 'raya.retrieval.request.settlement.v2'
+
+
+def entry(plan):
+    return Path(plan['source'])/('retrieval_reuse/entry.py' if reusable(plan) else 'server.py')
 
 
 def digest(data):
@@ -170,8 +186,9 @@ def load(file, expected, managed=False):
         reject('Selected Python image differs')
     source = Path(plan['source'])
     pins = plan['source_sha256']
-    expected = 12 if plan['kind'] == 'memory' else 7
-    if len(pins) != expected or pins != RELEASES[plan['kind']]:
+    reuse = reusable(plan)
+    selected = REUSE if reuse else RELEASES[plan['kind']]
+    if len(pins) != len(selected) or pins != selected:
         reject('Exact selected service release required')
     selected = {source / name for name in pins}
     paths, images = dependencies(plan['files'], selected)
@@ -179,7 +196,7 @@ def load(file, expected, managed=False):
     if not any(path.is_relative_to(deps) for path in paths):
         reject('Reviewed dependency closure required')
     for name, sha in pins.items():
-        if Path(name).name != name or not name.endswith('.py') or digest(images[source / name]) != sha:
+        if (not reuse and Path(name).name != name) or not name.endswith('.py') or digest(images[source / name]) != sha:
             reject('Selected service source differs')
     env = plan['env']
     system = {'SystemRoot', 'WINDIR', 'COMSPEC', 'PATH', 'PATHEXT', 'OS', 'NUMBER_OF_PROCESSORS',
@@ -194,6 +211,11 @@ def load(file, expected, managed=False):
     retrieval = {'RAYA_RETRIEVAL_PORT', 'RAYA_RETRIEVAL_TOKEN_FILE', 'RAYA_RETRIEVAL_RECEIPT_ROOT',
                  'RAYA_RETRIEVAL_RECEIPT_SID', 'RAYA_RETRIEVAL_RECEIPT_GENERATIONS',
                  'RAYA_RETRIEVAL_MIN_RAM_GIB', 'RAYA_RETRIEVAL_TIMEOUT'}
+    if reuse:
+        retrieval.add('RAYA_RETRIEVAL_RELEASE_SHA256')
+        value = env.get('RAYA_RETRIEVAL_RELEASE_SHA256')
+        if not isinstance(value, str) or len(value) != 64 or any(char not in '0123456789abcdef' for char in value):
+            reject('Independent reusable release selection required')
     if set(env) - system - private - (memory if plan['kind'] == 'memory' else retrieval):
         reject('Unreviewed environment field')
     if env.get('RAYA_MEMORY_EMBEDDING_MODEL', 'qwen3-embedding-0.6b') not in ('qwen3-embedding-0.6b', 'embeddinggemma-2'):
@@ -278,7 +300,7 @@ def namespaces(plan, images):
     # never the service, tokenizer, native inference or dependency import path.
     if plan['kind'] not in ('memory', 'retrieval'):
         reject('Managed service selection required')
-    source = Path(plan['source'])/'namespace.py'
+    source = Path(plan['source'])/('retrieval/namespace.py' if reusable(plan) else 'namespace.py')
     module = {'__name__': 'managed_selected_namespace', '__file__': str(source)}
     exec(compile(images[source], str(source), 'exec'), module)
     choices = ((plan['env'], 'RAYA_RETRIEVAL_RECEIPT'),)
@@ -300,12 +322,22 @@ def namespaces(plan, images):
 
 
 class Sources(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    def __init__(self, source, images):
+    def __init__(self, source, images, reuse=False):
         self.source = source
         self.images = images
+        self.reuse = reuse
+
+    def file(self, name):
+        if not self.reuse:
+            return self.source/(name+'.py')
+        if name in ('bootstrap', 'entry', 'lease', 'living', 'pool', 'receipts', 'resident', 'server', 'session'):
+            return self.source/'retrieval_reuse'/(name+'.py')
+        if name in ('models', 'namespace', 'owner', 'validation', 'worker'):
+            return self.source/'retrieval'/(name+'.py')
+        return None
 
     def find_spec(self, fullname, path=None, target=None):
-        file = self.source / (fullname + '.py')
+        file = self.file(fullname)
         if file not in self.images:
             return None
         return importlib.util.spec_from_loader(fullname, self, origin=str(file))
@@ -314,7 +346,7 @@ class Sources(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         return None
 
     def exec_module(self, module):
-        file = self.source / (module.__name__ + '.py')
+        file = self.file(module.__name__)
         module.__file__ = str(file)
         exec(compile(self.images[file], str(file), 'exec'), module.__dict__)
 
@@ -356,11 +388,11 @@ def serve(plan, images):
 
     # The original reader starts after NumPy preload, before accepted service import.
     thread = threading.Thread(target=control, name='memory-original-control', daemon=False)
-    module = {'__name__': '__main__', '__file__': str(Path(plan['source']) / 'server.py')}
+    module = {'__name__': '__main__', '__file__': str(entry(plan))}
     try:
         prepare(plan)
         thread.start()
-        sys.meta_path.insert(0, Sources(Path(plan['source']), images))
+        sys.meta_path.insert(0, Sources(Path(plan['source']), images, reusable(plan)))
         phase('import-started')
         import uvicorn
 
@@ -389,12 +421,21 @@ def serve(plan, images):
 
         # Run the genuine retained entrypoint and its existing finally hooks.
         uvicorn.run = run
-        file = Path(plan['source']) / 'server.py'
+        file = entry(plan)
         exec(compile(images[file], str(file), 'exec'), module)
     except BaseException as error:
         errors.append(error)
     finally:
         stop()
+        runtime = module.get('RUNTIME')
+        if runtime is not None:
+            try:
+                value = runtime.close()
+                if (not value['closed'] or not value['original_coordinator_joined'] or value['ownership_retained'] or
+                        not value['request_publications_confirmed'] or not value['request_admissions_joined']):
+                    reject('Original reusable service closure unconfirmed')
+            except BaseException as error:
+                errors.append(error)
         # If an earlier original finalizer raised, still attempt every independent pool.
         for name in ('POOL', 'STORAGE'):
             pool = module.get(name)

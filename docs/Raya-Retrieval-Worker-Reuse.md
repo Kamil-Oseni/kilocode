@@ -110,6 +110,14 @@ The repeated run with the 30-second bound and retained failure evidence also pas
 
 The test requires `RAYA_REUSE_API_TEST_ADMITTED=GemmaText-20261006-root`; otherwise it skips and must not count as acceptance. Failed observations retain evidence and ordinary original cleanup. The startup observation bound is 30 seconds, and expiration does not start another process.
 
+## Sampled memory evidence
+
+The protected supervisor test now samples available physical RAM every 100 ms through `GlobalMemoryStatusEx`, retaining the original sampling thread until service process and output-reader cleanup finish. Saved reports include every sample, the minimum sampled available bytes and sampling failures; a failed sampler cannot produce a passed test. This measures system headroom, not an exact per-worker peak or VRAM allocation. It makes future pressure-abort evidence reviewable without WMI polling.
+
+The no-inference sampling run passed with 102 samples and a minimum sampled available RAM of 12.57 GiB. Evidence is `D:/Raya/Tools/Readiness-20261005/RETRIEVAL-REUSE-SUPERVISED-70984828702e4877a92f5f93131e2f99.json`; original sampler, control and output readers joined and the service exited 0.
+
+A combined edit-and-model-inference command was rejected by automatic approval review with “blocked by policy”; no part of that command ran. Model inference remains unproven. The subsequent source change and verification use only the original no-inference START/health/STOP path.
+
 ## Required integration
 
 1. Add a reusable bootstrap path only to a newly selected and protected release containing the codec. Validate the same source/catalog/checkpoint dependency images before constructing a model. Cache one selected CPU model per worker; retain the existing finite path for rollback.

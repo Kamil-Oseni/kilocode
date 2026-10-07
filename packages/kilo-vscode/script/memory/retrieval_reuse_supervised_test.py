@@ -1,5 +1,6 @@
 """Actual protected candidate START/health/STOP; no inference or installed deployment."""
 import ast
+import ctypes
 import hashlib
 import json
 import os
@@ -35,6 +36,21 @@ def row(path):
     assert all(stamp(info)[index] == stamp(opened)[index] for index in (0, 1, 2, 3, 5))
     return {'path': str(path), 'bytes': info.st_size, 'sha256': digest,
             'identity': [getattr(info, key) for key in KEYS]}
+
+
+def available():
+    class Status(ctypes.Structure):
+        _fields_ = [('length', ctypes.c_ulong), ('load', ctypes.c_ulong)] + [
+            (name, ctypes.c_ulonglong) for name in ('total', 'free', 'paging', 'available_paging',
+                                                   'virtual', 'available_virtual', 'extended')]
+    value = Status()
+    value.length = ctypes.sizeof(value)
+    library = ctypes.WinDLL('kernel32', use_last_error=True)
+    library.GlobalMemoryStatusEx.argtypes = [ctypes.POINTER(Status)]
+    library.GlobalMemoryStatusEx.restype = ctypes.c_int
+    if not library.GlobalMemoryStatusEx(ctypes.byref(value)):
+        raise OSError(ctypes.get_last_error(), 'GlobalMemoryStatusEx')
+    return value.free
 
 
 @unittest.skipUnless(os.environ.get('RAYA_REUSE_API_TEST_ADMITTED') == 'GemmaText-20261006-root',
@@ -110,6 +126,19 @@ class Tests(unittest.TestCase):
                    threading.Thread(target=read, args=(child.stderr, errors))]
         for reader in readers:
             reader.start()
+        samples = []
+        faults = []
+        sampling = threading.Event()
+        begun = time.monotonic()
+        def sample():
+            try:
+                while not sampling.is_set():
+                    samples.append({'elapsed': time.monotonic()-begun, 'available_bytes': available()})
+                    sampling.wait(0.1)
+            except BaseException as error:
+                faults.append(error)
+        sampler = threading.Thread(target=sample)
+        sampler.start()
         phases = []
         health = None
         failure = None
@@ -149,19 +178,29 @@ class Tests(unittest.TestCase):
                 reader.join()
             child.stdout.close()
             child.stderr.close()
+            sampling.set()
+            sampler.join()
         values = [json.loads(raw) for raw in lines]
         closed = [value for value in values if value.get('format') == 'raya.memory.disposable.supervisor.closed']
-        report = {'passed': failure is None and child.returncode == 0 and len(closed) == 1 and closed[0]['passed'],
+        report = {'passed': failure is None and not faults and child.returncode == 0 and len(closed) == 1 and closed[0]['passed'],
                   'models_admitted': False, 'installed_acceptance': False,
                   'protected_paths': len(paths), 'dependency_files': len(inventory['images']),
                   'health': health, 'phases': values, 'exit': child.returncode,
                   'observation_failure': type(failure).__name__ if failure is not None else None,
+                  'memory_samples': samples, 'sample_interval_seconds': 0.1,
+                  'minimum_sampled_available_bytes': min((item['available_bytes'] for item in samples), default=None),
+                  'sampling_failures': [type(error).__name__ for error in faults],
+                  'original_sampler_joined': not sampler.is_alive(),
                   'original_readers_joined': all(not reader.is_alive() for reader in readers),
                   'stderr': b''.join(errors).decode('utf-8', errors='replace')}
         output = Path('D:/Raya/Tools/Readiness-20261005')/('RETRIEVAL-REUSE-SUPERVISED-'+uuid.uuid4().hex+'.json')
         output.write_text(json.dumps(report, indent=2), encoding='utf-8')
         if failure is not None:
             raise failure
+        if faults:
+            raise BaseExceptionGroup('Original memory sampler failed', faults)
+        self.assertTrue(samples)
+        self.assertTrue(report['original_sampler_joined'])
         self.assertEqual(child.returncode, 0, report['stderr'])
         self.assertEqual(len(closed), 1)
         self.assertTrue(closed[0]['passed'], closed)

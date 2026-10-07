@@ -133,7 +133,9 @@ class Pool:
                     time.monotonic() - self.owner.last >= self.owner.idle or
                     self.owner.model != model or self.owner.kind != ticket.kind):
                 self.retire(expired)
-        headroom = GIB // 2 if self.owner is not None else 13 * GIB // 4
+        # The clean Gemma runtime exceeded the earlier 3.25 GiB loading margin
+        # in a guarded live attempt. Keep the reserve and require more cold room.
+        headroom = GIB // 2 if self.owner is not None else (5 * GIB if model == 'embeddinggemma-2' else 13 * GIB // 4)
         if available() < self.reserve + headroom:
             if self.owner is not None:
                 self.retire(True)

@@ -167,6 +167,7 @@ export namespace KiloTask {
         : []),
       `Step cap: ${input.cap}`,
       "Execution responsibility: Carry out this assigned objective directly with the available authorized tools. Unless the assignment explicitly requests delegation, do not simply forward the same objective to another worker. Nested delegation is appropriate for a distinct necessary specialist subtask or independent parallel work; retain responsibility for the complete result. A worker's report is not proof that a file was saved. Verify requested file changes through actual mutation results and readback before reporting completion; report missing capability or unverified outcomes honestly.",
+      "Return only after executing and verifying the assigned work, or after identifying a concrete blocker that prevents further authorized progress. A progress announcement such as 'Reading the file' or 'I will write the result' is not a completed task: continue with the actual authorized tool calls in this run. Do not leave executable work for the parent to request again. For a request that needs only an explanation, return that explanation directly. Respect the step cap, cancellation and permission boundaries; never fabricate actions or verification to satisfy this instruction.",
       `Expected return: ${
         input.brief?.expected_return?.trim() ||
         "A concise synthesized result with conclusions, evidence, and artifact paths; do not return the raw transcript."

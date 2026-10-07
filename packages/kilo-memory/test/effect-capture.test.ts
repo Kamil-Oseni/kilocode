@@ -774,7 +774,7 @@ describe("MemoryCapture (fake ports)", () => {
           }
         },
       }
-      await run({ root: t.root, session: session(view()), model: recording })
+      await run({ root: t.root, session: session(view({ user: "Where is the deploy target?" })), model: recording })
 
       const existing = typedSeen.indexOf("## existing_memory")
       const assistant = typedSeen.indexOf("## latest_assistant")
@@ -798,6 +798,7 @@ describe("MemoryCapture (fake ports)", () => {
           "# Project",
           "## Facts",
           ...Array.from({ length: 60 }, (_, n) => `- archive_${n} :: ${"Historical project detail. ".repeat(50)}`),
+          "- launch :: Eden launches on Friday.",
         ].join("\n"),
       )
       const prompts: string[] = []
@@ -816,7 +817,9 @@ describe("MemoryCapture (fake ports)", () => {
       }
       await run({
         root: t.root,
-        session: session(view({ assistant: "Verified: Eden release moved to Saturday." })),
+        session: session(
+          view({ user: "Move the Eden launch to Saturday.", assistant: "Verified: Eden release moved to Saturday." }),
+        ),
         model: recording,
       })
       expect(prompts).toHaveLength(2)
@@ -826,6 +829,53 @@ describe("MemoryCapture (fake ports)", () => {
         expect(prompt).toContain("## diff_summary")
         expect(prompt.endsWith("\n```")).toBe(true)
       }
+      const typed = prompts.find((prompt) => prompt.includes("## existing_memory"))!
+      expect(typed).toContain("launch :: Eden launches on Friday.")
+      expect(typed).not.toContain("archive_0")
+    } finally {
+      await t.done()
+    }
+  })
+
+  test("targeted capture still verifies generated duplicates against the complete inventory", async () => {
+    const t = await tmp()
+    try {
+      await KiloMemory.enable({ root: t.root })
+      await KiloMemory.apply({
+        root: t.root,
+        ops: [
+          {
+            action: "add",
+            file: "project.md",
+            section: "Facts",
+            key: "backup",
+            text: "Backups use encrypted snapshots nightly.",
+          },
+        ],
+      })
+      let seen = ""
+      const recording: MemoryPorts.ModelPort = {
+        resolve: () => Effect.succeed({ handle: {} }),
+        run: async ({ system, prompt }) => {
+          if (system === typedPrompt) seen = prompt
+          return {
+            text:
+              system === digestPrompt
+                ? '{"topic":"release","summary":"Eden release schedule checked."}'
+                : '{"operations":[{"op":"upsert_project_fact","key":"duplicate","value":"Backups use encrypted snapshots nightly."}],"skipped":[]}',
+            usage: USAGE,
+          }
+        },
+      }
+      const result = await run({
+        root: t.root,
+        session: session(view({ user: "What is Eden release timing?", assistant: "Eden releases on Saturday." })),
+        model: recording,
+      })
+      expect(seen).not.toContain("encrypted snapshots")
+      expect(seen).toContain("No matching stored project facts")
+      expect(result).toMatchObject({ skipped: false, operationCount: 0 })
+      expect(Object.keys((await MemoryFiles.deriveInventory(t.root)).items)).toEqual(["project.md:Facts:backup"])
     } finally {
       await t.done()
     }

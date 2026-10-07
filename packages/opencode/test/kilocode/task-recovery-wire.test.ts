@@ -717,7 +717,7 @@ it.instance(
 )
 
 it.instance(
-  "timer factory requires its own completed goal observation before work",
+  "timer and manual factories require their own completed goal observation before work",
   () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
@@ -1011,7 +1011,33 @@ it.instance(
       expect((yield* first.call("read", { filePath: file }, allowed)).title).toBe("Read goal first")
       expect(Object.keys(yield* first.resolve())).toEqual(["get_goal"])
       const manual = yield* factory("manual")
-      expect((yield* manual.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
+      expect(Object.keys(manual.catalog)).toEqual(["get_goal"])
+      expect(manual.catalog.read).toBeUndefined()
+      expect(manual.catalog.update_goal).toBeUndefined()
+      const inspected = yield* manual.call("get_goal", {})
+      expect(Object.keys(yield* manual.resolve())).toEqual(["get_goal"])
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: manual.session.id,
+        messageID: manual.assistant.id,
+        type: "tool",
+        tool: "get_goal",
+        callID: "manual-goal",
+        state: {
+          status: "completed",
+          input: {},
+          title: inspected.title,
+          output: inspected.output,
+          metadata: inspected.metadata,
+          time: { start: Date.now(), end: Date.now() },
+        },
+      })
+      const available = yield* manual.resolve()
+      expect(available.read).toBeDefined()
+      expect((yield* manual.call("read", { filePath: file }, available)).output).toContain("ACTUAL_TIMER_FILE")
+      yield* goals.edit(manual.session.id, { objective: "Review the current manual assignment" })
+      expect((yield* manual.call("read", { filePath: file }, available)).title).toBe("Read goal first")
+      expect(Object.keys(yield* manual.resolve())).toEqual(["get_goal"])
       const reply = yield* factory("timer", "reply")
       expect((yield* reply.call("read", { filePath: file })).output).toContain("ACTUAL_TIMER_FILE")
     }),

@@ -81,15 +81,16 @@ export function observation(goal: RayaGoal.State, sessionID: SessionID, messageI
   return { version: 1, sessionID, messageID, revision: goal.revision, digest: identity(goal) }
 }
 
-/** Restrict timer callbacks only; existing continuation ownership remains the authority to run a timer turn. */
+/** Require timer and manual routine callbacks to observe their goal; continuation ownership still admits the turn. */
 export const first = Effect.fn("GoalToolGate.first")(function* (
   schema: JSONSchema7 | undefined,
   session: Session.Info,
   message: MessageID,
   sessions: Pick<Session.Interface, "get" | "messages">,
 ) {
-  const timer = Option.getOrUndefined(Schema.decodeUnknownOption(record)(session.metadata?.rayaRoutine))
-  if (timer?.trigger.kind !== "timer") return (_id?: string) => Effect.succeed(true)
+  const routine = Option.getOrUndefined(Schema.decodeUnknownOption(record)(session.metadata?.rayaRoutine))
+  if (routine?.trigger.kind !== "timer" && routine?.trigger.kind !== "manual")
+    return (_id?: string) => Effect.succeed(true)
   const read = schema && owners.get(schema)
   return (id?: string) =>
     Effect.gen(function* () {
@@ -173,7 +174,7 @@ export function bind(
             return {
               title: "Read goal first",
               output:
-                "Complete get_goal in this timer session before performing other work. Its saved result establishes the current goal for this dispatch.",
+                "Complete get_goal in this routine session before performing other work. Its saved result establishes the current goal for this dispatch.",
               metadata: {},
             }
           return execute(...args)

@@ -310,6 +310,8 @@ export const make = Effect.gen(function* () {
   ) => {
     if (globalThis.process.platform === "win32") {
       return Effect.callback<void, PlatformError.PlatformError>((resume) => {
+        // kilocode_change - an original exit can precede close while buffered pipes drain
+        if (proc.exitCode !== null || proc.signalCode !== null) return resume(Effect.void) // kilocode_change
         const clock = Direct.begin() // kilocode_change
         // kilocode_change start - observe the existing taskkill callback without another reader
         const child = NodeChildProcess.exec(

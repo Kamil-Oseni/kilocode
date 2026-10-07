@@ -2,6 +2,15 @@ import type { ChildProcess } from "node:child_process"
 
 const entries = new WeakMap<ChildProcess, { bytes?: number; category?: string }>()
 const rows: Record<string, unknown>[] = []
+const ended: {
+  diagnosticOnly: true
+  retirementAuthority: false
+  pid: number | undefined
+  start: number
+  at: number
+  code: number | null
+  signal: NodeJS.Signals | null
+}[] = []
 let attempted = 0
 let dropped = 0
 let failed = 0
@@ -48,6 +57,17 @@ export function observe(
   const entry: { bytes?: number; category?: string } = {}
   entries.set(child, entry)
   const image = child.spawnfile?.split(/[\\/]/).at(-1)?.toLowerCase()
+  child.once("exit", (code, signal) => {
+    ended.push({
+      diagnosticOnly: true,
+      retirementAuthority: false,
+      pid: child.pid,
+      start: clock.start,
+      at: Date.now(),
+      code,
+      signal,
+    })
+  })
   child.once("close", (code, signal) => {
     try {
       rows.push({
@@ -94,4 +114,9 @@ export function footer() {
 
 export function records() {
   return rows
+}
+
+/** Passive original exit events; these do not establish family retirement. */
+export function exits() {
+  return ended
 }

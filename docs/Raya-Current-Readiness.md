@@ -1,12 +1,12 @@
 # Raya current readiness
 
-Snapshot: October 6, 2026. Recorded everyday readiness remains **48/100**; installed acceptance remains **2 of 9**, with seven workflow/recovery gates open. These figures measure different things. Source checks and successful packaging do not certify everyday behavior.
+Snapshot: October 7, 2026. Recorded everyday readiness remains **48/100**; historical installed workflow acceptance is **3 of 9**, with six main gates and **38 unfinished implementation items**. Source checks and successful packaging do not certify everyday behavior.
 
 ## Current delivery and next work
 
-The installed candidate is `7.4.23-snapshot+fd11bde5e9.local.1791310351751`, from integration source `fd11bde5e956fadb2dd7075b6a5c32b74ba2cf40`. Its package and installation-preservation evidence support the first two gates below. Full historical payload, archive, installation and rollback evidence is retained in [the readiness history](Raya-Readiness-History.md#latest-fd11-installed-candidate-and-workflow-boundary).
+The installed candidate is `7.4.23-snapshot+1e30555592.local.1791362202488`, from source `1e305555920d3119ab4219f691e2e4f801aae292`. Its matching package, physical installation, profile preservation, external eight-package backup and rollback availability pass. Normal-window loaded identity and complete installed General/Routine acceptance remain pending. Earlier dated checkpoints below retain their historical scope.
 
-The latest real General trial produced the exact synthetic file, but rejected completion citations referred to an earlier zero-byte write. The parent subsequently blocked instead of using the supplied correction path. Correct output alone does not pass the General gate. The integration owner is investigating recovery and nonzero child-process exits before another installed trial.
+The latest complete General trial produced the exact48-byte synthetic file with one completed Task, one parent user turn and an accepted saved Goal audit. Full proof still fails because the original Task input omitted explicit access, and three native member exits remain unknown. Fresh-task access is corrected in source; the native collector source candidate passes9 cases/363 assertions. Both fixes require a matching package and fresh full installed verification. Cloud workers remain stopped and their reservations released; work continues locally.
 
 The everyday source branch contains newer Memory/Dream/context/self-heal work, request-ownership fixes, worker failure/Refresh feedback, consolidation cancellation feedback and audit-recovery guidance. These require full branch integration, a matching build and configured workflow testing. [The integration handoff](Raya-Everyday-Integration.md) records the source boundary, qualified checks and delivery sequence.
 

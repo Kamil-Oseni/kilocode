@@ -2,6 +2,10 @@
 #include <memory>
 #include <algorithm>
 #include <psapi.h>
+#include <atomic>
+#include <exception>
+#include <mutex>
+#include <thread>
 
 // This protocol is separate from PTY cancellation. Root/controller exit never
 // terminates persistent descendants. Only an explicit correlated abort forces.
@@ -114,6 +118,26 @@ struct Member {
 
 // Match the public receipt parser's existing bound; retained handles prohibit PID reuse.
 constexpr size_t capacity = 4096;
+
+// Keep membership observation independent of control publication and image hashing.
+struct Collector {
+  std::exception_ptr failure;
+  std::atomic<bool> ended = false;
+  std::jthread worker;
+  template<class F> explicit Collector(F collect) : worker([this, collect = std::move(collect)](std::stop_token stopped) {
+    try { collect(stopped); }
+    catch (...) { failure = std::current_exception(); }
+    ended.store(true, std::memory_order_release);
+  }) {}
+  void check() {
+    if (ended.load(std::memory_order_acquire) && failure) std::rethrow_exception(failure);
+  }
+  void finish() {
+    worker.request_stop();
+    worker.join();
+    check();
+  }
+};
 
 #include "source-diagnostic.inc"
 
@@ -254,11 +278,13 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
   Handle process(child.hProcess);
   Handle thread(child.hThread);
   const auto born = birth(process.value);
-  bool resumed = false, forced = false, unknown = false, capture = false, brokered = false, exited = false, overflow = false;
-  bool rejected = false, changed = false, complete = true;
+  bool resumed = false, forced = false, capture = false, brokered = false, exited = false;
+  bool rejected = false, changed = false;
+  std::atomic<bool> unknown = false, overflow = false, complete = true;
   std::map<std::wstring, bool> refused;
   const ULONGLONG deadline = GetTickCount64() + timeout;
   std::map<DWORD, std::unique_ptr<Member>> members;
+  std::mutex mutex;
   wchar_t option[2]{};
   const bool diagnostic = GetEnvironmentVariableW(L"RAYA_SOURCE_MEMBER_DIAGNOSTICS", option, 2) == 1 && option[0] == L'1';
   Diagnostic observations;
@@ -290,23 +316,22 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
     if (!AssignProcessToJobObject(job.value, process.value)) throw std::runtime_error("Native source mandatory containment failed");
     members.emplace(child.dwProcessId, std::make_unique<Member>(OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, child.dwProcessId)));
     if (diagnostic) observations.observe(child.dwProcessId, process.value, members);
-    write(control + L".source-membership", header + ",\"state\":\"membership\",\"job\":" + std::to_string(reinterpret_cast<ULONG_PTR>(job.value)) + ",\"completeProfileCoverage\":false,\"portableCaptureAuthorized\":false}");
-    write(control + L".source-launch", header + ",\"state\":\"suspended\",\"completeProfileCoverage\":false,\"portableCaptureAuthorized\":false}");
-    while (true) {
-      if (!exited && WaitForSingleObject(process.value, 0) == WAIT_OBJECT_0) {
-        DWORD status = STILL_ACTIVE;
-        if (!GetExitCodeProcess(process.value, &status) || status == STILL_ACTIVE) throw std::runtime_error("Native source root exact exit unavailable");
-        write(control + L".source-root-exited", header + ",\"state\":\"root-exited\",\"code\":" + std::to_string(status) + ",\"completeProfileCoverage\":false,\"portableCaptureAuthorized\":false}");
-        exited = true;
-      }
-      DWORD message = 0;
-      ULONG_PTR completion = 0;
-      LPOVERLAPPED value = nullptr;
-      DWORD wait = 10;
-      while (GetQueuedCompletionStatus(port.value, &message, &completion, &value, wait)) {
-        wait = 0;
+    Handle wake(CreateEventW(nullptr, FALSE, FALSE, nullptr));
+    if (!wake.value) throw std::runtime_error("Native source membership wake unavailable");
+    Collector collector([&](std::stop_token stopped) {
+      while (true) {
+        DWORD message = 0;
+        ULONG_PTR completion = 0;
+        LPOVERLAPPED value = nullptr;
+        if (!GetQueuedCompletionStatus(port.value, &message, &completion, &value, stopped.stop_requested() ? 0 : 10)) {
+          if (GetLastError() != WAIT_TIMEOUT) throw std::runtime_error("Native source membership queue failed");
+          if (stopped.stop_requested()) return;
+          continue;
+        }
         if (completion != reinterpret_cast<ULONG_PTR>(job.value)) throw std::runtime_error("Native source membership identity changed");
+        if (!SetEvent(wake.value)) throw std::runtime_error("Native source membership wake failed");
         const DWORD id = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(value));
+        std::lock_guard guard(mutex);
         if (message == JOB_OBJECT_MSG_NEW_PROCESS) {
           ++observations.notifications;
           HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, id);
@@ -345,12 +370,28 @@ int start(DWORD controller, uint64_t parent, const std::wstring& control, const 
         }
         if (message == JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS) unknown = true;
       }
-      if (GetLastError() != WAIT_TIMEOUT) throw std::runtime_error("Native source membership queue failed");
-      for (const auto& [id, member] : members) { static_cast<void>(id); member->close(); }
+    });
+    write(control + L".source-membership", header + ",\"state\":\"membership\",\"job\":" + std::to_string(reinterpret_cast<ULONG_PTR>(job.value)) + ",\"completeProfileCoverage\":false,\"portableCaptureAuthorized\":false}");
+    write(control + L".source-launch", header + ",\"state\":\"suspended\",\"completeProfileCoverage\":false,\"portableCaptureAuthorized\":false}");
+    while (true) {
+      const auto wakeup = WaitForSingleObject(wake.value, 10);
+      if (wakeup != WAIT_OBJECT_0 && wakeup != WAIT_TIMEOUT) throw std::runtime_error("Native source membership wake wait failed");
+      collector.check();
+      if (!exited && WaitForSingleObject(process.value, 0) == WAIT_OBJECT_0) {
+        DWORD status = STILL_ACTIVE;
+        if (!GetExitCodeProcess(process.value, &status) || status == STILL_ACTIVE) throw std::runtime_error("Native source root exact exit unavailable");
+        write(control + L".source-root-exited", header + ",\"state\":\"root-exited\",\"code\":" + std::to_string(status) + ",\"completeProfileCoverage\":false,\"portableCaptureAuthorized\":false}");
+        exited = true;
+      }
+      {
+        std::lock_guard guard(mutex);
+        for (const auto& [id, member] : members) { static_cast<void>(id); member->close(); }
+      }
       JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
       if (!QueryInformationJobObject(job.value, JobObjectBasicAccountingInformation, &accounting, sizeof(accounting), nullptr))
         throw std::runtime_error("Native source membership unavailable");
       if (!accounting.ActiveProcesses) {
+        collector.finish();
         for (const auto& root : paths) {
           try { if (_wcsicmp(canonical(root).c_str(), root.c_str())) { unknown = true; changed = true; } }
           catch (const std::exception&) { unknown = true; changed = true; }

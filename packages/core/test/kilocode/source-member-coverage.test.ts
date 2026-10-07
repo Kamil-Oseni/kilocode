@@ -10,10 +10,11 @@ const digest = async (file: string) =>
     .update(await readFile(file))
     .digest("hex")
 
-for (const capture of [false, true])
-  for (const mode of ["sequential", "parallel", "large", "overflow"])
+for (const capture of [false, true, "running"] as const)
+  for (const mode of ["sequential", "parallel", "large", "overflow"]) {
+    if (capture === "running" && mode !== "large") continue
     test.skipIf(process.platform !== "win32" || process.env.RAYA_MEMBER_COVERAGE_TESTS !== "1")(
-      `zero-delay ${mode} ${capture ? "capture" : "normal"} retains every original native birth and exit`,
+      `zero-delay ${mode} ${capture === "running" ? "running capture" : capture ? "capture" : "normal"} retains every original native birth and exit`,
       async () => {
         const helper = process.env.RAYA_MEMBER_COVERAGE_HELPER
         const fixture = process.env.RAYA_MEMBER_COVERAGE_FIXTURE
@@ -57,9 +58,16 @@ for (const capture of [false, true])
         }
         const output = [collect(app.child.stdout), collect(app.child.stderr)] as const
         const close = new Promise<void>((resolve) => app.child.once("close", () => resolve()))
-        // Capture is armed before execution; normal mode exercises the same actual producer without it.
-        const admission = await (capture ? app.capture() : Promise.resolve())
+        // Exercise both pre-Go capture and real control publication during the zero-delay child workload.
+        const admission = await (capture === true ? app.capture() : Promise.resolve())
           .then(() => app.start())
+          .then(async () => {
+            if (capture !== "running") return
+            await new Promise((resolve) => setTimeout(resolve, 100))
+            expect(app.child.exitCode).toBeNull()
+            expect(await Bun.file(app.ticket.control + ".source-root-exited").exists()).toBe(false)
+            await app.capture()
+          })
           .then(
             () => ({ accepted: true as const }),
             (error: unknown) => ({ accepted: false as const, error }),
@@ -135,8 +143,8 @@ for (const capture of [false, true])
         expect(family.forced).toBe(false)
         // Windows may add console participants; exact Job accounting, not a guessed multiplier, is authority.
         expect(family.totalProcesses).toBeGreaterThanOrEqual(count + 1)
-        expect(family.capture).toBe(capture)
-        expect(legacy.capture).toBe(capture)
+        expect(family.capture).toBe(capture !== false)
+        expect(legacy.capture).toBe(capture !== false)
         expect(
           new Set(family.members.map((row: { pid: number; birth: string }) => `${row.pid}:${row.birth}`)).size,
         ).toBe(family.members.length)
@@ -190,3 +198,4 @@ for (const capture of [false, true])
       },
       180000,
     )
+  }

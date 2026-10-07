@@ -5,6 +5,7 @@ import { image, directory, normalize } from "../control/identity"
 import { release } from "../control/catalog-v2"
 import type { Setup } from "../settings"
 import { interpreter, supervisor, retrieval as release7 } from "./catalog"
+import { images, fingerprint } from "./reuse-catalog"
 
 type Ref = Readonly<{ path: string; bytes: number; sha256: string }>
 type Notes = Readonly<{ root: string; system: string; generations: Readonly<Record<string, readonly string[]>> }>
@@ -160,24 +161,29 @@ export async function notes(cfg: Descriptor, plan: Record<string, unknown>, root
   )
 }
 
-/** Two independently selected plans share assets but never an HTTP-derived owner. */
-export function paired(cfg: Descriptor, memory: Record<string, unknown>, retrieval: Record<string, unknown>) {
-  check(cfg.version === 2 && cfg.retrieval, "Explicit paired descriptor required")
+function reusable(memory: Record<string, unknown>, retrieval: Record<string, unknown>) {
+  const protocol = retrieval.retrieval_protocol ?? "raya.retrieval.retirement.v1"
   check(
-    retrieval.format === "raya.memory.managed.supervisor" &&
-      retrieval.version === 1 &&
-      retrieval.kind === "retrieval" &&
-      retrieval.execution_admitted === true &&
-      retrieval.root === cfg.root &&
-      retrieval.python_sha256 === cfg.python.sha256 &&
-      isDeepStrictEqual({ ...row(retrieval.source_sha256) }, release7),
-    "Reviewed Retrieval release differs",
+    protocol === "raya.retrieval.retirement.v1" || protocol === "raya.retrieval.request.settlement.v2",
+    "Explicit Retrieval protocol refused",
   )
-  check(isDeepStrictEqual(memory.files, retrieval.files) && Array.isArray(memory.files), "Paired assets differ")
-  check(isDeepStrictEqual(memory.directories, retrieval.directories), "Paired directory generations differ")
-  for (const ref of [cfg.python, cfg.supervisor, cfg.plan, cfg.retrieval])
-    check(normalize(ref.path).startsWith(normalize(cfg.root) + "/"), "Paired image outside selected root")
-  check(cfg.plan.path !== cfg.retrieval.path, "Separate paired plans required")
+  const reuse = protocol === "raya.retrieval.request.settlement.v2"
+  const env = row(retrieval.env)
+  const original = row(memory.env)
+  check(
+    (original.RAYA_MEMORY_RETRIEVAL_PROTOCOL ?? "raya.retrieval.retirement.v1") === protocol,
+    "Paired Retrieval protocol differs",
+  )
+  if (reuse)
+    check(
+      env.RAYA_RETRIEVAL_RELEASE_SHA256 === fingerprint &&
+        original.RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256 === fingerprint,
+      "Independently selected reusable release differs",
+    )
+  return reuse
+}
+
+function credentials(cfg: Descriptor, memory: Record<string, unknown>, retrieval: Record<string, unknown>) {
   const env = row(retrieval.env)
   const original = row(memory.env)
   check(
@@ -198,6 +204,29 @@ export function paired(cfg: Descriptor, memory: Record<string, unknown>, retriev
     original.RAYA_MEMORY_TOKEN_FILE === path.join(cfg.root, "tokens", "memory.token"),
     "Selected Memory credential path differs",
   )
+}
+
+/** Two independently selected plans share assets but never an HTTP-derived owner. */
+export function paired(cfg: Descriptor, memory: Record<string, unknown>, retrieval: Record<string, unknown>) {
+  check(cfg.version === 2 && cfg.retrieval, "Explicit paired descriptor required")
+  const reuse = reusable(memory, retrieval)
+  check(
+    retrieval.format === "raya.memory.managed.supervisor" &&
+      retrieval.version === 1 &&
+      retrieval.kind === "retrieval" &&
+      retrieval.execution_admitted === true &&
+      retrieval.root === cfg.root &&
+      retrieval.python_sha256 === cfg.python.sha256 &&
+      isDeepStrictEqual({ ...row(retrieval.source_sha256) }, reuse ? images : release7),
+    "Reviewed Retrieval release differs",
+  )
+  check(isDeepStrictEqual(memory.files, retrieval.files) && Array.isArray(memory.files), "Paired assets differ")
+  check(isDeepStrictEqual(memory.directories, retrieval.directories), "Paired directory generations differ")
+  for (const ref of [cfg.python, cfg.supervisor, cfg.plan, cfg.retrieval])
+    check(normalize(ref.path).startsWith(normalize(cfg.root) + "/"), "Paired image outside selected root")
+  check(cfg.plan.path !== cfg.retrieval.path, "Separate paired plans required")
+  const env = row(retrieval.env)
+  credentials(cfg, memory, retrieval)
   const selected = row(memory.retrieval_selection)
   for (const key of ["RAYA_RETRIEVAL_RECEIPT_ROOT", "RAYA_RETRIEVAL_RECEIPT_SID", "RAYA_RETRIEVAL_RECEIPT_GENERATIONS"])
     check(env[key] === selected[key], "Paired original namespace selection differs")
@@ -205,13 +234,27 @@ export function paired(cfg: Descriptor, memory: Record<string, unknown>, retriev
     ["memory", memory],
     ["retrieval", retrieval],
   ] as const) {
-    check(plan.source === path.join(cfg.root, "source", kind), "Paired source directory differs")
+    check(
+      plan.source === path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind])),
+      "Paired source directory differs",
+    )
     const hashes = row(plan.source_sha256)
     for (const [name, hash] of Object.entries(hashes)) {
       const candidates = memory.files.filter((value) => row(value).path === path.join(String(plan.source), name))
       check(candidates.length === 1 && row(candidates[0]).sha256 === hash, "Selected paired source file differs")
     }
   }
+}
+
+function operation(cfg: Descriptor, env: Record<string, unknown>, setup: Setup) {
+  check(
+    ((setup.version === 2 ? setup.protocol : "raya.memory.operation.v1") === "raya.memory.operation.v2"
+      ? "raya.retrieval.request.settlement.v2"
+      : "raya.retrieval.retirement.v1") === (env.RAYA_MEMORY_RETRIEVAL_PROTOCOL ?? "raya.retrieval.retirement.v1") &&
+      ((setup.version === 2 ? setup.protocol : "raya.memory.operation.v1") !== "raya.memory.operation.v2" ||
+        cfg.version === 2),
+    "Selected Memory operation protocol differs",
+  )
 }
 
 /** Public descriptor selection never reads credential files or derives a namespace from HTTP. */
@@ -249,6 +292,8 @@ export async function selection(input: Descriptor, setup: Setup) {
       setup.origin === `http://127.0.0.1:${env.RAYA_MEMORY_PORT}`,
     "Managed service root/origin differs",
   )
+
+  operation(cfg, env, setup)
   await notes(cfg, plan, setup.root)
 
   for (const kind of ["memory", "retrieval"] as const) {

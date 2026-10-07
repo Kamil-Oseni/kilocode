@@ -9,6 +9,8 @@ import { ManagedOwner, Pipes, publish } from "../../src/second-brain/managed/own
 import { descriptor, paired } from "../../src/second-brain/managed/descriptor"
 import { interpreter, supervisor, retrieval } from "../../src/second-brain/managed/catalog"
 import { release } from "../../src/second-brain/control/catalog-v2"
+import { images, catalogs, fingerprint, readiness } from "../../src/second-brain/managed/reuse-catalog"
+import { document, canonical, sha } from "../../src/second-brain/control/frames"
 import { protect } from "../../src/second-brain/control/protection"
 import { observe } from "../../src/second-brain/control/identity"
 import { packaged } from "../../src/second-brain/control/index"
@@ -115,6 +117,74 @@ test("paired descriptor requires explicit Retrieval ref and exact selected relea
   expect(descriptor(single).version).toBe(1)
   expect(() => paired(descriptor(single), value.memory, value.plan)).toThrow()
 })
+test("reusable selection binds exact source closure, protocol and independent release", () => {
+  const value = plans("C:\\Synthetic\\raya-memory-managed-reuse")
+  const files = [
+    ...value.memory.files.filter((item) => item.path.includes("memory" + path.sep)),
+    ...Object.entries(images).map(([name, sha256]) => ({ path: path.join(value.cfg.root, "source", name), sha256 })),
+  ]
+  const memory = {
+    ...value.memory,
+    files,
+    env: {
+      ...value.memory.env,
+      RAYA_MEMORY_RETRIEVAL_PROTOCOL: "raya.retrieval.request.settlement.v2",
+      RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256: fingerprint,
+    },
+  }
+  const plan = {
+    ...value.plan,
+    files,
+    retrieval_protocol: "raya.retrieval.request.settlement.v2",
+    source: path.join(value.cfg.root, "source"),
+    source_sha256: images,
+    env: { ...value.plan.env, RAYA_RETRIEVAL_RELEASE_SHA256: fingerprint },
+  }
+  paired(value.cfg, memory, plan)
+  for (const change of [
+    { retrieval_protocol: "unknown" },
+    { retrieval_protocol: "raya.retrieval.retirement.v1" },
+    { source: value.plan.source },
+    { source_sha256: retrieval },
+    { env: { ...plan.env, RAYA_RETRIEVAL_RELEASE_SHA256: "a".repeat(64) } },
+  ])
+    expect(() => paired(value.cfg, memory, { ...plan, ...change })).toThrow()
+  expect(() => paired(value.cfg, value.memory, plan)).toThrow()
+  expect(() =>
+    paired(
+      value.cfg,
+      { ...memory, env: { ...memory.env, RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256: "b".repeat(64) } },
+      plan,
+    ),
+  ).toThrow()
+  const missing = files.filter((item) => item.path !== path.join(plan.source, "retrieval_reuse/entry.py"))
+  expect(() => paired(value.cfg, { ...memory, files: missing }, { ...plan, files: missing })).toThrow()
+})
+
+test("reusable pins match source bytes and readiness cannot adopt a different release", async () => {
+  for (const [name, digest] of Object.entries(images))
+    expect(sha(await readFile(path.join("script/memory", name)))).toBe(digest)
+  const parsed = document(Buffer.from(JSON.stringify({ source_sha256: images, catalog_sha256: catalogs })))
+  expect(sha(canonical(parsed.tree, parsed.text))).toBe(fingerprint)
+  const health = {
+    ownership_protocol: "raya.retrieval.request.settlement.v2",
+    selected_release_sha256: fingerprint,
+    catalog_sha256: catalogs,
+    retirement_unconfirmed: false,
+    draining: false,
+  }
+  readiness(health, fingerprint)
+  for (const change of [
+    { ownership_protocol: "raya.retrieval.retirement.v1" },
+    { selected_release_sha256: "a".repeat(64) },
+    { catalog_sha256: {} },
+    { retirement_unconfirmed: true },
+    { draining: true },
+  ])
+    expect(() => readiness({ ...health, ...change }, fingerprint)).toThrow()
+  expect(() => readiness(health, "b".repeat(64))).toThrow()
+})
+
 async function fixture(reserved = true) {
   const root = await mkdtemp(path.join(tmpdir(), "raya-memory-control-paired-"))
   await protect(root)

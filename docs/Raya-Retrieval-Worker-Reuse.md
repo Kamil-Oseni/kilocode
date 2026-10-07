@@ -94,6 +94,12 @@ The supervisor retains its flat twelve-file Memory and seven-file finite retriev
 
 Three entry construction tests run the actual fixed interpreter from disposable capsules with real protected receipt ACLs. They verify configuration without starting a service/model and refusal of stale release, foreign/oversized token, invalid reserve and prior journal. Four supervisor tests verify exact source admission and loader selection using fixture protection documents; those documents do not prove native provisioning or execution. Existing legacy release, phase, control-reader cleanup, finite inventory and Memory source-pin checks pass, as does the eight-test API suite with its expanded source release. A fully protected dependency cohort, matching managed client provisioning/descriptor, actual START/STOP service execution, peak tracing and successful warm inference remain required before deployment.
 
+## Managed launcher selection implemented
+
+The paired descriptor now explicitly selects either the legacy seven-image retrieval plan or the reusable sixteen-image source tree. Both Memory and Retrieval must select the same protocol; reusable plans must independently name the exact source/catalog fingerprint in both environments. Every selected source image must occur exactly once in the shared asset inventory. Memory operation v2 requires the paired descriptor and settlement protocol. The original launcher also checks reusable health against the independently selected fingerprint, catalog hashes, protocol and unfenced/undrained state while retaining its original child and pipes.
+
+The focused paired checks now include source-byte/fingerprint validation and refusal of mixed protocols, stale release, missing entry image, foreign source directory and uncertain/draining health. These checks validate selection and correlation, not successful inference or native ownership from HTTP. Protected provisioning, actual supervised START/STOP, peak tracing, successful warm inference transport and installed acceptance are still required.
+
 ## Required integration
 
 1. Add a reusable bootstrap path only to a newly selected and protected release containing the codec. Validate the same source/catalog/checkpoint dependency images before constructing a model. Cache one selected CPU model per worker; retain the existing finite path for rollback.

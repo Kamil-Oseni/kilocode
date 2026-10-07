@@ -4,7 +4,13 @@ import { canonical, check, child, decode, object, sha } from "./control/frames"
 type Value = ReturnType<typeof decode>["value"]
 type Row = { [key: string]: Value }
 type Identity = Readonly<{ request: string; epoch: string; release: string; digest: string }>
-type Selection = Identity & Readonly<{ kind: "search" | "sync"; downstream?: readonly Identity[]; budget?: number }>
+type Selection = Identity &
+  Readonly<{
+    kind: "search" | "sync"
+    downstream?: readonly Identity[]
+    budget?: number
+    protocol?: "raya.memory.operation.v1" | "raya.memory.operation.v2"
+  }>
 const counts = ["files", "chunks", "new_embeddings", "reused_embeddings"]
 const common = [
   "format",
@@ -141,6 +147,91 @@ function certificate(value: Value, node: Node, text: string, selected?: Identity
   fingerprint(row, node, text)
   return row
 }
+function living(row: Row, node: Node, text: string) {
+  hex(row.lease, 32)
+  integer(row, "sequence", node, text, 32)
+  check(
+    row.sequence !== 0 &&
+      row.original_process_running === true &&
+      row.original_job_membership_observed === true &&
+      row.selected_images_unchanged === true,
+    "Memory original live worker observation differs",
+  )
+  const current = fields(row.worker, ["birth_filetime", "image"])
+  check(
+    typeof current.birth_filetime === "string" &&
+      /^[1-9]\d{0,19}$/.test(current.birth_filetime) &&
+      BigInt(current.birth_filetime) <= 0xffffffffffffffffn &&
+      typeof current.image === "string" &&
+      current.image.length > 0 &&
+      Array.from(current.image).length <= 32767 &&
+      !current.image.includes("\0"),
+    "Memory original worker identity differs",
+  )
+}
+function settlement(value: Value, node: Node, text: string, selected?: Identity) {
+  const row = object(value)
+  outcome(row, "inference_outcome")
+  const complete = row.inference_outcome === "completed"
+  if (!complete) check(typeof row.worker_created === "boolean", "Memory worker evidence requires booleans")
+  fields(row, [
+    "format",
+    "version",
+    "request",
+    "owner_epoch",
+    "selected_release_sha256",
+    "phase",
+    "receipt_sha256",
+    "request_sha256",
+    "inference_outcome",
+    ...(complete
+      ? [
+          "lease",
+          "sequence",
+          "original_process_running",
+          "original_job_membership_observed",
+          "selected_images_unchanged",
+          "worker",
+          "result_sha256",
+        ]
+      : ["worker_created", "cleanup_outcome", "joins_observed", ...(row.worker_created ? ["lease", ...worker] : [])]),
+  ])
+  integer(row, "version", node, text, 2)
+  check(
+    row.format === "raya.retrieval.request.settlement" && row.version === 2 && row.phase === "settled",
+    "Memory downstream protocol differs",
+  )
+  identity(
+    row,
+    selected ?? {
+      request: String(row.request),
+      epoch: String(row.owner_epoch),
+      release: String(row.selected_release_sha256),
+      digest: String(row.request_sha256),
+    },
+  )
+  if (complete) living(row, node, text)
+  if (!complete && row.worker_created) {
+    hex(row.lease, 32)
+    check(
+      row.cleanup_outcome === "joined" && row.joins_observed === true,
+      "Memory original worker joins are unconfirmed",
+    )
+    integer(row, "root_exit", node, text, 0xffffffff)
+    integer(row, "job_active", node, text, 0)
+    check(
+      worker.filter((key) => key !== "root_exit" && key !== "job_active").every((key) => row[key] === true),
+      "Memory original worker cleanup differs",
+    )
+  }
+  if (!complete && !row.worker_created)
+    check(
+      row.cleanup_outcome === "not_started" && row.joins_observed === false,
+      "Memory never-created worker evidence differs",
+    )
+  fingerprint(row, node, text)
+  return row
+}
 function downstream(row: Row, node: Node, text: string, selected: Selection) {
   check(Array.isArray(row.downstream) && row.downstream.length <= 1024, "Memory downstream proofs required")
   const nodes = child(node, "downstream").children ?? []
@@ -152,7 +243,8 @@ function downstream(row: Row, node: Node, text: string, selected: Selection) {
     ids.add(current.request)
     const expected = selected.downstream?.find((item) => item.request === current.request)
     check(!selected.downstream || expected, "Memory downstream selection differs")
-    certificate(current, nodes[index], text, expected)
+    if (selected.protocol === "raya.memory.operation.v2") settlement(current, nodes[index], text, expected)
+    if (selected.protocol !== "raya.memory.operation.v2") certificate(current, nodes[index], text, expected)
   })
   if (selected.downstream)
     check(
@@ -253,6 +345,12 @@ function freeze(value: Value): Value {
 // response; never reconstruct these fingerprints from JS Number projections.
 export function parse(raw: Uint8Array, selected: Selection, mode: "response" | "terminal" | "pending") {
   check(
+    selected.protocol === undefined ||
+      selected.protocol === "raya.memory.operation.v1" ||
+      selected.protocol === "raya.memory.operation.v2",
+    "Memory selected protocol differs",
+  )
+  check(
     ["response", "terminal", "pending"].includes(mode) && ["search", "sync"].includes(selected.kind),
     "Memory operation selection mode differs",
   )
@@ -263,7 +361,7 @@ export function parse(raw: Uint8Array, selected: Selection, mode: "response" | "
   check(Buffer.byteLength(canonical(node, decoded.text)) <= 65536, "Memory operation exceeds its publication bound")
   const operation = mode === "response" ? object(row.operation) : row
   check(
-    operation.format === "raya.memory.operation.v1" && operation.kind === selected.kind,
+    operation.format === (selected.protocol ?? "raya.memory.operation.v1") && operation.kind === selected.kind,
     "Memory operation protocol differs",
   )
   identity(operation, selected)

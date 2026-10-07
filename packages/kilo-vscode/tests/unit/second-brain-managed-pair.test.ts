@@ -184,14 +184,21 @@ test("reusable pins match source bytes and readiness cannot adopt a different re
     draining: false,
   }
   readiness(health, fingerprint)
+  readiness(document(Buffer.from(JSON.stringify(health))).value as Record<string, unknown>, fingerprint)
   for (const change of [
     { ownership_protocol: "raya.retrieval.retirement.v1" },
     { selected_release_sha256: "a".repeat(64) },
     { catalog_sha256: {} },
+    { catalog_sha256: null },
+    { catalog_sha256: [] },
+    { catalog_sha256: { ...catalogs, "google--embeddinggemma-2.json": "a".repeat(64) } },
     { retirement_unconfirmed: true },
     { draining: true },
-  ])
+  ]) {
     expect(() => readiness({ ...health, ...change }, fingerprint)).toThrow()
+    const parsed = document(Buffer.from(JSON.stringify({ ...health, ...change })))
+    expect(() => readiness(parsed.value as Record<string, unknown>, fingerprint)).toThrow()
+  }
   expect(() => readiness(health, "b".repeat(64))).toThrow()
 })
 

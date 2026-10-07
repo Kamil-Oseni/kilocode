@@ -34,7 +34,10 @@ export function readiness(health: Record<string, unknown>, release: unknown) {
     release === fingerprint &&
       health.ownership_protocol === "raya.retrieval.request.settlement.v2" &&
       health.selected_release_sha256 === fingerprint &&
-      isDeepStrictEqual(health.catalog_sha256, catalogs) &&
+      health.catalog_sha256 !== null &&
+      typeof health.catalog_sha256 === "object" &&
+      !Array.isArray(health.catalog_sha256) &&
+      isDeepStrictEqual({ ...health.catalog_sha256 }, catalogs) &&
       health.retirement_unconfirmed === false &&
       health.draining === false,
     "Selected reusable Retrieval readiness differs",

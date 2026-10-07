@@ -22967,6 +22967,7 @@ export type KilocodeGoalGetResponses = {
     selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
+    pause?: "user-control" | "agent"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -23747,6 +23748,7 @@ export type KilocodeGoalUpdateResponses = {
     selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
+    pause?: "user-control" | "agent"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -24494,6 +24496,7 @@ export type KilocodeGoalCreateResponses = {
     selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
+    pause?: "user-control" | "agent"
     createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     activeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"

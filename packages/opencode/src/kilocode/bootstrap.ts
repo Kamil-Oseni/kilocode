@@ -130,14 +130,17 @@ export namespace KilocodeBootstrap {
           if (attention) yield* InstanceState.get(attention)
           if (routines) yield* routines()
           yield* Effect.logInfo("Raya goal and routine initialization complete")
-          yield* RayaGoalContinuation.restore({
+          const opts = {
             database,
             directory: Instance.directory,
             sessions,
             storage,
             enabled: () => config.get().pipe(Effect.map((cfg) => cfg.raya_routing?.goal_continuation !== false)),
             idle: (id) => runs.inspect(id).pipe(Effect.map((state) => state.phase === "idle")),
-          }).pipe(
+          } satisfies Parameters<typeof RayaGoalContinuation.restore>[0]
+          // Persist aborted Routine debt before the first request can observe cold state.
+          yield* RayaGoalContinuation.restore({ ...opts, bookkeeping: true })
+          yield* RayaGoalContinuation.restore(opts).pipe(
             Effect.catchCause((cause) =>
               Cause.hasInterrupts(cause)
                 ? Effect.interrupt

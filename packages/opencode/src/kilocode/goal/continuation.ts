@@ -551,6 +551,7 @@ export namespace RayaGoalContinuation {
     sessions: Pick<Session.Interface, "get" | "messages" | "children">
     enabled: () => Effect.Effect<boolean>
     idle: (sessionID: SessionID) => Effect.Effect<boolean>
+    bookkeeping?: boolean
     run?: Run
     loop?: Loop
   }) {
@@ -584,6 +585,7 @@ export namespace RayaGoalContinuation {
                   }
                 }
               }
+              if (input.bookkeeping) return
               if (
                 yield* wake({
                   ...input,

@@ -76,11 +76,12 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
           yield* sessions.updateMessage({ ...latest, id: MessageID.ascending(), error: undefined })
         }
         const before = yield* goals.get(session.id)
-        const restore = () =>
+        const restore = (bookkeeping = false) =>
           RayaGoalContinuation.restore({
             directory: kind === "foreign" ? session.directory + "/other" : session.directory,
             storage,
             sessions,
+            bookkeeping,
             enabled: () => Effect.succeed(true),
             idle: () => Effect.succeed(kind !== "busy"),
             run: async () => {
@@ -90,7 +91,7 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
               throw new Error("Unexpected replay")
             },
           })
-        yield* restore()
+        yield* restore(true)
         const after = yield* goals.get(session.id)
         if (kind === "aborted") {
           expect(after?.dispatch?.id).toBe(dispatch.id)

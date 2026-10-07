@@ -57,7 +57,40 @@ test("exact schemas and unrepaired arguments; strict outer choice/allowlist/boun
   expect(() => ToolEnvelope.schema([...tools, ...tools], "auto")).toThrow()
 })
 
+test("Goal mutations reject entire concurrent envelopes and preserve independent calls", () => {
+  const names = new Set(["update_goal", "read"])
+  const mutation = { name: "update_goal", arguments: { criterionID: "verified" } }
+  const read = { name: "read", arguments: { criterionID: "other" } }
+  expect(
+    ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls: [mutation] }), names, "required").tool_calls,
+  ).toEqual([{ function: mutation }])
+  for (const calls of [
+    [mutation, mutation],
+    [mutation, read],
+    [read, mutation],
+  ])
+    expect(() => ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls }), names, "required")).toThrow(
+      "Goal mutations require a separate single-call envelope",
+    )
+  expect(
+    ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls: [read, read] }), names, "required").tool_calls,
+  ).toEqual([{ function: read }, { function: read }])
+  const definitions = [...tools, { function: { name: "read", parameters: tools[0].function.parameters } }]
+  const batches = ToolEnvelope.schema(definitions, "required").anyOf.filter(
+    (branch) => branch.properties.kind.const === "tools",
+  )
+  expect(batches).toHaveLength(2)
+  for (const branch of batches) {
+    if (!("calls" in branch.properties)) throw new Error("Missing calls schema")
+    const calls = branch.properties.calls
+    expect(calls.items.anyOf.map((item) => item.properties.name.const)).toEqual(
+      calls.maxItems === 1 ? ["update_goal"] : ["read"],
+    )
+  }
+})
+
 test("actual HTTP envelope auto/required stream/nonstream metadata and preflight collision", async () => {
+  const batch = [{ ...tools[0], function: { ...tools[0].function, name: "inspect" } }]
   const rows: Record<string, unknown>[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -73,8 +106,8 @@ test("actual HTTP envelope auto/required stream/nonstream metadata and preflight
         : {
             kind: "tools",
             calls: [
-              { name: "update_goal", arguments: { criterionID: "verified" } },
-              { name: "update_goal", arguments: { criterionID: "other" } },
+              { name: "inspect", arguments: { criterionID: "verified" } },
+              { name: "inspect", arguments: { criterionID: "other" } },
             ],
           }
       return new Response(JSON.stringify(row(JSON.stringify(content))) + (body.stream ? "\n" : ""))
@@ -86,7 +119,7 @@ test("actual HTTP envelope auto/required stream/nonstream metadata and preflight
       for (const choice of ["auto", "required"]) {
         const response = await send(`${server.url}v1/chat/completions`, {
           method: "POST",
-          body: JSON.stringify(request(choice, stream)),
+          body: JSON.stringify({ ...request(choice, stream), tools: batch }),
         })
         const text = await response.text()
         const value = stream ? JSON.parse(text.split("\n")[0].slice(6)) : JSON.parse(text)

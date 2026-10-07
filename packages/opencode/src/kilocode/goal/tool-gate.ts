@@ -26,23 +26,32 @@ export const prepare = Effect.fn("GoalToolGate.prepare")(function* (
   const read = schema && owners.get(schema)
   const goal = read ? yield* read(session) : undefined
   const dispatch = goal?.dispatch
-  if (!read || !goal || !dispatch || dispatch.messageID !== message || dispatch.intent !== goal.intent)
-    return () => Effect.succeed(false)
+  if (!read || !goal || !dispatch || dispatch.messageID !== message) return () => Effect.succeed(false)
   return () =>
     Effect.gen(function* () {
-      if ((yield* current()) !== message) return false
-      const saved = yield* read(session)
-      if ((yield* current()) !== message) return false
-      return (
-        saved?.createdAt === goal.createdAt &&
-        saved.intent === goal.intent &&
-        saved.dispatch?.id === dispatch.id &&
-        saved.dispatch.messageID === message &&
-        saved.dispatch.intent === dispatch.intent &&
-        saved.status === "complete" &&
-        saved.auditAttempt?.accepted === true &&
-        saved.audit?.verifiedAt !== undefined
-      )
+      while (true) {
+        if ((yield* current()) !== message) return false
+        const saved = yield* read(session)
+        if ((yield* current()) !== message) return false
+        // User controls renew intent while retaining this dispatch; completion still requires the captured intent.
+        if (
+          saved?.createdAt !== goal.createdAt ||
+          saved.dispatch?.id !== dispatch.id ||
+          saved.dispatch.messageID !== message ||
+          saved.dispatch.intent !== dispatch.intent
+        )
+          return false
+        if (saved.status === "paused" && saved.pause === "user-control") {
+          yield* Effect.sleep(100)
+          continue
+        }
+        return (
+          saved.intent === goal.intent &&
+          saved.status === "complete" &&
+          saved.auditAttempt?.accepted === true &&
+          saved.audit?.verifiedAt !== undefined
+        )
+      }
     })
 })
 

@@ -1,7 +1,7 @@
 import { afterAll, expect } from "bun:test"
 import path from "node:path"
 import { writeFile } from "node:fs/promises"
-import { Effect, Schema } from "effect"
+import { Effect, Fiber, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import { RayaGoal } from "@/kilocode/goal"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -115,6 +115,71 @@ const it = testEffect(
     ]),
     [[RuntimeFlags.node, flags]],
   ),
+)
+it.instance("user-control pause parks the owned dispatch gate until explicit resume or cancellation", () =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const storage = yield* Storage.Service
+    const goals = RayaGoal.make({ storage, sessions })
+    const session = yield* sessions.create({ title: "Pause execution gate" })
+    yield* goals.create(session.id, "Keep the original dispatch")
+    yield* Effect.addFinalizer(() => goals.clear(session.id))
+    const queued = yield* goals.continued(session.id)
+    if (!queued?.dispatch?.messageID) throw new Error("Original dispatch missing")
+    const dispatch = queued.dispatch
+    const message = queued.dispatch.messageID
+    yield* goals.dispatched(session.id, dispatch.id)
+    yield* sessions.updateMessage({
+      id: message,
+      sessionID: session.id,
+      role: "user",
+      time: { created: Date.now() },
+      agent: "code",
+      model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("fixture") },
+    })
+    const definition = yield* goalTools(goals).update.pipe(Effect.flatMap(Tool.init))
+    const current = () =>
+      sessions.messages({ sessionID: session.id }).pipe(
+        Effect.map((rows) => rows.findLast((row) => row.info.role === "user")?.info.id),
+        Effect.orDie,
+      )
+    const check = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, current)
+    const paused = yield* goals.control(session.id, "paused")
+    expect(paused.pause).toBe("user-control")
+    const state = { done: false }
+    const pending = yield* check().pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          state.done = true
+        }),
+      ),
+      Effect.forkChild,
+    )
+    yield* Effect.sleep(250)
+    expect(state.done).toBe(false)
+    expect((yield* goals.get(session.id))?.dispatch).toEqual(paused.dispatch)
+    expect((yield* goals.get(session.id))?.status).toBe("paused")
+    yield* goals.control(session.id, "active")
+    expect(yield* Fiber.join(pending)).toBe(false)
+    expect(state.done).toBe(true)
+    expect((yield* goals.get(session.id))?.dispatch).toEqual(paused.dispatch)
+    yield* goals.control(session.id, "paused")
+    const fresh = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, current)
+    state.done = false
+    const cancelled = yield* fresh().pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          state.done = true
+        }),
+      ),
+      Effect.forkChild,
+    )
+    yield* Effect.sleep(250)
+    expect(state.done).toBe(false)
+    yield* Fiber.interrupt(cancelled)
+    expect(state.done).toBe(false)
+    expect((yield* goals.get(session.id))?.status).toBe("paused")
+  }),
 )
 it.instance(
   "accepted original goal dispatch synthesizes without tools and new user input remains usable",

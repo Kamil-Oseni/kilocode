@@ -2,6 +2,7 @@ import z from "zod"
 
 type Tool = { function: { name: string; description?: string; parameters: Record<string, unknown> } }
 const call = z.object({ name: z.string().min(1), arguments: z.record(z.string(), z.unknown()) }).strict()
+const serial = new Set(["create_goal", "update_goal", "update_goal_plan"])
 const wire = z.discriminatedUnion("kind", [
   call.extend({ kind: z.literal("tool"), content: z.string().optional() }),
   z.object({ kind: z.literal("tools"), calls: z.array(call).min(1).max(128), content: z.string().optional() }).strict(),
@@ -33,16 +34,22 @@ export namespace ToolEnvelope {
           properties: { ...call.properties, kind: { const: "tool" }, content: { type: "string" } },
           required: [...call.required, "kind"],
         })),
-        {
-          type: "object",
-          properties: {
-            kind: { const: "tools" },
-            calls: { type: "array", items: { anyOf: calls }, minItems: 1, maxItems: 128 },
-            content: { type: "string" },
-          },
-          required: ["kind", "calls"],
-          additionalProperties: false,
-        },
+        ...[false, true].flatMap((mutation) => {
+          const items = calls.filter((call) => serial.has(call.properties.name.const) === mutation)
+          if (!items.length) return []
+          return [
+            {
+              type: "object",
+              properties: {
+                kind: { const: "tools" },
+                calls: { type: "array", items: { anyOf: items }, minItems: 1, maxItems: mutation ? 1 : 128 },
+                content: { type: "string" },
+              },
+              required: ["kind", "calls"],
+              additionalProperties: false,
+            },
+          ]
+        }),
         ...(choice === "auto"
           ? [
               {
@@ -83,6 +90,8 @@ export namespace ToolEnvelope {
     }
     const calls = value.kind === "tool" ? [{ name: value.name, arguments: value.arguments }] : value.calls
     if (calls.some((call) => !names.has(call.name))) throw new Error("Unadvertised envelope tool")
+    if (calls.length > 1 && calls.some((call) => serial.has(call.name)))
+      throw new Error("Goal mutations require a separate single-call envelope")
     return { content: value.content ?? "", tool_calls: calls.map((call) => ({ function: call })) }
   }
 }

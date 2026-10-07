@@ -2,4 +2,4 @@
 "@kilocode/cli": patch
 ---
 
-Suspend owned goal execution while a user pause is active, and resume the original dispatch after explicit user control.
+Settle the current goal turn without further tools when paused, and continue work after explicit user resume.

@@ -29,29 +29,25 @@ export const prepare = Effect.fn("GoalToolGate.prepare")(function* (
   if (!read || !goal || !dispatch || dispatch.messageID !== message) return () => Effect.succeed(false)
   return () =>
     Effect.gen(function* () {
-      while (true) {
-        if ((yield* current()) !== message) return false
-        const saved = yield* read(session)
-        if ((yield* current()) !== message) return false
-        // User controls renew intent while retaining this dispatch; completion still requires the captured intent.
-        if (
-          saved?.createdAt !== goal.createdAt ||
-          saved.dispatch?.id !== dispatch.id ||
-          saved.dispatch.messageID !== message ||
-          saved.dispatch.intent !== dispatch.intent
-        )
-          return false
-        if (saved.status === "paused" && saved.pause === "user-control") {
-          yield* Effect.sleep(100)
-          continue
-        }
-        return (
-          saved.intent === goal.intent &&
-          saved.status === "complete" &&
-          saved.auditAttempt?.accepted === true &&
-          saved.audit?.verifiedAt !== undefined
-        )
-      }
+      if ((yield* current()) !== message) return false
+      const saved = yield* read(session)
+      if ((yield* current()) !== message) return false
+      // User controls renew intent while retaining this dispatch; completion still requires the captured intent.
+      if (
+        saved?.createdAt !== goal.createdAt ||
+        saved.dispatch?.id !== dispatch.id ||
+        saved.dispatch.messageID !== message ||
+        saved.dispatch.intent !== dispatch.intent
+      )
+        return false
+      // Close tool admission so the current turn can settle while the durable goal stays paused.
+      if (saved.status === "paused" && saved.pause === "user-control") return true
+      return (
+        saved.intent === goal.intent &&
+        saved.status === "complete" &&
+        saved.auditAttempt?.accepted === true &&
+        saved.audit?.verifiedAt !== undefined
+      )
     })
 })
 
@@ -170,7 +166,9 @@ export function bind(
       if (execute)
         item.execute = async (...args: Parameters<typeof execute>) => {
           if (await run(check()))
-            throw new Error("This goal dispatch is complete; provide its final response without further tools")
+            throw new Error(
+              "Tool admission for this goal dispatch is closed; finish the current turn without further tools",
+            )
           if (!(await run(admit(id))))
             return {
               title: "Read goal first",

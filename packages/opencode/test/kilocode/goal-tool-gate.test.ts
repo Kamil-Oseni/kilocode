@@ -1,7 +1,7 @@
 import { afterAll, expect } from "bun:test"
 import path from "node:path"
 import { writeFile } from "node:fs/promises"
-import { Effect, Fiber, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import { RayaGoal } from "@/kilocode/goal"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -33,7 +33,7 @@ import { TestInstance, disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const requests: Record<string, unknown>[] = []
-const state = { phase: 0, file: "", fresh: false, queued: false }
+const state = { phase: 0, file: "", fresh: false, queued: false, paused: false }
 const endpoint = Bun.serve({
   port: 0,
   async fetch(request) {
@@ -44,8 +44,9 @@ const endpoint = Bun.serve({
     const previous = body.messages.findLast(
       (row: { role: string; content: string }) => row.role === "tool" && row.content.includes("GATE_REAL_FILE"),
     )
-    const content =
-      phase === 0
+    const content = state.paused
+      ? undefined
+      : phase === 0
         ? { kind: "tool", name: "create_goal", arguments: { objective: "Read the fixture" } }
         : phase === 1 || (state.queued && phase === 4) || (state.fresh && phase === 6)
           ? { kind: "tool", name: "read", arguments: { filePath: state.file } }
@@ -116,70 +117,104 @@ const it = testEffect(
     [[RuntimeFlags.node, flags]],
   ),
 )
-it.instance("user-control pause parks the owned dispatch gate until explicit resume or cancellation", () =>
-  Effect.gen(function* () {
-    const sessions = yield* Session.Service
-    const storage = yield* Storage.Service
-    const goals = RayaGoal.make({ storage, sessions })
-    const session = yield* sessions.create({ title: "Pause execution gate" })
-    yield* goals.create(session.id, "Keep the original dispatch")
-    yield* Effect.addFinalizer(() => goals.clear(session.id))
-    const queued = yield* goals.continued(session.id)
-    if (!queued?.dispatch?.messageID) throw new Error("Original dispatch missing")
-    const dispatch = queued.dispatch
-    const message = queued.dispatch.messageID
-    yield* goals.dispatched(session.id, dispatch.id)
-    yield* sessions.updateMessage({
-      id: message,
-      sessionID: session.id,
-      role: "user",
-      time: { created: Date.now() },
-      agent: "code",
-      model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("fixture") },
-    })
-    const definition = yield* goalTools(goals).update.pipe(Effect.flatMap(Tool.init))
-    const current = () =>
-      sessions.messages({ sessionID: session.id }).pipe(
-        Effect.map((rows) => rows.findLast((row) => row.info.role === "user")?.info.id),
-        Effect.orDie,
+it.instance(
+  "user-control pause settles the owned turn before explicit resume",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const storage = yield* Storage.Service
+      const goals = RayaGoal.make({ storage, sessions })
+      const session = yield* sessions.create({ title: "Pause execution gate" })
+      yield* goals.create(session.id, "Keep the original dispatch")
+      yield* Effect.addFinalizer(() => goals.clear(session.id))
+      const queued = yield* goals.continued(session.id)
+      if (!queued?.dispatch?.messageID) throw new Error("Original dispatch missing")
+      const dispatch = queued.dispatch
+      const message = queued.dispatch.messageID
+      yield* goals.dispatched(session.id, dispatch.id)
+      yield* sessions.updateMessage({
+        id: message,
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "gate",
+        model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("fixture") },
+      })
+      const definition = yield* goalTools(goals).update.pipe(Effect.flatMap(Tool.init))
+      const current = () =>
+        sessions.messages({ sessionID: session.id }).pipe(
+          Effect.map((rows) => rows.findLast((row) => row.info.role === "user")?.info.id),
+          Effect.orDie,
+        )
+      const check = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, current)
+      const paused = yield* goals.control(session.id, "paused")
+      expect(paused.pause).toBe("user-control")
+      expect(yield* check()).toBe(true)
+      const fresh = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, current)
+      expect(yield* fresh()).toBe(true)
+      state.paused = true
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          state.paused = false
+          state.phase = 0
+          requests.length = 0
+        }),
       )
-    const check = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, current)
-    const paused = yield* goals.control(session.id, "paused")
-    expect(paused.pause).toBe("user-control")
-    const state = { done: false }
-    const pending = yield* check().pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          state.done = true
-        }),
-      ),
-      Effect.forkChild,
-    )
-    yield* Effect.sleep(250)
-    expect(state.done).toBe(false)
-    expect((yield* goals.get(session.id))?.dispatch).toEqual(paused.dispatch)
-    expect((yield* goals.get(session.id))?.status).toBe("paused")
-    yield* goals.control(session.id, "active")
-    expect(yield* Fiber.join(pending)).toBe(false)
-    expect(state.done).toBe(true)
-    expect((yield* goals.get(session.id))?.dispatch).toEqual(paused.dispatch)
-    yield* goals.control(session.id, "paused")
-    const fresh = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, current)
-    state.done = false
-    const cancelled = yield* fresh().pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          state.done = true
-        }),
-      ),
-      Effect.forkChild,
-    )
-    yield* Effect.sleep(250)
-    expect(state.done).toBe(false)
-    yield* Fiber.interrupt(cancelled)
-    expect(state.done).toBe(false)
-    expect((yield* goals.get(session.id))?.status).toBe("paused")
-  }),
+      const reply = yield* prompt.loop({ sessionID: session.id })
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.tools).toBeUndefined()
+      expect(requests[0]?.format).toBeUndefined()
+      expect(reply.parts.some((part) => part.type === "text" && part.text === "DONE")).toBe(true)
+      // Exercise the same durable acknowledgement used by the actual TurnClose subscriber.
+      const settled = yield* goals.finished(session.id, reply.info.id)
+      expect(settled?.status).toBe("paused")
+      expect(settled?.pause).toBe("user-control")
+      expect(settled?.dispatch?.id).toBe(dispatch.id)
+      expect(settled?.dispatch?.messageID).toBe(message)
+      expect(settled?.dispatch?.phase).toBe("finished")
+      expect(settled?.auditAttempt?.accepted).not.toBe(true)
+      const parts = (yield* sessions.messages({ sessionID: session.id })).flatMap((row) => row.parts)
+      expect(parts.filter((part) => part.type === "tool")).toEqual([])
+      yield* goals.control(session.id, "active")
+      expect(yield* check()).toBe(false)
+      expect(yield* fresh()).toBe(false)
+      const resumed = yield* goals.continued(session.id)
+      expect(resumed?.status).toBe("active")
+      expect(resumed?.objective).toBe(queued.objective)
+      expect(resumed?.dispatch?.phase).toBe("queued")
+      expect(resumed?.dispatch?.id).not.toBe(dispatch.id)
+      expect(yield* check()).toBe(false)
+    }),
+  {
+    config: {
+      snapshot: false,
+      formatter: false,
+      lsp: false,
+      enabled_providers: ["openai"],
+      provider: {
+        openai: {
+          npm: "@ai-sdk/openai-compatible",
+          options: {
+            baseURL: `${endpoint.url}v1`,
+            localInference: true,
+            localInferenceAPI: "ollama",
+            localInferenceToolFormat: "completion-envelope-v1",
+          },
+          models: { fixture: { name: "Gate fixture", limit: { context: 32768, output: 1024 } } },
+        },
+      },
+      permission: { "*": "deny", read: "allow", create_goal: "allow", get_goal: "allow", update_goal: "allow" },
+      agent: {
+        gate: {
+          mode: "primary",
+          steps: 8,
+          permission: { "*": "deny", read: "allow", create_goal: "allow", get_goal: "allow", update_goal: "allow" },
+        },
+      },
+    },
+  },
+  45000,
 )
 it.instance(
   "accepted original goal dispatch synthesizes without tools and new user input remains usable",
@@ -290,7 +325,7 @@ it.instance(
         .flatMap((row) => row.parts)
         .find((row) => row.type === "tool" && row.messageID === assistant.id)
       expect(refusal?.type === "tool" && refusal.state.status === "error" && refusal.state.error).toContain(
-        "dispatch is complete",
+        "Tool admission for this goal dispatch is closed",
       )
       expect(requests[5]?.format).toBeUndefined()
       const synthesis = (yield* sessions.messages({ sessionID: created.id })).at(-1)

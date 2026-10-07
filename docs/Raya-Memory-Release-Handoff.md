@@ -2,6 +2,8 @@
 
 The source is ready for integration into the matching release. Successful installed Gemma retrieval, bounded warm reuse, and automatic Raya capture remain unverified. Keep the existing service available until the new cohort passes its deployment checks.
 
+Current local staging: the 33 bundle entries are copied and verified in `D:/Raya/Services/Memory/Managed/raya-memory-managed-1d968fbd5b5446eb9eb0e764567a901c`, with native root ACL protection. This is source staging only; dependencies, checkpoints, namespaces and paired plans must still be provisioned before execution. The existing service and notes are unchanged. Original staging process and streams joined at exit 0; receipt `.tmp/new-pc/memory-reuse-local-source-stage-parent.json`.
+
 ## Inputs
 
 | Input | Selected artifact |

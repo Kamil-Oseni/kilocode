@@ -27,7 +27,7 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
       const sessions = yield* Session.Service
       const storage = yield* Storage.Service
       const goals = RayaGoal.make({ storage, sessions })
-      for (const kind of ["aborted", "unfinished", "newer", "busy", "foreign"] as const) {
+      for (const kind of ["aborted", "unfinished", "missing", "tools", "newer", "busy", "foreign"] as const) {
         const session = yield* sessions.create({
           metadata: {
             rayaRoutine: {
@@ -54,21 +54,23 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
           model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
         })
         const id = MessageID.ascending()
-        yield* sessions.updateMessage({
-          id,
-          parentID: dispatch.messageID!,
-          sessionID: session.id,
-          role: "assistant",
-          time: { created: Date.now(), completed: kind === "unfinished" ? undefined : Date.now() },
-          error: { name: "MessageAbortedError", data: { message: "Aborted" } },
-          agent: "code",
-          mode: "code",
-          path: { cwd: session.directory, root: session.directory },
-          cost: 0,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          providerID: ProviderV2.ID.make("test"),
-          modelID: ModelV2.ID.make("test-model"),
-        })
+        if (kind !== "missing")
+          yield* sessions.updateMessage({
+            id,
+            parentID: dispatch.messageID!,
+            sessionID: session.id,
+            role: "assistant",
+            finish: kind === "tools" ? "tool-calls" : undefined,
+            time: { created: Date.now(), completed: kind === "unfinished" ? undefined : Date.now() },
+            error: kind === "tools" ? undefined : { name: "MessageAbortedError", data: { message: "Aborted" } },
+            agent: "code",
+            mode: "code",
+            path: { cwd: session.directory, root: session.directory },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            providerID: ProviderV2.ID.make("test"),
+            modelID: ModelV2.ID.make("test-model"),
+          })
         if (kind === "newer") {
           const rows = yield* sessions.messages({ sessionID: session.id })
           const latest = rows.at(-1)!.info
@@ -101,7 +103,15 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
           expect(after?.status).toBe("active")
           expect(after?.usage).toEqual(before?.usage)
         }
-        if (kind !== "aborted") expect(after).toEqual(before)
+        if (kind === "unfinished" || kind === "missing" || kind === "tools") {
+          expect(after?.status).toBe("blocked")
+          expect(after?.blockedReason).toContain("may have finished")
+          expect(after?.dispatch).toEqual(before?.dispatch)
+          expect(after?.intent).toBe(before?.intent)
+          expect(after?.objective).toBe(before?.objective)
+          expect(after?.usage).toEqual(before?.usage)
+        }
+        if (kind === "newer" || kind === "busy" || kind === "foreign") expect(after).toEqual(before)
         yield* restore()
         expect(yield* goals.get(session.id)).toEqual(after)
       }

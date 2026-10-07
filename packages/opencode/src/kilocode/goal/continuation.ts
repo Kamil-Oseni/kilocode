@@ -580,7 +580,24 @@ export namespace RayaGoalContinuation {
                   const rows = yield* input.sessions.messages({ sessionID })
                   const reply = response(rows, goal.dispatch.messageID)
                   if (reply?.info.role === "assistant" && reply.info.error?.name === "MessageAbortedError") {
-                    yield* RayaGoal.make(input).finished(sessionID, reply.info.id, "interrupted")
+                    const settled = yield* RayaGoal.make(input).finished(sessionID, reply.info.id, "interrupted")
+                    if (settled || !input.bookkeeping) return
+                  }
+                  if (
+                    input.bookkeeping &&
+                    (!reply ||
+                      (reply.info.role === "assistant" &&
+                        (reply.info.time.completed === undefined || reply.info.finish === "tool-calls")))
+                  ) {
+                    yield* RayaGoal.make(input).update(
+                      sessionID,
+                      {
+                        status: "blocked",
+                        reason:
+                          "Raya stopped while this Routine was running. Its last action may have finished. Review its conversation before resuming; the action will not be replayed automatically.",
+                      },
+                      goal.revision,
+                    )
                     return
                   }
                 }

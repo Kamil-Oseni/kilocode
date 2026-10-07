@@ -386,7 +386,7 @@ export function captureRequested() {
 }
 
 /** Root-only private intake. Close joins preparation, never the shutdown it has just triggered. */
-export async function listen(run: () => Promise<void>) {
+export async function listen(run: () => Promise<void>, retire?: () => Promise<void>) {
   const job = await handoffContext()
   if (!job) return () => Promise.resolve()
   const actor: {
@@ -412,6 +412,8 @@ export async function listen(run: () => Promise<void>) {
       if (!value || actor.closed) return
       actor.closed = true // Reserve one authenticated request before any asynchronous preparation.
       capturing = true
+      // Successor preparation can take time; stop accepted work before observing its final state.
+      await retire?.()
       const ticket = await prepare({
         scope: job.header.roots,
         expected: { executable: job.header.executable, digest: job.header.digest },

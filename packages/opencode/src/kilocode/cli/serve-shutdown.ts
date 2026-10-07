@@ -175,7 +175,14 @@ export async function waitForServe(server: { quiesce(): Promise<void>; stop(clos
       },
     ],
   })
-  channel.close = await source.listen(shutdown.run)
+  channel.close = await source.listen(shutdown.run, () =>
+    retire({
+      source: () => Promise.resolve(),
+      requests: () => server.quiesce(),
+      scheduled: schedulerQuiesce,
+      stop,
+    }),
+  )
   const close = listen(shutdown.run)
   const wait = await Promise.allSettled([shutdown.wait])
   const results = await Promise.allSettled([

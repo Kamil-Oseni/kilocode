@@ -127,7 +127,17 @@ for (const mode of ["accepted", "tampered"])
       expect(created.id.length).toBeGreaterThan(0)
       const id = crypto.randomUUID()
       await session.handoff({ id, pipe: pipe.descriptor })
-      await session.successor(id)
+      const successor = session.successor(id)
+      const fenced = await wait(async () => {
+        const response = await fetch(`${url}/session`, {
+          headers: { "x-kilo-directory": path.join(root, "workspace") },
+        })
+        await response.arrayBuffer()
+        if (response.status !== 503) return undefined
+        return !(await Bun.file(`${session.ticket.control}.source-handoff-ready`).exists())
+      })
+      expect(fenced).toBe(true)
+      await successor
       const ready = await wait(async () => {
         const file = `${session.ticket.control}.source-handoff-ready`
         return (await Bun.file(file).exists()) ? JSON.parse(await readFile(file, "utf8")) : undefined

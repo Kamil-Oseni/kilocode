@@ -1,0 +1,72 @@
+Loading weights:   0%|          | 0/1376 [00:00<?, ?it/s]Loading weights:  15%|█▍        | 201/1376 [00:00<00:00, 1978.55it/s]Loading weights:  29%|██▉       | 399/1376 [00:00<00:00, 1949.00it/s]Loading weights:  43%|████▎     | 594/1376 [00:00<00:00, 1908.38it/s]Loading weights:  57%|█████▋    | 785/1376 [00:00<00:00, 1164.89it/s]Loading weights:  75%|███████▍  | 1027/1376 [00:00<00:00, 1470.15it/s]Loading weights:  88%|████████▊ | 1204/1376 [00:00<00:00, 1508.27it/s]Loading weights: 100%|██████████| 1376/1376 [00:00<00:00, 1275.49it/s]Loading weights: 100%|██████████| 1376/1376 [00:00<00:00, 1414.01it/s]
+{"stage": "image", "seconds": 2.5470702000020538, "dimensions": 768, "finite": true, "normalized": true}
+{"stage": "audio", "seconds": 0.7707368999836035, "dimensions": 768, "finite": true, "normalized": true}
+Traceback (most recent call last):
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\util\environment.py", line 36, in suggest_extra_on_exception
+    yield
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\base\modules\transformer.py", line 1405, in preprocess
+    processor_output = self._call_processor(
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\base\modules\transformer.py", line 1789, in _call_processor
+    return self._process_chat_messages(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\base\modules\transformer.py", line 1916, in _process_chat_messages
+    features = self._apply_chat_template(messages, modality_kwargs, common_kwargs, chat_template_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\base\modules\transformer.py", line 1974, in _apply_chat_template
+    return self.processor.apply_chat_template(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\transformers\processing_utils.py", line 2250, in apply_chat_template
+    out = self(
+          ^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\transformers\processing_utils.py", line 682, in __call__
+    processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\transformers\processing_utils.py", line 784, in _process_videos
+    processed_videos = self.video_processor(videos, **kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\transformers\video_processing_utils.py", line 87, in __call__
+    return self.preprocess(videos, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\transformers\models\embedding_gemma2\video_processing_embedding_gemma2.py", line 242, in preprocess
+    return super().preprocess(videos, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\transformers\video_processing_utils.py", line 120, in preprocess
+    videos, video_metadata = self._decode_and_sample_videos(
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\transformers\video_processing_utils.py", line 671, in _decode_and_sample_videos
+    videos, video_metadata = self.fetch_videos(videos, sample_indices_fn=sample_indices_fn)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\transformers\video_processing_utils.py", line 570, in fetch_videos
+    raise ImportError(
+ImportError: `torchcodec` is not installed and cannot be used to decode the video by default. Video decoding with `torchvision` is not available: `torchvision.io.read_video` was deprecated in `torchvision==0.22` and removed in `torchvision==0.26.0`. Please install `torchcodec` (`pip install torchcodec`) and use `backend='torchcodec'` to decode videos.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\media_probe.py", line 44, in <module>
+    values = model.encode({'text': '<|' + kind + '|>', kind: str(source)}, normalize_embeddings=True, show_progress_bar=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\torch\utils\_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\util\decorators.py", line 46, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\sentence_transformer\model.py", line 933, in encode
+    features = self.preprocess(inputs_batch, prompt=prompt, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\base\model.py", line 630, in preprocess
+    preprocessed = self[0].preprocess(inputs, prompt=prompt, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\base\modules\transformer.py", line 1404, in preprocess
+    with suggest_extra_on_exception():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kamil\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kamil\.codex\worktrees\raya-everyday-experience\raya\.tmp\memory-private\embedding-comparison\venv\Lib\site-packages\sentence_transformers\util\environment.py", line 41, in suggest_extra_on_exception
+    raise type(e)(f"{str(e).strip()}\n\nTo install the required dependencies, run:\n{hint}") from e
+ImportError: `torchcodec` is not installed and cannot be used to decode the video by default. Video decoding with `torchvision` is not available: `torchvision.io.read_video` was deprecated in `torchvision==0.22` and removed in `torchvision==0.26.0`. Please install `torchcodec` (`pip install torchcodec`) and use `backend='torchcodec'` to decode videos.
+
+To install the required dependencies, run:
+pip install -U "sentence-transformers[video]"  # or [audio] for audio-only models

@@ -365,7 +365,11 @@ export namespace RayaGoal {
       const now = Date.now()
       const hit = exhausted(state, now, usage.total)
       const pause = state.status === "active" && hit !== undefined
-      const resume = state.status === "paused" && state.budgetHit?.kind === "model-cost" && hit === undefined
+      const resume =
+        state.pause !== "user-control" &&
+        state.status === "paused" &&
+        state.budgetHit?.kind === "model-cost" &&
+        hit === undefined
       if (!pause && !resume && state.usage.delegatedCost === usage.delegated) return { state, resumed: false }
       if (state.status === "complete" || state.status === "blocked") return { state, resumed: false }
       const next = yield* save(sessionID, {
@@ -597,6 +601,7 @@ export namespace RayaGoal {
       return yield* save(sessionID, {
         ...state,
         status,
+        pause: status === "paused" ? "user-control" : undefined,
         review: status === "active" ? undefined : state.review,
         intent: crypto.randomUUID(),
         blockedReason: status === "active" ? undefined : state.blockedReason,
@@ -772,6 +777,7 @@ export namespace RayaGoal {
         revisions: changed ? revisions(prior, now, "control") : prior.revisions,
         review: changed || status === "active" ? undefined : prior.review,
         status,
+        pause: status === "paused" ? (input.status === "paused" ? "user-control" : prior.pause) : undefined,
         intent,
         updatedAt: now,
         blockedReason: changed || (status === "active" && prior.status !== "active") ? undefined : prior.blockedReason,
@@ -1155,6 +1161,11 @@ export namespace RayaGoal {
       expected?: string,
     ) {
       const state = yield* requireGoal(sessionID)
+      if (
+        state.pause === "user-control" ||
+        (state.status === "paused" && state.pause === undefined && !state.budgetHit && !state.review)
+      )
+        return yield* new AuditError({ message: "Only user goal controls can resume or change a user-paused goal." })
       if (input.status === "active" && state.replyRecovery && state.replyRecovery.reviewedAt === undefined)
         return yield* new AuditError({
           message: "Only an explicit user review can resume this interrupted worker reply.",
@@ -1227,6 +1238,7 @@ export namespace RayaGoal {
         return yield* save(sessionID, {
           ...state,
           status: "paused",
+          pause: "agent",
           intent: crypto.randomUUID(),
           updatedAt: now,
           activeMs: elapsed(state, now),

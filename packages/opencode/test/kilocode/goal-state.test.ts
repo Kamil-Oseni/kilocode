@@ -1043,6 +1043,54 @@ describe("RayaGoal", () => {
       }
     }),
   )
+  it.live("user control pause survives agent status changes until control resume", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const id = SessionID.make(`ses_pause_${crypto.randomUUID()}`)
+      const goals = setup(storage, () => [])
+      yield* Effect.addFinalizer(() => goals.clear(id))
+      const original = yield* goals.create(id, "Complete the original work")
+      const held = yield* goals.edit(id, { status: "paused", expectedIntent: original.intent! })
+      expect(held.state.pause).toBe("user-control")
+      expect((yield* setup(storage, () => []).get(id))?.pause).toBe("user-control")
+      for (const status of ["active", "blocked", "paused", "complete"] as const) {
+        const refused = yield* goals.update(id, { status }).pipe(Effect.flip)
+        expect(refused.message).toContain("Only user goal controls")
+        expect(yield* goals.get(id)).toEqual(held.state)
+      }
+      yield* storage.replace(["raya", "goal", id], {
+        ...held.state,
+        budget: { modelCost: 1 },
+        budgetHit: { kind: "model-cost", limit: 1, observed: 2, at: Date.now() },
+        usage: { ...held.state.usage, delegatedCost: 0 },
+      })
+      const settled = yield* goals.delegated(id)
+      expect(settled.resumed).toBe(false)
+      expect(settled.state.status).toBe("paused")
+      expect(settled.state.pause).toBe("user-control")
+      const resumed = yield* goals.control(id, "active")
+      expect(resumed.status).toBe("active")
+      expect(resumed.pause).toBeUndefined()
+      expect((yield* goals.update(id, { status: "paused" })).status).toBe("paused")
+      expect((yield* goals.update(id, { status: "active" })).status).toBe("active")
+      const paused = yield* goals.control(id, "paused")
+      expect(paused.pause).toBe("user-control")
+      expect((yield* goals.update(id, { status: "active" }).pipe(Effect.flip)).message).toContain(
+        "Only user goal controls",
+      )
+      const latest = yield* goals.edit(id, { status: "active", expectedIntent: paused.intent! })
+      expect(latest.state.status).toBe("active")
+      expect(latest.state.pause).toBeUndefined()
+      const legacy = yield* goals.update(id, { status: "paused" })
+      expect(legacy.pause).toBe("agent")
+      yield* storage.replace(["raya", "goal", id], { ...legacy, pause: undefined })
+      expect((yield* goals.update(id, { status: "active" }).pipe(Effect.flip)).message).toContain(
+        "Only user goal controls",
+      )
+      expect((yield* goals.control(id, "active")).status).toBe("active")
+    }),
+  )
+
   it.live("criteria edits require current intent, invalidate audits and flag the plan for review", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

@@ -336,6 +336,7 @@ export namespace Codec {
     selfHealAttempt: Schema.optional(Schema.String), // server-derived durable repair owner
     selfHealID: Schema.optional(Schema.String), // raya_change - link an isolated repair session to the global backlog
     status: Status,
+    pause: Schema.optional(Schema.Literals(["user-control", "agent"])),
     createdAt: Schema.Number,
     updatedAt: Schema.Number,
     activeMs: Schema.optional(Schema.Number), // raya_change - accumulated execution time excluding paused/terminal time

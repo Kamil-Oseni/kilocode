@@ -65,3 +65,7 @@ def run(source, sink, lease, resident):
             return
         body = lease.request(frame)
         write(sink, lease.completion(resident.infer(body)))
+    # Keep the final completion observable through the original live handle.
+    # The parent retires the lease by closing input; an extra request is refused.
+    if read(source) is not None:
+        raise ValueError('resident_lease_capacity')

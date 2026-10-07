@@ -338,6 +338,9 @@ class Owner:
                             'request': self.request, 'owner_epoch': self.epoch,
                             'selection_sha256': selection}, separators=(',', ':'))+'\n').encode()
 
+    def limits(self):
+        return Limits()
+
     def spawn(self):
         if HERE.name != 'retrieval' or HERE.parent.name != 'source' or not ROOT.name.startswith('raya-memory-managed-'):
             raise ValueError('private_source_layout')
@@ -350,10 +353,11 @@ class Owner:
         self.state['selection_sha256'] = selection
         self.state['owner'] = dict(identity(library, library.GetCurrentProcess()), pid=os.getpid())
         self.handles['job'] = checked(library.CreateJobObjectW(None, None), 'CreateJobObjectW')
-        limits = Limits()
+        limits = self.limits()
+        flags = limits.basic.flags
         checked(library.SetInformationJobObject(self.handles['job'], 9, ctypes.byref(limits), ctypes.sizeof(limits)), 'SetInformationJobObject')
         checked(library.QueryInformationJobObject(self.handles['job'], 9, ctypes.byref(limits), ctypes.sizeof(limits), None), 'QueryInformationJobObject')
-        if limits.basic.flags:
+        if limits.basic.flags != flags:
             raise ValueError('job_limits')
         self.handles['port'] = checked(library.CreateIoCompletionPort(w.HANDLE(-1), None, 0, 1), 'CreateIoCompletionPort')
         port = Port(None, self.handles['port'])

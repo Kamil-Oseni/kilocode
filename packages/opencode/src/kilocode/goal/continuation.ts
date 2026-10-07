@@ -569,6 +569,21 @@ export namespace RayaGoalContinuation {
               const goal = yield* RayaGoal.make(input).get(sessionID)
               if (!goal || goal.status !== "active" || !goal.dispatch) return
               if (!(yield* input.idle(sessionID))) return
+              // Shutdown may close callback intake before TurnClose bookkeeping runs.
+              // Retain the exact persisted abort without acquiring or replaying its execution.
+              if (goal.dispatch.phase === "started" && goal.dispatch.messageID) {
+                const identity = yield* Schema.decodeUnknownEffect(record)(session.metadata?.rayaRoutine).pipe(
+                  Effect.orElseSucceed(() => undefined),
+                )
+                if (identity) {
+                  const rows = yield* input.sessions.messages({ sessionID })
+                  const reply = response(rows, goal.dispatch.messageID)
+                  if (reply?.info.role === "assistant" && reply.info.error?.name === "MessageAbortedError") {
+                    yield* RayaGoal.make(input).finished(sessionID, reply.info.id, "interrupted")
+                    return
+                  }
+                }
+              }
               if (
                 yield* wake({
                   ...input,

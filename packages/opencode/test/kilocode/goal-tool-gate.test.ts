@@ -118,6 +118,95 @@ const it = testEffect(
   ),
 )
 it.instance(
+  "a host-prearmed goal owns its first real turn and releases accepted synthesis",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const storage = yield* Storage.Service
+      const instance = yield* TestInstance
+      const goals = RayaGoal.make({ storage, sessions })
+      const session = yield* sessions.create({ title: "Prearmed Goal gate" })
+      state.phase = 1
+      state.fresh = false
+      state.queued = false
+      state.paused = false
+      requests.length = 0
+      state.file = path.join(instance.directory, "prearmed.txt")
+      yield* Effect.promise(() => writeFile(state.file, "GATE_REAL_FILE", "utf8"))
+      const armed = yield* goals.create(session.id, "Read the fixture and provide DONE")
+      expect(armed.startMessageID).toBeUndefined()
+      expect(armed.startAfter).toBeDefined()
+      yield* Effect.addFinalizer(() =>
+        goals.clear(session.id).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              state.phase = 0
+              requests.length = 0
+            }),
+          ),
+        ),
+      )
+      const reply = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "gate",
+        model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("fixture") },
+        parts: [{ type: "text", text: armed.objective }],
+      })
+      const saved = yield* goals.get(session.id)
+      expect(saved?.status).toBe("complete")
+      expect(saved?.auditAttempt?.accepted).toBe(true)
+      expect(saved?.startMessageID).toBeUndefined()
+      expect(saved?.startAfter).toBe(armed.startAfter)
+      expect(saved?.dispatch?.messageID).toBeDefined()
+      const rows = yield* sessions.messages({ sessionID: session.id })
+      const users = rows.filter((row) => row.info.role === "user")
+      expect(users).toHaveLength(1)
+      expect(saved?.dispatch?.messageID).toBe(users[0]?.info.id)
+      expect(reply.info.role === "assistant" && reply.info.parentID).toBe(users[0]?.info.id)
+      expect(reply.parts.some((part) => part.type === "text" && part.text === "DONE")).toBe(true)
+      expect(
+        rows
+          .flatMap((row) => row.parts)
+          .filter((part) => part.type === "tool")
+          .map((part) => part.tool),
+      ).toEqual(["read", "update_goal"])
+      expect(requests).toHaveLength(3)
+      expect(requests[2]?.tools).toBeUndefined()
+      expect(requests[2]?.format).toBeUndefined()
+      expect(saved?.usage.continuations).toBe(0)
+    }),
+  {
+    config: {
+      snapshot: false,
+      formatter: false,
+      lsp: false,
+      enabled_providers: ["openai"],
+      provider: {
+        openai: {
+          npm: "@ai-sdk/openai-compatible",
+          options: {
+            baseURL: `${endpoint.url}v1`,
+            localInference: true,
+            localInferenceAPI: "ollama",
+            localInferenceToolFormat: "completion-envelope-v1",
+          },
+          models: { fixture: { name: "Gate fixture", limit: { context: 32768, output: 1024 } } },
+        },
+      },
+      permission: { "*": "deny", read: "allow", create_goal: "allow", get_goal: "allow", update_goal: "allow" },
+      agent: {
+        gate: {
+          mode: "primary",
+          steps: 8,
+          permission: { "*": "deny", read: "allow", create_goal: "allow", get_goal: "allow", update_goal: "allow" },
+        },
+      },
+    },
+  },
+  45000,
+)
+it.instance(
   "user-control pause settles the owned turn before explicit resume",
   () =>
     Effect.gen(function* () {

@@ -2306,6 +2306,60 @@ describe("RayaGoal", () => {
     }),
   )
 
+  it.live("host-prearmed initial ownership requires reserved intake and unambiguous real input", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+      const old = transcript({ sessionID }).rows[0]
+      const rows: MessageV2.WithParts[] = []
+      const goals = setup(storage, () => rows)
+      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const armed = yield* goals.create(sessionID, "Own the first post-arming message")
+      expect(armed.startMessageID).toBeUndefined()
+      expect(armed.startAfter).toBeDefined()
+      expect(yield* goals.initial(sessionID, armed.intent!, "worker")).toBeUndefined()
+      const fresh = transcript({ sessionID }).rows[0]
+      const part: MessageV2.TextPart = {
+        id: PartID.ascending(),
+        sessionID,
+        messageID: fresh.info.id,
+        type: "text",
+        text: armed.objective,
+      }
+      // A reserved ID distinguishes stale input even when wall-clock timestamps match.
+      rows.push({
+        info: { ...old.info, time: { created: armed.createdAt } },
+        parts: [{ ...part, messageID: old.info.id }],
+      })
+      expect(yield* goals.initial(sessionID, armed.intent!, "worker")).toBeUndefined()
+      rows[0] = { info: { ...fresh.info, time: { created: armed.createdAt - 1 } }, parts: [part] }
+      expect(yield* goals.initial(sessionID, armed.intent!, "worker")).toBeUndefined()
+      rows[0] = { info: { ...fresh.info, time: { created: armed.createdAt } }, parts: [] }
+      expect(yield* goals.initial(sessionID, armed.intent!, "worker")).toBeUndefined()
+      rows[0] = { ...rows[0], parts: [{ ...part, synthetic: true }] }
+      expect(yield* goals.initial(sessionID, armed.intent!, "worker")).toBeUndefined()
+      rows[0] = { ...rows[0], parts: [{ ...part, ignored: true }] }
+      expect(yield* goals.initial(sessionID, armed.intent!, "worker")).toBeUndefined()
+      rows[0] = { ...rows[0], parts: [part] }
+      const later = transcript({ sessionID }).rows[0]
+      rows.push({ ...later, parts: [{ ...part, messageID: later.info.id }] })
+      expect(yield* goals.initial(sessionID, armed.intent!, "worker")).toBeUndefined()
+      rows.pop()
+      expect(yield* goals.initial(sessionID, "stale", "worker")).toBeUndefined()
+      expect(yield* goals.initial(sessionID, armed.intent!, " ")).toBeUndefined()
+      const paused = yield* goals.control(sessionID, "paused")
+      expect(yield* goals.initial(sessionID, paused.intent!, "worker")).toBeUndefined()
+      const active = yield* goals.control(sessionID, "active")
+      const started = yield* goals.initial(sessionID, active.intent!, "worker")
+      expect(started?.startMessageID).toBeUndefined()
+      expect(started?.startAfter).toBe(armed.startAfter)
+      expect(started?.usage).toEqual(armed.usage)
+      expect(started?.dispatch).toMatchObject({ phase: "started", messageID: fresh.info.id, worker: "worker" })
+      expect(yield* goals.initial(sessionID, active.intent!, "replacement")).toBeUndefined()
+      expect(yield* goals.get(sessionID)).toEqual(started)
+    }),
+  )
+
   it.live("initial ownership rejects stale anchors and direction and preserves continuation accounting", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

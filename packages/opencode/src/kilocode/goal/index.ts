@@ -553,6 +553,7 @@ export namespace RayaGoal {
           criteria: required,
           budget,
           startMessageID,
+          startAfter: startMessageID ? undefined : MessageID.ascending(),
           startSnapshot,
           selfHealID,
           selfHealAttempt: linked?.id,
@@ -1917,14 +1918,27 @@ export namespace RayaGoal {
         !state ||
         state.status !== "active" ||
         state.dispatch ||
-        !state.startMessageID ||
+        (!state.startMessageID && !state.startAfter) ||
         (state.intent ?? "unset") !== intent ||
         !worker.trim()
       )
         return
       const rows = yield* deps.sessions.messages({ sessionID })
-      const anchor = rows.find((row) => row.info.id === state.startMessageID)
+      // A host may arm a goal before publishing its first user message. Retain its original unset anchor.
+      const pending = state.startMessageID
+        ? rows.filter((row) => row.info.id === state.startMessageID)
+        : rows.filter(
+            (row) =>
+              row.info.role === "user" && row.info.id > state.startAfter! && row.info.time.created >= state.createdAt,
+          )
+      if (pending.length !== 1) return
+      const anchor = pending[0]
       if (!anchor) return
+      if (
+        !state.startMessageID &&
+        !anchor.parts.some((part) => part.type === "text" && !part.synthetic && !part.ignored && part.text.trim())
+      )
+        return
       if (anchor.info.role === "assistant" && anchor.info.time.completed !== undefined) return
       const messageID = anchor.info.role === "user" ? anchor.info.id : anchor.info.parentID
       const users = rows.filter((row) => row.info.role === "user")

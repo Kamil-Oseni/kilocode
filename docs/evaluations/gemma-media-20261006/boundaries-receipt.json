@@ -1,0 +1,10 @@
+{
+  "label": "boundaries",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 41.05934970002272,
+  "sampled_peak_rss": 4041363456,
+  "minimum_free_ram": 6716252160,
+  "remaining_owned_pids": []
+}

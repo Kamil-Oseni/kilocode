@@ -1,0 +1,10 @@
+{
+  "label": "media-rerank",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 30.048246499995003,
+  "sampled_peak_rss": 2943156224,
+  "minimum_free_ram": 8701345792,
+  "remaining_owned_pids": []
+}

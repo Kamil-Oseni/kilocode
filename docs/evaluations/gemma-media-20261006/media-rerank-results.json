@@ -1,0 +1,110 @@
+{
+  "source_sha256": "c0cfec605b11efc4a3ff641a9c61be01e830fbabe63048b55e8783780c723345",
+  "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+  "load_seconds": 1.5667960999999195,
+  "positives": [
+    {
+      "query": "Which recording discusses launching an ad and analyzing what users said about Eden?",
+      "correct": true,
+      "score": 0.9883739948272705,
+      "seconds": 1.4875842000183184
+    },
+    {
+      "query": "I need reminders to move more and rest at night.",
+      "correct": true,
+      "score": 0.9901573657989502,
+      "seconds": 1.415932400006568
+    },
+    {
+      "query": "Where is the trip arrangement discussion?",
+      "correct": true,
+      "score": 0.004116150550544262,
+      "seconds": 1.3718060000101104
+    },
+    {
+      "query": "Find the part about checking a code change before saving it to version control.",
+      "correct": true,
+      "score": 0.2862623631954193,
+      "seconds": 1.3737361000094097
+    },
+    {
+      "query": "What are the ingredients for dinner?",
+      "correct": true,
+      "score": 0.09128909558057785,
+      "seconds": 1.3152145000058226
+    },
+    {
+      "query": "Where did we discuss managing living costs and buying hardware?",
+      "correct": true,
+      "score": 0.03220154345035553,
+      "seconds": 1.3382862999860663
+    }
+  ],
+  "negatives": [
+    {
+      "query": "A recording about dinosaurs from the Jurassic period.",
+      "score": 1.5523677575401962e-05,
+      "index": 0,
+      "seconds": 1.2931852999900002
+    },
+    {
+      "query": "Instructions for assembling a telescope.",
+      "score": 8.230708044720814e-05,
+      "index": 4,
+      "seconds": 1.336759700003313
+    },
+    {
+      "query": "A discussion of inheritance tax regulations.",
+      "score": 2.3128357497625984e-05,
+      "index": 5,
+      "seconds": 1.3381378000194672
+    },
+    {
+      "query": "An elephant trumpeting in a jungle.",
+      "score": 2.9876615371904336e-05,
+      "index": 2,
+      "seconds": 1.3509928999992553
+    },
+    {
+      "query": "Who won the chess championship?",
+      "score": 9.082761607714929e-06,
+      "index": 0,
+      "seconds": 1.3934873999969568
+    },
+    {
+      "query": "An explanation of earthquakes and tectonic plates.",
+      "score": 5.1734139560721815e-05,
+      "index": 2,
+      "seconds": 1.4435783000080846
+    },
+    {
+      "query": "A lesson about ancient Roman emperors.",
+      "score": 5.327842882252298e-05,
+      "index": 5,
+      "seconds": 1.4172912000212818
+    },
+    {
+      "query": "Audio of rain hitting a metal roof.",
+      "score": 4.2036266677314416e-05,
+      "index": 5,
+      "seconds": 1.4170164000242949
+    },
+    {
+      "query": "The visual clip showing a dog running along a beach.",
+      "score": 6.394221418304369e-05,
+      "index": 1,
+      "seconds": 1.6368666000198573
+    },
+    {
+      "query": "Find a picture of a steam locomotive.",
+      "score": 6.485290941782296e-05,
+      "index": 2,
+      "seconds": 1.6441160000103991
+    }
+  ],
+  "scope": "Text-only Qwen reranker on known generated speech reference text. No STT/captioning or installed confidence policy tested.",
+  "positive_min": 0.004116150550544262,
+  "negative_max": 8.230708044720814e-05,
+  "top1": 6,
+  "seconds": 24.140829700016184
+}

@@ -1521,7 +1521,7 @@ it.live(
 )
 
 it.live(
-  "a delegation accepted by a stopped process resumes with its reserved run identity",
+  "a delegation accepted by a stopped process remains held until explicit cancellation",
   () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()
@@ -1591,13 +1591,31 @@ it.live(
         yield* runner.revive()
         yield* runner.revive()
 
-        expect(yield* store.get(admitted.record.id)).toMatchObject({
-          state: "running",
-          childRunID: accepted.childRunID,
-          sessionID: SessionID.make("ses_process_stop"),
-        })
-        expect(opened).toEqual(["ses_process_stop"])
-        expect((yield* tasks.runsFor(books.id)).filter((run) => run.id === accepted.childRunID)).toHaveLength(1)
+        expect(yield* store.get(admitted.record.id)).toEqual(accepted)
+        expect(opened).toEqual([])
+        expect((yield* tasks.runsFor(books.id)).filter((run) => run.id === accepted.childRunID)).toHaveLength(0)
+        expect(yield* storage.list(["raya", "agent-starts"])).toEqual([])
+        const cancelled = yield* runner.stop(accepted.id)
+        expect(cancelled).toMatchObject({ state: "cancelled", childRunID: accepted.childRunID })
+        yield* runner.revive()
+        expect(yield* store.get(accepted.id)).toEqual(cancelled)
+        expect(opened).toEqual([])
+        const fresh = yield* store.admit(
+          {
+            source: "dlg_after_process_stop",
+            senderID: chief.id,
+            recipientID: books.id,
+            objective: "Explicit fresh request.",
+          },
+          chief,
+          books,
+        )
+        const taken = yield* store.take(books.id)
+        expect(taken?.id).toBe(fresh.record.id)
+        expect(taken?.state).toBe("accepted")
+        expect(taken?.childRunID).toBeString()
+        expect(taken?.childRunID).not.toBe(accepted.childRunID)
+        expect(yield* store.get(accepted.id)).toEqual(cancelled)
       }).pipe(Effect.provide(state(directory)))
     }),
   30_000,

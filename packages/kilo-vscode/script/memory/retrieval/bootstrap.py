@@ -12,7 +12,7 @@ import types
 
 HERE = Path(__file__).resolve().parent
 PINS = {'worker.py': 'a0fef291bd0e9b40151f4f3842bb6bddb87e127dd6ed15f73bd8f9cac8b5a599',
-        'models.py': 'c0cfec605b11efc4a3ff641a9c61be01e830fbabe63048b55e8783780c723345'}
+        'models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873'}
 ROOT = HERE.parent.parent
 DEPENDENCIES = ROOT/'dependencies'
 ENV = {'SystemRoot': 'C:\\Windows', 'HOME': str(ROOT/'home'), 'USERPROFILE': str(ROOT/'home'), 'TEMP': str(ROOT/'tmp'), 'TMP': str(ROOT/'tmp'), 'HF_HOME': str(ROOT/'hf'), 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_PROGRESS_BARS': '1', 'CUDA_VISIBLE_DEVICES': '-1'}

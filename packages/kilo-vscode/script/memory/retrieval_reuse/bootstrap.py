@@ -14,7 +14,7 @@ HERE = Path(__file__).resolve().parent
 SUPPORT = HERE.parent/'retrieval'/'bootstrap.py'
 DIGEST = '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d'
 PINS = {'lease.py': '308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d',
-        'resident.py': 'fdb995b6db2636a7a3fcc786ee520df3516e0016f42b0180dee105e4b34734d9',
+        'resident.py': 'f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039',
         'validation.py': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2'}
 
 

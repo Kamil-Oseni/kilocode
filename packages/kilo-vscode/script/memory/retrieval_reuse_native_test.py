@@ -116,6 +116,30 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.owner.lease.sequence, 0)
         self.joined(self.owner.state)
 
+    def test_actual_ram_guard_prevents_request_admission(self):
+        from pool import available
+        self.owner.start()
+        with self.assertRaisesRegex(ValueError, 'lease_memory_pressure'):
+            self.owner.exchange(uuid.uuid4().hex, {'model': self.owner.model, 'input': ['not admitted']},
+                                'unused-revision', threading.Event(), time.monotonic() + 2,
+                                lambda: available() < (1 << 50))
+        self.assertEqual(self.owner.lease.sequence, 0)
+        self.joined(self.owner.state)
+
+    def test_cancelled_start_never_creates_a_child(self):
+        cancel = threading.Event()
+        cancel.set()
+        with self.assertRaisesRegex(ValueError, 'lease_start_expired'):
+            self.owner.start(cancel, time.monotonic() + 2)
+        self.assertFalse(self.owner.created)
+        self.assertEqual(self.owner.handles, {})
+
+    def test_expired_start_never_creates_a_child(self):
+        with self.assertRaisesRegex(ValueError, 'lease_start_deadline'):
+            self.owner.start(threading.Event(), time.monotonic() - 1)
+        self.assertFalse(self.owner.created)
+        self.assertEqual(self.owner.handles, {})
+
     def test_invalid_request_has_no_completion_and_joins(self):
         self.owner.start()
         with self.assertRaises(ValueError):

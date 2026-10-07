@@ -14,8 +14,8 @@ from validation import canonical, decode, fingerprint
 
 HERE = Path(__file__).resolve().parent
 PINS = {'interpreter': 'b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2',
-        'bootstrap': 'b48323aa7f77527222e23a4a00e8bae128ff79635f4fd7270645d217a1f45db4',
-        'worker': 'fdb995b6db2636a7a3fcc786ee520df3516e0016f42b0180dee105e4b34734d9',
+        'bootstrap': 'cc424607c0b6d9b8565602d11027a4e1c65e769d06af8eaa89b581ec7ff30a6a',
+        'worker': 'f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039',
         'models': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873',
         'lease': '308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d',
         'validation': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2',
@@ -124,22 +124,36 @@ class Owner(Finite):
                 self.reply = value
                 self.condition.notify_all()
 
-    def start(self):
+    def start(self, cancel=None, until=None, pressure=None):
         if not self.mutex.acquire(blocking=False):
             raise ValueError('lease_owner_busy')
         try:
             if self.created or self.closed:
                 raise ValueError('lease_owner_already_started')
             try:
-                self.spawn()
                 deadline = min(self.until, time.monotonic() + 30)
+                if until is not None:
+                    if type(until) not in (int, float) or not time.monotonic() < until <= time.monotonic() + 150:
+                        raise ValueError('lease_start_deadline')
+                    deadline = min(deadline, until)
+
+                def admit():
+                    if time.monotonic() >= deadline or self.cancel.is_set() or (cancel is not None and cancel.is_set()):
+                        raise ValueError('lease_start_expired')
+                    if pressure is not None and pressure():
+                        raise ValueError('lease_memory_pressure')
+
+                admit()
+                self.spawn()
                 while not self.ready or (self.writer is not None and self.writer.is_alive()):
+                    admit()
                     if (time.monotonic() >= deadline or self.cancel.is_set() or self.errors or
                             self.library.WaitForSingleObject(self.handles['process'], 0) != 258 or
                             any(row['errors'] for row in self.readers.values())):
                         raise ValueError('lease_start_expired')
                     with self.condition:
                         self.condition.wait(0.01)
+                admit()
                 if self.errors or not self.state.get('frame_written') or 'control_write' in self.handles:
                     raise ValueError('lease_start_unconfirmed')
                 self.last = time.monotonic()
@@ -170,7 +184,7 @@ class Owner(Finite):
             with self.condition:
                 self.condition.notify_all()
 
-    def exchange(self, request, body, revision, cancel, until):
+    def exchange(self, request, body, revision, cancel, until, pressure=None):
         if not self.mutex.acquire(blocking=False):
             raise ValueError('lease_owner_busy')
         try:
@@ -178,6 +192,8 @@ class Owner(Finite):
                 raise ValueError('lease_owner_closed')
             if not time.monotonic() < until <= min(self.until, time.monotonic() + 150):
                 raise ValueError('lease_request_deadline')
+            if pressure is not None and pressure():
+                raise ValueError('lease_memory_pressure')
             frame = {'format': 'raya.retrieval.lease.request', 'version': 2, 'lease': self.request,
                      'owner_epoch': self.epoch, 'selected_release_sha256': self.release,
                      'sequence': self.lease.sequence + 1, 'request': request,
@@ -194,6 +210,8 @@ class Owner(Finite):
                     if (cancel.is_set() or self.cancel.is_set() or self.errors or
                             any(row['errors'] for row in self.readers.values()) or time.monotonic() >= until):
                         raise ValueError('lease_request_cancelled_or_expired')
+                    if pressure is not None and pressure():
+                        raise ValueError('lease_memory_pressure')
                     if self.reply is not None and not self.writer.is_alive():
                         paths, pins = self.images()
                         images = {name: {'path': path, 'sha256': pins[name], 'observed': self.state['sources'][name]}

@@ -14,7 +14,7 @@ class Resident:
         self.name = name
         self.model = None
 
-    def infer(self, body):
+    def check(self, body):
         allowed = {'model', 'input', 'input_type'} if self.kind == 'embeddings' else {'model', 'query', 'documents', 'top_n'}
         if not isinstance(body, dict) or set(body) - allowed or body.get('model') != self.name:
             raise ValueError('resident_input_selection')
@@ -25,12 +25,17 @@ class Resident:
             raise ValueError('resident_input_bound')
         if self.kind == 'embeddings' and body.get('input_type', 'document') not in ('document', 'query'):
             raise ValueError('resident_input_type')
+        query, top = None, None
         if self.kind == 'rerank':
             query = body.get('query')
             top = body.get('top_n', len(values))
             if (not isinstance(query, str) or not 0 < len(query.strip()) <= 2000 or
                     type(top) is not int or not 1 <= top <= len(values)):
                 raise ValueError('resident_rerank_input')
+        return values, query, top
+
+    def infer(self, body):
+        values, query, top = self.check(body)
         start = time.perf_counter()
         if self.model is None:
             # The selected bootstrap must inject authenticated MANIFESTS and dependency images.

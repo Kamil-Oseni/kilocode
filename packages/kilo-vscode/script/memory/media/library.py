@@ -5,6 +5,7 @@ captions. A trusted caller must select approved files and supervise inference.
 """
 import hashlib
 from contextlib import contextmanager
+import io
 import math
 import os
 import re
@@ -14,6 +15,7 @@ import stat
 import struct
 import tempfile
 import time
+import wave
 
 MODEL = 'google/embeddinggemma-2'
 REVISION = '914f7f89142e33e77833254d9c9b90c3cef7303b'
@@ -69,6 +71,70 @@ def vector(value):
     if abs(math.sqrt(sum(item * item for item in values)) - 1) > 0.001:
         raise ValueError('Media embeddings must be normalized.')
     return raw
+
+
+def inspect(path):
+    """Decode an immutable byte snapshot under pilot bounds; no recording/inference.
+
+    Native decoder calls still require an externally owned process deadline.
+    """
+    raw = read(path)
+    kind, _ = format(raw)
+    result = dict(kind=kind, sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))
+    if kind == 'image':
+        from PIL import Image
+        with Image.open(io.BytesIO(raw)) as image:
+            width, height = image.size
+            if width * height > 4_194_304 or max(width, height) > 4096 or getattr(image, 'n_frames', 1) != 1:
+                raise ValueError('Image exceeds the single-frame 4 megapixel pilot bound.')
+            image.load()
+        return dict(result, width=width, height=height, segments=[])
+    if kind == 'audio':
+        with wave.open(io.BytesIO(raw), 'rb') as audio:
+            rate, frames = audio.getframerate(), audio.getnframes()
+            if rate != 16000 or audio.getnchannels() != 1 or audio.getsampwidth() != 2 or audio.getcomptype() != 'NONE':
+                raise ValueError('Pilot audio requires mono 16 kHz PCM16 WAV.')
+            duration = frames / rate
+            if not 0 < duration <= 60:
+                raise ValueError('Audio exceeds the 60-second pilot bound.')
+            if len(audio.readframes(frames + 1)) != frames * 2:
+                raise ValueError('Audio frame count differs from its header.')
+        return dict(result, duration=duration, segments=[dict(start=start / rate, end=min(start + 30 * rate, frames) / rate) for start in range(0, frames, 30 * rate)])
+    import av
+    stamp = time.monotonic()
+    with av.open(io.BytesIO(raw)) as container:
+        streams = list(container.streams.video)
+        if len(streams) != 1 or len(container.streams.audio) > 1:
+            raise ValueError('Pilot video requires one video stream and at most one audio stream.')
+        stream = streams[0]
+        if stream.width * stream.height > 4_194_304 or max(stream.width, stream.height) > 4096:
+            raise ValueError('Video frame exceeds the 4 megapixel pilot bound.')
+        if stream.duration is None or stream.time_base is None:
+            raise ValueError('Video requires a declared duration and time base.')
+        duration = float(stream.duration * stream.time_base)
+        if not math.isfinite(duration) or not 0 < duration <= 30:
+            raise ValueError('Video exceeds the 30-second pilot bound.')
+        segments = []
+        previous = -1
+        for count, frame in enumerate(container.decode(stream)):
+            if count >= 1800 or time.monotonic() - stamp > 10:
+                raise ValueError('Video decoding exceeds its frame or time bound.')
+            if frame.width * frame.height > 4_194_304 or max(frame.width, frame.height) > 4096:
+                raise ValueError('Video frame exceeds the 4 megapixel pilot bound.')
+            if frame.pts is None or frame.time_base is None:
+                raise ValueError('Video frame has no timestamp.')
+            point = float(frame.pts * frame.time_base)
+            if not math.isfinite(point) or not 0 <= point < duration:
+                raise ValueError('Video frame timestamp lies outside its duration.')
+            if point < previous:
+                raise ValueError('Video timestamps are not monotonic.')
+            if not segments or point >= segments[-1]['start'] + 1:
+                segments.append(dict(start=point, end=min(point + 1, duration)))
+            previous = point
+        if not segments:
+            raise ValueError('Video contains no decoded frames.')
+        tracks = len(container.streams.audio)
+    return dict(result, duration=duration, segments=segments, audio_streams=tracks)
 
 
 class Library:

@@ -16,6 +16,7 @@ import type { Database } from "@opencode-ai/core/database/database"
 import { continuation, owned } from "@/kilocode/task/continuation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskExecution } from "@/kilocode/task/execution"
+import { stopped } from "@/kilocode/task/owner"
 import { record } from "@/kilocode/task/continuation"
 import { createHash } from "node:crypto"
 import { ExecutionIdle } from "@/kilocode/task/execution-event"
@@ -589,6 +590,12 @@ export namespace RayaGoalContinuation {
                       (reply.info.role === "assistant" &&
                         (reply.info.time.completed === undefined || reply.info.finish === "tool-calls")))
                   ) {
+                    const receipt = yield* RayaTaskExecution.make(input.storage).receipt({
+                      id: identity.runID,
+                      agentID: identity.agentID,
+                      sessionID,
+                    })
+                    if (!receipt || !stopped(receipt.owner)) return
                     yield* RayaGoal.make(input).update(
                       sessionID,
                       {

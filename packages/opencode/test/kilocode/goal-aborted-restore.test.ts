@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { createHash } from "node:crypto"
+import { Effect, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -12,6 +13,7 @@ import { MessageID } from "@/session/schema"
 import { Git } from "@/git"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
+import { durable } from "@/kilocode/task/owner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -27,18 +29,63 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
       const sessions = yield* Session.Service
       const storage = yield* Storage.Service
       const goals = RayaGoal.make({ storage, sessions })
-      for (const kind of ["aborted", "unfinished", "missing", "tools", "newer", "busy", "foreign"] as const) {
+      const dead = yield* Effect.promise(async () => {
+        const child = Bun.spawn({
+          cmd: [
+            process.execPath,
+            "-e",
+            "import { durable } from './src/kilocode/task/owner.ts'; console.log(JSON.stringify(durable()))",
+          ],
+          stdout: "pipe",
+          stderr: "pipe",
+        })
+        const [text, err, code] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
+        ])
+        if (code !== 0) throw new Error(err)
+        return Schema.decodeUnknownSync(
+          Schema.fromJsonString(Schema.Struct({ host: Schema.String, pid: Schema.Number, birth: Schema.String })),
+        )(text)
+      })
+      expect(dead.birth).toBeDefined()
+      for (const kind of [
+        "aborted",
+        "unfinished",
+        "missing",
+        "tools",
+        "owned",
+        "unowned",
+        "newer",
+        "busy",
+        "foreign",
+      ] as const) {
+        const agent = crypto.randomUUID()
+        const run = crypto.randomUUID()
         const session = yield* sessions.create({
           metadata: {
             rayaRoutine: {
               version: 2,
-              agentID: crypto.randomUUID(),
-              runID: crypto.randomUUID(),
+              agentID: agent,
+              runID: run,
               scheduleVersion: 1,
               trigger: { kind: "manual" },
             },
           },
         })
+        if (kind !== "unowned")
+          yield* storage.create(["raya", "agent-executions", createHash("sha256").update(run).digest("hex")], {
+            version: 1,
+            agentID: agent,
+            runID: run,
+            sessionID: session.id,
+            token: crypto.randomUUID(),
+            owner: kind === "owned" ? durable() : dead,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            state: "active",
+          })
         yield* Effect.addFinalizer(() => goals.clear(session.id))
         yield* goals.create(session.id, "Retain uncertain work")
         const queued = yield* goals.continued(session.id)
@@ -61,7 +108,10 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
             sessionID: session.id,
             role: "assistant",
             finish: kind === "tools" ? "tool-calls" : undefined,
-            time: { created: Date.now(), completed: kind === "unfinished" ? undefined : Date.now() },
+            time: {
+              created: Date.now(),
+              completed: kind === "unfinished" || kind === "owned" || kind === "unowned" ? undefined : Date.now(),
+            },
             error: kind === "tools" ? undefined : { name: "MessageAbortedError", data: { message: "Aborted" } },
             agent: "code",
             mode: "code",
@@ -111,7 +161,8 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
           expect(after?.objective).toBe(before?.objective)
           expect(after?.usage).toEqual(before?.usage)
         }
-        if (kind === "newer" || kind === "busy" || kind === "foreign") expect(after).toEqual(before)
+        if (kind === "owned" || kind === "unowned" || kind === "newer" || kind === "busy" || kind === "foreign")
+          expect(after).toEqual(before)
         yield* restore()
         expect(yield* goals.get(session.id)).toEqual(after)
       }

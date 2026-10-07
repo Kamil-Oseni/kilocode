@@ -53,6 +53,7 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
       for (const kind of [
         "aborted",
         "unfinished",
+        "crashed",
         "missing",
         "tools",
         "owned",
@@ -66,7 +67,7 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
         const session = yield* sessions.create({
           metadata: {
             rayaRoutine: {
-              version: 2,
+              version: kind === "crashed" ? 1 : 2,
               agentID: agent,
               runID: run,
               scheduleVersion: 1,
@@ -110,9 +111,15 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
             finish: kind === "tools" ? "tool-calls" : undefined,
             time: {
               created: Date.now(),
-              completed: kind === "unfinished" || kind === "owned" || kind === "unowned" ? undefined : Date.now(),
+              completed:
+                kind === "unfinished" || kind === "crashed" || kind === "owned" || kind === "unowned"
+                  ? undefined
+                  : Date.now(),
             },
-            error: kind === "tools" ? undefined : { name: "MessageAbortedError", data: { message: "Aborted" } },
+            error:
+              kind === "tools" || kind === "crashed"
+                ? undefined
+                : { name: "MessageAbortedError", data: { message: "Aborted" } },
             agent: "code",
             mode: "code",
             path: { cwd: session.directory, root: session.directory },
@@ -153,7 +160,7 @@ it.live("cold Routine restore retains a persisted abort without replay or execut
           expect(after?.status).toBe("active")
           expect(after?.usage).toEqual(before?.usage)
         }
-        if (kind === "unfinished" || kind === "missing" || kind === "tools") {
+        if (kind === "unfinished" || kind === "crashed" || kind === "missing" || kind === "tools") {
           expect(after?.status).toBe("blocked")
           expect(after?.blockedReason).toContain("may have finished")
           expect(after?.dispatch).toEqual(before?.dispatch)

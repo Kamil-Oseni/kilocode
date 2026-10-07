@@ -51,7 +51,9 @@ def result(value, kind, body, revision):
     if value.get('revision') != revision:
         raise ValueError('model_result_revision')
     if kind == 'embeddings':
-        if set(value) != {'object', 'model', 'revision', 'dimensions', 'normalized', 'data', 'timing'} or value['object'] != 'list' or value['model'] != 'qwen3-embedding-0.6b' or type(value['dimensions']) is not int or value['dimensions'] != 1024 or value['normalized'] is not True:
+        model = body.get('model', 'qwen3-embedding-0.6b')
+        dimensions = {'qwen3-embedding-0.6b': 1024, 'embeddinggemma-2': 768}.get(model)
+        if dimensions is None or set(value) != {'object', 'model', 'revision', 'dimensions', 'normalized', 'data', 'timing'} or value['object'] != 'list' or value['model'] != model or type(value['dimensions']) is not int or value['dimensions'] != dimensions or value['normalized'] is not True:
             raise ValueError('embedding_result_identity')
         rows = value['data']
         if not isinstance(rows, list) or len(rows) != len(body['input']):
@@ -60,7 +62,7 @@ def result(value, kind, body, revision):
             if not isinstance(row, dict) or set(row) != {'object', 'index', 'embedding'} or row['object'] != 'embedding' or type(row['index']) is not int or row['index'] != index:
                 raise ValueError('embedding_result_index')
             vector = row['embedding']
-            if not isinstance(vector, list) or len(vector) != 1024 or not all(number(item) for item in vector):
+            if not isinstance(vector, list) or len(vector) != dimensions or not all(number(item) for item in vector):
                 raise ValueError('embedding_result_finite_dimensions')
             if abs(math.sqrt(math.fsum(item*item for item in vector))-1) > 0.001:
                 raise ValueError('embedding_result_normalization')

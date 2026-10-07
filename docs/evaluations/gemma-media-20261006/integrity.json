@@ -1,0 +1,6 @@
+{
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "files_verified": 15,
+  "bytes_verified": 1525810123,
+  "method": "Rehash every file against the saved per-model catalog SHA-256 and byte count after the image probe; all matched."
+}

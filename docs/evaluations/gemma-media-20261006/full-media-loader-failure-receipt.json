@@ -1,0 +1,10 @@
+{
+  "label": "media-smoke-successor",
+  "exit_code": 1,
+  "joined": true,
+  "aborted": null,
+  "seconds": 12.556390400015516,
+  "sampled_peak_rss": 3914612736,
+  "minimum_free_ram": 10647408640,
+  "remaining_owned_pids": []
+}

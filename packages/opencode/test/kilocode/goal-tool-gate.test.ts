@@ -159,6 +159,8 @@ it.instance(
       const completed = tools.find((row) => row.tool === "update_goal")
       if (!completed || completed.state.status !== "completed") throw new Error("Accepted Goal result missing")
       expect(completed.state.output).toContain("Preserve the user's requested final response")
+      expect(completed.state.output).toContain("Copy required literal text character-for-character")
+      expect(completed.state.output).toContain("compare the entire response with the required literal text")
       expect(completed.state.output).toContain(`Original goal objective: ${JSON.stringify(saved.objective)}`)
       const wire = Schema.decodeUnknownSync(
         Schema.Array(Schema.Struct({ role: Schema.String, content: Schema.String })),

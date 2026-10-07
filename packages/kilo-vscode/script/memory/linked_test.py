@@ -222,7 +222,7 @@ class Tests(unittest.TestCase):
     def test_corrected_chunk_labels_have_a_new_index_recipe(self):
         node = next(row for row in TREE.body if isinstance(row, ast.Assign) and
                     any(isinstance(target, ast.Name) and target.id == 'SIGNATURE' for target in row.targets))
-        scope = {'MODEL': {'revision': 'synthetic-unchanged-model'}}
+        scope = {'MODEL': {'revision': 'synthetic-unchanged-model'}, 'SPACE': {'dimensions': 1024}}
         exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), str(SOURCE), 'exec'), scope)
         self.assertEqual(scope['SIGNATURE'], 'markdown-v4:300tokens:1024:normalized:local-link-labels:synthetic-unchanged-model')
         self.assertNotEqual(scope['SIGNATURE'], 'markdown-v3:300tokens:1024:normalized:local-link-labels:synthetic-unchanged-model')

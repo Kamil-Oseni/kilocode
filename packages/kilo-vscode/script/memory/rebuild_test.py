@@ -3,7 +3,7 @@
 This isolates the cache algorithm, not native admission, transport or tokenization.
 """
 import ast
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 import fnmatch
 import hashlib
 import json
@@ -22,19 +22,23 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / 'service'))
 from policy import Policy
+from admission import Store, entry, Refused
 
 SOURCE = HERE / 'service/index.py'
 TREE = ast.parse(SOURCE.read_bytes())
-NAMES = {'digest', 'decode', 'semantic', 'scan', 'headings', 'split'}
+NAMES = {'digest', 'decode', 'semantic', 'scan', 'headings', 'split', 'space'}
 BODY = [node for node in TREE.body if isinstance(node, ast.FunctionDef) and node.name in NAMES]
 OWNER = next(node for node in TREE.body if isinstance(node, ast.ClassDef) and node.name == 'Index')
 METHOD = next(node for node in OWNER.body if isinstance(node, ast.FunctionDef) and node.name == 'rebuild')
 # Admission/deadline decorators are outside this disposable cache fixture.
 METHOD.decorator_list = []
 BODY.append(METHOD)
+INIT = next(node for node in OWNER.body if isinstance(node, ast.FunctionDef) and node.name == '__init__')
+BODY.append(ast.ClassDef(name='Index', bases=[], keywords=[], body=[INIT], decorator_list=[]))
 BODY.extend(node for node in TREE.body if isinstance(node, ast.Assign)
             and any(isinstance(target, ast.Name) and target.id == 'SIGNATURE' for target in node.targets))
 MODEL = {'revision': 'controlled-cache-test'}
+SPACE = {'model': 'qwen3-embedding-0.6b', 'dimensions': 1024, 'stem': 'search'}
 remaining = lambda: None
 tokens = len
 exec(compile(ast.fix_missing_locations(ast.Module(body=BODY, type_ignores=[])), str(SOURCE), 'exec'), globals())
@@ -96,8 +100,10 @@ class Tests(unittest.TestCase):
         self.calls.append(body['input'])
         if self.broken:
             raise RuntimeError('controlled embedding failure')
-        return {'revision': MODEL['revision'], 'dimensions': 1024,
-                'data': [{'embedding': [1 / 32] * 1024} for _ in body['input']]}
+        self.assertEqual(body['model'], SPACE['model'])
+        size = SPACE['dimensions']
+        return {'revision': MODEL['revision'], 'dimensions': size,
+                'data': [{'embedding': [1 / size ** 0.5] * size} for _ in body['input']]}
 
     def rows(self):
         with self.owner.connect() as db:
@@ -139,6 +145,59 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.metadata(), self.meta)
         self.assertEqual((self.root / 'note.md').read_bytes(), self.raw)
         self.assertTrue(self.calls)
+
+    def test_gemma_recipe_rebuilds_1024_cache_and_reuses_only_768_vectors(self):
+        global SPACE, SIGNATURE
+        original = SPACE, SIGNATURE
+        SPACE = {'model': 'embeddinggemma-2', 'dimensions': 768, 'stem': 'search-embeddinggemma-2'}
+        node = next(row for row in TREE.body if isinstance(row, ast.Assign) and
+                    any(isinstance(target, ast.Name) and target.id == 'SIGNATURE' for target in row.targets))
+        try:
+            exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), str(SOURCE), 'exec'), globals())
+            with self.assertRaises(sqlite3.DatabaseError):
+                decode(self.prior[0][8])
+            result = rebuild(self.owner)
+            self.assertGreater(result['new_embeddings'], 0)
+            rows = self.rows()
+            for row in rows:
+                self.assertEqual(decode(row[8]).shape, (768,))
+            count = len(self.calls)
+            again = rebuild(self.owner)
+            self.assertEqual(again['new_embeddings'], 0)
+            self.assertEqual(again['reused_embeddings'], len(rows))
+            self.assertEqual(len(self.calls), count)
+            self.assertEqual((self.root / 'note.md').read_bytes(), self.raw)
+        finally:
+            SPACE, SIGNATURE = original
+
+    def test_model_namespaces_preserve_the_qwen_database_for_rollback(self):
+        global SPACE
+        original = SPACE
+        try:
+            SPACE = space('qwen3-embedding-0.6b')
+            qwen = Index(self.root)
+            with closing(sqlite3.connect(qwen.db)) as db, db:
+                db.execute('CREATE TABLE retained (value TEXT)')
+                db.execute('INSERT INTO retained VALUES (?)', ('verified rollback fixture',))
+            prior = qwen.db.read_bytes()
+            SPACE = space('embeddinggemma-2')
+            gemma = Index(self.root)
+            self.assertNotEqual(qwen.db, gemma.db)
+            self.assertNotEqual(qwen.lock, gemma.lock)
+            self.assertFalse(gemma.db.exists())
+            with closing(sqlite3.connect(gemma.db)) as db, db:
+                db.execute('CREATE TABLE selected (value TEXT)')
+                db.execute('INSERT INTO selected VALUES (?)', ('768-dimensional namespace',))
+            self.assertEqual(qwen.db.read_bytes(), prior)
+            SPACE = space('qwen3-embedding-0.6b')
+            rollback = Index(self.root)
+            self.assertEqual(rollback.db, qwen.db)
+            with closing(sqlite3.connect(rollback.db)) as db:
+                self.assertEqual(db.execute('SELECT value FROM retained').fetchall(), [('verified rollback fixture',)])
+            with self.assertRaises(Refused):
+                space('../foreign.sqlite')
+        finally:
+            SPACE = original
 
 
 if __name__ == '__main__':

@@ -101,7 +101,18 @@ def execute(call, until, cancel=None, correlation=None, proofs=None):
 os.environ['HF_HUB_OFFLINE'] = '1'
 ROOT = Path(__file__).parent
 CATALOG = Path(r'D:\Raya\Models\Catalog')
-MODEL = json.loads((CATALOG / 'Qwen--Qwen3-Embedding-0.6B.json').read_text(encoding='utf-8-sig'))
+
+
+def space(name):
+    if name == 'qwen3-embedding-0.6b':
+        return {'model': name, 'catalog': 'Qwen--Qwen3-Embedding-0.6B.json', 'dimensions': 1024, 'stem': 'search'}
+    if name == 'embeddinggemma-2':
+        return {'model': name, 'catalog': 'google--embeddinggemma-2.json', 'dimensions': 768, 'stem': 'search-embeddinggemma-2'}
+    raise Refused('Select a supported pinned embedding model.')
+
+
+SPACE = space(os.environ.get('RAYA_MEMORY_EMBEDDING_MODEL', 'qwen3-embedding-0.6b'))
+MODEL = json.loads((CATALOG / SPACE['catalog']).read_text(encoding='utf-8-sig'))
 RANKER = json.loads((CATALOG / 'Qwen--Qwen3-Reranker-0.6B.json').read_text(encoding='utf-8-sig'))
 TOKENIZER = None
 GATE = threading.Lock()
@@ -109,7 +120,7 @@ KEY = Path(os.environ['RAYA_MEMORY_RETRIEVAL_TOKEN_FILE']).read_text().strip()
 RELEASE = os.environ['RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256']
 if not hexadecimal(RELEASE, 64):
     raise Refused('Explicit reviewed downstream release selection is required.')
-SIGNATURE = 'markdown-v4:300tokens:1024:normalized:local-link-labels:' + MODEL['revision']
+SIGNATURE = f"markdown-v4:300tokens:{SPACE['dimensions']}:normalized:local-link-labels:" + MODEL['revision']
 
 
 def digest(value):
@@ -120,7 +131,7 @@ def decode(raw):
     remaining()
     import numpy as np
     remaining()
-    if not isinstance(raw, bytes) or len(raw) != 1024 * 4:
+    if not isinstance(raw, bytes) or len(raw) != SPACE['dimensions'] * 4:
         raise sqlite3.DatabaseError('Cached embedding has an invalid shape; rebuild the index.')
     vector = np.frombuffer(raw, dtype=np.float32)
     if not np.isfinite(vector).all() or abs(np.linalg.norm(vector) - 1) > 0.001:
@@ -163,7 +174,10 @@ def api(path, body, gate=None):
     if not isinstance(health, dict) or health.get('selected_release_sha256') != RELEASE or health.get('ownership_protocol') != 'raya.retrieval.retirement.v1' or health.get('ready') is not True or health.get('retirement_unconfirmed') is not False or health.get('draining') is not False or not hexadecimal(health.get('owner_epoch'), 32):
         raise Retirement('Selected downstream ownership admission differs.')
     sources, catalogs = health.get('source_sha256'), health.get('catalog_sha256')
-    if not isinstance(sources, dict) or set(sources) != {'server.py', 'owner.py', 'bootstrap.py', 'worker.py', 'models.py', 'validation.py', 'namespace.py'} or not isinstance(catalogs, dict) or set(catalogs) != {'Qwen--Qwen3-Embedding-0.6B.json', 'Qwen--Qwen3-Reranker-0.6B.json'} or not all(hexadecimal(item, 64) for item in (*sources.values(), *catalogs.values())) or fingerprint({'source_sha256': sources, 'catalog_sha256': catalogs}) != RELEASE:
+    expected = {'Qwen--Qwen3-Embedding-0.6B.json', 'Qwen--Qwen3-Reranker-0.6B.json'}
+    extended = expected | {'google--embeddinggemma-2.json'}
+    selected = extended if SPACE['model'] == 'embeddinggemma-2' else expected
+    if not isinstance(sources, dict) or set(sources) != {'server.py', 'owner.py', 'bootstrap.py', 'worker.py', 'models.py', 'validation.py', 'namespace.py'} or not isinstance(catalogs, dict) or (set(catalogs) != selected and not (SPACE['model'] == 'qwen3-embedding-0.6b' and set(catalogs) == extended)) or not all(hexadecimal(item, 64) for item in (*sources.values(), *catalogs.values())) or fingerprint({'source_sha256': sources, 'catalog_sha256': catalogs}) != RELEASE:
         raise Retirement('Selected downstream release map differs.')
     epoch = health['owner_epoch']
     auth = dict(auth, **{'X-Raya-Owner-Epoch': epoch})
@@ -617,8 +631,8 @@ class Index:
             raise ValueError('System directory cannot be a link.')
         if not existing:
             system.mkdir(exist_ok=True)
-        self.db = system / 'search.sqlite'
-        self.lock = system / 'search.lock'
+        self.db = system / (SPACE['stem'] + '.sqlite')
+        self.lock = system / (SPACE['stem'] + '.lock')
         if self.db.is_symlink() or self.lock.is_symlink() or (self.db.exists() and self.db.stat().st_nlink > 1) or (self.lock.exists() and self.lock.stat().st_nlink > 1):
             raise ValueError('Index database and lock cannot be links.')
         self.leaves = {self.db: entry(self.db), self.lock: entry(self.lock)}
@@ -743,12 +757,12 @@ class Index:
             for index in range(0, len(items), 16):
                 remaining()
                 batch = items[index:index + 16]
-                response = api('/v1/embeddings', {'input': [semantic(text) for _, text in batch], 'input_type': 'document'}, gate=lambda: self.guard(snapshot))
-                if response.get('revision') != MODEL['revision'] or response.get('dimensions') != 1024 or len(response['data']) != len(batch):
+                response = api('/v1/embeddings', {'model': SPACE['model'], 'input': [semantic(text) for _, text in batch], 'input_type': 'document'}, gate=lambda: self.guard(snapshot))
+                if response.get('revision') != MODEL['revision'] or response.get('dimensions') != SPACE['dimensions'] or len(response['data']) != len(batch):
                     raise RuntimeError('Embedding model or output shape changed.')
                 for (key, _), item in zip(batch, response['data']):
                     vector = np.asarray(item['embedding'], dtype=np.float32)
-                    if vector.shape != (1024,) or not np.isfinite(vector).all() or abs(np.linalg.norm(vector) - 1) > 0.001:
+                    if vector.shape != (SPACE['dimensions'],) or not np.isfinite(vector).all() or abs(np.linalg.norm(vector) - 1) > 0.001:
                         raise RuntimeError('Embedding is not a finite normalized vector.')
                     cache[key] = vector.tobytes()
             current = scan(self.root, self.lease.policy)
@@ -799,11 +813,11 @@ class Index:
         self.guard(snapshot)
         if not rows:
             return []
-        response = api('/v1/embeddings', {'input': query, 'input_type': 'query'}, gate=lambda: self.guard(snapshot))
-        if response.get('revision') != MODEL['revision']:
+        response = api('/v1/embeddings', {'model': SPACE['model'], 'input': query, 'input_type': 'query'}, gate=lambda: self.guard(snapshot))
+        if response.get('revision') != MODEL['revision'] or response.get('dimensions') != SPACE['dimensions']:
             raise RuntimeError('Query embedding revision changed.')
         vector = np.asarray(response['data'][0]['embedding'], dtype=np.float32)
-        if vector.shape != (1024,) or not np.isfinite(vector).all() or abs(np.linalg.norm(vector) - 1) > 0.001:
+        if vector.shape != (SPACE['dimensions'],) or not np.isfinite(vector).all() or abs(np.linalg.norm(vector) - 1) > 0.001:
             raise RuntimeError('Query embedding is not a finite normalized vector.')
         matrix = np.stack([decode(row[6]) for row in rows])
         scores = matrix @ vector

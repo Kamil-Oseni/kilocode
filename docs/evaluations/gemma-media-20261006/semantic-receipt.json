@@ -1,0 +1,10 @@
+{
+  "label": "semantic",
+  "exit_code": 0,
+  "joined": true,
+  "aborted": null,
+  "seconds": 51.586061500012875,
+  "sampled_peak_rss": 3929341952,
+  "minimum_free_ram": 11001815040,
+  "remaining_owned_pids": []
+}

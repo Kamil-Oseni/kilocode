@@ -107,6 +107,16 @@ function plans(root: string) {
 test("paired descriptor requires explicit Retrieval ref and exact selected release/ports/token/assets", () => {
   const value = plans("C:\\Synthetic\\raya-memory-managed-pair")
   paired(value.cfg, value.memory, value.plan)
+  for (const protocol of [null, undefined, true, 1, "", {}, []]) {
+    expect(() => paired(value.cfg, value.memory, { ...value.plan, retrieval_protocol: protocol })).toThrow()
+    expect(() =>
+      paired(
+        value.cfg,
+        { ...value.memory, env: { ...value.memory.env, RAYA_MEMORY_RETRIEVAL_PROTOCOL: protocol } },
+        value.plan,
+      ),
+    ).toThrow()
+  }
   expect(() => descriptor({ ...value.cfg, retrieval: undefined })).toThrow()
   for (const field of ["source_sha256", "port", "files", "env"] as const) {
     const changed = { ...value.plan, [field]: field === "port" ? 58741 : {} }

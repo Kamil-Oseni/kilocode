@@ -161,8 +161,12 @@ export async function notes(cfg: Descriptor, plan: Record<string, unknown>, root
   )
 }
 
+function choice(value: Record<string, unknown>, key: string) {
+  return Object.hasOwn(value, key) ? value[key] : "raya.retrieval.retirement.v1"
+}
+
 function reusable(memory: Record<string, unknown>, retrieval: Record<string, unknown>) {
-  const protocol = retrieval.retrieval_protocol ?? "raya.retrieval.retirement.v1"
+  const protocol = choice(retrieval, "retrieval_protocol")
   check(
     protocol === "raya.retrieval.retirement.v1" || protocol === "raya.retrieval.request.settlement.v2",
     "Explicit Retrieval protocol refused",
@@ -171,7 +175,7 @@ function reusable(memory: Record<string, unknown>, retrieval: Record<string, unk
   const env = row(retrieval.env)
   const original = row(memory.env)
   check(
-    (original.RAYA_MEMORY_RETRIEVAL_PROTOCOL ?? "raya.retrieval.retirement.v1") === protocol,
+    choice(original, "RAYA_MEMORY_RETRIEVAL_PROTOCOL") === protocol,
     "Paired Retrieval protocol differs",
   )
   if (reuse)
@@ -250,7 +254,7 @@ function operation(cfg: Descriptor, env: Record<string, unknown>, setup: Setup) 
   check(
     ((setup.version === 2 ? setup.protocol : "raya.memory.operation.v1") === "raya.memory.operation.v2"
       ? "raya.retrieval.request.settlement.v2"
-      : "raya.retrieval.retirement.v1") === (env.RAYA_MEMORY_RETRIEVAL_PROTOCOL ?? "raya.retrieval.retirement.v1") &&
+      : "raya.retrieval.retirement.v1") === choice(env, "RAYA_MEMORY_RETRIEVAL_PROTOCOL") &&
       ((setup.version === 2 ? setup.protocol : "raya.memory.operation.v1") !== "raya.memory.operation.v2" ||
         cfg.version === 2),
     "Selected Memory operation protocol differs",

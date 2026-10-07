@@ -5,6 +5,7 @@ import { context } from "@/kilocode/provider/ollama-context"
 import { ollama, OllamaBridgeError } from "@/kilocode/provider/ollama-bridge"
 import { Parameters } from "@/kilocode/tool/chief-route"
 import { ToolJsonSchema } from "@/tool/json-schema"
+import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 
 const options = {
   localInference: true,
@@ -34,6 +35,38 @@ const row = (content = envelope) => ({
   done_reason: "stop",
   prompt_eval_count: 7,
   eval_count: 3,
+})
+
+test("Chief routing cannot race duplicate routing or dependent delegation", () => {
+  const definitions = [
+    { function: { ...tools[0].function, parameters: { ...original } } },
+    { function: { name: "task", parameters: { type: "object" } } },
+  ]
+  const names = new Set(["chief_route", "task"])
+  const route = { name: "chief_route", arguments: args }
+  const task = { name: "task", arguments: { access: "edit" } }
+  expect(ToolEnvelope.decode(envelope, names, "required").tool_calls).toEqual([{ function: route }])
+  for (const calls of [
+    [route, route, route],
+    [route, task],
+    [task, route],
+  ])
+    expect(() => ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls }), names, "required")).toThrow(
+      "Chief routing requires a separate single-call envelope",
+    )
+  const batches = ToolEnvelope.schema(definitions, "required").anyOf.filter(
+    (branch) => branch.properties.kind.const === "tools",
+  )
+  expect(batches).toHaveLength(2)
+  for (const branch of batches) {
+    if (!("calls" in branch.properties)) throw new Error("Missing calls schema")
+    expect(branch.properties.calls.items.anyOf.map((item) => item.properties.name.const)).toEqual(
+      branch.properties.calls.maxItems === 1 ? ["chief_route"] : ["task"],
+    )
+  }
+  expect(
+    ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls: [task, task] }), names, "required").tool_calls,
+  ).toEqual([{ function: task }, { function: task }])
 })
 
 test("fresh Chief calls require a work class in the actual model schema", () => {
@@ -151,6 +184,14 @@ test("Chief routing constrained responses retain strict name, outer shape, nativ
   })
   try {
     const invalid = [
+      [
+        row(
+          JSON.stringify({
+            kind: "tools",
+            calls: Array.from({ length: 3 }, () => ({ name: "chief_route", arguments: args })),
+          }),
+        ),
+      ],
       [row('{"kind":"tool","name":"task","arguments":{}}')],
       [row('{"kind":"tool","name":"chief_route","arguments":[]}')],
       [row('{"kind":"tool","name":"chief_route","arguments":{},"extra":true}')],

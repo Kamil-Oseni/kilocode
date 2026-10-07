@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
-import { asSchema } from "ai"
+import { asSchema, streamText } from "ai"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createRequire } from "node:module"
 import path from "node:path"
 import { Effect, Schema } from "effect"
@@ -42,8 +43,10 @@ import { RayaGoal } from "@/kilocode/goal"
 import { goalTools } from "@/kilocode/tool/goal"
 import * as GoalGate from "@/kilocode/goal/tool-gate"
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
+import { KiloToolSchema } from "@/kilocode/session/tool-schema"
 import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 import { context, schemas } from "@/kilocode/provider/ollama-context"
+import { localFetch } from "@/kilocode/provider/local-scheduler"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 
@@ -365,16 +368,15 @@ it.instance(
       const Constructor: new (opts: { strict: boolean }) => { compile(schema: unknown): (input: unknown) => boolean } =
         createRequire(require.resolve("effect/package.json"))("ajv/dist/2020")
       const validator = new Constructor({ strict: false })
-      const parameters = yield* Effect.promise(() =>
-        Promise.resolve(asSchema(prepared.tools.task.inputSchema).jsonSchema),
-      )
+      const sanitized = yield* Effect.promise(() => KiloToolSchema.sanitize(prepared.tools))
+      const parameters = yield* Effect.promise(() => Promise.resolve(asSchema(sanitized.task.inputSchema).jsonSchema))
       expect(parameters.required).toContain("task_id")
       expect(parameters.properties?.task_id).toEqual({ type: "string", enum: [child.id] })
       expect(prepared.tools.update_goal).toBeDefined()
       const options = context(
         { localInference: true, localInferenceAPI: "ollama", localInferenceToolFormat: "completion-envelope-v1" },
         model,
-        prepared.tools,
+        sanitized,
       )
       const snapshot = schemas(options)?.find((row) => row.name === "task")
       expect(snapshot?.parameters).toEqual({ ...parameters })
@@ -385,6 +387,72 @@ it.instance(
       const validate = validator.compile(parameters)
       const local = validator.compile(snapshot.parameters)
       const envelope = validator.compile(ToolEnvelope.schema(definitions, "required"))
+      const wire = yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          const rows: unknown[] = []
+          const server = Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            async fetch(request) {
+              expect(new URL(request.url).pathname).toBe("/api/chat")
+              const body = Schema.decodeUnknownSync(Schema.Struct({ format: Schema.Unknown }))(await request.json())
+              rows.push(body.format)
+              return new Response(
+                [
+                  {
+                    model: model.api.id,
+                    message: { role: "assistant", content: JSON.stringify(handoff) },
+                    done: false,
+                  },
+                  { model: model.api.id, done: true, done_reason: "stop", prompt_eval_count: 8, eval_count: 3 },
+                ]
+                  .map((row) => JSON.stringify(row))
+                  .join("\n") + "\n",
+                { headers: { "content-type": "application/x-ndjson" } },
+              )
+            },
+          })
+          return { server, rows }
+        }),
+        ({ server, rows }) =>
+          Effect.promise(async () => {
+            // Match the SDK transport's production context: no per-request native schema snapshot.
+            const sdk = createOpenAICompatible({
+              name: "synthetic-recovery-wire",
+              baseURL: `${server.url}v1`,
+              fetch: Object.assign(
+                localFetch(
+                  context(
+                    {
+                      localInference: true,
+                      localInferenceAPI: "ollama",
+                      localInferenceToolFormat: "completion-envelope-v1",
+                    },
+                    model,
+                  ),
+                ),
+                { preconnect: globalThis.fetch.preconnect },
+              ),
+            })
+            const result = streamText({
+              model: sdk.chatModel(model.api.id),
+              messages: [{ role: "user", content: "Synthetic recovery transport; no model inference." }],
+              tools: { task: { description: sanitized.task.description, inputSchema: sanitized.task.inputSchema } },
+              toolChoice: "required",
+              maxRetries: 0,
+            })
+            const calls = []
+            for await (const event of result.fullStream) {
+              if (event.type === "error") throw event.error
+              if (event.type === "tool-call") calls.push(event)
+            }
+            expect(calls).toHaveLength(1)
+            expect(calls[0]).toMatchObject({ toolName: "task", input: handoff.arguments })
+            expect(rows).toHaveLength(1)
+            return validator.compile(rows[0])
+          }),
+        ({ server }) => Effect.promise(() => server.stop(true)),
+      )
       for (const input of [
         { brief: { objective: "Perform the missing write" } },
         { task_id: child.id },
@@ -395,15 +463,18 @@ it.instance(
         expect(validate(input)).toBe(false)
         expect(local(input)).toBe(false)
         expect(envelope({ kind: "tool", name: "task", arguments: input })).toBe(false)
+        expect(wire({ kind: "tool", name: "task", arguments: input })).toBe(false)
       }
       const correction = { task_id: child.id, brief: { objective: "Perform missing write and read the saved file" } }
       expect(validate(correction)).toBe(true)
       expect(local(correction)).toBe(true)
       expect(envelope({ kind: "tool", name: "task", arguments: correction })).toBe(true)
+      expect(wire({ kind: "tool", name: "task", arguments: correction })).toBe(true)
       expect(prepared.tools.task.description).toContain(raw)
       expect(validate(handoff.arguments)).toBe(true)
       expect(local(handoff.arguments)).toBe(true)
       expect(envelope(handoff)).toBe(true)
+      expect(wire(handoff)).toBe(true)
       expect(ToolEnvelope.guide(definitions)).toContain(child.id)
       expect(ToolEnvelope.guide(definitions)).toContain("supply a concrete correction objective")
       expect(yield* sessions.children(parent.id)).toHaveLength(1)

@@ -18,9 +18,9 @@ BASE = ROOT/'python'/'python.exe'
 ENV = {'SystemRoot': 'C:\\Windows', 'HOME': str(ROOT/'home'), 'USERPROFILE': str(ROOT/'home'), 'TEMP': str(ROOT/'tmp'), 'TMP': str(ROOT/'tmp'), 'HF_HOME': str(ROOT/'hf'), 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_PROGRESS_BARS': '1', 'CUDA_VISIBLE_DEVICES': '-1'}
 BOOT = HERE/'bootstrap.py'
 PINS = {'interpreter': 'b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2',
-        'bootstrap': '18667f8876fb0b04168e804315312ce0b4bb04e56682a44543ae5e3c2d600ab2',
+        'bootstrap': 'f07ce77f8a4358ffb8852b0f4228976695e95820ca558306b5a0c81794b3b3c6',
         'worker': 'a0fef291bd0e9b40151f4f3842bb6bddb87e127dd6ed15f73bd8f9cac8b5a599',
-        'models': 'c0cfec605b11efc4a3ff641a9c61be01e830fbabe63048b55e8783780c723345'}
+        'models': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873'}
 SIZE = ctypes.c_size_t
 REGISTRY = {}
 

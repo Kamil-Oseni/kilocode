@@ -43,6 +43,36 @@ class Embeddings:
         return result
 
 
+class Gemma:
+    """Text-only Gemma for a caller-admitted pinned manifest; no service selection."""
+    def __init__(self, manifest):
+        if not isinstance(manifest, dict) or manifest.get('source') != 'google/embeddinggemma-2' or manifest.get('revision') != '914f7f89142e33e77833254d9c9b90c3cef7303b' or manifest.get('status') != 'downloaded_verified':
+            raise ValueError('Supply the admitted pinned Gemma checkpoint.')
+        from sentence_transformers import SentenceTransformer
+        self.manifest = dict(manifest)
+        self.model = SentenceTransformer(self.manifest['path'], device='cpu', local_files_only=True,
+                                         trust_remote_code=False, config_kwargs={'vision_config': None, 'audio_config': None},
+                                         model_kwargs={'dtype': torch.float32})
+        self.model.max_seq_length = 512
+        self.tokenizer = self.model.tokenizer
+        if not all(name in self.model.prompts for name in ('Document', 'SearchQuery')):
+            raise ValueError('Expected the pinned Gemma retrieval prompts.')
+
+    def encode(self, texts, query=False):
+        if type(query) is not bool or not isinstance(texts, list) or not 1 <= len(texts) <= 32 or any(not isinstance(text, str) or not 0 < len(text.strip()) <= 8000 for text in texts):
+            raise ValueError('Supply 1–32 nonempty strings and an explicit query selection.')
+        name = 'SearchQuery' if query else 'Document'
+        prompt = self.model.prompts[name]
+        values = [prompt + text for text in texts]
+        if any(len(tokens) > 512 for tokens in self.tokenizer(values, truncation=False)['input_ids']):
+            raise ValueError('Text exceeds the 512-token service window; split documents into smaller chunks.')
+        result = self.model.encode(texts, prompt_name=name, batch_size=2, normalize_embeddings=True,
+                                   convert_to_tensor=True, show_progress_bar=False)
+        if result.shape != (len(texts), 768) or not torch.isfinite(result).all() or not torch.allclose(torch.linalg.vector_norm(result, dim=1), torch.ones(len(texts)), atol=0.001):
+            raise RuntimeError('Gemma returned incompatible or invalid embeddings.')
+        return result
+
+
 class Reranker:
     def __init__(self):
         self.manifest = dict(MANIFESTS['qwen3-reranker-0.6b'])

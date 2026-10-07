@@ -1,5 +1,6 @@
 import type { ChildProcess } from "effect/unstable/process"
 import { Effect } from "effect"
+import type { ChildProcess as Process } from "node:child_process"
 
 const commands = new WeakSet<object>()
 
@@ -32,5 +33,25 @@ const inactive = (pid: number | undefined) =>
     )
   })
 
-export const cleanup = <E, R>(pid: number | undefined, next: Effect.Effect<void, E, R>) =>
-  inactive(pid).pipe(Effect.flatMap((inactive) => (inactive ? Effect.void : next)))
+/** Let short commands retire through their original exit event before Windows tree cleanup. */
+export const cleanup = <E, R>(proc: Process, next: Effect.Effect<void, E, R>) =>
+  Effect.callback<boolean>((resume) => {
+    if (proc.exitCode !== null || proc.signalCode !== null) return resume(Effect.succeed(true))
+    const finish = (value: boolean) => {
+      clearTimeout(timer)
+      proc.off("exit", exited)
+      resume(Effect.succeed(value))
+    }
+    const exited = () => finish(true)
+    proc.once("exit", exited)
+    // OS process retirement uses elapsed time, including under an injected Effect test clock.
+    const timer = setTimeout(() => finish(false), 100)
+    return Effect.sync(() => {
+      clearTimeout(timer)
+      proc.off("exit", exited)
+    })
+  }).pipe(
+    Effect.flatMap((exit) =>
+      exit ? Effect.void : inactive(proc.pid).pipe(Effect.flatMap((inactive) => (inactive ? Effect.void : next))),
+    ),
+  )

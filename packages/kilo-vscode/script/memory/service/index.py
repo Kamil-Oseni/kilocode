@@ -118,6 +118,9 @@ TOKENIZER = None
 GATE = threading.Lock()
 KEY = Path(os.environ['RAYA_MEMORY_RETRIEVAL_TOKEN_FILE']).read_text().strip()
 RELEASE = os.environ['RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256']
+PROTOCOL = os.environ.get('RAYA_MEMORY_RETRIEVAL_PROTOCOL', 'raya.retrieval.retirement.v1')
+if PROTOCOL not in ('raya.retrieval.retirement.v1', 'raya.retrieval.request.settlement.v2'):
+    raise Refused('Select a supported downstream ownership protocol.')
 if not hexadecimal(RELEASE, 64):
     raise Refused('Explicit reviewed downstream release selection is required.')
 SIGNATURE = f"markdown-v4:300tokens:{SPACE['dimensions']}:normalized:local-link-labels:" + MODEL['revision']
@@ -147,6 +150,13 @@ class Redirect(urllib.request.HTTPRedirectHandler):
 def api(path, body, gate=None):
     if path == '/v1/embeddings' and isinstance(body.get('input'), str):
         body = dict(body, input=[body['input']])
+    reuse = PROTOCOL == 'raya.retrieval.request.settlement.v2'
+    if path not in ('/v1/embeddings', '/v1/rerank'):
+        raise Refused('Select a supported downstream request route.')
+    route = '/v2' if reuse else '/v1'
+    path = route + path[3:]
+    field = 'settlement' if reuse else 'retirement'
+    phase = 'settled' if reuse else 'retired'
     port = int(os.environ.get('RAYA_RETRIEVAL_PORT', '8873'))
     if not 1024 <= port <= 65535:
         raise ValueError('Retrieval port is outside the local service range.')
@@ -171,13 +181,18 @@ def api(path, body, gate=None):
     auth = {'Authorization': 'Bearer '+KEY}
     with opener.open(urllib.request.Request(origin+'/health', headers=auth), timeout=2) as response:
         health = metadata(response.read(65537))
-    if not isinstance(health, dict) or health.get('selected_release_sha256') != RELEASE or health.get('ownership_protocol') != 'raya.retrieval.retirement.v1' or health.get('ready') is not True or health.get('retirement_unconfirmed') is not False or health.get('draining') is not False or not hexadecimal(health.get('owner_epoch'), 32):
+    if not isinstance(health, dict) or health.get('selected_release_sha256') != RELEASE or health.get('ownership_protocol') != PROTOCOL or health.get('ready') is not True or health.get('retirement_unconfirmed') is not False or health.get('draining') is not False or not hexadecimal(health.get('owner_epoch'), 32):
         raise Retirement('Selected downstream ownership admission differs.')
     sources, catalogs = health.get('source_sha256'), health.get('catalog_sha256')
     expected = {'Qwen--Qwen3-Embedding-0.6B.json', 'Qwen--Qwen3-Reranker-0.6B.json'}
     extended = expected | {'google--embeddinggemma-2.json'}
     selected = extended if SPACE['model'] == 'embeddinggemma-2' else expected
-    if not isinstance(sources, dict) or set(sources) != {'server.py', 'owner.py', 'bootstrap.py', 'worker.py', 'models.py', 'validation.py', 'namespace.py'} or not isinstance(catalogs, dict) or (set(catalogs) != selected and not (SPACE['model'] == 'qwen3-embedding-0.6b' and set(catalogs) == extended)) or not all(hexadecimal(item, 64) for item in (*sources.values(), *catalogs.values())) or fingerprint({'source_sha256': sources, 'catalog_sha256': catalogs}) != RELEASE:
+    images = {'server.py', 'owner.py', 'bootstrap.py', 'worker.py', 'models.py', 'validation.py', 'namespace.py'}
+    if reuse:
+        images = {'retrieval/'+name for name in images} | {'retrieval_reuse/'+name+'.py' for name in
+                  ('bootstrap', 'lease', 'living', 'pool', 'receipts', 'resident', 'server', 'session')}
+        selected = extended
+    if not isinstance(sources, dict) or set(sources) != images or not isinstance(catalogs, dict) or (set(catalogs) != selected and not (not reuse and SPACE['model'] == 'qwen3-embedding-0.6b' and set(catalogs) == extended)) or not all(hexadecimal(item, 64) for item in (*sources.values(), *catalogs.values())) or fingerprint({'source_sha256': sources, 'catalog_sha256': catalogs}) != RELEASE:
         raise Retirement('Selected downstream release map differs.')
     epoch = health['owner_epoch']
     auth = dict(auth, **{'X-Raya-Owner-Epoch': epoch})
@@ -185,19 +200,22 @@ def api(path, body, gate=None):
     wire = canonical(body)
     if len(wire) > 300000:
         raise ValueError('Canonical downstream body exceeds its bound.')
-    record = lease.store.begin(key, port, epoch, RELEASE, parent, digest)
+    record = lease.store.begin(key, port, epoch, RELEASE, parent, digest, PROTOCOL)
     completed = False
     submitted = False
 
     def retire():
-        request = urllib.request.Request(origin + '/v1/requests/' + key, method='DELETE', headers=auth)
+        request = urllib.request.Request(origin + route + '/requests/' + key, method='DELETE', headers=auth)
         try:
             with opener.open(request, timeout=2) as response:
                 raw = response.read(65537)
                 value = metadata(raw)
-                if not isinstance(value, dict) or value.get('cancel_requested') is not True or type(value.get('active')) is not bool or value.get('request') != key or value.get('owner_epoch') != epoch or value.get('retirement_acknowledged') is not False:
+                if (not isinstance(value, dict) or value.get('cancel_requested') is not True or
+                        value.get('request') != key or value.get('owner_epoch') != epoch or
+                        value.get(field+'_acknowledged') is not False or
+                        (not reuse and type(value.get('active')) is not bool)):
                     raise RuntimeError('Retrieval cancellation acknowledgment differs.')
-                return value['active']
+                return value
         except urllib.error.HTTPError as err:
             err.close()
             raise
@@ -224,10 +242,10 @@ def api(path, body, gate=None):
                 retire()
             proof = None
             while True:
-                with opener.open(urllib.request.Request(origin+'/v1/requests/'+key, headers=auth), timeout=2) as response:
+                with opener.open(urllib.request.Request(origin+route+'/requests/'+key, headers=auth), timeout=2) as response:
                     value = metadata(response.read(65537))
-                if isinstance(value, dict) and value.get('phase') == 'retired':
-                    proof = certificate(value, key, epoch, RELEASE, digest)
+                if isinstance(value, dict) and value.get('phase') == phase:
+                    proof = certificate(value, key, epoch, RELEASE, digest, PROTOCOL)
                     break
                 if time.monotonic() >= until:
                     raise Retirement('Original downstream terminal receipt remains unconfirmed.')
@@ -261,10 +279,10 @@ def api(path, body, gate=None):
                     if len(raw) > 2 * 1024 * 1024:
                         raise ValueError('Retrieval response exceeds 2 MiB.')
                 value = metadata(bytes(raw), 2097152)
-                if not isinstance(value, dict) or 'retirement' not in value:
+                if not isinstance(value, dict) or field not in value:
                     raise Retirement('Successful inference response lacks original retirement evidence.')
-                proof = certificate(value['retirement'], key, epoch, RELEASE, digest)
-                result = {name: item for name, item in value.items() if name != 'retirement'}
+                proof = certificate(value[field], key, epoch, RELEASE, digest, PROTOCOL)
+                result = {name: item for name, item in value.items() if name != field}
                 if proof['inference_outcome'] != 'completed' or proof.get('result_sha256') != fingerprint(result):
                     raise Retirement('Inference result does not match its original terminal receipt.')
                 completed = True

@@ -7,7 +7,10 @@ import json
 import os
 from pathlib import Path
 import stat
+import socket
 import sys
+import threading
+import time
 import unittest
 import uuid
 
@@ -195,6 +198,82 @@ class Tests(unittest.TestCase):
                 self.assertEqual([status for status, _ in results], [503] * 4)
                 self.assertEqual(len(self.runtime.records), 4)
         asyncio.run(run())
+
+    def test_actual_memory_consumer_over_loopback_settles_ram_refusal(self):
+        import uvicorn
+        listener = socket.socket()
+        listener.bind(('127.0.0.1', 0))
+        port = listener.getsockname()[1]
+        self.runtime.port = port
+        server = uvicorn.Server(uvicorn.Config(self.app, host='127.0.0.1', port=port,
+                                              log_config=None, access_log=False))
+        thread = threading.Thread(target=lambda: server.run(sockets=[listener]), daemon=False)
+
+        def join():
+            server.should_exit = True
+            thread.join(10)
+            self.assertFalse(thread.is_alive(), 'Original loopback server remains live')
+            listener.close()
+
+        thread.start()
+        self.addCleanup(join)
+        until = time.monotonic()+5
+        while not server.started and thread.is_alive() and time.monotonic() < until:
+            time.sleep(0.01)
+        self.assertTrue(server.started)
+        token = self.root/'synthetic-token.txt'
+        token.write_text(self.runtime.token, encoding='utf-8')
+        env = {'RAYA_MEMORY_RETRIEVAL_TOKEN_FILE': str(token),
+               'RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256': self.runtime.pool.release,
+               'RAYA_RETRIEVAL_PORT': str(port), 'RAYA_MEMORY_EMBEDDING_MODEL': 'qwen3-embedding-0.6b',
+               'RAYA_MEMORY_RETRIEVAL_PROTOCOL': 'raya.retrieval.request.settlement.v2'}
+        prior = {name: os.environ.get(name) for name in env}
+        sys.path.insert(0, str(SOURCE/'service'))
+        try:
+            os.environ.update(env)
+            spec = importlib.util.spec_from_file_location('actual_memory_consumer', SOURCE/'service/index.py')
+            consumer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(consumer)
+            notes = self.root/'synthetic-notes'
+            notes.mkdir()
+            store = consumer.Store(notes)
+            store.replace({'format': 'raya-general-sources-v1', 'root': str(notes),
+                           'enabled': True, 'revision': 1, 'files': []}, None)
+            proofs = []
+            with store.lease() as lease:
+                selected = consumer.LEASE.set(lease)
+                try:
+                    with self.assertRaisesRegex(RuntimeError, '503'):
+                        consumer.execute(lambda: consumer.api('/v1/embeddings',
+                                         {'model': 'qwen3-embedding-0.6b', 'input': 'Synthetic HTTP input'}),
+                                         time.monotonic()+15, correlation='a'*32, proofs=proofs)
+                finally:
+                    consumer.LEASE.reset(selected)
+            self.assertFalse(store.pending())
+            self.assertEqual(len(proofs), 1)
+            self.assertEqual(proofs[0]['phase'], 'settled')
+            self.assertFalse(proofs[0]['worker_created'])
+            self.assertEqual(json.loads(store.retirement.read_bytes())['status'], 'settled')
+            self.assertIsNone(self.runtime.pool.owner)
+            consumer.PROTOCOL = 'raya.retrieval.retirement.v1'
+            with store.lease() as lease:
+                selected = consumer.LEASE.set(lease)
+                try:
+                    with self.assertRaises(consumer.Retirement):
+                        consumer.execute(lambda: consumer.api('/v1/embeddings',
+                                         {'model': 'qwen3-embedding-0.6b', 'input': ['Synthetic refusal']}),
+                                         time.monotonic()+15, correlation='b'*32, proofs=[])
+                finally:
+                    consumer.LEASE.reset(selected)
+            self.assertEqual(len(self.runtime.records), 1)
+            self.assertFalse(store.pending())
+        finally:
+            sys.path.remove(str(SOURCE/'service'))
+            for name, value in prior.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
 
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ import struct
 import threading
 import time
 
-from owner import BASE, HERE as SOURCE, Limits, Owner as Finite, checked
+from owner import BASE, HERE as SOURCE, REGISTRY, Limits, Owner as Finite, checked
 from lease import INPUT, OUTPUT, Lease
 from living import accept
 from validation import canonical, decode, fingerprint
@@ -240,6 +240,23 @@ class Owner(Finite):
         if self.closed:
             return dict(self.state)
         self.closed = True
+        # This is only the pre-allocation path, not a failed-creation cleanup
+        # shortcut. The finite spawn allocates its job before calling CreateProcess.
+        if (not self.created and not self.handles and self.writer is None and not self.readers and
+                self.state.get('phase') == 'prepared' and not self.state.get('work_admitted')):
+            self.state.update(phase='terminal', cleanup_outcome='not_started', joins_observed=False,
+                              never_allocated_observed=True)
+            try:
+                self.publish()
+                if REGISTRY.get(self.request) is not self:
+                    raise ValueError('lease_original_registry_changed')
+                del REGISTRY[self.request]
+                return dict(self.state, ownership_retained=False)
+            except Exception as error:
+                self.failure(error, 'lease_never_allocated_publication')
+                self.state.update(phase='uncertain', cleanup_outcome='publication_unconfirmed')
+                self.expire()
+                return dict(self.state, ownership_retained=True)
         if force:
             self.cancel.set()
             if self.created:

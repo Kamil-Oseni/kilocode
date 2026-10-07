@@ -31,8 +31,8 @@ def available():
 
 
 class Ticket:
-    def __init__(self, kind, body, until):
-        self.request = uuid.uuid4().hex
+    def __init__(self, kind, body, until, request=None):
+        self.request = request or uuid.uuid4().hex
         self.kind = kind
         self.body = body
         self.until = until
@@ -40,6 +40,7 @@ class Ticket:
         self.done = threading.Event()
         self.result = None
         self.error = None
+        self.owner = None
 
 
 class Pool:
@@ -78,7 +79,20 @@ class Pool:
                 self.active.cancel.set()
             self.condition.notify_all()
 
-    def submit(self, kind, body, until):
+    def prepare(self, kind, body):
+        snapshot = decode(canonical(body, 300000), 300000)
+        model = snapshot.get('model') if isinstance(snapshot, dict) else None
+        if not isinstance(model, str) or model not in self.revisions:
+            raise ValueError('pool_model_not_selected')
+        Resident(kind, model).check(snapshot)
+        canonical({'format': 'raya.retrieval.lease.request', 'version': 2, 'lease': '0' * 32,
+                   'owner_epoch': self.epoch, 'selected_release_sha256': self.release, 'sequence': 32,
+                   'request': '0' * 32, 'request_sha256': '0' * 64, 'kind': kind, 'body': snapshot}, 300000)
+        return snapshot
+
+    def submit(self, kind, body, until, request=None):
+        if request is not None and (not isinstance(request, str) or not re.fullmatch('[a-f0-9]{32}', request)):
+            raise ValueError('pool_request_identity')
         if type(until) not in (int, float) or not time.monotonic() < until <= time.monotonic() + 150:
             raise ValueError('pool_deadline')
         with self.condition:
@@ -87,18 +101,11 @@ class Pool:
             if not self.slots.acquire(blocking=False):
                 raise ValueError('pool_capacity')
         try:
-            snapshot = decode(canonical(body, 300000), 300000)
-            model = snapshot.get('model') if isinstance(snapshot, dict) else None
-            if not isinstance(model, str) or model not in self.revisions:
-                raise ValueError('pool_model_not_selected')
-            Resident(kind, model).check(snapshot)
-            canonical({'format': 'raya.retrieval.lease.request', 'version': 2, 'lease': '0' * 32,
-                       'owner_epoch': self.epoch, 'selected_release_sha256': self.release, 'sequence': 32,
-                       'request': '0' * 32, 'request_sha256': '0' * 64, 'kind': kind, 'body': snapshot}, 300000)
+            snapshot = self.prepare(kind, body)
             with self.condition:
                 if self.stop.is_set() or self.fenced:
                     raise ValueError('pool_admission_closed')
-                ticket = Ticket(kind, snapshot, until)
+                ticket = Ticket(kind, snapshot, until, request)
                 self.queue.append(ticket)
                 self.condition.notify_all()
                 return ticket
@@ -117,8 +124,11 @@ class Pool:
         if self.owner is None:
             return
         receipt = self.owner.retire(force)
-        if (receipt is None or receipt.get('phase') != 'terminal' or receipt.get('cleanup_outcome') != 'joined' or
-                receipt.get('joins_observed') is not True or self.owner.handles):
+        joined = receipt is not None and receipt.get('cleanup_outcome') == 'joined' and receipt.get('joins_observed') is True
+        never = (receipt is not None and not self.owner.created and receipt.get('never_allocated_observed') is True and
+                 receipt.get('cleanup_outcome') == 'not_started' and receipt.get('joins_observed') is False)
+        if (receipt is None or receipt.get('phase') != 'terminal' or not (joined or never) or
+                receipt.get('ownership_retained') is True or self.owner.handles):
             self.fence()
             raise ValueError('pool_retirement_unconfirmed')
         self.owner = None
@@ -143,7 +153,9 @@ class Pool:
         if self.owner is None:
             self.owner = Owner(uuid.uuid4().hex, self.epoch, self.release, ticket.kind, model,
                                threading.Event(), self.fence, self.namespace)
+            ticket.owner = self.owner
             self.owner.start(ticket.cancel, ticket.until, self.pressure)
+        ticket.owner = self.owner
         if ticket.cancel.is_set() or self.stop.is_set() or time.monotonic() >= ticket.until:
             self.retire(True)
             raise ValueError('pool_before_inference_cancelled_or_expired')
@@ -157,6 +169,7 @@ class Pool:
     def complete(self, ticket, error=None, result=None):
         with self.condition:
             if result is not None and (ticket.cancel.is_set() or self.stop.is_set() or time.monotonic() >= ticket.until):
+                self.retire(True)
                 error, result = 'pool_delivery_cancelled_or_expired', None
             ticket.error = error
             ticket.result = result

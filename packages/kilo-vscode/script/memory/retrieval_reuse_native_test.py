@@ -133,12 +133,41 @@ class Tests(unittest.TestCase):
             self.owner.start(cancel, time.monotonic() + 2)
         self.assertFalse(self.owner.created)
         self.assertEqual(self.owner.handles, {})
+        self.assertEqual(self.owner.state['phase'], 'terminal')
+        self.assertEqual(self.owner.state['cleanup_outcome'], 'not_started')
+        self.assertFalse(self.owner.state['joins_observed'])
+        from owner import REGISTRY
+        self.assertNotIn(self.owner.request, REGISTRY)
+        from pool import Pool
+        pool = Pool(self.owner.epoch, self.owner.release, {self.owner.model: 'b' * 40}, self.namespace)
+        pool.owner = self.owner
+        pool.retire(True)
+        self.assertIsNone(pool.owner)
+        self.assertFalse(pool.fenced)
+        self.assertTrue(pool.close()['closed'])
 
     def test_expired_start_never_creates_a_child(self):
         with self.assertRaisesRegex(ValueError, 'lease_start_deadline'):
             self.owner.start(threading.Event(), time.monotonic() - 1)
         self.assertFalse(self.owner.created)
         self.assertEqual(self.owner.handles, {})
+        self.assertEqual(self.owner.state['phase'], 'terminal')
+        self.assertTrue(self.owner.state['never_allocated_observed'])
+
+    def test_v2_failure_receipt_requires_actual_joined_owner(self):
+        from receipts import failure, parse
+        selected = {'request': uuid.uuid4().hex, 'owner_epoch': self.owner.epoch,
+                    'selected_release_sha256': self.owner.release, 'request_sha256': 'b' * 64}
+        self.owner.start()
+        with self.assertRaisesRegex(ValueError, 'settlement_original_retirement_unconfirmed'):
+            failure(selected, 'cancelled', self.owner)
+        self.joined(self.owner.retire(True))
+        with self.assertRaisesRegex(ValueError, 'settlement_original_owner_selection'):
+            failure({**selected, 'owner_epoch': 'f' * 32}, 'cancelled', self.owner)
+        proof = failure(selected, 'cancelled', self.owner)
+        self.assertTrue(proof['joins_observed'])
+        self.assertEqual(proof['lease'], self.owner.request)
+        self.assertEqual(parse(proof, selected), proof)
 
     def test_invalid_request_has_no_completion_and_joins(self):
         self.owner.start()

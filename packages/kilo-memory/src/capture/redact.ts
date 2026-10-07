@@ -16,6 +16,8 @@ export namespace MemoryRedact {
   const secret = [
     /sk-[A-Za-z0-9_-]{20,}/,
     /gh[pousr]_[A-Za-z0-9_]{20,}/,
+    /\bgithub_pat_[A-Za-z0-9_]{20,}/,
+    /\bhf_[A-Za-z0-9]{20,}/,
     /AIza[0-9A-Za-z_-]{30,}/,
     /xox[baprs]-[A-Za-z0-9-]{20,}/,
     /AKIA[0-9A-Z]{16}/,

@@ -3,8 +3,9 @@ import { expect, test } from "bun:test"
 import { copyFile, mkdtemp, readFile, writeFile, stat, utimes, rename, link, symlink } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
-import { admission } from "../../src/kilocode/process-host/identity"
-import { request } from "../../src/kilocode/process-host/request"
+import { admission, synchronous } from "../../src/kilocode/process-host/identity"
+import { request, synchronous as query } from "../../src/kilocode/process-host/request"
+import { readFileSync, writeFileSync, utimesSync } from "node:fs"
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "raya-helper-admission-"))
@@ -12,6 +13,43 @@ async function fixture() {
   await copyFile(path.resolve(import.meta.dir, "../../native/kilocode/bin/raya-process-host.exe"), file)
   return { root, file }
 }
+
+test("synchronous native identity joins actual protocol with unchanged helper bytes", async () => {
+  const { file } = await fixture()
+  const result = synchronous(file, () => query(file, ["inspect", String(process.pid)]))
+  expect(result).toMatchObject({ status: "owned" })
+})
+
+test("synchronous native identity rejects same-size helper changes with restored mtime", async () => {
+  const { file } = await fixture()
+  const before = await stat(file)
+  expect(() =>
+    synchronous(file, () => {
+      const result = query(file, ["--protocol"])
+      const bytes = readFileSync(file)
+      bytes[bytes.length - 1] ^= 1
+      writeFileSync(file, bytes)
+      utimesSync(file, before.atime, before.mtime)
+      return result
+    }),
+  ).toThrow("changed during admission")
+})
+
+test("stalled synchronous read-only query is refused and its original child is joined", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "raya-identity-query-deadline-"))
+  const file = path.join(root, "query-pid")
+  const started = performance.now()
+  expect(() =>
+    query(process.execPath, [
+      "-e",
+      `await Bun.write(${JSON.stringify(file)}, String(process.pid)); await Bun.sleep(30_000)`,
+    ]),
+  ).toThrow("identity query refused")
+  expect(performance.now() - started).toBeLessThan(20_000)
+  const pid = Number(await readFile(file, "utf8"))
+  expect(Number.isSafeInteger(pid) && pid > 0 && pid !== process.pid).toBe(true)
+  expect(() => process.kill(pid, 0)).toThrow()
+}, 25_000)
 
 test("actual protocol accepts timestamp-only metadata changes with unchanged executable bytes", async () => {
   const { file } = await fixture()

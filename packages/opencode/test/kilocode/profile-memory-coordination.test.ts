@@ -50,6 +50,13 @@ test("actual retired namespace and session admissions preserve portable memory c
   const owners = createHash("sha1").update(`raya.profile.json:${normalized}`).digest("hex") + ".owners"
   const owner = path.join(metadata, owners, (await readdir(path.join(metadata, owners)))[0])
   const bytes = await readFile(owner)
+  expect(await memories(container)).toEqual(before)
+  await writeFile(owner, JSON.stringify({ ...JSON.parse(bytes.toString()), version: 2, birth: "0" }))
+  try {
+    await assert.rejects(memories(container))
+  } finally {
+    await writeFile(owner, bytes)
+  }
   const changed = JSON.parse(bytes.toString())
   changed.root = path.join(dir, "foreign", "session.md")
   await writeFile(owner, JSON.stringify(changed))

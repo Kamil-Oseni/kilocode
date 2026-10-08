@@ -1,4 +1,27 @@
-import { spawn } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
+
+/** One finite read-only query; synchronous constructors must join the original child and both pipes. */
+export function synchronous(file: string, args: string[]) {
+  const started = performance.now()
+  const child = spawnSync(file, args, {
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 4096,
+    timeout: 15_000,
+  })
+  if (
+    child.error ||
+    child.status !== 0 ||
+    child.signal ||
+    !child.stdout ||
+    !child.stderr ||
+    performance.now() - started >= 15_000
+  )
+    throw new Error("Native process identity query refused", { cause: child.error })
+  if (child.stdout.length > 4096 || child.stderr.length > 4096)
+    throw new Error("Native process identity response exceeded bound")
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(child.stdout)) as unknown
+}
 
 /** Reject late native replies even when timer callbacks are delayed. Never retry effects. */
 export function request(file: string, args: string[], bound = 8 * 1024 * 1024, timeout = 15_000) {

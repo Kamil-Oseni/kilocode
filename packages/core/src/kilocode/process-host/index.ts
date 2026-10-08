@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { createHash } from "node:crypto"
-import { request } from "./request"
-import { admission } from "./identity"
+import { request, synchronous as querySync } from "./request"
+import { admission, synchronous as admitSync } from "./identity"
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { open, stat, realpath } from "node:fs/promises"
 import path from "node:path"
@@ -27,6 +27,7 @@ const directory = selected.directory
 const bundled = selected.bundled
 const executable = path.join(directory, "raya-process-host.exe")
 let verified: { identity: string; pending: Promise<string> } | undefined
+let synchronous: string | undefined
 
 /** Compiled hosts declare compatibility explicitly; a failed native host never falls back. */
 export function mode(): "native" | "legacy" {
@@ -107,6 +108,18 @@ async function call(args: string[], file?: string) {
 
 export function inspect(value: number, file?: string) {
   return call(["inspect", pid(value)], file)
+}
+
+/** Exact kernel process identity for synchronous native-resource acquisition; no process is stopped. */
+export function inspectSync(value: number) {
+  const candidate = host()
+  return admitSync(candidate.file, (identity) => {
+    if (synchronous !== identity) {
+      compatible(querySync(candidate.file, ["--protocol"]))
+      synchronous = identity
+    }
+    return querySync(candidate.file, ["inspect", pid(value)])
+  })
 }
 
 export function terminate(value: number, expected: string) {

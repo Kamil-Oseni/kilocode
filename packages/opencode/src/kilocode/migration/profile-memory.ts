@@ -106,7 +106,7 @@ async function coordination(dir: string, original = dir) {
       const info = await lstat(owner)
       if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 4096)
         throw new Error("Unverified memory coordination owner file")
-      const value = z
+      const record = z
         .object({
           format: z.literal("raya.profile-native-owner"),
           version: z.literal(1),
@@ -116,6 +116,19 @@ async function coordination(dir: string, original = dir) {
           token: z.string().uuid(),
         })
         .strict()
+      const value = z
+        .union([
+          record,
+          record
+            .extend({
+              version: z.literal(2),
+              birth: z
+                .string()
+                .regex(/^\d{1,20}$/)
+                .refine((value) => BigInt(value) > 0n && BigInt(value) <= 0xffffffffffffffffn),
+            })
+            .strict(),
+        ])
         .parse(JSON.parse((await bounded(owner, 4096)).value))
       const normalize = (file: string) =>
         process.platform === "win32" ? path.normalize(file).toLowerCase() : path.normalize(file)

@@ -9,6 +9,7 @@ import { Hash } from "../util/hash"
 import { resolve, type Input } from "./database-path"
 import { ProfileRoots } from "./profile-roots"
 import { publish } from "./profile-record"
+import { birth, retired } from "./profile-owner"
 
 type Writer = "profile.sqlite.primary.effect" | "profile.sqlite.primary.legacy" | "profile.storage.json"
 // "json" is the legacy filesystem admission namespace, not a content format:
@@ -118,13 +119,15 @@ function native(root: Root) {
   mkdirSync(names.owners, { recursive: true, mode: 0o700 })
   const token = randomUUID()
   const marker = path.join(names.owners, token + ".json")
+  const identity = birth()
   const record = JSON.stringify({
     format: "raya.profile-native-owner",
-    version: 1,
+    version: identity ? 2 : 1,
     root: normalize(state.path),
     pid: process.pid,
     hostname: os.hostname(),
     token,
+    ...(identity ? { birth: identity } : {}),
   })
   publish(marker, record)
   if (existsSync(names.gate)) {
@@ -236,7 +239,7 @@ async function natives(root: Root) {
       !("format" in owner) ||
       owner.format !== "raya.profile-native-owner" ||
       !("version" in owner) ||
-      owner.version !== 1 ||
+      (owner.version !== 1 && owner.version !== 2) ||
       !("root" in owner) ||
       owner.root !== normalize(root.path) ||
       !("hostname" in owner) ||
@@ -251,15 +254,18 @@ async function natives(root: Root) {
       `${owner.token}.json` !== name
     )
       throw new Error("Profile native ownership is uncertain")
-    const dead = (() => {
-      try {
-        process.kill(owner.pid, 0)
-        return false
-      } catch (err) {
-        return !!err && typeof err === "object" && "code" in err && err.code === "ESRCH"
-      }
-    })()
-    // A live or reused PID is never reclaimed; no heartbeat/birth estimate grants authority.
+    const dead =
+      owner.version === 2
+        ? await retired(owner.pid, "birth" in owner ? owner.birth : undefined)
+        : (() => {
+            try {
+              process.kill(owner.pid, 0)
+              return false
+            } catch (err) {
+              return !!err && typeof err === "object" && "code" in err && err.code === "ESRCH"
+            }
+          })()
+    // Legacy live/reused PIDs remain uncertain; version 2 uses the kernel's exact creation identity.
     if (!dead) throw new Error("Profile native owners remain live or uncertain")
     if ((await readFile(file, "utf8")) !== raw) throw new Error("Profile native ownership changed during verification")
     await unlink(file)

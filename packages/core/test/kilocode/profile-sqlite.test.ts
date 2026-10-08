@@ -13,7 +13,9 @@ async function fixture() {
   return {
     dir,
     file,
+    retained: false,
     async [Symbol.asyncDispose]() {
+      if (this.retained) return
       await rm(dir, { recursive: true, force: true })
     },
   }
@@ -145,21 +147,34 @@ test("active SQLite publication races never write inside maintenance and peers r
   try {
     await wait(input.ready)
     const peer = profileSqlite(tmp.file, () => new Database(tmp.file))
-    peer.run("INSERT INTO fixture VALUES ('peer')")
-    const scope = await profileScope({ data: tmp.dir, channel: "latest", disabled: false })
-    for (let index = 0; index < 4; index++)
-      await coordinateProfileWriters(scope, "cooperative-maintenance", async () => {
-        const db = new Database(tmp.file, { readonly: true })
-        const count = () => db.query("SELECT COUNT(*) AS total FROM fixture").get()
-        const before = count()
-        await Bun.sleep(30)
-        expect(count()).toEqual(before)
-        db.close()
-      })
-    await writeFile(input.release, "release")
-    expect(await child.exited).toBe(0)
-    expect(await new Response(child.stderr).text()).toBe("")
-    peer.close()
+    try {
+      // Match both production adapters and the independent WAL writer's busy policy.
+      peer.run("PRAGMA busy_timeout = 5000")
+      peer.run("INSERT INTO fixture VALUES ('peer')")
+      const scope = await profileScope({ data: tmp.dir, channel: "latest", disabled: false })
+      for (let index = 0; index < 4; index++)
+        await coordinateProfileWriters(scope, "cooperative-maintenance", async () => {
+          const db = new Database(tmp.file, { readonly: true })
+          try {
+            const count = () => db.query("SELECT COUNT(*) AS total FROM fixture").get()
+            const before = count()
+            await Bun.sleep(30)
+            expect(count()).toEqual(before)
+          } finally {
+            db.close()
+          }
+        })
+      await writeFile(input.release, "release")
+      expect(await child.exited).toBe(0)
+      expect(await new Response(child.stderr).text()).toBe("")
+    } finally {
+      peer.close()
+    }
+  } catch (err) {
+    tmp.retained = true
+    await writeFile(path.join(tmp.dir, "failure.private.json"), JSON.stringify({ message: String(err) }))
+    console.error(`Retained actual SQLite race failure: ${tmp.dir}`)
+    throw err
   } finally {
     child.kill()
     await child.exited

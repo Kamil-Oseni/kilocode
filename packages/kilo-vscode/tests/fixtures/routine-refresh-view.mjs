@@ -121,6 +121,29 @@ try {
   assert.equal(sent.filter((msg) => msg.type === "routineList").length, 2)
   button("Review runs").click()
   assert.match(root.textContent, /Retained report/)
+  reply({
+    type: "routineRuns",
+    agentID: agent.id,
+    runs: [
+      { id: "older-running", agentID: agent.id, status: "running", at: 0 },
+      { id: "older-waiting", agentID: agent.id, status: "blocked", blockedReason: "waiting on you", at: 1 },
+      ...Array.from({ length: 51 }, (_, index) => ({
+        id: index === 50 ? "run" : `terminal-${index}`,
+        agentID: agent.id,
+        status: "complete",
+        at: index + 2,
+        outcome: { summary: index === 50 ? "Retained report" : `Terminal report ${index}` },
+      })),
+    ],
+  })
+  const options = [...root.querySelectorAll('[aria-label="Run review for Review"] select option')]
+  assert.ok(options.some((option) => option.value === "older-running" && option.textContent.includes("running")))
+  assert.ok(options.some((option) => option.value === "older-waiting" && option.textContent.includes("blocked")))
+  assert.equal(options.length, 52)
+  assert.equal(
+    options.some((option) => option.value === "terminal-0"),
+    false,
+  )
   reply({ type: "routineState", refreshID: 2, refresh: "loading" })
   reply({ type: "routineRuns", refreshID: 2, agentID: agent.id, error: "History unavailable" })
   reply({ type: "routineState", refreshID: 2, refresh: "partial", failed: [agent.id] })
@@ -221,7 +244,7 @@ try {
   })
   assert.match(root.querySelector("[data-routine-comparison]").textContent, /Current authoritative requirements/)
   assert.equal(root.querySelector(".routines-instructions textarea").value, "Original requirements")
-  console.log("routine-refresh-view: 22 assertions passed")
+  console.log("routine-refresh-view: refresh and pending-retention checks passed")
 } finally {
   dispose()
   root.remove()

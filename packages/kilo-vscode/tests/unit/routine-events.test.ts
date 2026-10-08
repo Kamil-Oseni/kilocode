@@ -46,6 +46,34 @@ function page(cursor: number, agentID = "worker") {
   }
 }
 
+test("terminal history limits retain older running and waiting identities", () => {
+  const trace = {
+    version: 1,
+    goalCreatedAt: 1,
+    turns: [
+      {
+        turnID: "msg_parent",
+        messages: [{ messageID: "msg_assistant", actions: [{ actionID: "prt_action", status: "running" }] }],
+      },
+    ],
+  }
+  const pending = [
+    { id: "running", revision: 3, status: "running" as const, trace },
+    { id: "waiting", revision: 4, status: "blocked" as const, blockedReason: "waiting on you", trace },
+  ]
+  const terminal = Array.from({ length: 51 }, (_, index) => ({
+    id: `terminal-${index}`,
+    revision: 1,
+    status: "complete" as const,
+  }))
+  const result = projectRuns([], [...pending, ...terminal], false)
+  expect(result.find((run) => run.id === "running")).toEqual(pending[0])
+  expect(result.find((run) => run.id === "waiting")).toEqual(pending[1])
+  expect(result).toHaveLength(52)
+  expect(result.some((run) => run.id === "terminal-0")).toBe(false)
+  expect(result.some((run) => run.id === "terminal-50")).toBe(true)
+})
+
 test("out-of-order and duplicate hints replay once and a late bulk history cannot regress the run", async () => {
   const calls: string[] = []
   const messages: Record<string, unknown>[] = []

@@ -453,6 +453,7 @@ export namespace MemoryCapture {
         root,
         now,
         messageID: view.lastAssistantID,
+        pending: plan.idleFlush,
         tokens,
         count,
         digest: Boolean(digest.summary),
@@ -483,7 +484,7 @@ export namespace MemoryCapture {
         }),
       }),
     )
-    return { root, skipped: false as const, operationCount: count, tokens }
+    return { root, skipped: false as const, operationCount: count, tokens, idleFlush: plan.idleFlush }
   },
   // Release the per-root abort controller acquired at the top once the turn settles (any exit path).
   (effect, input) => effect.pipe(Effect.ensuring(Effect.sync(() => MemoryTimers.release(input.root)))))

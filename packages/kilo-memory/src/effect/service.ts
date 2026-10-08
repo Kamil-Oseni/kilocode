@@ -96,6 +96,8 @@ type Index = {
 type CommitInput = RootInput & {
   now: number
   messageID: string
+  // A digest may finish while typed capture is deferred. Keep that message eligible for its idle flush.
+  pending?: boolean
   tokens: number
   count: number
   digest: boolean
@@ -217,7 +219,7 @@ export namespace MemoryService {
                 // Digest-only commits leave the typed-interval clock where it was.
                 lastTypedConsolidationAt: input.typed ? input.now : state.stats.lastTypedConsolidationAt,
                 lastSessionSavedAt: input.digest ? input.now : state.stats.lastSessionSavedAt,
-                lastConsolidatedMessageID: input.messageID,
+                lastConsolidatedMessageID: input.pending ? state.stats.lastConsolidatedMessageID : input.messageID,
                 lastConsolidationCost: input.cost ?? state.stats.lastConsolidationCost,
                 lastConsolidationTokens:
                   input.typed || input.digest ? input.tokens : state.stats.lastConsolidationTokens,

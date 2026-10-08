@@ -89,7 +89,7 @@ export namespace MemoryTurn {
               }),
             ),
           )
-          if (result?.skipped && result.idleFlush) schedule(input, memory, result.root)
+          if (result?.idleFlush) schedule(input, memory, result.root)
         }),
       )
       .pipe(

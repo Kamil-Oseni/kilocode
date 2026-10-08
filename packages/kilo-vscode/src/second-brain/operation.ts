@@ -6,7 +6,7 @@ type Row = { [key: string]: Value }
 type Identity = Readonly<{ request: string; epoch: string; release: string; digest: string }>
 type Selection = Identity &
   Readonly<{
-    kind: "search" | "sync"
+    kind: "search" | "sync" | "capture"
     downstream?: readonly Identity[]
     budget?: number
     protocol?: "raya.memory.operation.v1" | "raya.memory.operation.v2"
@@ -280,6 +280,37 @@ function terminal(row: Row, node: Node, text: string, selected: Selection) {
 }
 function result(value: Value, selected: Selection) {
   const row = object(value)
+  if (selected.kind === "capture") {
+    fields(row, [
+      "id",
+      "status",
+      "duplicate",
+      "input_sha256",
+      ...(Object.hasOwn(row, "note_sha256") ? ["note_sha256"] : []),
+    ])
+    check(
+      typeof row.id === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(row.id),
+      "Capture identity differs",
+    )
+    check(row.status === "committed" && typeof row.duplicate === "boolean", "Capture publication is unconfirmed")
+    check(
+      typeof row.input_sha256 === "string" && /^[a-f0-9]{64}$/.test(row.input_sha256),
+      "Capture input digest differs",
+    )
+    if (Object.hasOwn(row, "note_sha256")) {
+      const notes = object(row.note_sha256)
+      check(Object.keys(notes).length > 0 && Object.keys(notes).length <= 6, "Capture note result exceeds its bound")
+      Object.entries(notes).forEach(([name, hash]) =>
+        check(
+          /^(?:Daily\/\d{4}-\d{2}-\d{2}|(?:Areas|Projects|Preferences|Decisions|Commitments)\/Raya)\.md$/.test(name) &&
+            typeof hash === "string" &&
+            /^[a-f0-9]{64}$/.test(hash),
+          "Capture note result differs",
+        ),
+      )
+    }
+    return row
+  }
   if (selected.kind === "sync") {
     fields(row, [...counts, ...(Object.hasOwn(row, "rebuilt") ? ["rebuilt"] : [])])
     check(!Object.hasOwn(row, "rebuilt") || row.rebuilt === true, "Memory rebuilt result differs")
@@ -351,7 +382,7 @@ export function parse(raw: Uint8Array, selected: Selection, mode: "response" | "
     "Memory selected protocol differs",
   )
   check(
-    ["response", "terminal", "pending"].includes(mode) && ["search", "sync"].includes(selected.kind),
+    ["response", "terminal", "pending"].includes(mode) && ["search", "sync", "capture"].includes(selected.kind),
     "Memory operation selection mode differs",
   )
   check(raw.length > 0 && raw.length <= 262144, "Memory response exceeds its bound")

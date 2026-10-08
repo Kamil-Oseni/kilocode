@@ -1,5 +1,7 @@
 """Real Windows Markdown Store publication in disposable directories; no models."""
 import copy
+import hashlib
+import json
 from pathlib import Path
 import shutil
 import sys
@@ -13,6 +15,62 @@ from notes import RecoveryNeeded, Store
 
 
 class Tests(unittest.TestCase):
+    def structured(self):
+        body = copy.deepcopy(self.body)
+        body['format'] = 'raya.memory.capture.v3'
+        body['source'] = {'user': {'id': 'user-original', 'text': 'We are out of eggs.'},
+                          'assistant': {'id': body['message'], 'text': 'I added eggs.'},
+                          'tools': [{'id': 'tool-original', 'name': 'shopping', 'status': 'error', 'text': 'List unavailable'}]}
+        framed = [body['observed_utc'], body['source']['user']['id'], body['source']['user']['text'],
+                  body['message'], body['source']['assistant']['text'],
+                  [[row['id'], row['name'], row['status'], row['text']] for row in body['source']['tools']]]
+        body['source_sha256'] = hashlib.sha256(json.dumps(framed, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+        digest = hashlib.sha256(json.dumps([body['project'], body['session'], body['message']],
+                                          ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+        body['id'] = str(uuid.UUID(hex=digest[:32], version=5))
+        body['entries'][0].update(origin='user_statement', evidence=[{'id': 'user-original', 'start': 0, 'end': 19}])
+        return body
+
+    def test_structured_publication_preserves_source_classes_and_failed_tools(self):
+        body = self.structured()
+        result = publish(self.root, body)
+        state = Store(self.root).state(body['id'])
+        self.assertEqual(result['status'], 'committed')
+        self.assertEqual({row['kind'] for row in state['sources']},
+                         {'user_statement', 'assistant_interpretation', 'tool_observation'})
+        self.assertIn('Origin: user_statement', (self.root / 'Areas/Raya.md').read_text())
+        source = self.root / 'System/Capture' / body['id'] / 'tool_observation.md'
+        self.assertEqual(json.loads(source.read_text())['sources'][0]['status'], 'error')
+        self.assertTrue(publish(self.root, body)['duplicate'])
+
+    def test_structured_assistant_claim_cannot_be_tool_evidence(self):
+        body = self.structured()
+        body['entries'][0].update(origin='tool_observation', evidence=[{'id': body['message'], 'start': 0, 'end': 5}])
+        with self.assertRaisesRegex(ValueError, 'original source'):
+            publish(self.root, body)
+        self.assertFalse((self.root / 'Areas/Raya.md').exists())
+
+    def test_structured_changed_source_and_foreign_turn_refuse_before_publication(self):
+        body = self.structured()
+        body['source']['tools'][0]['status'] = 'completed'
+        with self.assertRaisesRegex(ValueError, 'digest differs'):
+            publish(self.root, body)
+        body = self.structured()
+        body['message'] = 'another-reply'
+        with self.assertRaisesRegex(ValueError, 'original turn'):
+            publish(self.root, body)
+        self.assertFalse((self.root / 'Areas/Raya.md').exists())
+
+    def test_structured_evidence_uses_bounded_original_spans(self):
+        body = self.structured()
+        body['entries'][0]['evidence'][0]['end'] = 200
+        with self.assertRaisesRegex(ValueError, 'span differs'):
+            publish(self.root, body)
+        body = self.structured()
+        body['entries'][0]['origin'] = ['invented']
+        with self.assertRaisesRegex(ValueError, 'attribution differs'):
+            publish(self.root, body)
+
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix='raya-capture-')).resolve()
         self.body = {'format': 'raya.memory.capture.v2', 'id': str(uuid.uuid4()), 'project': str(self.root),

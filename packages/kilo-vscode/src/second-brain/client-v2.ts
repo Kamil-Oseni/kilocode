@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util"
 import { canonical, decode, object, sha } from "./control/frames"
 import { parse as operation } from "./operation"
 import { parse } from "./settings"
-import { sources } from "./setup-v2"
+import type { SecondBrainRequest } from "@kilocode/sdk/v2/client"
 import { raw } from "./raw-response"
 import { search } from "./search-results"
 import { context } from "./linked-results"
@@ -11,6 +11,15 @@ import { release } from "./control/catalog-v2"
 import type { BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 
 type Selection = Parameters<typeof operation>[1]
+type Capture = Extract<SecondBrainRequest["command"], { action: "capture" }>
+export type Publication = Pick<Capture, "id" | "observed_utc" | "source_sha256" | "source" | "entries"> & {
+  format: "raya.memory.capture.v3"
+  project: string
+  session: string
+  message: string
+  day: string
+  zone: string
+}
 type Options = {
   id: string
   before: (request: unknown) => Promise<void>
@@ -121,9 +130,10 @@ export class ClientV2 {
     const scope = signal ? AbortSignal.any([signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000)
     const value = object(json(await this.request("/health", scope)).value)
     const pins = object(value.source_sha256)
+    const names = Object.keys(this.#setup.source_sha256)
     if (
-      Object.keys(pins).sort().join() !== [...sources].sort().join() ||
-      sources.some((name) => pins[name] !== this.#setup.source_sha256[name]) ||
+      Object.keys(pins).sort().join() !== names.sort().join() ||
+      names.some((name) => pins[name] !== this.#setup.source_sha256[name]) ||
       value.operation_protocol !== this.#setup.protocol ||
       !hex(value.owner_epoch, 32) ||
       value.selected_release_sha256 !== fingerprint(this.#setup.source_sha256) ||
@@ -156,7 +166,13 @@ export class ClientV2 {
     return this.#selection
   }
 
-  private async send(kind: "sync" | "search", body: object, opts: Options, expected?: string, budget?: number) {
+  private async send(
+    kind: "sync" | "search" | "capture",
+    body: object,
+    opts: Options,
+    expected?: string,
+    budget?: number,
+  ) {
     const id = opts.id
     const before = opts.before
     const downstream = opts.downstream
@@ -303,6 +319,22 @@ export class ClientV2 {
       )
     const value = await this.send("search", body, opts, undefined, budget)
     const result = context(object(value.result!).context, this.#setup.root, budget)
+    value.signal.throwIfAborted()
+    return result
+  }
+
+  async capture(body: Publication, opts: Options) {
+    if (
+      this.#setup.protocol !== "raya.memory.operation.v2" ||
+      !("capture.py" in this.#setup.source_sha256) ||
+      body.format !== "raya.memory.capture.v3" ||
+      Buffer.byteLength(JSON.stringify(body)) > 65536
+    )
+      throw new Failure("unsupported", "Select the reviewed capture-capable Memory release", 0)
+    const value = await this.send("capture", body, opts)
+    const result = object(value.result!)
+    if (result.id !== body.id || result.input_sha256 !== fingerprint(body))
+      throw new Failure("identity_mismatch", "Original capture receipt differs", 200)
     value.signal.throwIfAborted()
     return result
   }

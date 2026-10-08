@@ -21,7 +21,7 @@ class Journal:
         self.folder = self.namespace.folder('Requests', epoch)
 
     def reserve(self, request, kind, body):
-        if not hex(request, 32) or kind not in ('search', 'sync'):
+        if not hex(request, 32) or kind not in ('search', 'sync', 'capture'):
             raise ValueError('Memory operation identity differs.')
         value = {'format': self.format, 'request': request,
                  'owner_epoch': self.epoch, 'selected_release_sha256': self.release,

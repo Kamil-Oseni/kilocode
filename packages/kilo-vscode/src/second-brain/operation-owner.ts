@@ -1,4 +1,4 @@
-import { ClientV2 } from "./client-v2"
+import { ClientV2, type Publication } from "./client-v2"
 import { Failure } from "./client"
 import { object } from "./control/frames"
 import { parse, type BrainSettings } from "./settings"
@@ -71,6 +71,10 @@ export class OperationOwner {
     )
       return Promise.reject(new Error("Supply a bounded query and explicit linked-context budget"))
     return this.run((before, signal, id) => this.#client.context(query, budget, { id, before, signal }), opts)
+  }
+
+  capture(body: Publication, opts: Options) {
+    return this.run((before, signal, id) => this.#client.capture(body, { id, before, signal }), opts)
   }
 
   sync(expected: string, opts: Options & { close: () => Promise<void> }) {

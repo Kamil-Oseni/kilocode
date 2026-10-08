@@ -21,12 +21,12 @@ FIELDS = {'format', 'request', 'owner_epoch', 'selected_release_sha256', 'kind',
 
 
 def request(value):
-    if not isinstance(value, dict) or set(value) != FIELDS or value['format'] not in ('raya.memory.operation.v1', 'raya.memory.operation.v2') or value['status'] != 'pending' or value['kind'] not in ('sync', 'search') or not hex(value['request'], 32) or not hex(value['owner_epoch'], 32) or not hex(value['request_sha256'], 64) or not hex(value['selected_release_sha256'], 64):
+    if not isinstance(value, dict) or set(value) != FIELDS or value['format'] not in ('raya.memory.operation.v1', 'raya.memory.operation.v2') or value['status'] != 'pending' or value['kind'] not in ('sync', 'search', 'capture') or not hex(value['request'], 32) or not hex(value['owner_epoch'], 32) or not hex(value['request_sha256'], 64) or not hex(value['selected_release_sha256'], 64):
         raise ValueError('Historical original request differs.')
 
 
 def sources(value):
-    if not isinstance(value, dict) or set(value) != set(SOURCES):
+    if not isinstance(value, dict) or set(value) not in (set(SOURCES), set(SOURCES) | {'capture.py'}):
         raise ValueError('Exact reviewed source set required.')
     for name, digest in value.items():
         path = Path(__file__).resolve().parent / name

@@ -18,6 +18,6 @@ test("personal capture preserves notes, journal evidence, cancellation and confl
     child.exited,
   ])
   expect(code, output + error).toBe(0)
-  expect(error).toContain("Ran 10 tests")
+  expect(error).toContain("Ran 14 tests")
   expect(error).toContain("OK")
 }, 30_000)

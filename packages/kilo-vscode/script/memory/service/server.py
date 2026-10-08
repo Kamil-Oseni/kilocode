@@ -10,11 +10,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse
-from index import Index, execute, Cancelled, PROTOCOL
+from index import Index, execute, Cancelled, PROTOCOL, CANCEL
 from admission import Retirement, failures
 from operations import Journal
 from dispatch import prepare, submit
 from proposals import Proposals
+from capture import publish, validate
 from retirement import decode, canonical, fingerprint, hex
 
 ROOT = Path(__file__).parent
@@ -30,7 +31,7 @@ if not KEY:
     raise ValueError('An existing token is required.')
 SOURCE = {name: hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in
           ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
-           'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py')}
+           'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py', 'capture.py')}
 RELEASE = fingerprint(SOURCE)
 EPOCH = secrets.token_hex(16)
 JOURNAL = Journal(os.environ['RAYA_MEMORY_OPERATION_ROOT'],
@@ -255,20 +256,21 @@ async def handle(request: Request, path: str):
             DRAIN.update(id=key, until=time.monotonic()+60 if path.endswith('/drain') else 0)
             value = {'draining': DRAIN['until'] > time.monotonic(), 'active': ACTIVE, 'lease_seconds': 60}
         return JSONResponse(value, headers={'Cache-Control': 'no-store'})
-    if request.method != 'POST' or path not in ('v1/memory/search', 'v1/memory/sync'):
+    if request.method != 'POST' or path not in ('v1/memory/search', 'v1/memory/sync', 'v1/memory/capture'):
         return fail('not_found', 'Route not found.', 404)
     key = request.headers.get('x-raya-memory-request-id')
     if not hex(key, 32):
         return fail('invalid_request_id', 'Provide the original request identity.', 400)
     if request.headers.get('content-type', '').split(';')[0] != 'application/json':
         return fail('unsupported_media', 'Use application/json.', 415)
+    limit = 65536 if path == 'v1/memory/capture' else 16000
     async def read():
         raw = bytearray()
         async for part in request.stream():
             raw.extend(part)
-            if len(raw) > 16000:
-                raise ValueError('Request exceeds 16 KB.')
-        return decode(bytes(raw), 16000)
+            if len(raw) > limit:
+                raise ValueError('Request exceeds its operation bound.')
+        return decode(bytes(raw), limit)
     try:
         body = await asyncio.wait_for(read(), 15)
         if not isinstance(body, dict):
@@ -278,13 +280,18 @@ async def handle(request: Request, path: str):
             body = search(body)
             budget = body.get('context_budget')
             work = (lambda: {'results': [], 'context': INDEX.context(body['query'], budget, body['top']), 'capture_enabled': False}) if budget is not None else (lambda: {'results': INDEX.search(body['query'], body['top']), 'capture_enabled': False})
+        elif kind == 'capture':
+            if body.get('format') != 'raya.memory.capture.v3' or PROTOCOL != 'raya.retrieval.request.settlement.v2':
+                raise ValueError('Evidence-bound capture requires the current publication protocol.')
+            validate(body)
+            work = lambda: publish(NOTES, body, cancel=lambda: bool(CANCEL.get() and CANCEL.get().is_set()))
         else:
             if set(body)-{'force_rebuild', 'expected_policy_sha256'} or type(body.get('force_rebuild', False)) is not bool or not hex(body.get('expected_policy_sha256'), 64):
                 raise ValueError('Provide the exact confirmed policy fingerprint and boolean rebuild flag.')
             body = {'force_rebuild': body.get('force_rebuild', False), 'expected_policy_sha256': body['expected_policy_sha256']}
             work = lambda: INDEX.sync(force=body['force_rebuild'], expected=body['expected_policy_sha256'])
-        if len(canonical(body)) > 16000:
-            raise ValueError('Canonical request exceeds 16 KB.')
+        if len(canonical(body)) > limit:
+            raise ValueError('Canonical request exceeds its operation bound.')
     except (ValueError, UnicodeDecodeError) as error:
         return fail('invalid_request', str(error), 422)
     except asyncio.TimeoutError:

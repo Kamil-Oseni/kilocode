@@ -71,6 +71,27 @@ test("separate v2 setup schema refuses cross-version, paged and incomplete maps"
   expect(() => parse({ ...setup, root: root + "\0" })).toThrow()
 })
 
+test("capture selection and debt require the exact publication module and current protocol", () => {
+  const selected = {
+    ...setup,
+    protocol: "raya.memory.operation.v2",
+    source_sha256: { ...pins, "capture.py": "f".repeat(64) },
+  }
+  expect(parse(selected)).toEqual(selected)
+  expect(() =>
+    parse({ ...selected, source_sha256: { ...selected.source_sha256, "unreviewed.py": "f".repeat(64) } }),
+  ).toThrow()
+  const value = metadata("search")
+  const capture = {
+    ...value,
+    protocol: selected.protocol,
+    request: { ...value.request, op: "capture", source_sha256: selected.source_sha256 },
+  }
+  expect(journal(capture)).toEqual(capture)
+  expect(() => journal({ ...capture, protocol: "raya.memory.operation.v1" })).toThrow()
+  expect(() => journal({ ...capture, request: { ...capture.request, source_sha256: pins } })).toThrow()
+})
+
 test("v2 sync and search debts preserve exact root and refuse replay-shaped metadata", () => {
   for (const op of ["sync", "search"] as const) {
     const value = metadata(op)

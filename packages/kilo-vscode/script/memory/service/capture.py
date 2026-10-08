@@ -12,14 +12,18 @@ import json
 import os
 from pathlib import Path
 import re
+import uuid
 
 from admission import closing
+from retirement import canonical
 from notes import FOLDERS, RecoveryNeeded, Store, clean, digest, identity, safe
 
 
 def validate(body):
     fields = {'format', 'id', 'project', 'session', 'message', 'observed_utc', 'day', 'zone', 'source', 'entries'}
-    if not isinstance(body, dict) or set(body) != fields or body['format'] != 'raya.memory.capture.v2':
+    if isinstance(body, dict) and body.get('format') == 'raya.memory.capture.v3':
+        fields.add('source_sha256')
+    if not isinstance(body, dict) or set(body) != fields or body['format'] not in {'raya.memory.capture.v2', 'raya.memory.capture.v3'}:
         raise ValueError('Use the exact completed-turn capture payload.')
     if not isinstance(body['id'], str):
         raise ValueError('Capture requires a canonical UUID string.')
@@ -40,14 +44,17 @@ def validate(body):
     if (not isinstance(zone, str) or len(zone) > 255 or
             not re.fullmatch(r'[A-Za-z][A-Za-z0-9._+-]*(?:/[A-Za-z0-9][A-Za-z0-9._+-]*)*', zone)):
         raise ValueError('Capture requires a bounded IANA diary zone label.')
-    if not isinstance(body['source'], str) or not body['source'].strip() or len(body['source'].encode('utf-8')) > 65536:
+    if body['format'] == 'raya.memory.capture.v3':
+        evidence(body)
+    elif not isinstance(body['source'], str) or not body['source'].strip() or len(body['source'].encode('utf-8')) > 65536:
         raise ValueError('Capture source must be nonempty and at most 64 KiB.')
     if not isinstance(body['entries'], list) or not 1 <= len(body['entries']) <= 8:
         raise ValueError('Capture requires 1–8 organized entries.')
     keys = set()
     for item in body['entries']:
-        if (not isinstance(item, dict) or set(item) != {'category', 'key', 'text'} or
-                not isinstance(item['category'], str) or item['category'] not in FOLDERS):
+        fields = {'category', 'key', 'text'} | ({'origin', 'evidence'} if body['format'] == 'raya.memory.capture.v3' else set())
+        if (not isinstance(item, dict) or set(item) != fields or
+                not isinstance(item['category'], str) or item['category'] not in FOLDERS - {'People'}):
             raise ValueError('Entries require an approved category, stable key and text.')
         key = item['key']
         if not isinstance(key, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,79}', key):
@@ -59,7 +66,65 @@ def validate(body):
         keys.add(key)
         if not isinstance(item['text'], str) or not item['text'].strip() or len(item['text'].encode('utf-8')) > 4096:
             raise ValueError('Entry text must be nonempty and at most 4 KiB.')
+    if body['format'] == 'raya.memory.capture.v3':
+        return canonical(body)
     return json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+
+
+def evidence(body):
+    framed = json.dumps([body['project'], body['session'], body['message']], ensure_ascii=False, separators=(',', ':'))
+    if body['id'] != str(uuid.UUID(hex=digest(framed.encode('utf-8'))[:32], version=5)):
+        raise ValueError('Capture ID differs from its original turn.')
+    source = body['source']
+    if not isinstance(source, dict) or set(source) != {'user', 'assistant', 'tools'}:
+        raise ValueError('Capture requires the structured original source.')
+    groups = {'user_statement': [source['user']], 'assistant_interpretation': [source['assistant']],
+              'tool_observation': source['tools']}
+    if not isinstance(source['tools'], list) or len(source['tools']) > 16:
+        raise ValueError('Original tools exceed their bound.')
+    ids = set()
+    for origin, rows in groups.items():
+        for row in rows:
+            fields = {'id', 'text'} | ({'name', 'status'} if origin == 'tool_observation' else set())
+            if not isinstance(row, dict) or set(row) != fields:
+                raise ValueError('Original source fields differ.')
+            if not isinstance(row['id'], str) or not 1 <= len(row['id']) <= 256 or row['id'] in ids:
+                raise ValueError('Original source IDs must be bounded and unique.')
+            ids.add(row['id'])
+            limit = 4000 if origin == 'tool_observation' else 16000
+            if not isinstance(row['text'], str) or not row['text'].strip() or len(row['text'].encode('utf-16-le')) // 2 > limit:
+                raise ValueError('Original source text exceeds its bound.')
+            if origin == 'tool_observation' and (not isinstance(row['status'], str) or row['status'] not in {'completed', 'error'} or
+                    not isinstance(row['name'], str) or not 1 <= len(row['name']) <= 256):
+                raise ValueError('Original tool status differs.')
+    if source['assistant']['id'] != body['message']:
+        raise ValueError('Original reply identity differs.')
+    if len(json.dumps(source, ensure_ascii=False, separators=(',', ':')).encode('utf-8')) > 24000:
+        raise ValueError('Original source exceeds the aggregate extraction bound.')
+    framed = [body['observed_utc'], source['user']['id'], source['user']['text'],
+              source['assistant']['id'], source['assistant']['text'],
+              [[row['id'], row['name'], row['status'], row['text']] for row in source['tools']]]
+    actual = digest(json.dumps(framed, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+    if body['source_sha256'] != actual:
+        raise ValueError('Original capture source digest differs.')
+    if not isinstance(body['entries'], list) or not 1 <= len(body['entries']) <= 8:
+        raise ValueError('Capture requires 1–8 organized entries.')
+    for item in body['entries']:
+        if not isinstance(item, dict) or not isinstance(item.get('origin'), str) or item['origin'] not in groups:
+            raise ValueError('Capture attribution differs.')
+        spans = item.get('evidence')
+        if not isinstance(spans, list) or not 1 <= len(spans) <= 4:
+            raise ValueError('Capture requires bounded original evidence.')
+        for span in spans:
+            if not isinstance(span, dict) or set(span) != {'id', 'start', 'end'}:
+                raise ValueError('Capture evidence fields differ.')
+            original = next((row for row in groups[item['origin']] if row['id'] == span['id']), None)
+            start, end = span['start'], span['end']
+            if original is None or type(start) is not int or type(end) is not int or not 0 <= start < end <= 16000:
+                raise ValueError('Capture evidence does not identify its original source.')
+            raw = original['text'].encode('utf-16-le')
+            if end * 2 > len(raw) or not raw[start * 2:end * 2].decode('utf-16-le').strip():
+                raise ValueError('Capture evidence span differs.')
 
 
 @contextmanager
@@ -159,17 +224,34 @@ def publish(root, body, observe=None, cancel=None):
             text += '\nInterpretation of a recorded conversation; not independently verified.\n'
             for item in body['entries']:
                 if item['category'] == category:
-                    text += '\n### ' + item['key'] + '\n\n' + item['text'] + '\n'
+                    text += '\n### ' + item['key'] + '\n\n'
+                    if body['format'] == 'raya.memory.capture.v3':
+                        text += 'Origin: ' + item['origin'] + '\nEvidence: ' + json.dumps(item['evidence'], ensure_ascii=False) + '\n\n'
+                    text += item['text'] + '\n'
             changes.append({'path': name, 'expected': None if old is None else digest(old), 'content': text})
         folder.mkdir()
         immutable(folder / 'input.json', raw)
         source = folder / 'source.md'
         snapshot = ('# Original completed turn\n\n' + json.dumps({name: body[name] for name in
                     ('project', 'session', 'message', 'observed_utc', 'day', 'zone')}, ensure_ascii=False) +
-                    '\n\nKind: assistant_interpretation\n\n' + body['source']).encode('utf-8')
+                    '\n\nKind: assistant_interpretation\n\n' + (body['source'] if isinstance(body['source'], str)
+                    else json.dumps(body['source'], ensure_ascii=False))).encode('utf-8')
         immutable(source, snapshot)
         request = {'id': body['id'], 'changes': changes, 'sources': [{'path': str(source),
                    'sha256': digest(snapshot), 'kind': 'assistant_interpretation', 'event_time': body['observed_utc']}]}
+        if body['format'] == 'raya.memory.capture.v3':
+            request['sources'] = []
+            for origin, rows in [('user_statement', [body['source']['user']]),
+                                 ('assistant_interpretation', [body['source']['assistant']]),
+                                 ('tool_observation', body['source']['tools'])]:
+                if not rows:
+                    continue
+                path = folder / (origin + '.md')
+                raw = json.dumps({'origin': origin, 'observed_utc': body['observed_utc'], 'sources': rows},
+                                 ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+                immutable(path, raw)
+                request['sources'].append({'path': str(path), 'sha256': digest(raw), 'kind': origin,
+                                           'event_time': body['observed_utc']})
         immutable(folder / 'request.json', json.dumps(request, sort_keys=True, ensure_ascii=False).encode('utf-8'))
         if observe:
             observe('captured')

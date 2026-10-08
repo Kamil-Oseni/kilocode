@@ -14,6 +14,23 @@ export const sources = [
   "proposals.py",
 ] as const
 
+export function pins(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Memory source pins are required")
+  const rows = input as Record<string, unknown>
+  const names = "capture.py" in rows ? [...sources, "capture.py"] : sources
+  if (
+    Object.keys(rows).sort().join() !== [...names].sort().join() ||
+    names.some(
+      (name) =>
+        typeof rows[name] !== "string" ||
+        (rows[name] as string).length !== 64 ||
+        !/^[a-f0-9]{64}$/.test(rows[name] as string),
+    )
+  )
+    throw new Error("Memory requires the exact reviewed source pins")
+  return Object.freeze(Object.fromEntries(names.map((name) => [name, rows[name] as string])))
+}
+
 export function setup(value: Record<string, unknown>, url: string) {
   if (
     (value.protocol !== "raya.memory.operation.v1" && value.protocol !== "raya.memory.operation.v2") ||
@@ -23,25 +40,13 @@ export function setup(value: Record<string, unknown>, url: string) {
     value.root.length > 4096
   )
     throw new Error("Memory requires a bounded absolute Windows root")
-  const pins = value.source_sha256
-  if (!pins || typeof pins !== "object" || Array.isArray(pins)) throw new Error("Memory source pins are required")
-  const rows = pins as Record<string, unknown>
-  if (
-    Object.keys(rows).sort().join() !== [...sources].sort().join() ||
-    sources.some(
-      (name) =>
-        typeof rows[name] !== "string" ||
-        (rows[name] as string).length !== 64 ||
-        !/^[a-f0-9]{64}$/.test(rows[name] as string),
-    )
-  )
-    throw new Error("Memory requires exactly twelve reviewed source pins")
+  const selected = pins(value.source_sha256)
   return Object.freeze({
     format: "raya.memory.setup" as const,
     version: 2 as const,
     protocol: value.protocol,
     origin: url,
     root: value.root,
-    source_sha256: Object.freeze(Object.fromEntries(sources.map((name) => [name, rows[name] as string]))),
+    source_sha256: selected,
   })
 }

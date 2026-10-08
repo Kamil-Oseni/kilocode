@@ -110,6 +110,49 @@ test("out-of-order and duplicate hints replay once and a late bulk history canno
   }
 })
 
+test("removing a watched worker cancels its in-flight history and refuses the late response", async () => {
+  const entered = gate()
+  const delayed = gate()
+  const messages: Record<string, unknown>[] = []
+  const calls: string[] = []
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      const id = new URL(request.url).pathname.split("/").at(-2)!
+      calls.push(id)
+      if (calls.length === 1) {
+        entered.release()
+        await delayed.promise
+      }
+      return Response.json(page(1))
+    },
+  })
+  const client = createKiloClient({ baseUrl: server.url.toString() })
+  const reader = new RoutineEvents(
+    () => ({ client, directory: "workspace", generation: 1 }),
+    (msg) => messages.push(msg),
+  )
+  try {
+    reader.watch(["worker"])
+    const active = reader.hint(event(1))
+    await entered.promise
+    reader.watch([])
+    reader.watch(["worker"])
+    expect(await Promise.race([active.then(() => true), Bun.sleep(1000).then(() => false)])).toBe(true)
+    delayed.release()
+    await active
+    expect(messages.filter((msg) => msg.type === "routineRuns")).toEqual([])
+    await reader.hint(event(1))
+    expect(calls).toHaveLength(2)
+    expect(messages.filter((msg) => msg.type === "routineRuns").map((msg) => msg.cursor)).toEqual([1])
+  } finally {
+    delayed.release()
+    reader.dispose()
+    await server.stop(true)
+  }
+})
+
 test("expired replay cursor falls back to a snapshot on reconnect", async () => {
   const calls: string[] = []
   const messages: Record<string, unknown>[] = []

@@ -72,6 +72,12 @@ export class RoutineEvents {
     for (const id of this.lag.keys()) if (!this.known.has(id)) this.lag.delete(id)
     for (const id of this.failed) if (!this.known.has(id)) this.failed.delete(id)
     for (const id of this.pending) if (!this.known.has(id)) this.pending.delete(id)
+    for (const [id, controller] of this.inflight) {
+      if (this.known.has(id)) continue
+      controller.abort()
+      this.controllers.delete(controller)
+      this.inflight.delete(id)
+    }
   }
 
   hint(value: unknown): Promise<void> {
@@ -187,8 +193,8 @@ export class RoutineEvents {
       const now = this.current()
       return (
         !this.stopped &&
+        this.owns(id, controller) &&
         !controller.signal.aborted &&
-        this.controllers.has(controller) &&
         now.client === scope.client &&
         now.directory === scope.directory &&
         now.generation === scope.generation
@@ -224,13 +230,17 @@ export class RoutineEvents {
       } else this.lag.delete(id)
     } catch {
       // A later live event or reconnect replays from the same durable cursor.
-      if (this.deadline !== undefined) this.failed.add(id)
+      if (this.deadline !== undefined && this.owns(id, controller)) this.failed.add(id)
     } finally {
       clearTimeout(timer)
       controller.abort()
       this.controllers.delete(controller)
       if (this.inflight.get(id) === controller) this.inflight.delete(id)
     }
+  }
+
+  private owns(id: string, controller: AbortController) {
+    return this.known.has(id) && this.controllers.has(controller)
   }
 
   private warn() {

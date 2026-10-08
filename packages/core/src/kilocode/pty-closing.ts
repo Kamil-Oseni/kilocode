@@ -13,7 +13,7 @@ export function drain<E, R, E2, R2>(
       const item = yield* take
       const sent = yield* write(item).pipe(Effect.timeoutOption(duration))
       if (Option.isNone(sent)) {
-        yield* write(new Socket.CloseEvent(1013, "terminal output backlog"))
+        yield* write(new Socket.CloseEvent(1013, "terminal output backlog")).pipe(Effect.timeoutOption(duration))
         return yield* Effect.never.pipe(Effect.timeoutOption(duration), Effect.asVoid)
       }
       if (item instanceof Socket.CloseEvent)

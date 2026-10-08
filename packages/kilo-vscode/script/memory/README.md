@@ -66,9 +66,12 @@ The master also binds a fresh protected diagnostics root, its native birth
 generation and its protection receipt. Each case saves bounded original stream
 sidecars and a terminal record there, including failures. Keep these files
 private; raw exception output is not certified free of sensitive content.
-The test does not issue embeddings, rerank, sync or search. Memory initialization
-does load its local tokenizer; native namespace observation occurs at import.
-These effects require Root admission despite the absence of inference.
+The test does not issue embeddings, rerank, sync or search. The current Memory
+index loads NumPy and its tokenizer lazily when an operation needs them; its
+constructor does not load the tokenizer. The older selected external service
+still imports NumPy and Transformers eagerly. Native namespace observation
+occurs at import, so service startup still requires Root admission despite the
+absence of inference. Lazy imports do not establish model or search acceptance.
 
 ## Gates still pending
 

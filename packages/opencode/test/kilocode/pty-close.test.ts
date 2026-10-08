@@ -13,6 +13,25 @@ import { makePtyOutbox } from "../../src/server/routes/instance/httpapi/handlers
 const node = Bun.which("node")
 const fixture = fileURLToPath(new URL("./pty-close-reader.cjs", import.meta.url))
 
+test("bounds the fallback close when neither the send nor close request settles", async () => {
+  const frames: Array<string | Uint8Array | Socket.CloseEvent> = []
+  const started = Date.now()
+  await Effect.runPromise(
+    drain(
+      Effect.succeed("output"),
+      (item) => Effect.sync(() => frames.push(item)).pipe(Effect.andThen(Effect.never)),
+      20,
+    ).pipe(Effect.timeout("1 second")),
+  )
+  expect(frames).toHaveLength(2)
+  expect(frames[0]).toBe("output")
+  expect(frames[1]).toBeInstanceOf(Socket.CloseEvent)
+  const close = frames[1]
+  if (!(close instanceof Socket.CloseEvent)) throw new Error("Expected fallback close request")
+  expect(close.code).toBe(1013)
+  expect(Date.now() - started).toBeLessThan(1000)
+})
+
 async function run(stalled: boolean, pressure = false) {
   if (!node) throw new Error("Real Node socket client is required")
   const state = { released: false, finished: false, elapsed: 0, detached: 0, accepted: 0, bytes: 0, depth: 0 }

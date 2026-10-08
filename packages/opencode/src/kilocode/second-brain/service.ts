@@ -10,16 +10,20 @@ import { ErrorCode, Event, type Failure, Request, RequestID, Result } from "./pr
 import { valid } from "./reply"
 
 const log = Log.create({ service: "second-brain-host" })
+
+function read(command: Request["command"]) {
+  return command.action === "context" || command.action === "status" ? command.action : undefined
+}
 type WithoutID<T> = T extends unknown ? Omit<T, "id"> : never
 export type Input = WithoutID<Request>
 
 export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrainHostError", {
   code: ErrorCode,
   detail: Schema.String,
-  operation: Schema.optional(Schema.Literal("context")),
+  operation: Schema.optional(Schema.Literals(["context", "status"])),
 }) {
   override get message() {
-    if (this.operation === "context") return `${this.detail}. No note changes were requested.`
+    if (this.operation) return `${this.detail}. No note changes were requested.`
     return `${this.detail}. Proposal outcome is unconfirmed; do not automatically retry creation. List/read the original proposal ID before deciding what to do next.`
   }
 }
@@ -91,7 +95,7 @@ export function layer(timeout: Duration.Input = "2 minutes") {
                   new HostError({
                     code: "disconnected",
                     detail: "The Second Brain host disconnected",
-                    operation: entry.info.command.action === "context" ? "context" : undefined,
+                    operation: read(entry.info.command),
                   }),
                 )
               }
@@ -138,7 +142,7 @@ export function layer(timeout: Duration.Input = "2 minutes") {
           entry.deferred,
           new HostError({
             code: reason,
-            operation: entry.info.command.action === "context" ? "context" : undefined,
+            operation: read(entry.info.command),
             detail:
               reason === "timeout"
                 ? "The Second Brain host request timed out"
@@ -148,7 +152,7 @@ export function layer(timeout: Duration.Input = "2 minutes") {
       })
 
       const request = Effect.fn("SecondBrain.request")(function* (input: Input) {
-        const operation = input.command.action === "context" ? ("context" as const) : undefined
+        const operation = read(input.command)
         const pending = (yield* StateService).pending
         if (pending.size >= 32)
           return yield* new HostError({
@@ -229,7 +233,7 @@ export function layer(timeout: Duration.Input = "2 minutes") {
           new HostError({
             code: input.error.code,
             detail: input.error.message,
-            operation: entry.info.command.action === "context" ? "context" : undefined,
+            operation: read(entry.info.command),
           }),
         )
       })

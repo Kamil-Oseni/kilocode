@@ -148,6 +148,10 @@ test("proposal bridge uses real SDK reply once and refuses foreign project befor
     properties: { ...request, id: "req-foreign", project: path.join(cfg.root, "foreign") },
   })
   await until(() => cfg.rejects.length === 1)
+  await until(() => {
+    const active: unknown = Reflect.get(bridge, "active")
+    return active instanceof Map && active.size === 0
+  })
   await bridge.close()
   expect(cfg.replies).toEqual([{ result: { action: "list", project: cfg.root, proposals: [] } }])
   expect(await readFile(marker, "utf8")).toBe("entered")
@@ -300,6 +304,41 @@ test("a delayed recovery list cannot enter the host after SDK client replacement
     expect(next.replies).toEqual([])
   } finally {
     gate.held.resolve()
+    await bridge.close()
+  }
+})
+
+test("status failures use the original SDK rejection without claiming a proposal write", async () => {
+  const cfg = await fixture()
+  cfg.queued.push({
+    id: "req-status-refused",
+    sessionID: "ses-original",
+    project: cfg.root,
+    command: { action: "status" },
+  })
+  const bridge = new BrainBridge(cfg.connection, {
+    model: async () => {
+      throw new Error("Setup state is uncertain")
+    },
+  })
+  try {
+    cfg.connected()
+    await until(() => cfg.rejects.length === 1)
+    await until(() => {
+      const active: unknown = Reflect.get(bridge, "active")
+      return active instanceof Map && active.size === 0
+    })
+    await bridge.close()
+    expect(cfg.replies).toEqual([])
+    expect(cfg.rejects).toEqual([
+      {
+        error: {
+          code: "conflict",
+          message: "Memory setup status could not be confirmed. Check Memory settings; no note changes were requested.",
+        },
+      },
+    ])
+  } finally {
     await bridge.close()
   }
 })

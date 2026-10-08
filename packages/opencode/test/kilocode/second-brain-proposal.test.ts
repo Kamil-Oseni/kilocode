@@ -667,6 +667,32 @@ it.instance("disconnected timeout and cancellation clear original request withou
   }),
 )
 
+it.instance("read-only status refusal cancellation and timeout never imply a proposal write", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const brain = yield* SecondBrain.Service
+    const sessionID = SessionID.make("ses_brain_status_failure")
+    for (const mode of ["reject", "cancel", "timeout"]) {
+      const fiber = yield* brain
+        .request({ sessionID, project: inst.directory, command: { action: "status" } })
+        .pipe(Effect.forkChild)
+      const pending = yield* brain.list().pipe(Effect.repeat({ until: (rows) => rows.length === 1 }))
+      if (mode === "reject")
+        yield* brain.reject({
+          requestID: pending[0].id,
+          error: { code: "conflict", message: "Setup state is uncertain" },
+        })
+      if (mode === "cancel") yield* brain.cancelSession(sessionID)
+      const failure = yield* Fiber.join(fiber).pipe(Effect.flip)
+      expect(failure.code).toBe(mode === "reject" ? "conflict" : mode === "cancel" ? "cancelled" : "timeout")
+      expect(failure.operation).toBe("status")
+      expect(failure.message).toContain("No note changes were requested")
+      expect(failure.message).not.toContain("Proposal outcome")
+      expect(yield* brain.list()).toEqual([])
+    }
+  }),
+)
+
 test("model schema rejects apply and invented proposal IDs", () => {
   expect(Schema.decodeUnknownExit(Command)({ action: "apply", id, digest: "a".repeat(64) })._tag).toBe("Failure")
   expect(Schema.decodeUnknownExit(Command)({ action: "read", id: "invented" })._tag).toBe("Failure")

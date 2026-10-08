@@ -12,10 +12,10 @@ const Params = Schema.Union([
   Schema.Struct({ query: Recall.fields.query, budget: Schema.optional(Recall.fields.budget) }),
 ])
 
-function cancelled(signal: AbortSignal) {
+function cancelled(signal: AbortSignal, operation: "context" | "status" = "context") {
   return Effect.callback<never, HostError>((resume) => {
     const fail = () =>
-      resume(Effect.fail(new HostError({ code: "cancelled", detail: "Memory recall cancelled", operation: "context" })))
+      resume(Effect.fail(new HostError({ code: "cancelled", detail: "Memory read cancelled", operation })))
     if (signal.aborted) return fail()
     signal.addEventListener("abort", fail, { once: true })
     return Effect.sync(() => signal.removeEventListener("abort", fail))
@@ -55,7 +55,7 @@ export const BrainRecallTool = Tool.define<
                 project: inst.directory,
                 command: { action: "status" },
               })
-              .pipe(Effect.raceFirst(cancelled(ctx.abort)), Effect.orDie)
+              .pipe(Effect.raceFirst(cancelled(ctx.abort, "status")), Effect.orDie)
             if (result.action !== "status") return yield* Effect.die(new Error("Memory status reply required"))
             return {
               title: "Memory setup status",

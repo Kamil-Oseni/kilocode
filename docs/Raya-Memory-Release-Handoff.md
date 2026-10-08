@@ -1,5 +1,11 @@
 # Memory deployment handoff — October 7
 
+## October 8 current integrated source bundle
+
+For current provisioning, the staged successor is `D:/Raya/Services/Packaging/Candidates/Reuse-d44-current-20261008-root/sources.zip`: 107,231 bytes, SHA-256 `c9dfce7df44d798f95e0f07b93254b4493724a740a9a3acb5cd520f94e6027d5`. Its receipt selects integrated commit `ca93b495ff33518ec205745eb9f03fcd12ba880f` and reusable fingerprint `366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b`. All 33 archive entries were read back against the staged bytes. Twelve Memory files match the current supervisor release map, sixteen Retrieval files match the supervisor and extension reuse catalog, and three checkpoint catalogs match current pins. The current supervisor is included. The clean dependency candidate below remains selected staging input.
+
+This supersedes the older bundle and fingerprint below only for source provisioning. It does not establish protected interpreter/dependency admission, deployed service readiness, Gemma index migration, warm reuse or automatic capture. Those deployment checks remain required. The older input table is retained as historical evidence; use the successor fingerprint for both current cohort release selections.
+
 The source is ready for integration into the matching release. Successful installed Gemma retrieval, bounded warm reuse, and automatic Raya capture remain unverified. Keep the existing service available until the new cohort passes its deployment checks.
 
 ## Inputs

@@ -24,6 +24,7 @@ type Record = {
   prepared: boolean
   settled: boolean
   completed?: boolean
+  failed?: boolean
   retiring?: boolean
   retired?: boolean
   value?: ReturnType<typeof operation>
@@ -59,7 +60,7 @@ export class ClientV2 {
   #token: string
   #used = new Set<string>()
   #records = new Map<string, Record>()
-  #proofs = new WeakMap<object, { record: Record; completed: boolean }>()
+  #proofs = new WeakMap<object, { record: Record; completed: boolean; failed?: boolean }>()
   #selection?: { epoch: string; release: string }
 
   constructor(token: string, input: unknown) {
@@ -224,6 +225,16 @@ export class ClientV2 {
     return proof
   }
 
+  /** Validated unsuccessful terminal GET retires work without claiming successful results. */
+  closed(id: string) {
+    const record = this.#records.get(id)
+    if (!record?.settled || !record.prepared || !record.sent || !record.failed || record.retiring || record.retired)
+      return undefined
+    const proof = Object.freeze({})
+    this.#proofs.set(proof, { record, completed: false, failed: true })
+    return proof
+  }
+
   async settle(proof: object, id: string, body: () => Promise<void>) {
     const issued = this.#proofs.get(proof)
     const record = issued?.record
@@ -234,7 +245,11 @@ export class ClientV2 {
       !record.prepared ||
       record.retiring ||
       record.retired ||
-      (issued.completed ? !record.sent || !record.completed : record.sent)
+      (issued.failed
+        ? !record.sent || !record.failed
+        : issued.completed
+          ? !record.sent || !record.completed
+          : record.sent)
     )
       throw new Error("Original Memory settlement required")
     this.#proofs.delete(proof)
@@ -316,6 +331,7 @@ export class ClientV2 {
   async observe(id: string, signal?: AbortSignal) {
     const record = this.original(id)
     record.completed = false
+    record.failed = false
     const scope = signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000)
     const bytes = await this.request(`/v1/memory/requests/${id}`, scope, "GET", record.selected)
     const status = object(json(bytes).value).status
@@ -323,6 +339,8 @@ export class ClientV2 {
     record.value = value
     scope.throwIfAborted()
     record.completed = status === "terminal" && object(value.operation).operation_outcome === "completed"
+    record.failed =
+      status === "terminal" && ["failed", "cancelled"].includes(String(object(value.operation).operation_outcome))
     return value
   }
 

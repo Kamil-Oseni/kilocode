@@ -6,6 +6,7 @@ import { useVSCode } from "../../context/vscode"
 import type { BrainState, BrainRequest } from "../../../../src/shared/second-brain"
 import { BrainProposals } from "./BrainProposals"
 import { BrainConsolidation } from "./BrainConsolidation"
+import { MediaEvidence } from "./MediaEvidence"
 
 const labels: Record<string, string> = {
   namespace_changed: "Memory folder changed. Trusted re-admission is required.",
@@ -99,10 +100,10 @@ export function SecondBrain() {
         Import control setup
       </Button>
       <Button onClick={() => request("review")} disabled={!state().configured || busy()}>
-        Review sources
+        Choose notes
       </Button>
       <Button onClick={() => request("sync")} disabled={!state().configured || busy()}>
-        Confirm sync
+        Index selected notes
       </Button>
       <Button onClick={() => request("disable")} disabled={!state().configured || busy()}>
         Disable source policy
@@ -189,6 +190,7 @@ export function SecondBrain() {
         disabled.
       </p>
       <BrainConsolidation configured={state().configured} />
+      <Show when={state().media}>{(value) => <MediaEvidence value={value()} />}</Show>
       <BrainProposals configured={state().configured} busy={busy()} index={(action) => request(action)} />
     </Card>
   )

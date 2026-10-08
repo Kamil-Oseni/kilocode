@@ -82,7 +82,8 @@ with tempfile.TemporaryDirectory(prefix='raya-memory-operation-codec-') as temp:
             ('search', 'completed', False, ''), ('sync', 'completed', False, ''),
             ('sync', 'completed', True, ''), ('sync', 'failed', False, ''), ('search', 'cancelled', False, ''),
             ('search', 'completed', False, 'escape'), ('search', 'completed', False, 'score'),
-            ('search', 'completed', False, 'line'), ('sync', 'completed', False, 'counts')]):
+            ('search', 'completed', False, 'line'), ('sync', 'completed', False, 'counts'),
+            ('search', 'failed', False, 'empty')]):
         request = format(index+1, '032x')
         body = {'query': 'Synthetic café 日本語 😀', 'top': 5} if kind == 'search' else {
             'force_rebuild': rebuilt, 'expected_policy_sha256': 'e'*64}
@@ -103,7 +104,7 @@ with tempfile.TemporaryDirectory(prefix='raya-memory-operation-codec-') as temp:
             result['results'][0]['line'] = 0
         if invalid == 'counts':
             result['new_embeddings'] = 3
-        proofs = [proof(format(100+index, '032x'), outcome=outcome),
+        proofs = [] if invalid == 'empty' else [proof(format(100+index, '032x'), outcome=outcome),
                   proof(format(200+index, '032x'), created=False, outcome='cancelled')]
         terminal = journal.complete(pending, result if outcome == 'completed' else None, outcome, proofs)
         selected = {'request': request, 'epoch': journal.epoch, 'release': journal.release,

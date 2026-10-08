@@ -138,8 +138,8 @@ export class OperationOwner {
     if (!observed.ok) errors.push(observed.error)
     if (observed.ok) {
       const operation = object(observed.value.operation)
-      if (operation.status !== "terminal" || operation.operation_outcome !== "completed")
-        errors.push(new Failure("retirement_unconfirmed", "Original Memory operation is not completed", 0))
+      if (operation.status !== "terminal")
+        errors.push(new Failure("retirement_unconfirmed", "Original Memory operation is not terminal", 0))
     }
     return errors
   }
@@ -177,7 +177,7 @@ export class OperationOwner {
       const closed = await outcome(Promise.resolve().then(close))
       if (!closed.ok) cleanup.push(closed.error)
     }
-    if (!proof && result.ok && !signal.aborted && cleanup.length === 0) proof = this.#client.completed(id)
+    if (!proof) proof = this.proof(id, result.ok && !signal.aborted, cleanup)
     if (debt !== undefined && proof && cleanup.length === 0) {
       const settled = await outcome(
         this.#client.settle(proof, id, () => this.settings.settle(debt, this.#lease, proof)),
@@ -192,6 +192,11 @@ export class OperationOwner {
     if (debt === undefined) throw new Error("Original Memory journal was not observed")
     if (!proof) throw new Error("Original completed Memory settlement was not observed")
     return result.value
+  }
+
+  private proof(id: string, completed: boolean, errors: readonly unknown[]) {
+    if (errors.length) return undefined
+    return (completed ? this.#client.completed(id) : undefined) ?? this.#client.closed(id)
   }
 
   async settle() {

@@ -24,6 +24,7 @@ import { DreamTransport } from "./dream-transport"
 import { entry as dreamEntry } from "./dream-entry"
 import { DreamActivity } from "./dream-activity"
 import { Effect } from "effect"
+import { choices } from "./note-choices"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
@@ -709,14 +710,17 @@ export class BrainHost {
       }
       send(await this.service.status())
     } catch (err) {
-      const configured = await this.settings.load().then(
-        (value) => !!value,
-        () => false,
-      )
+      const pending = this.settings.pending() !== undefined
+      const configured = pending
+        ? this.settings.version() !== undefined
+        : await this.settings.load().then(
+            (value) => !!value,
+            () => false,
+          )
       send({
         configured,
         status: "unavailable",
-        code: err instanceof Failure ? err.code : "setup_invalid",
+        code: pending ? "control_uncertain" : err instanceof Failure ? err.code : "setup_invalid",
         results: [],
       })
     }
@@ -795,17 +799,23 @@ export class BrainHost {
   }
 
   private async review() {
-    const names = await vscode.window.showInputBox({
-      prompt:
-        "Complete source allowlist: relative Markdown paths separated by newlines or semicolons. Omitted sources are removed.",
-      ignoreFocusOut: true,
-    })
-    if (names === undefined) return
-    const selected = names
-      .split(/[;\r\n]+/)
-      .map((value) => value.trim())
-      .filter(Boolean)
+    const cfg = await this.settings.load()
+    if (!cfg) throw new Error("Memory setup required")
+    const names = await choices(cfg.setup.root)
+    if (!names.length) throw new Error("No eligible Markdown notes found")
+    const picked = await vscode.window.showQuickPick(
+      names.map((name) => ({ label: name })),
+      {
+        canPickMany: true,
+        ignoreFocusOut: true,
+        title: "Choose the notes Raya may search",
+        placeHolder: "Choose the complete set. Previously selected notes you omit will be removed. Review follows.",
+      },
+    )
+    if (picked === undefined) return
+    const selected = picked.map((item) => item.label)
     if (!selected.length || selected.length > 128) throw new Error("Select 1–128 relative source files")
+    if (!this.settings.current(cfg.setup)) throw new Error("Memory setup changed during note selection")
     const enabled = await vscode.window.showQuickPick(
       [
         { label: "Enable this reviewed source policy", value: true },

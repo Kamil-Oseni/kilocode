@@ -549,6 +549,58 @@ genuine("failed POST retains debt after false cancel ACK and original terminal G
   }
 })
 
+genuine("failed search before downstream work settles its original debt and preserves the failure", async () => {
+  const value = await harness("search-failed-empty", { status: 503 })
+  try {
+    await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow(
+      "Inspect the original",
+    )
+    expect(value.settings.pending()).toBeUndefined()
+    expect(value.owner.retired()).toBe(true)
+    expect(value.calls.map((row) => row.method)).toEqual(["GET", "POST", "DELETE", "GET"])
+    await expect(value.owner.dispose()).rejects.toThrow("Inspect the original")
+    expect((await value.settings.load())?.setup.root).toBe("C:\\Synthetic")
+  } finally {
+    await value.cleanup()
+  }
+})
+
+genuine("cancelled search with original downstream retirement settles without successful results", async () => {
+  const value = await harness("search-cancelled", { status: 503 })
+  try {
+    await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow(
+      "Inspect the original",
+    )
+    expect(value.settings.pending()).toBeUndefined()
+    expect(value.owner.retired()).toBe(true)
+    await expect(value.owner.dispose()).rejects.toThrow("Inspect the original")
+  } finally {
+    await value.cleanup()
+  }
+})
+
+genuine("substituted failed terminal cannot retire original debt", async () => {
+  const data = await fixture()
+  const item = data.cases.find((row) => row.name === "search-failed-empty")!
+  const value = await harness("search-failed-empty", {
+    status: 503,
+    terminal() {
+      const bytes = Buffer.from(item.terminal, "base64")
+      return Buffer.from(bytes.toString().replace(item.selected.epoch, "f".repeat(32)))
+    },
+  })
+  try {
+    await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow(
+      "Original Memory operation failures retained",
+    )
+    expect(value.settings.pending()).toBeDefined()
+    expect(value.owner.retired()).toBe(false)
+    await expect(value.owner.dispose()).rejects.toThrow("Original Memory operation failures retained")
+  } finally {
+    await value.cleanup()
+  }
+})
+
 genuine("failed clear joins original restoration before releasing its slot", async () => {
   const entered = deferred()
   const barrier = deferred()
@@ -691,11 +743,11 @@ genuine("genuine pending metadata cannot clear completed response debt", async (
   })
   try {
     await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow(
-      "not completed",
+      "not terminal",
     )
     expect(value.settings.pending()).toBeDefined()
     expect(value.calls.map((row) => row.method)).toEqual(["GET", "POST", "GET"])
-    await expect(value.owner.dispose()).rejects.toThrow("not completed")
+    await expect(value.owner.dispose()).rejects.toThrow("not terminal")
   } finally {
     await value.cleanup()
   }

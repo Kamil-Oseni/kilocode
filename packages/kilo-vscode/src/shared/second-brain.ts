@@ -56,6 +56,7 @@ export type BrainState = Readonly<{
   review?: BrainReview
   context?: BrainContext
   root?: string
+  media?: Readonly<{ root: string; query: string; top: number; response: unknown }>
   dream?: Readonly<{ status: "native-review" | "closed" | "unavailable"; activity?: BrainDreamActivity }>
   results: readonly BrainSource[]
   control?: Readonly<{

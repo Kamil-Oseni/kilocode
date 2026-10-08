@@ -21,6 +21,7 @@ export namespace MemoryTurn {
   type Input = {
     root: string
     sessionID: string
+    messageID?: string
     reason: Reason
     session: MemoryPorts.SessionPort
     model: MemoryPorts.ModelPort
@@ -36,6 +37,7 @@ export namespace MemoryTurn {
           MemoryCapture.turn({
             root: input.root,
             sessionID: input.sessionID,
+            messageID: input.messageID,
             session: input.session,
             model: input.model,
             memoryModel: input.memoryModel,
@@ -77,6 +79,7 @@ export namespace MemoryTurn {
           const result = yield* MemoryCapture.turn({
             root: input.root,
             sessionID: input.sessionID,
+            messageID: input.messageID,
             session: input.session,
             model: input.model,
             reason: input.reason,

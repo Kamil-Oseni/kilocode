@@ -111,10 +111,11 @@ function trace(messages: MessageV2.WithParts[], max: number) {
     .join("\n\n")
 }
 
-function latest(messages: MessageV2.WithParts[]): Turn | undefined {
+function latest(messages: MessageV2.WithParts[], id?: string): Turn | undefined {
   const assistant = messages.findLast(
     (item): item is AssistantTurn =>
       item.info.role === "assistant" &&
+      (id === undefined || (item.info.id === id && typeof item.info.time.completed === "number")) &&
       Boolean(item.info.finish) &&
       item.info.summary !== true &&
       !item.info.error &&
@@ -138,19 +139,21 @@ function latest(messages: MessageV2.WithParts[]): Turn | undefined {
 
 /** True when the turn was answered from memory (targeted recall ran); digesting it would echo memory back into itself. */
 function recalledMemory(turn: Turn) {
-  return [turn.user, ...turn.assistants].flatMap((item) => item.parts).some((part) => {
-    if (part.type === "tool") {
-      return (
-        ["kilo_memory_recall", "second_brain_recall"].includes(part.tool) &&
-        part.state.status === "completed" &&
-        typeof part.state.metadata.count === "number" &&
-        part.state.metadata.count > 0
-      )
-    }
-    if (part.type !== "text") return false
-    const marker = (part.metadata as { kiloMemory?: { type?: string; count?: number } } | undefined)?.kiloMemory
-    return marker?.type === "recall" && (marker.count ?? 0) > 0
-  })
+  return [turn.user, ...turn.assistants]
+    .flatMap((item) => item.parts)
+    .some((part) => {
+      if (part.type === "tool") {
+        return (
+          ["kilo_memory_recall", "second_brain_recall"].includes(part.tool) &&
+          part.state.status === "completed" &&
+          typeof part.state.metadata.count === "number" &&
+          part.state.metadata.count > 0
+        )
+      }
+      if (part.type !== "text") return false
+      const marker = (part.metadata as { kiloMemory?: { type?: string; count?: number } } | undefined)?.kiloMemory
+      return marker?.type === "recall" && (marker.count ?? 0) > 0
+    })
 }
 
 // --- Model resolution + invocation (host provider/`ai` -> port ModelHandle) --------------------
@@ -190,10 +193,20 @@ async function memoryText(input: {
     const budget = input.budget
     const context = input.source.limit.context
     const output = input.source.limit.output
-    if (!Number.isSafeInteger(budget.input) || budget.input < 1 || budget.input > 12000 ||
-      !Number.isSafeInteger(budget.output) || budget.output < 1 || budget.output > 8000 ||
-      !Number.isFinite(context) || context <= 0 || !Number.isFinite(output) || output <= 0 ||
-      budget.output > output || budget.input + budget.output + 32 > context)
+    if (
+      !Number.isSafeInteger(budget.input) ||
+      budget.input < 1 ||
+      budget.input > 12000 ||
+      !Number.isSafeInteger(budget.output) ||
+      budget.output < 1 ||
+      budget.output > 8000 ||
+      !Number.isFinite(context) ||
+      context <= 0 ||
+      !Number.isFinite(output) ||
+      output <= 0 ||
+      budget.output > output ||
+      budget.input + budget.output + 32 > context
+    )
       throw new Error("Memory model budget is invalid or exceeds its configured model limits")
     const tokens = Math.ceil(MemoryToken.estimate(`${input.system}\n${input.prompt}`) * 1.3) + 32
     if (tokens > budget.input) throw new Error("Memory model prompt exceeds its estimated input budget")
@@ -269,25 +282,29 @@ export namespace MemorySession {
     summary: SessionSummary.Interface
   }): MemoryPorts.SessionPort {
     return {
-      readTurn: ({ sessionID, window }) =>
+      readTurn: ({ sessionID, window, messageID }) =>
         Effect.gen(function* () {
           const messages = yield* input.sessions.messages({ sessionID: SessionID.make(sessionID), limit: window })
-          const turn = latest(messages)
+          const end =
+            messageID === undefined
+              ? messages.length
+              : messages.findIndex((item) => item.info.id === messageID && item.info.sessionID === sessionID) + 1
+          if (end === 0) return undefined
+          const scoped = messages.slice(0, end).filter((item) => item.info.sessionID === sessionID)
+          const turn = latest(scoped, messageID)
           if (!turn) return undefined
-          const diffs = yield* input.summary
-            .computeDiff({ messages: [turn.user, ...turn.assistants] })
-            .pipe(
-              Effect.catch((err) =>
-                Effect.sync(() => {
-                  log.warn("memory turn diff unavailable", { error: String(err) })
-                  return [] as Snapshot.FileDiff[]
-                }),
-              ),
-            )
+          const diffs = yield* input.summary.computeDiff({ messages: [turn.user, ...turn.assistants] }).pipe(
+            Effect.catch((err) =>
+              Effect.sync(() => {
+                log.warn("memory turn diff unavailable", { error: String(err) })
+                return [] as Snapshot.FileDiff[]
+              }),
+            ),
+          )
           return {
             user: text(turn.user.parts),
             assistant: output(turn.assistant.parts),
-            recent: trace(messages, 8),
+            recent: trace(scoped, 8),
             lastAssistantID: turn.assistant.info.id,
             sessionModel: {
               providerID: turn.user.info.model.providerID,
@@ -337,7 +354,10 @@ export namespace MemoryModel {
           if (reason) log.warn("memory model config ignored", { reason, model: configured })
           const language = yield* input.provider.getLanguage(source)
           const provider = yield* input.provider.getProvider(source.providerID)
-          return { handle: modelOptions(source, language, localConfig(provider.options).enabled), ...(reason ? { fallback: { reason } } : {}) }
+          return {
+            handle: modelOptions(source, language, localConfig(provider.options).enabled),
+            ...(reason ? { fallback: { reason } } : {}),
+          }
         }).pipe(Effect.mapError(MemoryError.from)),
       run: ({ handle, system, prompt, timeoutMs, signal, budget }) => {
         const resolved = handle as ModelHandle

@@ -11,6 +11,7 @@ import { MemoryLog } from "../src/effect/log"
 import type { MemoryPorts } from "../src/effect/ports"
 import { MemoryService } from "../src/effect/service"
 import { MemoryTimers } from "../src/effect/timers"
+import { MemoryTurn } from "../src/effect/turn"
 import { MemorySchema } from "../src/schema"
 import { MemoryPaths } from "../src/storage/paths"
 import { MemoryFiles } from "../src/storage/store"
@@ -90,6 +91,42 @@ function run(input: {
 }
 
 describe("MemoryCapture (fake ports)", () => {
+  test("turn-close forwards the original reply and rejects a substituted view before model resolution", async () => {
+    const t = await tmp()
+    const seen: string[] = []
+    const port: MemoryPorts.SessionPort = {
+      get: () => Effect.succeed({ parentID: undefined }),
+      readTurn: (input) => {
+        seen.push(input.messageID ?? "missing")
+        return Effect.succeed(view({ lastAssistantID: "msg_successor" }))
+      },
+    }
+    const model: MemoryPorts.ModelPort = {
+      resolve: () => Effect.die(new Error("Model must not resolve for a substituted turn")),
+      run: async () => {
+        throw new Error("Model must not run for a substituted turn")
+      },
+    }
+    try {
+      await KiloMemory.enable({ root: t.root })
+      await Effect.runPromise(
+        MemoryTurn.close({
+          root: t.root,
+          sessionID: "ses_anchored",
+          messageID: "msg_original",
+          reason: "completed",
+          session: port,
+          model,
+        }).pipe(Effect.provideService(MemoryService.Service, MemoryService.make())),
+      )
+      expect(seen).toEqual(["msg_original"])
+      expect((await MemoryFiles.readState(t.root)).stats.lastConsolidatedMessageID).toBeNull()
+      expect((await KiloMemory.show({ root: t.root })).sources.environment).not.toContain("successor")
+    } finally {
+      await t.done()
+    }
+  })
+
   test("turn-close typed LLM saves environment memory", async () => {
     const t = await tmp()
     try {

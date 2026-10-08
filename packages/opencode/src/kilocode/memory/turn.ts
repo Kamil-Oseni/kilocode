@@ -33,6 +33,7 @@ export namespace MemoryTurn {
 
   export const close = Effect.fn("MemoryTurn.close")(function* (input: {
     sessionID: SessionID
+    messageID?: string
     reason: Reason
     sessions: Session.Interface
     summary: SessionSummary.Interface
@@ -43,6 +44,7 @@ export namespace MemoryTurn {
     return yield* TurnCore.close({
       root,
       sessionID: input.sessionID,
+      messageID: input.messageID,
       reason: input.reason,
       session: MemorySession.port({ sessions: input.sessions, summary: input.summary }),
       model: MemoryModel.port({ provider: input.provider }),
@@ -76,8 +78,13 @@ export namespace MemoryLifecycle {
           const ctx = yield* InstanceState.context
           const enabled = yield* KiloSessionPrompt.memoryToolEnabled({ ctx })
           if (!enabled) return
+          if (!evt.properties.messageID) {
+            log.warn("memory turn-close missing original reply", { sessionID: evt.properties.sessionID })
+            return
+          }
           yield* MemoryTurn.close({
             sessionID: evt.properties.sessionID,
+            messageID: evt.properties.messageID,
             // A superseded turn handed off to a queued follow-up after draining
             // its step; for digest purposes it was cut short like an interrupt.
             reason: evt.properties.reason === "superseded" ? "interrupted" : evt.properties.reason,

@@ -19,13 +19,15 @@ for (const cancel of [false, true])
     async () => {
       const root = await mkdtemp(path.join(os.tmpdir(), "raya-capture-deferred-"))
       const calls: string[] = []
+      const anchors: string[] = []
       const done = Promise.withResolvers<void>()
       const svc = MemoryService.make()
       svc.setIdleSettle(10)
       const session: MemoryPorts.SessionPort = {
         get: () => Effect.succeed({}),
-        readTurn: () =>
-          Effect.succeed({
+        readTurn: (input) => {
+          anchors.push(input.messageID ?? "missing")
+          return Effect.succeed({
             user: "The Atlas project uses bun run verify-atlas for its integration tests.",
             assistant: "I will use bun run verify-atlas when validating the Atlas integration tests.",
             recent: "Atlas integration test command: bun run verify-atlas.",
@@ -33,7 +35,8 @@ for (const cancel of [false, true])
             sessionModel: { providerID: "fixture", modelID: "capture" },
             recalledMemory: false,
             diffs: [],
-          }),
+          })
+        },
       }
       const model: MemoryPorts.ModelPort = {
         resolve: () => Effect.succeed({ handle: {} }),
@@ -57,15 +60,21 @@ for (const cancel of [false, true])
           stats: { ...state.stats, lastTypedConsolidationAt: Date.now(), lastConsolidatedMessageID: "other_assistant" },
         })
         await Effect.runPromise(
-          MemoryTurn.close({ root, sessionID: "new_session", reason: "completed", session, model }).pipe(
-            Effect.provideService(MemoryService.Service, svc),
-          ),
+          MemoryTurn.close({
+            root,
+            sessionID: "new_session",
+            messageID: "new_assistant",
+            reason: "completed",
+            session,
+            model,
+          }).pipe(Effect.provideService(MemoryService.Service, svc)),
         )
         if (cancel) {
           MemoryTurn.open({ sessionID: "new_session" })
           await Bun.sleep(40)
           expect(calls.filter((system) => system === typedPrompt)).toHaveLength(0)
           expect((await MemoryFiles.readState(root)).stats.lastConsolidatedMessageID).toBe("other_assistant")
+          expect(anchors).toEqual(["new_assistant"])
           return
         }
         await Promise.race([done.promise, Bun.sleep(1000)])
@@ -75,10 +84,16 @@ for (const cancel of [false, true])
         svc.dropLock("new_session")
         expect((await KiloMemory.show({ root })).sources.environment).toContain("bun run verify-atlas")
         expect((await MemoryFiles.readState(root)).stats.lastConsolidatedMessageID).toBe("new_assistant")
+        expect(anchors).toEqual(["new_assistant", "new_assistant"])
         await Effect.runPromise(
-          MemoryTurn.close({ root, sessionID: "new_session", reason: "completed", session, model }).pipe(
-            Effect.provideService(MemoryService.Service, svc),
-          ),
+          MemoryTurn.close({
+            root,
+            sessionID: "new_session",
+            messageID: "new_assistant",
+            reason: "completed",
+            session,
+            model,
+          }).pipe(Effect.provideService(MemoryService.Service, svc)),
         )
         await Bun.sleep(40)
         expect(calls.filter((system) => system === typedPrompt)).toHaveLength(1)

@@ -25,6 +25,8 @@ export namespace MemoryPorts {
     readonly readTurn: (input: {
       sessionID: string
       window: number
+      /** Original completed assistant; omitted only by legacy manual callers. */
+      messageID?: string
     }) => Effect.Effect<TurnView | undefined, MemoryError>
     readonly get: (input: { sessionID: string }) => Effect.Effect<{ parentID?: string } | undefined, MemoryError>
   }

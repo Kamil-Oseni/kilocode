@@ -310,6 +310,86 @@ function summary(input: { seen: string[]; diffs: Snapshot.FileDiff[] }): Session
 const ref = { providerID: "test", modelID: "fake-memory-model" }
 
 describe("memory ports", () => {
+  test("original reply selection excludes queued successor text, tools and diffs", async () => {
+    const sid = SessionID.make("ses_original")
+    const uid = MessageID.make("msg_original_user")
+    const rid = MessageID.make("msg_original_recall")
+    const aid = MessageID.make("msg_original_reply")
+    const next = MessageID.make("msg_queued_user")
+    const reply = MessageID.make("msg_queued_reply")
+    const seen: string[] = []
+    const messages = [
+      user({ sessionID: sid, id: uid, body: "Remember my original preference." }),
+      assistant({
+        sessionID: sid,
+        id: rid,
+        parentID: uid,
+        time: 2,
+        finish: "tool-calls",
+        parts: [tool({ sessionID: sid, messageID: rid, name: "second_brain_recall", meta: { count: 1 } })],
+      }),
+      assistant({ sessionID: sid, id: aid, parentID: uid, time: 4, parts: [text(sid, aid, "Original reply.")] }),
+      user({ sessionID: sid, id: next, body: "Future queued preference." }),
+      assistant({
+        sessionID: sid,
+        id: reply,
+        parentID: next,
+        time: 6,
+        parts: [text(sid, reply, "Future queued reply."), tool({ sessionID: sid, messageID: reply, name: "bash" })],
+      }),
+    ]
+    const port = MemorySession.port({ sessions: sessions(messages), summary: summary({ seen, diffs: [] }) })
+    const result = await Effect.runPromise(port.readTurn({ sessionID: sid, window: 24, messageID: aid }))
+    expect(result?.lastAssistantID).toBe(aid)
+    expect(result?.assistant).toBe("Original reply.")
+    expect(result?.recalledMemory).toBe(true)
+    expect(result?.recent).not.toContain("Future")
+    expect(result?.recent).not.toContain("Tool bash")
+    expect(seen).toEqual([uid, rid, aid])
+    expect((await Effect.runPromise(port.readTurn({ sessionID: sid, window: 24 })))?.lastAssistantID).toBe(reply)
+    expect(await Effect.runPromise(port.readTurn({ sessionID: sid, window: 1, messageID: aid }))).toBeUndefined()
+  })
+
+  test("original reply selection refuses missing, foreign, incomplete and invalid anchors without a latest fallback", async () => {
+    const sid = SessionID.make("ses_anchor")
+    const uid = MessageID.make("msg_anchor_user")
+    const aid = MessageID.make("msg_anchor_reply")
+    const other = SessionID.make("ses_foreign")
+    const base = assistant({ sessionID: sid, id: aid, parentID: uid, time: 2, parts: [text(sid, aid, "Anchored.")] })
+    if (base.info.role !== "assistant") throw new Error("Assistant fixture required")
+    const cases = [
+      { row: base, id: MessageID.make("msg_absent") },
+      { row: { ...base, info: { ...base.info, sessionID: other } }, id: aid },
+      { row: { ...base, info: { ...base.info, time: { created: 2 } } }, id: aid },
+      { row: { ...base, info: { ...base.info, finish: undefined } }, id: aid },
+      { row: { ...base, info: { ...base.info, summary: true } }, id: aid },
+      {
+        row: {
+          ...base,
+          info: { ...base.info, error: { name: "MessageAbortedError" as const, data: { message: "Stopped" } } },
+        },
+        id: aid,
+      },
+      { row: base, id: uid },
+    ]
+    for (const item of cases) {
+      const seen: string[] = []
+      const port = MemorySession.port({
+        sessions: sessions([user({ sessionID: sid, id: uid, body: "Original." }), item.row]),
+        summary: summary({ seen, diffs: [] }),
+      })
+      expect(await Effect.runPromise(port.readTurn({ sessionID: sid, window: 24, messageID: item.id }))).toBeUndefined()
+      expect(seen).toEqual([])
+    }
+    const seen: string[] = []
+    const port = MemorySession.port({
+      sessions: sessions([user({ sessionID: other, id: uid, body: "Foreign user." }), base]),
+      summary: summary({ seen, diffs: [] }),
+    })
+    expect(await Effect.runPromise(port.readTurn({ sessionID: sid, window: 24, messageID: aid }))).toBeUndefined()
+    expect(seen).toEqual([])
+  })
+
   test("session port extracts the latest turn, recall markers, and all assistant steps", async () => {
     const sessionID = SessionID.make("ses_memory_adapter")
     const uid = MessageID.make("msg_user")

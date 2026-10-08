@@ -17,6 +17,7 @@ import type { CorsOptions } from "@opencode-ai/server/cors"
 import { lazy } from "@/util/lazy"
 import * as KiloListener from "@/kilocode/server/listener" // kilocode_change
 import * as EventDrain from "@/kilocode/server/event-drain" // kilocode_change
+import * as PtyTransport from "@/kilocode/pty/transport" // kilocode_change
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -222,6 +223,7 @@ function serverLayer(opts: { port: number; hostname: string }) {
   }) as typeof server.close
 
   return Layer.mergeAll(
+    PtyTransport.layer(server), // kilocode_change - own the authenticated terminal transport
     NodeHttpServer.layer(() => server, { port: opts.port, host: opts.hostname, disablePreemptiveShutdown: true }), // kilocode_change - join the original close instead of caching a timed-out interruption
     // kilocode_change start - join terminal event writers before forcing remaining sockets
     Layer.effect(ListenerServerService)(

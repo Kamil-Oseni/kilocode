@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Context, Config as EffectConfig, Effect, Layer, Queue, Schema } from "effect"
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeServices } from "@effect/platform-node" // kilocode_change
+import { layer as transport } from "../kilocode/pty-server" // kilocode_change
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import path from "path"
@@ -52,7 +53,7 @@ const effectIt = testEffect(
     Socket.layerWebSocketConstructorGlobal,
     servedRoutes.pipe(
       Layer.provide(Socket.layerWebSocketConstructorGlobal),
-      Layer.provideMerge(NodeHttpServer.layerTest),
+      Layer.provideMerge(transport), // kilocode_change - provide the owned terminal transport to the listener
       Layer.provideMerge(NodeServices.layer),
     ),
   ),

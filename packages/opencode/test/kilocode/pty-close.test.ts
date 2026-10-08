@@ -7,13 +7,15 @@ import { Deferred, Effect, Layer, Queue } from "effect"
 import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { drain } from "../../src/kilocode/pty/closing"
+import * as Transport from "../../src/kilocode/pty/transport"
+import { makePtyOutbox } from "../../src/server/routes/instance/httpapi/handlers/pty"
 
 const node = Bun.which("node")
 const fixture = fileURLToPath(new URL("./pty-close-reader.cjs", import.meta.url))
 
-async function run(stalled: boolean) {
+async function run(stalled: boolean, pressure = false) {
   if (!node) throw new Error("Real Node socket client is required")
-  const state = { released: false, finished: false, elapsed: 0 }
+  const state = { released: false, finished: false, elapsed: 0, detached: 0, accepted: 0, bytes: 0, depth: 0 }
   const http = createServer()
   const connections = new Set<Connection>()
   http.on("connection", (connection) => {
@@ -26,15 +28,27 @@ async function run(stalled: boolean) {
     "/socket",
     Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest
-      const socket = yield* request.upgrade
+      const transport = yield* Transport.Service
+      const socket = yield* transport.upgrade(request)
       const write = yield* socket.writer
       const queue = yield* Queue.unbounded<string | Socket.CloseEvent>()
+      const wake = yield* Queue.dropping<void>(1)
+      const outbox = makePtyOutbox(wake, () => state.detached++)
       const started = Date.now()
       yield* Effect.race(
-        drain(Queue.take(queue), write, stalled ? 500 : "5 seconds"),
+        drain(pressure ? outbox.take : Queue.take(queue), write, stalled ? 500 : "5 seconds"),
         socket.runRaw(
           () =>
             Effect.gen(function* () {
+              if (pressure) {
+                for (let n = 0; n < 1024; n++) {
+                  if (!outbox.offer("x".repeat(65536))) break
+                  state.accepted++
+                }
+                state.bytes = outbox.bytes
+                state.depth = outbox.depth
+                return
+              }
               for (let n = 0; n < 128; n++) yield* Queue.offer(queue, "x".repeat(8192))
               yield* Queue.offer(queue, new Socket.CloseEvent(1013, "terminal output backlog"))
             }),
@@ -56,6 +70,7 @@ async function run(stalled: boolean) {
   )
   const layer = HttpRouter.serve(routes, { disableLogger: true, disableListenLog: true }).pipe(
     Layer.provideMerge(NodeHttpServer.layer(() => http, { port: 0, gracefulShutdownTimeout: "1 second" })),
+    Layer.provideMerge(Transport.layer(http)),
   )
   return Effect.runPromise(
     Effect.gen(function* () {
@@ -67,7 +82,7 @@ async function run(stalled: boolean) {
         }),
       )
       const url = HttpServer.formatAddress(server.address).replace(/^http/, "ws") + "/socket"
-      const child = Bun.spawn([node, fixture, url, stalled ? "stalled" : "resume"], {
+      const child = Bun.spawn([node, fixture, url, pressure ? "pressure" : stalled ? "stalled" : "resume"], {
         stdout: "pipe",
         stderr: "pipe",
         windowsHide: true,
@@ -120,4 +135,20 @@ test("releases the scoped reader at the deadline when its peer never resumes", a
   expect(state.finished).toBe(true)
   expect(state.elapsed).toBeGreaterThanOrEqual(450)
   expect(state.elapsed).toBeLessThan(2000)
+}, 10000)
+
+test("drains the bounded application outbox through actual native sends before reconnect closure", async () => {
+  const { state, result } = await run(false, true)
+  expect(result.err).toBe("")
+  expect(result.code).toBe(0)
+  const receipt = JSON.parse(result.out)
+  expect(state.accepted).toBe(128)
+  expect(state.detached).toBe(1)
+  expect(state.bytes).toBe(8 * 1024 * 1024)
+  expect(state.depth).toBe(129)
+  expect(receipt.after).toBe(receipt.settled)
+  expect(receipt.bytes).toBe(state.accepted * 65536)
+  expect(receipt.code).toBe(1013)
+  expect(receipt.reason).toBe("terminal output backlog")
+  expect(state.released).toBe(true)
 }, 10000)

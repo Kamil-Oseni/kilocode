@@ -1,4 +1,4 @@
-import { Duration, Effect } from "effect"
+import { Duration, Effect, Option } from "effect"
 import * as Socket from "effect/unstable/socket/Socket"
 
 // Socket.writer only requests the close handshake. Keep its scoped reader alive
@@ -11,7 +11,11 @@ export function drain<E, R, E2, R2>(
   return Effect.gen(function* () {
     while (true) {
       const item = yield* take
-      yield* write(item)
+      const sent = yield* write(item).pipe(Effect.timeoutOption(duration))
+      if (Option.isNone(sent)) {
+        yield* write(new Socket.CloseEvent(1013, "terminal output backlog"))
+        return yield* Effect.never.pipe(Effect.timeoutOption(duration), Effect.asVoid)
+      }
       if (item instanceof Socket.CloseEvent)
         return yield* Effect.never.pipe(Effect.timeoutOption(duration), Effect.asVoid)
     }

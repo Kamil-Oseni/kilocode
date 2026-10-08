@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeServices } from "@effect/platform-node" // kilocode_change
+import { layer as transport } from "../kilocode/pty-server" // kilocode_change
 import { PtyID } from "@opencode-ai/core/pty/schema"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
@@ -40,7 +41,7 @@ const effectIt = testEffect(
     Socket.layerWebSocketConstructorGlobal,
     servedRoutes.pipe(
       Layer.provide(Socket.layerWebSocketConstructorGlobal),
-      Layer.provideMerge(NodeHttpServer.layerTest),
+      Layer.provideMerge(transport), // kilocode_change - exercise the owned authenticated upgrade
       Layer.provideMerge(NodeServices.layer),
     ),
   ),

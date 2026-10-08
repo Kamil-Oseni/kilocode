@@ -9,6 +9,7 @@ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { LocationServiceMap } from "@opencode-ai/core/location-services" // kilocode_change
 import { locationServiceMapLayer } from "@/kilocode/pty/location-map" // kilocode_change
 import { drain } from "@/kilocode/pty/closing" // kilocode_change
+import * as PtyTransport from "@/kilocode/pty/transport" // kilocode_change
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Shell } from "@opencode-ai/core/shell"
@@ -276,7 +277,11 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
           parsedCursor !== undefined && Number.isSafeInteger(parsedCursor) && parsedCursor >= -1
             ? parsedCursor
             : undefined
-        const socket = yield* Effect.orDie(ctx.request.upgrade)
+        // kilocode_change start - require the owned transport after all route authentication
+        const transport = yield* Effect.serviceOption(PtyTransport.Service)
+        if (Option.isNone(transport)) return HttpServerResponse.empty({ status: 503 })
+        const socket = yield* Effect.orDie(transport.value.upgrade(ctx.request))
+        // kilocode_change end
         const write = yield* socket.writer
         const closeAccepted = (event: Socket.CloseEvent) =>
           socket

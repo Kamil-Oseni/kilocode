@@ -4,6 +4,7 @@ const WebSocket = require("ws")
 assert.equal(process.release.name, "node")
 const ws = new WebSocket(process.argv[2], { perMessageDeflate: false })
 const stalled = process.argv[3] === "stalled"
+const limit = process.argv[3] === "pressure" ? 8 * 1024 * 1024 : 2 * 1024 * 1024
 const result = { code: 0, reason: "", bytes: 0, settled: 0, after: 0, runtime: process.release.name }
 let timer
 let paused = false
@@ -26,7 +27,7 @@ ws.on("message", (data) => {
     return
   }
   result.bytes += data.length
-  assert.ok(result.bytes <= 2 * 1024 * 1024)
+  assert.ok(result.bytes <= limit)
 })
 ws.on("error", (error) => {
   console.error(error.message)

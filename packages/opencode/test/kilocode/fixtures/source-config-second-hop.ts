@@ -183,14 +183,20 @@ export async function roundtrip(
     if (storage.length) {
       assert(bundle.archives.some((value) => JSON.stringify(value.json) === JSON.stringify(storage)))
       const claims = bundle.disposition.files.filter((entry) => entry.disposition.kind === "storage-json")
-      assert.equal(claims.length, 5)
+      assert.equal(claims.length, 7)
       assert.equal(
         new Set(
           claims.map((entry) =>
             entry.disposition.kind === "storage-json" ? entry.disposition.selector.role : "invalid",
           ),
         ).size,
-        5,
+        6,
+      )
+      assert.deepEqual(
+        claims
+          .map((entry) => (entry.disposition.kind === "storage-json" ? entry.disposition.selector.role : "invalid"))
+          .sort(),
+        ["checkpoint", "goal", "goal-stop", "initialization", "runs", "runs", "workers"],
       )
     }
     if (memories.length) {
@@ -238,7 +244,10 @@ export async function roundtrip(
       )
         primaries.push(workspace)
     }
-    const next = await restore(text, password, target, mappings, { primaries })
+    const next = await restore(text, password, target, mappings, {
+      primaries,
+      helper: process.env.RAYA_TEST_DIRECTORY_HELPER,
+    })
     if (drafts) {
       assert(bundle.composers)
       await (await import("./composer-restored")).verifyComposers(next.path, bundle.composers, mappings)

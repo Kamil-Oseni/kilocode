@@ -60,6 +60,8 @@ const issues = new Set([
   "custom",
 ])
 const fields = new Set([
+  "quick_check",
+  "busy",
   "sql",
   "json",
   "memory",

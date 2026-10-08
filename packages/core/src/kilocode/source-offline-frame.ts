@@ -125,16 +125,30 @@ const retired = z
 function error(code: string) {
   return Object.assign(new Error("Native offline preparation refused"), { code })
 }
-/** An early terminal response is failure even after confirmed rollback; it never grants an image. */
-export function preparation(raw: unknown, generation: string, version: 1 | 2 | 3 | 4 = 1): unknown {
-  if (typeof raw !== "object" || raw === null || !("state" in raw) || raw.state !== "retired") return raw
+function receipt(raw: unknown, generation: string, version: 1 | 2 | 3 | 4) {
   const result = retired.safeParse(raw)
   if (!result.success || result.data.generation !== generation || result.data.version !== version)
     throw error("RAYA_OFFLINE_FRAME_INVALID")
-  const failures = result.data.failures.map((message) =>
+  return result.data
+}
+function reasons(value: z.infer<typeof retired>) {
+  const failures = value.failures.map((message) =>
     error(Object.hasOwn(messages, message) ? messages[message] : "RAYA_OFFLINE_UNKNOWN_REFUSAL"),
   )
-  if (!result.data.restored) failures.push(error("RAYA_OFFLINE_ROLLBACK_UNCONFIRMED"))
+  if (!value.restored) failures.push(error("RAYA_OFFLINE_ROLLBACK_UNCONFIRMED"))
+  return failures
+}
+/** An early terminal response is failure even after confirmed rollback; it never grants an image. */
+export function preparation(raw: unknown, generation: string, version: 1 | 2 | 3 | 4 = 1): unknown {
+  if (typeof raw !== "object" || raw === null || !("state" in raw) || raw.state !== "retired") return raw
+  const failures = reasons(receipt(raw, generation, version))
   if (!failures.length) failures.push(error("RAYA_OFFLINE_EARLY_RETIREMENT"))
   throw new AggregateError(failures, "Native offline preparation refused")
+}
+/** Release accepts only exact identity and confirmed rollback, with fixed failure classifications. */
+export function retirement(raw: unknown, generation: string, version: 1 | 2 | 3 | 4): unknown {
+  const value = receipt(raw, generation, version)
+  const failures = reasons(value)
+  if (failures.length) throw new AggregateError(failures, "Native offline retirement refused")
+  return value
 }

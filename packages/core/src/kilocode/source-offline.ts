@@ -7,7 +7,7 @@ import z from "zod"
 import { inspect, NativeProcess } from "./process-host"
 import { validatePolicy, type SourcePolicy } from "./source-policy"
 import { plan, negative } from "./source-image-plan"
-import { preparation } from "./source-offline-frame"
+import { preparation, retirement } from "./source-offline-frame"
 import { directoryInventory, validateDirectoryInventory } from "./source-image-directories"
 
 type Root = Readonly<{ kind: "json" | "sqlite"; path: string }>
@@ -441,9 +441,9 @@ export async function withImage<A>(
   // Do not kill on callback failure. The held guardian owns exact rollback.
   if (!owner.child.stdin.destroyed) owner.child.stdin.end(frame(1, generation))
   try {
-    const receipt = retired.parse(await owner.next())
+    const receipt = retired.parse(retirement(await owner.next(), generation, version))
     if (receipt.version !== version || receipt.generation !== generation || receipt.failures.length)
-      throw new Error(`Offline retirement refused: ${receipt.failures.join("; ")}`)
+      throw new Error("Offline retirement identity or failures differ")
   } catch (err) {
     failures.push(err)
   }

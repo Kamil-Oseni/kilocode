@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { request } from "./request"
 import { admission } from "./identity"
 import { existsSync, readFileSync, statSync } from "node:fs"
-import { open, stat } from "node:fs/promises"
+import { open, stat, realpath } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -159,6 +159,21 @@ function location(file: string) {
   if (!path.isAbsolute(file) || file.length > 4096 || file.includes("\0"))
     throw new Error("Native file receipt path invalid")
   return file
+}
+/** Existing DOS spelling for I/O only; it grants no profile capture authority. */
+export async function alias(file: string, helper?: string): Promise<string> {
+  const value = record(
+    await request(await ready(helper), ["path-alias-v1", path.resolve(location(file))], 32768),
+    ["version", "path"],
+    "Native path alias invalid",
+  )
+  if (value.version !== 1 || typeof value.path !== "string") throw new Error("Native path alias invalid")
+  location(value.path)
+  const original = await realpath(file)
+  if ((await realpath(value.path)) !== original) throw new Error("Native path alias identity differs")
+  const [before, after] = await Promise.all([stat(file, { bigint: true }), stat(value.path, { bigint: true })])
+  if (before.dev !== after.dev || before.ino !== after.ino) throw new Error("Native path alias identity differs")
+  return value.path
 }
 
 /** Private metadata snapshots never enter model context or telemetry. */

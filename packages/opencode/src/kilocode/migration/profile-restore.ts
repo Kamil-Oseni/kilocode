@@ -5,6 +5,7 @@ import { Effect, ManagedRuntime } from "effect"
 import { sql } from "drizzle-orm"
 import { checkpoints, tables, unseal, payload } from "./profile-bundle"
 import { Hash } from "@opencode-ai/core/util/hash"
+import { NativeProcess } from "@opencode-ai/core/kilocode/process-host/index"
 import { identity, remap } from "./profile-workspaces"
 import { attach, materialize } from "./profile-artifacts"
 import { ordinary } from "./profile-tui"
@@ -59,7 +60,7 @@ export async function restore(
   password: string,
   target: string,
   mappings: Readonly<Record<string, string>>,
-  options: { primaries?: readonly string[] } = {},
+  options: { primaries?: readonly string[]; helper?: string } = {},
 ) {
   const original = await unseal(text, password)
   if (!path.isAbsolute(target)) throw new Error("Destination must be an absolute new profile container")
@@ -282,6 +283,12 @@ export async function restore(
     const mapped = snapshot ? destinations.get(identity(snapshot.workspace)) : undefined
     if (!mapped || typeof project !== "string") throw new Error("Checkpoint snapshot mapping is unavailable")
     const directory = path.join(stage, "snapshot", project, Hash.fast(mapped))
+    // Git's repository admission still rejects some deep Windows paths even
+    // with core.longpaths. Use an existing, identity-checked DOS spelling only.
+    const readable =
+      process.platform === "win32" && directory.length >= 240
+        ? await NativeProcess.alias(directory, options.helper)
+        : path.relative(stage, directory)
     const env = { ...process.env }
     for (const key of Object.keys(env)) if (key.startsWith("GIT_")) delete env[key]
     Object.assign(env, {
@@ -297,7 +304,7 @@ export async function restore(
           "core.fsmonitor=false",
           ...(process.platform === "win32" ? ["-c", "core.longpaths=true"] : []),
           "--git-dir",
-          path.relative(stage, directory),
+          readable,
           "cat-file",
           "-e",
           `${row.hash}^{tree}`,

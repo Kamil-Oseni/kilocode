@@ -5,7 +5,50 @@ import os from "node:os"
 import { Database } from "bun:sqlite"
 import z from "zod"
 import { failure } from "../../src/kilocode/migration/source-failure"
-import { preparation } from "@opencode-ai/core/kilocode/source-offline-frame"
+import { preparation, retirement } from "@opencode-ai/core/kilocode/source-offline-frame"
+
+test("release rollback diagnostics retain native classifications through source failure intake", () => {
+  const generation = crypto.randomUUID()
+  const secret = "PRIVATE_RELEASE_SOURCE_PATH_AND_PASSWORD"
+  try {
+    retirement(
+      {
+        version: 4,
+        generation,
+        state: "retired",
+        restored: false,
+        failures: ["Offline rollback remains uncertain; journal retained", secret],
+        portableCaptureAuthorized: false,
+      },
+      generation,
+      4,
+    )
+    throw new Error("Failed native rollback was accepted")
+  } catch (err) {
+    const value = failure(err)
+    expect(value.errors.map((item) => item.code).filter(Boolean)).toEqual([
+      "RAYA_OFFLINE_ROLLBACK_REMAINS_UNCERTAIN_JOURNAL_RETAINED",
+      "RAYA_OFFLINE_UNKNOWN_REFUSAL",
+      "RAYA_OFFLINE_ROLLBACK_UNCONFIRMED",
+    ])
+    expect(JSON.stringify(value)).not.toContain(secret)
+    expect(JSON.stringify(value)).not.toContain(generation)
+  }
+})
+
+test("SQLite verification diagnostics retain fixed pragma fields without rejected values", () => {
+  const confidential = "PRIVATE_SQLITE_VALUE_AND_PATH"
+  for (const [field, expected] of [
+    ["quick_check", "ok"],
+    ["busy", 0],
+  ] as const) {
+    const result = z.object({ [field]: z.literal(expected) }).safeParse({ [field]: confidential })
+    if (result.success) throw new Error("Invalid pragma result was accepted")
+    const value = failure(result.error)
+    expect(value.errors[0].issues).toEqual([{ code: "invalid_value", path: [field] }])
+    expect(JSON.stringify(value)).not.toContain(confidential)
+  }
+})
 
 test("native early-retirement diagnostics expose fixed codes without native packet values", () => {
   const generation = crypto.randomUUID()

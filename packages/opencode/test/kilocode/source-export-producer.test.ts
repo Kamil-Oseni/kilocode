@@ -61,6 +61,8 @@ test.skipIf(process.platform !== "win32")(
       KILO_DB: file,
       RAYA_TEST_HISTORICAL_SQLITE: missing,
       RAYA_TEST_EVIDENCE: evidence,
+      RAYA_TEST_WORKSPACE: path.join(root, "workspace"),
+      RAYA_TEST_GOAL_STOP_WITNESS: path.join(evidence, "goal-stop-native.json"),
       RAYA_AUTH_CONTENT: "{}",
       KILO_AUTH_CONTENT: "{}",
       RAYA_DISABLE_MODELS_FETCH: "1",
@@ -339,6 +341,17 @@ test.skipIf(process.platform !== "win32")(
       expect((await session.exit).code).toBe(0)
       expect(await Bun.file(output).exists()).toBe(true)
       const bundle = await unseal(await Bun.file(output).text(), password)
+      const stopped = await Bun.file(path.join(evidence, "goal-stop-native.json")).json()
+      const stop = bundle.json.find(
+        (item) =>
+          item.path ===
+          `raya/goal-stops/${stopped.seeded.sessionID}/${createHash("sha256").update(stopped.seeded.intent).digest("hex")}.json`,
+      )
+      expect(stop).toBeDefined()
+      expect(JSON.parse(stop!.value)).toEqual(stopped.receipt)
+      const { goalStop } = await import("../../src/kilocode/migration/profile-goal-stop-correspondence")
+      expect(goalStop(stop!.path, stop!.value, bundle)).toBe(true)
+      expect(stopped.receipt.task.runs).toHaveLength(1)
       const ready = await Bun.file(`${session.ticket.control}.source-handoff-ready`).json()
       const ack = await Bun.file(path.join(ready.value.successor.control, "ack.json")).json()
       assert.equal(bundle.disposition?.directoryCoverage, "verified")
@@ -422,22 +435,27 @@ test.skipIf(process.platform !== "win32")(
         .parse(JSON.parse(seeds[0][1]))
       const voice = await (
         await import("./fixtures/source-voice-reconciliation-assert")
-      ).verifyVoice(bundle, true, baseline)
+      ).verifyVoice(bundle, true, baseline, stopped.startup)
       const gitMetadata = await (
         await import("./fixtures/source-git-metadata-assert")
       ).assertGitMetadataSource(bundle, true)
       const storageClaims = bundle.disposition.files.filter((entry) => entry.disposition.kind === "storage-json")
-      expect(storageClaims).toHaveLength(5)
+      expect(storageClaims).toHaveLength(7)
       expect(
         new Set(
           storageClaims.map((entry) =>
             entry.disposition.kind === "storage-json" ? entry.disposition.selector.role : "invalid",
           ),
         ).size,
-      ).toBe(5)
+      ).toBe(6)
+      expect(
+        storageClaims
+          .map((entry) => (entry.disposition.kind === "storage-json" ? entry.disposition.selector.role : "invalid"))
+          .sort(),
+      ).toEqual(["checkpoint", "goal", "goal-stop", "initialization", "runs", "runs", "workers"])
       for (const entry of storageClaims) {
         if (entry.disposition.kind !== "storage-json") throw new Error("Actual storage JSON correspondence missing")
-        validateStorage(entry.disposition, { json: bundle.json })
+        validateStorage(entry.disposition, { json: bundle.json, sql: bundle.sql })
         const info = await lstat(entry.path, { bigint: true })
         expect(entry.dev).toBe(info.dev.toString())
         expect(entry.ino).toBe(info.ino.toString())
@@ -746,6 +764,26 @@ test.skipIf(process.platform !== "win32")(
           portableCaptureAuthorized: false,
         }),
       )
+      const formation = process.env.RAYA_TEST_SOURCE_FORMATION_FILE
+      if (formation) {
+        assert(path.isAbsolute(formation))
+        await writeFile(
+          formation,
+          JSON.stringify({
+            format: "raya.synthetic-profile-formation",
+            version: 1,
+            sourceFixturePassed: true,
+            compiledRecoveryAccepted: false,
+            root,
+            evidence,
+            artifact: result.result.artifact,
+            passwordFile: secret,
+            goalStopWitness: path.join(evidence, "goal-stop-native.json"),
+            receipt: path.join(root, "receipt.json"),
+          }),
+          { flag: "wx", mode: 0o600 },
+        )
+      }
     } catch (err) {
       errors.push(err)
     } finally {

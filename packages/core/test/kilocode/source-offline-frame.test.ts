@@ -1,7 +1,42 @@
 import { expect, test } from "bun:test"
-import { preparation } from "../../src/kilocode/source-offline-frame"
+import { preparation, retirement } from "../../src/kilocode/source-offline-frame"
 
 const generation = crypto.randomUUID()
+test("release retains exact rollback failure codes without native text", () => {
+  const secret = "PRIVATE_NATIVE_SOURCE_AND_PASSWORD"
+  try {
+    retirement(frame(["Offline rollback remains uncertain; journal retained", secret], false), generation, 1)
+    throw new Error("Unconfirmed rollback was accepted")
+  } catch (err) {
+    if (!(err instanceof AggregateError)) throw err
+    expect(err.errors.map((value) => value.code)).toEqual([
+      "RAYA_OFFLINE_ROLLBACK_REMAINS_UNCERTAIN_JOURNAL_RETAINED",
+      "RAYA_OFFLINE_UNKNOWN_REFUSAL",
+      "RAYA_OFFLINE_ROLLBACK_UNCONFIRMED",
+    ])
+    expect(err.errors.every((value) => !value.message.includes(secret))).toBe(true)
+  }
+})
+test("release requires confirmed restoration, exact identity and a strict terminal frame", () => {
+  for (const version of [1, 2, 3, 4] as const) {
+    const raw = { ...frame([]), version }
+    expect(retirement(raw, generation, version)).toEqual(raw)
+    for (const invalid of [
+      { ...raw, generation: crypto.randomUUID() },
+      { ...raw, state: "held" },
+      { ...raw, portableCaptureAuthorized: true },
+      { ...raw, extra: "PRIVATE_VALUE" },
+      { ...raw, failures: ["x".repeat(1025)] },
+      { ...raw, failures: Array(129).fill("Offline source hardlink refused") },
+    ]) {
+      expect(() => retirement(invalid, generation, version)).toThrow()
+    }
+    expect(() => retirement({ ...raw, restored: false }, generation, version)).toThrow()
+    expect(() =>
+      retirement({ ...raw, failures: ["Offline exact DACL restoration differs"] }, generation, version),
+    ).toThrow()
+  }
+})
 function frame(failures: string[], restored = true) {
   return { version: 1, generation, state: "retired", restored, failures, portableCaptureAuthorized: false }
 }

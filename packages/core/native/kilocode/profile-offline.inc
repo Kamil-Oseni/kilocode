@@ -28,6 +28,20 @@ std::wstring canonical(const std::wstring& file) {
     throw std::runtime_error("Offline canonical path unavailable");
   return std::wstring(physical + 4);
 }
+void alias(const std::wstring& file) {
+  const auto original = canonical(file);
+  Handle pin(CreateFileW(native(original).c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
+    nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+  if (pin.value == INVALID_HANDLE_VALUE) throw std::runtime_error("Native path alias identity unavailable");
+  wchar_t buffer[4101]{};
+  const DWORD length = GetShortPathNameW(native(original).c_str(), buffer, 4101);
+  if (!length || length >= 4101 || std::wstring(buffer).substr(0, 4) != L"\\\\?\\")
+    throw std::runtime_error("Native short path unavailable");
+  const std::wstring shortpath(buffer + 4);
+  if (_wcsicmp(canonical(shortpath).c_str(), original.c_str()))
+    throw std::runtime_error("Native short path identity differs");
+  std::printf("{\"version\":1,\"path\":%s}\n", Source::json(shortpath).c_str());
+}
 bool exists(const std::wstring& file) {
   if (GetFileAttributesW(native(file).c_str()) != INVALID_FILE_ATTRIBUTES) return true;
   const auto code = GetLastError();
@@ -44,6 +58,14 @@ HANDLE immutable(const std::wstring& file) {
   if (code == ERROR_TOO_MANY_OPEN_FILES || code == ERROR_NOT_ENOUGH_MEMORY || code == ERROR_OUTOFMEMORY || code == ERROR_NO_SYSTEM_RESOURCES)
     throw std::runtime_error("Offline immutable stage resources refused");
   throw std::runtime_error("Offline immutable stage handle refused");
+}
+LONG update(HANDLE handle, PSECURITY_DESCRIPTOR descriptor) {
+  // Preserve the captured AI/P state and inherited ACEs without propagating
+  // a parent update into descendants before their originals are journaled.
+  if (!SetSecurityDescriptorControl(descriptor, SE_DACL_AUTO_INHERIT_REQ, SE_DACL_AUTO_INHERIT_REQ)) return -1;
+  using Set = LONG (NTAPI *)(HANDLE, SECURITY_INFORMATION, PSECURITY_DESCRIPTOR);
+  const auto set = reinterpret_cast<Set>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetSecurityObject"));
+  return set ? set(handle, DACL_SECURITY_INFORMATION, descriptor) : -1;
 }
 struct Node {
   std::wstring path;
@@ -88,11 +110,9 @@ struct Node {
         !GetSecurityDescriptorControl(descriptor, &flags, &revision)) {
       LocalFree(descriptor); throw std::runtime_error("Offline original DACL invalid");
     }
-    const auto code = SetSecurityInfo(handle.value, SE_FILE_OBJECT,
-      DACL_SECURITY_INFORMATION | ((flags & SE_DACL_PROTECTED) ? PROTECTED_DACL_SECURITY_INFORMATION : UNPROTECTED_DACL_SECURITY_INFORMATION),
-      nullptr, nullptr, acl, nullptr);
+    const auto code = update(handle.value, descriptor);
     LocalFree(descriptor);
-    if (code != ERROR_SUCCESS) throw std::runtime_error("Offline handle DACL update refused");
+    if (code < 0) throw std::runtime_error("Offline handle DACL update refused");
   }
   void fence() {
     PSECURITY_DESCRIPTOR descriptor = nullptr;
@@ -116,11 +136,19 @@ struct Node {
         LocalFree(descriptor); throw std::runtime_error("Offline original ACE preservation failed");
       }
     }
+    SECURITY_DESCRIPTOR fenced{};
+    SECURITY_DESCRIPTOR_CONTROL flags{}; DWORD revision = 0;
+    if (!GetSecurityDescriptorControl(descriptor, &flags, &revision) ||
+        !InitializeSecurityDescriptor(&fenced, SECURITY_DESCRIPTOR_REVISION) ||
+        !SetSecurityDescriptorDacl(&fenced, TRUE, acl, FALSE) ||
+        !SetSecurityDescriptorControl(&fenced, SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED,
+          static_cast<SECURITY_DESCRIPTOR_CONTROL>(SE_DACL_PROTECTED | (flags & SE_DACL_AUTO_INHERITED)))) {
+      LocalFree(descriptor); throw std::runtime_error("Offline data denial construction failed");
+    }
     changed = true; // Journal already durable; any uncertain update requires restoration.
-    const auto code = SetSecurityInfo(handle.value, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-      nullptr, nullptr, acl, nullptr);
+    const auto code = update(handle.value, &fenced);
     LocalFree(descriptor);
-    if (code != ERROR_SUCCESS) throw std::runtime_error("Offline namespace data denial refused");
+    if (code < 0) throw std::runtime_error("Offline namespace data denial refused");
     expected = security();
   }
   void check() const {

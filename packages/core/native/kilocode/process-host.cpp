@@ -524,6 +524,7 @@ void guard(DWORD id, uint64_t expected, DWORD controller, uint64_t parent, const
 
 int wmain(int argc, wchar_t** argv) {
   try {
+    if (argc == 3 && std::wstring(argv[1]) == L"path-alias-v1") { Offline::alias(argv[2]); return 0; }
     if (argc == 2 && std::wstring(argv[1]) == L"profile-offline") return Offline::launch();
     if (argc == 2 && std::wstring(argv[1]) == L"profile-offline-guardian") return Offline::run(true);
     if (argc == 2 && std::wstring(argv[1]) == L"source-pipe-serve") return SourcePipe::serve();

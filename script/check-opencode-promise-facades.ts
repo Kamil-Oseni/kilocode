@@ -51,7 +51,7 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     reason:
       "actual public Goal Stop joins the same production application graph's idle Routine execution and exact task history",
   },
-  "kilocode/fixtures/profile-goal-stop-transfer.ts": {
+  "kilocode/fixtures/source-goal-stop-seed.ts": {
     count: 2,
     reason: "actual public Goal Stop and native encrypted transfer use the same production application writer graph",
   },

@@ -10,6 +10,10 @@ export async function verifyVoice(
   input: unknown,
   originals = false,
   baseline?: { cycle: number; status: string; scanned: number; receipts: number },
+  startup?: {
+    before: { cycle: number; status: string; scanned: number; receipts: number }
+    after: { cycle: number; status: string; scanned: number; receipts: number }
+  },
 ) {
   const value = payload.parse(input)
   assert(value.voice && value.disposition)
@@ -34,8 +38,11 @@ export async function verifyVoice(
   assert.equal(baseline.status, "complete")
   assert.equal(baseline.scanned, 0)
   assert.equal(baseline.receipts, 0)
-  // One HTTP voice layer runs the shipped startup reconciliation after the seed.
-  assert.equal(state.cycle, baseline.cycle + 1)
+  assert(startup, "Actual public Goal Stop HTTP startup publication is required")
+  assert.deepEqual(startup.before, baseline)
+  assert.deepEqual(startup.after, { ...baseline, cycle: baseline.cycle + 1 })
+  // The seeded public Stop app and the served HTTP app each reconcile once.
+  assert.equal(state.cycle, startup.after.cycle + 1)
   assert.equal(state.receipts, 0)
   assert.equal(state.scanned, 0)
   return Object.freeze({
@@ -46,6 +53,7 @@ export async function verifyVoice(
     sourceReceipts: 0,
     activation: "inert",
     seedCycle: baseline.cycle,
+    stopCycle: startup.after.cycle,
     retiredCycle: state.cycle,
     actualHTTPStartupReconciliation: true,
     settlementReplay: false,

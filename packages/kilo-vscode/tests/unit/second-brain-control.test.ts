@@ -123,6 +123,26 @@ async function fixture(update?: (key: string, value: unknown) => Promise<void>) 
   return { root, settings, service, control, stored, extension }
 }
 
+test("indexing without approval joins the actual read-only control child and permits a new source review", async () => {
+  const value = await fixture()
+  try {
+    await expect(value.control.sync(async () => {
+      throw new Error("Unapproved policy must not request indexing consent")
+    }, async () => {
+      throw new Error("Unapproved policy must not index")
+    })).rejects.toMatchObject({ code: "source_policy_required" })
+    expect(value.control.snapshot().status).toBe("unchecked")
+    expect(value.settings.pending()).toBeUndefined()
+    expect(Control.held()).toEqual([])
+    expect(await Bun.file(path.join(value.root, "System", "general-admission.json")).exists()).toBe(false)
+    await value.control.review(["first.md"], true, async () => true)
+    expect(value.control.snapshot().status).toBe("approved")
+    expect(value.settings.pending()).toBeUndefined()
+  } finally {
+    await Promise.all([value.control.dispose(), value.service.dispose()])
+  }
+}, 60000)
+
 test("actual pinned child publishes only after native callback, journals before publication and retains complete removal review", async () => {
   const value = await fixture()
   try {

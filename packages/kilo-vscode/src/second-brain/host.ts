@@ -25,6 +25,7 @@ import { entry as dreamEntry } from "./dream-entry"
 import { DreamActivity } from "./dream-activity"
 import { Effect } from "effect"
 import { choices } from "./note-choices"
+import { unchanged } from "./review"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
@@ -937,7 +938,7 @@ export class BrainHost {
         { modal: true },
         action,
       )
-      return answer === action && !document.isClosed && document.getText() === value.text
+      return answer === action && !document.isClosed && unchanged(value.text, document.getText())
     } finally {
       provider.dispose()
     }

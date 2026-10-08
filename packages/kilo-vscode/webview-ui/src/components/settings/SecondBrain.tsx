@@ -20,6 +20,7 @@ const labels: Record<string, string> = {
   transport_error: "The local Memory service could not finish the request.",
   control_setup_required: "Import a reviewed local control setup before reviewing sources.",
   control_busy: "A native Memory review or control operation is already in progress.",
+  source_policy_required: "Choose notes and approve their source policy before indexing.",
   control_uncertain:
     "An earlier Memory operation has not finished recovery. Inspect its original request in this session before continuing.",
 }
@@ -119,7 +120,10 @@ export function SecondBrain() {
       <Button onClick={() => request("review")} disabled={!state().configured || busy()}>
         1. Choose notes
       </Button>
-      <Button onClick={() => request("sync")} disabled={!state().configured || busy()}>
+      <Button
+        onClick={() => request("sync")}
+        disabled={!state().configured || busy() || !["approved", "synced"].includes(state().control?.status ?? "")}
+      >
         2. Index selected notes
       </Button>
       <Button onClick={() => request("disable")} disabled={!state().configured || busy()}>

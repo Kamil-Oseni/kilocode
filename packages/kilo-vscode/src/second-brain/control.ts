@@ -22,6 +22,11 @@ export type ControlState = Readonly<{
 }>
 
 class Cancelled extends Error {}
+class Unapproved extends Failure {
+  constructor() {
+    super("source_policy_required", "Choose and approve notes before indexing", 0)
+  }
+}
 function row(value: unknown): Row {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Memory control projection refused")
   return value as Row
@@ -111,6 +116,12 @@ export class BrainControl {
     if (this.closed || epoch !== this.epoch) throw new Cancelled("Memory review is no longer current")
   }
 
+  private unapproved(err: unknown, closed: boolean) {
+    if (!(err instanceof Unapproved) || !closed || this.settings.pending()) return false
+    this.state = Object.freeze({ status: "unchecked" })
+    return true
+  }
+
   private transaction(
     body: (session: Session, check: () => void, close: () => Promise<void>) => Promise<void>,
   ): Promise<void> {
@@ -154,7 +165,8 @@ export class BrainControl {
             this.retained = session.snapshot()
             if (closing.ok) this.owner = undefined
             if (!result.ok || !closing.ok) {
-              if (!(result.ok === false && result.error instanceof Cancelled) || !closing.ok)
+              const safe = !result.ok && this.unapproved(result.error, closing.ok)
+              if (!safe && (!(result.ok === false && result.error instanceof Cancelled) || !closing.ok))
                 this.state = Object.freeze({ status: "uncertain" })
               if (!result.ok && !closing.ok && result.error === closing.error) throw result.error
               if (!result.ok && !closing.ok)
@@ -220,7 +232,8 @@ export class BrainControl {
       const value = await session.state()
       check()
       const policy = row(value.policy)
-      if (policy.enabled !== true || !Array.isArray(policy.files)) throw new Error("Enabled reviewed policy required")
+      if (!Array.isArray(policy.files)) throw new Error("Reviewed policy files required")
+      if (policy.enabled !== true) throw new Unapproved()
       const expected = digest(value.policy_sha256)
       const text =
         `Sync only this current enabled source policy\nRoot: ${String(policy.root)}\nPolicy SHA-256: ${expected}\nRevision: ${String(policy.revision)}\n` +

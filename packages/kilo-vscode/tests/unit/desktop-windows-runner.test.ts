@@ -2,6 +2,47 @@ import { describe, expect, it } from "bun:test"
 import { WindowsDesktopDriver, runner } from "../../src/services/computer-use/desktop-windows"
 
 describe.skipIf(process.platform !== "win32")("persistent Windows desktop runner", () => {
+  it("rechecks authority before writing a command and remains reusable after refusal", async () => {
+    const host = runner()
+    try {
+      await expect(
+        host.run("throw 'script reached host'", () => {
+          throw new Error("Authority revoked")
+        }),
+      ).rejects.toThrow("Authority revoked")
+      expect(await host.run("'ready'")).toBe("ready")
+    } finally {
+      host.cancel()
+    }
+  }, 30_000)
+
+  it("forwards the fallback guard for a second check at the host write boundary", async () => {
+    const host = runner()
+    // Substitute only the effectful desktop script with a harmless sentinel;
+    // the production driver and persistent host still perform both guard checks.
+    const driver = new WindowsDesktopDriver({
+      run: (_script, guard) => host.run("throw 'script reached host'", guard),
+      cancel: () => host.cancel(),
+    })
+    let calls = 0
+    try {
+      await expect(
+        driver.perform(
+          { windowID: "0x1", observationID: "test", sensitive: false, operation: "key", key: "A" },
+          { windowID: "0x1", location: "synthetic" },
+          undefined,
+          () => {
+            if (++calls === 2) throw new Error("Authority changed during preparation")
+          },
+        ),
+      ).rejects.toThrow("Authority changed during preparation")
+      expect(calls).toBe(2)
+      expect(await host.run("'ready'")).toBe("ready")
+    } finally {
+      driver.cancel()
+    }
+  }, 30_000)
+
   it("warms the host without desktop observation or input", async () => {
     const host = runner()
     const driver = new WindowsDesktopDriver(host)

@@ -1069,7 +1069,7 @@ switch ($action.operation) {
 `
 }
 
-export type Runner = { run(script: string): Promise<string>; cancel(): void }
+export type Runner = { run(script: string, guard?: () => void): Promise<string>; cancel(): void }
 const HOST_OUTPUT = 30 * 1024 * 1024
 
 const host = String.raw`
@@ -1155,17 +1155,19 @@ export function runner(): Runner {
   }
 
   return {
-    run: (script) =>
+    run: (script, guard) =>
       new Promise((resolve, reject) => {
         if (active) {
           reject(new Error("A Windows desktop driver command is already active"))
           return
         }
+        const body = `${Buffer.from(script, "utf8").toString("base64")}\n`
         const process = start()
+        guard?.()
         const pending = { resolve, reject }
         active = pending
         stderr = ""
-        process.stdin.write(`${Buffer.from(script, "utf8").toString("base64")}\n`, "utf8", (error) => {
+        process.stdin.write(body, "utf8", (error) => {
           if (!error || active !== pending) return
           stop(new Error(error.message, { cause: error }))
         })
@@ -2183,7 +2185,9 @@ export class WindowsDesktopDriver implements DesktopDriver {
       this.inputUnknown = true
       throw new Error("Native desktop input outcome is unknown; no action will be replayed")
     }
-    await this.runner.run(perform(action, target))
+    const script = perform(action, target)
+    guard?.()
+    await this.runner.run(script, guard)
   }
 
   cancel(): void {

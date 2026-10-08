@@ -1,16 +1,14 @@
-import { WebSocketServer, type WebSocket } from "@raya/ws"
-import { Context, Deferred, Effect, Layer, type Scope } from "effect"
-import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest"
+// Use the pinned package's published server entry explicitly: Bun replaces bare
+// ws, while the CLI's browser condition otherwise selects the browser-only stub.
+import { WebSocketServer, type WebSocket } from "../../../node_modules/@raya/ws/wrapper.mjs"
+import { Deferred, Effect, Layer } from "effect"
+import { Service } from "@opencode-ai/core/kilocode/pty-transport"
+import { WebSocketTracker } from "../../server/routes/instance/httpapi/websocket-tracker"
 import * as Socket from "effect/unstable/socket/Socket"
 import { IncomingMessage, type Server } from "node:http"
 import type { Duplex } from "node:stream"
 
-export class Service extends Context.Service<
-  Service,
-  {
-    readonly upgrade: (request: HttpServerRequest) => Effect.Effect<Socket.Socket, Socket.SocketError, Scope.Scope>
-  }
->()("raya/pty/Transport") {}
+export { Service }
 
 const failure = (cause: unknown) => new Socket.SocketError({ reason: new Socket.SocketWriteError({ cause }) })
 
@@ -35,6 +33,7 @@ export function layer(server: Server) {
       )
 
       return Service.of({
+        register: WebSocketTracker.register,
         upgrade: (request) =>
           Effect.gen(function* () {
             const source = request.source

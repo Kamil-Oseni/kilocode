@@ -22928,6 +22928,10 @@
                       "type": "string",
                       "pattern": "^msg"
                     },
+                    "startAfter": {
+                      "type": "string",
+                      "pattern": "^msg"
+                    },
                     "startSnapshot": {
                       "type": "string"
                     },
@@ -22940,6 +22944,10 @@
                     "status": {
                       "type": "string",
                       "enum": ["active", "paused", "complete", "blocked"]
+                    },
+                    "pause": {
+                      "type": "string",
+                      "enum": ["user-control", "agent"]
                     },
                     "createdAt": {
                       "anyOf": [
@@ -27129,6 +27137,10 @@
                       "type": "string",
                       "pattern": "^msg"
                     },
+                    "startAfter": {
+                      "type": "string",
+                      "pattern": "^msg"
+                    },
                     "startSnapshot": {
                       "type": "string"
                     },
@@ -27141,6 +27153,10 @@
                     "status": {
                       "type": "string",
                       "enum": ["active", "paused", "complete", "blocked"]
+                    },
+                    "pause": {
+                      "type": "string",
+                      "enum": ["user-control", "agent"]
                     },
                     "createdAt": {
                       "anyOf": [
@@ -31248,6 +31264,10 @@
                       "type": "string",
                       "pattern": "^msg"
                     },
+                    "startAfter": {
+                      "type": "string",
+                      "pattern": "^msg"
+                    },
                     "startSnapshot": {
                       "type": "string"
                     },
@@ -31260,6 +31280,10 @@
                     "status": {
                       "type": "string",
                       "enum": ["active", "paused", "complete", "blocked"]
+                    },
+                    "pause": {
+                      "type": "string",
+                      "enum": ["user-control", "agent"]
                     },
                     "createdAt": {
                       "anyOf": [

@@ -2,7 +2,10 @@ import { Pty } from "@opencode-ai/core/pty"
 import { PtyProtocol } from "@opencode-ai/core/pty/protocol"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Location } from "@opencode-ai/core/location"
-import { Effect, Queue } from "effect"
+import { Effect, Option, Queue } from "effect" // kilocode_change
+import { Service as Transport } from "@opencode-ai/core/kilocode/pty-transport" // kilocode_change
+import { makePtyOutbox } from "@opencode-ai/core/kilocode/pty-output" // kilocode_change
+import { drain } from "@opencode-ai/core/kilocode/pty-closing" // kilocode_change
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -163,7 +166,11 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
               ? cursorNumber
               : undefined
 
-          const socket = yield* Effect.orDie(ctx.request.upgrade)
+          // kilocode_change start - consume the owned upgrade only after typed-route authentication
+          const transport = yield* Effect.serviceOption(Transport)
+          if (Option.isNone(transport)) return HttpServerResponse.empty({ status: 503 })
+          const socket = yield* Effect.orDie(transport.value.upgrade(ctx.request))
+          // kilocode_change end
           const write = yield* socket.writer
           const closeAccepted = (event: Socket.CloseEvent) =>
             socket
@@ -174,15 +181,22 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
                 Effect.catch(() => Effect.void),
               )
 
-          // Outbound frames flow through one queue drained by a single writer so replay, live
-          // output, and the close frame keep their order.
-          // TODO: Integrate graceful-shutdown socket tracking before clients migrate to this route.
-          const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
+          // kilocode_change start - share bounded output and shutdown ownership with the legacy route
+          const closing = new Socket.CloseEvent(1001, "server closing")
+          const registered = yield* transport.value.register(write(closing))
+          if (!registered) {
+            yield* closeAccepted(closing)
+            return HttpServerResponse.empty()
+          }
+          const wake = yield* Queue.dropping<void>(1)
+          let release = () => {}
+          const outbox = makePtyOutbox(wake, () => release())
+          // kilocode_change end
           const attachment = yield* pty
             .attach(ctx.params.ptyID, {
               cursor,
-              onData: (chunk) => Queue.offerUnsafe(outbox, chunk),
-              onEnd: () => Queue.offerUnsafe(outbox, new Socket.CloseEvent(1000)),
+              onData: (chunk) => void outbox.offer(chunk), // kilocode_change
+              onEnd: () => outbox.end(new Socket.CloseEvent(1000)), // kilocode_change
               allowExited: url.searchParams.get(PTY_REPLAY_EXITED_QUERY) === "1", // kilocode_change
             })
             .pipe(
@@ -195,20 +209,15 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
             )
           if (!attachment) return HttpServerResponse.empty()
 
-          for (const chunk of PtyProtocol.chunks(attachment.replay)) Queue.offerUnsafe(outbox, chunk)
-          Queue.offerUnsafe(outbox, PtyProtocol.metaFrame(attachment.cursor))
-          attachment.activate()
-
-          const drain = Effect.gen(function* () {
-            while (true) {
-              const item = yield* Queue.take(outbox)
-              yield* write(item)
-              if (item instanceof Socket.CloseEvent) return
-            }
-          })
+          // kilocode_change start - retain replay order, report gaps, and release the PTY on overflow
+          release = () => attachment.detach()
+          for (const chunk of PtyProtocol.chunks(attachment.replay)) if (!outbox.offer(chunk)) break
+          if (!outbox.closed) outbox.offer(PtyProtocol.metaFrame(attachment.cursor, attachment.replayGap))
+          if (!outbox.closed) attachment.activate()
+          // kilocode_change end
 
           yield* Effect.race(
-            drain,
+            drain(outbox.take, write), // kilocode_change
             socket.runRaw((message) => {
               const decoded = PtyProtocol.decodeInput(message)
               if (decoded !== undefined) attachment.write(decoded)

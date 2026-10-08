@@ -3,7 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Card } from "@kilocode/kilo-ui/card"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { useVSCode } from "../../context/vscode"
-import type { BrainState, BrainRequest } from "../../../../src/shared/second-brain"
+import type { BrainState, BrainRequest, BrainCapture } from "../../../../src/shared/second-brain"
 import { BrainProposals } from "./BrainProposals"
 import { BrainConsolidation } from "./BrainConsolidation"
 import { MediaEvidence } from "./MediaEvidence"
@@ -47,6 +47,15 @@ const indexing: Record<string, string> = {
   synced: "Selected notes indexed; search is ready",
   policy_disabled: "Note access disabled",
   uncertain: "Indexing needs recovery",
+}
+
+const captures: Record<BrainCapture["status"], string> = {
+  unavailable: "Automatic saving unavailable",
+  paused: "Automatic saving paused",
+  ready: "Automatic saving ready",
+  saving: "Saving to Memory…",
+  uncertain: "A previous save needs review",
+  capacity: "Automatic saving needs space",
 }
 
 export function SecondBrain() {
@@ -96,7 +105,7 @@ export function SecondBrain() {
   }
   const off = vscode.onMessage((message) => {
     if (message.type === "secondBrainState" && message.id === id()) {
-      setControl()
+      if (!message.live) setControl()
       setState(message.state)
     }
   })
@@ -117,6 +126,15 @@ export function SecondBrain() {
       </p>
       <p role="status">{state().configured ? status[state().status] : "Setup required"}</p>
       <Show when={state().root}>{(root) => <p>Notes folder: {root()}</p>}</Show>
+      <Show when={state().capture}>
+        {(capture) => (
+          <p role="status">
+            {captures[capture().status]}
+            {capture().reason === "source_capacity" ? ". Review indexed notes; none were removed." : ""}
+            {capture().reason === "ledger_capacity" ? ". Review capture history; existing records are retained." : ""}
+          </p>
+        )}
+      </Show>
       <Show when={control()}>
         {(action) => (
           <p role="status">

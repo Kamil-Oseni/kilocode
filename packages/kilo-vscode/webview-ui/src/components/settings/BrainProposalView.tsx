@@ -49,7 +49,7 @@ export function BrainProposalView(props: {
     <Card>
       <h3>Proposed memory changes</h3>
       <p>Project: {props.proposal.project}</p>
-      <p role="status">{props.proposal.status} · Automatic capture is off</p>
+      <p role="status">{props.proposal.status} · Changes require review</p>
       <Show when={props.proposal.status === "applying"}>
         <p role="alert">Publication is unresolved. Read the current outcome before taking another action.</p>
       </Show>

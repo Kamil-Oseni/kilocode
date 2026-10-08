@@ -6943,7 +6943,8 @@ export type SecondBrainStatusResult = {
   configured: boolean
   root?: string
   index: "unchecked" | "reviewing" | "approved" | "syncing" | "synced" | "policy_disabled" | "uncertain"
-  capture: "unavailable"
+  capture: "unavailable" | "paused" | "ready" | "saving" | "uncertain" | "capacity"
+  capture_reason?: "source_capacity" | "ledger_capacity"
   preparation: "unavailable"
 }
 

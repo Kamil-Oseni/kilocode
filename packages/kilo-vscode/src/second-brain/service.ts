@@ -9,6 +9,15 @@ import type { CaptureBinding, CapturePublication } from "./capture-intake"
 
 import { setup as file } from "../shared/memory-query"
 
+function captureIndex(value: object): CaptureBinding["index"] {
+  if (!("index" in value) || !value.index || typeof value.index !== "object" || !("status" in value.index))
+    return undefined
+  const status = value.index.status
+  return status === "unchecked" || status === "approved" || status === "synced" || status === "policy_disabled"
+    ? status
+    : undefined
+}
+
 const empty: BrainState = Object.freeze({ configured: false, status: "disconnected", results: [] })
 
 /** Host-private, explicit operations only. Aborted transport is not physical worker retirement. */
@@ -23,6 +32,7 @@ export class BrainService {
   private managed: ManagedOwner | undefined
   private opening: Promise<void> | undefined
   private captures = new WeakMap<CaptureBinding, NonNullable<Awaited<ReturnType<BrainSettings["load"]>>>["setup"]>()
+  private selection: CaptureBinding | undefined
 
   constructor(
     private readonly settings: BrainSettings,
@@ -234,9 +244,15 @@ export class BrainService {
       release: health.release,
       owner: health.epoch,
       generation: original,
+      index: captureIndex(health),
     })
     this.captures.set(binding, cfg.setup)
+    this.selection = binding
     return binding
+  }
+
+  captureSnapshot() {
+    return this.selection && this.captureCurrent(this.selection) ? this.selection : undefined
   }
 
   captureCurrent(binding: CaptureBinding) {

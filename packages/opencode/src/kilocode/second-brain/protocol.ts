@@ -100,7 +100,8 @@ export const StatusResult = Schema.Struct({
   configured: Schema.Boolean,
   root: Schema.optional(Path),
   index: Schema.Literals(["unchecked", "reviewing", "approved", "syncing", "synced", "policy_disabled", "uncertain"]),
-  capture: Schema.Literal("unavailable"),
+  capture: Schema.Literals(["unavailable", "paused", "ready", "saving", "uncertain", "capacity"]),
+  capture_reason: Schema.optional(Schema.Literals(["source_capacity", "ledger_capacity"])),
   preparation: Schema.Literal("unavailable"),
 }).annotate({ identifier: "SecondBrainStatusResult" })
 export const Result = Schema.Union([

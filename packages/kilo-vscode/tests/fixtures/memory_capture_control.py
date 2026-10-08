@@ -96,4 +96,13 @@ class Tests(support.Tests):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    if sys.argv[1:] == ['--prepare-native']:
+        fixture = Tests('test_original_bridge_capacity_refuses_without_publication')
+        fixture.setUp()
+        body = fixture.structured()
+        sha = fixture.policy([fixture.row('Projects/Note-' + str(i) + '.md') for i in range(128)])
+        fixture.close(fixture.bridge())
+        print(json.dumps(dict(root=str(fixture.root), body=body, sha=sha,
+                              config=str(fixture.root / 'control.json'))))
+    else:
+        unittest.main()

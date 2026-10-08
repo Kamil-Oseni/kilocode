@@ -7695,6 +7695,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.ignoreController?.dispose()
     this.chatAutocomplete?.dispose()
     this.speech?.dispose() // raya_change - Milestone H
+    this.brain?.detach()
     disposeGitChangesTarget()
   }
 }

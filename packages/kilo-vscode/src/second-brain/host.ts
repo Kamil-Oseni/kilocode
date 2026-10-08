@@ -96,6 +96,8 @@ export class BrainHost {
   private readonly service: BrainService
   private readonly control: BrainControl
   private readonly intake: CaptureIntake
+  private readonly observer: ReturnType<CaptureIntake["observe"]>
+  private view: { id: string; state: BrainResponse["state"]; post: (value: BrainResponse) => void } | undefined
   private current: { id: string; owner: object } | undefined
   private dream?: Promise<void>
   private closing = false
@@ -493,8 +495,28 @@ export class BrainHost {
           throw new Failure("identity_mismatch", "Control and search releases differ", 0)
         return Control.open(setup.root, catalog, context.extensionPath)
       })
+    this.observer = this.intake.observe(() => {
+      const view = this.view
+      if (!view || this.closing) return
+      view.post({
+        type: "secondBrainState",
+        id: view.id,
+        live: true,
+        state: {
+          ...view.state,
+          capture: this.intake.snapshot(this.service.captureSnapshot()),
+          control: this.control.snapshot(),
+        },
+      })
+    })
+    context.subscriptions.push(this.observer)
     if (existing) return
-    services.set(context, { settings: this.settings, service: this.service, control: this.control, intake: this.intake })
+    services.set(context, {
+      settings: this.settings,
+      service: this.service,
+      control: this.control,
+      intake: this.intake,
+    })
     context.subscriptions.push(
       vscode.commands.registerCommand("raya.memory.inspectConfiguration", () =>
         diagnostic(this.settings, context.globalState),
@@ -504,6 +526,10 @@ export class BrainHost {
       vscode.commands.registerCommand("raya.memory.archiveFailedSetup", () => this.archive()),
       vscode.commands.registerCommand("raya.memory.resumeClosedPair", () => this.resume()),
       vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
+      vscode.commands.registerCommand("kilo-code.new.memory.activateReviewedCapture", (...args: unknown[]) => {
+        if (args.length) throw new Error("Native capture activation accepts no command arguments")
+        return this.activateCapture()
+      }),
     )
     const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
     register(close)
@@ -512,6 +538,12 @@ export class BrainHost {
         void close().catch(() => console.warn("[Raya] Memory coordinator cleanup failed"))
       },
     })
+  }
+
+  /** Retires this panel subscription while other panels retain the shared service. */
+  detach() {
+    this.view = undefined
+    this.observer.dispose()
   }
 
   async accept(message: Record<string, unknown>, post: (value: BrainResponse) => void) {
@@ -570,7 +602,11 @@ export class BrainHost {
   }
 
   /** Model requests can read approved context or prepare proposals, never authorize application. */
-  async model(request: { project: string; sessionID?: string; command: unknown }, directory: string, signal: AbortSignal) {
+  async model(
+    request: { project: string; sessionID?: string; command: unknown },
+    directory: string,
+    signal: AbortSignal,
+  ) {
     signal.throwIfAborted()
     const project = path.resolve(directory)
     if (project.toLowerCase() !== path.resolve(request.project).toLowerCase())
@@ -614,6 +650,22 @@ export class BrainHost {
   }
 
   /** Native setup only: original human authorization must accompany saved capture choices. */
+  private async activateCapture() {
+    if (this.closing || !vscode.workspace.isTrusted) throw new Error("Trusted capture setup required")
+    const files = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      canSelectFolders: false,
+      filters: { "Reviewed capture choices": ["json"] },
+      title: "Activate reviewed automatic Memory saving",
+    })
+    if (!files?.[0] || files[0].scheme !== "file") return
+    const cfg = await metadata(files[0].fsPath, (value, digest) => this.intake.reviewed(value, digest))
+    await this.saveCapture(cfg, new AbortController().signal)
+    await vscode.window.showInformationMessage(
+      cfg.enabled ? `Automatic Memory saving activated with ${cfg.model}.` : "Automatic Memory saving paused.",
+    )
+  }
+
   async saveCapture(value: unknown, signal: AbortSignal) {
     if (this.closing || !vscode.workspace.isTrusted) throw new Error("Trusted capture setup required")
     const binding = await this.service.captureSelection(signal)
@@ -624,7 +676,7 @@ export class BrainHost {
     }
     await this.service.configure(() => this.intake.save(value, binding, check), false)
     check()
-    if (!this.service.captureCurrent(binding) || !this.intake.selected(binding))
+    if (!this.service.captureCurrent(binding) || !this.intake.saved(binding))
       throw new Error("Saved capture choices do not match the current reviewed Memory release")
   }
 
@@ -661,23 +713,28 @@ export class BrainHost {
       const grant = await this.intake.grant(turn, binding, check)
       return { action: "capturePolicy" as const, ...result, enabled: !!grant, ...(grant ? { grant } : {}) }
     }
-    const body = this.intake.consume(turn, this.intake.parse(row), binding, check)
     try {
+      const body = this.intake.consume(turn, this.intake.parse(row), binding, check)
       if (!body.entries.length) {
         await this.intake.finish(turn, "skipped")
         return { action: "capture" as const, ...result, status: "skipped" as const }
       }
       if (!capturing(this.control)) throw new Error("Select the reviewed capture-capable control release")
+      await this.intake.begin(turn)
       const receipt = await this.control.capture(body, check)
       check()
       const hash = captureReceipt(receipt, body.id)
       await this.intake.finish(turn, "published", hash)
       return { action: "capture" as const, ...result, status: "published" as const, receipt: hash }
     } catch (err) {
-      await this.intake.finish(turn, "uncertain").catch((retained: unknown) => {
+      const phase =
+        err instanceof Error && "code" in err && err.code === "capture_source_capacity" ? "capacity" : "uncertain"
+      await this.intake.finish(turn, phase).catch((retained: unknown) => {
         throw new AggregateError([err, retained], "Original capture and outcome retention failed")
       })
       throw err
+    } finally {
+      this.intake.end(turn)
     }
   }
 
@@ -687,13 +744,15 @@ export class BrainHost {
     signal.throwIfAborted()
     if (state.status === "unavailable")
       throw new Error("Memory setup state is uncertain; wait for the original operation to settle")
+    const capture = this.intake.snapshot(this.service.captureSnapshot())
     return {
       action: "status" as const,
       project,
       configured: state.configured,
       root: state.root,
       index: state.configured ? this.control.snapshot().status : ("unchecked" as const),
-      capture: "unavailable" as const,
+      capture: state.configured ? capture.status : ("unavailable" as const),
+      ...(state.configured && capture.reason ? { capture_reason: capture.reason } : {}),
       preparation: "unavailable" as const,
     }
   }
@@ -800,8 +859,18 @@ export class BrainHost {
 
   private async handle(message: BrainRequest, post: (value: BrainResponse) => void) {
     if (typeof message.id !== "string" || !/^[a-z0-9-]{1,80}$/i.test(message.id)) return
-    const send = (state: BrainResponse["state"]) =>
-      post({ type: "secondBrainState", id: message.id, state: { ...state, control: this.control.snapshot() } })
+    const send = (state: BrainResponse["state"]) => {
+      this.view = { id: message.id, state, post }
+      post({
+        type: "secondBrainState",
+        id: message.id,
+        state: {
+          ...state,
+          control: this.control.snapshot(),
+          capture: this.intake.snapshot(this.service.captureSnapshot()),
+        },
+      })
+    }
     try {
       if (message.action === "setup") await this.setup()
       if (message.action === "disconnect") {

@@ -2,6 +2,18 @@ import { createHash } from "node:crypto"
 import { parseTree, type Node, type ParseError } from "jsonc-parser"
 
 export type Op = "state" | "preview" | "discard" | "approve" | "policy_pause" | "capture_authorize" | "capture_admit"
+export class Refused extends Error {
+  readonly code: "capture_source_capacity" | "control_refused"
+  constructor(
+    op: Op,
+    types: readonly string[],
+    readonly publication: "none" | "may_have_happened",
+  ) {
+    super("Control refused: " + types.join(",") + "; publication=" + publication)
+    this.code =
+      op === "capture_authorize" && types.includes("CaptureCapacity") ? "capture_source_capacity" : "control_refused"
+  }
+}
 export type Generation = Readonly<{ root: readonly (string | null)[]; system: readonly (string | null)[] }>
 const generations = new WeakMap<object, Generation>()
 export const exact = (value: object) => generations.get(value)
@@ -173,12 +185,7 @@ function refusal(value: Value, op: Op): never {
       err.types.every((item) => typeof item === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(item)),
     "Bounded refusal classes required",
   )
-  throw Object.assign(new Error("Control refused: " + err.types.join(",") + "; publication=" + err.publication), {
-    code:
-      op === "capture_authorize" && err.types.includes("CaptureCapacity")
-        ? "capture_source_capacity"
-        : "control_refused",
-  })
+  throw new Refused(op, err.types as string[], err.publication as "none" | "may_have_happened")
 }
 
 function admission(value: { [key: string]: Value }) {

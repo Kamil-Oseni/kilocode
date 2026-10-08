@@ -27,10 +27,12 @@ export function valid(request: Request, value: Result) {
       ? command.entries.length === 0 && value.receipt === undefined
       : value.receipt !== undefined
   }
-  if (value.action === "status")
+  if (value.action === "status") {
+    if ((value.capture === "capacity") !== (value.capture_reason !== undefined)) return false
     return value.configured
       ? value.root !== undefined && path.isAbsolute(value.root)
-      : value.root === undefined && value.index === "unchecked"
+      : value.root === undefined && value.index === "unchecked" && value.capture === "unavailable"
+  }
   if (request.command.action === "status") return false
   if (value.action !== "context") {
     if (

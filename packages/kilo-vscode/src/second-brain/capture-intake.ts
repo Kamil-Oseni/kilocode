@@ -3,9 +3,16 @@ import { createHash, randomUUID } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import type { SecondBrainRequest } from "@kilocode/sdk/v2/client"
 import { MemoryRedact } from "@kilocode/kilo-memory/redact"
+import type { BrainCapture } from "../shared/second-brain"
 
 type Command = Extract<SecondBrainRequest["command"], { action: "capture" }>
-export type CaptureBinding = Readonly<{ root: string; release: string; owner: string; generation: object }>
+export type CaptureBinding = Readonly<{
+  root: string
+  release: string
+  owner: string
+  generation: object
+  index?: "unchecked" | "approved" | "synced" | "policy_disabled"
+}>
 type Turn = { project: string; sessionID: string; messageID: string; source_sha256: string }
 type Storage = { get<T>(key: string): T | undefined; update(key: string, value: unknown): PromiseLike<void> }
 const key = "raya.secondBrain.personalCapture"
@@ -66,7 +73,16 @@ const consent = z
     release: hash,
     zone: z.string().min(1).max(255),
     model: z.string().min(1).max(512),
-    authorization: z.object({ source: z.string().min(1).max(4096), sha256: hash }).strict(),
+    authorization: z
+      .object({
+        source: text(4096),
+        sha256: hash,
+        original: z
+          .object({ source: text(4096), sha256: hash })
+          .strict()
+          .optional(),
+      })
+      .strict(),
   })
   .strict()
 type Consent = z.infer<typeof consent>
@@ -77,7 +93,9 @@ const record = z
     sessionID: z.string().min(1).max(256),
     messageID: z.string().min(1).max(256),
     source_sha256: hash,
-    phase: z.enum(["reserved", "skipped", "published", "uncertain"]),
+    root: text(4096),
+    release: hash,
+    phase: z.enum(["reserved", "saving", "skipped", "published", "uncertain", "capacity"]),
     receipt: hash.optional(),
   })
   .strict()
@@ -153,7 +171,65 @@ function evidence(command: Command) {
 export class CaptureIntake {
   private tail = Promise.resolve()
   private grants = new Map<string, { turn: Turn; binding: CaptureBinding; consent: Consent; expires: number }>()
+  private active = new Set<string>()
+  private listeners = new Set<() => void>()
   constructor(private readonly storage: Storage) {}
+
+  observe(listener: () => void) {
+    this.listeners.add(listener)
+    return { dispose: () => this.listeners.delete(listener) }
+  }
+
+  private changed() {
+    for (const listener of this.listeners) {
+      try {
+        listener()
+      } catch {
+        console.warn("[Raya] Memory capture status could not be delivered")
+      }
+    }
+  }
+
+  /** Parses public choices; only the native activation command may publish this value. */
+  reviewed(value: unknown, digest: string) {
+    const cfg = consent.parse(value)
+    hash.parse(digest)
+    if (cfg.authorization.original) throw new Error("Select original reviewed capture choices")
+    return {
+      ...cfg,
+      authorization: {
+        source: "kilo-code.new.memory.activateReviewedCapture",
+        sha256: digest,
+        original: cfg.authorization,
+      },
+    }
+  }
+
+  snapshot(binding?: CaptureBinding): BrainCapture {
+    const raw = this.storage.get(key)
+    if (raw === undefined) return { status: "unavailable" }
+    const cfg = consent.parse(raw)
+    const saved = rows.parse(this.storage.get(ledger) ?? [])
+    const selected = saved.filter((row) => row.root === cfg.root && row.release === cfg.release)
+    if (selected.some((row) => this.active.has(row.id))) return { status: "saving" }
+    if (selected.some((row) => row.phase === "saving" || row.phase === "uncertain")) return { status: "uncertain" }
+    if (selected.some((row) => row.phase === "capacity")) return { status: "capacity", reason: "source_capacity" }
+    if (saved.length >= 10000) return { status: "capacity", reason: "ledger_capacity" }
+    if (
+      selected.some(
+        (row) =>
+          row.phase === "reserved" &&
+          !Array.from(this.grants.values()).some(
+            (grant) => identity(grant.turn) === row.id && grant.expires > Date.now(),
+          ),
+      )
+    )
+      return { status: "uncertain" }
+    if (!cfg.enabled) return { status: "paused" }
+    if (!binding || cfg.root !== binding.root || cfg.release !== binding.release) return { status: "unavailable" }
+    if (binding.index === "policy_disabled") return { status: "paused" }
+    return { status: binding.index === "synced" ? "ready" : "unavailable" }
+  }
 
   parse(value: unknown): Command {
     return command.parse(value)
@@ -184,15 +260,21 @@ export class CaptureIntake {
       await this.storage.update(key, cfg)
       if (!isDeepStrictEqual(this.storage.get(key), cfg)) throw new Error("Capture consent persistence failed")
       this.grants.clear()
+      this.changed()
       check?.()
     })
   }
 
   selected(binding: CaptureBinding) {
+    const cfg = this.saved(binding)
+    return cfg?.enabled ? cfg : undefined
+  }
+
+  saved(binding: CaptureBinding) {
     const raw = this.storage.get(key)
     if (raw === undefined) return undefined
     const cfg = consent.parse(raw)
-    if (!cfg.enabled || cfg.root !== binding.root || cfg.release !== binding.release) return undefined
+    if (cfg.root !== binding.root || cfg.release !== binding.release) return undefined
     return cfg
   }
 
@@ -200,14 +282,21 @@ export class CaptureIntake {
     return this.serial(async () => {
       check()
       const cfg = this.selected(binding)
-      if (!cfg) return undefined
-      record.parse({ ...turn, id: identity(turn), phase: "reserved" })
+      if (!cfg || binding.index !== "synced") return undefined
+      const row = record.parse({
+        ...turn,
+        id: identity(turn),
+        root: binding.root,
+        release: binding.release,
+        phase: "reserved",
+      })
       const saved = rows.parse(this.storage.get(ledger) ?? [])
       const id = identity(turn)
       // Retain uncertainty and exact completed IDs across reopen; never evict to permit replay.
       if (saved.some((row) => row.id === id)) return undefined
-      if (saved.length >= 10000) throw new Error("Capture history is full; archive it in Memory before continuing")
-      const next = [...saved, { ...turn, id, phase: "reserved" as const }]
+      if (saved.length >= 10000)
+        throw new Error("Capture history reached its limit; automatic saving needs history management")
+      const next = [...saved, row]
       await this.storage.update(ledger, next)
       if (!isDeepStrictEqual(this.storage.get(ledger), next))
         throw new Error("Original capture reservation was not saved")
@@ -217,6 +306,7 @@ export class CaptureIntake {
       const grant = randomUUID()
       const expires = Date.now() + 35000
       this.grants.set(grant, { turn: { ...turn }, binding, consent: cfg, expires })
+      this.changed()
       return { id: grant, root: cfg.root, release: cfg.release, zone: cfg.zone, model: cfg.model, expires }
     })
   }
@@ -271,18 +361,37 @@ export class CaptureIntake {
     return body
   }
 
-  finish(turn: Turn, phase: Record["phase"], receipt?: string) {
+  begin(turn: Turn) {
+    return this.transition(turn, "saving")
+  }
+
+  /** Ends only the original in-memory activity; durable outcomes remain retained. */
+  end(turn: Turn) {
+    this.active.delete(identity(turn))
+    this.changed()
+  }
+
+  finish(turn: Turn, phase: Exclude<Record["phase"], "reserved" | "saving">, receipt?: string) {
+    return this.transition(turn, phase, receipt)
+  }
+
+  private transition(turn: Turn, phase: Exclude<Record["phase"], "reserved">, receipt?: string) {
     return this.serial(async () => {
+      if (phase === "published" && !hash.safeParse(receipt).success)
+        throw new Error("Original published capture receipt required")
       const saved = rows.parse(this.storage.get(ledger) ?? [])
       const id = identity(turn)
       const prior = saved.find((row) => row.id === id)
-      if (!prior || prior.source_sha256 !== turn.source_sha256 || prior.phase !== "reserved")
+      if (!prior || prior.source_sha256 !== turn.source_sha256 || !["reserved", "saving"].includes(prior.phase))
         throw new Error("Original capture reservation cannot be replaced")
       const next = saved.map((row) =>
         row.id === id ? record.parse({ ...row, phase, ...(receipt ? { receipt } : {}) }) : row,
       )
       await this.storage.update(ledger, next)
       if (!isDeepStrictEqual(this.storage.get(ledger), next)) throw new Error("Capture outcome persistence failed")
+      if (phase === "saving") this.active.add(id)
+      if (phase !== "saving") this.active.delete(id)
+      this.changed()
     })
   }
 }

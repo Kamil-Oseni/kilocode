@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { CaptureIntake } from "../../src/second-brain/capture-intake"
+import { metadata } from "../../src/second-brain/manifest"
 
 test("durable original capture grants bind consent, generation, source and local day without replay", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "raya-capture-intake-"))
@@ -20,7 +21,13 @@ test("durable original capture grants bind consent, generation, source and local
   }
   try {
     const intake = new CaptureIntake(storage)
-    const binding = { root: "D:/Raya/SecondBrain", release: "a".repeat(64), owner: "original-service", generation: {} }
+    const binding = {
+      root: "D:/Raya/SecondBrain",
+      release: "a".repeat(64),
+      owner: "original-service",
+      generation: {},
+      index: "synced" as const,
+    }
     const cfg = {
       version: 1,
       enabled: true,
@@ -30,6 +37,16 @@ test("durable original capture grants bind consent, generation, source and local
       model: "qwen-local/qwen3.5-4b-pinned:2a654d98e6fb",
       authorization: { source: "Original human automatic-capture request", sha256: "b".repeat(64) },
     }
+    const packet = path.join(dir, "choices.json")
+    const bytes = JSON.stringify(cfg, null, 2)
+    await Bun.write(packet, bytes)
+    const reviewed = await metadata(packet, (value, digest) => intake.reviewed(value, digest))
+    expect(reviewed.authorization.source).toBe("kilo-code.new.memory.activateReviewedCapture")
+    expect(reviewed.authorization.sha256).toBe(createHash("sha256").update(bytes).digest("hex"))
+    expect(reviewed.authorization.original).toEqual(cfg.authorization)
+    expect(() => intake.reviewed(reviewed, "d".repeat(64))).toThrow("original reviewed")
+    const states: string[] = []
+    const listener = intake.observe(() => states.push(intake.snapshot(binding).status))
     const source = {
       user: { id: "user", text: "I prefer warm lights." },
       assistant: { id: "reply", text: "I will remember that." },
@@ -43,7 +60,11 @@ test("durable original capture grants bind consent, generation, source and local
       .digest("hex")
     const turn = { project: "C:/Work", sessionID: "session", messageID: "reply", source_sha256: fingerprint }
     expect(await intake.grant(turn, binding, () => {})).toBeUndefined()
+    expect(intake.snapshot(binding).status).toBe("unavailable")
     await intake.save(cfg)
+    expect(intake.snapshot(binding).status).toBe("ready")
+    expect(intake.snapshot({ ...binding, index: "unchecked" }).status).toBe("unavailable")
+    expect(await intake.grant(turn, { ...binding, index: "unchecked" }, () => {})).toBeUndefined()
     await expect(intake.save({ ...cfg, root: "D:/Other" }, binding)).rejects.toThrow("different reviewed")
     const grants = await Promise.all([intake.grant(turn, binding, () => {}), intake.grant(turn, binding, () => {})])
     expect(grants.filter(Boolean)).toHaveLength(1)
@@ -72,6 +93,7 @@ test("durable original capture grants bind consent, generation, source and local
     expect(() => intake.consume(turn, command, binding, () => {})).toThrow("one-use")
     await intake.finish(turn, "skipped")
     const reopened = new CaptureIntake(storage)
+    expect(reopened.snapshot(binding).status).toBe("ready")
     expect(await reopened.grant(turn, binding, () => {})).toBeUndefined()
     expect(() => reopened.consume(turn, command, binding, () => {})).toThrow("one-use")
     await expect(reopened.finish(turn, "published", "c".repeat(64))).rejects.toThrow("cannot be replaced")
@@ -83,10 +105,26 @@ test("durable original capture grants bind consent, generation, source and local
       intake.consume(next, { ...command, id: ids[1].id, grant: second!.id }, { ...binding, generation: {} }, () => {}),
     ).toThrow("one-use")
     expect(await reopened.grant(next, binding, () => {})).toBeUndefined()
+    expect(reopened.snapshot(binding).status).toBe("uncertain")
+
+    const writing = { ...turn, sessionID: "writing" }
+    await intake.grant(writing, binding, () => {})
+    await intake.begin(writing)
+    expect(intake.snapshot(binding).status).toBe("saving")
+    expect(states.at(-1)).toBe("saving")
+    expect(new CaptureIntake(storage).snapshot(binding).status).toBe("uncertain")
+    intake.end(writing)
+    expect(intake.snapshot(binding).status).toBe("uncertain")
+    await expect(intake.finish(writing, "published")).rejects.toThrow("receipt required")
+    await intake.finish(writing, "capacity")
+    expect(intake.snapshot(binding)).toEqual({ status: "capacity", reason: "source_capacity" })
+    expect(states.at(-1)).toBe("capacity")
+    listener.dispose()
 
     const last = { ...turn, sessionID: "last" }
     const third = await intake.grant(last, binding, () => {})
     await intake.save({ ...cfg, enabled: false })
+    expect(intake.saved(binding)?.enabled).toBe(false)
     expect(() => intake.consume(last, { ...command, grant: third!.id }, binding, () => {})).toThrow("one-use")
     expect(await reopened.grant({ ...turn, sessionID: "disabled" }, binding, () => {})).toBeUndefined()
   } finally {

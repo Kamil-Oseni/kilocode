@@ -4,6 +4,7 @@ import type { BrainSettings } from "./settings"
 import { status } from "./index-status"
 import type { Publication } from "./client-v2"
 import { isDeepStrictEqual } from "node:util"
+import { Refused } from "./control/frames"
 
 type Row = Record<string, unknown>
 export type Session = {
@@ -131,7 +132,10 @@ export class BrainControl {
   }
 
   private unapproved(err: unknown, closed: boolean) {
-    if (!(err instanceof Unapproved) || !closed || this.settings.pending()) return false
+    const safe =
+      err instanceof Unapproved ||
+      (err instanceof Refused && err.code === "capture_source_capacity" && err.publication === "none")
+    if (!safe || !closed || this.settings.pending()) return false
     this.state = Object.freeze({ status: "unchecked" })
     return true
   }

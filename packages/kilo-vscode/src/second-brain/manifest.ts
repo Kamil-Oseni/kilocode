@@ -1,8 +1,9 @@
 import { lstat, open } from "node:fs/promises"
 import { parse } from "./settings"
+import { createHash } from "node:crypto"
 
 /** User-selected public metadata only; never a credential or approval authority. */
-export async function metadata<T>(file: string, decode: (input: unknown) => T) {
+export async function metadata<T>(file: string, decode: (input: unknown, digest: string) => T) {
   const before = await lstat(file, { bigint: true })
   if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || before.size > 16_384n)
     throw new Error("Memory setup must be a bounded ordinary file")
@@ -25,7 +26,10 @@ export async function metadata<T>(file: string, decode: (input: unknown) => T) {
         throw new Error("Memory setup changed during import")
     if (before.ctimeNs !== after.ctimeNs || row.ctimeNs !== final.ctimeNs || bytes.byteLength !== Number(before.size))
       throw new Error("Memory setup changed during import")
-    return decode(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)))
+    return decode(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+      createHash("sha256").update(bytes).digest("hex"),
+    )
   })().then(
     (value) => ({ value }),
     (error: unknown) => ({ error }),

@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process"
-import { check, object, reply, sha, exact, document, canonical, type Op, type Generation } from "./frames"
+import { check, object, reply, sha, exact, document, canonical, Refused, type Op, type Generation } from "./frames"
 import { valid, type Identity } from "./identity"
 import type { Publication } from "../client-v2"
 type Ticket = object
@@ -165,11 +165,27 @@ export class Transport {
       // Authentic control refusals and malformed protocol both fence the generation.
       const cause = err instanceof Error ? err : new Error("Reply verification failed")
       this.fenced = true
-      this.errors.push(cause)
       const row = this.history[this.history.length - 1]
+      if (this.denied(cause, flight, row)) {
+        // This exact valid preflight denial has no publication. Still fence intake
+        // and retain the child until its original exit and both streams join.
+        row.verified = true
+        flight.reject(cause)
+        return
+      }
+      this.errors.push(cause)
       if (row.mutation) row.outcome = Object.freeze({ state: "failed", failure: cause.name })
       flight.reject(cause)
     }
+  }
+  private denied(cause: Error, flight: Flight, row: History) {
+    return (
+      cause instanceof Refused &&
+      cause.code === "capture_source_capacity" &&
+      cause.publication === "none" &&
+      flight.op === "capture_authorize" &&
+      !row.mutation
+    )
   }
   private async request(op: Op, args: Record<string, unknown>, mutation?: Mutation, before?: Before) {
     check(

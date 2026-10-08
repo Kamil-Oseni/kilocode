@@ -48,10 +48,16 @@ export type BrainDreamActivity = Readonly<{
   lifecycle: "active" | "settling" | "joined" | "uncertain"
 }>
 
+export type BrainCapture = Readonly<{
+  status: "unavailable" | "paused" | "ready" | "saving" | "uncertain" | "capacity"
+  reason?: "source_capacity" | "ledger_capacity"
+}>
+
 export type BrainState = Readonly<{
   configured: boolean
   status: "disconnected" | "checking" | "ready" | "searching" | "cancelled" | "unavailable"
   code?: string
+  capture?: BrainCapture
   recall?: "unverified"
   proposals?: BrainProposalResult
   review?: BrainReview
@@ -94,7 +100,7 @@ export type BrainRequest =
   | { type: "secondBrain"; action: "search"; id: string; query: string }
   | { type: "secondBrain"; action: "context"; id: string; query: string; budget: number }
 
-export type BrainResponse = { type: "secondBrainState"; id: string; state: BrainState }
+export type BrainResponse = { type: "secondBrainState"; id: string; state: BrainState; live?: true }
 
 /** Read-only explanation from the matching saved candidate, outside the signed publication record. */
 export type BrainReview = Readonly<{

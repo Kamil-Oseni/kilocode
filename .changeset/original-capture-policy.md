@@ -2,4 +2,4 @@
 "kilo-code": patch
 ---
 
-Bind personal Memory saves to saved choices, original completed conversations and the current source policy. Prevent duplicate saves after reconnects and preserve uncertain outcomes for inspection.
+Activate reviewed automatic Memory saving through a native command. Bind saves to saved choices and original completed conversations, prevent duplicates after reconnects, and show saving, paused, uncertain and capacity states in the Memory panel.

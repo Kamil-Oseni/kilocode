@@ -97864,7 +97864,11 @@
           },
           "capture": {
             "type": "string",
-            "enum": ["unavailable"]
+            "enum": ["unavailable", "paused", "ready", "saving", "uncertain", "capacity"]
+          },
+          "capture_reason": {
+            "type": "string",
+            "enum": ["source_capacity", "ledger_capacity"]
           },
           "preparation": {
             "type": "string",

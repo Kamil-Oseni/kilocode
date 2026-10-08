@@ -57,7 +57,7 @@ function provenance(input: { assistant: string }) {
  * provenance suppressor must not fire. */
 function editsInstructionDocs(diffs: { file?: string }[]) {
   return diffs.some((item) => {
-    const file = item.file ?? ""
+    const file = (item.file ?? "").replaceAll("\\", "/")
     return /(^|\/)(AGENTS\.md|CLAUDE\.md)$/i.test(file) || /(^|\/)docs?\//i.test(file)
   })
 }

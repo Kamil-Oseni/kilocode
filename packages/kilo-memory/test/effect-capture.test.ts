@@ -881,14 +881,20 @@ describe("MemoryCapture (fake ports)", () => {
     }
   })
 
-  test("provenance suppressor is skipped when the turn actually edits AGENTS.md", async () => {
+  test.each([
+    { file: "AGENTS.md", count: 1 },
+    { file: "C:\\project\\AGENTS.md", count: 1 },
+    { file: "C:\\project\\CLAUDE.md", count: 1 },
+    { file: "C:\\project\\docs\\setup.md", count: 1 },
+    { file: "C:\\project\\src\\parser.ts", count: 0 },
+    { file: "C:\\project\\AGENTS.md.bak", count: 0 },
+  ])("instruction provenance uses the actual edited path: %j", async (row) => {
     const t = await tmp()
     try {
       await KiloMemory.enable({ root: t.root })
       await KiloMemory.configure({ root: t.root, settings: { autoConsolidate: true } })
 
-      // Assistant text names AGENTS.md 4+ times (would trip the provenance suppressor), but the diff
-      // shows AGENTS.md was actually edited — real work on the file, so typed capture must still run.
+      // The same repeated instruction names are genuine work only when the edited path is documentation.
       const assistant = [
         "Updated AGENTS.md to document the test rule.",
         "AGENTS.md now says to run package tests.",
@@ -897,7 +903,7 @@ describe("MemoryCapture (fake ports)", () => {
       const result = await run({
         root: t.root,
         session: session(
-          view({ assistant, diffs: [{ file: "AGENTS.md", status: "modified", additions: 6, deletions: 1 }] }),
+          view({ assistant, diffs: [{ file: row.file, status: "modified", additions: 6, deletions: 1 }] }),
         ),
         model: model({
           digest: '{"topic":"docs","summary":"Edited AGENTS.md. Next: verify."}',
@@ -906,9 +912,9 @@ describe("MemoryCapture (fake ports)", () => {
         }),
       })
 
-      expect(result).toMatchObject({ skipped: false, operationCount: 1 })
+      expect(result).toMatchObject({ skipped: false, operationCount: row.count })
       const shown = await KiloMemory.show({ root: t.root })
-      expect(shown.sources.project).toContain("agents_rule")
+      expect(shown.sources.project.includes("agents_rule")).toBe(row.count === 1)
     } finally {
       await t.done()
     }

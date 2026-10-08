@@ -1,5 +1,5 @@
 import path from "node:path"
-import { readdir } from "node:fs/promises"
+import { lstat, readdir } from "node:fs/promises"
 import { isDeepStrictEqual } from "node:util"
 import { check, document, object } from "./control/frames"
 import { directory, image, normalize, powershell, environment } from "./control/identity"
@@ -26,7 +26,7 @@ function disjoint(a: string, b: string) {
   return left !== right && !left.startsWith(right + "/") && !right.startsWith(left + "/")
 }
 
-async function originals(old: Awaited<ReturnType<typeof inspect>>) {
+async function originals(old: Pick<Awaited<ReturnType<typeof inspect>>, "original" | "cfg">) {
   const original = await retained(old.original)
   check(
     original.format === "raya.memory.managed.pair.originals" && original.version === 2,
@@ -68,6 +68,37 @@ async function originals(old: Awaited<ReturnType<typeof inspect>>) {
   return pids
 }
 
+async function unclosed(entry: unknown, pending: unknown, witness: ReturnType<typeof receipt>) {
+  check(pending === undefined, "Unsettled request debt cannot enter missing-closure recovery")
+  const saved = object(entry as Parameters<typeof object>[0])
+  const setup = parse(saved.setup)
+  const cfg = descriptor(saved.managed)
+  const prior = object(saved.launch)
+  const original = receipt(prior.receipt)
+  check(
+    setup.version === 2 &&
+      cfg.version === 2 &&
+      prior.phase === "running" &&
+      isDeepStrictEqual(original, witness) &&
+      path.basename(original.path) === "managed-original.json" &&
+      normalize(original.path).startsWith(normalize(cfg.root) + "/"),
+    "Exact saved unclosed original pair required",
+  )
+  const pair = await retained(original)
+  check(pair.format === "raya.memory.managed.pair.originals" && pair.version === 2, "Original pair required")
+  const location = path.join(path.dirname(original.path), "managed-closed.json")
+  const missing = await lstat(location).then(
+    () => false,
+    (err: unknown) => {
+      if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return true
+      throw err
+    },
+  )
+  check(missing, "Existing closure requires exact closed-pair recovery")
+  const held = await image(original.path, 65536)
+  return { setup, cfg, original, held, selected: { request: original.sha256 }, outcome: "unknown" as const }
+}
+
 /** Historical failure is quarantined, never accepted as joined or settled. */
 export async function review(file: string, entry: unknown, pending: unknown) {
   await directory(path.dirname(file))
@@ -75,12 +106,17 @@ export async function review(file: string, entry: unknown, pending: unknown) {
   const input = object(document(held.raw, 65536).value)
   check(
     Object.keys(input).sort().join() === "format,managed,observation,setup,version" &&
-      input.format === "raya.memory.failed-search.fresh-start" &&
+      ["raya.memory.failed-search.fresh-start", "raya.memory.unclosed-pair.fresh-start"].includes(
+        String(input.format),
+      ) &&
       input.version === 1,
     "Explicit reviewed fresh-start selection required",
   )
   const witness = receipt(input.observation)
-  const old = await inspect(witness.path, entry, pending)
+  const old =
+    input.format === "raya.memory.unclosed-pair.fresh-start"
+      ? await unclosed(entry, pending, witness)
+      : { ...(await inspect(witness.path, entry, pending)), outcome: "failed" as const }
   check(
     old.held.digest === witness.sha256 && old.held.raw.length === witness.bytes && old.held.tuple === witness.tuple,
     "Fresh-start observation changed",
@@ -98,7 +134,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
   check(
     cfg.version === 2 &&
       cfg.python.sha256 === old.cfg.python.sha256 &&
-      cfg.supervisor.sha256 === old.cfg.supervisor.sha256,
+      (input.format === "raya.memory.unclosed-pair.fresh-start" || cfg.supervisor.sha256 === old.cfg.supervisor.sha256),
     "Reviewed paired fresh runtime required",
   )
   const spaces = Object.values(cfg.namespaces)
@@ -142,7 +178,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
     observation: witness,
     pids: Object.freeze([...new Set(pids)]),
     ports: Object.freeze(ports),
-    outcome: "failed" as const,
+    outcome: old.outcome,
     closure: "unproven" as const,
     settlement: false as const,
     qualification:

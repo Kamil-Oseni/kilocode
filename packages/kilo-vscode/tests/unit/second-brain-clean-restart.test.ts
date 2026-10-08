@@ -431,6 +431,48 @@ async function fresh(value: Awaited<ReturnType<typeof fixture>>) {
   return { ...failure, file, input }
 }
 
+test("missing producer closure quarantines the exact prior pair without claiming request settlement", async () => {
+  const value = await fixture("raya.memory.operation.v2")
+  try {
+    const selected = await fresh(value)
+    selected.input.format = "raya.memory.unclosed-pair.fresh-start"
+    selected.input.observation = value.running.launch.receipt
+    await writeFile(selected.file, JSON.stringify(selected.input))
+    const host = value.settings()
+    await expect(host.archive(selected.file, async () => true)).rejects.toThrow("Unsettled request debt")
+    const saved = JSON.parse(await readFile(value.file, "utf8"))
+    delete saved["raya.secondBrain.control.uncertainty"]
+    await writeFile(value.file, JSON.stringify(saved))
+    const before = await readFile(value.file)
+    const original = await readFile(value.running.launch.receipt.path)
+    await host.archive(selected.file, async () => false)
+    expect(await readFile(value.file)).toEqual(before)
+    await writeFile(value.closed.path, "damaged closure remains evidence")
+    await expect(host.archive(selected.file, async () => true)).rejects.toThrow("Existing closure")
+    expect(await readFile(value.file)).toEqual(before)
+    await rm(value.closed.path)
+    await host.archive(selected.file, async (review) => {
+      expect(review.outcome).toBe("unknown")
+      expect(review.closure).toBe("unproven")
+      expect(review.settlement).toBe(false)
+      return true
+    })
+    const current = JSON.parse(await readFile(value.file, "utf8"))
+    const audit = current[`raya.secondBrain.failedSearchArchive.${value.running.launch.receipt.sha256}`]
+    expect(audit.previous).toEqual(value.running)
+    expect(audit.phase).toBe("applied")
+    expect(audit.debt).toBeUndefined()
+    expect(audit.settlement).toBe(false)
+    expect(current["raya.secondBrain.quarantinedSetups"]).toEqual([value.running])
+    expect(await readFile(value.running.launch.receipt.path)).toEqual(original)
+    expect(host.pending()).toBeUndefined()
+    expect((await host.load())!.setup).toEqual(selected.input.setup)
+    await expect(host.save(value.setup, "synthetic", value.cfg)).rejects.toThrow("Quarantined Memory address")
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
+
 test("fresh-start quarantine retains unproven failure and admits a separate setup without a closure receipt", async () => {
   const value = await fixture("raya.memory.operation.v2")
   try {

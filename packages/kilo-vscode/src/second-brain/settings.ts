@@ -366,7 +366,7 @@ export class BrainSettings {
         format: "raya.memory.failed-search.archive",
         version: 1,
         previous: entry,
-        debt: metadata,
+        ...(metadata === undefined ? {} : { debt: metadata }),
         review: reviewed,
         phase: "prepared",
         closure: "unproven",

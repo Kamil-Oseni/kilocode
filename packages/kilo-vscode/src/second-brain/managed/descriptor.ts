@@ -4,7 +4,7 @@ import { document, child, check } from "../control/frames"
 import { image, directory, normalize } from "../control/identity"
 import { release } from "../control/catalog-v2"
 import type { Setup } from "../settings"
-import { interpreter, supervisor, retrieval as release7 } from "./catalog"
+import { interpreter, supervisors, retrieval as release7 } from "./catalog"
 import { images, fingerprint } from "./reuse-catalog"
 import { parse } from "./value"
 
@@ -108,7 +108,8 @@ export function descriptor(value: unknown): Descriptor {
   const namespaces = row(item.namespaces)
   keys(namespaces, ["memory", "retrieval"])
   check(
-    reference(item.python).sha256 === interpreter && reference(item.supervisor).sha256 === supervisor,
+    reference(item.python).sha256 === interpreter &&
+      supervisors.some((hash) => reference(item.supervisor).sha256 === hash),
     "Reviewed managed interpreter/supervisor required",
   )
   return Object.freeze({

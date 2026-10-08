@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process"
-import { createReadStream } from "node:fs"
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { realpath, lstat, mkdtemp, mkdir, readdir } from "node:fs/promises"
 import path from "node:path"
 import z from "zod"
@@ -9,6 +8,7 @@ import { validatePolicy, type SourcePolicy } from "./source-policy"
 import { plan, negative } from "./source-image-plan"
 import { preparation, retirement } from "./source-offline-frame"
 import { directoryInventory, validateDirectoryInventory } from "./source-image-directories"
+import { digest as hash } from "./file-digest"
 
 type Root = Readonly<{ kind: "json" | "sqlite"; path: string }>
 type Pin = Readonly<{ executable: string; digest: string }>
@@ -75,11 +75,6 @@ const brand: unique symbol = Symbol("held-profile-image")
 export type Image = Readonly<{ [brand]: true }>
 const images = new WeakMap<object, { roots: readonly Root[]; value: Value; active: boolean }>()
 const normalize = (value: string) => value.toLowerCase()
-const hash = async (value: string) => {
-  const digest = createHash("sha256")
-  for await (const bytes of createReadStream(value, { highWaterMark: 65536 })) digest.update(bytes)
-  return digest.digest("hex")
-}
 const same = (left: string, right: string) => normalize(left) === normalize(right)
 function inside(root: string, value: string) {
   const relative = path.relative(normalize(root), normalize(value))

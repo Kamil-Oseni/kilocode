@@ -2030,7 +2030,7 @@ it.live("headless run: root session permission asks still queue (only subagents 
   ),
 )
 
-for (const mode of ["copy", "literal", "stalled", "capped"] as const)
+for (const mode of ["copy", "background", "literal", "stalled", "capped"] as const)
   it.live(
     `same Task finishes announced work without changing its input: ${mode}`,
     () =>
@@ -2048,16 +2048,23 @@ for (const mode of ["copy", "literal", "stalled", "capped"] as const)
             mode !== "literal"
               ? `Read ${input}, copy its exact bytes into ${output}, then read ${output} to verify the copy.`
               : 'Return exactly the literal sentence "I will read input.txt" without reading files.'
-          yield* llm.push(
+          const child = (hit: { body: Record<string, unknown> }) =>
+            JSON.stringify(hit.body.messages).includes("<subagent_brief>")
+          const push = (...items: Parameters<typeof llm.push>) =>
+            mode === "background" ? llm.pushMatch(child, ...items) : llm.push(...items)
+          const send = (...items: Parameters<typeof llm.push>) =>
+            mode === "background" ? llm.pushMatch((hit) => !child(hit), ...items) : llm.push(...items)
+          yield* send(
             reply().tool("task", {
               description: "Execute the assigned synthetic objective",
               prompt: objective,
               subagent_type: "worker",
               access: "edit",
+              ...(mode === "background" ? { background: true } : {}),
             }),
           )
-          if (mode === "copy")
-            yield* llm.push(
+          if (mode === "copy" || mode === "background")
+            yield* push(
               reply().text("I'll read input.txt, write its exact bytes to result.txt, then verify the copy.").stop(),
               reply().tool("read", { filePath: input }),
               reply().tool("write", {
@@ -2068,12 +2075,11 @@ for (const mode of ["copy", "literal", "stalled", "capped"] as const)
               reply().tool("read", { filePath: output }),
               reply().text("The files match exactly after saved-target readback.").stop(),
             )
-          if (mode === "literal") yield* llm.push(reply().text("I will read input.txt").stop())
+          if (mode === "literal") yield* push(reply().text("I will read input.txt").stop())
           if (mode === "stalled" || mode === "capped")
-            yield* llm.push(reply().text("I'll read input.txt and copy it into result.txt.").stop())
-          if (mode === "stalled")
-            yield* llm.push(reply().text("I'll read input.txt and copy it into result.txt.").stop())
-          yield* llm.push(
+            yield* push(reply().text("I'll read input.txt and copy it into result.txt.").stop())
+          if (mode === "stalled") yield* push(reply().text("I'll read input.txt and copy it into result.txt.").stop())
+          yield* send(
             reply()
               .text(
                 mode === "stalled" || mode === "capped"
@@ -2082,6 +2088,7 @@ for (const mode of ["copy", "literal", "stalled", "capped"] as const)
               )
               .stop(),
           )
+          if (mode === "background") yield* send(reply().text("Background result received.").stop())
           yield* prompt.prompt({
             sessionID: parent.id,
             agent: "code",
@@ -2103,9 +2110,13 @@ for (const mode of ["copy", "literal", "stalled", "capped"] as const)
             expect(task.state.error).toContain("plan for unfinished work")
           }
           if (mode === "copy" || mode === "literal") expect(task.state.status).toBe("completed")
-          const child = task.state.metadata?.sessionId
-          if (typeof child !== "string") throw new Error("Task lacks its actual child session")
-          const history = yield* sessions.messages({ sessionID: SessionID.make(child) })
+          const id = task.state.metadata?.sessionId
+          if (typeof id !== "string") throw new Error("Task lacks its actual child session")
+          if (mode === "background") {
+            const result = yield* (yield* BackgroundJob.Service).wait({ id })
+            expect(result.info?.status).toBe("completed")
+          }
+          const history = yield* sessions.messages({ sessionID: SessionID.make(id) })
           const users = history.filter((row) => row.info.role === "user")
           expect(users).toHaveLength(1)
           expect(task.state.metadata?.childMessageID).toBe(users[0].info.id)
@@ -2115,9 +2126,13 @@ for (const mode of ["copy", "literal", "stalled", "capped"] as const)
               .every((row) => row.info.role === "assistant" && row.info.parentID === users[0].info.id),
           ).toBe(true)
           const work = history.flatMap((row) => row.parts).filter((part) => part.type === "tool")
-          expect(work.map((part) => part.tool)).toEqual(mode === "copy" ? ["read", "write", "read"] : [])
-          expect(yield* llm.calls).toBe(mode === "copy" ? 7 : mode === "stalled" ? 4 : 3)
-          if (mode === "copy") expect(yield* Effect.promise(() => Bun.file(output).text())).toBe(content)
+          expect(work.map((part) => part.tool)).toEqual(
+            mode === "copy" || mode === "background" ? ["read", "write", "read"] : [],
+          )
+          if (mode !== "background") expect(yield* llm.calls).toBe(mode === "copy" ? 7 : mode === "stalled" ? 4 : 3)
+          if (mode === "background") expect((yield* llm.hits).filter(child)).toHaveLength(5)
+          if (mode === "copy" || mode === "background")
+            expect(yield* Effect.promise(() => Bun.file(output).text())).toBe(content)
           if (mode === "literal" && task.state.status === "completed")
             expect(task.state.output).toContain("I will read input.txt")
         }),

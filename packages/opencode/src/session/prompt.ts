@@ -2,6 +2,7 @@ import * as GoalMessage from "@/kilocode/goal/message" // kilocode_change
 import * as GoalTurn from "@/kilocode/goal/turn" // kilocode_change
 import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - final synthesis for the original dispatch
 import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
+import { BackgroundJob } from "@/background/job" // kilocode_change
 import * as TaskProgress from "@/kilocode/session/task-progress" // kilocode_change - keep provisional worker announcements in the original input
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
@@ -185,6 +186,7 @@ export const layer = Layer.effect(
     const instruction = yield* Instruction.Service
     const state = yield* SessionRunState.Service
     const workers = yield* TaskWorker.Service // kilocode_change
+    const jobs = yield* BackgroundJob.Service // kilocode_change
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
@@ -1675,7 +1677,7 @@ export const layer = Layer.effect(
 
         // kilocode_change start - one owned same-input checkpoint before accepting a worker announcement
         const checkpoint = !checked.has(lastUser.id)
-          ? yield* TaskProgress.checkpoint(sessions, workers, sessionID, lastUser.id, lastAssistantMsg)
+          ? yield* TaskProgress.checkpoint(sessions, workers, jobs, sessionID, lastUser.id, lastAssistantMsg)
           : undefined
         // kilocode_change end
         if (
@@ -2880,6 +2882,7 @@ export const node = LayerNode.make({
     Instruction.node,
     SessionRunState.node,
     TaskWorker.node, // kilocode_change
+    BackgroundJob.node, // kilocode_change
     SessionRevert.node,
     SessionSummary.node,
     SystemPrompt.node,

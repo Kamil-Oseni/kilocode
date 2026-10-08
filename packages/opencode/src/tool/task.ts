@@ -530,8 +530,8 @@ export const TaskTool = Tool.define(
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
-      // kilocode_change start - new unplanned foreground Chief workers cannot redelegate
-      const direct = !resumed && ctx.agent === "auto" && !branch && !runInBackground
+      // kilocode_change start - scheduling mode cannot expand an unplanned Chief worker's delegation authority
+      const direct = !resumed && ctx.agent === "auto" && !branch
       const canTask =
         !direct &&
         !TaskAuthority.direct(resumed?.metadata, resumed?.id ?? "", resumed?.parentID) &&

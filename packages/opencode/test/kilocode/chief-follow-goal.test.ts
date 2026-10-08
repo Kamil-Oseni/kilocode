@@ -182,6 +182,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
       "compat-request",
       "compat-user",
       "edit",
+      "edit-background",
       "conflict",
       "readonly",
       "omitted-access",
@@ -219,6 +220,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         mode.startsWith("refinement") ||
         [
           "edit",
+          "edit-background",
           "conflict",
           "readonly",
           "omitted-access",
@@ -449,6 +451,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         resolvePromptParts: (text) => Effect.succeed([{ type: "text" as const, text }]),
         prompt: (input) =>
           Effect.gen(function* () {
+            if (input.backgroundResult) return reply(input, "Background result received")
             started++
             const user = yield* sessions.updateMessage({
               id: input.messageID!,
@@ -515,6 +518,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
             subagent_type:
               ["readonly", "omitted-access"].includes(mode) || mode.startsWith("refinement") ? "researcher" : "general",
             brief: { objective: work ? "Write the requested file" : "Inspect the fixture" },
+            ...(mode === "edit-background" ? { background: true } : {}),
             ...(mode === "unknown-resume" ? { task_id: SessionID.make("ses_missing_capable_child") } : {}),
             ...(mode === "conflict"
               ? { access: "read" as const }
@@ -772,11 +776,16 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect(TaskAuthority.hard(child.metadata, "edit", ["/private/other.txt"])).toHaveLength(1)
         continue
       }
+      if (mode === "edit-background" && Exit.isSuccess(result)) {
+        const joined = yield* (yield* BackgroundJob.Service).wait({ id: result.value.metadata.sessionId })
+        expect(joined.info?.status).toBe("completed")
+      }
       const parent = yield* sessions.get(chat.id)
       if (
         mode !== "current" &&
         mode !== "compat" &&
         mode !== "edit" &&
+        mode !== "edit-background" &&
         mode !== "continuation" &&
         mode !== "compaction" &&
         mode !== "compaction-absent"
@@ -793,7 +802,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
       }
       if (Exit.isFailure(result)) throw Cause.squash(result.cause)
       expect(result.value.metadata.selectedAgent).toBe("general")
-      if (mode === "edit") {
+      if (mode === "edit" || mode === "edit-background") {
         const child = yield* sessions.get(result.value.metadata.sessionId)
         expect(child.metadata?.["raya.task.authority"]).toMatchObject({ access: "edit" })
         expect(TaskAuthority.direct(child.metadata, child.id, child.parentID)).toBe(true)
@@ -822,6 +831,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         ])
       }
       expect(started).toBe(1)
+      if (mode === "edit-background") continue
       if (mode === "compat") {
         expect(RayaChief.phase(parent.metadata)).toBe("verify")
         expect(parent.metadata?.["raya.chief.verification"]).toBeUndefined()

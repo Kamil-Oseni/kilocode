@@ -26,6 +26,7 @@ import { DreamActivity } from "./dream-activity"
 import { Effect } from "effect"
 import { choices } from "./note-choices"
 import { unchanged } from "./review"
+import { ClosedRequired } from "./closed-recovery"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
@@ -456,6 +457,7 @@ export class BrainHost {
       vscode.commands.registerCommand("raya.memory.reconcileOperation", () => this.service.reconcile()),
       vscode.commands.registerCommand("raya.memory.repairFailedSearch", () => this.repair()),
       vscode.commands.registerCommand("raya.memory.archiveFailedSetup", () => this.archive()),
+      vscode.commands.registerCommand("raya.memory.resumeClosedPair", () => this.resume()),
       vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
     )
     const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
@@ -493,6 +495,7 @@ export class BrainHost {
         "reconcile",
         "repair",
         "archive",
+        "resume",
         "disconnect",
         "controlSetup",
         "review",
@@ -713,6 +716,7 @@ export class BrainHost {
       if (message.action === "cancel" && this.current?.id === message.target)
         await this.service.stop(this.current.owner)
       if (message.action === "search" || message.action === "context") {
+        this.indexed()
         await this.query(message, send)
         return
       }
@@ -726,22 +730,39 @@ export class BrainHost {
       send(await this.service.status())
     } catch (err) {
       const pending = this.settings.pending() !== undefined
-      const configured = pending
-        ? this.settings.version() !== undefined
-        : await this.settings.load().then(
-            (value) => !!value,
-            () => false,
-          )
+      const configured =
+        pending || err instanceof ClosedRequired
+          ? this.settings.version() !== undefined
+          : await this.settings.load().then(
+              (value) => !!value,
+              () => false,
+            )
       send({
         configured,
         status: "unavailable",
-        code: pending ? "control_uncertain" : err instanceof Failure ? err.code : "setup_invalid",
+        code: pending ? "control_uncertain" : this.code(err),
         results: [],
       })
     }
   }
 
+  private code(err: unknown) {
+    if (err instanceof ClosedRequired) return "closed_pair_recovery_required"
+    if (err instanceof Failure) return err.code
+    return "setup_invalid"
+  }
+
+  private indexed() {
+    if (this.control.snapshot().status !== "synced")
+      throw new Failure("source_index_required", "Approve and index your notes before searching", 0)
+  }
+
   private async recovery(action: BrainRequest["action"], send: (state: BrainResponse["state"]) => void) {
+    if (action === "resume") {
+      await this.resume()
+      send(await this.service.status())
+      return true
+    }
     if (action === "reconcile") {
       send(await this.service.reconcile())
       return true
@@ -862,6 +883,18 @@ export class BrainHost {
         "Archive and start fresh",
       )
       return accepted === "Archive and start fresh"
+    })
+  }
+
+  private async resume() {
+    if (!vscode.workspace.isTrusted) throw new Error("Trusted workspace required for Memory recovery")
+    await this.service.resume(async (review) => {
+      const accepted = await vscode.window.showWarningMessage(
+        `Restore the saved shutdown state for ${review.root}? Both original Memory producers closed successfully. Closure SHA-256: ${review.closed.sha256}. The previous setup is retained in an audit. This permits a fresh service start; it does not settle or replay requests, index notes or enable capture.`,
+        { modal: true },
+        "Restore closed Memory setup",
+      )
+      return accepted === "Restore closed Memory setup"
     })
   }
 

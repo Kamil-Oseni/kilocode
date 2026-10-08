@@ -21,6 +21,9 @@ const labels: Record<string, string> = {
   control_setup_required: "Import a reviewed local control setup before reviewing sources.",
   control_busy: "A native Memory review or control operation is already in progress.",
   source_policy_required: "Choose notes and approve their source policy before indexing.",
+  source_index_required: "Approve and index your notes before searching their contents.",
+  closed_pair_recovery_required:
+    "The saved Memory launch needs its original shutdown receipt verified before a fresh start.",
   control_uncertain:
     "An earlier Memory operation has not finished recovery. Inspect its original request in this session before continuing.",
 }
@@ -53,7 +56,8 @@ export function SecondBrain() {
       action === "check" ||
       action === "reconcile" ||
       action === "repair" ||
-      action === "archive"
+      action === "archive" ||
+      action === "resume"
     )
       setState({ configured: state().configured, status: "checking", results: [] })
     if (action === "search" || action === "context") {
@@ -82,7 +86,12 @@ export function SecondBrain() {
   return (
     <Card>
       <h4>SecondBrain</h4>
-      <p>Choose your notes, approve their review, then index them. After indexing, search for their contents below.</p>
+      <p>
+        Import your service setup using the file picker, then choose and approve the notes you want Raya to remember.
+      </p>
+      <p>
+        Setup file paths belong in the file picker. After indexing, the search box accepts questions about your notes.
+      </p>
       <p role="status">{state().configured ? state().status : "Setup required"}</p>
       <Show when={control()}>
         {(action) => (
@@ -114,6 +123,11 @@ export function SecondBrain() {
       <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>
         Disconnect
       </Button>
+      <Show when={state().code === "closed_pair_recovery_required"}>
+        <Button onClick={() => request("resume")} disabled={busy()}>
+          Restore closed Memory setup
+        </Button>
+      </Show>
       <Button onClick={() => request("controlSetup")} disabled={!state().configured || busy()}>
         Import control setup
       </Button>
@@ -138,18 +152,23 @@ export function SecondBrain() {
           </p>
         </Show>
       </Show>
-      <TextField
-        label="3. Search indexed note contents"
-        value={query()}
-        onChange={setQuery}
-        placeholder="Ask about the contents of your selected notes"
-      />
-      <Button onClick={() => request("search")} disabled={!state().configured || busy() || !query().trim()}>
-        Search notes
-      </Button>
-      <Button onClick={() => request("context")} disabled={!state().configured || busy() || !query().trim()}>
-        Preview linked context
-      </Button>
+      <Show
+        when={state().control?.status === "synced"}
+        fallback={<p>Choose notes and finish indexing to open note search.</p>}
+      >
+        <TextField
+          label="3. Search indexed note contents"
+          value={query()}
+          onChange={setQuery}
+          placeholder="Ask about the contents of your selected notes"
+        />
+        <Button onClick={() => request("search")} disabled={!state().configured || busy() || !query().trim()}>
+          Search notes
+        </Button>
+        <Button onClick={() => request("context")} disabled={!state().configured || busy() || !query().trim()}>
+          Preview linked context
+        </Button>
+      </Show>
       <Show when={searching()}>
         <Button onClick={() => request("cancel")}>Cancel search</Button>
       </Show>

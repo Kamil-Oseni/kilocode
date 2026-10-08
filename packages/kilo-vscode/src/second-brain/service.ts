@@ -142,6 +142,10 @@ export class BrainService {
     return this.recovery(() => this.settings.archive(file, confirm))
   }
 
+  resume(confirm: Parameters<BrainSettings["resume"]>[0]) {
+    return this.recovery(() => this.settings.resume(confirm))
+  }
+
   private recovery(body: () => Promise<void>) {
     if (this.closed || this.changing || this.pending.size || this.operation || this.managed)
       return Promise.reject(

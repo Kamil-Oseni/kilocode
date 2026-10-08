@@ -151,7 +151,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
 }
 
 /** Current absence is only admission to new ports; it proves no historical lifecycle. */
-export async function absent(input: Awaited<ReturnType<typeof review>>) {
+export async function absent(input: Pick<Awaited<ReturnType<typeof review>>, "pids" | "ports">) {
   const script = `$ErrorActionPreference='Stop'; $pids=@(${input.pids.join(",")}); $ports=@(${input.ports.join(",")}); $processes=@(Get-CimInstance Win32_Process | Where-Object {$_.ProcessId -in $pids}); $listeners=@(Get-NetTCPConnection -State Listen | Where-Object {$_.LocalPort -in $ports}); if($processes.Count -or $listeners.Count){throw 'Historical process or selected service port remains present'}; [ordered]@{processes=0;listeners=0}|ConvertTo-Json -Compress`
   const result = await command(
     powershell(),
@@ -167,6 +167,6 @@ export async function absent(input: Awaited<ReturnType<typeof review>>) {
     pids: input.pids,
     ports: input.ports,
     helper: result.receipt,
-    qualification: "Current process/listener absence only; historical closure unproven",
+    qualification: "Current process/listener absence only; this observation does not prove historical closure",
   })
 }

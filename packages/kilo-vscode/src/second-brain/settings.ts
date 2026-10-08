@@ -9,6 +9,7 @@ import { launch as context, admission, transition, history as managedHistory, ty
 import { review as repair } from "./failed-repair"
 import { review as archive, absent } from "./failed-archive"
 import { normalize } from "./control/identity"
+import { review as closed, ClosedRequired } from "./closed-recovery"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
@@ -110,8 +111,11 @@ export class BrainSettings {
       throw new Error("Memory v2 operation is unavailable pending original settlement")
     const prior = entry.launch as { phase: string; receipt: Receipt } | undefined
     const launch = await this.context(entry, setup)
-    if (entry.launch && !launch && (!isDeepStrictEqual(entry, this.managedEntry) || prior?.phase !== "running"))
+    if (entry.launch && !launch && (!isDeepStrictEqual(entry, this.managedEntry) || prior?.phase !== "running")) {
+      if (entry.managed?.version === 2 && prior?.phase === "running")
+        throw new ClosedRequired("Saved running Memory pair remains retained; verified shutdown recovery is required")
       throw new Error("Original managed launch remains retained; restarted hosts cannot adopt or replay it")
+    }
     const key = await this.secrets.get(entry.credential)
     if (!key) return undefined
     if (!isDeepStrictEqual(this.storage.get<unknown>(state), entry))
@@ -172,6 +176,53 @@ export class BrainSettings {
   pending() {
     const value = this.storage.get<unknown>(debt)
     return value === undefined ? undefined : journal(value)
+  }
+
+  /** Restore a missed shutdown publication from the exact original producer closure. */
+  resume(confirm: (value: Awaited<ReturnType<typeof closed>>) => Promise<boolean>) {
+    return this.serial(async () => {
+      const entry = structuredClone(this.entry(this.storage.get<unknown>(state)))
+      if (this.pending()) throw new Error("Request debt requires original settlement before closed-pair recovery")
+      const reviewed = await closed(entry)
+      await absent(reviewed)
+      if (!(await confirm(reviewed))) return
+      const same = () => isDeepStrictEqual(this.storage.get<unknown>(state), entry) && this.pending() === undefined
+      if (!same() || !isDeepStrictEqual(await closed(entry), reviewed)) throw new Error("Reviewed closed pair changed")
+      const observation = await absent(reviewed)
+      if (!same()) throw new Error("Closed-pair selection changed during absence check")
+      const key = `raya.secondBrain.closedPairRecovery.${reviewed.closed.sha256}`
+      if (this.storage.get(key) !== undefined) throw new Error("Closed-pair recovery audit already exists")
+      const prior = entry.launch as { phase: string; receipt: Receipt; history?: Receipt[] }
+      const next = { ...entry, launch: { ...prior, phase: "closed", receipt: reviewed.closed } }
+      const audit = {
+        format: "raya.memory.closed-pair.recovery",
+        version: 1,
+        previous: entry,
+        review: reviewed,
+        absence: observation,
+        observed: Date.now(),
+        phase: "prepared",
+        requestSettlement: false,
+      }
+      await this.storage.update(key, audit)
+      if (!same() || !isDeepStrictEqual(this.storage.get(key), audit)) throw new Error("Closed-pair audit changed")
+      try {
+        if (!isDeepStrictEqual(await closed(entry), reviewed) || !same()) throw new Error("Closed-pair inputs changed")
+        await this.storage.update(state, next)
+        if (!isDeepStrictEqual(this.storage.get(state), next) || this.pending())
+          throw new Error("Closed-pair publication changed")
+        await this.storage.update(key, { ...audit, phase: "applied" })
+        if (
+          !isDeepStrictEqual(this.storage.get(key), { ...audit, phase: "applied" }) ||
+          !isDeepStrictEqual(this.storage.get(state), next) ||
+          this.pending()
+        )
+          throw new Error("Closed-pair recovery changed")
+        this.managedEntry = undefined
+      } catch (err) {
+        await this.restore(entry, next, undefined, err, key, audit)
+      }
+    })
   }
 
   /** Separately confirmed administrative metadata repair, never original-client settlement. */

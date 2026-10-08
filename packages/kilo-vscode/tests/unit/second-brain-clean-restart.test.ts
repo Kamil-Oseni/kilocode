@@ -18,6 +18,92 @@ import { fingerprint } from "../../src/second-brain/failed-repair"
 import { images, fingerprint as reusable } from "../../src/second-brain/managed/reuse-catalog"
 import { image } from "../../src/second-brain/control/identity"
 import { review as archive, absent } from "../../src/second-brain/failed-archive"
+import { review as closure, ClosedRequired } from "../../src/second-brain/closed-recovery"
+
+test("missed shutdown publication recovers only the exact closed pair after its original parent exits", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "raya-closed-pair-parent-"))
+  const runner = path.join(dir, "producer.ts")
+  const source = await readFile(import.meta.filename, "utf8")
+  const imports = source.slice(source.indexOf("\nconst python ="), source.indexOf("\nasync function failed("))
+  const header = source
+    .slice(0, source.indexOf('test("missed shutdown'))
+    .replace(/from "(\.[^"]+)"/g, (_, name: string) => `from ${JSON.stringify(path.resolve(import.meta.dir, name))}`)
+  await writeFile(
+    runner,
+    header +
+      imports +
+      "\nconst value = await fixture(); console.log(JSON.stringify({root:value.root,file:value.file,running:value.running,closed:value.closed}));\n",
+  )
+  const child = Bun.spawn([process.execPath, runner], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+    windowsHide: true,
+  })
+  const [code, out, err] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ])
+  expect(code, err).toBe(0)
+  const value = JSON.parse(out) as {
+    root: string
+    file: string
+    running: object
+    closed: { path: string; sha256: string }
+  }
+  const storage = {
+    get<T>(key: string) {
+      return JSON.parse(readFileSync(value.file, "utf8"))[key] as T | undefined
+    },
+    async update(key: string, item: unknown) {
+      const data = JSON.parse(await readFile(value.file, "utf8"))
+      data[key] = item
+      await writeFile(value.file, JSON.stringify(data))
+    },
+  }
+  const cfg = new BrainSettings(storage, {
+    async get() {
+      return "synthetic"
+    },
+    async store() {},
+    async delete() {},
+  })
+  const key = "raya.secondBrain.setup"
+  try {
+    await storage.update(key, value.running)
+    await expect(cfg.load()).rejects.toBeInstanceOf(ClosedRequired)
+    const reviewed = await closure(value.running as Parameters<typeof closure>[0])
+    expect(reviewed.pids).toContain(child.pid)
+    expect((await absent(reviewed)).helper.code).toBe(0)
+    await cfg.resume(async () => false)
+    expect(storage.get(key)).toEqual(value.running)
+    const original = await readFile(value.closed.path)
+    await writeFile(value.closed.path, original.toString().replace('"code":0', '"code":1'))
+    await expect(cfg.resume(async () => true)).rejects.toThrow()
+    expect(storage.get(key)).toEqual(value.running)
+    await writeFile(value.closed.path, original)
+    // Restoring bytes changes the tuple, so derive a fresh exact review rather than reuse prior authority.
+    await cfg.resume(async (review) => {
+      expect(review.closed.sha256).toBe(value.closed.sha256)
+      return true
+    })
+    expect(storage.get<{ launch: { phase: string } }>(key)?.launch.phase).toBe("closed")
+    expect(cfg.pending()).toBeUndefined()
+    const audit = storage.get<{ previous: unknown; requestSettlement: boolean; phase: string }>(
+      `raya.secondBrain.closedPairRecovery.${value.closed.sha256}`,
+    )
+    expect(audit?.previous).toEqual(value.running)
+    expect(audit?.requestSettlement).toBe(false)
+    expect(audit?.phase).toBe("applied")
+    expect((await cfg.load())?.launch?.predecessor?.sha256).toBe(value.closed.sha256)
+  } finally {
+    expect(path.dirname(value.root)).toBe(path.resolve(tmpdir()))
+    await rm(value.root, { recursive: true, force: true })
+    expect(path.dirname(dir)).toBe(path.resolve(tmpdir()))
+    await rm(dir, { recursive: true, force: true })
+  }
+}, 60000)
 
 const python = "D:/Raya/Services/Packaging/Python/3.12.14/python.exe"
 // Controlled nonmodel producer; actual Pipes observes the original process and both readers.

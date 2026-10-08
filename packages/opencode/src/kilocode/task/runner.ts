@@ -53,6 +53,7 @@ import type { PtyArchive } from "@/kilocode/pty/archive"
 import { RayaTaskExecution } from "./execution"
 import { scheduler as admission } from "./admission"
 import { TaskRetirement } from "@/kilocode/goal/stop-receipt"
+import { trace } from "./trace"
 
 const WAIT = "waiting on you"
 
@@ -214,6 +215,7 @@ export namespace RayaTaskRunner {
     stopMembers: (id: string, members: readonly string[]) => Effect.Effect<void, unknown>
     recoverStops: () => Effect.Effect<void, unknown>
     settle: (sessionID: SessionID) => Effect.Effect<void, RayaTask.GuardError>
+    observe: (sessionID: SessionID) => Effect.Effect<void, RayaTask.GuardError>
     stopGoal: <A, E, R>(
       body: (tasks: GoalStop) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | RayaTask.GuardError, R>
@@ -238,7 +240,7 @@ export namespace RayaTaskRunner {
     halt?: (sessionID: SessionID) => Effect.Effect<void>
     pty?: PtyArchive.Interface
     continuation?: (run: RayaTask.Run) => Effect.Effect<void>
-  }): { runner: Runner; events: Pick<Runner, "settle" | "park"> } {
+  }): { runner: Runner; events: Pick<Runner, "settle" | "park" | "observe"> } {
     const refuse = () => new RayaTask.GuardError({ message: "Routine scheduler admission is closed." })
     const intake = <A, E, R>(body: Effect.Effect<A, E, R>) =>
       admission.track(initialize.pipe(Effect.andThen(body)), refuse)
@@ -743,7 +745,7 @@ export namespace RayaTaskRunner {
                       )
                   if (admitted.selected.trigger.kind === "timer" && schedule)
                     yield* schedule.link(admitted.selected.trigger, owner.id, created.id)
-                  yield* goals.create(
+                  const goal = yield* goals.create(
                     created.id,
                     objective,
                     undefined,
@@ -761,6 +763,7 @@ export namespace RayaTaskRunner {
                     status: "running",
                     scheduleVersion: item.scheduleVersion ?? 1,
                     trigger: admitted.selected.trigger,
+                    goalCreatedAt: goal.createdAt,
                   }
                   const stored = yield* tasks.record(run)
                   if (opts?.bind && inbox) yield* inbox.move(item.id, opts.bind.source, opts.bind.sessionID, created.id)
@@ -1594,6 +1597,34 @@ export namespace RayaTaskRunner {
       )
     })
 
+    const observe = Effect.fn("RayaTaskRunner.observe")(function* (sessionID: SessionID) {
+      if (yield* transfer.held().pipe(Effect.orDie)) return
+      const session = yield* input.sessions.get(sessionID)
+      const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      if (!identity) return
+      const run = (yield* tasks.runsFor(identity.agentID)).find((row) => row.id === identity.runID)
+      if (
+        !run ||
+        !RayaTask.pending(run) ||
+        run.sessionID !== sessionID ||
+        (run.scheduleVersion ?? 1) !== identity.scheduleVersion ||
+        !isDeepStrictEqual(run.trigger, identity.trigger)
+      )
+        return
+      const goal = yield* goals.get(sessionID)
+      const rows = yield* input.sessions.messages({ sessionID })
+      const value = trace(run, goal, rows)
+      if (isDeepStrictEqual(value, run.trace)) return
+      if (!isDeepStrictEqual(goal, yield* goals.get(sessionID))) return
+      if (
+        !isDeepStrictEqual(session.metadata?.rayaRoutine, (yield* input.sessions.get(sessionID)).metadata?.rayaRoutine)
+      )
+        return
+      yield* tasks.transition(run, { ...run, trace: value })
+    })
+
     const settle = Effect.fn("RayaTaskRunner.settle")(function* (sessionID: SessionID, exact?: RayaTask.Run) {
       if (yield* transfer.held().pipe(Effect.orDie)) return
       const recovery = (yield* goals.get(sessionID))?.replyRecovery
@@ -1663,6 +1694,7 @@ export namespace RayaTaskRunner {
         const changed = yield* tasks.transition(run, {
           ...run,
           status,
+          trace: goal?.createdAt === run.goalCreatedAt ? run.trace : undefined,
           blockedReason: goal
             ? goal.blockedReason
             : "No saved goal is available to verify this run's result. Review its conversation and saved instructions before starting more work.",
@@ -2361,6 +2393,7 @@ export namespace RayaTaskRunner {
       stopMembers: (...args) => intake(stopMembers(...args)),
       recoverStops: () => intake(recoverStops()),
       settle: (...args) => intake(settle(...args)) as ReturnType<Runner["settle"]>,
+      observe: (...args) => intake(observe(...args)) as ReturnType<Runner["observe"]>,
       stopGoal: (body) =>
         intake(
           body({
@@ -2397,6 +2430,8 @@ export namespace RayaTaskRunner {
     return {
       runner,
       events: {
+        observe: (...args: Parameters<Runner["observe"]>) =>
+          initialize.pipe(Effect.andThen((observe as Runner["observe"])(...args))),
         settle: (...args: Parameters<Runner["settle"]>) =>
           initialize.pipe(Effect.andThen((settle as Runner["settle"])(...args))),
         park: park as Runner["park"],
@@ -2481,6 +2516,7 @@ export namespace RayaTaskRunner {
                 if (!goal || goal.completion !== "reply" || goal.status !== "active") break
                 yield* Effect.sleep(Duration.millis(delay))
               }
+              yield* owned.events.observe(sid)
               yield* owned.events.settle(sid)
             }).pipe(
               (body) => admission.observe(body, known),

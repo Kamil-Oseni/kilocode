@@ -39637,6 +39637,72 @@
                         }
                       ]
                     },
+                    "goalCreatedAt": {
+                      "type": "number"
+                    },
+                    "trace": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "goalCreatedAt": {
+                          "type": "number"
+                        },
+                        "turns": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "turnID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "messages": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "messageID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "actions": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "actionID": {
+                                            "type": "string",
+                                            "pattern": "^prt"
+                                          },
+                                          "status": {
+                                            "type": "string",
+                                            "enum": ["pending", "running", "completed", "error"]
+                                          }
+                                        },
+                                        "required": ["actionID", "status"],
+                                        "additionalProperties": false
+                                      },
+                                      "maxItems": 256
+                                    }
+                                  },
+                                  "required": ["messageID", "actions"],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 128
+                              }
+                            },
+                            "required": ["turnID", "messages"],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 128
+                        }
+                      },
+                      "required": ["version", "goalCreatedAt", "turns"],
+                      "additionalProperties": false
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 1,
@@ -39755,8 +39821,7 @@
                     }
                   },
                   "required": ["id", "agentID", "at", "sessionID", "status"],
-                  "additionalProperties": false,
-                  "description": "Started run"
+                  "additionalProperties": false
                 }
               }
             }
@@ -40127,6 +40192,72 @@
                           }
                         ]
                       },
+                      "goalCreatedAt": {
+                        "type": "number"
+                      },
+                      "trace": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "goalCreatedAt": {
+                            "type": "number"
+                          },
+                          "turns": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "turnID": {
+                                  "type": "string",
+                                  "pattern": "^msg"
+                                },
+                                "messages": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "messageID": {
+                                        "type": "string",
+                                        "pattern": "^msg"
+                                      },
+                                      "actions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "actionID": {
+                                              "type": "string",
+                                              "pattern": "^prt"
+                                            },
+                                            "status": {
+                                              "type": "string",
+                                              "enum": ["pending", "running", "completed", "error"]
+                                            }
+                                          },
+                                          "required": ["actionID", "status"],
+                                          "additionalProperties": false
+                                        },
+                                        "maxItems": 256
+                                      }
+                                    },
+                                    "required": ["messageID", "actions"],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 128
+                                }
+                              },
+                              "required": ["turnID", "messages"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 128
+                          }
+                        },
+                        "required": ["version", "goalCreatedAt", "turns"],
+                        "additionalProperties": false
+                      },
                       "revision": {
                         "type": "integer",
                         "minimum": 1,
@@ -40492,6 +40623,72 @@
                               }
                             ]
                           },
+                          "goalCreatedAt": {
+                            "type": "number"
+                          },
+                          "trace": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "goalCreatedAt": {
+                                "type": "number"
+                              },
+                              "turns": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "turnID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "messages": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "messageID": {
+                                            "type": "string",
+                                            "pattern": "^msg"
+                                          },
+                                          "actions": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "actionID": {
+                                                  "type": "string",
+                                                  "pattern": "^prt"
+                                                },
+                                                "status": {
+                                                  "type": "string",
+                                                  "enum": ["pending", "running", "completed", "error"]
+                                                }
+                                              },
+                                              "required": ["actionID", "status"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 256
+                                          }
+                                        },
+                                        "required": ["messageID", "actions"],
+                                        "additionalProperties": false
+                                      },
+                                      "maxItems": 128
+                                    }
+                                  },
+                                  "required": ["turnID", "messages"],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 128
+                              }
+                            },
+                            "required": ["version", "goalCreatedAt", "turns"],
+                            "additionalProperties": false
+                          },
                           "revision": {
                             "type": "integer",
                             "minimum": 1,
@@ -40680,6 +40877,69 @@
                                 "enum": ["Infinity", "-Infinity", "NaN"]
                               }
                             ]
+                          },
+                          "trace": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "goalCreatedAt": {
+                                "type": "number"
+                              },
+                              "turns": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "turnID": {
+                                      "type": "string",
+                                      "pattern": "^msg"
+                                    },
+                                    "messages": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "messageID": {
+                                            "type": "string",
+                                            "pattern": "^msg"
+                                          },
+                                          "actions": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "actionID": {
+                                                  "type": "string",
+                                                  "pattern": "^prt"
+                                                },
+                                                "status": {
+                                                  "type": "string",
+                                                  "enum": ["pending", "running", "completed", "error"]
+                                                }
+                                              },
+                                              "required": ["actionID", "status"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 256
+                                          }
+                                        },
+                                        "required": ["messageID", "actions"],
+                                        "additionalProperties": false
+                                      },
+                                      "maxItems": 128
+                                    }
+                                  },
+                                  "required": ["turnID", "messages"],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 128
+                              }
+                            },
+                            "required": ["version", "goalCreatedAt", "turns"],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -40937,6 +41197,72 @@
                                       "additionalProperties": false
                                     }
                                   ]
+                                },
+                                "goalCreatedAt": {
+                                  "type": "number"
+                                },
+                                "trace": {
+                                  "type": "object",
+                                  "properties": {
+                                    "version": {
+                                      "type": "number",
+                                      "enum": [1]
+                                    },
+                                    "goalCreatedAt": {
+                                      "type": "number"
+                                    },
+                                    "turns": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "turnID": {
+                                            "type": "string",
+                                            "pattern": "^msg"
+                                          },
+                                          "messages": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "messageID": {
+                                                  "type": "string",
+                                                  "pattern": "^msg"
+                                                },
+                                                "actions": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "actionID": {
+                                                        "type": "string",
+                                                        "pattern": "^prt"
+                                                      },
+                                                      "status": {
+                                                        "type": "string",
+                                                        "enum": ["pending", "running", "completed", "error"]
+                                                      }
+                                                    },
+                                                    "required": ["actionID", "status"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 256
+                                                }
+                                              },
+                                              "required": ["messageID", "actions"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 128
+                                          }
+                                        },
+                                        "required": ["turnID", "messages"],
+                                        "additionalProperties": false
+                                      },
+                                      "maxItems": 128
+                                    }
+                                  },
+                                  "required": ["version", "goalCreatedAt", "turns"],
+                                  "additionalProperties": false
                                 },
                                 "revision": {
                                   "type": "integer",
@@ -43680,6 +44006,72 @@
                             "additionalProperties": false
                           }
                         ]
+                      },
+                      "goalCreatedAt": {
+                        "type": "number"
+                      },
+                      "trace": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "goalCreatedAt": {
+                            "type": "number"
+                          },
+                          "turns": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "turnID": {
+                                  "type": "string",
+                                  "pattern": "^msg"
+                                },
+                                "messages": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "messageID": {
+                                        "type": "string",
+                                        "pattern": "^msg"
+                                      },
+                                      "actions": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "actionID": {
+                                              "type": "string",
+                                              "pattern": "^prt"
+                                            },
+                                            "status": {
+                                              "type": "string",
+                                              "enum": ["pending", "running", "completed", "error"]
+                                            }
+                                          },
+                                          "required": ["actionID", "status"],
+                                          "additionalProperties": false
+                                        },
+                                        "maxItems": 256
+                                      }
+                                    },
+                                    "required": ["messageID", "actions"],
+                                    "additionalProperties": false
+                                  },
+                                  "maxItems": 128
+                                }
+                              },
+                              "required": ["turnID", "messages"],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 128
+                          }
+                        },
+                        "required": ["version", "goalCreatedAt", "turns"],
+                        "additionalProperties": false
                       },
                       "revision": {
                         "type": "integer",
@@ -103091,6 +103483,69 @@
                         "enum": ["Infinity", "-Infinity", "NaN"]
                       }
                     ]
+                  },
+                  "trace": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "goalCreatedAt": {
+                        "type": "number"
+                      },
+                      "turns": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "turnID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "messages": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "actions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "actionID": {
+                                          "type": "string",
+                                          "pattern": "^prt"
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": ["pending", "running", "completed", "error"]
+                                        }
+                                      },
+                                      "required": ["actionID", "status"],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 256
+                                  }
+                                },
+                                "required": ["messageID", "actions"],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 128
+                            }
+                          },
+                          "required": ["turnID", "messages"],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 128
+                      }
+                    },
+                    "required": ["version", "goalCreatedAt", "turns"],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -121007,6 +121462,69 @@
                         "enum": ["-Infinity"]
                       }
                     ]
+                  },
+                  "trace": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "goalCreatedAt": {
+                        "type": "number"
+                      },
+                      "turns": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "turnID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "messages": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "actions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "actionID": {
+                                          "type": "string",
+                                          "pattern": "^prt"
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": ["pending", "running", "completed", "error"]
+                                        }
+                                      },
+                                      "required": ["actionID", "status"],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 256
+                                  }
+                                },
+                                "required": ["messageID", "actions"],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 128
+                            }
+                          },
+                          "required": ["turnID", "messages"],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 128
+                      }
+                    },
+                    "required": ["version", "goalCreatedAt", "turns"],
+                    "additionalProperties": false
                   }
                 },
                 "required": [

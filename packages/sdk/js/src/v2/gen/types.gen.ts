@@ -8508,6 +8508,20 @@ export type EventRayaRoutineRunChanged = {
       stateRevision: number
       status: "running" | "complete" | "blocked" | "error"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      trace?: {
+        version: 1
+        goalCreatedAt: number
+        turns: Array<{
+          turnID: string
+          messages: Array<{
+            messageID: string
+            actions: Array<{
+              actionID: string
+              status: "pending" | "running" | "completed" | "error"
+            }>
+          }>
+        }>
+      }
     }
   }
 }
@@ -14147,6 +14161,20 @@ export type EventRayaRoutineRunChanged1 = {
       stateRevision: number
       status: "running" | "complete" | "blocked" | "error"
       at: number | "NaN" | "Infinity" | "-Infinity"
+      trace?: {
+        version: 1
+        goalCreatedAt: number
+        turns: Array<{
+          turnID: string
+          messages: Array<{
+            messageID: string
+            actions: Array<{
+              actionID: string
+              status: "pending" | "running" | "completed" | "error"
+            }>
+          }>
+        }>
+      }
     }
   }
 }
@@ -26303,6 +26331,21 @@ export type KilocodeRoutineRunResponses = {
           filter?: string
           receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+    goalCreatedAt?: number
+    trace?: {
+      version: 1
+      goalCreatedAt: number
+      turns: Array<{
+        turnID: string
+        messages: Array<{
+          messageID: string
+          actions: Array<{
+            actionID: string
+            status: "pending" | "running" | "completed" | "error"
+          }>
+        }>
+      }>
+    }
     revision?: number
     outcome?: {
       kind: "code" | "notify"
@@ -26420,6 +26463,21 @@ export type KilocodeRoutineRunsResponses = {
           filter?: string
           receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+    goalCreatedAt?: number
+    trace?: {
+      version: 1
+      goalCreatedAt: number
+      turns: Array<{
+        turnID: string
+        messages: Array<{
+          messageID: string
+          actions: Array<{
+            actionID: string
+            status: "pending" | "running" | "completed" | "error"
+          }>
+        }>
+      }>
+    }
     revision?: number
     outcome?: {
       kind: "code" | "notify"
@@ -26498,6 +26556,21 @@ export type KilocodeRoutineEventsResponses = {
             filter?: string
             receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
           }
+      goalCreatedAt?: number
+      trace?: {
+        version: 1
+        goalCreatedAt: number
+        turns: Array<{
+          turnID: string
+          messages: Array<{
+            messageID: string
+            actions: Array<{
+              actionID: string
+              status: "pending" | "running" | "completed" | "error"
+            }>
+          }>
+        }>
+      }
       revision?: number
       outcome?: {
         kind: "code" | "notify"
@@ -26532,6 +26605,20 @@ export type KilocodeRoutineEventsResponses = {
       stateRevision: number
       status: "running" | "complete" | "blocked" | "error"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      trace?: {
+        version: 1
+        goalCreatedAt: number
+        turns: Array<{
+          turnID: string
+          messages: Array<{
+            messageID: string
+            actions: Array<{
+              actionID: string
+              status: "pending" | "running" | "completed" | "error"
+            }>
+          }>
+        }>
+      }
     }>
   }
 }
@@ -26588,6 +26675,21 @@ export type KilocodeRoutineHistoriesResponses = {
               filter?: string
               receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
             }
+        goalCreatedAt?: number
+        trace?: {
+          version: 1
+          goalCreatedAt: number
+          turns: Array<{
+            turnID: string
+            messages: Array<{
+              messageID: string
+              actions: Array<{
+                actionID: string
+                status: "pending" | "running" | "completed" | "error"
+              }>
+            }>
+          }>
+        }
         revision?: number
         outcome?: {
           kind: "code" | "notify"
@@ -27312,6 +27414,21 @@ export type KilocodeRoutineEventResponses = {
           filter?: string
           receivedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         }
+    goalCreatedAt?: number
+    trace?: {
+      version: 1
+      goalCreatedAt: number
+      turns: Array<{
+        turnID: string
+        messages: Array<{
+          messageID: string
+          actions: Array<{
+            actionID: string
+            status: "pending" | "running" | "completed" | "error"
+          }>
+        }>
+      }>
+    }
     revision?: number
     outcome?: {
       kind: "code" | "notify"

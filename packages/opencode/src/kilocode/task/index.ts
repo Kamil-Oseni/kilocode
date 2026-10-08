@@ -617,7 +617,10 @@ export namespace RayaTask {
           const prior = seen.get(event.runID)
           if (
             prior &&
-            (prior.sessionID !== event.sessionID || prior.at !== event.at || prior.stateRevision >= event.stateRevision)
+            (prior.sessionID !== event.sessionID ||
+              prior.at !== event.at ||
+              (prior.trace && event.trace && prior.trace.goalCreatedAt !== event.trace.goalCreatedAt) ||
+              prior.stateRevision >= event.stateRevision)
           )
             return true
           seen.set(event.runID, event)
@@ -625,7 +628,10 @@ export namespace RayaTask {
           const run = runs.get(event.runID)
           return (
             !!run &&
-            (run.sessionID !== event.sessionID || run.at !== event.at || (run.revision ?? 1) < event.stateRevision)
+            (run.sessionID !== event.sessionID ||
+              run.at !== event.at ||
+              (event.trace !== undefined && event.trace.goalCreatedAt !== run.goalCreatedAt) ||
+              (run.revision ?? 1) < event.stateRevision)
           )
         })
         if (
@@ -635,7 +641,12 @@ export namespace RayaTask {
           inconsistent ||
           [...latest].some(([key, event]) => {
             const run = runs.get(key)
-            return !!run && ((run.revision ?? 1) !== event.stateRevision || run.status !== event.status)
+            return (
+              !!run &&
+              ((run.revision ?? 1) !== event.stateRevision ||
+                run.status !== event.status ||
+                !isDeepStrictEqual(run.trace, event.trace))
+            )
           }) ||
           events.length > 1024 ||
           Buffer.byteLength(JSON.stringify(events)) > 512 * 1024 ||
@@ -821,6 +832,7 @@ export namespace RayaTask {
         stateRevision: changed.revision ?? 1,
         status: changed.status,
         at: changed.at,
+        ...(changed.trace ? { trace: changed.trace } : {}),
       }
       // Bound both count and serialized bytes. A stale cursor must resnapshot.
       const events = [...prior.events, event].slice(-1024)
@@ -1454,6 +1466,13 @@ export namespace RayaTask {
       const prior = items.find((run) => run.id === input.id)
       if (prior && (prior.at !== input.at || prior.sessionID !== input.sessionID))
         return yield* Effect.die(new Error("A routine run cannot change its startup time or session."))
+      if (prior && prior.goalCreatedAt !== input.goalCreatedAt)
+        return yield* Effect.die(new Error("A routine run cannot change its initial goal identity."))
+      if (input.trace) {
+        yield* Schema.decodeUnknownEffect(Codec.Trace)(input.trace).pipe(Effect.orDie)
+        if (input.trace.goalCreatedAt !== input.goalCreatedAt)
+          return yield* Effect.die(new Error("Routine turn identities do not match its initial goal."))
+      }
       if (prior && input.scheduleVersion !== undefined && input.scheduleVersion !== (prior.scheduleVersion ?? 1))
         return yield* Effect.die(new Error("A routine run cannot change its schedule version."))
       if (prior && input.trigger !== undefined && !isDeepStrictEqual(prior.trigger, input.trigger))

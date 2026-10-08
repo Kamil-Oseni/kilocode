@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { SessionID } from "@/session/schema"
+import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { Trigger as TriggerSchema } from "./trigger"
 
@@ -146,6 +146,49 @@ export namespace Codec {
   export const Trigger = TriggerSchema
   export type Trigger = typeof Trigger.Type
 
+  export const Trace = Schema.Struct({
+    version: Schema.Literal(1),
+    goalCreatedAt: Schema.Finite,
+    turns: Schema.Array(
+      Schema.Struct({
+        turnID: MessageID,
+        messages: Schema.Array(
+          Schema.Struct({
+            messageID: MessageID,
+            actions: Schema.Array(
+              Schema.Struct({
+                actionID: PartID,
+                status: Schema.Literals(["pending", "running", "completed", "error"]),
+              }),
+            ).check(Schema.isMaxLength(256)),
+          }),
+        ).check(Schema.isMaxLength(128)),
+      }),
+    ).check(Schema.isMaxLength(128)),
+  }).check(
+    Schema.makeFilter((value) => {
+      const turns = new Set<string>()
+      const messages = new Set<string>()
+      const actions = new Set<string>()
+      for (const turn of value.turns) {
+        if (turns.has(turn.turnID)) return "Duplicate Routine turn identity."
+        turns.add(turn.turnID)
+        for (const message of turn.messages) {
+          if (messages.has(message.messageID)) return "Duplicate Routine message identity."
+          messages.add(message.messageID)
+          for (const action of message.actions) {
+            if (actions.has(action.actionID)) return "Duplicate Routine action identity."
+            actions.add(action.actionID)
+          }
+        }
+      }
+      return messages.size > 128 || actions.size > 256 || Buffer.byteLength(JSON.stringify(value)) > 64 * 1024
+        ? "Routine identity snapshot exceeds its bounds."
+        : undefined
+    }),
+  )
+  export type Trace = typeof Trace.Type
+
   export const Run = Schema.Struct({
     id: Schema.String,
     agentID: Schema.String,
@@ -154,12 +197,20 @@ export namespace Codec {
     status: Schema.Literals(["running", "complete", "blocked", "error"]),
     scheduleVersion: Schema.optional(Version),
     trigger: Schema.optional(Trigger),
+    goalCreatedAt: Schema.optional(Schema.Finite),
+    trace: Schema.optional(Trace),
     revision: Schema.optional(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
     ),
     outcome: Schema.optional(Outcome),
     blockedReason: Schema.optional(Schema.String),
-  })
+  }).check(
+    Schema.makeFilter((value) =>
+      value.trace && value.trace.goalCreatedAt !== value.goalCreatedAt
+        ? "Routine identity snapshot belongs to a different goal."
+        : undefined,
+    ),
+  )
   export type Run = typeof Run.Type
 
   // The run and its public event are published in one atomic storage replacement.
@@ -175,8 +226,9 @@ export namespace Codec {
     agentID: Schema.String,
     sessionID: SessionID,
     stateRevision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-    status: Run.fields.status,
+    status: Schema.Literals(["running", "complete", "blocked", "error"]),
     at: Schema.Number,
+    trace: Schema.optional(Trace),
   })
   export type Event = typeof Event.Type
   export const History = Schema.Struct({

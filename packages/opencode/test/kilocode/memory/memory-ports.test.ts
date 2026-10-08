@@ -470,9 +470,14 @@ describe("memory ports", () => {
         baseURL: `http://127.0.0.1:${server.port}/v1`,
         apiKey: "unused",
       })
+      const configured = provider({ npm: "@ai-sdk/openai-compatible" })
       const port = MemoryModel.port({
         provider: {
-          ...provider({ npm: "@ai-sdk/openai-compatible" }),
+          ...configured,
+          getModel: (providerID, modelID) =>
+            configured.getModel(providerID, modelID).pipe(
+              Effect.map((model) => ({ ...model, options: { reasoningEffort: "none", stream: true } })),
+            ),
           getLanguage: () => Effect.succeed(sdk.languageModel("fake-memory-model")),
         },
       })
@@ -485,6 +490,7 @@ describe("memory ports", () => {
       })
 
       expect((seen[0] as { stream?: boolean }).stream).toBe(false)
+      expect(seen[0]).toMatchObject({ reasoning_effort: "none" })
       expect(result.text).toBe('{"topic":"t","summary":"s"}')
       await port.run({
         handle: resolved.handle,

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { createReadStream, createWriteStream } from "node:fs"
+import { createReadStream, createWriteStream, type Stats } from "node:fs"
 import { lstat, mkdir, open, readFile, readdir, rename } from "node:fs/promises"
 import { join } from "node:path"
 import { Transform } from "node:stream"
@@ -7,13 +7,18 @@ import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { held } from "./browser-held"
 
-const Origin = z.object({ requestID: z.string().min(1), sessionID: z.string().min(1), directory: z.string().min(1) })
+const limit = 512 * 1024
+const Origin = z.object({
+  requestID: z.string().min(1).max(128),
+  sessionID: z.string().min(1).max(128),
+  directory: z.string().min(1).max(32768),
+})
 export type TransferOrigin = z.infer<typeof Origin>
 const Record = z.object({
   version: z.literal(1),
   id: z.string().uuid(),
-  tabID: z.string().min(1),
-  profile: z.string().min(1),
+  tabID: z.string().min(1).max(128),
+  profile: z.string().min(1).max(32768),
   origin: Origin.optional(),
   status: z.enum(["waiting", "receiving", "completed", "failed", "cancelled", "unknown"]),
   filename: z.string().max(200),
@@ -28,6 +33,35 @@ const Record = z.object({
   error: z.string().max(2000).optional(),
 })
 export type TransferInfo = z.infer<typeof Record>
+
+async function receipt(path: string) {
+  const before = await lstat(path)
+  const valid = (info: Stats) => info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && info.size <= limit
+  const same = (info: Stats) =>
+    valid(info) &&
+    info.dev === before.dev &&
+    info.ino === before.ino &&
+    info.size === before.size &&
+    info.mtimeMs === before.mtimeMs
+  if (!valid(before) || !(await held(path)))
+    throw new Error("Download receipt metadata is not an ordinary bounded file")
+  const file = await open(path, "r")
+  try {
+    if (!same(await file.stat())) throw new Error("Download receipt changed before reading")
+    const buffer = Buffer.alloc(limit + 1)
+    let size = 0
+    while (size < buffer.length) {
+      const row = await file.read(buffer, size, buffer.length - size, size)
+      if (row.bytesRead === 0) break
+      size += row.bytesRead
+    }
+    if (size !== before.size || !same(await file.stat()) || !same(await lstat(path)) || !(await held(path)))
+      throw new Error("Download receipt changed during reading")
+    return Record.parse(JSON.parse(buffer.subarray(0, size).toString("utf8")))
+  } finally {
+    await file.close()
+  }
+}
 export interface NativeDownload {
   suggestedFilename(): string
   url(): string
@@ -88,7 +122,7 @@ export class BrowserTransfers {
       const dir = join(this.root, name)
       if (!(await lstat(dir)).isDirectory() || (await lstat(dir)).isSymbolicLink()) continue
       try {
-        const info = Record.parse(JSON.parse(await readFile(join(dir, "receipt.json"), "utf8")))
+        const info = await receipt(join(dir, "receipt.json"))
         if (info.id !== name || info.profile !== this.profile) continue
         const entry: Entry = { info }
         this.entries.set(info.id, entry)
@@ -98,7 +132,15 @@ export class BrowserTransfers {
           await this.save(entry)
         }
       } catch (error) {
-        console.error("[Raya] Browser download receipt could not be restored:", name, error)
+        console.error("[Kilo New] Browser download receipt could not be restored", {
+          id: name,
+          reason:
+            error instanceof SyntaxError
+              ? "invalid-json"
+              : error instanceof z.ZodError
+                ? "invalid-receipt"
+                : "unavailable",
+        })
       }
     }
   }
@@ -110,6 +152,7 @@ export class BrowserTransfers {
     const next = previous
       .catch(() => undefined)
       .then(async () => {
+        if (Buffer.byteLength(content) > limit) throw new Error("Download receipt metadata exceeds its size limit")
         const dir = join(this.root, entry.info.id)
         const file = join(dir, `${randomUUID()}.tmp`)
         const handle = await open(file, "wx", 0o600)
@@ -229,9 +272,7 @@ export class BrowserTransfers {
         .catch(async (error: unknown) => {
           await native
             .cancel()
-            .catch((failure: unknown) =>
-              console.error("[Raya] Unregistered download cancellation failed:", failure),
-            )
+            .catch((failure: unknown) => console.error("[Raya] Unregistered download cancellation failed:", failure))
           console.error("[Raya] Browser download capture failed:", error)
         })
         .finally(() => this.registrations.delete(task))
@@ -365,9 +406,7 @@ export class BrowserTransfers {
       entry.info.status = "unknown"
       entry.info.error =
         "Manual control interrupted download event attribution. Inspect the page and downloads before another action."
-      void this.save(entry).catch((error) =>
-        console.error("[Raya] Download takeover could not be recorded:", error),
-      )
+      void this.save(entry).catch((error) => console.error("[Raya] Download takeover could not be recorded:", error))
     }
     this.armed.clear()
   }

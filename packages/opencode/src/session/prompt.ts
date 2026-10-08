@@ -28,6 +28,7 @@ import { KiloReadObject } from "@/kilocode/tool/read-object" // kilocode_change
 import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_change - Milestone D child step ceiling
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
+import { settled as recalled } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory question synthesis
 import { RayaToolModel } from "@/kilocode/chief/tool-model" // kilocode_change
 import { isInterrupted } from "@/kilocode/effect/cause" // kilocode_change
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
@@ -1880,8 +1881,9 @@ export const layer = Layer.effect(
           const direct =
             agent.name === "auto" &&
             phase === "route" &&
-            HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
-            (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id)) // kilocode_change - only the exact selected device request can release synthesis
+            ((HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
+              (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id))) ||
+              recalled(msgs, current, lastUser.id)) // kilocode_change - original read-only Memory questions or selected device requests can release synthesis
           // raya_change end
           // kilocode_change end
 

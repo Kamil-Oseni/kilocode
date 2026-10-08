@@ -363,6 +363,32 @@ def prepare(plan):
         from transformers import AutoTokenizer
 
 
+def settled(record, name, future):
+    """Join the original Future; only its own successful publication can classify a failed inference."""
+    try:
+        return future.result()
+    except BaseException:
+        publication = record.get('publication')
+        terminal = record.get('terminal')
+        pending = record.get('pending')
+        if (name != 'future' or record.get('phase') != 'terminal' or record.get('faults') or
+                publication is None or not publication.done() or publication.cancelled() or
+                publication.exception() is not None or publication.result() is not terminal or
+                not isinstance(terminal, dict) or not isinstance(pending, dict) or
+                terminal.get('status') != 'terminal' or
+                terminal.get('operation_outcome') not in ('cancelled', 'failed') or
+                any(terminal.get(key) != pending.get(key) for key in
+                    ('format', 'request', 'owner_epoch', 'selected_release_sha256', 'kind', 'request_sha256'))):
+            raise
+        body = {key: value for key, value in terminal.items() if key != 'receipt_sha256'}
+        raw = json.dumps(body, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
+        if hashlib.sha256(raw).hexdigest() != terminal.get('receipt_sha256'):
+            raise
+        # Journal.complete already validates the downstream certificates before this
+        # same original publication Future succeeds. Never inspect or adopt disk receipts here.
+        return None
+
+
 def serve(plan, images):
     errors = []
     state = {'server': None, 'stop': False, 'control_eof': False}
@@ -461,7 +487,7 @@ def serve(plan, images):
                 if future is None:
                     continue
                 try:
-                    future.result()
+                    settled(record, name, future)
                 except BaseException as error:
                     errors.append(error)
         if module.get('ACTIVE', 0) != 0 or module.get('JOBS') or module.get('UNCERTAIN'):

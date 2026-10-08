@@ -145,7 +145,11 @@ for (const mode of ["export"])
         completeProfileCoverage: false,
         portableCaptureAuthorized: false,
       })
-      expect(result.reason).toContain("outside producer policy")
+      expect(result.reason).toBe("Source handoff failed")
+      expect(result.failure.errors.map((item: { code?: string }) => item.code)).toContain(
+        "RAYA_SOURCE_CAPTURE_SELECTION_REFUSED",
+      )
+      expect(JSON.stringify(result)).not.toContain(outside)
       const database = new Database(path.join(root, "raya.db"), { readonly: true })
       expect(database.query("SELECT id,title FROM session WHERE id=?").get(created.id)).toEqual({
         id: created.id,

@@ -1088,13 +1088,18 @@ while (($line = [Console]::In.ReadLine()) -ne $null) {
 }
 `
 
-export function runner(): Runner {
+export function runner(timeout = 30_000): Runner {
+  if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 30_000)
+    throw new Error("Windows desktop command timeout must be within 30 seconds")
   let child: ChildProcessWithoutNullStreams | undefined
   let active: { resolve(value: string): void; reject(error: Error): void } | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
   let stdout = ""
   let stderr = ""
 
   const stop = (error: Error) => {
+    clearTimeout(timer)
+    timer = undefined
     const pending = active
     active = undefined
     if (pending) pending.reject(error)
@@ -1128,6 +1133,8 @@ export function runner(): Runner {
         const pending = active
         active = undefined
         if (!pending) continue
+        clearTimeout(timer)
+        timer = undefined
         const split = line.indexOf(" ")
         const status = split < 0 ? line : line.slice(0, split)
         const value = split < 0 ? "" : line.slice(split + 1)
@@ -1167,6 +1174,12 @@ export function runner(): Runner {
         const pending = { resolve, reject }
         active = pending
         stderr = ""
+        timer = setTimeout(() => {
+          if (active !== pending || child !== process) return
+          child = undefined
+          stop(new Error("Windows desktop command timed out; its outcome is unknown"))
+          process.kill()
+        }, timeout)
         process.stdin.write(body, "utf8", (error) => {
           if (!error || active !== pending) return
           stop(new Error(error.message, { cause: error }))

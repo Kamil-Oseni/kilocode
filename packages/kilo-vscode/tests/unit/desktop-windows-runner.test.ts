@@ -56,6 +56,23 @@ describe.skipIf(process.platform !== "win32")("persistent Windows desktop runner
     }
   }, 30_000)
 
+  it("bounds a stalled command and uses a fresh host without replaying it", async () => {
+    const host = runner(2000)
+    try {
+      const first = await host.run("[string]$PID")
+      const pending = host.run("Start-Sleep -Seconds 30; 'late'").then(
+        () => "unexpected completion",
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      )
+      expect(await Promise.race([pending, Bun.sleep(3000).then(() => "deadline absent")])).toContain("timed out")
+      expect(await pending).toContain("outcome is unknown")
+      expect(await host.run("[string]$PID")).not.toBe(first)
+      expect(await host.run("'ready'")).toBe("ready")
+    } finally {
+      host.cancel()
+    }
+  }, 30_000)
+
   it("keeps selected-window probes off a busy single-command desktop runner", async () => {
     const host = runner()
     const scripts: string[] = []

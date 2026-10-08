@@ -110,6 +110,13 @@ def integrity():
     return INDEX.store.pending() or PROPOSALS.pending()
 
 
+def inspection():
+    pending = integrity()
+    with GUARD:
+        idle = not (ACTIVE or UNCERTAIN or DRAIN['until'] > time.monotonic())
+    return pending, INDEX.inspect() if idle and not pending else None
+
+
 def finish(record, future):
     # Runs on STORAGE after the original inference Future has settled.
     pending = record['pending']
@@ -159,9 +166,9 @@ async def handle(request: Request, path: str):
     if not secrets.compare_digest(request.headers.get('authorization', ''), 'Bearer '+KEY):
         return fail('unauthorized', 'A local service token is required.', 401)
     if request.method == 'GET' and path == 'health':
-        check = STORAGE.submit(integrity)
+        check = STORAGE.submit(inspection)
         try:
-            pending = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(check)), 15)
+            pending, index = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(check)), 15)
         except Exception:
             return fail('inspection_required', 'Memory identity or ownership is unconfirmed.', 503)
         with GUARD:
@@ -171,6 +178,8 @@ async def handle(request: Request, path: str):
                      'admission_required': True, 'root': str(NOTES), 'source_sha256': SOURCE,
                      'owner_epoch': EPOCH, 'selected_release_sha256': RELEASE,
                      'operation_protocol': JOURNAL.format}
+            if index is not None:
+                value['index'] = index
         return JSONResponse(value, headers={'Cache-Control': 'no-store'})
     if request.headers.get('x-raya-memory-owner-epoch') != EPOCH:
         return fail('owner_epoch_changed', 'Select the original Memory owner epoch.', 409)

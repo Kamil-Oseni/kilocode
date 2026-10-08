@@ -296,9 +296,16 @@ export class BrainService {
   ) {
     try {
       if (query === undefined) {
-        await original.health(signal)
+        const health = await original.health(signal)
         signal.throwIfAborted()
-        post({ configured: true, status: "ready", results: [], root })
+        if (this.managed && !this.managed.valid()) throw new Error("Original managed generation is unavailable")
+        post({
+          configured: true,
+          status: "ready",
+          results: [],
+          root,
+          ...(health.index ? { control: health.index } : {}),
+        })
         return
       }
       if (budget !== undefined) {

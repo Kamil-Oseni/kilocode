@@ -7,6 +7,8 @@ import json
 import os
 import re
 import sqlite3
+import math
+import struct
 import time
 import urllib.error
 import urllib.request
@@ -15,7 +17,7 @@ from pathlib import Path, PurePosixPath
 import posixpath
 from urllib.parse import unquote
 from notes import clean
-from admission import Store, Refused, Retirement, closing, entry, leaf
+from admission import Store, Lease, Refused, Retirement, closing, entry, leaf, image
 from policy import Policy
 from retirement import decode as metadata, certificate, canonical, fingerprint, hex as hexadecimal
 from contextlib import contextmanager
@@ -396,7 +398,7 @@ def headings(lines, check):
     return result
 
 
-def split(path, note):
+def split(path, note, measure=tokens):
     lines = note['text'].splitlines()
     sections = headings(lines, remaining)
     heading = ''
@@ -409,7 +411,7 @@ def split(path, note):
         text = '\n'.join(value for _, value in section).strip()
         if text:
             source = f'Source: {path}\nSection: {heading}\n{text}'
-            if tokens(source) > 300:
+            if measure(source) > 300:
                 raise ValueError('A single Markdown line is too long; split it: ' + path)
             start, end = section[0][0], section[-1][0]
             result.append({'id': digest(f'{path}:{start}:{len(result)}:{source}'.encode()), 'path': path, 'start': start, 'end': end, 'heading': heading, 'text': source, 'filehash': note['hash'], 'contenthash': digest(source.encode())})
@@ -419,16 +421,16 @@ def split(path, note):
             emit()
             heading = sections[number - 1]
         candidate = f'Source: {path}\nSection: {heading}\n' + '\n'.join(value for _, value in section + [(number, line)])
-        if tokens(candidate) > 300:
+        if measure(candidate) > 300:
             emit()
         prefix = f'Source: {path}\nSection: {heading}\n'
-        if tokens(prefix) > 100:
+        if measure(prefix) > 100:
             raise ValueError('Use a shorter note path or heading: ' + path)
-        while tokens(prefix + line) > 300:
+        while measure(prefix + line) > 300:
             low, high = 1, len(line)
             while low < high:
                 middle = (low + high + 1) // 2
-                if tokens(prefix + line[:middle]) <= 300:
+                if measure(prefix + line[:middle]) <= 300:
                     low = middle
                 else:
                     high = middle - 1
@@ -448,6 +450,27 @@ def ordinary(path):
             raise ValueError('Linked memory ancestry is refused.')
     if path.is_file() and path.stat().st_nlink != 1:
         raise ValueError('Linked memory files are refused.')
+
+
+def measure(model=MODEL):
+    """Use the pinned fast tokenizer without importing the model/torch stack."""
+    from tokenizers import Tokenizer
+    path = Path(model['path']) / 'tokenizer.json'
+    ordinary(path)
+    selected = [row for row in model['files'] if row['name'] == 'tokenizer.json']
+    if len(selected) != 1 or not 0 < selected[0]['bytes'] <= 33554432:
+        raise Refused('A bounded pinned tokenizer is required for index inspection.')
+    before = path.stat()
+    with path.open('rb') as file:
+        opened = os.fstat(file.fileno())
+        raw = file.read(selected[0]['bytes'] + 1)
+        held = os.fstat(file.fileno())
+    fields = lambda row: (row.st_dev, row.st_ino, row.st_size, row.st_mtime_ns, row.st_ctime_ns, row.st_nlink)
+    cross = lambda row: (row.st_dev, row.st_ino, row.st_size, row.st_mtime_ns, row.st_nlink)
+    if fields(opened) != fields(held) or cross(before) != cross(held) or fields(before) != fields(path.stat()) or len(raw) != selected[0]['bytes'] or digest(raw) != selected[0]['sha256']:
+        raise Refused('Pinned tokenizer bytes or identity changed.')
+    value = Tokenizer.from_str(raw.decode('utf-8'))
+    return lambda text: len(value.encode(text, add_special_tokens=False).ids)
 
 
 def image(path):
@@ -662,6 +685,61 @@ class Index:
             raise Refused('A current admission lease is required.')
         lease.check()
         return lease
+
+    @bounded
+    def inspect(self):
+        """Inspect current approved sources and existing derived bytes without rebuilding."""
+        with self.store.locked():
+            if self.store.pending():
+                raise Retirement('Original retrieval retirement remains unconfirmed.')
+            if not os.path.lexists(self.store.file):
+                return {'status': 'unchecked'}
+            raw = image(self.store.file)
+            policy = Policy(json.loads(raw.decode('utf-8-sig')))
+            if policy.root != self.root:
+                raise Refused('Stored source policy belongs to another root.')
+            sha = digest(raw)
+            if not policy.enabled:
+                self.store.check()
+                if image(self.store.file) != raw:
+                    raise Refused('Disabled source policy changed during inspection.')
+                return {'status': 'policy_disabled', 'digest': sha}
+            lease = Lease(self.store, raw)
+            token = LEASE.set(lease)
+            try:
+                with closing(lease.check):
+                    snapshot = scan(self.root, lease.policy)
+                    if not os.path.lexists(self.db):
+                        return {'status': 'approved', 'digest': sha}
+                    with leaf(self.db, self.leaves[self.db], lease.check) as (_, guard, original):
+                        self.leaves[self.db] = original
+                        db = sqlite3.connect(self.db.as_uri() + '?mode=ro', uri=True, timeout=1)
+                        with closing(db.close):
+                            db.set_progress_handler(lambda: (remaining() or 0), 1000)
+                            meta = dict(db.execute('SELECT key,value FROM meta'))
+                            files = json.dumps({path: note['hash'] for path, note in snapshot.items()}, sort_keys=True)
+                            if meta.get('signature') != SIGNATURE + ':admission:' + sha or meta.get('files') != files:
+                                return {'status': 'approved', 'digest': sha}
+                            count = measure() if snapshot else tokens
+                            chunks = [chunk for path, note in snapshot.items() for chunk in split(path, note, count)]
+                            if len(chunks) > 10000:
+                                raise Refused('Derived index inspection exceeds its bound.')
+                            rows = list(db.execute('SELECT id,path,start,end,heading,text,filehash,contenthash,vector FROM chunks LIMIT 10001'))
+                            expected = {tuple(chunk[key] for key in ('id', 'path', 'start', 'end', 'heading', 'text', 'filehash', 'contenthash')) for chunk in chunks}
+                            if len(rows) != len(expected) or {tuple(row[:8]) for row in rows} != expected:
+                                raise Refused('Derived index differs from the complete approved source chunks.')
+                            for row in rows:
+                                raw = row[8]
+                                if not isinstance(raw, bytes) or len(raw) != SPACE['dimensions'] * 4:
+                                    raise Refused('Cached vector shape differs.')
+                                vector = struct.unpack('<' + 'f' * SPACE['dimensions'], raw)
+                                if not all(math.isfinite(value) for value in vector) or abs(math.sqrt(sum(value * value for value in vector)) - 1) > 0.001:
+                                    raise Refused('Cached vector is not finite and normalized.')
+                            self.guard(snapshot)
+                            guard()
+                    return {'status': 'synced', 'digest': sha}
+            finally:
+                LEASE.reset(token)
 
     def guard(self, snapshot):
         lease = self.lease

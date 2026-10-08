@@ -1,6 +1,7 @@
 import { Failure } from "./client"
 import type { BrainService } from "./service"
 import type { BrainSettings } from "./settings"
+import { status } from "./index-status"
 
 type Row = Record<string, unknown>
 export type Session = {
@@ -102,6 +103,12 @@ export class BrainControl {
     if (this.settings.pending()) return { status: "uncertain" as const }
     if (this.state.status === "uncertain" && this.retained === undefined) return { status: "uncertain" as const }
     return { ...this.state }
+  }
+
+  observe(value: unknown) {
+    if (this.closed || this.pending || this.owner || this.settings.pending() || this.state.status === "uncertain")
+      throw new Failure("control_busy", "Original Memory control is busy or uncertain", 0)
+    this.state = status(value)
   }
 
   invalidate() {

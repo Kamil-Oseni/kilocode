@@ -741,7 +741,14 @@ export class BrainHost {
       if (message.action === "check") {
         const owner = {}
         this.current = { id: message.id, owner }
-        await this.service.run(undefined, send, owner)
+        await this.service.run(
+          undefined,
+          (state) => {
+            if (state.status === "ready" && state.control) this.control.observe(state.control)
+            send(state)
+          },
+          owner,
+        )
         return
       }
       if (await this.recovery(message.action, send)) return

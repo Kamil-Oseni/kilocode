@@ -1,4 +1,5 @@
 import { Failure } from "./client"
+import { status } from "./index-status"
 import { isDeepStrictEqual } from "node:util"
 import { canonical, decode, object, sha } from "./control/frames"
 import { parse as operation } from "./operation"
@@ -155,7 +156,14 @@ export class ClientV2 {
       !value.ready
     )
       throw new Failure("admission_closed", "Memory v2 admission or retirement is unconfirmed.", 200)
-    return this.retain(value.owner_epoch, String(value.selected_release_sha256))
+    const index = this.inspection(value.index, names.includes("capture.py"))
+    return { ...this.retain(value.owner_epoch, String(value.selected_release_sha256)), ...(index ? { index } : {}) }
+  }
+
+  private inspection(value: unknown, available: boolean) {
+    if (value === undefined) return undefined
+    if (!available) throw new Failure("identity_mismatch", "This legacy release cannot inspect the derived index.", 200)
+    return status(value)
   }
 
   private retain(epoch: string, release: string) {

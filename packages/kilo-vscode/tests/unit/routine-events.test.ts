@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { RoutineEvents } from "../../src/kilo-provider/routine-events"
+import { RoutineRefresh } from "../../src/kilo-provider/routine-refresh"
 import { projectRuns } from "../../webview-ui/src/components/routines/run-projection"
 
 function gate() {
@@ -149,6 +150,101 @@ test("removing a watched worker cancels its in-flight history and refuses the la
   } finally {
     delayed.release()
     reader.dispose()
+    await server.stop(true)
+  }
+})
+
+test("a late hint cannot restore a worker removed by the authoritative roster", async () => {
+  const messages: Record<string, unknown>[] = []
+  let calls = 0
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch() {
+      calls++
+      return Response.json(page(1))
+    },
+  })
+  const client = createKiloClient({ baseUrl: server.url.toString() })
+  const reader = new RoutineEvents(
+    () => ({ client, directory: "workspace", generation: 1 }),
+    (msg) => messages.push(msg),
+  )
+  try {
+    reader.watch(["worker"])
+    reader.watch([])
+    await reader.hint(event(1))
+    expect(calls).toBe(0)
+    expect(messages).toEqual([])
+  } finally {
+    reader.dispose()
+    await server.stop(true)
+  }
+})
+
+test("unknown hint bursts share one authoritative refresh and a genuinely new worker becomes live", async () => {
+  const entered = gate()
+  const blocked = gate()
+  const messages: Record<string, unknown>[] = []
+  let listed = false
+  let rosters = 0
+  let histories = 0
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      const route = new URL(request.url).pathname
+      if (route.endsWith("/agent")) {
+        rosters++
+        if (rosters === 1) {
+          entered.release()
+          await blocked.promise
+        }
+        return Response.json(listed ? [{ id: "worker" }] : [])
+      }
+      if (route.endsWith("/organization")) return Response.json({ items: [] })
+      if (route.endsWith("/agent-runs"))
+        return Response.json({ items: listed ? [{ agentID: "worker", runs: page(2).runs }] : [], failed: [] })
+      if (route.endsWith("/events")) {
+        histories++
+        return Response.json(page(2))
+      }
+      return Response.json([])
+    },
+  })
+  const client = createKiloClient({ baseUrl: server.url.toString() })
+  const scope = () => ({ client, directory: "workspace", generation: 1 })
+  const refresh = new RoutineRefresh(scope, (msg) => {
+    if (Array.isArray(msg.agents)) reader.watch(msg.agents.map((agent) => agent.id))
+    messages.push(msg)
+  })
+  const reader = new RoutineEvents(
+    scope,
+    (msg) => messages.push(msg),
+    15_000,
+    () => refresh.request(),
+  )
+  try {
+    reader.watch([])
+    const burst = Promise.all(Array.from({ length: 64 }, () => reader.hint(event(1))))
+    await entered.promise
+    expect(rosters).toBe(1)
+    expect(histories).toBe(0)
+    blocked.release()
+    await burst
+    expect(rosters).toBe(1)
+    expect(messages.filter((msg) => msg.type === "routineRuns")).toEqual([])
+    listed = true
+    await reader.hint(event(2))
+    expect(rosters).toBe(2)
+    expect(messages.some((msg) => msg.type === "routineRuns" && msg.agentID === "worker")).toBe(true)
+    await reader.hint(event(2))
+    expect(histories).toBe(1)
+    expect(messages.some((msg) => msg.type === "routineRuns" && msg.cursor === 2)).toBe(true)
+  } finally {
+    blocked.release()
+    reader.dispose()
+    refresh.dispose()
     await server.stop(true)
   }
 })

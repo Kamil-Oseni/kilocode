@@ -55,15 +55,19 @@ export class RoutineEvents {
   private overflow = false
   private epoch = 0
   private deadline?: number
+  private watched = false
+  private discovery?: Promise<void>
 
   constructor(
     private readonly current: () => Scope,
     private readonly post: (message: Record<string, unknown>) => void,
     private readonly timeout = 15_000,
+    private readonly refresh?: () => Promise<void>,
   ) {}
 
   watch(ids: readonly string[]) {
     this.sync()
+    this.watched = true
     this.known.clear()
     for (const id of ids.slice(0, 256)) if (id) this.known.add(id)
     if (ids.length > 256) this.warn()
@@ -87,6 +91,7 @@ export class RoutineEvents {
       this.warn()
       return Promise.resolve()
     }
+    if (this.watched && !this.known.has(value.agentID)) return this.discover()
     if (value.sequence <= (this.cursors.get(value.agentID) ?? 0)) return Promise.resolve()
     this.wanted.set(value.agentID, Math.max(value.sequence, this.wanted.get(value.agentID) ?? 0))
     this.enqueue(value.agentID)
@@ -105,6 +110,7 @@ export class RoutineEvents {
 
   invalidate() {
     this.epoch++
+    this.discovery = undefined
     this.pending.clear()
     this.inflight.clear()
     this.wanted.clear()
@@ -130,8 +136,10 @@ export class RoutineEvents {
       this.cursors.clear()
       this.known.clear()
       this.overflow = false
+      this.watched = false
     }
     if (this.scope && (this.scope.client !== scope.client || this.scope.generation !== scope.generation)) {
+      this.discovery = undefined
       this.pending.clear()
       for (const controller of this.controllers) controller.abort()
       this.controllers.clear()
@@ -241,6 +249,16 @@ export class RoutineEvents {
 
   private owns(id: string, controller: AbortController) {
     return this.known.has(id) && this.controllers.has(controller)
+  }
+
+  private discover(): Promise<void> {
+    if (!this.refresh) return Promise.resolve()
+    if (this.discovery) return this.discovery
+    const active = this.refresh().finally(() => {
+      if (this.discovery === active) this.discovery = undefined
+    })
+    this.discovery = active
+    return active
   }
 
   private warn() {

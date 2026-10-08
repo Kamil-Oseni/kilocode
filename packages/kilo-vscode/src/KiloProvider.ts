@@ -425,6 +425,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly routineEvents = new RoutineEvents(
     () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
     (message) => this.postMessage(message),
+    15_000,
+    () => this.routineRefresh.request(),
   )
   private readonly routineDrafts = new RoutineDrafts()
   private readonly routineRefresh = new RoutineRefresh(

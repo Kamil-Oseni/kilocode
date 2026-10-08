@@ -150,7 +150,7 @@ const wait = async (test) => {
     if (test()) return
     await Bun.sleep(10)
   }
-  throw new Error("Browser condition not reached")
+  throw new Error("Browser condition not reached: " + node.textContent.slice(0, 1200))
 }
 const button = (text) => [...document.querySelectorAll("button")].find((item) => item.textContent === text)
 try {
@@ -159,8 +159,11 @@ try {
   assert.match(node.textContent, /Setup required/)
   assert.equal(button("Search notes"), undefined)
   assert.equal(posts, 0)
+  button("Memory setup").click()
+  assert.equal(button("Memory setup").getAttribute("aria-expanded"), "true")
+  await wait(() => button("Import service setup"))
   button("Import service setup").click()
-  await wait(() => node.textContent.includes("disconnected"))
+  await wait(() => node.textContent.includes("Service not connected"))
   for (const [label, action] of [
     ["Import control setup", "controlSetup"],
     ["1. Choose notes", "review"],
@@ -185,8 +188,18 @@ try {
   assert.match(node.textContent, /Fully Paused is unavailable/)
   assert.equal(button("Search notes"), undefined)
   // Source-policy display metadata only; actual policy/native consent is a separate gate.
-  emit(current, { configured: true, status: "ready", results: [], control: { status: "synced" } })
+  emit(current, { configured: true, status: "ready", results: [], root, control: { status: "synced" } })
+  assert.match(node.textContent, /Notes folder:/)
+  assert.match(node.textContent, /Memory connected/)
+  assert.match(node.textContent, /Selected notes indexed; search is ready/)
   const field = document.querySelector("input")
+  field.value = "D:\\Raya\\Services\\Memory\\setup.json"
+  field.dispatchEvent(new window.Event("input", { bubbles: true }))
+  await wait(() => node.textContent.includes("This is a file path"))
+  assert.equal(button("Search notes").disabled, true)
+  assert.equal(button("Preview linked context").disabled, true)
+  assert.equal(button("Choose setup file").disabled, false)
+  assert.equal(posts, 0)
   field.value = "Synthetic query"
   field.dispatchEvent(new window.Event("input", { bubbles: true }))
   await wait(() => !button("Search notes").disabled)

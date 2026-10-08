@@ -76,6 +76,10 @@ test("context coordinator refuses legacy setup and cancelled input without start
     parent.abort(new Error("private cancellation"))
     await expect(service.context("preference", 1000, parent.signal)).rejects.toThrow("private cancellation")
     await expect(service.context(" ", 1000, new AbortController().signal)).rejects.toThrow("bounded")
+    const states: BrainState[] = []
+    await service.run("D:\\Raya\\Services\\Memory\\setup.json", (state) => states.push(state))
+    expect(states.at(-1)?.code).toBe("setup_file_query")
+    expect((await service.status()).root).toBe(root)
     expect(requests).toEqual([])
     expect(settings.pending()).toBeUndefined()
   } finally {

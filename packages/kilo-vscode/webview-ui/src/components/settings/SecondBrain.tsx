@@ -7,8 +7,10 @@ import type { BrainState, BrainRequest } from "../../../../src/shared/second-bra
 import { BrainProposals } from "./BrainProposals"
 import { BrainConsolidation } from "./BrainConsolidation"
 import { MediaEvidence } from "./MediaEvidence"
+import { setup } from "../../../../src/shared/memory-query"
 
 const labels: Record<string, string> = {
+  setup_file_query: "This is a file path. Choose your setup file in Memory setup.",
   namespace_changed: "Memory folder changed. Trusted re-admission is required.",
   retirement_pending: "Memory is waiting for the current retrieval request to retire.",
   retirement_unconfirmed: "Memory cleanup is uncertain. Trusted local inspection is required.",
@@ -28,7 +30,27 @@ const labels: Record<string, string> = {
     "An earlier Memory operation has not finished recovery. Inspect its original request in this session before continuing.",
 }
 
+const status: Record<BrainState["status"], string> = {
+  disconnected: "Service not connected",
+  checking: "Connecting to Memory…",
+  ready: "Memory connected",
+  searching: "Searching your indexed notes…",
+  cancelled: "Search cancelled",
+  unavailable: "Memory unavailable",
+}
+
+const indexing: Record<string, string> = {
+  unchecked: "Choose and approve notes to index",
+  reviewing: "Reviewing selected notes",
+  approved: "Notes approved; indexing required",
+  syncing: "Indexing selected notes…",
+  synced: "Selected notes indexed; search is ready",
+  policy_disabled: "Note access disabled",
+  uncertain: "Indexing needs recovery",
+}
+
 export function SecondBrain() {
+  const [expanded, expand] = createSignal(false)
   const vscode = useVSCode()
   const [state, setState] = createSignal<BrainState>({ configured: false, status: "disconnected", results: [] })
   const [query, setQuery] = createSignal("")
@@ -36,6 +58,7 @@ export function SecondBrain() {
   const [control, setControl] = createSignal<"review" | "sync">()
   const searching = () => ["checking", "searching"].includes(state().status)
   const busy = () => searching() || Boolean(control())
+  const blocked = () => !state().configured || busy() || !query().trim() || setup(query())
   const request = (
     action: Exclude<
       BrainRequest["action"],
@@ -85,14 +108,15 @@ export function SecondBrain() {
   })
   return (
     <Card>
-      <h4>SecondBrain</h4>
+      <h4>Memory</h4>
       <p>
         Import your service setup using the file picker, then choose and approve the notes you want Raya to remember.
       </p>
       <p>
         Setup file paths belong in the file picker. After indexing, the search box accepts questions about your notes.
       </p>
-      <p role="status">{state().configured ? state().status : "Setup required"}</p>
+      <p role="status">{state().configured ? status[state().status] : "Setup required"}</p>
+      <Show when={state().root}>{(root) => <p>Notes folder: {root()}</p>}</Show>
       <Show when={control()}>
         {(action) => (
           <p role="status">
@@ -103,34 +127,41 @@ export function SecondBrain() {
       <Show when={state().code}>
         <p role="alert">{labels[state().code!] ?? "Memory is unavailable. Check the local service."}</p>
       </Show>
-      <Button onClick={() => request("setup")} disabled={busy()}>
-        Import service setup
+      <Button aria-expanded={expanded()} onClick={() => expand(!expanded())}>
+        Memory setup
       </Button>
-      <Button onClick={() => request("check")} disabled={!state().configured || busy()}>
-        Check service
-      </Button>
-      <Show when={state().code === "control_uncertain"}>
-        <Button onClick={() => request("reconcile")} disabled={!state().configured || busy()}>
-          Inspect unfinished request
-        </Button>
-        <Button onClick={() => request("repair")} disabled={!state().configured || busy()}>
-          Recover prior failed search
-        </Button>
-        <Button onClick={() => request("archive")} disabled={!state().configured || busy()}>
-          Archive failed setup and start fresh
-        </Button>
+      <Show when={expanded()}>
+        <section aria-label="Memory setup">
+          <Button onClick={() => request("setup")} disabled={busy()}>
+            Import service setup
+          </Button>
+          <Button onClick={() => request("check")} disabled={!state().configured || busy()}>
+            Check service
+          </Button>
+          <Show when={state().code === "control_uncertain"}>
+            <Button onClick={() => request("reconcile")} disabled={!state().configured || busy()}>
+              Inspect unfinished request
+            </Button>
+            <Button onClick={() => request("repair")} disabled={!state().configured || busy()}>
+              Recover prior failed search
+            </Button>
+            <Button onClick={() => request("archive")} disabled={!state().configured || busy()}>
+              Archive failed setup and start fresh
+            </Button>
+          </Show>
+          <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>
+            Disconnect
+          </Button>
+          <Show when={state().code === "closed_pair_recovery_required"}>
+            <Button onClick={() => request("resume")} disabled={busy()}>
+              Restore closed Memory setup
+            </Button>
+          </Show>
+          <Button onClick={() => request("controlSetup")} disabled={!state().configured || busy()}>
+            Import control setup
+          </Button>
+        </section>
       </Show>
-      <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>
-        Disconnect
-      </Button>
-      <Show when={state().code === "closed_pair_recovery_required"}>
-        <Button onClick={() => request("resume")} disabled={busy()}>
-          Restore closed Memory setup
-        </Button>
-      </Show>
-      <Button onClick={() => request("controlSetup")} disabled={!state().configured || busy()}>
-        Import control setup
-      </Button>
       <Button onClick={() => request("review")} disabled={!state().configured || busy()}>
         1. Choose notes
       </Button>
@@ -144,7 +175,7 @@ export function SecondBrain() {
         Disable source policy
       </Button>
       <Show when={state().control}>
-        <p role="status">Source policy: {state().control!.status}</p>
+        <p role="status">{indexing[state().control!.status]}</p>
         <Show when={state().control!.hostJoinRequired}>
           <p>
             Source policy is disabled. Existing backend work still requires its lifecycle owner to join. Fully Paused is
@@ -162,10 +193,16 @@ export function SecondBrain() {
           onChange={setQuery}
           placeholder="Ask about the contents of your selected notes"
         />
-        <Button onClick={() => request("search")} disabled={!state().configured || busy() || !query().trim()}>
+        <Show when={setup(query())}>
+          <p role="alert">This is a file path. Choose your setup file in Memory setup, then ask a question here.</p>
+          <Button onClick={() => request("setup")} disabled={busy()}>
+            Choose setup file
+          </Button>
+        </Show>
+        <Button onClick={() => request("search")} disabled={blocked()}>
           Search notes
         </Button>
-        <Button onClick={() => request("context")} disabled={!state().configured || busy() || !query().trim()}>
+        <Button onClick={() => request("context")} disabled={blocked()}>
           Preview linked context
         </Button>
       </Show>

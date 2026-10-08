@@ -5,6 +5,7 @@ import type { BrainSettings } from "./settings"
 import { join } from "./join"
 import { OperationOwner } from "./operation-owner"
 import { ManagedOwner } from "./managed/owner"
+import { setup as file } from "../shared/memory-query"
 
 const empty: BrainState = Object.freeze({ configured: false, status: "disconnected", results: [] })
 
@@ -34,7 +35,7 @@ export class BrainService {
         results: [],
       }
     const cfg = await this.settings.load()
-    return { ...this.state, configured: !!cfg, results: [] }
+    return { ...this.state, configured: !!cfg, results: [], root: cfg?.setup.root }
   }
 
   async proposal(
@@ -222,7 +223,7 @@ export class BrainService {
         send({
           configured: this.state.configured,
           status: signal.signal.aborted ? "cancelled" : "unavailable",
-          code: signal.signal.aborted ? undefined : "setup_invalid",
+          code: signal.signal.aborted ? undefined : err instanceof Failure ? err.code : "setup_invalid",
           results: [],
         })
       })
@@ -240,6 +241,8 @@ export class BrainService {
     post: (state: BrainState) => void,
     budget?: number,
   ) {
+    if (query !== undefined && file(query))
+      throw new Failure("setup_file_query", "This is a file path. Choose your setup file in Memory setup.", 0)
     const cfg = await this.prepare(signal)
     signal.throwIfAborted()
     if (!cfg) {
@@ -259,11 +262,11 @@ export class BrainService {
     try {
       if (query === undefined) {
         await client.health(signal)
-        post({ configured: true, status: "ready", results: [] })
+        post({ configured: true, status: "ready", results: [], root: cfg.setup.root })
         return
       }
       const result = await client.search(query, { signal })
-      post({ configured: true, status: "ready", results: result.results, recall: "unverified" })
+      post({ configured: true, status: "ready", results: result.results, recall: "unverified", root: cfg.setup.root })
     } catch (err) {
       const health =
         query === undefined
@@ -295,7 +298,7 @@ export class BrainService {
       if (query === undefined) {
         await original.health(signal)
         signal.throwIfAborted()
-        post({ configured: true, status: "ready", results: [] })
+        post({ configured: true, status: "ready", results: [], root })
         return
       }
       if (budget !== undefined) {
@@ -307,7 +310,7 @@ export class BrainService {
       }
       const result = await original.search(query, { id: crypto.randomUUID().replaceAll("-", ""), signal })
       signal.throwIfAborted()
-      post({ configured: true, status: "ready", results: result.results, recall: "unverified" })
+      post({ configured: true, status: "ready", results: result.results, recall: "unverified", root })
     } catch (err) {
       await this.failure(original, err, signal, post)
       throw err

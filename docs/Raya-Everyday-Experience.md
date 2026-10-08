@@ -2,6 +2,18 @@
 
 Conversation, coding, delegated jobs, routines and goals remain first-class workflows. This upgrade is successful when Raya finishes ordinary work and reports observed results, not merely when its services are reachable.
 
+## Conversation-led Memory setup — required October 8
+
+The user explicitly requires first-time SecondBrain setup inside the conversation. The Memory tab is the later destination for manually changing settings, inspecting sources, correcting or forgetting facts, managing saved entries and pausing automatic capture. A functioning standalone search panel or an expandable manifest-import section does not satisfy this requirement.
+
+When Memory is unavailable, Raya should offer a short setup conversation with clear action cards. Offer the suggested local memory folder and an optional folder picker; explain that Raya saves useful conversation and completed-action information, with sensitive-source exclusions. Apply the user's selected scope through the existing setup, credential, service ownership and source-review boundaries. Prepare the reviewed local runtime and configuration behind those actions: ordinary users must not need to locate setup.json, managed-launch.json, service ports or source hashes. Credential entry must remain in the existing masked input rather than conversation text. Cancelling setup preserves the conversation and permits resuming the incomplete step.
+
+Show setup progress in plain language: preparing local memory, selecting notes, indexing and ready. Report actual completion and useful errors without making the user inspect service journals. Technical details belong in an optional troubleshooting view. An approved source list, a running service and enabled capture are separate states; do not advertise remembering as enabled before completed-turn saving and conversational recall actually work.
+
+After setup, ordinary conversation should retrieve relevant memories without manual search, save meaningful completed-turn/action information with a quiet saved-entry indication, and accept conversational remember, correct and forget requests. The existing bounded background ownership, source provenance, exclusions and correction/deletion review still apply. The Memory tab exposes enabled/paused/error status and last saved entry, with clear inspect, edit, forget and pause controls. Advanced service settings remain available there without dominating the normal flow.
+
+Installed acceptance must start from an unconfigured disposable profile using the conversation flow, complete setup without typing technical filenames into chat/search, then save a new stated preference and retrieve it in a later conversation. Verify one correction, one forget and one pause, plus an unsupported question that must not receive an invented memory answer. Preserve normal chat input and session state across cancelled or failed setup. Component source checks remain useful, but cannot replace this user journey.
+
 ## Source changes
 
 ### Edit recovery reply checkpoint, 2026-10-06

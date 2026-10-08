@@ -111,6 +111,7 @@ export async function composerIdentity(
     session: (sessionID: string, directory: string) => Promise<{ projectID: string; directory: string }>
   },
 ): Promise<DraftIdentity> {
+  const ambiguous = () => Boolean(target.sessionID && ctx.ambiguous(target.sessionID))
   const scope = ctx.scopes().find((item) => item.box === target.box)
   if (
     !ctx.current() ||
@@ -119,7 +120,7 @@ export async function composerIdentity(
     !target.key ||
     target.key.length > 4096 ||
     Boolean(target.sessionID) === Boolean(target.pendingID) ||
-    (target.sessionID && ctx.ambiguous(target.sessionID))
+    ambiguous()
   )
     refused("invalid")
   const directory = realpathSync.native(scope.directory)
@@ -131,15 +132,17 @@ export async function composerIdentity(
   const selected = ctx.scopes().find((item) => item.box === target.box)
   const reason = !ctx.current()
     ? "connection"
-    : !selected
-      ? "pane"
-      : !samePath(directory, realpathSync.native(selected.directory))
-        ? "directory"
-        : target.projectID && target.projectID !== projectID
-          ? "project"
-          : session && !samePath(realpathSync.native(session.directory), directory)
-            ? "session-directory"
-            : undefined
+    : ambiguous()
+      ? "session-ownership"
+      : !selected
+        ? "pane"
+        : !samePath(directory, realpathSync.native(selected.directory))
+          ? "directory"
+          : target.projectID && target.projectID !== projectID
+            ? "project"
+            : session && !samePath(realpathSync.native(session.directory), directory)
+              ? "session-directory"
+              : undefined
   if (reason) {
     console.warn("[Raya] Composer draft scope changed", { reason })
     refused("stale")

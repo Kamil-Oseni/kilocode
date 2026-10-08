@@ -380,6 +380,34 @@ describe("durable composer host bridge", () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+  it("refuses session ownership that becomes ambiguous during either lookup", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "raya-composer-ownership-"))
+    try {
+      for (const phase of ["project", "session"]) {
+        const state = { ambiguous: false }
+        await expect(
+          composerIdentity(
+            { box: "private", key: "retained", sessionID: "session" },
+            {
+              scopes: () => [{ box: "private", directory: root }],
+              current: () => true,
+              ambiguous: () => state.ambiguous,
+              project: async () => {
+                if (phase === "project") state.ambiguous = true
+                return "project"
+              },
+              session: async () => {
+                if (phase === "session") state.ambiguous = true
+                return { projectID: "project", directory: root }
+              },
+            },
+          ),
+        ).rejects.toMatchObject({ code: "stale" })
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
   it("reports only a static reason when session scope verification refuses", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "raya-composer-reason-"))
     const warning = spyOn(console, "warn").mockImplementation(() => undefined)

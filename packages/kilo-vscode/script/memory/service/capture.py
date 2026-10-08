@@ -2,9 +2,12 @@
 
 This module is not an authorization boundary or a service endpoint. Its caller
 must bind the payload to the original turn, current owner and capture consent.
+The caller stamps the diary day from that turn's UTC time and saved IANA zone;
+day and zone are never model output. This module validates their shape, not the
+timezone conversion, and never substitutes the publication clock.
 """
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 import json
 import os
 from pathlib import Path
@@ -15,8 +18,8 @@ from notes import FOLDERS, RecoveryNeeded, Store, clean, digest, identity, safe
 
 
 def validate(body):
-    fields = {'format', 'id', 'project', 'session', 'message', 'observed_utc', 'source', 'entries'}
-    if not isinstance(body, dict) or set(body) != fields or body['format'] != 'raya.memory.capture.v1':
+    fields = {'format', 'id', 'project', 'session', 'message', 'observed_utc', 'day', 'zone', 'source', 'entries'}
+    if not isinstance(body, dict) or set(body) != fields or body['format'] != 'raya.memory.capture.v2':
         raise ValueError('Use the exact completed-turn capture payload.')
     if not isinstance(body['id'], str):
         raise ValueError('Capture requires a canonical UUID string.')
@@ -30,6 +33,13 @@ def validate(body):
     stamp = datetime.fromisoformat(body['observed_utc'])
     if stamp.utcoffset() is None or stamp.utcoffset().total_seconds() != 0:
         raise ValueError('Capture observation must have an explicit UTC offset.')
+    day = body['day']
+    if not isinstance(day, str) or len(day) != 10 or date.fromisoformat(day).isoformat() != day:
+        raise ValueError('Capture requires a canonical original diary day.')
+    zone = body['zone']
+    if (not isinstance(zone, str) or len(zone) > 255 or
+            not re.fullmatch(r'[A-Za-z][A-Za-z0-9._+-]*(?:/[A-Za-z0-9][A-Za-z0-9._+-]*)*', zone)):
+        raise ValueError('Capture requires a bounded IANA diary zone label.')
     if not isinstance(body['source'], str) or not body['source'].strip() or len(body['source'].encode('utf-8')) > 65536:
         raise ValueError('Capture source must be nonempty and at most 64 KiB.')
     if not isinstance(body['entries'], list) or not 1 <= len(body['entries']) <= 8:
@@ -142,7 +152,7 @@ def publish(root, body, observe=None, cancel=None):
         clean(store.root)
         changes = []
         for category in sorted({item['category'] for item in body['entries']}):
-            name = category + '/Raya.md'
+            name = 'Daily/' + body['day'] + '.md' if category == 'Daily' else category + '/Raya.md'
             old = store.current(store.target(name))
             text = '' if old is None else old.decode('utf-8')
             text += '\n\n## Raya capture ' + body['id'] + '\n'
@@ -155,7 +165,7 @@ def publish(root, body, observe=None, cancel=None):
         immutable(folder / 'input.json', raw)
         source = folder / 'source.md'
         snapshot = ('# Original completed turn\n\n' + json.dumps({name: body[name] for name in
-                    ('project', 'session', 'message', 'observed_utc')}, ensure_ascii=False) +
+                    ('project', 'session', 'message', 'observed_utc', 'day', 'zone')}, ensure_ascii=False) +
                     '\n\nKind: assistant_interpretation\n\n' + body['source']).encode('utf-8')
         immutable(source, snapshot)
         request = {'id': body['id'], 'changes': changes, 'sources': [{'path': str(source),

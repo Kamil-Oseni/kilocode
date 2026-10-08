@@ -15,9 +15,10 @@ from notes import RecoveryNeeded, Store
 class Tests(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix='raya-capture-')).resolve()
-        self.body = {'format': 'raya.memory.capture.v1', 'id': str(uuid.uuid4()), 'project': str(self.root),
+        self.body = {'format': 'raya.memory.capture.v2', 'id': str(uuid.uuid4()), 'project': str(self.root),
                      'session': 'session-original', 'message': 'reply-original',
-                     'observed_utc': '2026-10-08T19:00:00+00:00', 'source': 'User: We are out of eggs.',
+                     'observed_utc': '2026-10-08T19:00:00+00:00', 'day': '2026-10-08', 'zone': 'America/Toronto',
+                     'source': 'User: We are out of eggs.',
                      'entries': [{'category': 'Areas', 'key': 'groceries', 'text': 'Add eggs to the shopping list.'}]}
 
     def tearDown(self):
@@ -47,11 +48,40 @@ class Tests(unittest.TestCase):
         original = target.read_bytes()
         self.assertTrue(publish(self.root, self.body)['duplicate'])
         self.assertEqual(target.read_bytes(), original)
+
         changed = copy.deepcopy(self.body)
         changed['entries'][0]['text'] = 'Different interpretation.'
         with self.assertRaisesRegex(ValueError, 'another original'):
             publish(self.root, changed)
         self.assertEqual(target.read_bytes(), original)
+
+    def test_daily_uses_original_date_and_preserves_existing_note(self):
+        # Toronto evening falls on the following UTC date; the caller stamps its diary day.
+        self.body['observed_utc'] = '2026-10-09T02:00:00+00:00'
+        target = self.root / 'Daily' / '2026-10-08.md'
+        target.parent.mkdir()
+        target.write_text('# My day\nKeep my original entry.\n', encoding='utf-8')
+        self.body['entries'].append({'category': 'Daily', 'key': 'groceries-request',
+                                     'text': 'Requested eggs for the shopping list.'})
+        result = publish(self.root, self.body)
+        self.assertEqual(result['status'], 'committed')
+        self.assertTrue(target.read_text(encoding='utf-8').startswith('# My day\nKeep my original entry.\n'))
+        self.assertIn('groceries-request', target.read_text(encoding='utf-8'))
+        self.assertFalse((target.parent / 'Raya.md').exists())
+        self.assertFalse((target.parent / '2026-10-09.md').exists())
+        self.assertTrue((self.root / 'Areas' / 'Raya.md').exists())
+        original = target.read_bytes()
+        self.assertTrue(publish(self.root, self.body)['duplicate'])
+        self.assertEqual(target.read_bytes(), original)
+        state = Store(self.root).state(self.body['id'])
+        self.assertEqual({entry['path'] for entry in state['changes']}, {'Daily/2026-10-08.md', 'Areas/Raya.md'})
+        snapshot = self.root / 'System' / 'Changes' / self.body['id'] / 'source-0.txt'
+        self.assertIn('"day": "2026-10-08"', snapshot.read_text(encoding='utf-8'))
+        self.assertIn('"zone": "America/Toronto"', snapshot.read_text(encoding='utf-8'))
+        target.write_text('Later diary edit', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'newer note edit'):
+            publish(self.root, self.body)
+        self.assertEqual(target.read_text(encoding='utf-8'), 'Later diary edit')
 
     def test_excluded_and_linked_targets_refuse(self):
         (self.root / '.rayaignore').write_text('Areas/\n', encoding='utf-8')
@@ -119,7 +149,10 @@ class Tests(unittest.TestCase):
     def test_invalid_payload_never_creates_store_files(self):
         invalid = []
         for field, value in [('extra', True), ('id', 'not-a-uuid'), ('project', 'relative'),
-                             ('observed_utc', '2026-10-08T19:00:00'), ('source', 'x' * 65537)]:
+                             ('observed_utc', '2026-10-08T19:00:00'), ('source', 'x' * 65537),
+                             ('format', 'raya.memory.capture.v1'), ('day', '2026-02-30'),
+                             ('day', '20261008'), ('day', '../2026-10-08'), ('day', None),
+                             ('zone', ''), ('zone', '../Toronto'), ('zone', 'x' * 256), ('zone', None)]:
             body = copy.deepcopy(self.body)
             body[field] = value
             invalid.append(body)

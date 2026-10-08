@@ -1,6 +1,7 @@
 import { Token } from "@/util/token"
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
 import type { ModelMessage, Tool } from "ai"
+import type { ContextResult } from "./protocol"
 
 const owners = new WeakMap<object, ReturnType<typeof create>>()
 const reservations = new WeakMap<
@@ -62,6 +63,25 @@ export function reserve(callback: unknown, budget: number, signal: AbortSignal) 
   const take = typeof callback === "function" ? reservations.get(callback) : undefined
   if (!take) throw new Error("Original request context owner required for Memory recall")
   return take(budget, signal)
+}
+
+/** Preserve whole cited passages in service priority order within the actual frame reservation. */
+export function fit(value: ContextResult, budget: number): ContextResult {
+  if (!valid(budget) || budget === 0 || budget > MAX) throw new Error("Invalid Memory context budget")
+  const result = {
+    ...value,
+    context: { ...value.context, sources: [...value.context.sources], diagnostics: [...value.context.diagnostics] },
+  }
+  const fits = () => Math.ceil(Token.estimate(JSON.stringify(result)) * 1.3) <= budget
+  if (fits()) return result
+  result.context.truncated = true
+  while (!fits() && result.context.diagnostics.length) result.context.diagnostics.pop()
+  while (!fits() && result.context.sources.length) {
+    const source = result.context.sources.pop()
+    if (source) result.context.tokens -= source.tokens
+  }
+  if (!fits()) throw new Error("Memory provenance exceeds its reserved context budget")
+  return result
 }
 
 export function bind(tools: Record<string, Tool>, owner: ReturnType<typeof create>) {

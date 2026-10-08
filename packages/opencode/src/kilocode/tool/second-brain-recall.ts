@@ -4,7 +4,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Session } from "@/session/session"
 import { Recall, Status } from "@/kilocode/second-brain/protocol"
 import { SecondBrain, HostError } from "@/kilocode/second-brain/service"
-import { reserve } from "@/kilocode/second-brain/context"
+import { fit, reserve } from "@/kilocode/second-brain/context"
 import * as Tool from "@/tool/tool"
 
 const Params = Schema.Union([
@@ -76,13 +76,14 @@ export const BrainRecallTool = Tool.define<
             })
             .pipe(Effect.raceFirst(cancelled(ctx.abort)), Effect.orDie)
           if (result.action !== "context") return yield* Effect.die(new Error("Memory context reply required"))
+          const selected = fit(result, lease.budget)
           return {
             title: "Second Brain recall",
-            output: lease.check(result),
+            output: lease.check(selected),
             metadata: {
-              count: result.context.sources.length,
-              truncated: result.context.truncated,
-              tokens: result.context.tokens,
+              count: selected.context.sources.length,
+              truncated: selected.context.truncated,
+              tokens: selected.context.tokens,
             },
           }
         }),

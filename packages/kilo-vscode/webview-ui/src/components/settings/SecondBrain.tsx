@@ -167,7 +167,9 @@ export function SecondBrain() {
       </Button>
       <Button
         onClick={() => request("sync")}
-        disabled={!state().configured || busy() || !["approved", "synced"].includes(state().control?.status ?? "")}
+        disabled={
+          !state().configured || busy() || !["unchecked", "approved", "synced"].includes(state().control?.status ?? "")
+        }
       >
         2. Index selected notes
       </Button>

@@ -1656,6 +1656,8 @@ export namespace RayaTaskRunner {
           yield* Effect.die(new Error("Saved startup snapshot does not match run history."))
         const definition = saved?.definition ?? item
         const msgs = yield* input.sessions.messages({ sessionID })
+        // Message lookup may yield to a new goal/control state. Never publish its predecessor's outcome.
+        if (!isDeepStrictEqual(goal, yield* goals.get(sessionID))) continue
         const cost = msgs.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
         const summary = goal?.blockedReason?.trim() || goal?.reply?.body.trim() || goal?.audit?.summary?.trim() || ""
         const changed = yield* tasks.transition(run, {

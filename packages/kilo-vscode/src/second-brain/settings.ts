@@ -6,6 +6,7 @@ import { settlement, ClientV2 } from "./client-v2"
 import { descriptor, receipt as checked, type Descriptor } from "./managed/descriptor"
 import type { Receipt } from "./managed/owner"
 import { launch as context, admission, transition, history as managedHistory, type Launch } from "./managed/restart"
+import { review as repair } from "./failed-repair"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
@@ -168,6 +169,107 @@ export class BrainSettings {
   pending() {
     const value = this.storage.get<unknown>(debt)
     return value === undefined ? undefined : journal(value)
+  }
+
+  /** Separately confirmed administrative metadata repair, never original-client settlement. */
+  repair(file: string, confirm: (value: Awaited<ReturnType<typeof repair>>) => Promise<boolean>) {
+    return this.serial(async () => {
+      const entry = structuredClone(this.entry(this.storage.get<unknown>(state)))
+      const metadata = this.pending()
+      const reviewed = await repair(file, entry, metadata)
+      const same = () =>
+        isDeepStrictEqual(this.storage.get<unknown>(state), entry) && isDeepStrictEqual(this.pending(), metadata)
+      if (!(await confirm(reviewed))) return
+      const current = await repair(file, entry, metadata)
+      if (!same() || !isDeepStrictEqual(current, reviewed)) throw new Error("Reviewed failed-search repair changed")
+      const key = `raya.secondBrain.failedSearchRecovery.${reviewed.request}`
+      const prior = entry.launch as { phase: string; receipt: Receipt; history?: Receipt[] }
+      const next = { ...entry, launch: { ...prior, phase: "closed", receipt: reviewed.closed } }
+      const audit = {
+        format: "raya.memory.failed-search.repair",
+        version: 1,
+        previous: entry,
+        debt: metadata,
+        review: reviewed,
+        repaired: Date.now(),
+        phase: "prepared",
+      }
+      const retained = this.storage.get<typeof audit>(key)
+      if (retained !== undefined) {
+        if (
+          !["prepared", "failed"].includes(retained.phase) ||
+          !Number.isSafeInteger(retained.repaired) ||
+          !isDeepStrictEqual(retained, { ...audit, repaired: retained.repaired, phase: retained.phase })
+        )
+          throw new Error("Original failed-search repair already exists or differs")
+        audit.repaired = retained.repaired
+      }
+      await this.storage.update(key, audit)
+      if (!same() || !isDeepStrictEqual(this.storage.get<unknown>(key), audit))
+        throw new Error("Failed-search repair backup publication changed")
+      try {
+        if (!isDeepStrictEqual(await repair(file, entry, metadata), reviewed) || !same())
+          throw new Error("Failed-search repair inputs changed after backup")
+        await this.storage.update(state, next)
+        if (!isDeepStrictEqual(this.storage.get<unknown>(state), next) || !isDeepStrictEqual(this.pending(), metadata))
+          throw new Error("Failed-search repair selection changed during publication")
+        await this.storage.update(debt, undefined)
+        if (!isDeepStrictEqual(this.storage.get<unknown>(state), next) || this.pending() !== undefined)
+          throw new Error("Failed-search repair changed during journal clearance")
+        await this.storage.update(key, { ...audit, phase: "applied" })
+        if (
+          !isDeepStrictEqual(this.storage.get<unknown>(key), { ...audit, phase: "applied" }) ||
+          !isDeepStrictEqual(this.storage.get<unknown>(state), next) ||
+          this.pending() !== undefined
+        )
+          throw new Error("Failed-search repair audit changed")
+        this.original = undefined
+        this.managedEntry = undefined
+      } catch (err) {
+        await this.restore(entry, next, metadata, err, key, audit)
+      }
+    })
+  }
+
+  private async restore(
+    entry: unknown,
+    next: unknown,
+    metadata: unknown,
+    err: unknown,
+    key: string,
+    audit: object,
+  ): Promise<never> {
+    const saved = this.storage.get<unknown>(state)
+    const pending = this.pending()
+    if (
+      (!isDeepStrictEqual(saved, entry) && !isDeepStrictEqual(saved, next)) ||
+      (pending !== undefined && !isDeepStrictEqual(pending, metadata))
+    )
+      throw new AggregateError([err, new Error("Repair restoration identity changed")], "Failed-search repair failed")
+    const errors: unknown[] = []
+    await Promise.resolve(this.storage.update(state, entry)).catch((error: unknown) => errors.push(error))
+    if (
+      !isDeepStrictEqual(this.storage.get<unknown>(state), entry) ||
+      (this.pending() !== undefined && !isDeepStrictEqual(this.pending(), metadata))
+    )
+      throw new AggregateError(
+        [err, ...errors, new Error("Repair restoration identity changed")],
+        "Failed-search repair failed",
+      )
+    await Promise.resolve(this.storage.update(debt, metadata)).catch((error: unknown) => errors.push(error))
+    if (errors.length) throw new AggregateError([err, ...errors], "Failed-search repair restoration failed")
+    if (!isDeepStrictEqual(this.pending(), metadata))
+      throw new AggregateError([err, new Error("Repair journal restoration changed")], "Failed-search repair failed")
+    const retained = this.storage.get<unknown>(key)
+    if (!isDeepStrictEqual(retained, audit) && !isDeepStrictEqual(retained, { ...audit, phase: "applied" }))
+      throw new AggregateError(
+        [err, new Error("Repair audit restoration identity changed")],
+        "Failed-search repair failed",
+      )
+    await Promise.resolve(this.storage.update(key, { ...audit, phase: "failed" })).catch((error: unknown) => {
+      throw new AggregateError([err, error], "Failed-search repair audit restoration failed")
+    })
+    throw err
   }
 
   record(value: unknown, lease?: object) {

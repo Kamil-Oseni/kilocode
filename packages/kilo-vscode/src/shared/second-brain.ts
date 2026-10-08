@@ -75,6 +75,7 @@ export type BrainRequest =
         | "setup"
         | "check"
         | "reconcile"
+        | "repair"
         | "disconnect"
         | "controlSetup"
         | "review"

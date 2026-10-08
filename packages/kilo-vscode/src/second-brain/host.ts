@@ -453,6 +453,7 @@ export class BrainHost {
         diagnostic(this.settings, context.globalState),
       ),
       vscode.commands.registerCommand("raya.memory.reconcileOperation", () => this.service.reconcile()),
+      vscode.commands.registerCommand("raya.memory.repairFailedSearch", () => this.repair()),
       vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
     )
     const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
@@ -483,9 +484,18 @@ export class BrainHost {
     if (message.action === "cancel" && typeof message.target === "string")
       await this.handle({ type: "secondBrain", action: "cancel", id: message.id, target: message.target }, post)
     if (
-      ["state", "setup", "check", "reconcile", "disconnect", "controlSetup", "review", "sync", "disable"].includes(
-        String(message.action),
-      )
+      [
+        "state",
+        "setup",
+        "check",
+        "reconcile",
+        "repair",
+        "disconnect",
+        "controlSetup",
+        "review",
+        "sync",
+        "disable",
+      ].includes(String(message.action))
     )
       await this.handle(
         {
@@ -709,10 +719,7 @@ export class BrainHost {
         await this.service.run(undefined, send, owner)
         return
       }
-      if (message.action === "reconcile") {
-        send(await this.service.reconcile())
-        return
-      }
+      if (await this.recovery(message.action, send)) return
       send(await this.service.status())
     } catch (err) {
       const pending = this.settings.pending() !== undefined
@@ -729,6 +736,17 @@ export class BrainHost {
         results: [],
       })
     }
+  }
+
+  private async recovery(action: BrainRequest["action"], send: (state: BrainResponse["state"]) => void) {
+    if (action === "reconcile") {
+      send(await this.service.reconcile())
+      return true
+    }
+    if (action !== "repair") return false
+    await this.repair()
+    send(await this.service.status())
+    return true
   }
 
   private async query(
@@ -801,6 +819,24 @@ export class BrainHost {
     })
     if (key === undefined) return
     await this.service.configure(() => this.settings.save(cfg, key, managed))
+  }
+
+  private async repair() {
+    if (!vscode.workspace.isTrusted) throw new Error("Trusted workspace required for Memory repair")
+    const selected = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: { "Failed search observation": ["json"] },
+      title: "Select the reviewed original failed-search observation",
+    })
+    if (!selected?.[0] || selected[0].scheme !== "file") return
+    await this.service.repair(selected[0].fsPath, async (review) => {
+      const accepted = await vscode.window.showWarningMessage(
+        `Recover the saved Memory setup for ${review.root}? Original search ${review.request} failed with no downstream requests, and its original producer pair closed cleanly. Trust the reviewed observation SHA-256 ${review.observation.sha256}. Previous setup and failed-request metadata are retained in an audit. The search is not retried; source indexing and capture remain separate actions.`,
+        { modal: true },
+        "Recover failed search",
+      )
+      return accepted === "Recover failed search"
+    })
   }
 
   private async review() {

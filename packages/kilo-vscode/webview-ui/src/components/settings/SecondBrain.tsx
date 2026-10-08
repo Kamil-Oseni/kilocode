@@ -47,7 +47,7 @@ export function SecondBrain() {
       vscode.postMessage({ type: "secondBrain", action, id: next, target })
       return
     }
-    if (action === "setup" || action === "check" || action === "reconcile")
+    if (action === "setup" || action === "check" || action === "reconcile" || action === "repair")
       setState({ configured: state().configured, status: "checking", results: [] })
     if (action === "search" || action === "context") {
       setState({ configured: state().configured, status: "searching", results: [] })
@@ -75,7 +75,7 @@ export function SecondBrain() {
   return (
     <Card>
       <h4>SecondBrain</h4>
-      <p>Search your reviewed local notes. Results stay in this panel and are not added to chat.</p>
+      <p>Choose your notes, approve their review, then index them. After indexing, search for their contents below.</p>
       <p role="status">{state().configured ? state().status : "Setup required"}</p>
       <Show when={control()}>
         {(action) => (
@@ -97,6 +97,9 @@ export function SecondBrain() {
         <Button onClick={() => request("reconcile")} disabled={!state().configured || busy()}>
           Inspect unfinished request
         </Button>
+        <Button onClick={() => request("repair")} disabled={!state().configured || busy()}>
+          Recover prior failed search
+        </Button>
       </Show>
       <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>
         Disconnect
@@ -105,10 +108,10 @@ export function SecondBrain() {
         Import control setup
       </Button>
       <Button onClick={() => request("review")} disabled={!state().configured || busy()}>
-        Choose notes
+        1. Choose notes
       </Button>
       <Button onClick={() => request("sync")} disabled={!state().configured || busy()}>
-        Index selected notes
+        2. Index selected notes
       </Button>
       <Button onClick={() => request("disable")} disabled={!state().configured || busy()}>
         Disable source policy
@@ -123,10 +126,10 @@ export function SecondBrain() {
         </Show>
       </Show>
       <TextField
-        label="Search local notes"
+        label="3. Search indexed note contents"
         value={query()}
         onChange={setQuery}
-        placeholder="What would you like to find?"
+        placeholder="Ask about the contents of your selected notes"
       />
       <Button onClick={() => request("search")} disabled={!state().configured || busy() || !query().trim()}>
         Search notes

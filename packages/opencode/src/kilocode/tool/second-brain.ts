@@ -143,7 +143,7 @@ export const SecondBrainTool = Tool.define<
                       metadata: { status: "unconfirmed" as const, action: command.action, code: err.code },
                     }),
               onSuccess: (result) =>
-                result.action === "context"
+                !("proposals" in result)
                   ? Effect.die(new Error("Proposal result required"))
                   : Effect.succeed({
                       title: result.action === "propose" ? "Pending Second Brain proposal" : "Second Brain proposals",

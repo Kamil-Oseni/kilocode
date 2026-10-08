@@ -536,6 +536,7 @@ export class BrainHost {
     if (!request.command || typeof request.command !== "object" || Array.isArray(request.command))
       throw new Error("Proposal command required")
     const row = request.command as Record<string, unknown>
+    if (row.action === "status") return this.inspect(row, project, signal)
     if (row.action === "context") {
       if (!recall(row)) throw new Error("Bounded context command required")
       const result = await this.service.context(row.query, row.budget, signal)
@@ -566,6 +567,23 @@ export class BrainHost {
     if (row.action === "propose" && proposals[0]?.status !== "pending")
       throw new Error("Original proposal creation is unconfirmed")
     return { action: row.action as "list" | "read" | "propose", project, proposals }
+  }
+
+  private async inspect(row: Record<string, unknown>, project: string, signal: AbortSignal) {
+    if (Object.keys(row).join() !== "action") throw new Error("Exact read-only Memory status command required")
+    const state = await this.service.status()
+    signal.throwIfAborted()
+    if (state.status === "unavailable")
+      throw new Error("Memory setup state is uncertain; wait for the original operation to settle")
+    return {
+      action: "status" as const,
+      project,
+      configured: state.configured,
+      root: state.root,
+      index: state.configured ? this.control.snapshot().status : ("unchecked" as const),
+      capture: "unavailable" as const,
+      preparation: "unavailable" as const,
+    }
   }
 
   private async proposal(message: Record<string, unknown>, post: (value: BrainResponse) => void) {

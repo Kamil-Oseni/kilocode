@@ -44,7 +44,8 @@ const it = testEffect(
 )
 
 function result(request: Request): ProposalResult {
-  if (request.command.action === "context") throw new Error("Proposal request required")
+  if (request.command.action === "context" || request.command.action === "status")
+    throw new Error("Proposal request required")
   return {
     action: request.command.action,
     project: request.project,
@@ -329,6 +330,64 @@ it.instance("real recall tool requires original frame, permission and sourced bo
   }),
 )
 
+it.instance("real Memory status uses the original frame and settles a project-bound request", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create()
+    const brain = yield* SecondBrain.Service
+    const bus = yield* Bus.Service
+    const events = yield* Queue.unbounded<Request>()
+    const off = yield* bus.subscribeCallback(Event.Requested, (event) => Queue.offerUnsafe(events, event.properties))
+    yield* Effect.addFinalizer(() => Effect.sync(off))
+    const owner = MemoryContext.create()
+    const catalog = MemoryContext.bind({ recall: aiTool({ inputSchema: jsonSchema({ type: "object" }) }) }, owner)
+    const asks: string[] = []
+    const ctx: Tool.Context = {
+      sessionID: chat.id,
+      messageID: MessageID.make("msg_brain_status"),
+      agent: "auto",
+      abort: new AbortController().signal,
+      messages: [],
+      extra: { memoryContext: owner.reserve },
+      metadata: () => Effect.void,
+      ask: (row) =>
+        Effect.sync(() => {
+          asks.push(row.permission)
+        }),
+    }
+    const recall = yield* BrainRecallTool.pipe(Effect.flatMap(Tool.init))
+    expect((yield* recall.execute({ action: "status" }, ctx).pipe(Effect.exit))._tag).toBe("Failure")
+    expect(yield* Queue.size(events)).toBe(0)
+    MemoryContext.prepare({
+      originals: catalog,
+      tools: catalog,
+      messages: [{ role: "system", content: "Inspect saved Memory setup." }],
+      context: 8192,
+      output: 1024,
+    })
+    const fiber = yield* recall.execute({ action: "status" }, ctx).pipe(Effect.forkChild)
+    const request = yield* Queue.take(events).pipe(Effect.timeout("1 second"))
+    expect(request.command).toEqual({ action: "status" })
+    expect(request.project).toBe(chat.directory)
+    const value = {
+      action: "status" as const,
+      project: inst.directory,
+      configured: true,
+      root: path.join(inst.directory, "SecondBrain"),
+      index: "synced" as const,
+      capture: "unavailable" as const,
+      preparation: "unavailable" as const,
+    }
+    yield* brain.reply({ requestID: request.id, result: value })
+    const result = yield* Fiber.join(fiber)
+    expect(JSON.parse(result.output)).toEqual(value)
+    expect(result.metadata).toEqual({ count: 0, truncated: false, tokens: 0 })
+    expect(asks).toEqual(["second_brain_recall", "second_brain_recall"])
+    expect(yield* brain.list()).toEqual([])
+  }),
+)
+
 it.instance("real recall rejects late replaced or cancelled frames and recovers in the current frame", () =>
   Effect.gen(function* () {
     const inst = yield* InstanceState.context
@@ -557,7 +616,7 @@ it.instance("foreign project refuses before publication and mismatched reply doe
     }
     yield* brain.reply({ requestID: pending[0].id, result: closed })
     const replied = yield* Fiber.join(fiber)
-    if (replied.action === "context") throw new Error("Proposal result required")
+    if (!("proposals" in replied)) throw new Error("Proposal result required")
     expect(replied.proposals[0].status).toBe("applied")
     const row = closed.proposals[0]
     const create = yield* brain

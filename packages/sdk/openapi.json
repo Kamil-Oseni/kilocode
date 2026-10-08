@@ -81995,6 +81995,17 @@
         "required": ["action", "query", "budget"],
         "additionalProperties": false
       },
+      "SecondBrainStatus": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["status"]
+          }
+        },
+        "required": ["action"],
+        "additionalProperties": false
+      },
       "SecondBrainRequest": {
         "type": "object",
         "properties": {
@@ -82017,6 +82028,9 @@
               },
               {
                 "$ref": "#/components/schemas/SecondBrainRecall"
+              },
+              {
+                "$ref": "#/components/schemas/SecondBrainStatus"
               }
             ]
           }
@@ -97636,6 +97650,42 @@
         "required": ["action", "project", "root", "context"],
         "additionalProperties": false
       },
+      "SecondBrainStatusResult": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["status"]
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "root": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "index": {
+            "type": "string",
+            "enum": ["unchecked", "reviewing", "approved", "syncing", "synced", "policy_disabled", "uncertain"]
+          },
+          "capture": {
+            "type": "string",
+            "enum": ["unavailable"]
+          },
+          "preparation": {
+            "type": "string",
+            "enum": ["unavailable"]
+          }
+        },
+        "required": ["action", "project", "configured", "index", "capture", "preparation"],
+        "additionalProperties": false
+      },
       "SecondBrainResult": {
         "anyOf": [
           {
@@ -97643,6 +97693,9 @@
           },
           {
             "$ref": "#/components/schemas/SecondBrainContextResult"
+          },
+          {
+            "$ref": "#/components/schemas/SecondBrainStatusResult"
           }
         ]
       },

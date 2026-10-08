@@ -1972,11 +1972,15 @@ export type SecondBrainRecall = {
   budget: number
 }
 
+export type SecondBrainStatus = {
+  action: "status"
+}
+
 export type SecondBrainRequest = {
   id: SecondBrainRequestId
   sessionID: string
   project: string
-  command: SecondBrainCommand | SecondBrainRecall
+  command: SecondBrainCommand | SecondBrainRecall | SecondBrainStatus
 }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
@@ -6890,7 +6894,17 @@ export type SecondBrainContextResult = {
   }
 }
 
-export type SecondBrainResult = SecondBrainProposalResult | SecondBrainContextResult
+export type SecondBrainStatusResult = {
+  action: "status"
+  project: string
+  configured: boolean
+  root?: string
+  index: "unchecked" | "reviewing" | "approved" | "syncing" | "synced" | "policy_disabled" | "uncertain"
+  capture: "unavailable"
+  preparation: "unavailable"
+}
+
+export type SecondBrainResult = SecondBrainProposalResult | SecondBrainContextResult | SecondBrainStatusResult
 
 export type SecondBrainFailure = {
   code: "cancelled" | "disconnected" | "invalid_request" | "not_found" | "timeout" | "unsupported" | "conflict"

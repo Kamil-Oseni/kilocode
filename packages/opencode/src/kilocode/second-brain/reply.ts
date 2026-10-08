@@ -8,6 +8,11 @@ const restricted = new Set(["system", "archive", ".git", "health", "medical", "p
 export function valid(request: Request, value: Result) {
   if (!Schema.is(Result)(value) || request.command.action !== value.action || request.project !== value.project)
     return false
+  if (value.action === "status")
+    return value.configured
+      ? value.root !== undefined && path.isAbsolute(value.root)
+      : value.root === undefined && value.index === "unchecked"
+  if (request.command.action === "status") return false
   if (value.action !== "context") {
     if (request.command.action === "context") return false
     return (

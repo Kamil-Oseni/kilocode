@@ -4,6 +4,7 @@ import { BrainSettings, files, parse } from "../../src/second-brain/settings"
 import { BrainService } from "../../src/second-brain/service"
 import type { BrainState } from "../../src/shared/second-brain"
 import { manifest } from "../../src/second-brain/manifest"
+import { sources } from "../../src/second-brain/setup-v2"
 import { mkdtemp, writeFile, link, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -53,6 +54,44 @@ function storage() {
     },
   )
 }
+
+test("fresh Memory status retains the saved folder without starting a service or exposing credentials", async () => {
+  const requests: string[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      requests.push(request.method)
+      return Response.json({})
+    },
+  })
+  const settings = storage()
+  const setup = {
+    format: "raya.memory.setup" as const,
+    version: 2 as const,
+    protocol: "raya.memory.operation.v1" as const,
+    origin: server.url.origin,
+    root,
+    source_sha256: Object.fromEntries(sources.map((name) => [name, "a".repeat(64)])),
+  }
+  const service = new BrainService(settings)
+  try {
+    await settings.save(setup, "private-fixture-key")
+    const state = await service.status()
+    expect(state).toEqual({ configured: true, status: "disconnected", root, results: [] })
+    expect(JSON.stringify(state)).not.toContain("private-fixture-key")
+    await service.configure(async () => {})
+    expect((await service.status()).root).toBe(root)
+    await settings.save({ ...setup, root: root + "/Selected" }, "private-fixture-key")
+    expect((await service.status()).root).toBe(root + "/Selected")
+    await settings.clear()
+    expect(await service.status()).toEqual({ configured: false, status: "disconnected", root: undefined, results: [] })
+    expect(requests).toEqual([])
+  } finally {
+    await service.dispose()
+    await server.stop()
+  }
+})
 
 test("context coordinator refuses legacy setup and cancelled input without starting search", async () => {
   const requests: string[] = []

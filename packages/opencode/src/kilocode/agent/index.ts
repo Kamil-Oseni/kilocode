@@ -27,6 +27,8 @@ const GOAL_INTENT_GUIDANCE =
   'Treat ordinary phrases such as "done when", "keep working until", "do not stop until", "finish this completely and verify it", or "make this a goal" as durable-goal intent without requiring /goal. In VS Code the host normally arms that goal before the turn; otherwise call create_goal when no goal exists. Preserve the full objective, keep making verified progress across turns, and complete or block it through the goal tools rather than asking the user to remember goal commands.'
 const ASK_OPTIONS_GUIDANCE =
   "When a discrete choice genuinely belongs to the user, call ask_options instead of asking in prose. Use stable option ids, enable allow_multiple only when choices may be combined, and rely on the always-available Other response. Before an unapproved destructive action, use ask_options with explicit confirm and cancel choices."
+const MEMORY_GUIDANCE =
+  "Handle personal Memory questions directly with second_brain_recall before claiming you cannot access saved notes. Inspect {action:'status'} for setup information; retrieve {query} for remembered facts. Cite passages that support the answer and retain historical/disputed qualifiers; similarity matches alone prove nothing. Say you do not know when no retrieved passage supports the question. Memory setup uses the existing ask_options question cards for one missing decision at a time, never technical filenames or a custom wizard. Do not re-ask for a known folder or already authorized capture. Unavailable preparation/capture is an implementation limitation, not missing user permission. Do not delegate ordinary personal recall through Chief or task. These reads do not authorize note edits or capture."
 const ROUTINE_GUIDANCE =
   'Treat ordinary requests to create or change a recurring worker, routine, team, organization, or tracked organization work as Routines intent. Handle Routines intent in this primary chat with the direct Routines tools; do not call chief_route or task for it. Raya owns durable storage and generates internal IDs, so never ask the user to choose a file, database, API, schema, persistence mechanism, internal ID, or revision. For an existing organization or assignment, call inspect_routines first. For tracked work, infer the best authorized sender and responsible worker from their saved roles and objectives when one route clearly fits, draft the expected result and context from the request, and call assign_organization_work. Ask one concise question only when the intended result or route is genuinely ambiguous. Before organization or worker mutation, call ask_options for each product decision the user has not supplied: organization name and purpose; optional operating policy; shared model-cost budget or an explicit choice of no shared limit; every worker\'s name, role, job, schedule and timezone; read/notify or editing access; exact tool scope; capabilities; output description and acceptance criteria; reporting lines; and each directional delegation permission. Ask one concise decision at a time when the user requests a conversational setup. Encode read/notify access as "brief" and editing access as "full". Omit creation budget fields when the user chooses no limit; never send null for an omitted creation limit. Use ["*"] only when the user explicitly chooses all tools and [] only when the user chooses question-only access. Never infer delegation authority from a supervisor relationship. Call schedule_task, create_organization, update_routine, update_organization, or assign_organization_work only after the request is complete enough to save. After mutation, call inspect_routines and confirm the saved state.'
 const DELEGATION_GUIDANCE =
@@ -969,7 +971,7 @@ export function addAuto(
     name: "auto",
     displayName: "Auto",
     description: "Intelligently route each request to the best-fit specialist and model.",
-    prompt: `${ROUTINE_GUIDANCE}\n\n${RayaChief.prompt(specialists)}\n\n${ASK_OPTIONS_GUIDANCE}`,
+    prompt: `${MEMORY_GUIDANCE}\n\n${ROUTINE_GUIDANCE}\n\n${RayaChief.prompt(specialists)}\n\n${ASK_OPTIONS_GUIDANCE}`,
     options: {},
     permission: Permission.merge(
       defaults,
@@ -984,6 +986,7 @@ export function addAuto(
         glob: "allow",
         list: "allow",
         semantic_search: "allow",
+        second_brain_recall: "allow",
         todoread: "allow",
         chief_message: "allow",
         skill: "allow",

@@ -35,11 +35,12 @@ export const Recall = Schema.Struct({
   budget: integer(1, 12000),
 }).annotate({ identifier: "SecondBrainRecall" })
 export type Recall = typeof Recall.Type
+export const Status = Schema.Struct({ action: Schema.Literal("status") }).annotate({ identifier: "SecondBrainStatus" })
 export const Request = Schema.Struct({
   id: RequestID,
   sessionID: SessionID,
   project: Path,
-  command: Schema.Union([Command, Recall]),
+  command: Schema.Union([Command, Recall, Status]),
 }).annotate({ identifier: "SecondBrainRequest" })
 export type Request = typeof Request.Type
 const Proposal = Schema.Struct({
@@ -92,7 +93,18 @@ export const ContextResult = Schema.Struct({
   }),
 }).annotate({ identifier: "SecondBrainContextResult" })
 export type ContextResult = typeof ContextResult.Type
-export const Result = Schema.Union([ProposalResult, ContextResult]).annotate({ identifier: "SecondBrainResult" })
+export const StatusResult = Schema.Struct({
+  action: Schema.Literal("status"),
+  project: Path,
+  configured: Schema.Boolean,
+  root: Schema.optional(Path),
+  index: Schema.Literals(["unchecked", "reviewing", "approved", "syncing", "synced", "policy_disabled", "uncertain"]),
+  capture: Schema.Literal("unavailable"),
+  preparation: Schema.Literal("unavailable"),
+}).annotate({ identifier: "SecondBrainStatusResult" })
+export const Result = Schema.Union([ProposalResult, ContextResult, StatusResult]).annotate({
+  identifier: "SecondBrainResult",
+})
 export type Result = typeof Result.Type
 export const ErrorCode = Schema.Literals([
   "cancelled",

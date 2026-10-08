@@ -12,7 +12,12 @@ import { valid } from "./reply"
 const log = Log.create({ service: "second-brain-host" })
 
 function read(command: Request["command"]) {
-  return command.action === "context" || command.action === "status" ? command.action : undefined
+  return command.action === "context" ||
+    command.action === "status" ||
+    command.action === "capturePolicy" ||
+    command.action === "capture"
+    ? command.action
+    : undefined
 }
 type WithoutID<T> = T extends unknown ? Omit<T, "id"> : never
 export type Input = WithoutID<Request>
@@ -20,9 +25,13 @@ export type Input = WithoutID<Request>
 export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrainHostError", {
   code: ErrorCode,
   detail: Schema.String,
-  operation: Schema.optional(Schema.Literals(["context", "status"])),
+  operation: Schema.optional(Schema.Literals(["context", "status", "capturePolicy", "capture"])),
 }) {
   override get message() {
+    if (this.operation === "capturePolicy")
+      return `${this.detail}. Capture extraction and publication were not authorized.`
+    if (this.operation === "capture")
+      return `${this.detail}. Inspect the original capture ID before retrying; publication is unconfirmed.`
     if (this.operation) return `${this.detail}. No note changes were requested.`
     return `${this.detail}. Proposal outcome is unconfirmed; do not automatically retry creation. List/read the original proposal ID before deciding what to do next.`
   }

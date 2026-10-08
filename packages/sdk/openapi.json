@@ -82031,6 +82031,194 @@
               },
               {
                 "$ref": "#/components/schemas/SecondBrainStatus"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": ["capturePolicy"]
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": ["action", "messageID", "source_sha256"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": ["capture"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "grant": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "observed_utc": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "user": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000
+                          }
+                        },
+                        "required": ["id", "text"],
+                        "additionalProperties": false
+                      },
+                      "assistant": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000
+                          }
+                        },
+                        "required": ["id", "text"],
+                        "additionalProperties": false
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["completed", "error"]
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4000
+                            }
+                          },
+                          "required": ["id", "name", "status", "text"],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      }
+                    },
+                    "required": ["user", "assistant", "tools"],
+                    "additionalProperties": false
+                  },
+                  "entries": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "category": {
+                          "type": "string",
+                          "enum": ["Daily", "Preferences", "Projects", "Areas", "Commitments", "Decisions"]
+                        },
+                        "key": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$"
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096
+                        },
+                        "origin": {
+                          "type": "string",
+                          "enum": ["user_statement", "tool_observation", "assistant_interpretation"]
+                        },
+                        "evidence": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 16000
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 16000
+                              }
+                            },
+                            "required": ["id", "start", "end"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 4
+                        }
+                      },
+                      "required": ["category", "key", "text", "origin", "evidence"],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8
+                  }
+                },
+                "required": [
+                  "action",
+                  "id",
+                  "grant",
+                  "messageID",
+                  "observed_utc",
+                  "source_sha256",
+                  "source",
+                  "entries"
+                ],
+                "additionalProperties": false
               }
             ]
           }
@@ -97696,6 +97884,110 @@
           },
           {
             "$ref": "#/components/schemas/SecondBrainStatusResult"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["capturePolicy"]
+              },
+              "project": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "sessionID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "messageID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "source_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "grant": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "root": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "release": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "zone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "expires": {
+                    "type": "number"
+                  }
+                },
+                "required": ["id", "root", "release", "zone", "model", "expires"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["action", "project", "sessionID", "messageID", "source_sha256", "enabled"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["capture"]
+              },
+              "project": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "sessionID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "messageID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "source_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["published", "duplicate", "skipped"]
+              },
+              "receipt": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": ["action", "project", "sessionID", "messageID", "source_sha256", "status"],
+            "additionalProperties": false
           }
         ]
       },

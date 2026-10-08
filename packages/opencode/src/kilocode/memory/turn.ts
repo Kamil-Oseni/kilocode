@@ -1,4 +1,4 @@
-import { Cause, Effect } from "effect"
+import { Cause, Effect, Semaphore } from "effect"
 import { MemoryTurn as TurnCore } from "@kilocode/kilo-memory/effect/turn"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
 import { MemoryRedact } from "@kilocode/kilo-memory/redact"
@@ -14,6 +14,8 @@ import type { SessionSummary } from "@/session/summary"
 import { KiloSession } from "@/kilocode/session"
 import { KiloSessionPrompt } from "@/kilocode/session/prompt"
 import { MemoryModel, MemorySession } from "./ports"
+import { capture } from "../second-brain/capture"
+import type { SecondBrain } from "../second-brain/service"
 
 const log = Log.create({ service: "memory.lifecycle" })
 
@@ -61,8 +63,45 @@ export namespace MemoryLifecycle {
     summary: SessionSummary.Interface
     provider: Provider.Interface
     memory: MemoryService.Interface
+    brain?: SecondBrain.Interface
   }) {
     const bridge = yield* EffectBridge.make()
+    const gate = yield* Semaphore.make(1)
+    const seen = new Set<string>()
+    const pending = new Set<string>()
+    yield* input.bus.subscribeCallback(KiloSession.Event.TurnClose, (evt) => {
+      const message = evt.properties.messageID
+      const brain = input.brain
+      if (!brain) return
+      if (evt.properties.reason !== "completed" || evt.properties.parentID || !message || seen.has(message)) return
+      if (pending.size >= 8) {
+        log.warn("personal capture admission is full", { sessionID: evt.properties.sessionID })
+        return
+      }
+      seen.add(message)
+      pending.add(message)
+      while (seen.size > 1024) {
+        const prior = [...seen].find((id) => !pending.has(id))
+        if (!prior) break
+        seen.delete(prior)
+      }
+      bridge.fork(
+        gate
+          .withPermits(1)(
+            capture({
+              sessionID: evt.properties.sessionID,
+              messageID: message,
+              sessions: input.sessions,
+              provider: input.provider,
+              brain,
+            }),
+          )
+          .pipe(
+            Effect.catchCause((cause) => Effect.sync(() => log.warn("personal capture failed", { err: brief(cause) }))),
+            Effect.ensuring(Effect.sync(() => pending.delete(message))),
+          ),
+      )
+    })
     yield* input.bus.subscribeCallback(KiloSession.Event.TurnOpen, (evt) =>
       bridge.fork(
         Effect.sync(() => MemoryTurn.open({ sessionID: evt.properties.sessionID })).pipe(

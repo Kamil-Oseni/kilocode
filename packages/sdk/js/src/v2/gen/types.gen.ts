@@ -1980,7 +1980,50 @@ export type SecondBrainRequest = {
   id: SecondBrainRequestId
   sessionID: string
   project: string
-  command: SecondBrainCommand | SecondBrainRecall | SecondBrainStatus
+  command:
+    | SecondBrainCommand
+    | SecondBrainRecall
+    | SecondBrainStatus
+    | {
+        action: "capturePolicy"
+        messageID: string
+        source_sha256: string
+      }
+    | {
+        action: "capture"
+        id: string
+        grant: string
+        messageID: string
+        observed_utc: string
+        source_sha256: string
+        source: {
+          user: {
+            id: string
+            text: string
+          }
+          assistant: {
+            id: string
+            text: string
+          }
+          tools: Array<{
+            id: string
+            name: string
+            status: "completed" | "error"
+            text: string
+          }>
+        }
+        entries: Array<{
+          category: "Daily" | "Preferences" | "Projects" | "Areas" | "Commitments" | "Decisions"
+          key: string
+          text: string
+          origin: "user_statement" | "tool_observation" | "assistant_interpretation"
+          evidence: Array<{
+            id: string
+            start: number
+            end: number
+          }>
+        }>
+      }
 }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
@@ -6904,7 +6947,35 @@ export type SecondBrainStatusResult = {
   preparation: "unavailable"
 }
 
-export type SecondBrainResult = SecondBrainProposalResult | SecondBrainContextResult | SecondBrainStatusResult
+export type SecondBrainResult =
+  | SecondBrainProposalResult
+  | SecondBrainContextResult
+  | SecondBrainStatusResult
+  | {
+      action: "capturePolicy"
+      project: string
+      sessionID: string
+      messageID: string
+      source_sha256: string
+      enabled: boolean
+      grant?: {
+        id: string
+        root: string
+        release: string
+        zone: string
+        model: string
+        expires: number
+      }
+    }
+  | {
+      action: "capture"
+      project: string
+      sessionID: string
+      messageID: string
+      source_sha256: string
+      status: "published" | "duplicate" | "skipped"
+      receipt?: string
+    }
 
 export type SecondBrainFailure = {
   code: "cancelled" | "disconnected" | "invalid_request" | "not_found" | "timeout" | "unsupported" | "conflict"

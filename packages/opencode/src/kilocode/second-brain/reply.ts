@@ -8,13 +8,37 @@ const restricted = new Set(["system", "archive", ".git", "health", "medical", "p
 export function valid(request: Request, value: Result) {
   if (!Schema.is(Result)(value) || request.command.action !== value.action || request.project !== value.project)
     return false
+  if (value.action === "capturePolicy" || value.action === "capture") {
+    const command = request.command
+    if (command.action !== value.action) return false
+    if (command.action !== "capturePolicy" && command.action !== "capture") return false
+    if (
+      value.sessionID !== request.sessionID ||
+      value.messageID !== command.messageID ||
+      value.source_sha256 !== command.source_sha256
+    )
+      return false
+    if (value.action === "capturePolicy")
+      return value.enabled
+        ? Boolean(value.grant && path.isAbsolute(value.grant.root) && value.grant.expires > Date.now())
+        : value.grant === undefined
+    if (command.action !== "capture") return false
+    return value.status === "skipped"
+      ? command.entries.length === 0 && value.receipt === undefined
+      : value.receipt !== undefined
+  }
   if (value.action === "status")
     return value.configured
       ? value.root !== undefined && path.isAbsolute(value.root)
       : value.root === undefined && value.index === "unchecked"
   if (request.command.action === "status") return false
   if (value.action !== "context") {
-    if (request.command.action === "context") return false
+    if (
+      request.command.action === "context" ||
+      request.command.action === "capturePolicy" ||
+      request.command.action === "capture"
+    )
+      return false
     return (
       value.proposals.every((row) => row.project === request.project) &&
       (request.command.action !== "propose" || value.proposals.every((row) => row.status === "pending")) &&

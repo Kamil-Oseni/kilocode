@@ -15,6 +15,7 @@ import { createWorkspaceProvider } from "@/kilocode/session-export/workspace-pro
 import { Instance } from "@/kilocode/instance"
 import { Identity } from "@kilocode/kilo-telemetry"
 import { MemoryLifecycle } from "@/kilocode/memory/turn"
+import { SecondBrain } from "@/kilocode/second-brain/service"
 import { MemoryService } from "@kilocode/kilo-memory/effect/service"
 import { MemoryEvents } from "@/kilocode/memory/events"
 import { installMemoryRuntime } from "@/kilocode/memory/runtime"
@@ -53,6 +54,7 @@ export namespace KilocodeBootstrap {
       const runs = yield* SessionRunState.Service
       const summary = yield* SessionSummary.Service
       const provider = yield* Provider.Service
+      const brain = yield* Effect.serviceOption(SecondBrain.Service)
       const memory = yield* MemoryService.Service
       const watcher = yield* KilocodeWatcher.Service
       const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // raya_change - Milestone A durable goal storage
@@ -123,7 +125,14 @@ export namespace KilocodeBootstrap {
         yield* Effect.logInfo("Raya session initialization starting")
         yield* kilo.init()
         yield* Effect.logInfo("Raya session initialization complete")
-        yield* MemoryLifecycle.subscribe({ bus, sessions, summary, provider, memory })
+        yield* MemoryLifecycle.subscribe({
+          bus,
+          sessions,
+          summary,
+          provider,
+          memory,
+          brain: Option.getOrUndefined(brain),
+        })
         if (storage) {
           yield* Effect.logInfo("Raya goal and routine initialization starting")
           if (continuation) yield* InstanceState.get(continuation)
@@ -205,6 +214,7 @@ export namespace KilocodeBootstrap {
       AppNodeBuilder.build(SessionSummary.node),
       AppNodeBuilder.build(Provider.node),
       MemoryService.layer,
+      SecondBrain.defaultLayer,
       Bus.defaultLayer,
       KilocodeWatcher.defaultLayer,
       AppNodeBuilder.build(Storage.node), // raya_change - Milestone A durable goal storage
@@ -227,6 +237,7 @@ export namespace KilocodeBootstrap {
         SessionSummary.node,
         Provider.node,
         memory,
+        SecondBrain.node,
         Bus.node,
         watcher,
         Storage.node, // raya_change - Milestone A durable goal storage

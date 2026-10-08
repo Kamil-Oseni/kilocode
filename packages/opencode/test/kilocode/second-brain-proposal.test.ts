@@ -44,7 +44,12 @@ const it = testEffect(
 )
 
 function result(request: Request): ProposalResult {
-  if (request.command.action === "context" || request.command.action === "status")
+  if (
+    request.command.action === "context" ||
+    request.command.action === "status" ||
+    request.command.action === "capture" ||
+    request.command.action === "capturePolicy"
+  )
     throw new Error("Proposal request required")
   return {
     action: request.command.action,
@@ -588,6 +593,36 @@ it.instance("real tool binds retained session, authorizes actual source and retu
     expect(yield* brain.list()).toEqual([])
     expect(yield* Queue.size(events)).toBe(0)
     yield* sessions.remove(chat.id)
+  }),
+)
+
+it.instance("capture policy handshake rejects foreign identities without settling its original request", () =>
+  Effect.gen(function* () {
+    const inst = yield* InstanceState.context
+    const brain = yield* SecondBrain.Service
+    const sessionID = SessionID.make("ses_capture_policy")
+    const command = { action: "capturePolicy" as const, messageID: "msg_capture", source_sha256: "c".repeat(64) }
+    const fiber = yield* brain.request({ sessionID, project: inst.directory, command }).pipe(Effect.forkChild)
+    yield* Effect.yieldNow
+    const pending = yield* brain.list()
+    expect(pending).toHaveLength(1)
+    const reply = {
+      action: "capturePolicy" as const,
+      project: inst.directory,
+      sessionID,
+      messageID: command.messageID,
+      source_sha256: command.source_sha256,
+      enabled: false,
+    }
+    expect(
+      (yield* brain
+        .reply({ requestID: pending[0].id, result: { ...reply, messageID: "msg_foreign" } })
+        .pipe(Effect.exit))._tag,
+    ).toBe("Failure")
+    expect(yield* brain.list()).toHaveLength(1)
+    yield* brain.reply({ requestID: pending[0].id, result: reply })
+    expect(yield* Fiber.join(fiber)).toEqual(reply)
+    expect(yield* brain.list()).toHaveLength(0)
   }),
 )
 

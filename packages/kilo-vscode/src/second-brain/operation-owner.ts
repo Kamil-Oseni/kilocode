@@ -73,8 +73,8 @@ export class OperationOwner {
     return this.run((before, signal, id) => this.#client.context(query, budget, { id, before, signal }), opts)
   }
 
-  capture(body: Publication, opts: Options) {
-    return this.run((before, signal, id) => this.#client.capture(body, { id, before, signal }), opts)
+  capture(body: Publication, expected: string, opts: Options) {
+    return this.run((before, signal, id) => this.#client.capture(body, expected, { id, before, signal }), opts)
   }
 
   sync(expected: string, opts: Options & { close: () => Promise<void> }) {

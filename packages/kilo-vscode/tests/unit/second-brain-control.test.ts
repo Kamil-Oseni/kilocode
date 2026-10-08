@@ -47,7 +47,7 @@ test("qualified collector recipe admits actual images and refuses changed releas
     )
     const file = path.join(root, "bin", "raya-process-host.json")
     const row = JSON.parse(await readFile(file, "utf8"))
-    expect(row.recipe).toBe("7b5d46b56cb26d18041272f351e6e9cf5167cfc7747e39d33a68926e220f71ef")
+    expect(row.recipe).toBe("49ac0bfd8edc84babd69839bb0322f5bbde32906fd675eb4804fe0f86b936695")
     expect((await packaged(root)).digest).toBe(row.exe)
     for (const change of [
       { recipe: "f".repeat(64) },

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { parseTree, type Node, type ParseError } from "jsonc-parser"
 
-export type Op = "state" | "preview" | "discard" | "approve" | "policy_pause"
+export type Op = "state" | "preview" | "discard" | "approve" | "policy_pause" | "capture_authorize" | "capture_admit"
 export type Generation = Readonly<{ root: readonly (string | null)[]; system: readonly (string | null)[] }>
 const generations = new WeakMap<object, Generation>()
 export const exact = (value: object) => generations.get(value)
@@ -144,7 +144,7 @@ export function reply(raw: Uint8Array, op: Op, seq: number, root: string) {
     check(
       err.kind === "control_refused" &&
         err.message === "Control operation refused; inspect current identity and review." &&
-        err.publication === (["approve", "policy_pause"].includes(op) ? "may_have_happened" : "none"),
+        err.publication === (["approve", "policy_pause", "capture_admit"].includes(op) ? "may_have_happened" : "none"),
       "Refusal identity refused",
     )
     check(
@@ -168,8 +168,49 @@ export function reply(raw: Uint8Array, op: Op, seq: number, root: string) {
     check(typeof value.discarded === "boolean", "Discard result refused")
   }
   if (op === "approve" || op === "policy_pause") publication(value, op)
+  if (op === "capture_authorize") authorization(value, root)
+  if (op === "capture_admit") admission(value)
   if (op === "preview") preview(value, decoded, root)
   return value
+}
+
+function admission(value: { [key: string]: Value }) {
+  fields(value, ["policy_sha256", "revision", "capture", "source_policy_refreshed"])
+  hash(value.policy_sha256)
+  integer(value.revision, 1)
+  check(
+    typeof value.capture === "string" &&
+      /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value.capture) &&
+      value.source_policy_refreshed === true,
+    "Original committed capture admission differs",
+  )
+}
+
+function authorization(value: { [key: string]: Value }, root: string) {
+  fields(value, ["root", "expected_policy_sha256", "namespace"])
+  check(value.root === root, "Original capture root differs")
+  hash(value.expected_policy_sha256)
+  const ns = fields(value.namespace, ["root", "system"])
+  for (const key of ["root", "system"]) {
+    const tuple = ns[key]
+    check(
+      Array.isArray(tuple) &&
+        tuple.length === 3 &&
+        tuple.every(
+          (part, index) =>
+            (index === 2 && part === null) ||
+            (typeof part === "string" && /^\d{1,20}$/.test(part) && BigInt(part) <= 18446744073709551615n),
+        ),
+      "Original capture namespace refused",
+    )
+  }
+  generations.set(
+    value,
+    Object.freeze({
+      root: Object.freeze(ns.root as (string | null)[]),
+      system: Object.freeze(ns.system as (string | null)[]),
+    }),
+  )
 }
 
 function preview(value: { [key: string]: Value }, decoded: ReturnType<typeof decode>, root: string) {

@@ -51,7 +51,7 @@ function sync(input: unknown, root: unknown) {
 function mutation(input: unknown) {
   const request = row(input, ["op", "seq", "bytes", "digest", "identity", "mutation"])
   if (
-    !["approve", "policy_pause"].includes(String(request.op)) ||
+    !["approve", "policy_pause", "capture_admit"].includes(String(request.op)) ||
     !count(request.seq) ||
     !count(request.bytes) ||
     Number(request.bytes) > 65536 ||
@@ -59,6 +59,18 @@ function mutation(input: unknown) {
   )
     throw new Error("Memory uncertainty request refused")
   identity(request.identity)
+  if (request.op === "capture_admit") {
+    const value = row(request.mutation, ["expected", "capture", "input_sha256", "namespace"])
+    if (
+      !hash(value.expected) ||
+      !hash(value.input_sha256) ||
+      typeof value.capture !== "string" ||
+      !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.capture)
+    )
+      throw new Error("Original capture mutation metadata refused")
+    namespace(value.namespace)
+    return
+  }
   const mutation = row(request.mutation, ["expected", "prospective", "revision", "enabled", "namespace"])
   if (
     !(mutation.expected === null || hash(mutation.expected)) ||

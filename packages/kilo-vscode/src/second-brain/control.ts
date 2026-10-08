@@ -2,6 +2,8 @@ import { Failure } from "./client"
 import type { BrainService } from "./service"
 import type { BrainSettings } from "./settings"
 import { status } from "./index-status"
+import type { Publication } from "./client-v2"
+import { isDeepStrictEqual } from "node:util"
 
 type Row = Record<string, unknown>
 export type Session = {
@@ -11,6 +13,11 @@ export type Session = {
   discard(ticket: object): Promise<Row>
   metadata(ticket: object): unknown
   pause(expected: string, before?: (metadata: unknown) => Promise<void>, mutation?: unknown): Promise<Row>
+  captureAuthorize?(body: Publication, expected: string): Promise<Row>
+  captureAdmit?(
+    body: { id: string; input_sha256: string; expected_policy_sha256: string },
+    before: (metadata: unknown) => Promise<void>,
+  ): Promise<Row>
   close(): Promise<{ code: number | null; signal: string | null; stdout: boolean; stderr: boolean; errors: string[] }>
   snapshot(): unknown
   fence(): void
@@ -251,6 +258,60 @@ export class BrainControl {
       await body(expected, this.signal!.signal, close)
       check()
       this.state = Object.freeze({ status: "synced", digest: expected })
+    })
+  }
+
+  capture(body: Publication, authorize: () => void | Promise<void>) {
+    let result: Awaited<ReturnType<BrainService["capture"]>> | undefined
+    return this.transaction(async (session, check, close) => {
+      const gate = async () => {
+        check()
+        await authorize()
+        check()
+      }
+      await gate()
+      if (!session.captureAuthorize || !session.captureAdmit)
+        throw new Failure("unsupported", "Select the reviewed capture-capable Memory control", 0)
+      const value = await session.state()
+      await gate()
+      if (row(value.policy).enabled !== true) throw new Unapproved()
+      const expected = digest(value.policy_sha256)
+      await session.captureAuthorize(body, expected)
+      await gate()
+      this.state = Object.freeze({ status: "syncing", digest: expected })
+      const receipt = await this.service.capture(body, expected, this.signal!.signal, close)
+      await gate()
+      let original: unknown
+      const admitted = await session.captureAdmit(
+        { id: body.id, input_sha256: receipt.input_sha256, expected_policy_sha256: expected },
+        async (request) => {
+          await gate()
+          await this.record(request)
+          original = request
+          check()
+        },
+      )
+      check()
+      const successor = digest(admitted.policy_sha256)
+      // The native mutation journal clears only after its original child and pipes
+      // join. Reindex then owns a different HTTP request and settlement record.
+      await close()
+      check()
+      const debt = this.settings.pending()
+      if (!debt || debt.version !== 1 || !isDeepStrictEqual(debt.request, original))
+        throw new Error("Original capture admission journal required")
+      await this.settings.record(undefined).catch(async (err: unknown) => {
+        await this.settings.record(debt)
+        throw err
+      })
+      await gate()
+      await this.service.sync(successor, this.signal!.signal, close)
+      await gate()
+      this.state = Object.freeze({ status: "synced", digest: successor })
+      result = receipt
+    }).then(() => {
+      if (!result) throw new Error("Original capture and reindex were not confirmed")
+      return result
     })
   }
 

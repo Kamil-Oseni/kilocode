@@ -306,7 +306,7 @@ def refresh(root, key, signature, expected, gate):
     return dict(policy_sha256=sha, revision=successor['revision'], capture=key, source_policy_refreshed=True)
 
 
-def publish(root, body, observe=None, cancel=None):
+def publish(root, body, observe=None, cancel=None, expected=None):
     raw = validate(body)
     root = Path(root)
     if not root.is_absolute():
@@ -315,6 +315,8 @@ def publish(root, body, observe=None, cancel=None):
         safe(path)
     store = Store(root)
     signature = digest(raw)
+    if expected is not None:
+        authorize(root, body, expected)
     with guard(store):
         if cancel and cancel():
             raise ValueError('Capture cancelled before publication.')
@@ -392,6 +394,10 @@ def publish(root, body, observe=None, cancel=None):
         if cancel and cancel():
             raise RecoveryNeeded('Capture cancelled; immutable preparation retained for inspection.')
         def checkpoint(stage):
+            if expected is not None and stage in {'preparing', 'prepared'}:
+                # Store.apply owns the original admission and note locks here.
+                # The request binds this exact policy CAS intent before any note writes.
+                authorize(root, body, expected)
             if observe:
                 observe(stage)
             if stage in {'preparing', 'prepared'} and cancel and cancel():

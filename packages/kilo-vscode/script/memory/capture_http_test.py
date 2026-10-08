@@ -34,31 +34,38 @@ class HTTP(unittest.TestCase):
         raw = json.dumps([self.body['observed_utc'], source['user']['id'], source['user']['text'],
                          source['assistant']['id'], source['assistant']['text'], []], separators=(',', ':')).encode()
         self.body['source_sha256'] = hashlib.sha256(raw).hexdigest()
+        from admission import Store
+        admission = Store(self.notes, existing=True)
+        self.sha = admission.replace(dict(format='raya-general-sources-v1', root=str(self.notes),
+                                          enabled=True, revision=1, files=[]), None)
 
     def test_capture_auth_original_epoch_publication_and_no_replay(self):
         async def run():
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.server.app), base_url='http://127.0.0.1:8874') as client:
+                body = dict(publication=self.body, expected_policy_sha256=self.sha)
                 target = self.notes / 'Preferences/Raya.md'
-                self.assertEqual((await client.post('/v1/memory/capture', json=self.body)).status_code, 401)
+                self.assertEqual((await client.post('/v1/memory/capture', json=body)).status_code, 401)
                 headers = {'Authorization': 'Bearer ' + self.key, 'X-Raya-Memory-Request-ID': uuid.uuid4().hex}
-                self.assertEqual((await client.post('/v1/memory/capture', json=self.body, headers=headers)).status_code, 409)
+                self.assertEqual((await client.post('/v1/memory/capture', json=body, headers=headers)).status_code, 409)
                 headers['X-Raya-Memory-Owner-Epoch'] = self.server.EPOCH
-                damaged = copy.deepcopy(self.body)
-                damaged['source_sha256'] = '0' * 64
+                self.assertEqual((await client.post('/v1/memory/capture', json=self.body, headers=headers)).status_code, 422)
+                damaged = copy.deepcopy(body)
+                damaged['publication']['source_sha256'] = '0' * 64
                 self.assertEqual((await client.post('/v1/memory/capture', json=damaged, headers=headers)).status_code, 422)
                 self.assertFalse(target.exists())
-                response = await client.post('/v1/memory/capture', json=self.body, headers=headers)
+                response = await client.post('/v1/memory/capture', json=body, headers=headers)
                 self.assertEqual(response.status_code, 200, response.text)
                 result = response.json()
                 self.assertEqual(result['status'], 'committed')
                 self.assertEqual(result['operation']['kind'], 'capture')
                 self.assertEqual(result['operation']['operation_outcome'], 'completed')
                 self.assertEqual(result['operation']['downstream'], [])
+                self.assertEqual(result['operation']['request_sha256'], hashlib.sha256(self.server.canonical(body)).hexdigest())
                 print(json.dumps({'response': response.text, 'selected': {'request': headers['X-Raya-Memory-Request-ID'],
                     'epoch': self.server.EPOCH, 'release': self.server.RELEASE,
                     'digest': result['operation']['request_sha256'], 'kind': 'capture', 'protocol': self.server.JOURNAL.format}}))
                 saved = target.read_bytes()
-                self.assertEqual((await client.post('/v1/memory/capture', json=self.body, headers=headers)).status_code, 409)
+                self.assertEqual((await client.post('/v1/memory/capture', json=body, headers=headers)).status_code, 409)
                 self.assertEqual(target.read_bytes(), saved)
                 self.assertEqual(self.server.ACTIVE, 0)
         asyncio.run(run())

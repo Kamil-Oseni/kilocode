@@ -5,6 +5,8 @@ import type { BrainSettings } from "./settings"
 import { join } from "./join"
 import { OperationOwner } from "./operation-owner"
 import { ManagedOwner } from "./managed/owner"
+import type { CaptureBinding, CapturePublication } from "./capture-intake"
+
 import { setup as file } from "../shared/memory-query"
 
 const empty: BrainState = Object.freeze({ configured: false, status: "disconnected", results: [] })
@@ -20,6 +22,7 @@ export class BrainService {
   private operation: OperationOwner | undefined
   private managed: ManagedOwner | undefined
   private opening: Promise<void> | undefined
+  private captures = new WeakMap<CaptureBinding, NonNullable<Awaited<ReturnType<BrainSettings["load"]>>>["setup"]>()
 
   constructor(
     private readonly settings: BrainSettings,
@@ -174,6 +177,77 @@ export class BrainService {
     ]).catch((err: unknown) => errors.push(err))
     await this.managed?.close().catch((err: unknown) => errors.push(err))
     await join(errors.map((err) => Promise.reject(err)))
+  }
+
+  /** Only the native control transaction may enter while configuration intake is fenced. */
+  async capture(body: CapturePublication, expected: string, signal: AbortSignal, close: () => Promise<void>) {
+    if (this.closed || !this.changing || typeof close !== "function" || !/^[a-f0-9]{64}$/.test(expected))
+      throw new Error("Original native capture transaction required")
+    const cfg = await this.prepare(signal)
+    signal.throwIfAborted()
+    if (
+      !cfg ||
+      cfg.setup.version !== 2 ||
+      cfg.setup.protocol !== "raya.memory.operation.v2" ||
+      !("capture.py" in cfg.setup.source_sha256)
+    )
+      throw new Error("Reviewed capture-capable Memory setup required")
+    this.operation ??= new OperationOwner(this.settings, cfg.key, cfg.setup)
+    const original = this.operation
+    try {
+      const result = await original.capture(body, expected, { id: crypto.randomUUID().replaceAll("-", ""), signal })
+      signal.throwIfAborted()
+      if (this.managed && !this.managed.valid()) throw new Error("Original managed generation is unavailable")
+      if (
+        result.id !== body.id ||
+        typeof result.input_sha256 !== "string" ||
+        !/^[a-f0-9]{64}$/.test(result.input_sha256) ||
+        result.status !== "committed"
+      )
+        throw new Error("Original committed capture receipt was not confirmed")
+      return { ...result, id: body.id, input_sha256: result.input_sha256 }
+    } catch (err) {
+      await this.release(original, err)
+      throw err
+    }
+  }
+
+  async captureSelection(signal: AbortSignal): Promise<CaptureBinding> {
+    if (this.closed || this.changing || this.pending.size || this.settings.pending())
+      throw new Error("Memory capture selection is busy or uncertain")
+    const cfg = await this.prepare(signal)
+    if (
+      !cfg ||
+      cfg.setup.version !== 2 ||
+      cfg.setup.protocol !== "raya.memory.operation.v2" ||
+      !("capture.py" in cfg.setup.source_sha256)
+    )
+      throw new Error("Select the reviewed capture-capable Memory release")
+    this.operation ??= new OperationOwner(this.settings, cfg.key, cfg.setup)
+    const original = this.operation
+    const health = await original.health(signal)
+    signal.throwIfAborted()
+    if (this.operation !== original || !this.settings.current(cfg.setup) || (this.managed && !this.managed.valid()))
+      throw new Error("Original Memory capture generation changed")
+    const binding = Object.freeze({
+      root: cfg.setup.root,
+      release: health.release,
+      owner: health.epoch,
+      generation: original,
+    })
+    this.captures.set(binding, cfg.setup)
+    return binding
+  }
+
+  captureCurrent(binding: CaptureBinding) {
+    const setup = this.captures.get(binding)
+    return (
+      !this.closed &&
+      !!setup &&
+      this.operation === binding.generation &&
+      this.settings.current(setup) &&
+      (!this.managed || this.managed.valid())
+    )
   }
 
   /** Only the native control transaction may enter while configuration intake is fenced. */

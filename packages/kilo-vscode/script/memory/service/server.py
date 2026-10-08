@@ -309,10 +309,14 @@ async def handle(request: Request, path: str):
             budget = body.get('context_budget')
             work = (lambda: {'results': [], 'context': INDEX.context(body['query'], budget, body['top']), 'capture_enabled': False}) if budget is not None else (lambda: {'results': INDEX.search(body['query'], body['top']), 'capture_enabled': False})
         elif kind == 'capture':
-            if body.get('format') != 'raya.memory.capture.v3' or PROTOCOL != 'raya.retrieval.request.settlement.v2':
+            if set(body) != {'publication', 'expected_policy_sha256'} or not hex(body['expected_policy_sha256'], 64):
+                raise ValueError('Bind the original publication to its exact enabled source policy.')
+            publication = body['publication']
+            expected = body['expected_policy_sha256']
+            if not isinstance(publication, dict) or publication.get('format') != 'raya.memory.capture.v3' or PROTOCOL != 'raya.retrieval.request.settlement.v2':
                 raise ValueError('Evidence-bound capture requires the current publication protocol.')
-            validate(body)
-            work = lambda: publish(NOTES, body, cancel=lambda: bool(CANCEL.get() and CANCEL.get().is_set()))
+            validate(publication)
+            work = lambda: publish(NOTES, publication, expected=expected, cancel=lambda: bool(CANCEL.get() and CANCEL.get().is_set()))
         else:
             if set(body)-{'force_rebuild', 'expected_policy_sha256'} or type(body.get('force_rebuild', False)) is not bool or not hex(body.get('expected_policy_sha256'), 64):
                 raise ValueError('Provide the exact confirmed policy fingerprint and boolean rebuild flag.')

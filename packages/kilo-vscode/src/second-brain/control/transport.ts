@@ -1,6 +1,7 @@
 import type { ChildProcess } from "node:child_process"
-import { check, object, reply, sha, exact, type Op, type Generation } from "./frames"
+import { check, object, reply, sha, exact, document, canonical, type Op, type Generation } from "./frames"
 import { valid, type Identity } from "./identity"
+import type { Publication } from "../client-v2"
 type Ticket = object
 type Flight = {
   op: Op
@@ -17,6 +18,8 @@ type Mutation = Readonly<{
   revision?: number
   enabled?: boolean
   namespace?: Generation
+  capture?: string
+  input_sha256?: string
 }>
 export type Before = (
   request: Readonly<{
@@ -258,6 +261,40 @@ export class Transport {
   state() {
     return this.request("state", {})
   }
+  private captures = new Map<string, Mutation>()
+  async captureAuthorize(publication: Publication, expected: string) {
+    check(/^[a-f0-9]{64}$/.test(expected), "Original capture policy required")
+    const value = await this.request("capture_authorize", { publication, expected_policy_sha256: expected })
+    check(value.expected_policy_sha256 === expected, "Original capture preflight policy differs")
+    const namespace = exact(value)
+    check(namespace, "Original capture namespace required")
+    const body = document(Buffer.from(JSON.stringify(publication)), 65536)
+    this.captures.set(
+      publication.id,
+      Object.freeze({
+        expected,
+        namespace,
+        capture: publication.id,
+        input_sha256: sha(canonical(body.tree, body.text)),
+      }),
+    )
+    return value
+  }
+  async captureAdmit(body: { id: string; input_sha256: string; expected_policy_sha256: string }, before: Before) {
+    check(
+      /^[a-f0-9]{64}$/.test(body.input_sha256) && /^[a-f0-9]{64}$/.test(body.expected_policy_sha256),
+      "Original capture fingerprints required",
+    )
+    const mutation = this.captures.get(body.id)
+    check(
+      mutation && mutation.expected === body.expected_policy_sha256 && mutation.input_sha256 === body.input_sha256,
+      "Original capture preflight required",
+    )
+    this.captures.delete(body.id)
+    const value = await this.request("capture_admit", body, mutation, before)
+    check(value.capture === body.id, "Different capture admission refused")
+    return value
+  }
   async preview(names: string[], enabled: boolean) {
     check(
       names.length >= 1 && names.length <= 128 && typeof enabled === "boolean",
@@ -350,7 +387,10 @@ export class Transport {
       errors: this.errors.map((err) => err.name),
       history: this.history.map((row) => ({ ...row })),
       mutationUncertain: this.history.some(
-        (row) => ["approve", "policy_pause"].includes(row.op) && !row.verified && row.outcome?.state !== "not_sent",
+        (row) =>
+          ["approve", "policy_pause", "capture_admit"].includes(row.op) &&
+          !row.verified &&
+          row.outcome?.state !== "not_sent",
       ),
       forced: false,
       sourceProtocolUsed: false,

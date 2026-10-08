@@ -331,15 +331,16 @@ export class ClientV2 {
     return result
   }
 
-  async capture(body: Publication, opts: Options) {
+  async capture(body: Publication, expected: string, opts: Options) {
     if (
       this.#setup.protocol !== "raya.memory.operation.v2" ||
       !("capture.py" in this.#setup.source_sha256) ||
       body.format !== "raya.memory.capture.v3" ||
-      Buffer.byteLength(JSON.stringify(body)) > 65536
+      !hex(expected, 64) ||
+      Buffer.byteLength(JSON.stringify({ publication: body, expected_policy_sha256: expected })) > 65536
     )
       throw new Failure("unsupported", "Select the reviewed capture-capable Memory release", 0)
-    const value = await this.send("capture", body, opts)
+    const value = await this.send("capture", { publication: body, expected_policy_sha256: expected }, opts)
     const result = object(value.result!)
     if (result.id !== body.id || result.input_sha256 !== fingerprint(body))
       throw new Failure("identity_mismatch", "Original capture receipt differs", 200)

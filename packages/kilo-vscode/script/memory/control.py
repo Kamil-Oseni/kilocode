@@ -81,13 +81,15 @@ class Bridge:
         self.generation = {self.root: directory(self.root), self.system: directory(self.system)}
         self.source = local(cfg['source_dir'])
         self.generation[self.source] = directory(self.source)
-        fields(cfg['source_sha256'], FILES)
+        names = (*FILES, 'capture.py') if 'capture.py' in cfg['source_sha256'] else FILES
+        fields(cfg['source_sha256'], names)
         self.pins = cfg['source_sha256']
         if any(not isinstance(value, str) or not re.fullmatch('[a-f0-9]{64}', value) for value in self.pins.values()):
             raise ValueError('Exact source hashes required.')
         self.check()
         self.modules = {}
-        for name in ('retirement', 'policy', 'admission', 'notes', 'host'):
+        modules = ('retirement', 'policy', 'admission', 'notes', 'host', *(['capture'] if 'capture.py' in self.pins else []))
+        for name in modules:
             if name in sys.modules:
                 raise ValueError('Unselected module already loaded.')
             file = self.source / (name + '.py')
@@ -101,7 +103,7 @@ class Bridge:
             exec(compile(raw, str(file), 'exec'), module.__dict__)
             self.modules[name] = module
         self.check()
-        for name in ('retirement', 'policy', 'admission', 'notes', 'host'):
+        for name in modules:
             if Path(sys.modules[name].__file__).resolve() != self.source / (name + '.py'):
                 raise ValueError('Imported module path differs.')
         self.host = sys.modules['host'].Host(self.root, existing=True,
@@ -114,7 +116,7 @@ class Bridge:
             local(str(path))
             if directory(path) != expected:
                 raise ValueError('Captured directory changed.')
-        for name in FILES:
+        for name in self.pins:
             if hashlib.sha256(image(self.source / name)).hexdigest() != self.pins[name]:
                 raise ValueError('Selected source changed.')
         for name, module in getattr(self, 'modules', {}).items():
@@ -146,6 +148,25 @@ class Bridge:
                 if not isinstance(args['expected_policy_sha256'], str) or not re.fullmatch('[a-f0-9]{64}', args['expected_policy_sha256']):
                     raise ValueError('Expected policy hash required.')
                 return self.host.pause(args['expected_policy_sha256'])
+            if op == 'capture_authorize':
+                fields(args, ('publication', 'expected_policy_sha256'))
+                if 'capture' not in self.modules:
+                    raise ValueError('Select the reviewed capture-capable control release.')
+                self.modules['capture'].authorize(self.root, args['publication'], args['expected_policy_sha256'])
+                return {'root': str(self.root), 'expected_policy_sha256': args['expected_policy_sha256'],
+                        'namespace': {key: [None if item is None else str(item) for item in self.generation[path]]
+                                      for key, path in [('root', self.root), ('system', self.system)]}}
+            if op == 'capture_admit':
+                fields(args, ('id', 'input_sha256', 'expected_policy_sha256'))
+                if 'capture' not in self.modules:
+                    raise ValueError('Select the reviewed capture-capable control release.')
+                for key in ('input_sha256', 'expected_policy_sha256'):
+                    if not isinstance(args[key], str) or not re.fullmatch('[a-f0-9]{64}', args[key]):
+                        raise ValueError('Original capture and policy hashes required.')
+                # The private parent gates saved consent before sending this original
+                # mutation. The selected bridge continuously checks its generation.
+                return self.modules['capture'].refresh(self.root, args['id'], args['input_sha256'],
+                    args['expected_policy_sha256'], self.check)
             raise ValueError('Operation not allowed.')
 
 
@@ -175,7 +196,7 @@ def main():
         except Exception as err:
             types = [type(item).__name__ for item in sys.modules['admission'].failures(err)]
             reply.update(ok=False, error={'kind': 'control_refused', 'message': 'Control operation refused; inspect current identity and review.',
-                                         'types': types, 'publication': 'may_have_happened' if request['op'] in ('approve', 'policy_pause') else 'none'})
+                                         'types': types, 'publication': 'may_have_happened' if request['op'] in ('approve', 'policy_pause', 'capture_admit') else 'none'})
         output = json.dumps(reply, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode('utf-8') + b'\n'
         if len(output) > 2097152:
             raise ValueError('Oversized reply; inspect original operation.')

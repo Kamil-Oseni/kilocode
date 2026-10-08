@@ -29,6 +29,49 @@ import { unchanged } from "./review"
 import { ClosedRequired } from "./closed-recovery"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
+import { CaptureIntake, type CapturePublication } from "./capture-intake"
+
+type CaptureControl = { capture(body: CapturePublication, authorize: () => void): Promise<unknown> }
+function capturing(value: object): value is object & CaptureControl {
+  return "capture" in value && typeof value.capture === "function"
+}
+
+function captureTurn(request: { sessionID?: string }, row: Record<string, unknown>, project: string) {
+  if (
+    typeof request.sessionID !== "string" ||
+    !request.sessionID ||
+    request.sessionID.length > 256 ||
+    typeof row.messageID !== "string" ||
+    !row.messageID ||
+    row.messageID.length > 256 ||
+    typeof row.source_sha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(row.source_sha256)
+  )
+    throw new Error("Exact original completed capture turn required")
+  return { project, sessionID: request.sessionID, messageID: row.messageID, source_sha256: row.source_sha256 }
+}
+
+function captureReceipt(receipt: unknown, id: string) {
+  if (
+    !receipt ||
+    typeof receipt !== "object" ||
+    !("id" in receipt) ||
+    receipt.id !== id ||
+    !("input_sha256" in receipt) ||
+    typeof receipt.input_sha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(receipt.input_sha256)
+  )
+    throw new Error("Original indexed capture receipt differs")
+  return receipt.input_sha256
+}
+
+function trusted(project: string) {
+  if (!vscode.workspace.isTrusted) throw new Error("Authenticated trusted project required")
+  const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project))
+  if (!folder || path.resolve(folder.uri.fsPath).toLowerCase() !== project.toLowerCase())
+    throw new Error("Select an exact trusted workspace folder")
+}
+
 function recall(row: Record<string, unknown>): row is { action: "context"; query: string; budget: number } {
   return (
     Object.keys(row).sort().join("|") === "action|budget|query" &&
@@ -40,7 +83,7 @@ function recall(row: Record<string, unknown>): row is { action: "context"; query
 
 const services = new WeakMap<
   vscode.ExtensionContext,
-  { settings: BrainSettings; service: BrainService; control: BrainControl }
+  { settings: BrainSettings; service: BrainService; control: BrainControl; intake: CaptureIntake }
 >()
 const catalogKey = "raya.secondBrain.control.catalog"
 
@@ -52,6 +95,7 @@ export class BrainHost {
   private readonly settings: BrainSettings
   private readonly service: BrainService
   private readonly control: BrainControl
+  private readonly intake: CaptureIntake
   private current: { id: string; owner: object } | undefined
   private dream?: Promise<void>
   private closing = false
@@ -434,6 +478,7 @@ export class BrainHost {
     const existing = services.get(context)
     this.settings = existing?.settings ?? new BrainSettings(context.globalState, context.secrets)
     this.service = existing?.service ?? new BrainService(this.settings, context.extensionPath)
+    this.intake = existing?.intake ?? new CaptureIntake(context.globalState)
     this.control =
       existing?.control ??
       new BrainControl(this.service, this.settings, async (setup) => {
@@ -449,7 +494,7 @@ export class BrainHost {
         return Control.open(setup.root, catalog, context.extensionPath)
       })
     if (existing) return
-    services.set(context, { settings: this.settings, service: this.service, control: this.control })
+    services.set(context, { settings: this.settings, service: this.service, control: this.control, intake: this.intake })
     context.subscriptions.push(
       vscode.commands.registerCommand("raya.memory.inspectConfiguration", () =>
         diagnostic(this.settings, context.globalState),
@@ -525,17 +570,16 @@ export class BrainHost {
   }
 
   /** Model requests can read approved context or prepare proposals, never authorize application. */
-  async model(request: { project: string; command: unknown }, directory: string, signal: AbortSignal) {
+  async model(request: { project: string; sessionID?: string; command: unknown }, directory: string, signal: AbortSignal) {
     signal.throwIfAborted()
     const project = path.resolve(directory)
-    if (project.toLowerCase() !== path.resolve(request.project).toLowerCase() || !vscode.workspace.isTrusted)
+    if (project.toLowerCase() !== path.resolve(request.project).toLowerCase())
       throw new Error("Authenticated trusted project required")
-    const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project))
-    if (!folder || path.resolve(folder.uri.fsPath).toLowerCase() !== project.toLowerCase())
-      throw new Error("Select an exact trusted workspace folder")
+    trusted(project)
     if (!request.command || typeof request.command !== "object" || Array.isArray(request.command))
       throw new Error("Proposal command required")
     const row = request.command as Record<string, unknown>
+    if (["capturePolicy", "capture"].includes(String(row.action))) return this.capture(request, project, signal)
     if (row.action === "status") return this.inspect(row, project, signal)
     if (row.action === "context") {
       if (!recall(row)) throw new Error("Bounded context command required")
@@ -567,6 +611,74 @@ export class BrainHost {
     if (row.action === "propose" && proposals[0]?.status !== "pending")
       throw new Error("Original proposal creation is unconfirmed")
     return { action: row.action as "list" | "read" | "propose", project, proposals }
+  }
+
+  /** Native setup only: original human authorization must accompany saved capture choices. */
+  async saveCapture(value: unknown, signal: AbortSignal) {
+    if (this.closing || !vscode.workspace.isTrusted) throw new Error("Trusted capture setup required")
+    const binding = await this.service.captureSelection(signal)
+    const check = () => {
+      signal.throwIfAborted()
+      if (this.closing || !vscode.workspace.isTrusted || !this.service.captureCurrent(binding))
+        throw new Error("Original capture setup changed during consent publication")
+    }
+    await this.service.configure(() => this.intake.save(value, binding, check), false)
+    check()
+    if (!this.service.captureCurrent(binding) || !this.intake.selected(binding))
+      throw new Error("Saved capture choices do not match the current reviewed Memory release")
+  }
+
+  private async capture(
+    request: { project: string; sessionID?: string; command: unknown },
+    project: string,
+    signal: AbortSignal,
+  ) {
+    const row = request.command as Record<string, unknown>
+    const turn = captureTurn(request, row, project)
+    const result = { project, sessionID: turn.sessionID, messageID: turn.messageID, source_sha256: turn.source_sha256 }
+    if (row.action === "capturePolicy") {
+      if (Object.keys(row).sort().join() !== "action,messageID,source_sha256")
+        throw new Error("Exact capture policy command required")
+      if (!this.intake.enabled()) return { action: "capturePolicy" as const, ...result, enabled: false }
+    }
+    const binding = await this.service.captureSelection(signal)
+    const cfg = this.intake.selected(binding)
+    const check = () => {
+      signal.throwIfAborted()
+      const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project))
+      if (
+        this.closing ||
+        !vscode.workspace.isTrusted ||
+        !folder ||
+        path.resolve(folder.uri.fsPath).toLowerCase() !== project.toLowerCase() ||
+        !this.service.captureCurrent(binding) ||
+        !isDeepStrictEqual(this.intake.selected(binding), cfg)
+      )
+        throw new Error("Original capture configuration, workspace or generation changed")
+    }
+    check()
+    if (row.action === "capturePolicy") {
+      const grant = await this.intake.grant(turn, binding, check)
+      return { action: "capturePolicy" as const, ...result, enabled: !!grant, ...(grant ? { grant } : {}) }
+    }
+    const body = this.intake.consume(turn, this.intake.parse(row), binding, check)
+    try {
+      if (!body.entries.length) {
+        await this.intake.finish(turn, "skipped")
+        return { action: "capture" as const, ...result, status: "skipped" as const }
+      }
+      if (!capturing(this.control)) throw new Error("Select the reviewed capture-capable control release")
+      const receipt = await this.control.capture(body, check)
+      check()
+      const hash = captureReceipt(receipt, body.id)
+      await this.intake.finish(turn, "published", hash)
+      return { action: "capture" as const, ...result, status: "published" as const, receipt: hash }
+    } catch (err) {
+      await this.intake.finish(turn, "uncertain").catch((retained: unknown) => {
+        throw new AggregateError([err, retained], "Original capture and outcome retention failed")
+      })
+      throw err
+    }
   }
 
   private async inspect(row: Record<string, unknown>, project: string, signal: AbortSignal) {

@@ -2,6 +2,7 @@ import * as GoalMessage from "@/kilocode/goal/message" // kilocode_change
 import * as GoalTurn from "@/kilocode/goal/turn" // kilocode_change
 import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - final synthesis for the original dispatch
 import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
+import * as TaskProgress from "@/kilocode/session/task-progress" // kilocode_change - keep provisional worker announcements in the original input
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
@@ -1579,6 +1580,7 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       let structured: unknown
       let step = 0
+      const checked = new Set<MessageID>() // kilocode_change - at most one worker checkpoint per original input
       let extras = 0 // kilocode_change - raya_change: refresh the step budget while a goal is armed
       const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
@@ -1671,6 +1673,11 @@ export const layer = Layer.effect(
         }
         // kilocode_change end
 
+        // kilocode_change start - one owned same-input checkpoint before accepting a worker announcement
+        const checkpoint = !checked.has(lastUser.id)
+          ? yield* TaskProgress.checkpoint(sessions, workers, sessionID, lastUser.id, lastAssistantMsg)
+          : undefined
+        // kilocode_change end
         if (
           lastAssistant?.finish &&
           !["tool-calls"].includes(lastAssistant.finish) &&
@@ -1689,8 +1696,14 @@ export const layer = Layer.effect(
               callID: orphan.callID,
             })
           }
-          yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
-          break
+          // kilocode_change start - never extend the existing worker step ceiling
+          const selected = yield* agents.get(lastUser.agent)
+          if (!checkpoint || step >= KiloTask.steps(selected?.steps, session.metadata)) {
+            yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+            break
+          }
+          checked.add(lastUser.id)
+          // kilocode_change end
         }
 
         if (lastUser.agent === "auto") yield* resume(sessionID, lastUser.model) // kilocode_change - exact choice before any resumed dispatch
@@ -1935,6 +1948,7 @@ export const layer = Layer.effect(
           // kilocode_change end
           const system = [
             ...env,
+            ...(checkpoint ? [checkpoint] : []), // kilocode_change - ephemeral; no new Task, user message or authority
             ...mem, // kilocode_change
             ...instructions,
             ...(mcpInstructions ? [mcpInstructions] : []),

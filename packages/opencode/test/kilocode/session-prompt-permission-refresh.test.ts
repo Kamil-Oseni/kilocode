@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { expect } from "bun:test"
+import { createHash } from "node:crypto"
 import { Cause, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
 import fs, { rename, rm, symlink } from "fs/promises"
 import os from "os"
@@ -38,7 +39,7 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { Session } from "../../src/session/session"
-import { MessageID } from "../../src/session/schema"
+import { MessageID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SystemPrompt } from "../../src/session/system"
 import { SessionSummary } from "../../src/session/summary"
@@ -2027,4 +2028,143 @@ it.live("headless run: root session permission asks still queue (only subagents 
     }),
     { git: true },
   ),
+)
+
+for (const mode of ["copy", "literal", "stalled", "capped"] as const)
+  it.live(
+    `same Task finishes announced work without changing its input: ${mode}`,
+    () =>
+      provideTmpdirServer(
+        Effect.fnUntraced(function* ({ dir, llm }) {
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ title: "Worker checkpoint test" })
+          const input = path.join(dir, "input.txt")
+          const output = path.join(dir, "result.txt")
+          const content = "Copy this exact synthetic content"
+          const digest = createHash("sha256").update(content).digest("hex")
+          yield* Effect.promise(() => Bun.write(input, content))
+          const objective =
+            mode !== "literal"
+              ? `Read ${input}, copy its exact bytes into ${output}, then read ${output} to verify the copy.`
+              : 'Return exactly the literal sentence "I will read input.txt" without reading files.'
+          yield* llm.push(
+            reply().tool("task", {
+              description: "Execute the assigned synthetic objective",
+              prompt: objective,
+              subagent_type: "worker",
+              access: "edit",
+            }),
+          )
+          if (mode === "copy")
+            yield* llm.push(
+              reply().text("I'll read input.txt, write its exact bytes to result.txt, then verify the copy.").stop(),
+              reply().tool("read", { filePath: input }),
+              reply().tool("write", {
+                filePath: output,
+                content,
+                exact: { bytes: Buffer.byteLength(content), sha256: digest },
+              }),
+              reply().tool("read", { filePath: output }),
+              reply().text("The files match exactly after saved-target readback.").stop(),
+            )
+          if (mode === "literal") yield* llm.push(reply().text("I will read input.txt").stop())
+          if (mode === "stalled" || mode === "capped")
+            yield* llm.push(reply().text("I'll read input.txt and copy it into result.txt.").stop())
+          if (mode === "stalled")
+            yield* llm.push(reply().text("I'll read input.txt and copy it into result.txt.").stop())
+          yield* llm.push(
+            reply()
+              .text(
+                mode === "stalled" || mode === "capped"
+                  ? "The worker did not execute the assignment."
+                  : "Assigned work finished.",
+              )
+              .stop(),
+          )
+          yield* prompt.prompt({
+            sessionID: parent.id,
+            agent: "code",
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+            parts: [{ type: "text", text: objective }],
+          })
+          const messages = yield* sessions.messages({ sessionID: parent.id })
+          const tasks = messages
+            .flatMap((row) => row.parts)
+            .filter((part) => part.type === "tool" && part.tool === "task")
+          expect(tasks).toHaveLength(1)
+          const task = tasks[0]
+          if (task.type !== "tool") throw new Error("Task receipt is missing")
+          if (task.state.status !== "completed" && task.state.status !== "error")
+            throw new Error("Task is still pending")
+          if (mode === "stalled" || mode === "capped") {
+            expect(task.state.status).toBe("error")
+            if (task.state.status !== "error") throw new Error("Planning-only work must fail")
+            expect(task.state.error).toContain("plan for unfinished work")
+          }
+          if (mode === "copy" || mode === "literal") expect(task.state.status).toBe("completed")
+          const child = task.state.metadata?.sessionId
+          if (typeof child !== "string") throw new Error("Task lacks its actual child session")
+          const history = yield* sessions.messages({ sessionID: SessionID.make(child) })
+          const users = history.filter((row) => row.info.role === "user")
+          expect(users).toHaveLength(1)
+          expect(task.state.metadata?.childMessageID).toBe(users[0].info.id)
+          expect(
+            history
+              .filter((row) => row.info.role === "assistant")
+              .every((row) => row.info.role === "assistant" && row.info.parentID === users[0].info.id),
+          ).toBe(true)
+          const work = history.flatMap((row) => row.parts).filter((part) => part.type === "tool")
+          expect(work.map((part) => part.tool)).toEqual(mode === "copy" ? ["read", "write", "read"] : [])
+          expect(yield* llm.calls).toBe(mode === "copy" ? 7 : mode === "stalled" ? 4 : 3)
+          if (mode === "copy") expect(yield* Effect.promise(() => Bun.file(output).text())).toBe(content)
+          if (mode === "literal" && task.state.status === "completed")
+            expect(task.state.output).toContain("I will read input.txt")
+        }),
+        {
+          git: true,
+          config: (url) => ({
+            ...providerCfg(url),
+            formatter: false,
+            permission: { "*": "allow" },
+            agent: {
+              worker: {
+                mode: "subagent",
+                description: "Synthetic copy worker",
+                model: "test/test-model",
+                steps: mode === "capped" ? 1 : 10,
+              },
+            },
+          }),
+        },
+      ),
+    30_000,
+  )
+
+it.live(
+  "worker checkpoint excludes an unrelated child without a running Task receipt",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const parent = yield* sessions.create({ title: "Unowned parent" })
+        const child = yield* sessions.create({ parentID: parent.id, title: "Unowned child" })
+        const text = "I'll read input.txt and copy it into result.txt."
+        yield* llm.push(reply().text(text).stop())
+        const result = yield* prompt.prompt({
+          sessionID: child.id,
+          agent: "code",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+          parts: [{ type: "text", text: "Describe the proposed next action." }],
+        })
+        expect(result.parts.filter((part) => part.type === "text").map((part) => part.text)).toEqual([text])
+        expect(yield* llm.calls).toBe(1)
+        expect(
+          (yield* sessions.messages({ sessionID: child.id })).filter((row) => row.info.role === "user"),
+        ).toHaveLength(1)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  30_000,
 )

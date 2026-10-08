@@ -29,6 +29,7 @@ import { Permission } from "@/permission" // raya_change - Milestone D auto-rout
 import { RayaChief } from "@/kilocode/chief" // raya_change - Milestone B enforced Auto decision
 import * as GoalChildren from "@/kilocode/goal/children" // kilocode_change - raya_change: goal child reservations
 import * as GoalInput from "@/kilocode/goal/task-input" // kilocode_change - retain exact parent goal ownership on Task inputs
+import * as TaskProgress from "@/kilocode/session/task-progress" // kilocode_change - reject unresolved worker announcements
 import { RayaGoal } from "@/kilocode/goal" // kilocode_change - validate Auto edit goal state
 import { Storage } from "@/storage/storage" // kilocode_change - raya_change: durable goal child limit
 import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B preserved target model
@@ -867,6 +868,14 @@ export const TaskTool = Tool.define(
             const blocked = TaskRepeat.blocked(message)
             return yield* Effect.fail(new Error(blocked ?? `${message}\n${resumeHint(nextSession.id)}`))
           }
+          // kilocode_change end
+          // kilocode_change start - a capped or repeated planning-only reply is not completed execution
+          if (TaskProgress.announced(result, params.brief?.objective?.trim() || params.prompt?.trim() || ""))
+            return yield* Effect.fail(
+              new Error(
+                `The worker returned a plan for unfinished work instead of executing it.\n${resumeHint(nextSession.id)}`,
+              ),
+            )
           // kilocode_change end
           return result.parts.findLast((item) => item.type === "text")?.text ?? ""
         },

@@ -1,5 +1,19 @@
 # Raya current readiness
 
+## October 8 delivery update
+
+The latest saved delivery receipt identifies `7.4.23-snapshot+990c5146bc.local.1791436499531`, source `990c5146bc3317ab740fa668b0dc99c8ce0b89eb`. It records audited payload and preservation acceptance, **48/100 readiness**, **3/9 historical accepted workflows**, and **38 unfinished requirements**. Its normal-window and runtime acceptance flags remain false. These are saved delivery classifications, not a fresh certification of every installed file or workflow.
+
+The private installed General workflow now has a scoped pass: exact 48-byte read/write/readback, one selected specialist, autonomous Goal completion and original process/stream retirement. On October 8, this chat rechecked the qualified receipt, all ten selected referenced file hashes and saved input/output byte equality. That recheck does not rerun or independently recertify the original oracle. Normal VS Code reply/model/draft close-and-reopen acceptance remains pending.
+
+Full compiled encrypted-profile recovery remains open. The build chat reports exact permission restoration and a successful first restore; its second-hop checkpoint check is still under repair. A read-only check of the actual failing checkpoint succeeds through a shorter path and fails through the 252-character restore path. This establishes that object's availability, not complete recovery.
+
+FLUX has one inspected bounded generation pass; reference editing was aborted by the RAM reserve. Production image integration remains unselected. See [the image runtime boundary](Raya-Local-Image-Readiness.md).
+
+Evidence: `D:/Raya/Tools/Readiness-20261008/general-receipt-reference-recheck.json`; `D:/Raya/Tools/Readiness-20261008/Git-LongPath-Probe-0a83f084d74c47a2a8a4811e75685831/result.json`. The complete earlier snapshot below is retained as historical evidence; its candidate version, failure and counts are superseded only within the scopes above. All unfinished requirements remain active.
+
+## October 6 historical snapshot
+
 Snapshot: October 6, 2026. Recorded everyday readiness remains **48/100**; installed acceptance remains **2 of 9**, with seven workflow/recovery gates open. These figures measure different things. Source checks and successful packaging do not certify everyday behavior.
 
 ## Current delivery and next work

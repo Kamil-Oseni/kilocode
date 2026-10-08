@@ -89,4 +89,5 @@ class Encoder:
         if not isinstance(query, str) or not query.strip() or len(query.encode('utf-8')) > 2048 or type(segments) is not bool:
             raise ValueError('Supply a bounded nonempty media query and explicit segment selection.')
         values = self.encode(query, {'prompt_name': 'SearchQuery', 'processing_kwargs': {'text': {'max_length': 512, 'truncation': True}}})
-        return library.search_segments(values, self.space, top) if segments else library.search(values, self.space, top)
+        rows = library.search_segments(values, self.space, top) if segments else library.search(values, self.space, top)
+        return [dict(row, verification='unverified') for row in rows]

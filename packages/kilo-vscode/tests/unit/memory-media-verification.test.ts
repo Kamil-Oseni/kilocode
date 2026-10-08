@@ -1,0 +1,25 @@
+import { expect, test } from "bun:test"
+import path from "node:path"
+
+test("media evidence excludes rejected, uncertain, replayed and changed sources", async () => {
+  const root = process.cwd()
+  const child = Bun.spawn(
+    [
+      "D:/Raya/Services/Packaging/Python/3.12.14/python.exe",
+      "-I",
+      "-S",
+      "-B",
+      path.join(root, "tests/fixtures/memory_media_verification.py"),
+      path.join(root, "script/memory/media"),
+    ],
+    { stdout: "pipe", stderr: "pipe" },
+  )
+  const [output, error, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ])
+  expect(code, output + error).toBe(0)
+  expect(error).toContain("Ran 10 tests")
+  expect(error).toContain("OK")
+}, 30_000)

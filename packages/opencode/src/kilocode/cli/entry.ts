@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto"
-import { readFile, realpath } from "node:fs/promises"
+import { realpath } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { launch, memberContext } from "@opencode-ai/core/kilocode/source-launch"
 import { prepare } from "@opencode-ai/core/kilocode/source-profile"
 import { startup } from "@opencode-ai/core/kilocode/source-offline"
+import { digest as sum } from "@opencode-ai/core/kilocode/file-digest"
 
 /** The compiled producer has no Global imports or profile writer side effects. */
 async function enter() {
@@ -26,9 +26,7 @@ async function enter() {
   }
   const executable = await realpath(process.execPath)
   const cwd = await realpath(process.cwd())
-  const digest = createHash("sha256")
-    .update(await readFile(executable))
-    .digest("hex")
+  const digest = await sum(executable)
   await startup()
   const profile = await prepare({ home: os.homedir(), cwd, env: process.env })
   const env = Object.fromEntries(

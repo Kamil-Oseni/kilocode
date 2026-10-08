@@ -20,7 +20,7 @@ export async function digest(file: string) {
     const initial = await handle.stat({ bigint: true })
     if (!same(before, initial)) throw new Error("Digest file changed before reading")
     const hash = createHash("sha256")
-    const buffer = Buffer.allocUnsafe(65536)
+    const buffer = Buffer.allocUnsafe(1048576)
     let size = 0n
     while (size < initial.size) {
       const remaining = initial.size - size

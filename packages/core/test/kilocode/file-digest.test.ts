@@ -21,9 +21,9 @@ test("file digest preserves known SHA256 vectors and fresh content", async () =>
   expect(await digest(file)).toBe("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
   await writeFile(file, "abc")
   expect(await digest(file)).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
-  const bytes = Buffer.alloc(65536 * 3 + 17, 0x83)
-  bytes[65535] = 0
-  bytes[65536] = 0xff
+  const bytes = Buffer.alloc(1048576 * 3 + 17, 0x83)
+  bytes[1048575] = 0
+  bytes[1048576] = 0xff
   await writeFile(file, bytes)
   expect(await digest(file)).toBe(createHash("sha256").update(bytes).digest("hex"))
   await writeFile(file, "abc")

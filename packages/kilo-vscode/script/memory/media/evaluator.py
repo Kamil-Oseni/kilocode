@@ -121,10 +121,8 @@ class Evaluator:
                 if not container.streams.audio:
                     return ''
                 resampler = av.AudioResampler(format='s16', layout='mono', rate=16000)
-                for count, frame in enumerate(container.decode(audio=0)):
-                    if count >= 1800 or time.monotonic() - stamp > 10:
-                        raise ValueError('Spoken video evidence exceeds its decoding bound.')
-                    for part in resampler.resample(frame):
+                def collect(frames):
+                    for part in frames:
                         if part.pts is None or part.time_base is None:
                             raise ValueError('Spoken video evidence has no timestamp.')
                         point = float(part.pts * part.time_base)
@@ -136,8 +134,13 @@ class Evaluator:
                         last = min(part.samples, round((end - point) * 16000))
                         if first < last:
                             parts.append(part.to_ndarray().tobytes()[first * 2:last * 2])
+                for count, frame in enumerate(container.decode(audio=0)):
+                    if count >= 1800 or time.monotonic() - stamp > 10:
+                        raise ValueError('Spoken video evidence exceeds its decoding bound.')
+                    collect(resampler.resample(frame))
                     if frame.pts is not None and frame.time_base is not None and float(frame.pts * frame.time_base) >= end:
                         break
+                collect(resampler.resample(None))
         if not parts or not any(parts):
             return ''
         output = io.BytesIO()

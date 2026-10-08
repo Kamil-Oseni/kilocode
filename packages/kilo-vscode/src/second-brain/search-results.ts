@@ -30,6 +30,13 @@ function scores(item: Row): item is Row & { embedding_similarity: number; releva
   )
 }
 
+function provenance(text: string) {
+  const body = text.replace(/^Source: [^\r\n]*\r?\nSection: [^\r\n]*\r?\n/, "").trim()
+  return /^Recorded update: \d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})\. Source snapshots: (?:\[(?:user_statement|tool_observation|document|assistant_interpretation)\]\(<[^<>\r\n]+\/System\/Changes\/[a-f0-9-]+\/source-\d+\.txt>\)(?:, |\.))+$/i.test(
+    body,
+  )
+}
+
 /** Exact legacy scalar and source-provenance projection, shared by both protocols. */
 export function search(value: unknown, root: string, top: number) {
   if (!record(value) || value.capture_enabled !== false || !Array.isArray(value.results) || value.results.length > top)
@@ -71,5 +78,7 @@ export function search(value: unknown, root: string, top: number) {
       relevance_score: item.relevance_score,
     })
   })
-  return Object.freeze(results)
+  // Validate every incoming row before excluding generated audit-only footers.
+  // Similarity and reranker scores never establish answer support.
+  return Object.freeze(results.filter((item) => !provenance(item.text)))
 }

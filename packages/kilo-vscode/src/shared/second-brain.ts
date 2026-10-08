@@ -52,6 +52,7 @@ export type BrainState = Readonly<{
   configured: boolean
   status: "disconnected" | "checking" | "ready" | "searching" | "cancelled" | "unavailable"
   code?: string
+  recall?: "unverified"
   proposals?: BrainProposalResult
   review?: BrainReview
   context?: BrainContext

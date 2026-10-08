@@ -263,7 +263,7 @@ export class BrainService {
         return
       }
       const result = await client.search(query, { signal })
-      post({ configured: true, status: "ready", results: result.results })
+      post({ configured: true, status: "ready", results: result.results, recall: "unverified" })
     } catch (err) {
       const health =
         query === undefined
@@ -307,7 +307,7 @@ export class BrainService {
       }
       const result = await original.search(query, { id: crypto.randomUUID().replaceAll("-", ""), signal })
       signal.throwIfAborted()
-      post({ configured: true, status: "ready", results: result.results })
+      post({ configured: true, status: "ready", results: result.results, recall: "unverified" })
     } catch (err) {
       await this.failure(original, err, signal, post)
       throw err

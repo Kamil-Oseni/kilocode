@@ -172,6 +172,14 @@ export function SecondBrain() {
       <Show when={searching()}>
         <Button onClick={() => request("cancel")}>Cancel search</Button>
       </Show>
+      <Show when={state().recall === "unverified"}>
+        <p role="status">
+          <Show when={state().results.length} fallback="No factual passages returned. ">
+            Similarity matches only.{" "}
+          </Show>
+          No supporting answer has been verified for this question.
+        </p>
+      </Show>
       <For each={state().results}>
         {(result) => (
           <section>

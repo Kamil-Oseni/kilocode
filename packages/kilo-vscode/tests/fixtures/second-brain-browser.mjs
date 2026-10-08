@@ -157,16 +157,18 @@ try {
   await wait(() => sent.some((row) => row.action === "state"))
   await Promise.all(jobs)
   assert.match(node.textContent, /Setup required/)
-  assert.equal(button("Search notes").disabled, true)
+  assert.equal(button("Search notes"), undefined)
   assert.equal(posts, 0)
   button("Import service setup").click()
   await wait(() => node.textContent.includes("disconnected"))
   for (const [label, action] of [
     ["Import control setup", "controlSetup"],
-    ["Review sources", "review"],
-    ["Confirm sync", "sync"],
+    ["1. Choose notes", "review"],
+    ["2. Index selected notes", "sync"],
     ["Disable source policy", "disable"],
   ]) {
+    if (action === "sync")
+      emit(sent.at(-1).id, { configured: true, status: "ready", results: [], control: { status: "approved" } })
     button(label).click()
     const request = sent.at(-1)
     assert.equal(request.action, action)
@@ -181,6 +183,9 @@ try {
     control: { status: "policy_disabled", hostJoinRequired: true },
   })
   assert.match(node.textContent, /Fully Paused is unavailable/)
+  assert.equal(button("Search notes"), undefined)
+  // Source-policy display metadata only; actual policy/native consent is a separate gate.
+  emit(current, { configured: true, status: "ready", results: [], control: { status: "synced" } })
   const field = document.querySelector("input")
   field.value = "Synthetic query"
   field.dispatchEvent(new window.Event("input", { bubbles: true }))
@@ -198,6 +203,20 @@ try {
     false,
   )
   assert.equal(JSON.stringify(sent).includes("synthetic-private-key"), false)
+  // Unverified evidence must be explicit for both empty and nonempty searches.
+  const latest = sent.at(-1).id
+  emit(latest, { configured: true, status: "ready", results: [], recall: "unverified" })
+  assert.match(node.textContent, /No factual passages returned/)
+  assert.match(node.textContent, /No supporting answer has been verified/)
+  emit(latest, {
+    configured: true,
+    status: "ready",
+    results: [{ relative: "General.md", line: 1, end_line: 2, text: "Unverified passage" }],
+    recall: "unverified",
+    control: { status: "synced" },
+  })
+  assert.match(node.textContent, /Similarity matches only/)
+  assert.match(node.textContent, /No supporting answer has been verified/)
   button("Preview linked context").click()
   const preview = sent.at(-1)
   assert.equal(preview.action, "context")

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { spawn } from "../../src/util/process"
@@ -15,6 +15,9 @@ import { observe } from "../../src/second-brain/control/identity"
 import { packaged } from "../../src/second-brain/control/index"
 import { release } from "../../src/second-brain/control/catalog-v2"
 import { fingerprint } from "../../src/second-brain/failed-repair"
+import { images, fingerprint as reusable } from "../../src/second-brain/managed/reuse-catalog"
+import { image } from "../../src/second-brain/control/identity"
+import { review as archive, absent } from "../../src/second-brain/failed-archive"
 
 const python = "D:/Raya/Services/Packaging/Python/3.12.14/python.exe"
 // Controlled nonmodel producer; actual Pipes observes the original process and both readers.
@@ -82,7 +85,7 @@ async function fixture(
     version: 2 as const,
     protocol,
     origin: "http://127.0.0.1:58741",
-    root: "C:\\Synthetic\\Notes",
+    root,
     source_sha256: release,
   }
   const first = settings()
@@ -227,6 +230,232 @@ async function failed(value: Awaited<ReturnType<typeof fixture>>) {
   await writeFile(value.file, JSON.stringify(data))
   return { file, witness, debt, ref }
 }
+
+async function fresh(value: Awaited<ReturnType<typeof fixture>>) {
+  const failure = await failed(value)
+  await rm(value.closed.path)
+  const root = path.join(value.root, "raya-memory-managed-" + crypto.randomUUID().replaceAll("-", ""))
+  await mkdir(root)
+  await mkdir(path.join(value.root, "System"))
+  await copyFile(python, path.join(root, "python.exe"))
+  await copyFile(path.resolve("script/memory/supervise.py"), path.join(root, "supervise.py"))
+  const ref = async (file: string, limit = 16777216) => {
+    const held = await image(file, limit)
+    return { path: file, bytes: held.raw.length, sha256: held.digest }
+  }
+  const cfg = structuredClone(value.cfg)
+  const old = path.join(value.root, "old-plan.json")
+  await writeFile(old, JSON.stringify({ env: { RAYA_RETRIEVAL_PORT: "58742" } }))
+  value.running.managed.plan = await ref(old)
+  failure.witness.entry_sha256 = fingerprint(value.running)
+  await writeFile(failure.file, JSON.stringify(failure.witness))
+  const saved = JSON.parse(await readFile(value.file, "utf8"))
+  saved["raya.secondBrain.setup"] = value.running
+  await writeFile(value.file, JSON.stringify(saved))
+  cfg.root = root
+  cfg.python = await ref(path.join(root, "python.exe"), 536870912)
+  cfg.supervisor = await ref(path.join(root, "supervise.py"))
+  for (const kind of ["memory", "retrieval"] as const) {
+    const space = cfg.namespaces[kind]
+    space.root = path.join(root, kind)
+    await mkdir(path.join(space.root, "Runs"), { recursive: true })
+    await mkdir(path.join(space.root, "Requests"))
+  }
+  cfg.notes = {
+    root: value.root,
+    system: path.join(value.root, "System"),
+    generations: { root: ["1", "2", "3"], system: ["4", "5", "6"] },
+  }
+  const text = (generations: Record<string, readonly string[]>) =>
+    "{" +
+    Object.entries(generations)
+      .map(([key, row]) => JSON.stringify(key) + ":[" + row.join(",") + "]")
+      .join(",") +
+    "}"
+  const namespace = (kind: "memory" | "retrieval", prefix: string) => ({
+    [prefix + "_ROOT"]: cfg.namespaces[kind].root,
+    [prefix + "_SID"]: cfg.namespaces[kind].sid,
+    [prefix + "_GENERATIONS"]: text(cfg.namespaces[kind].generations),
+  })
+  const selection = namespace("retrieval", "RAYA_RETRIEVAL_RECEIPT")
+  const files = [
+    ...Object.entries(release).map(([name, sha256]) => ({ path: path.join(root, "source", "memory", name), sha256 })),
+    ...Object.entries(images).map(([name, sha256]) => ({ path: path.join(root, "source", name), sha256 })),
+  ]
+  const common = {
+    format: "raya.memory.managed.supervisor",
+    version: 1,
+    execution_admitted: true,
+    root,
+    python_sha256: interpreter,
+    files,
+    directories: [],
+  }
+  const memory = {
+    ...common,
+    kind: "memory",
+    source: path.join(root, "source", "memory"),
+    source_sha256: release,
+    port: 58743,
+    notes_selection: cfg.notes,
+    retrieval_selection: selection,
+    env: {
+      ...namespace("memory", "RAYA_MEMORY_OPERATION"),
+      RAYA_MEMORY_ROOT: value.root,
+      RAYA_MEMORY_PORT: "58743",
+      RAYA_RETRIEVAL_PORT: "58744",
+      RAYA_MEMORY_NOTE_GENERATIONS: text(cfg.notes.generations),
+      RAYA_MEMORY_TOKEN_FILE: path.join(root, "tokens", "memory.token"),
+      RAYA_MEMORY_RETRIEVAL_TOKEN_FILE: path.join(root, "tokens", "retrieval.token"),
+      RAYA_MEMORY_RETRIEVAL_PROTOCOL: "raya.retrieval.request.settlement.v2",
+      RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256: reusable,
+    },
+  }
+  const retrieval = {
+    ...common,
+    kind: "retrieval",
+    source: path.join(root, "source"),
+    source_sha256: images,
+    port: 58744,
+    retrieval_protocol: "raya.retrieval.request.settlement.v2",
+    env: {
+      ...selection,
+      RAYA_RETRIEVAL_PORT: "58744",
+      RAYA_RETRIEVAL_TOKEN_FILE: path.join(root, "tokens", "retrieval.token"),
+      RAYA_RETRIEVAL_RELEASE_SHA256: reusable,
+    },
+  }
+  await writeFile(path.join(root, "memory.json"), JSON.stringify(memory))
+  await writeFile(path.join(root, "retrieval.json"), JSON.stringify(retrieval))
+  cfg.plan = await ref(path.join(root, "memory.json"))
+  cfg.retrieval = await ref(path.join(root, "retrieval.json"))
+  const witness = await image(failure.file)
+  const input = {
+    format: "raya.memory.failed-search.fresh-start",
+    version: 1,
+    observation: { path: failure.file, bytes: witness.raw.length, sha256: witness.digest, tuple: witness.tuple },
+    setup: { ...value.setup, origin: "http://127.0.0.1:58743" },
+    managed: cfg,
+  }
+  const file = path.join(root, "fresh-start.json")
+  await writeFile(file, JSON.stringify(input))
+  return { ...failure, file, input }
+}
+
+test("fresh-start quarantine retains unproven failure and admits a separate setup without a closure receipt", async () => {
+  const value = await fixture("raya.memory.operation.v2")
+  try {
+    const selected = await fresh(value)
+    const host = value.settings()
+    await host.archive(selected.file, async (review) => {
+      expect(review.closure).toBe("unproven")
+      expect(review.settlement).toBe(false)
+      return true
+    })
+    const saved = JSON.parse(await readFile(value.file, "utf8"))
+    const audit = saved[`raya.secondBrain.failedSearchArchive.${selected.debt.request.id}`]
+    expect(audit.phase).toBe("applied")
+    expect(audit.closure).toBe("unproven")
+    expect(audit.settlement).toBe(false)
+    expect(audit.previous).toEqual(value.running)
+    expect(audit.debt).toEqual(selected.debt)
+    expect(audit.absence.helper.originalJoined).toBe(true)
+    expect(host.pending()).toBeUndefined()
+    const loaded = await host.load()
+    expect(loaded!.key).toBe("synthetic")
+    expect(loaded!.setup).toEqual(selected.input.setup)
+    expect(loaded!.launch!.predecessor).toBeUndefined()
+    expect(saved["raya.secondBrain.setup"].launch).toBeUndefined()
+    await expect(host.save(value.setup, "synthetic", value.cfg)).rejects.toThrow("Quarantined Memory address")
+    await host.clear()
+    await host.save(selected.input.setup, "synthetic", selected.input.managed)
+    expect((await host.load())!.key).toBe("synthetic")
+    expect(saved["raya.secondBrain.quarantinedSetups"]).toEqual([value.running])
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
+
+test("fresh-start refuses live listeners and used or historical namespaces, without changing saved debt", async () => {
+  const value = await fixture("raya.memory.operation.v2")
+  try {
+    const selected = await fresh(value)
+    const before = await readFile(value.file)
+    const reviewed = await archive(selected.file, value.running, selected.debt)
+    const server = Bun.serve({ hostname: "127.0.0.1", port: reviewed.ports[0], fetch: () => new Response("test") })
+    try {
+      await expect(absent(reviewed)).rejects.toThrow("Memory helper failures")
+    } finally {
+      await server.stop(true)
+    }
+    await writeFile(path.join(selected.input.managed.namespaces.memory.root, "Runs", "used.json"), "{}")
+    await expect(value.settings().archive(selected.file, async () => true)).rejects.toThrow("Unused fresh")
+    await rm(path.join(selected.input.managed.namespaces.memory.root, "Runs", "used.json"))
+    selected.input.managed.namespaces.memory.root = value.cfg.namespaces.memory.root
+    await writeFile(selected.file, JSON.stringify(selected.input))
+    await expect(value.settings().archive(selected.file, async () => true)).rejects.toThrow("Old operation namespace")
+    expect(await readFile(value.file)).toEqual(before)
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
+
+test("fresh-start refuses every earlier quarantined namespace and changed reviewed selection", async () => {
+  const value = await fixture("raya.memory.operation.v2")
+  try {
+    const selected = await fresh(value)
+    const saved = JSON.parse(await readFile(value.file, "utf8"))
+    const old = structuredClone(value.running)
+    old.managed.namespaces.memory.root = selected.input.managed.namespaces.memory.root
+    saved["raya.secondBrain.quarantinedSetups"] = [old]
+    await writeFile(value.file, JSON.stringify(saved))
+    const before = await readFile(value.file)
+    await expect(value.settings().archive(selected.file, async () => true)).rejects.toThrow(
+      "Quarantined Memory namespace",
+    )
+    expect(await readFile(value.file)).toEqual(before)
+    delete saved["raya.secondBrain.quarantinedSetups"]
+    await writeFile(value.file, JSON.stringify(saved))
+    const prior = await readFile(value.file)
+    await expect(
+      value.settings().archive(selected.file, async () => {
+        selected.input.setup.origin = "http://127.0.0.1:58745"
+        await writeFile(selected.file, JSON.stringify(selected.input))
+        return true
+      }),
+    ).rejects.toThrow()
+    expect(await readFile(value.file)).toEqual(prior)
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
+
+test("fresh-start cancellation and failing journal publication preserve old failure for retry", async () => {
+  let armed = false
+  const error = new Error("Original archive journal failure")
+  const value = await fixture("raya.memory.operation.v2", async (key, input) => {
+    if (!armed || key !== "raya.secondBrain.control.uncertainty" || input !== undefined) return
+    armed = false
+    throw error
+  })
+  try {
+    const selected = await fresh(value)
+    const before = await readFile(value.file)
+    const host = value.settings()
+    await host.archive(selected.file, async () => false)
+    expect(await readFile(value.file)).toEqual(before)
+    armed = true
+    await expect(host.archive(selected.file, async () => true)).rejects.toBe(error)
+    expect(host.pending()).toEqual(selected.debt)
+    const saved = JSON.parse(await readFile(value.file, "utf8"))
+    expect(saved["raya.secondBrain.setup"]).toEqual(value.running)
+    expect(saved[`raya.secondBrain.failedSearchArchive.${selected.debt.request.id}`].phase).toBe("failed")
+    await host.archive(selected.file, async () => true)
+    expect(host.pending()).toBeUndefined()
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
 
 test("explicit failed-empty repair preserves failure audit and credential and admits a clean original successor", async () => {
   const value = await fixture("raya.memory.operation.v2")

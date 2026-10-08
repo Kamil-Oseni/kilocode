@@ -135,6 +135,25 @@ print(json.dumps({'namespaces':namespaces,'directories':directories},separators=
 /** Creation is never resumed or replayed: any partial generation remains an exclusive sticky collision. */
 export async function generation(cfg: Descriptor, launch: Launch, files: readonly { raw: Buffer }[]) {
   location(cfg, launch)
+  return create(cfg, launch, files)
+}
+
+/** Explicit administrative fresh-start metadata must remain outside every historical request namespace. */
+export async function fresh(cfg: Descriptor, root: string, files: readonly { raw: Buffer }[]) {
+  check(
+    normalize(path.dirname(root)) === normalize(cfg.root) &&
+      /^raya-memory-fresh-[a-f0-9]{32}$/.test(path.basename(root)),
+    "Explicit fresh generation location required",
+  )
+  for (const prior of Object.values(cfg.namespaces))
+    check(
+      !normalize(root).startsWith(normalize(prior.root) + "/") && normalize(root) !== normalize(prior.root),
+      "Fresh generation cannot adopt a historical namespace",
+    )
+  return create(cfg, { root }, files)
+}
+
+async function create(cfg: Descriptor, launch: Launch, files: readonly { raw: Buffer }[]) {
   await directory(path.dirname(launch.root))
   await mkdir(launch.root)
   await directory(launch.root)

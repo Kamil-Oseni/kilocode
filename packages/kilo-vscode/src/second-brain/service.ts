@@ -135,12 +135,19 @@ export class BrainService {
   }
 
   repair(file: string, confirm: Parameters<BrainSettings["repair"]>[1]) {
+    return this.recovery(() => this.settings.repair(file, confirm))
+  }
+
+  archive(file: string, confirm: Parameters<BrainSettings["archive"]>[1]) {
+    return this.recovery(() => this.settings.archive(file, confirm))
+  }
+
+  private recovery(body: () => Promise<void>) {
     if (this.closed || this.changing || this.pending.size || this.operation || this.managed)
       return Promise.reject(
         new Failure("control_uncertain", "Historical repair requires a fresh host with no owned work", 0),
       )
-    const job = this.settings
-      .repair(file, confirm)
+    const job = body()
       .then(() => {
         this.opening = undefined
         this.state = { configured: true, status: "disconnected", results: [] }

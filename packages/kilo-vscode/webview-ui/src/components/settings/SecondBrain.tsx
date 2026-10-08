@@ -47,7 +47,13 @@ export function SecondBrain() {
       vscode.postMessage({ type: "secondBrain", action, id: next, target })
       return
     }
-    if (action === "setup" || action === "check" || action === "reconcile" || action === "repair")
+    if (
+      action === "setup" ||
+      action === "check" ||
+      action === "reconcile" ||
+      action === "repair" ||
+      action === "archive"
+    )
       setState({ configured: state().configured, status: "checking", results: [] })
     if (action === "search" || action === "context") {
       setState({ configured: state().configured, status: "searching", results: [] })
@@ -99,6 +105,9 @@ export function SecondBrain() {
         </Button>
         <Button onClick={() => request("repair")} disabled={!state().configured || busy()}>
           Recover prior failed search
+        </Button>
+        <Button onClick={() => request("archive")} disabled={!state().configured || busy()}>
+          Archive failed setup and start fresh
         </Button>
       </Show>
       <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>

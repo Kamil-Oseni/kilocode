@@ -47,7 +47,7 @@ function observation(raw: Uint8Array, entry: unknown) {
 }
 
 /** Explicit operator review only. This observation never mints producer or native settlement authority. */
-export async function review(file: string, entry: unknown, pending: unknown) {
+export async function inspect(file: string, entry: unknown, pending: unknown) {
   await directory(path.dirname(file))
   const held = await image(file, 65536)
   const witness = observation(held.raw, entry)
@@ -104,7 +104,11 @@ export async function review(file: string, entry: unknown, pending: unknown) {
       isDeepStrictEqual(document(current.raw, 65536).value, witness.terminal),
     "Original failed terminal changed",
   )
-  const original = receipt(prior.receipt)
+  return { setup, cfg, original: receipt(prior.receipt), selected, held }
+}
+
+export async function review(file: string, entry: unknown, pending: unknown) {
+  const { setup, cfg, original, selected, held } = await inspect(file, entry, pending)
   const location = path.join(path.dirname(original.path), "managed-closed.json")
   await directory(path.dirname(location))
   const ended = await image(location, 65536)

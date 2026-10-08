@@ -7,10 +7,13 @@ import { descriptor, receipt as checked, type Descriptor } from "./managed/descr
 import type { Receipt } from "./managed/owner"
 import { launch as context, admission, transition, history as managedHistory, type Launch } from "./managed/restart"
 import { review as repair } from "./failed-repair"
+import { review as archive, absent } from "./failed-archive"
+import { normalize } from "./control/identity"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
 const debt = "raya.secondBrain.control.uncertainty"
+const quarantine = "raya.secondBrain.quarantinedSetups"
 
 export type Setup =
   | ReturnType<typeof setup>
@@ -272,6 +275,115 @@ export class BrainSettings {
     throw err
   }
 
+  /** Explicit replacement keeps historical uncertainty in its audit; no cold settlement is minted. */
+  archive(file: string, confirm: (value: Awaited<ReturnType<typeof archive>>) => Promise<boolean>) {
+    return this.serial(async () => {
+      const entry = structuredClone(this.entry(this.storage.get<unknown>(state)))
+      const metadata = this.pending()
+      const reviewed = await archive(file, entry, metadata)
+      this.reusable(reviewed.setup, reviewed.managed)
+      await absent(reviewed)
+      const same = () =>
+        isDeepStrictEqual(this.storage.get<unknown>(state), entry) && isDeepStrictEqual(this.pending(), metadata)
+      if (!(await confirm(reviewed))) return
+      if (!same() || !isDeepStrictEqual(await archive(file, entry, metadata), reviewed))
+        throw new Error("Reviewed fresh-start selection changed")
+      const key = `raya.secondBrain.failedSearchArchive.${reviewed.request}`
+      const next = { setup: reviewed.setup, managed: reviewed.managed, credential: entry.credential }
+      const audit = {
+        format: "raya.memory.failed-search.archive",
+        version: 1,
+        previous: entry,
+        debt: metadata,
+        review: reviewed,
+        phase: "prepared",
+        closure: "unproven",
+        settlement: false,
+      }
+      const existing = this.storage.get<typeof audit>(key)
+      if (
+        existing !== undefined &&
+        (!["prepared", "failed"].includes(existing.phase) ||
+          !isDeepStrictEqual(existing, { ...audit, phase: existing.phase }))
+      )
+        throw new Error("Historical failure archive already exists or differs")
+      await this.storage.update(key, audit)
+      if (!same() || !isDeepStrictEqual(this.storage.get<unknown>(key), audit))
+        throw new Error("Historical failure backup changed")
+      const prior = this.quarantined()
+      const retained = prior.some((value) => isDeepStrictEqual(value, entry)) ? prior : [...prior, entry]
+      await this.storage.update(quarantine, retained)
+      if (!same() || !isDeepStrictEqual(this.quarantined(), retained))
+        throw new Error("Historical quarantine publication changed")
+      try {
+        if (!isDeepStrictEqual(await archive(file, entry, metadata), reviewed) || !same())
+          throw new Error("Fresh-start inputs changed after backup")
+        await this.activate(entry, next, metadata, key, audit, reviewed, retained)
+        this.original = undefined
+        this.managedEntry = undefined
+      } catch (err) {
+        const current = this.storage.get<Record<string, unknown>>(key)
+        if (
+          current?.phase === "applied" &&
+          isDeepStrictEqual(current, { ...audit, phase: "applied", absence: current.absence })
+        )
+          await this.storage.update(key, audit)
+        await this.restore(entry, next, metadata, err, key, audit)
+      }
+    })
+  }
+
+  private async activate(
+    entry: unknown,
+    next: unknown,
+    metadata: unknown,
+    key: string,
+    audit: object,
+    reviewed: Awaited<ReturnType<typeof archive>>,
+    retained: unknown,
+  ) {
+    const absence = await absent(reviewed)
+    this.reusable(reviewed.setup, reviewed.managed)
+    if (!isDeepStrictEqual(this.storage.get<unknown>(state), entry) || !isDeepStrictEqual(this.pending(), metadata))
+      throw new Error("Fresh-start setup changed during admission")
+    await this.storage.update(state, next)
+    if (!isDeepStrictEqual(this.storage.get<unknown>(state), next) || !isDeepStrictEqual(this.pending(), metadata))
+      throw new Error("Fresh-start setup publication changed")
+    await this.storage.update(debt, undefined)
+    if (!isDeepStrictEqual(this.storage.get<unknown>(state), next) || this.pending() !== undefined)
+      throw new Error("Fresh-start active journal changed")
+    await this.storage.update(key, { ...audit, phase: "applied", absence })
+    if (
+      !isDeepStrictEqual(this.storage.get<unknown>(key), { ...audit, phase: "applied", absence }) ||
+      !isDeepStrictEqual(this.storage.get<unknown>(state), next) ||
+      this.pending() !== undefined ||
+      !isDeepStrictEqual(this.quarantined(), retained)
+    )
+      throw new Error("Historical failure archive changed")
+  }
+
+  private quarantined() {
+    const raw = this.storage.get<unknown>(quarantine)
+    if (raw === undefined) return []
+    if (!Array.isArray(raw) || raw.length > 128) throw new Error("Invalid historical Memory quarantine")
+    return raw.map((value) => this.entry(value))
+  }
+
+  private reusable(setup: Setup, managed?: Descriptor) {
+    for (const prior of this.quarantined()) {
+      if (parse(prior.setup).origin === setup.origin) throw new Error("Quarantined Memory address cannot be reused")
+      if (!managed || !prior.managed) continue
+      for (const old of Object.values(prior.managed.namespaces)) {
+        for (const fresh of Object.values(managed.namespaces)) {
+          const a = normalize(old.root)
+          const b = normalize(fresh.root)
+          if (a === b || a.startsWith(b + "/") || b.startsWith(a + "/"))
+            throw new Error("Quarantined Memory namespace cannot be reused")
+        }
+      }
+    }
+  }
+
   record(value: unknown, lease?: object) {
     const metadata = value === undefined ? undefined : journal(value)
     return this.serial(async () => {
@@ -348,6 +460,7 @@ export class BrainSettings {
   }
 
   private async publish(setup: Setup, key: string, managed?: Descriptor) {
+    this.reusable(setup, managed)
     const previous = this.storage.get<unknown>(state)
     const prior = previous === undefined ? undefined : this.entry(previous)
     if (prior?.managed && this.pending()) throw new Error("Original managed debt must settle before replacement")
@@ -365,7 +478,8 @@ export class BrainSettings {
         })
       throw err
     }
-    if (prior) await this.secrets.delete(prior.credential)
+    if (prior && !this.quarantined().some((value) => value.credential === prior.credential))
+      await this.secrets.delete(prior.credential)
   }
 
   clear() {
@@ -381,7 +495,8 @@ export class BrainSettings {
         throw new Error("Retained original managed launch must close before removal")
     }
     await this.storage.update(state, undefined)
-    if (prior !== undefined) await this.secrets.delete(this.entry(prior).credential)
+    if (prior !== undefined && !this.quarantined().some((value) => value.credential === this.entry(prior).credential))
+      await this.secrets.delete(this.entry(prior).credential)
   }
 
   private serial(body: () => Promise<void>) {

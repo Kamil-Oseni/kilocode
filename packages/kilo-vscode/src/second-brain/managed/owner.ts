@@ -23,6 +23,7 @@ export class Pipes {
   readonly eof = { stdout: false, stderr: false }
   private phases = new Set<string>()
   private terminal = false
+  private failure?: string
   private prestart = false
   private started = false
   private ending?: Promise<unknown>
@@ -83,6 +84,19 @@ export class Pipes {
     if (!row || typeof row !== "object" || Array.isArray(row)) return
     if (row?.format === "raya.memory.disposable.supervisor.phase" && typeof row.phase === "string")
       this.phases.add(row.phase)
+    if (
+      row.format === "raya.memory.disposable.supervisor.closed" &&
+      row.passed === false &&
+      Array.isArray(row.errors)
+    ) {
+      const names = row.errors
+        .slice(0, 8)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && /^[A-Z][A-Za-z0-9_]{0,63}(Error|Exception|Group)$/.test(value),
+        )
+      this.failure = names.length ? names.join(", ") : "Unspecified producer failure"
+    }
     if (row.passed !== true || !Array.isArray(row.errors) || row.errors.length !== 0) return
     if (row.format === "raya.memory.disposable.supervisor.closed" && row.control_joined === true) this.terminal = true
     if (
@@ -143,7 +157,8 @@ export class Pipes {
     const [exit] = await Promise.all([this.exit, this.closed, ...this.readers])
     check(
       exit.code === 0 && exit.signal === null && this.eof.stdout && this.eof.stderr && !this.errors.length,
-      "Original managed child or streams did not close successfully",
+      "Original managed child or streams did not close successfully" +
+        (this.failure ? `; producer errors: ${this.failure}` : ""),
     )
     return Object.freeze({
       pid: this.child.pid,

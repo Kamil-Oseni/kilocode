@@ -15,7 +15,7 @@ import { protect } from "../../src/second-brain/control/protection"
 import { observe } from "../../src/second-brain/control/identity"
 import { packaged } from "../../src/second-brain/control/index"
 import { BrainService } from "../../src/second-brain/service"
-import { project, generation } from "../../src/second-brain/managed/generation"
+import { project, generation, fresh } from "../../src/second-brain/managed/generation"
 import { command } from "../../src/second-brain/control/command"
 import { BrainSettings } from "../../src/second-brain/settings"
 import ts from "typescript"
@@ -581,6 +581,22 @@ test("fresh generation creates protected original namespaces accepted by real Py
     expect(memory.directories).toEqual(retrieval.directories)
     expect(next.python.path).toBe(python)
     expect(memory.files).toEqual(retrieval.files)
+    const replacement = path.join(value.root, "raya-memory-fresh-" + "c".repeat(32))
+    const separate = await fresh(observed, replacement, files)
+    const newproof = path.join(value.root, "administrative-fresh-witness.json")
+    await publish(newproof, separate.namespaces)
+    const checked = await command(
+      python,
+      ["-I", "-S", "-B", "-c", script, path.resolve("script/memory/service/namespace.py"), newproof],
+      { windowsHide: true },
+    )
+    expect(checked.stdout.trim()).toBe("verified-two-namespaces")
+    expect(separate.namespaces.memory.root).toBe(path.join(replacement, "memory"))
+    expect(separate.namespaces.retrieval.root).toBe(path.join(replacement, "retrieval"))
+    await expect(fresh(observed, replacement, files)).rejects.toThrow()
+    await expect(fresh(observed, path.join(launch.root, "raya-memory-fresh-" + "d".repeat(32)), files)).rejects.toThrow(
+      "Explicit fresh generation",
+    )
     const failed = { root: path.join(value.root, "memory", "Runs", "b".repeat(32)) }
     await writeFile(path.join(value.root, "source", "memory", "namespace.py"), "# changed private fixture")
     await expect(generation(observed, failed, files)).rejects.toThrow("Reviewed namespace observer required")

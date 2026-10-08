@@ -1,0 +1,172 @@
+import path from "node:path"
+import { readdir } from "node:fs/promises"
+import { isDeepStrictEqual } from "node:util"
+import { check, document, object } from "./control/frames"
+import { directory, image, normalize, powershell, environment } from "./control/identity"
+import { command } from "./control/command"
+import { inspect, fingerprint } from "./failed-repair"
+import { descriptor, receipt, selection } from "./managed/descriptor"
+import { parse } from "./settings"
+import { parse as value } from "./managed/value"
+
+async function retained(input: unknown) {
+  const ref = receipt(input)
+  await directory(path.dirname(ref.path))
+  const file = await image(ref.path, 65536)
+  check(
+    file.raw.length === ref.bytes && file.digest === ref.sha256 && file.tuple === ref.tuple,
+    "Archived original image changed",
+  )
+  return object(document(file.raw, 65536).value)
+}
+
+function disjoint(a: string, b: string) {
+  const left = normalize(a)
+  const right = normalize(b)
+  return left !== right && !left.startsWith(right + "/") && !right.startsWith(left + "/")
+}
+
+async function originals(old: Awaited<ReturnType<typeof inspect>>) {
+  const original = await retained(old.original)
+  check(
+    original.format === "raya.memory.managed.pair.originals" && original.version === 2,
+    "Exact historical original pair required",
+  )
+  const pair = object(original.originals)
+  check(Object.keys(pair).sort().join() === "memory,retrieval", "Historical paired identities required")
+  const pids: number[] = []
+  for (const kind of ["memory", "retrieval"] as const) {
+    const ref = receipt(pair[kind])
+    check(
+      normalize(ref.path) === normalize(path.join(path.dirname(old.original.path), `managed-${kind}-original.json`)),
+      "Historical original location differs",
+    )
+    const producer = await retained(ref)
+    check(
+      producer.format === "raya.memory.managed.pair.original" &&
+        producer.version === 2 &&
+        producer.kind === kind &&
+        isDeepStrictEqual(producer.selected, original.selected) &&
+        producer.nativeFamilyRetirement === false,
+      "Historical producer identity differs",
+    )
+    const identity = object(producer.identity)
+    check(
+      Number.isSafeInteger(identity.pid) &&
+        Number(identity.pid) > 0 &&
+        Number.isSafeInteger(identity.parent) &&
+        Number(identity.parent) > 0 &&
+        typeof identity.birth === "string" &&
+        /^\d{1,20}$/.test(identity.birth) &&
+        identity.digest === old.cfg.python.sha256 &&
+        typeof identity.executable === "string" &&
+        normalize(identity.executable) === normalize(old.cfg.python.path),
+      "Historical process selection differs",
+    )
+    pids.push(Number(identity.pid))
+  }
+  return pids
+}
+
+/** Historical failure is quarantined, never accepted as joined or settled. */
+export async function review(file: string, entry: unknown, pending: unknown) {
+  await directory(path.dirname(file))
+  const held = await image(file, 65536)
+  const input = object(document(held.raw, 65536).value)
+  check(
+    Object.keys(input).sort().join() === "format,managed,observation,setup,version" &&
+      input.format === "raya.memory.failed-search.fresh-start" &&
+      input.version === 1,
+    "Explicit reviewed fresh-start selection required",
+  )
+  const witness = receipt(input.observation)
+  const old = await inspect(witness.path, entry, pending)
+  check(
+    old.held.digest === witness.sha256 && old.held.raw.length === witness.bytes && old.held.tuple === witness.tuple,
+    "Fresh-start observation changed",
+  )
+  const setup = parse(input.setup)
+  const cfg = descriptor(input.managed)
+  check(
+    setup.version === 2 &&
+      setup.protocol === old.setup.protocol &&
+      setup.root === old.setup.root &&
+      setup.origin !== old.setup.origin &&
+      fingerprint(setup.source_sha256) === fingerprint(old.setup.source_sha256),
+    "Fresh setup must preserve reviewed notes/release and use a different address",
+  )
+  check(
+    cfg.version === 2 &&
+      cfg.python.sha256 === old.cfg.python.sha256 &&
+      cfg.supervisor.sha256 === old.cfg.supervisor.sha256,
+    "Reviewed paired fresh runtime required",
+  )
+  const spaces = Object.values(cfg.namespaces)
+  check(disjoint(spaces[0].root, spaces[1].root), "Separate fresh service namespaces required")
+  for (const space of spaces) {
+    check(
+      Object.values(old.cfg.namespaces).every((prior) => disjoint(prior.root, space.root)),
+      "Old operation namespace cannot be reused",
+    )
+    for (const kind of ["Runs", "Requests"]) {
+      await directory(path.join(space.root, kind))
+      check((await readdir(path.join(space.root, kind))).length === 0, "Unused fresh operation namespace required")
+    }
+  }
+  const fresh = await selection(cfg, setup)
+  const pids = await originals(old)
+  const prior = await image(old.cfg.plan.path, 16777216)
+  check(
+    prior.raw.length === old.cfg.plan.bytes && prior.digest === old.cfg.plan.sha256,
+    "Historical service plan changed",
+  )
+  const plan = object(value(prior.raw))
+  const env = object(plan.env)
+  const ports = [
+    Number(new URL(old.setup.origin).port),
+    Number(env.RAYA_RETRIEVAL_PORT),
+    Number(fresh.plan.port),
+    Number(fresh.retrieval!.port),
+  ]
+  check(
+    ports.every((port) => Number.isSafeInteger(port) && port > 0 && port <= 65535) &&
+      ports.slice(2).every((port) => !ports.slice(0, 2).includes(port)),
+    "Fresh service ports must differ",
+  )
+  return Object.freeze({
+    request: old.selected.request,
+    root: setup.root,
+    setup,
+    managed: cfg,
+    selection: Object.freeze({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple }),
+    observation: witness,
+    pids: Object.freeze([...new Set(pids)]),
+    ports: Object.freeze(ports),
+    outcome: "failed" as const,
+    closure: "unproven" as const,
+    settlement: false as const,
+    qualification:
+      "Explicit quarantine and fresh namespace admission; no historical producer, native family or cold settlement authority",
+  })
+}
+
+/** Current absence is only admission to new ports; it proves no historical lifecycle. */
+export async function absent(input: Awaited<ReturnType<typeof review>>) {
+  const script = `$ErrorActionPreference='Stop'; $pids=@(${input.pids.join(",")}); $ports=@(${input.ports.join(",")}); $processes=@(Get-CimInstance Win32_Process | Where-Object {$_.ProcessId -in $pids}); $listeners=@(Get-NetTCPConnection -State Listen | Where-Object {$_.LocalPort -in $ports}); if($processes.Count -or $listeners.Count){throw 'Historical process or selected service port remains present'}; [ordered]@{processes=0;listeners=0}|ConvertTo-Json -Compress`
+  const result = await command(
+    powershell(),
+    ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
+    { env: environment(), windowsHide: true },
+  )
+  check(
+    isDeepStrictEqual(JSON.parse(result.stdout), { processes: 0, listeners: 0 }),
+    "Fresh-start absence observation refused",
+  )
+  return Object.freeze({
+    observed: Date.now(),
+    pids: input.pids,
+    ports: input.ports,
+    helper: result.receipt,
+    qualification: "Current process/listener absence only; historical closure unproven",
+  })
+}

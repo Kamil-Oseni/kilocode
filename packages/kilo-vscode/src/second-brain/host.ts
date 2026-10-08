@@ -454,6 +454,7 @@ export class BrainHost {
       ),
       vscode.commands.registerCommand("raya.memory.reconcileOperation", () => this.service.reconcile()),
       vscode.commands.registerCommand("raya.memory.repairFailedSearch", () => this.repair()),
+      vscode.commands.registerCommand("raya.memory.archiveFailedSetup", () => this.archive()),
       vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
     )
     const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
@@ -490,6 +491,7 @@ export class BrainHost {
         "check",
         "reconcile",
         "repair",
+        "archive",
         "disconnect",
         "controlSetup",
         "review",
@@ -743,6 +745,11 @@ export class BrainHost {
       send(await this.service.reconcile())
       return true
     }
+    if (action === "archive") {
+      await this.archive()
+      send(await this.service.status())
+      return true
+    }
     if (action !== "repair") return false
     await this.repair()
     send(await this.service.status())
@@ -836,6 +843,24 @@ export class BrainHost {
         "Recover failed search",
       )
       return accepted === "Recover failed search"
+    })
+  }
+
+  private async archive() {
+    if (!vscode.workspace.isTrusted) throw new Error("Trusted workspace required for Memory recovery")
+    const selected = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: { "Fresh Memory setup": ["json"] },
+      title: "Select the reviewed fresh-start Memory setup",
+    })
+    if (!selected?.[0] || selected[0].scheme !== "file") return
+    await this.service.archive(selected[0].fsPath, async (review) => {
+      const accepted = await vscode.window.showWarningMessage(
+        `Archive failed setup and start fresh for ${review.root}? Search ${review.request} failed without downstream requests. Its original shutdown is unproven. The old setup, credential reference and request remain in a quarantined audit. Trust fresh setup SHA-256 ${review.selection.sha256} and observation ${review.observation.sha256}. New service addresses and request folders will be used. Your notes are preserved; the failed search is not retried.`,
+        { modal: true },
+        "Archive and start fresh",
+      )
+      return accepted === "Archive and start fresh"
     })
   }
 

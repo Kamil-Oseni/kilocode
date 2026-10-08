@@ -25,7 +25,7 @@ const labels: Record<string, string> = {
   source_policy_required: "Choose notes and approve their source policy before indexing.",
   source_index_required: "Approve and index your notes before searching their contents.",
   closed_pair_recovery_required:
-    "The saved Memory launch needs its original shutdown receipt verified before a fresh start.",
+    "The saved Memory shutdown is unconfirmed. Restore its verified original receipt, or review a separate fresh setup.",
   control_uncertain:
     "An earlier Memory operation has not finished recovery. Inspect its original request in this session before continuing.",
 }
@@ -145,8 +145,10 @@ export function SecondBrain() {
             <Button onClick={() => request("repair")} disabled={!state().configured || busy()}>
               Recover prior failed search
             </Button>
-            <Button onClick={() => request("archive")} disabled={!state().configured || busy()}>
-              Archive failed setup and start fresh
+          </Show>
+          <Show when={["control_uncertain", "closed_pair_recovery_required"].includes(state().code ?? "")}>
+            <Button onClick={() => request("archive")} disabled={busy()}>
+              Archive prior setup and start fresh
             </Button>
           </Show>
           <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>

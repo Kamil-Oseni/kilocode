@@ -115,6 +115,11 @@
     },
     "commands": [
       {
+        "command": "raya.memory.archiveFailedSetup",
+        "title": "Archive Failed Memory Setup and Start Fresh",
+        "category": "Raya"
+      },
+      {
         "command": "raya.memory.startDream",
         "title": "Consolidate Approved Memories",
         "category": "Raya"

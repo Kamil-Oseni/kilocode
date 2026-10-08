@@ -58,6 +58,11 @@ def clean(root):
         raise RecoveryNeeded('An interrupted note change requires explicit recovery before indexing.')
 
 
+def recorded(folder, stamp, sources):
+    links = [f"[{source['kind']}](<{(folder / ('source-' + str(index) + '.txt')).as_posix()}>)" for index, source in enumerate(sources)]
+    return '\n\nRecorded update: ' + stamp + '. Source snapshots: ' + ', '.join(links) + '.\n'
+
+
 class Store:
     def __init__(self, root):
         self.root = Path(root).absolute()
@@ -197,8 +202,7 @@ class Store:
                 raise ValueError('Supply 1–16 note changes.')
             sources = self.sources(request['sources'])
             stamp = datetime.now(timezone.utc).isoformat()
-            links = [f"[{source['kind']}](<{(folder / ('source-' + str(index) + '.txt')).as_posix()}>)" for index, (source, _) in enumerate(sources)]
-            footer = '\n\nRecorded update: ' + stamp + '. Source snapshots: ' + ', '.join(links) + '.\n'
+            footer = recorded(folder, stamp, [source for source, _ in sources])
             entries = []
             names = set()
             total = 0

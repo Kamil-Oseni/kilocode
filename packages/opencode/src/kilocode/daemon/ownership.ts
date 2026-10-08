@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import { realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import z from "zod"
@@ -9,6 +8,7 @@ import { Process } from "@/util/process"
 import { PowerShell, pwsh } from "@/kilocode/shell/shell"
 import * as Windows from "@/kilocode/background-process/windows-tree"
 import { decode, refused, type ImagePhase } from "./image-diagnostic"
+import { digest as hash } from "@opencode-ai/core/kilocode/file-digest"
 
 export const Certificate = z.object({
   version: z.literal(1),
@@ -98,13 +98,7 @@ export async function image(pid: number) {
     const executable = await canonical(file)
     phase = "bytes"
     const before = await stat(file)
-    const digest = createHash("sha256")
-      .update(
-        await Bun.file(file)
-          .arrayBuffer()
-          .then((buffer) => Buffer.from(buffer)),
-      )
-      .digest("hex")
+    const digest = await hash(file)
     const after = await stat(file)
     if (
       before.dev !== after.dev ||

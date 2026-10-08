@@ -1,3 +1,4 @@
+/// <reference path="./ws.d.ts" />
 // Use the pinned package's published server entry explicitly: Bun replaces bare
 // ws, while the CLI's browser condition otherwise selects the browser-only stub.
 import { WebSocketServer, type WebSocket } from "../../../node_modules/@raya/ws/wrapper.mjs"

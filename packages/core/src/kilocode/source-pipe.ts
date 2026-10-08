@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process"
-import { createHash, randomUUID } from "node:crypto"
-import { readFile, realpath } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { realpath } from "node:fs/promises"
 import z from "zod"
 import { NativeProcess } from "./process-host"
+import { digest as hash } from "./file-digest"
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 export const IdentitySchema = z
@@ -18,10 +19,6 @@ export const DescriptorSchema = z
   .strict()
 export type Descriptor = Readonly<{ name: string; server: Readonly<z.infer<typeof IdentitySchema>> }>
 export type Pin = Readonly<{ executable: string; digest: string }>
-const hash = async (file: string) =>
-  createHash("sha256")
-    .update(await readFile(file))
-    .digest("hex")
 async function image(pin?: Pin) {
   const file = await NativeProcess.source(pin?.executable)
   if (pin && (await realpath(file)).toLowerCase() !== (await realpath(pin.executable)).toLowerCase())

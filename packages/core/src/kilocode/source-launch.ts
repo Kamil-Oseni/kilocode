@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto"
-import { mkdtemp, open, readFile, realpath, stat } from "node:fs/promises"
+import { mkdtemp, open, realpath, stat } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import z from "zod"
@@ -10,6 +10,7 @@ import { validateObservation } from "./profile-observation"
 import { observe as watch } from "./source-observer"
 import { SourcePolicySchema, covers, validatePolicy, type SourcePolicy } from "./source-policy"
 import { DescriptorSchema, IdentitySchema, type Descriptor } from "./source-pipe"
+import { digest as sum } from "./file-digest"
 
 const uuid = z.string().uuid()
 const birth = z
@@ -91,7 +92,6 @@ async function drain(stream: ReturnType<typeof spawn>["stdout"]) {
 
 const same = (left: string, right: string) => left.toLowerCase() === right.toLowerCase()
 const hash = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex")
-const sum = async (file: string) => hash(await readFile(file))
 async function canonical(file: string): Promise<string> {
   if (!path.isAbsolute(file) || path.normalize(file) !== file || file.includes("\0"))
     throw new Error("Source launch path is not absolute and normalized")

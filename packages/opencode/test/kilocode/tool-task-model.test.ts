@@ -25,6 +25,9 @@ import { RayaToolModel } from "../../src/kilocode/chief/tool-model"
 import { TaskTool, Parameters, type TaskPromptOps } from "../../src/tool/task"
 import { ToolJsonSchema } from "../../src/tool/json-schema"
 import { Truncate } from "../../src/tool/truncate"
+import { Storage } from "../../src/storage/storage"
+import { RayaGoal } from "../../src/kilocode/goal"
+import * as GoalInput from "../../src/kilocode/goal/task-input"
 import { ToolRegistry } from "../../src/tool/registry"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -119,6 +122,7 @@ const it = testEffect(
       Truncate.node,
       Provider.node,
       ToolRegistry.node,
+      Storage.node,
       Database.node,
     ]),
   ),
@@ -215,6 +219,7 @@ function run(input: {
   config?: Pick<Config.Info, "small_model" | "subagent_model" | "subagent_variant" | "subagent_variant_overrides">
   workflow?: { model: typeof cfg; variant?: string }
   resume?: boolean
+  goal?: boolean
 }) {
   return provideTmpdirInstance(
     () =>
@@ -223,6 +228,10 @@ function run(input: {
         if (input.state) yield* writeState(input.state)
 
         const { chat, assistant } = yield* seed(input.agent, input.variant)
+        const sessions = yield* Session.Service
+        const goals = input.goal ? RayaGoal.make({ storage: yield* Storage.Service, sessions }) : undefined
+        const goal = goals ? yield* goals.create(chat.id, "inspect resolution", assistant.parentID) : undefined
+        if (goals) yield* Effect.addFinalizer(() => goals.clear(chat.id))
         const tool = yield* TaskTool
         const def = yield* tool.init()
         if (input.omit) {
@@ -234,7 +243,6 @@ function run(input: {
         const receipts: unknown[] = []
         let seen: SessionPrompt.PromptInput | undefined
         const promptOps = stubOps({ onPrompt: (value) => (seen = value) })
-        const sessions = yield* Session.Service
         const jobs = yield* BackgroundJob.Service
         const resumed = input.resume
           ? yield* sessions.create({ parentID: chat.id, agent: input.agent, title: "Existing child" })
@@ -298,6 +306,11 @@ function run(input: {
         if (retained?.type === "tool" && retained.state.status === "running") {
           expect(retained.state.metadata?.provenance).toEqual(result.metadata.provenance)
           expect(retained.state.metadata?.childMessageID).toBe(seen?.messageID)
+          if (goal) {
+            const scope = { version: 1, sessionID: chat.id, intent: goal.intent, createdAt: goal.createdAt }
+            expect(retained.state.metadata?.[GoalInput.key]).toEqual(scope)
+            expect(result.metadata[GoalInput.key]).toEqual(scope)
+          }
         }
         const provenance = result.metadata.provenance
         if (!provenance || !seen?.model)
@@ -379,6 +392,10 @@ it.live("supplied display label remains the actual child title", () =>
       expect(result.title).toBe("Inspect API ownership \u00b7 Worker")
     }),
   ),
+)
+
+it.live("actual Task admission retains its active parent goal intent in both receipts", () =>
+  run({ agent: "worker", goal: true }),
 )
 
 describe("tool.task model resolution", () => {

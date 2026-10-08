@@ -1961,6 +1961,39 @@ export namespace RayaGoal {
       })
     })
 
+    /** The Task input boundary verifies parent ownership before calling this internal intake. */
+    const follow = Effect.fn("RayaGoal.follow")(function* (
+      sessionID: SessionID,
+      intent: string,
+      messageID: MessageID,
+      worker: string,
+    ) {
+      const state = yield* get(sessionID)
+      if (!state || state.status !== "active" || state.intent !== intent || !worker.trim() || !state.inputs?.length)
+        return
+      if (state.inputs.includes(messageID)) return
+      const rows = yield* deps.sessions.messages({ sessionID })
+      const users = rows.filter((row) => row.info.role === "user")
+      const latest = users
+        .toSorted((a, b) => a.info.time.created - b.info.time.created || a.info.id.localeCompare(b.info.id))
+        .at(-1)
+      if (!latest || latest.info.id !== messageID || latest.info.time.created < state.createdAt) return
+      if (users.filter((row) => row.info.id === messageID).length !== 1) return
+      yield* save(sessionID, {
+        ...state,
+        inputs: [...state.inputs, messageID],
+        dispatch: {
+          id: crypto.randomUUID(),
+          messageID,
+          intent,
+          phase: "started",
+          worker,
+          queuedAt: latest.info.time.created,
+          startedAt: Date.now(),
+        },
+      })
+    })
+
     const bound = Effect.fn("RayaGoal.bound")(function* (sessionID: SessionID, id: string, worker: string) {
       const state = yield* get(sessionID)
       const dispatch = state?.dispatch
@@ -2325,6 +2358,7 @@ export namespace RayaGoal {
       finished,
       bound,
       initial,
+      follow,
     }
   }
 }

@@ -28,6 +28,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Permission } from "@/permission" // raya_change - Milestone D auto-routing respects inherited task denies
 import { RayaChief } from "@/kilocode/chief" // raya_change - Milestone B enforced Auto decision
 import * as GoalChildren from "@/kilocode/goal/children" // kilocode_change - raya_change: goal child reservations
+import * as GoalInput from "@/kilocode/goal/task-input" // kilocode_change - retain exact parent goal ownership on Task inputs
 import { RayaGoal } from "@/kilocode/goal" // kilocode_change - validate Auto edit goal state
 import { Storage } from "@/storage/storage" // kilocode_change - raya_change: durable goal child limit
 import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B preserved target model
@@ -795,6 +796,7 @@ export const TaskTool = Tool.define(
         parentSessionId: SessionID
         sessionId: SessionID
         childMessageID?: MessageID // kilocode_change - older results lack verifiable input lineage
+        [GoalInput.key]?: GoalInput.Scope // kilocode_change - authenticated parent goal intent for retained input evidence
         selectedAgent?: string
         displayName?: string // raya_change - durable identity for compact child monitors
         [TaskAuthority.key]?: { version: 1; access: TaskAuthority.Access } // kilocode_change - verified child authority
@@ -811,6 +813,7 @@ export const TaskTool = Tool.define(
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
         childMessageID: message, // kilocode_change
+        ...(yield* GoalInput.stamp(storage, ctx.sessionID)), // kilocode_change - fence later child repairs to this unchanged parent goal
         selectedAgent: next.name, // raya_change - expose Chief routing to parent and nested UI
         displayName, // raya_change
         ...(authority ? { [TaskAuthority.key]: { version: 1 as const, access: authority } } : {}), // kilocode_change

@@ -211,7 +211,7 @@ Then read get_goal again. If a genuine decision only the user can make prevents 
 
 Include every saved criterion in the audit. A criterion explicitly marked required=false may remain unverified with passed=false and an empty evidence list; all claimed successes still require evidence.
 
-Immediately before update_goal(status="complete"), derive every concrete requirement from get_goal and cite real successful tool evidence for each one. Complete the goal only when the full objective is evidenced. Give concise progress updates without exposing private chain-of-thought.
+Immediately before update_goal(status="complete"), derive every concrete requirement from get_goal and cite real successful tool evidence for each one. Copy callID, messageID, partID and sessionID from the recorded evidence as separate fields; never construct a callID by joining IDs. On audit refusal, repair the specific failed requirement. If current byte-equality guidance says the files match, correct the cited read receipts without rewriting the files or repeating delegated work. Complete the goal only when the full objective is evidenced. Give concise progress updates without exposing private chain-of-thought.
 </system-reminder>`
 
 /** The goal text is written last, after any attachment parts, and closes the saved intake. */

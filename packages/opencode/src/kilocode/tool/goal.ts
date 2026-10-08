@@ -14,6 +14,7 @@ import { ChiefVerification } from "@/kilocode/chief/verification"
 import { example } from "@/kilocode/task-resume"
 import { RayaChief } from "@/kilocode/chief"
 import { associate } from "@/kilocode/goal/turn"
+import { repair as intake } from "@/kilocode/goal/task-input"
 import type { SessionRunState } from "@/session/run-state"
 
 type Goals = ReturnType<typeof RayaGoal.make>
@@ -123,6 +124,8 @@ export function goalTools(
       }),
       execute: (input: { before?: string }, ctx) =>
         Effect.gen(function* () {
+          const current = Option.getOrUndefined(yield* Effect.serviceOption(Session.Service))
+          if (current) yield* intake(goals, current, ctx.sessionID).pipe(Effect.orDie)
           const goal = yield* goals.get(ctx.sessionID)
           if (!goal) {
             yield* phase(ctx.sessionID, "done")

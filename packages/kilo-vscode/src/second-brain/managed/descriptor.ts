@@ -6,6 +6,7 @@ import { release } from "../control/catalog-v2"
 import type { Setup } from "../settings"
 import { interpreter, supervisor, retrieval as release7 } from "./catalog"
 import { images, fingerprint } from "./reuse-catalog"
+import { parse } from "./value"
 
 type Ref = Readonly<{ path: string; bytes: number; sha256: string }>
 type Notes = Readonly<{ root: string; system: string; generations: Readonly<Record<string, readonly string[]>> }>
@@ -174,10 +175,7 @@ function reusable(memory: Record<string, unknown>, retrieval: Record<string, unk
   const reuse = protocol === "raya.retrieval.request.settlement.v2"
   const env = row(retrieval.env)
   const original = row(memory.env)
-  check(
-    choice(original, "RAYA_MEMORY_RETRIEVAL_PROTOCOL") === protocol,
-    "Paired Retrieval protocol differs",
-  )
+  check(choice(original, "RAYA_MEMORY_RETRIEVAL_PROTOCOL") === protocol, "Paired Retrieval protocol differs")
   if (reuse)
     check(
       env.RAYA_RETRIEVAL_RELEASE_SHA256 === fingerprint &&
@@ -276,8 +274,7 @@ export async function selection(input: Descriptor, setup: Setup) {
       return value
     }),
   )
-  const decoded = document(files[2].raw, 16777216, 1000000)
-  const plan = row(decoded.value)
+  const plan = row(parse(files[2].raw))
   check(
     plan.format === "raya.memory.managed.supervisor" &&
       plan.version === 1 &&
@@ -323,7 +320,7 @@ export async function selection(input: Descriptor, setup: Setup) {
       check(isDeepStrictEqual(tokens, selected.generations[name]), "Original uint64 generation differs")
     }
   }
-  const retrieval = cfg.version === 2 ? row(document(files[3].raw, 16777216, 1000000).value) : undefined
+  const retrieval = cfg.version === 2 ? row(parse(files[3].raw)) : undefined
   if (retrieval) paired(cfg, plan, retrieval)
   return Object.freeze({ cfg, plan, files, retrieval })
 }

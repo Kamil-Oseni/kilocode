@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { spawn } from "../../src/util/process"
@@ -72,22 +72,25 @@ test("missed shutdown publication recovers only the exact closed pair after its 
   const key = "raya.secondBrain.setup"
   try {
     await storage.update(key, value.running)
-    await expect(cfg.load()).rejects.toBeInstanceOf(ClosedRequired)
     const reviewed = await closure(value.running as Parameters<typeof closure>[0])
     expect(reviewed.pids).toContain(child.pid)
     expect((await absent(reviewed)).helper.code).toBe(0)
     await cfg.resume(async () => false)
     expect(storage.get(key)).toEqual(value.running)
     const original = await readFile(value.closed.path)
+    const missing = value.closed.path + ".retained"
+    await rename(value.closed.path, missing)
+    await expect(cfg.load()).rejects.toBeInstanceOf(ClosedRequired)
+    expect(storage.get(key)).toEqual(value.running)
+    await rename(missing, value.closed.path)
     await writeFile(value.closed.path, original.toString().replace('"code":0', '"code":1'))
+    await expect(cfg.load()).rejects.toBeInstanceOf(ClosedRequired)
     await expect(cfg.resume(async () => true)).rejects.toThrow()
     expect(storage.get(key)).toEqual(value.running)
     await writeFile(value.closed.path, original)
     // Restoring bytes changes the tuple, so derive a fresh exact review rather than reuse prior authority.
-    await cfg.resume(async (review) => {
-      expect(review.closed.sha256).toBe(value.closed.sha256)
-      return true
-    })
+    const loaded = await Promise.all([cfg.load(), cfg.load()])
+    expect(loaded.map((item) => item?.launch?.predecessor?.sha256)).toEqual([value.closed.sha256, value.closed.sha256])
     expect(storage.get<{ launch: { phase: string } }>(key)?.launch.phase).toBe("closed")
     expect(cfg.pending()).toBeUndefined()
     const audit = storage.get<{ previous: unknown; requestSettlement: boolean; phase: string }>(

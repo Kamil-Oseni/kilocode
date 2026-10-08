@@ -85,6 +85,7 @@ export class BrainSettings {
   private original: { metadata: ReturnType<typeof journal>; lease: object } | undefined
   private managedEntry: ReturnType<BrainSettings["entry"]> | undefined
   private readonly launches = new WeakMap<object, Launch>()
+  private reopening?: Promise<void>
   constructor(
     private readonly storage: Pick<Memento, "get" | "update">,
     private readonly secrets: Pick<SecretStorage, "get" | "store" | "delete">,
@@ -112,8 +113,10 @@ export class BrainSettings {
     const prior = entry.launch as { phase: string; receipt: Receipt } | undefined
     const launch = await this.context(entry, setup)
     if (entry.launch && !launch && (!isDeepStrictEqual(entry, this.managedEntry) || prior?.phase !== "running")) {
-      if (entry.managed?.version === 2 && prior?.phase === "running")
-        throw new ClosedRequired("Saved running Memory pair remains retained; verified shutdown recovery is required")
+      if (entry.managed?.version === 2 && prior?.phase === "running") {
+        await this.reopen(entry)
+        return this.load()
+      }
       throw new Error("Original managed launch remains retained; restarted hosts cannot adopt or replay it")
     }
     const key = await this.secrets.get(entry.credential)
@@ -125,6 +128,24 @@ export class BrainSettings {
     this.loaded.set(setup, entry)
     if (launch) this.launches.set(setup, launch)
     return { setup, key, ...(entry.managed ? { managed: entry.managed } : {}), ...(launch ? { launch } : {}) }
+  }
+
+  private async reopen(entry: ReturnType<BrainSettings["entry"]>) {
+    // Reconcile only an exact original closure. Missing/live/uncertain owners
+    // and request debt still refuse; this never adopts a running producer.
+    if (!this.reopening)
+      this.reopening = this.resume(async () => isDeepStrictEqual(this.storage.get<unknown>(state), entry)).finally(
+        () => {
+          this.reopening = undefined
+        },
+      )
+    await this.reopening.catch((err: unknown) => {
+      throw new ClosedRequired("Saved running Memory pair remains retained; verified shutdown recovery is required", {
+        cause: err,
+      })
+    })
+    if (isDeepStrictEqual(this.storage.get<unknown>(state), entry))
+      throw new ClosedRequired("Original Memory setup changed before shutdown recovery")
   }
 
   private async context(entry: ReturnType<BrainSettings["entry"]>, setup: Setup) {

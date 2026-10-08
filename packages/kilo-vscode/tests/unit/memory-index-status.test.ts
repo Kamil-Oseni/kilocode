@@ -17,7 +17,7 @@ test("original authenticated cold index inspection is accepted by the host proje
     child.exited,
   ])
   expect(code, output + error).toBe(0)
-  expect(error).toContain("Ran 5 tests")
+  expect(error).toContain("Ran 6 tests")
   const proof = JSON.parse(output)
   expect(status(proof.index)).toEqual(proof.index)
   expect(status(proof.index).status).toBe("synced")

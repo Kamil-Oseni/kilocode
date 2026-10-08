@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse
-from index import Index, execute, Cancelled, PROTOCOL, CANCEL
+from index import Index, execute, Cancelled, PROTOCOL, CANCEL, operation
 from admission import Retirement, failures
 from operations import Journal
 from dispatch import prepare, submit
@@ -50,6 +50,7 @@ RECORDS = {}
 PROPOSALS = Proposals(NOTES)
 REVIEWS = set()
 REVIEW_ERRORS = []
+READS = {}
 ACTIVE = 0
 UNCERTAIN = False
 DRAIN = {'id': None, 'until': 0}
@@ -110,11 +111,18 @@ def integrity():
     return INDEX.store.pending() or PROPOSALS.pending()
 
 
-def inspection():
-    pending = integrity()
+def inspection(until, cancel):
+    with operation(until, cancel):
+        pending = integrity()
+        with GUARD:
+            idle = not (ACTIVE or UNCERTAIN or DRAIN['until'] > time.monotonic())
+        return pending, INDEX.inspect() if idle and not pending else None
+
+
+def inspected(future):
+    # Only original physical Future settlement releases this read slot.
     with GUARD:
-        idle = not (ACTIVE or UNCERTAIN or DRAIN['until'] > time.monotonic())
-    return pending, INDEX.inspect() if idle and not pending else None
+        READS.pop(future)
 
 
 def finish(record, future):
@@ -166,10 +174,21 @@ async def handle(request: Request, path: str):
     if not secrets.compare_digest(request.headers.get('authorization', ''), 'Bearer '+KEY):
         return fail('unauthorized', 'A local service token is required.', 401)
     if request.method == 'GET' and path == 'health':
-        check = STORAGE.submit(inspection)
+        until = time.monotonic() + 4
+        cancel = threading.Event()
+        with GUARD:
+            if READS:
+                return fail('inspection_pending', 'The original read is still settling.', 503)
+            check = STORAGE.submit(inspection, until, cancel)
+            READS[check] = {'until': until, 'cancel': cancel}
+        check.add_done_callback(inspected)
         try:
-            pending, index = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(check)), 15)
+            pending, index = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(check)), max(.001, until-time.monotonic()))
+        except asyncio.CancelledError:
+            cancel.set()
+            raise
         except Exception:
+            cancel.set()
             return fail('inspection_required', 'Memory identity or ownership is unconfirmed.', 503)
         with GUARD:
             value = {'ready': not (UNCERTAIN or pending), 'namespace_valid': True, 'retirement_unconfirmed': UNCERTAIN or (pending and ACTIVE == 0),
@@ -187,7 +206,7 @@ async def handle(request: Request, path: str):
         if request.headers.get('content-type', '').split(';')[0] != 'application/json':
             return fail('unsupported_media', 'Use application/json.', 415)
         with GUARD:
-            if UNCERTAIN or ACTIVE or DRAIN['until'] > time.monotonic() or not SLOTS.acquire(blocking=False):
+            if UNCERTAIN or ACTIVE or READS or DRAIN['until'] > time.monotonic() or not SLOTS.acquire(blocking=False):
                 return fail('admission_closed', 'Memory is busy or requires reconciliation.', 409)
         try:
             async def read():
@@ -306,7 +325,7 @@ async def handle(request: Request, path: str):
     except asyncio.TimeoutError:
         return fail('request_timeout', 'Request body timed out.', 408)
     with GUARD:
-        if UNCERTAIN or DRAIN['until'] > time.monotonic():
+        if UNCERTAIN or READS or DRAIN['until'] > time.monotonic():
             return fail('admission_closed', 'Memory admission is closed.', 503)
         if key in RECORDS:
             return fail('duplicate_request', 'Inspect the original request; do not resubmit it.', 409)

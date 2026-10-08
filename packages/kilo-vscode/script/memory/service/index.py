@@ -454,6 +454,7 @@ def ordinary(path):
 
 def measure(model=MODEL):
     """Use the pinned fast tokenizer without importing the model/torch stack."""
+    remaining()
     from tokenizers import Tokenizer
     path = Path(model['path']) / 'tokenizer.json'
     ordinary(path)
@@ -469,8 +470,15 @@ def measure(model=MODEL):
     cross = lambda row: (row.st_dev, row.st_ino, row.st_size, row.st_mtime_ns, row.st_nlink)
     if fields(opened) != fields(held) or cross(before) != cross(held) or fields(before) != fields(path.stat()) or len(raw) != selected[0]['bytes'] or digest(raw) != selected[0]['sha256']:
         raise Refused('Pinned tokenizer bytes or identity changed.')
+    remaining()
     value = Tokenizer.from_str(raw.decode('utf-8'))
-    return lambda text: len(value.encode(text, add_special_tokens=False).ids)
+    remaining()
+    def count(text):
+        remaining()
+        result = len(value.encode(text, add_special_tokens=False).ids)
+        remaining()
+        return result
+    return count
 
 
 def image(path):

@@ -7,6 +7,8 @@ import struct
 import sys
 import os
 import subprocess
+import threading
+import time
 from pathlib import Path
 import unittest
 from contextlib import closing
@@ -46,6 +48,31 @@ class HTTP(unittest.TestCase):
         self.assertEqual(result.json()['index'], {'status': 'synced', 'digest': sha})
         self.assertEqual(original.db.read_bytes(), before)
         print(json.dumps({'index': result.json()['index']}))
+
+    def test_queue_wait_consumes_deadline_and_original_read_remains_owned(self):
+        hold = threading.Event()
+        original = self.server.STORAGE.submit(hold.wait)
+        try:
+            started = time.monotonic()
+            self.assertEqual(self.health().status_code, 503)
+            self.assertLess(time.monotonic() - started, 5)
+            self.assertEqual(len(self.server.READS), 1)
+            retained = next(iter(self.server.READS))
+            self.assertFalse(retained.done())
+            self.assertTrue(self.server.READS[retained]['cancel'].is_set())
+            self.assertEqual(self.health().status_code, 503)
+            self.assertFalse(self.server.INDEX.db.exists())
+        finally:
+            hold.set()
+            original.result(timeout=5)
+        with self.assertRaises(Exception):
+            retained.result(timeout=5)
+        until = time.monotonic() + 1
+        while self.server.READS and time.monotonic() < until:
+            time.sleep(.001)
+        self.assertEqual(self.server.READS, {})
+        self.assertEqual(self.health().status_code, 200)
+        self.assertFalse(self.server.INDEX.db.exists())
 
     def test_changed_policy_or_disabled_sources_never_restore_ready(self):
         sha = self.policy()

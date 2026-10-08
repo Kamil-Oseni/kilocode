@@ -615,11 +615,18 @@ export namespace RayaTask {
         const seen = new Map<string, Event>()
         const inconsistent = events.some((event) => {
           const prior = seen.get(event.runID)
-          if (prior && (prior.sessionID !== event.sessionID || prior.stateRevision >= event.stateRevision)) return true
+          if (
+            prior &&
+            (prior.sessionID !== event.sessionID || prior.at !== event.at || prior.stateRevision >= event.stateRevision)
+          )
+            return true
           seen.set(event.runID, event)
           latest.set(event.runID, event)
           const run = runs.get(event.runID)
-          return !!run && (run.sessionID !== event.sessionID || (run.revision ?? 1) < event.stateRevision)
+          return (
+            !!run &&
+            (run.sessionID !== event.sessionID || run.at !== event.at || (run.revision ?? 1) < event.stateRevision)
+          )
         })
         if (
           !Number.isSafeInteger(value.cursor) ||

@@ -189,6 +189,12 @@ describe("routine event journal", () => {
           { ...saved, events: [{ ...first, id: "other" }, second] },
           { ...saved, events: [{ ...first, sequence: 0 }, second] },
           { ...saved, events: [{ ...first, sessionID: SessionID.make("ses_foreign") }, second] },
+          { ...saved, events: [{ ...first, at: first.at + 1 }, second] },
+          {
+            ...saved,
+            runs: saved.runs.slice(1),
+            events: [first, { ...first, id: second.id, sequence: 2, stateRevision: 2, at: first.at + 1 }],
+          },
           { ...saved, events: [{ ...first, stateRevision: 2 }, second] },
           { ...saved, events: [{ ...first, status: "running" }, second] },
           { ...saved, events: [{ ...first, runID: second.runID }, second] },

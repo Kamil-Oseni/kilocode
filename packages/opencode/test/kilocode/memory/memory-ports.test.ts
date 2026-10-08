@@ -475,9 +475,9 @@ describe("memory ports", () => {
         provider: {
           ...configured,
           getModel: (providerID, modelID) =>
-            configured.getModel(providerID, modelID).pipe(
-              Effect.map((model) => ({ ...model, options: { reasoningEffort: "none", stream: true } })),
-            ),
+            configured
+              .getModel(providerID, modelID)
+              .pipe(Effect.map((model) => ({ ...model, options: { reasoningEffort: "none", stream: true } }))),
           getLanguage: () => Effect.succeed(sdk.languageModel("fake-memory-model")),
         },
       })

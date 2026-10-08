@@ -79,15 +79,16 @@ export async function capture(token: object) {
       ].map((scope) => [`${key(scope.data)}:${key(scope.storage)}`, Object.freeze(scope)]),
     ).values(),
   ])
-  for (const root of [
-    ...closure.roots, // Include every authenticated root in the final held image; disposition still classifies payloads.
+  const bindings = [
+    ...profile.roots,
     ...namespaces.roots,
     ...namespaces.origins,
     ...artifacts,
     ...historical,
     ...(input.host ? [{ kind: "json" as const, path: input.host.file }] : []),
     ...scopes.map((scope) => ({ kind: "json" as const, path: scope.storage })),
-  ]) {
+  ]
+  for (const root of [...closure.roots, ...bindings]) {
     if (roots.some((parent) => parent.kind === root.kind && key(parent.path) === key(root.path))) continue
     roots.push(root)
   }
@@ -128,6 +129,7 @@ export async function capture(token: object) {
     ...planned.selfHeal.requirements.map((item) => ({ kind: "json" as const, path: item.path })),
     ...metadata,
   ]) {
+    bindings.push(root)
     if (!covers(closure.policy, root.path))
       throw new Error("Historical SQL workspace or Git namespace escapes the retired producer policy")
     if (!roots.some((parent) => parent.kind === root.kind && key(parent.path) === key(root.path))) roots.push(root)
@@ -175,7 +177,17 @@ export async function capture(token: object) {
               selfHealScopes: scopes,
               workspaces,
               config,
-              acknowledged: closure.roots,
+              // Selected component namespaces retain their explicit partial disposition.
+              // Additional acknowledged owners must not disappear from that selection.
+              acknowledged: closure.roots.filter(
+                (root) =>
+                  !bindings.some(
+                    (parent) =>
+                      parent.kind === root.kind &&
+                      (key(parent.path) === key(root.path) ||
+                        (parent.kind === "json" && key(root.path).startsWith(key(parent.path) + path.sep))),
+                  ),
+              ),
             }),
           ),
         )

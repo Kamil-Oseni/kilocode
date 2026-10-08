@@ -10,12 +10,28 @@ function relative(parent: string, file: string) {
 }
 
 /** Authenticated owners require proof from the final live held image, not policy containment. */
-export function assertCoverage(working: Working, roots: readonly Root[]) {
+export function assertCoverage(
+  working: Working,
+  roots: readonly Root[],
+  payload?: readonly { path: string; disposition: { kind: string } }[],
+) {
   const image = inventory(working)
   const files = new Set(image.files.map((file) => key(file.path)))
   const directories = new Map(image.directories?.map((dir) => [key(dir.path), dir]))
   const ancestors = image.roots.filter((root) => root.kind === "json" && root.directory && !root.absent)
   for (const root of roots) {
+    if (
+      payload?.some(
+        (file) =>
+          file.disposition.kind === "unclassified" &&
+          (root.kind === "json"
+            ? relative(root.path, file.path) !== undefined
+            : ["", "-wal", "-shm"].some((suffix) => key(root.path + suffix) === key(file.path))),
+      )
+    )
+      throw Object.assign(new Error("Acknowledged source state lacks a typed payload binding"), {
+        code: "RAYA_SOURCE_STATE_SCOPE_UNCOVERED",
+      })
     if (image.roots.some((item) => item.kind === root.kind && key(item.path) === key(root.path))) continue
     const anchors = root.kind === "json" ? ancestors.filter((item) => relative(item.path, root.path) !== undefined) : []
     if (anchors.length && files.has(key(root.path))) continue

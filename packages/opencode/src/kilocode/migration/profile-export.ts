@@ -49,6 +49,7 @@ import { bindRestoredComponents, restoredComponentValues } from "./profile-resto
 import { bindTui } from "./profile-tui-correspondence"
 import { bindRestoredSources, restoredSourceValues } from "./profile-restored-source-correspondence"
 import { bindHold } from "./profile-restore-hold-correspondence"
+import { assertCoverage } from "./source-image-coverage"
 
 type Root = Readonly<{ kind: "sqlite" | "json"; path: string }>
 const key = (root: Root) => `${root.kind}:${process.platform === "win32" ? root.path.toLowerCase() : root.path}`
@@ -69,6 +70,7 @@ export async function exportProfile(
     selfHealScopes?: readonly { data: string; storage: string }[]
     workspaces?: readonly string[]
     config?: z.output<typeof ConfigEvidence>
+    acknowledged?: readonly Root[]
   },
 ) {
   assertCapture(proof, roots)
@@ -226,7 +228,7 @@ export async function exportProfile(
       : []
   const sql = artifacts ? await bindSQL(artifacts.working, { sql: collected.sql, exports, stores }) : undefined
   const config = artifacts?.config ? await bindConfig(artifacts.working, artifacts.config, "selected") : undefined
-    const markdown = artifacts?.config ? bindMarkdown(artifacts.working, artifacts.config) : undefined
+  const markdown = artifacts?.config ? bindMarkdown(artifacts.working, artifacts.config) : undefined
   const correspondence = artifacts
     ? await bindGit(artifacts.working, { artifacts: git, secondary: additional.secondary })
     : undefined
@@ -271,68 +273,70 @@ export async function exportProfile(
     ? await bindGitMetadata(artifacts.working, { artifacts: git, secondary: additional.secondary })
     : undefined
   assertCapture(proof, roots)
-  return seal(
-    payload.parse({
-      format: "raya.profile-data",
-      version: 1,
-      id: crypto.randomUUID(),
-      createdAt: Date.now(),
-      ...collected,
-      config: artifacts?.config,
-      disposition: artifacts
-        ? collectDisposition(
-            artifacts.working,
-            claims,
-            "selected",
-            sql,
-            config,
-            correspondence,
-            capsule,
-            remembered,
-            stored,
-            metadata,
-            spoken,
-            models,
-            drafts,
-            derived,
-            omitted,
-            restored,
-            prior,
-            display,
-            original,
-            hold,
-            markdown,
-          )
-        : undefined,
-      composers,
-      stores,
-      selfHeal: artifacts?.selfHealScopes
-        ? await collectSelfHeal(artifacts.working, artifacts.selfHealScopes)
-        : undefined,
-      outputs: artifacts
-        ? await collectOutputs(artifacts.working, {
-            data,
-            sql: collected.sql,
-          })
-        : undefined,
-      notes,
-      workspaces,
-      memory,
-      archives: additional.archives,
-      secondary: additional.secondary,
-      preferences,
-      exports,
-      artifacts: git,
-      host,
-      voice,
-      operational,
-      restoredArtifacts,
-      restoredComponents,
-      restoredSources,
-      tui,
-      json,
-      review: { reconnectCredentials: true, uncertainWork: "held-no-replay" },
-    }),
-    password,
-  )
+  const bundle = payload.parse({
+    format: "raya.profile-data",
+    version: 1,
+    id: crypto.randomUUID(),
+    createdAt: Date.now(),
+    ...collected,
+    config: artifacts?.config,
+    disposition: artifacts
+      ? collectDisposition(
+          artifacts.working,
+          claims,
+          "selected",
+          sql,
+          config,
+          correspondence,
+          capsule,
+          remembered,
+          stored,
+          metadata,
+          spoken,
+          models,
+          drafts,
+          derived,
+          omitted,
+          restored,
+          prior,
+          display,
+          original,
+          hold,
+          markdown,
+        )
+      : undefined,
+    composers,
+    stores,
+    selfHeal: artifacts?.selfHealScopes
+      ? await collectSelfHeal(artifacts.working, artifacts.selfHealScopes)
+      : undefined,
+    outputs: artifacts
+      ? await collectOutputs(artifacts.working, {
+          data,
+          sql: collected.sql,
+        })
+      : undefined,
+    notes,
+    workspaces,
+    memory,
+    archives: additional.archives,
+    secondary: additional.secondary,
+    preferences,
+    exports,
+    artifacts: git,
+    host,
+    voice,
+    operational,
+    restoredArtifacts,
+    restoredComponents,
+    restoredSources,
+    tui,
+    json,
+    review: { reconnectCredentials: true, uncertainWork: "held-no-replay" },
+  })
+  if (artifacts?.acknowledged) {
+    if (!bundle.disposition) throw new Error("Source export lacks held payload disposition")
+    assertCoverage(artifacts.working, artifacts.acknowledged, bundle.disposition.files)
+  }
+  return seal(bundle, password)
 }

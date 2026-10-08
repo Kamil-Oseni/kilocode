@@ -175,6 +175,7 @@ export async function capture(token: object) {
               selfHealScopes: scopes,
               workspaces,
               config,
+              acknowledged: closure.roots,
             }),
           ),
         )

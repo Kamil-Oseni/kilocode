@@ -1,6 +1,10 @@
 export const interpreter = "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2"
 export const supervisor = "55530325cc6e8836b49722e39f0b7f87d93c2fe30699d2f5373ff650beb50618"
-export const supervisors = [supervisor, "31200051a3248182a01284fa0f8524d07c5360aaf21b5df76025574ff7497e60"] as const
+export const supervisors = [
+  supervisor,
+  "31200051a3248182a01284fa0f8524d07c5360aaf21b5df76025574ff7497e60",
+  "953e159d25e57ac862bd96be56b2b53a2febaf89f2e74628b8a11c92cabceb1b",
+] as const
 
 export const retrieval = Object.freeze({
   "bootstrap.py": "530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d",

@@ -84,6 +84,16 @@ class Tests(support.Tests):
         self.assertFalse((self.root / 'Areas/Raya.md').exists())
         self.assertEqual(support.Store(self.root).state(body['id'])['status'], 'preparing')
 
+    def test_original_bridge_capacity_refuses_without_publication(self):
+        body = self.structured()
+        sha = self.policy([self.row('Projects/Note-' + str(i) + '.md') for i in range(128)])
+        child = self.bridge()
+        row = self.call(child, 1, 'capture_authorize', dict(publication=body, expected_policy_sha256=sha))
+        self.assertFalse(row['ok'])
+        self.assertIn('CaptureCapacity', row['error']['types'])
+        self.assertEqual(row['error']['publication'], 'none')
+        self.assertFalse((self.root / 'Areas/Raya.md').exists())
+
 
 if __name__ == '__main__':
     unittest.main()

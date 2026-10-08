@@ -19,10 +19,10 @@ test("actual private capture bridge replies satisfy strict original-operation fr
     child.exited,
   ])
   expect(code, output + error).toBe(0)
-  expect(error).toContain("Ran 9 tests")
+  expect(error).toContain("Ran 10 tests")
   expect(error).toContain("OK")
   const rows = output.trim().split("\n")
-  expect(rows.length).toBe(4)
+  expect(rows.length).toBe(5)
   for (const line of rows) {
     const row = JSON.parse(line) as { root: string; op: Op; seq: number; raw: string; ok: boolean }
     const parse = () => reply(Buffer.from(row.raw), row.op, row.seq, row.root)
@@ -31,5 +31,15 @@ test("actual private capture bridge replies satisfy strict original-operation fr
       continue
     }
     expect(parse).toThrow()
+    if (row.raw.includes("CaptureCapacity")) {
+      const err = (() => {
+        try {
+          parse()
+        } catch (err) {
+          return err
+        }
+      })()
+      expect(err).toHaveProperty("code", "capture_source_capacity")
+    }
   }
 }, 30_000)

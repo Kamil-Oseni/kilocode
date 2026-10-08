@@ -2,7 +2,7 @@ import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { document, child, check } from "../control/frames"
 import { image, directory, normalize } from "../control/identity"
-import { release } from "../control/catalog-v2"
+import { selected as catalog } from "../control/catalog-capture"
 import type { Setup } from "../settings"
 import { interpreter, supervisors, retrieval as release7 } from "./catalog"
 import { images, fingerprint } from "./reuse-catalog"
@@ -276,6 +276,7 @@ export async function selection(input: Descriptor, setup: Setup) {
     }),
   )
   const plan = row(parse(files[2].raw))
+  const selected = catalog(setup.source_sha256)
   check(
     plan.format === "raya.memory.managed.supervisor" &&
       plan.version === 1 &&
@@ -283,8 +284,8 @@ export async function selection(input: Descriptor, setup: Setup) {
       plan.execution_admitted === true &&
       plan.root === cfg.root &&
       plan.python_sha256 === cfg.python.sha256 &&
-      isDeepStrictEqual({ ...row(plan.source_sha256) }, release) &&
-      isDeepStrictEqual(setup.source_sha256, release),
+      isDeepStrictEqual({ ...row(plan.source_sha256) }, selected) &&
+      isDeepStrictEqual(setup.source_sha256, selected),
     "Managed plan release differs",
   )
   const env = row(plan.env)

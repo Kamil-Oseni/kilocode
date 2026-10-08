@@ -139,23 +139,7 @@ export function reply(raw: Uint8Array, op: Op, seq: number, root: string) {
     row.format === "raya.memory.control.reply" && row.version === 1 && row.seq === seq && typeof row.ok === "boolean",
     "Reply identity refused",
   )
-  if (!row.ok) {
-    const err = fields(row.error, ["kind", "message", "types", "publication"])
-    check(
-      err.kind === "control_refused" &&
-        err.message === "Control operation refused; inspect current identity and review." &&
-        err.publication === (["approve", "policy_pause", "capture_admit"].includes(op) ? "may_have_happened" : "none"),
-      "Refusal identity refused",
-    )
-    check(
-      Array.isArray(err.types) &&
-        err.types.length > 0 &&
-        err.types.length <= 32 &&
-        err.types.every((item) => typeof item === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(item)),
-      "Bounded refusal classes required",
-    )
-    throw new Error("Control refused: " + err.types.join(",") + "; publication=" + err.publication)
-  }
+  if (!row.ok) refusal(row.error, op)
   const value = object(row.result)
   if (op === "state") {
     fields(value, ["policy_sha256", "policy", "capture_enabled"])
@@ -172,6 +156,29 @@ export function reply(raw: Uint8Array, op: Op, seq: number, root: string) {
   if (op === "capture_admit") admission(value)
   if (op === "preview") preview(value, decoded, root)
   return value
+}
+
+function refusal(value: Value, op: Op): never {
+  const err = fields(value, ["kind", "message", "types", "publication"])
+  check(
+    err.kind === "control_refused" &&
+      err.message === "Control operation refused; inspect current identity and review." &&
+      err.publication === (["approve", "policy_pause", "capture_admit"].includes(op) ? "may_have_happened" : "none"),
+    "Refusal identity refused",
+  )
+  check(
+    Array.isArray(err.types) &&
+      err.types.length > 0 &&
+      err.types.length <= 32 &&
+      err.types.every((item) => typeof item === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(item)),
+    "Bounded refusal classes required",
+  )
+  throw Object.assign(new Error("Control refused: " + err.types.join(",") + "; publication=" + err.publication), {
+    code:
+      op === "capture_authorize" && err.types.includes("CaptureCapacity")
+        ? "capture_source_capacity"
+        : "control_refused",
+  })
 }
 
 function admission(value: { [key: string]: Value }) {

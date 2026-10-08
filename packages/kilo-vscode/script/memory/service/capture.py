@@ -21,6 +21,10 @@ from retirement import canonical
 from notes import FOLDERS, RecoveryNeeded, Store, clean, digest, identity, safe, recorded
 
 
+class CaptureCapacity(ValueError):
+    pass
+
+
 def validate(body):
     fields = {'format', 'id', 'project', 'session', 'message', 'observed_utc', 'day', 'zone', 'source', 'entries'}
     if isinstance(body, dict) and body.get('format') == 'raya.memory.capture.v3':
@@ -207,7 +211,7 @@ def authorize(root, body, expected):
     admission, _, selected = policy(root, expected)
     store = Store(root)
     if len(set(selected.files) | {name.casefold() for name in targets(body)}) > 128:
-        raise ValueError('Memory source capacity is 128 notes. Review an explicit archival or shard setup before saving another new source; no approved rows were dropped.')
+        raise CaptureCapacity('Memory source capacity is 128 notes. Review an explicit archival or shard setup before saving another new source; no approved rows were dropped.')
     for name in targets(body):
         old = store.current(store.target(name))
         row = selected.files.get(name.casefold())

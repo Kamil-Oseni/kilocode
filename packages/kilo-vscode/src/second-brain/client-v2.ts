@@ -8,7 +8,7 @@ import type { SecondBrainRequest } from "@kilocode/sdk/v2/client"
 import { raw } from "./raw-response"
 import { search } from "./search-results"
 import { context } from "./linked-results"
-import { release } from "./control/catalog-v2"
+import { selected as catalog } from "./control/catalog-capture"
 import type { BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 
 type Selection = Parameters<typeof operation>[1]
@@ -319,7 +319,8 @@ export class ClientV2 {
       Buffer.byteLength(JSON.stringify(body)) > 16000
     )
       throw new Error("Supply a bounded query and explicit linked-context budget")
-    if (Object.entries(release).some(([name, hash]) => this.#setup.source_sha256[name] !== hash))
+    const selected = catalog(this.#setup.source_sha256)
+    if (Object.entries(selected).some(([name, hash]) => this.#setup.source_sha256[name] !== hash))
       throw new Failure(
         "unsupported",
         "Select the separately reviewed context-capable Memory release before linked recall.",

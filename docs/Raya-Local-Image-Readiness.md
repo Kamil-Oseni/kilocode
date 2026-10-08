@@ -16,6 +16,7 @@ Updated October 8, 2026. FLUX is prepared as an isolated runtime, not an install
 |---|---|---|
 | 512px, four-step text-to-image | Generated and visually inspected an orange on blue fabric. | 37.25 seconds including imports/loading; 8.0 GiB peak Torch CUDA allocation; sampled minimum global free RAM 4.29 GiB. |
 | 512px, four-step reference-image edit | Aborted at exit 42; no image produced. | 11.38 GiB starting free RAM; sampled minimum global free RAM 3.47 GiB triggered the 4 GiB reserve watchdog. |
+| Authorized reference-image edit retry | Aborted at exit 42; no image produced. | 12.20 GiB starting free RAM after VM shutdown; sampled minimum 3.78 GiB triggered the unchanged 4 GiB reserve watchdog. |
 
 Both tests used an explicitly authorized temporary graceful shutdown of the 2 GiB Home Assistant VM. The parent restarted it afterward, and its usual web URL returned HTTP 200. The model process exited and GPU memory was released. No shared Memory service or light commands changed.
 
@@ -25,6 +26,7 @@ The successful generation began with 11.69 GiB available RAM after an earlier 12
 
 - `generation-acceptance.json`, generation output `outputs/487eb178fa7e4df6acac40adaea41ec7/`, and `vm-assisted-generation-test.json`.
 - `editing-attempt.json`, aborted output `outputs/e8ef2b808651452caa2f18902ad3548a/`, and `vm-assisted-editing-test.json`.
+- Retry: `outputs/9b1dc16ea78846549f09a2baf8af672f/result.json`, `vm-assisted-editing-retry.json`, and `home-assistant-after-edit-retry.json`. The harness required at least 12 GiB available RAM before admitting the retry. Its original child exited 42; the VM restarted and the web URL returned HTTP 200. This still does not establish editing capacity.
 - Catalog: `D:/Raya/Models/Catalog/black-forest-labs--FLUX.2-klein-4B.json`. Production selection is false; editing acceptance is false.
 - Offline wheels, hash-pinned requirements, controlled Python base and `restore.ps1` remain together in the candidate. Recovery instructions: `D:/RayaBackups/RECOVERY.md`. All copies are on this PC; off-PC recovery remains pending.
 

@@ -447,6 +447,20 @@ describe("memory capture parsing", () => {
     expect(parseDigest({ topic: "", summary: "User: x Result: y." }, "", 120).topic).not.toBe("User")
   })
 
+  test("Windows build output is excluded while source edits still count", () => {
+    for (const file of [
+      "C:\\project\\dist\\bundle.js",
+      "src\\generated\\client.ts",
+      "C:\\project\\node_modules\\library\\index.js",
+    ]) {
+      expect(hasUserEdit([{ file }]), file).toBe(false)
+      expect(hasSubstantialDiff([{ file, additions: 200, deletions: 0 }]), file).toBe(false)
+    }
+    const file = "C:\\project\\src\\build_tools.ts"
+    expect(hasUserEdit([{ file }])).toBe(true)
+    expect(hasSubstantialDiff([{ file, additions: 20, deletions: 0 }])).toBe(true)
+  })
+
   test("verifies duplicate skips and operation duplicates", () => {
     const items = [
       {

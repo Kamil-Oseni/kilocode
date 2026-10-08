@@ -13,7 +13,7 @@ const generated =
  * edits report 0/0, so churn must not be required. */
 export function hasUserEdit(diffs: Pick<CaptureDiff, "file">[]) {
   return diffs.some((item) => {
-    const file = item.file ?? ""
+    const file = (item.file ?? "").replaceAll("\\", "/")
     if (!file) return false
     return !generated.test(file)
   })
@@ -25,7 +25,7 @@ export function hasUserEdit(diffs: Pick<CaptureDiff, "file">[]) {
  * never substantial here, but still counts as work via hasUserEdit. */
 export function hasSubstantialDiff(diffs: Pick<CaptureDiff, "file" | "additions" | "deletions">[]) {
   return diffs.some((item) => {
-    const file = item.file ?? ""
+    const file = (item.file ?? "").replaceAll("\\", "/")
     if (!file) return false
     if (generated.test(file)) return false
     return item.additions + item.deletions >= 20

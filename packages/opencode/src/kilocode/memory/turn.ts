@@ -1,4 +1,5 @@
 import { Cause, Effect, Semaphore } from "effect"
+import type { Database } from "@opencode-ai/core/database/database"
 import { MemoryTurn as TurnCore } from "@kilocode/kilo-memory/effect/turn"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
 import { MemoryRedact } from "@kilocode/kilo-memory/redact"
@@ -64,6 +65,7 @@ export namespace MemoryLifecycle {
     provider: Provider.Interface
     memory: MemoryService.Interface
     brain?: SecondBrain.Interface
+    database: Database.Interface
   }) {
     const bridge = yield* EffectBridge.make()
     const gate = yield* Semaphore.make(1)
@@ -94,6 +96,7 @@ export namespace MemoryLifecycle {
               sessions: input.sessions,
               provider: input.provider,
               brain,
+              database: input.database,
             }),
           )
           .pipe(

@@ -126,6 +126,7 @@ export namespace KilocodeBootstrap {
         yield* kilo.init()
         yield* Effect.logInfo("Raya session initialization complete")
         yield* MemoryLifecycle.subscribe({
+          database,
           bus,
           sessions,
           summary,

@@ -33,6 +33,14 @@ for (const disabled of [false, true]) {
           messages: [
             { role: "system", content: "Existing agent instructions" },
             { role: "user", content: `Reply exactly ${JSON.stringify(text)}` },
+            {
+              role: "assistant",
+              content: "",
+              tool_calls: [
+                { id: "original-call", type: "function", function: { name: "update_goal", arguments: "{}" } },
+              ],
+            },
+            { role: "tool", tool_call_id: "original-call", content: "Original result" },
           ],
           tools: disabled
             ? [{ type: "function", function: { name: "update_goal", parameters: { type: "object" } } }]
@@ -48,6 +56,15 @@ for (const disabled of [false, true]) {
       expect(rows[0].messages).toEqual([
         { role: "system", content: "Existing agent instructions\n\n" + ToolEnvelope.reply() },
         { role: "user", content: `Reply exactly ${JSON.stringify(text)}` },
+        {
+          role: "assistant",
+          content: JSON.stringify({ kind: "tools", calls: [{ name: "update_goal", arguments: {} }], content: "" }),
+        },
+        {
+          role: "tool",
+          tool_name: "update_goal",
+          content: JSON.stringify({ toolCallId: "original-call", output: "Original result" }),
+        },
       ])
     } finally {
       await server.stop()

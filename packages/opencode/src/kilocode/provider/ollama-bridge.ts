@@ -574,12 +574,9 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       (!data.tools?.length || advertised.size !== data.tools.length || [...advertised].some((name) => !name.trim()))
     )
       throw new OllamaBridgeError()
+    const protocol = options.localInferenceToolFormat === "completion-envelope-v1"
     const envelope =
-      options.localInferenceToolFormat === "completion-envelope-v1" &&
-      advertised.size > 0 &&
-      data.tool_choice !== "none"
-        ? (data.tool_choice ?? "auto")
-        : undefined
+      protocol && advertised.size > 0 && data.tool_choice !== "none" ? (data.tool_choice ?? "auto") : undefined
     if (envelope && data.response_format && data.response_format.type !== "text") throw new OllamaBridgeError()
     const originals = envelope ? schemas(options) : undefined
     if (originals) {
@@ -620,13 +617,13 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       return {
         role: message.role,
         content:
-          envelope && message.role === "assistant" && calls?.length
+          protocol && message.role === "assistant" && calls?.length
             ? JSON.stringify({ kind: "tools", calls: calls.map((call) => call.function), content })
-            : envelope && message.role === "tool" && message.tool_call_id
+            : protocol && message.role === "tool" && message.tool_call_id
               ? JSON.stringify({ toolCallId: message.tool_call_id, output: content })
               : content,
         ...(message.reasoning_content !== undefined ? { thinking: message.reasoning_content } : {}),
-        ...(calls && !(envelope && message.role === "assistant") ? { tool_calls: calls } : {}),
+        ...(calls && !(protocol && message.role === "assistant") ? { tool_calls: calls } : {}),
         ...(name ? { tool_name: name } : {}),
       }
     })

@@ -619,6 +619,14 @@ it.live(
             ask: () => Effect.void,
           }
           const catalog = { chief_route: "route", task: "task", raya_home_assistant_lights_read: "device" }
+          for (const access of ["edit", "computer"] as const) {
+            expect(
+              Exit.isFailure(
+                yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant", access }, ctx)),
+              ),
+            ).toBe(true)
+            expect((yield* sessions.get(session.id)).metadata?.[HomeAssistant.key]).toBeUndefined()
+          }
           expect(RayaChief.tools(catalog, session.metadata, { session: session.id, user: user.id })).toEqual({
             chief_route: "route",
           })

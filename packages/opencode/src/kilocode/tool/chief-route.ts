@@ -27,7 +27,7 @@ export const Parameters = Schema.Struct({
   workflow: Schema.optional(
     Schema.Literals(["specialist", "home_assistant"]).annotate({
       description:
-        "Select home_assistant only for connected light inspection/control requested in this turn; otherwise specialist.",
+        "Select home_assistant with read access only for connected light inspection/control requested in this turn; file edits and desktop actions require specialist.",
     }),
   ),
 })
@@ -98,6 +98,10 @@ export const ChiefRouteTool = Tool.define<
               if (dispatch.findLast((item) => item.info.role === "user")?.info.id !== user)
                 throw new Error("Auto routing requires the current original user dispatch")
               if (params.workflow === "home_assistant") {
+                if (params.access !== "read")
+                  throw new Error(
+                    "Home Assistant cannot perform file edits or desktop actions. Route this work through specialist.",
+                  )
                 const messages = yield* sessions.messages({ sessionID: ctx.sessionID })
                 const latest = messages.findLast((item) => item.info.role === "user")
                 const current = messages.find((item) => item.info.id === ctx.messageID)

@@ -21,7 +21,7 @@ const labels: Record<string, string> = {
   control_setup_required: "Import a reviewed local control setup before reviewing sources.",
   control_busy: "A native Memory review or control operation is already in progress.",
   control_uncertain:
-    "A previous policy publication is uncertain. Its retained metadata needs trusted reconciliation; no operation is replayed.",
+    "An earlier Memory operation has not finished recovery. Inspect its original request in this session before continuing.",
 }
 
 export function SecondBrain() {
@@ -47,7 +47,7 @@ export function SecondBrain() {
       vscode.postMessage({ type: "secondBrain", action, id: next, target })
       return
     }
-    if (action === "setup" || action === "check")
+    if (action === "setup" || action === "check" || action === "reconcile")
       setState({ configured: state().configured, status: "checking", results: [] })
     if (action === "search" || action === "context") {
       setState({ configured: state().configured, status: "searching", results: [] })
@@ -93,6 +93,11 @@ export function SecondBrain() {
       <Button onClick={() => request("check")} disabled={!state().configured || busy()}>
         Check service
       </Button>
+      <Show when={state().code === "control_uncertain"}>
+        <Button onClick={() => request("reconcile")} disabled={!state().configured || busy()}>
+          Inspect unfinished request
+        </Button>
+      </Show>
       <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>
         Disconnect
       </Button>

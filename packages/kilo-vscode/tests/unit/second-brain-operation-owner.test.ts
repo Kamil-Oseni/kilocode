@@ -12,7 +12,7 @@ import { BrainService } from "../../src/second-brain/service"
 
 type Case = {
   name: string
-  selected: { request: string; epoch: string; release: string }
+  selected: { request: string; epoch: string; release: string; protocol?: "raya.memory.operation.v2" }
   body: { query?: string; expected_policy_sha256?: string }
   terminal: string
   pending: string
@@ -149,7 +149,7 @@ async function harness(
           source_sha256: data.source_sha256,
           owner_epoch: item.selected.epoch,
           selected_release_sha256: item.selected.release,
-          operation_protocol: "raya.memory.operation.v1",
+          operation_protocol: item.selected.protocol ?? "raya.memory.operation.v1",
         })
       expect(request.headers.get("X-Raya-Memory-Owner-Epoch")).toBe(item.selected.epoch)
       expect([item.selected.request, ...(opts.repeat ? [opts.repeat] : [])]).toContain(
@@ -175,7 +175,7 @@ async function harness(
   const setup = {
     format: "raya.memory.setup",
     version: 2,
-    protocol: "raya.memory.operation.v1",
+    protocol: item.selected.protocol ?? "raya.memory.operation.v1",
     root: "C:\\Synthetic",
     origin: `http://127.0.0.1:${host.port}`,
     source_sha256: data.source_sha256,
@@ -550,7 +550,7 @@ genuine("failed POST retains debt after false cancel ACK and original terminal G
 })
 
 genuine("failed search before downstream work settles its original debt and preserves the failure", async () => {
-  const value = await harness("search-failed-empty", { status: 503 })
+  const value = await harness("search-failed-empty-v2", { status: 503 })
   try {
     await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow(
       "Inspect the original",
@@ -574,6 +574,74 @@ genuine("cancelled search with original downstream retirement settles without su
     expect(value.settings.pending()).toBeUndefined()
     expect(value.owner.retired()).toBe(true)
     await expect(value.owner.dispose()).rejects.toThrow("Inspect the original")
+  } finally {
+    await value.cleanup()
+  }
+})
+
+genuine("original owner reconciles a later failed terminal without replay or losing its original failure", async () => {
+  const data = await fixture()
+  const item = data.cases.find((row) => row.name === "search-failed-empty-v2")!
+  let ready = false
+  const value = await harness(item.name, {
+    status: 503,
+    terminal() {
+      return Buffer.from(ready ? item.terminal : item.pending, "base64")
+    },
+  })
+  try {
+    const error = await value.owner
+      .search(value.item.body.query!, { id: value.item.selected.request })
+      .catch((err: unknown) => err)
+    expect(error).toBeInstanceOf(AggregateError)
+    expect(value.settings.pending()).toBeDefined()
+    ready = true
+    expect(await value.owner.reconcile()).toBe(error)
+    expect(value.settings.pending()).toBeUndefined()
+    expect(value.owner.retired()).toBe(true)
+    expect(value.calls.map((row) => row.method)).toEqual(["GET", "POST", "DELETE", "GET", "GET"])
+    await expect(value.owner.dispose()).rejects.toBe(error)
+    await expect(value.owner.reconcile()).rejects.toThrow("unavailable")
+  } finally {
+    await value.cleanup()
+  }
+})
+
+genuine("reconciliation keeps pending debt and cannot adopt a cold original request", async () => {
+  const data = await fixture()
+  const item = data.cases.find((row) => row.name === "search-failed-empty-v2")!
+  const value = await harness(item.name, { status: 503, terminal: () => Buffer.from(item.pending, "base64") })
+  try {
+    await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow()
+    await expect(value.owner.reconcile()).rejects.toThrow("not terminal")
+    expect(value.settings.pending()).toBeDefined()
+    expect(() => new OperationOwner(value.settings, "synthetic-only", value.setup)).toThrow(
+      "Original loaded Memory credential selection differs",
+    )
+    expect(value.settings.pending()).toBeDefined()
+    await expect(value.owner.dispose()).rejects.toThrow()
+  } finally {
+    await value.cleanup()
+  }
+})
+
+genuine("reconciliation cannot turn a failed native close into retirement", async () => {
+  const value = await harness("sync-failed", { status: 503 })
+  const error = new Error("Original native close failed")
+  try {
+    await expect(
+      value.owner.sync(value.item.body.expected_policy_sha256!, {
+        id: value.item.selected.request,
+        close: async () => {
+          throw error
+        },
+      }),
+    ).rejects.toThrow("Original Memory operation failures retained")
+    const count = value.calls.length
+    await expect(value.owner.reconcile()).rejects.toThrow("unavailable")
+    expect(value.calls).toHaveLength(count)
+    expect(value.settings.pending()).toBeDefined()
+    await expect(value.owner.dispose()).rejects.toThrow("Original Memory operation failures retained")
   } finally {
     await value.cleanup()
   }

@@ -452,6 +452,7 @@ export class BrainHost {
       vscode.commands.registerCommand("raya.memory.inspectConfiguration", () =>
         diagnostic(this.settings, context.globalState),
       ),
+      vscode.commands.registerCommand("raya.memory.reconcileOperation", () => this.service.reconcile()),
       vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
     )
     const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
@@ -482,7 +483,7 @@ export class BrainHost {
     if (message.action === "cancel" && typeof message.target === "string")
       await this.handle({ type: "secondBrain", action: "cancel", id: message.id, target: message.target }, post)
     if (
-      ["state", "setup", "check", "disconnect", "controlSetup", "review", "sync", "disable"].includes(
+      ["state", "setup", "check", "reconcile", "disconnect", "controlSetup", "review", "sync", "disable"].includes(
         String(message.action),
       )
     )
@@ -706,6 +707,10 @@ export class BrainHost {
         const owner = {}
         this.current = { id: message.id, owner }
         await this.service.run(undefined, send, owner)
+        return
+      }
+      if (message.action === "reconcile") {
+        send(await this.service.reconcile())
         return
       }
       send(await this.service.status())

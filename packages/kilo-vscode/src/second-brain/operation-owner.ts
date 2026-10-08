@@ -28,6 +28,7 @@ export class OperationOwner {
   #failures = new Set<unknown>()
   #lease: object
   #retired = false
+  #recovery?: { id: string; debt: unknown }
 
   constructor(
     private readonly settings: BrainSettings,
@@ -111,6 +112,7 @@ export class OperationOwner {
     const slot = { controller, job }
     // Publish the accepted lifetime synchronously, before health or durable writes.
     this.#retired = false
+    this.#recovery = undefined
     this.#slot = slot
     const work = this.work(body, signal, id, close)
     void work.then(
@@ -173,10 +175,9 @@ export class OperationOwner {
     const cleanup: unknown[] = []
     // Inspection always uses the same client/selection. Health and DELETE ACK cannot clear debt.
     if (debt !== undefined && !proof) cleanup.push(...(await this.inspect(id, !result.ok || signal.aborted)))
-    if (close) {
-      const closed = await outcome(Promise.resolve().then(close))
-      if (!closed.ok) cleanup.push(closed.error)
-    }
+    const closed = await outcome(Promise.resolve().then(() => close?.()))
+    if (!closed.ok) cleanup.push(closed.error)
+    if (debt !== undefined && closed.ok) this.#recovery = { id, debt }
     if (!proof) proof = this.proof(id, result.ok && !signal.aborted, cleanup)
     if (debt !== undefined && proof && cleanup.length === 0) {
       const settled = await outcome(
@@ -197,6 +198,32 @@ export class OperationOwner {
   private proof(id: string, completed: boolean, errors: readonly unknown[]) {
     if (errors.length) return undefined
     return (completed ? this.#client.completed(id) : undefined) ?? this.#client.closed(id)
+  }
+
+  /** Retry inspection of this retained request only; never resubmit or adopt cold metadata. */
+  reconcile() {
+    const retained = this.#recovery
+    const error = [...this.#failures][0]
+    if (this.#slot || !retained || error === undefined || this.#retired)
+      return Promise.reject(new Failure("control_uncertain", "Original failed Memory request is unavailable", 0))
+    const controller = new AbortController()
+    const job = (async () => {
+      const errors = await this.inspect(retained.id, false)
+      raise(errors)
+      const proof = this.#client.closed(retained.id)
+      if (!proof) throw new Failure("retirement_unconfirmed", "Original unsuccessful terminal is unconfirmed", 0)
+      await this.#client.settle(proof, retained.id, () => this.settings.settle(retained.debt, this.#lease, proof))
+      this.#retired = true
+      return error
+    })()
+    const slot = { controller, job }
+    this.#slot = slot
+    void job
+      .finally(() => {
+        if (this.#slot === slot) this.#slot = undefined
+      })
+      .catch(() => undefined)
+    return job
   }
 
   async settle() {

@@ -115,6 +115,25 @@ export class BrainService {
     await this.configure(() => this.settings.clear())
   }
 
+  reconcile() {
+    if (this.closed || this.changing || this.pending.size || !this.operation)
+      return Promise.reject(
+        new Failure("control_uncertain", "Original Memory operation is unavailable for recovery", 0),
+      )
+    const original = this.operation
+    const job = (async () => {
+      const error = await original.reconcile()
+      await this.release(original, error)
+      this.state = { configured: true, status: "disconnected", results: [] }
+      return this.status()
+    })().finally(() => {
+      this.changing = undefined
+    })
+    this.changing = job.then(() => undefined)
+    void this.changing.catch(() => undefined)
+    return job
+  }
+
   async dispose() {
     this.closed = true
     const errors: unknown[] = []

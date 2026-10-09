@@ -35,9 +35,10 @@ class HTTP(unittest.TestCase):
                    RAYA_MEMORY_NOTE_GENERATIONS=json.dumps({name: MODULE.generation(self.notes if name == 'root' else self.notes/'System') for name in ('root', 'system')}))
         previous = dict(os.environ)
         os.environ.update(env)
-        sys.path.insert(0, str(HERE / 'service'))
+        source = Path(getattr(self, 'source', HERE / 'service'))
+        sys.path.insert(0, str(source))
         try:
-            spec = importlib.util.spec_from_file_location('proposal_server', HERE / 'service/server.py')
+            spec = importlib.util.spec_from_file_location('proposal_server', source / 'server.py')
             self.server = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.server)
         finally:

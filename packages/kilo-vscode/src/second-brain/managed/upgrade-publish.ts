@@ -121,7 +121,15 @@ async function admission(previous: Entry) {
 
 function catalog(input: unknown, proof: Awaited<ReturnType<typeof review>>) {
   if (input === undefined) return undefined
-  const value = parseCatalog(input)
+  check(input && typeof input === "object" && !Array.isArray(input), "Retained control selection required")
+  const selected = input as Record<string, unknown>
+  check(
+    Object.keys(selected).sort().join() === "catalog,root" &&
+      selected.root === proof.previous.setup.root &&
+      selected.root === proof.next.setup.root,
+    "Retained control notes root differs",
+  )
+  const value = parseCatalog(selected.catalog)
   check(
     isDeepStrictEqual(value.source_sha256, proof.previous.setup.source_sha256) &&
       proof.original.length > 0 &&
@@ -129,7 +137,10 @@ function catalog(input: unknown, proof: Awaited<ReturnType<typeof review>>) {
     "Original control release differs",
   )
   // Original Python/bridge execution images stay selected; only the reviewed source directory/release changes.
-  return parseCatalog({ ...value, source: proof.source, source_sha256: proof.next.setup.source_sha256 })
+  return {
+    root: selected.root,
+    catalog: parseCatalog({ ...value, source: proof.source, source_sha256: proof.next.setup.source_sha256 }),
+  }
 }
 
 function intent(storage: Storage, artifact: Descriptor["plan"]) {

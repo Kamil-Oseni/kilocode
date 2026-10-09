@@ -1,5 +1,6 @@
 import path from "node:path"
-import { copyFile, mkdir, readFile, writeFile, lstat } from "node:fs/promises"
+import { copyFile, mkdir, readFile, writeFile, lstat, mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { readFileSync } from "node:fs"
 import { BrainSettings } from "../../../src/second-brain/settings"
 import { descriptor } from "../../../src/second-brain/managed/descriptor"
@@ -10,11 +11,36 @@ import { interpreter } from "../../../src/second-brain/managed/catalog"
 import { image, observe } from "../../../src/second-brain/control/identity"
 import { packaged } from "../../../src/second-brain/control/index"
 import { spawn } from "../../../src/util/process"
+import { runtime } from "./native-memory-runtime"
+import { release } from "../../../src/second-brain/control/catalog-capture"
+import { sha } from "../../../src/second-brain/control/frames"
 
-const python = "D:/Raya/Services/Packaging/Python/3.12.14/python.exe"
+const base = "D:/Raya/Services/Packaging/Python/3.12.14/python.exe"
+const full = process.argv.includes("--runtime")
+const source = full ? await mkdtemp(path.join(tmpdir(), "raya-original-capture-source-")) : undefined
+if (source) {
+  for (const name of Object.keys(release))
+    await copyFile(path.resolve("script/memory/service", name), path.join(source, name))
+  const child = Bun.spawn(
+    ["git", "show", "5a4e669f0803ff5a52e22da85a69f5346ceeba41:packages/kilo-vscode/script/memory/service/index.py"],
+    { stdout: "pipe", stderr: "pipe" },
+  )
+  const [raw, errors, code] = await Promise.all([
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ])
+  if (
+    code !== 0 ||
+    errors ||
+    sha(Buffer.from(raw)) !== "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e"
+  )
+    throw new Error("Exact original capture source blob required")
+  await writeFile(path.join(source, "index.py"), Buffer.from(raw))
+}
 const prepared = await command(
   "D:/Raya/Services/Packaging/Environments/PrimarySnapshot/Scripts/python.exe",
-  ["-B", path.resolve("script/memory/capture_recovery_test.py"), "--prepare"],
+  ["-B", path.resolve("script/memory/capture_recovery_test.py"), "--prepare", ...(source ? ["--source", source] : [])],
   { cwd: process.cwd() },
 )
 const data = JSON.parse(prepared.stdout) as {
@@ -26,17 +52,28 @@ const data = JSON.parse(prepared.stdout) as {
     operation: { request: string; owner_epoch: string; selected_release_sha256: string; request_sha256: string }
   }
 }
-const root = path.join(data.root, "raya-memory-managed-recovery")
-await mkdir(path.join(root, "memory", "Runs"), { recursive: true })
-await mkdir(path.join(root, "source", "memory"), { recursive: true })
-for (const name of Object.keys(data.cfg.pins))
-  await copyFile(path.join(data.cfg.source, name), path.join(root, "source", "memory", name))
-await copyFile(path.resolve("script/memory/supervise.py"), path.join(root, "supervise.py"))
-await writeFile(
-  path.join(root, "memory.json"),
-  JSON.stringify({ source: path.join(root, "source", "memory"), source_sha256: data.cfg.pins }),
-)
-await writeFile(path.join(root, "retrieval.json"), JSON.stringify({ port: 58742 }))
+const native = full ? await runtime(data.root, { path: data.cfg.source, pins: data.cfg.pins }, data.notes) : undefined
+const root = native?.cfg.root ?? path.join(data.root, "raya-memory-managed-recovery")
+if (!native) {
+  await mkdir(path.join(root, "memory", "Runs"), { recursive: true })
+  await mkdir(path.join(root, "source", "memory"), { recursive: true })
+  for (const name of Object.keys(data.cfg.pins))
+    await copyFile(path.join(data.cfg.source, name), path.join(root, "source", "memory", name))
+  await copyFile(path.resolve("script/memory/supervise.py"), path.join(root, "supervise.py"))
+  await writeFile(
+    path.join(root, "memory.json"),
+    JSON.stringify({ source: path.join(root, "source", "memory"), source_sha256: data.cfg.pins }),
+  )
+  await writeFile(path.join(root, "retrieval.json"), JSON.stringify({ port: 58742 }))
+}
+if (source) {
+  if (
+    path.dirname(source) !== path.resolve(tmpdir()) ||
+    !path.basename(source).startsWith("raya-original-capture-source-")
+  )
+    throw new Error("Owned source fixture path required")
+  await rm(source, { recursive: true })
+}
 const ref = async (file: string) => {
   const held = await image(file, 16777216)
   return { path: file, bytes: held.raw.length, sha256: held.digest }
@@ -46,16 +83,19 @@ const space = (kind: string) => ({
   sid: "S-1-5-21-1-2-3-1001",
   generations: { root: ["1", "2", "3"], Runs: ["4", "5", "6"], Requests: ["7", "8", "9"] },
 })
-const cfg = descriptor({
-  format: "raya.memory.managed.launch",
-  version: 2,
-  root,
-  python: await ref(python),
-  supervisor: await ref(path.join(root, "supervise.py")),
-  plan: await ref(path.join(root, "memory.json")),
-  retrieval: await ref(path.join(root, "retrieval.json")),
-  namespaces: { memory: space("memory"), retrieval: space("retrieval") },
-})
+const cfg =
+  native?.cfg ??
+  descriptor({
+    format: "raya.memory.managed.launch",
+    version: 2,
+    root,
+    python: await ref(base),
+    supervisor: await ref(path.join(root, "supervise.py")),
+    plan: await ref(path.join(root, "memory.json")),
+    retrieval: await ref(path.join(root, "retrieval.json")),
+    namespaces: { memory: space("memory"), retrieval: space("retrieval") },
+  })
+const python = cfg.python.path
 const file = path.join(data.root, "host.json")
 await writeFile(file, "{}")
 const settings = new BrainSettings(

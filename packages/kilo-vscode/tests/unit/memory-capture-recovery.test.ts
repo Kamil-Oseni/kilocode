@@ -8,11 +8,15 @@ import { BrainService } from "../../src/second-brain/service"
 import { CaptureIntake } from "../../src/second-brain/capture-intake"
 import { command } from "../../src/second-brain/control/command"
 import { sha } from "../../src/second-brain/control/frames"
+import { fingerprint } from "../../src/second-brain/failed-repair"
+import { release, bridge } from "../../src/second-brain/control/catalog-capture"
+import { linked } from "../../src/second-brain/managed/capture-upgrade"
+import { descriptor } from "../../src/second-brain/managed/descriptor"
 
-async function fixture(hook?: (key: string, value: unknown) => Promise<void>) {
+async function fixture(hook?: (key: string, value: unknown) => Promise<void>, full = false) {
   const producer = await command(
     process.execPath,
-    [path.resolve("tests/unit/fixtures/committed-capture-producer.ts")],
+    [path.resolve("tests/unit/fixtures/committed-capture-producer.ts"), ...(full ? ["--runtime"] : [])],
     {
       cwd: process.cwd(),
     },
@@ -70,6 +74,154 @@ async function inventory(root: string) {
   await walk(root)
   return rows
 }
+
+for (const stage of ["confirmation", "ledger"] as const)
+  test(`cross-release original capture recovery preserves exact proof after ${stage} acknowledgement loss`, async () => {
+    const fault = { enabled: false }
+    const value = await fixture(async (key) => {
+      if (
+        fault.enabled &&
+        key ===
+          (stage === "ledger"
+            ? "raya.secondBrain.personalCapture.turns"
+            : `raya.secondBrain.committedCaptureRecovery.${value.turn.id}.confirmation`)
+      ) {
+        fault.enabled = false
+        throw new Error("Cross-release physical acknowledgement loss")
+      }
+    }, true)
+    try {
+      const original = value.storage.get<{ setup: { source_sha256: Record<string, string> }; managed: unknown }>(
+        "raya.secondBrain.setup",
+      )!
+      const cfg = descriptor(original.managed)
+      const before = await inventory(value.notes)
+      const consent = {
+        version: 1,
+        enabled: true,
+        root: value.notes,
+        release: value.turn.release,
+        zone: "America/Toronto",
+        model: "pinned-local-model",
+        authorization: { source: "Original synthetic human authorization", sha256: "a".repeat(64) },
+      }
+      await value.storage.update("raya.secondBrain.personalCapture", consent)
+      await value.storage.update("raya.secondBrain.control.catalog", {
+        root: value.notes,
+        catalog: {
+          format: "raya.memory.control.catalog",
+          version: 2,
+          python: cfg.python.path,
+          source: path.join(cfg.root, "source/memory"),
+          bridge: path.resolve("script/memory/control.py"),
+          python_sha256: cfg.python.sha256,
+          bridge_sha256: bridge,
+          source_sha256: original.setup.source_sha256,
+        },
+      })
+      const settings = value.settings()
+      const service = new BrainService(settings, process.cwd())
+      await service.recoverCapture(value.turn, async () => true)
+      const key = `raya.secondBrain.committedCaptureRecovery.${value.turn.id}`
+      const audit = value.storage.get(key)
+      expect(settings.upgrading()).toBe(true)
+      const reviewed = await service.upgradeCapture(value.turn)
+      expect(settings.upgrading()).toBe(false)
+      expect(linked(reviewed)?.previousRelease).toBe(value.turn.release)
+      expect(linked(reviewed)?.release).toBe(fingerprint(release))
+      expect(linked(reviewed)?.release).not.toBe(value.turn.release)
+      expect(linked(reviewed)?.indexConfirmed).toBe(false)
+      expect(value.storage.get(key)).toEqual(audit)
+      expect(value.storage.get("raya.secondBrain.personalCapture.turns")).toEqual([value.turn])
+      expect(value.storage.get("raya.secondBrain.personalCapture")).toEqual({
+        ...consent,
+        release: fingerprint(release),
+      })
+      // These are confirmation-input fields, not a claim of authenticated installed index acceptance.
+      const binding = {
+        root: value.notes,
+        release: fingerprint(release),
+        owner: "synthetic-confirmation-input",
+        generation: {},
+        index: "synced" as const,
+        digest: reviewed.policySHA,
+      }
+      const clone = JSON.parse(JSON.stringify(reviewed)) as typeof reviewed
+      expect(linked(clone)).toBeUndefined()
+      await expect(new CaptureIntake(value.storage).confirmRecovery(clone, binding, () => {})).rejects.toThrow(
+        "must agree",
+      )
+      await expect(
+        new CaptureIntake(value.storage).confirmRecovery(
+          reviewed,
+          { ...binding, release: value.turn.release },
+          () => {},
+        ),
+      ).rejects.toThrow("must agree")
+      fault.enabled = true
+      await expect(new CaptureIntake(value.storage).confirmRecovery(reviewed, binding, () => {})).rejects.toThrow(
+        "physical acknowledgement loss",
+      )
+      const intake = new CaptureIntake(value.storage)
+      const selected = intake.recoverable().find((row) => row.id === value.turn.id)!
+      expect(selected.phase).toBe(stage === "ledger" ? "published" : "uncertain")
+      const proof = value.storage.get(`${key}.confirmation`)
+      const cold = await value.settings().reviewCapture(process.cwd(), selected)
+      expect(linked(cold)).toEqual(linked(reviewed))
+      await intake.confirmRecovery(cold, binding, () => {})
+      expect(value.storage.get(`${key}.confirmation`)).toEqual(proof)
+      expect(value.storage.get("raya.secondBrain.personalCapture.turns")).toEqual([
+        { ...value.turn, phase: "published", receipt: reviewed.inputSHA },
+      ])
+      expect(value.storage.get(key)).toEqual(audit)
+      expect(await inventory(value.notes)).toEqual(before)
+      await service.dispose()
+    } finally {
+      await value.cleanup()
+    }
+  }, 60000)
+
+test("cross-release upgrade resumes its original fenced intent after the new setup physically saves", async () => {
+  const fault = { enabled: false }
+  const value = await fixture(async (key, item) => {
+    if (
+      fault.enabled &&
+      key === "raya.secondBrain.setup" &&
+      fingerprint((item as { setup: { source_sha256: unknown } }).setup.source_sha256) === fingerprint(release)
+    ) {
+      fault.enabled = false
+      throw new Error("Runtime physical acknowledgement loss")
+    }
+  }, true)
+  try {
+    const before = await inventory(value.notes)
+    const settings = value.settings()
+    const service = new BrainService(settings, process.cwd())
+    await service.recoverCapture(value.turn, async () => true)
+    const key = `raya.secondBrain.committedCaptureRecovery.${value.turn.id}`
+    const audit = value.storage.get(key)
+    fault.enabled = true
+    await expect(service.upgradeCapture(value.turn)).rejects.toThrow("Runtime physical acknowledgement loss")
+    expect(value.storage.get<{ format: string }>("raya.secondBrain.committedCaptureRecovery.pending")?.format).toBe(
+      "raya.memory.runtime.upgrade.pending",
+    )
+    const cold = value.settings()
+    expect(cold.upgrading()).toBe(true)
+    await expect(cold.load()).rejects.toThrow("Interrupted Memory recovery must finish")
+    await service.dispose()
+    const resumed = new BrainService(cold, process.cwd())
+    const reviewed = await resumed.upgradeCapture(value.turn)
+    expect(cold.upgrading()).toBe(false)
+    expect(linked(reviewed)?.previousRelease).toBe(value.turn.release)
+    expect(linked(reviewed)?.release).toBe(fingerprint(release))
+    expect(value.storage.get(key)).toEqual(audit)
+    expect(value.storage.get("raya.secondBrain.personalCapture.turns")).toEqual([value.turn])
+    expect(await inventory(value.notes)).toEqual(before)
+    await resumed.dispose()
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
 
 test("reviewed committed capture restores admission with an audit and no note or ledger replay", async () => {
   const value = await fixture()
@@ -179,7 +331,7 @@ for (const stage of ["state", "verified", "clear", "applied"])
       const prior = value.storage.get<{ phase: string }>(`raya.secondBrain.committedCaptureRecovery.${value.turn.id}`)
       expect(prior?.phase).toBe(stage === "state" ? "prepared" : stage === "applied" ? "applied" : "verified")
       const settings = value.settings()
-      await expect(settings.load()).rejects.toThrow("Interrupted committed capture recovery must finish")
+      await expect(settings.load()).rejects.toThrow("Interrupted Memory recovery must finish")
       const result = await settings.recoverCapture(process.cwd(), value.turn, async () => true)
       expect(result?.capture).toBe(value.turn.id)
       expect(settings.pending()).toBeUndefined()

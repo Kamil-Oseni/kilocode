@@ -8,6 +8,7 @@ import type { failure } from "./capture-failure"
 import type { review } from "./committed-capture"
 import { fingerprint } from "./failed-repair"
 import type { Setup } from "./settings"
+import { linked } from "./managed/capture-upgrade"
 
 type Command = Extract<SecondBrainRequest["command"], { action: "capture" }>
 export type CaptureBinding = Readonly<{
@@ -120,6 +121,7 @@ export function records(input: unknown) {
 }
 
 export function confirmation(value: Awaited<ReturnType<typeof review>>, original: ReturnType<typeof records>[number]) {
+  const upgrade = linked(value)
   return {
     format: "raya.memory.committed-capture.confirmation",
     version: 1,
@@ -130,6 +132,7 @@ export function confirmation(value: Awaited<ReturnType<typeof review>>, original
     requestSettlement: false,
     replay: false,
     indexConfirmed: true,
+    ...(upgrade ? { upgrade } : {}),
   }
 }
 const failures = z
@@ -463,11 +466,16 @@ export class CaptureIntake {
       check()
       const saved = records(this.storage.get(ledger))
       const prior = saved.find((row) => row.id === value.capture)
+      const upgrade = linked(value, this.storage)
       if (
         !prior ||
         binding.root !== value.root ||
         prior.root !== binding.root ||
-        prior.release !== binding.release ||
+        (upgrade
+          ? upgrade.capture !== prior.id ||
+            upgrade.previousRelease !== prior.release ||
+            upgrade.release !== binding.release
+          : prior.release !== binding.release) ||
         binding.index !== "synced" ||
         binding.digest !== value.policySHA
       )

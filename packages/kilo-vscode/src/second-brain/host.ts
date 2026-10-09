@@ -1135,7 +1135,9 @@ export class BrainHost {
     const retained = this.context.globalState.get<{ phase: string }>(key)
     const result =
       retained?.phase === "applied"
-        ? await this.settings.reviewCapture(this.context.extensionPath, selected.turn)
+        ? this.settings.upgrading()
+          ? await this.service.upgradeCapture(selected.turn)
+          : await this.settings.reviewCapture(this.context.extensionPath, selected.turn)
         : await this.service.recoverCapture(selected.turn, async (review) => {
             if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection is unavailable")
             const accepted = await vscode.window.showWarningMessage(
@@ -1147,7 +1149,8 @@ export class BrainHost {
             return accepted === "Recover committed save"
           })
     if (!result) return
-    await this.confirmCapture(result, selected.turn)
+    const reviewed = this.settings.upgrading() ? await this.service.upgradeCapture(selected.turn) : result
+    await this.confirmCapture(reviewed, selected.turn)
     await vscode.window.showInformationMessage(
       "The original Memory save is confirmed and its current source policy is indexed. The original audit is retained.",
     )

@@ -15,6 +15,8 @@ from capture_recovery import review
 class Recovery(unittest.TestCase):
     def setUp(self):
         fixture = support.HTTP('test_capture_auth_original_epoch_publication_and_no_replay')
+        if hasattr(self, 'source'):
+            fixture.source = self.source
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
         for name in ['root', 'notes', 'key', 'server', 'body', 'sha']:
@@ -38,7 +40,7 @@ class Recovery(unittest.TestCase):
         self.result = asyncio.run(publish())
         from capture import refresh
         refresh(self.notes, self.body['id'], self.result['input_sha256'], self.sha, lambda: None)
-        self.cfg = dict(source=str(Path(__file__).parent / 'service'), root=str(self.notes),
+        self.cfg = dict(source=str(Path(self.server.__file__).parent), root=str(self.notes),
                         pins=self.server.SOURCE, bodySHA=self.result['operation']['request_sha256'],
                         resultSHA=self.result['operation']['result_sha256'],
                         turn=dict(id=self.body['id'], project=self.body['project'], sessionID=self.body['session'],
@@ -100,8 +102,10 @@ class Recovery(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] == ['--prepare']:
+    if sys.argv[1:] == ['--prepare'] or (len(sys.argv) == 4 and sys.argv[1:3] == ['--prepare', '--source']):
         fixture = Recovery('test_committed_effect_and_original_request_are_verified_without_writes')
+        if len(sys.argv) == 4:
+            fixture.source = Path(sys.argv[3])
         fixture.setUp()
         fixture.server.POOL.shutdown(wait=True)
         fixture.server.STORAGE.shutdown(wait=True)

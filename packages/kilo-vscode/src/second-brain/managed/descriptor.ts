@@ -212,14 +212,20 @@ function credentials(cfg: Descriptor, memory: Record<string, unknown>, retrieval
 function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, reuse: boolean) {
   const original = path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind]))
   if (plan.source === original) return
+  const pins =
+    cfg.supervisor.sha256 === current
+      ? capture
+      : cfg.supervisor.sha256 === "a1128d8f746e5827127a67a2c6e022c72e405a4598b3eed790b8a672a3427dd4"
+        ? { ...capture, "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3" }
+        : undefined
   check(
     kind === "memory" &&
       typeof plan.source === "string" &&
       path.dirname(plan.source) === cfg.root &&
       /^raya-memory-source-upgrade-[a-f0-9]{32}$/.test(path.basename(plan.source)) &&
       cfg.supervisor.path === path.join(plan.source, "supervise.py") &&
-      cfg.supervisor.sha256 === current &&
-      isDeepStrictEqual({ ...row(plan.source_sha256) }, capture),
+      pins &&
+      isDeepStrictEqual({ ...row(plan.source_sha256) }, pins),
     "Paired source directory differs",
   )
 }

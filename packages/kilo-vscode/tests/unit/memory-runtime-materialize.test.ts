@@ -172,6 +172,41 @@ for name in ('root','changed','duplicate','missing','source'):
   expect(retained.tuple).toBe(original.tuple)
 }, 30000)
 
+test("upgraded source metadata admits only its exact historical or current supervisor cohort", async () => {
+  const next = await materialize(cfg, setup, path.resolve("."), "e".repeat(32))
+  const selected = await selection(next.next.managed, next.next.setup)
+  const pins = { ...release, "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3" }
+  const prior = {
+    ...next.next.managed,
+    supervisor: {
+      ...next.next.managed.supervisor,
+      sha256: "a1128d8f746e5827127a67a2c6e022c72e405a4598b3eed790b8a672a3427dd4",
+    },
+  }
+  const files = (selected.plan.files as { path: string; sha256: string }[]).map((row) =>
+    row.path === path.join(next.source, "index.py") ? { ...row, sha256: pins["index.py"] } : row,
+  )
+  const memory = { ...selected.plan, source_sha256: pins, files }
+  const retrieval = { ...selected.retrieval!, files }
+  // Schema-only admission checks; altered fixture metadata is not a native image or launch proof.
+  expect(() => paired(prior, memory, retrieval)).not.toThrow()
+  expect(() => paired(next.next.managed, selected.plan, selected.retrieval!)).not.toThrow()
+  expect(() => paired(next.next.managed, memory, retrieval)).toThrow("Paired source directory differs")
+  expect(() => paired(prior, selected.plan, selected.retrieval!)).toThrow("Paired source directory differs")
+  expect(() =>
+    paired({ ...prior, supervisor: { ...prior.supervisor, sha256: "f".repeat(64) } }, memory, retrieval),
+  ).toThrow("Paired source directory differs")
+  expect(() =>
+    paired(prior, { ...memory, source_sha256: { ...pins, "server.py": "f".repeat(64) } }, retrieval),
+  ).toThrow("Paired source directory differs")
+  for (const source of [
+    path.join(next.source, "nested"),
+    path.join(cfg.root, "foreign"),
+    path.join(cfg.root, "raya-memory-source-upgrade-" + "f".repeat(32)),
+  ])
+    expect(() => paired(prior, { ...memory, source }, retrieval)).toThrow("Paired source directory differs")
+}, 30000)
+
 test("reusable v2 upgrade retains its independent release and external notes witness", async () => {
   const notes = path.join(outer, "external-notes")
   await mkdir(path.join(notes, "System"), { recursive: true })

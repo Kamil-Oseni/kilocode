@@ -769,6 +769,9 @@ export namespace RayaTask {
         const items = yield* list()
         const agent = items.find((item) => item.id === value.agentID)
         if (!agent) return { items, found: false as const }
+        yield* removals(deps.storage)
+          .check(value.agentID)
+          .pipe(Effect.mapError((err) => new GuardError({ message: err.message })))
         if (!isDeepStrictEqual(agent, value.definition))
           return yield* new GuardError({ kind: "conflict", message: "This staged routine changed." })
         const evidence = yield* usage(value.agentID)
@@ -786,7 +789,11 @@ export namespace RayaTask {
         input.found
           ? removals(deps.storage)
               .stage(value.agentID)
-              .pipe(Effect.andThen(save(input.items.filter((item) => item.id !== value.agentID))), Effect.as(true))
+              .pipe(
+                Effect.mapError((err) => new GuardError({ message: err.message })),
+                Effect.andThen(save(input.items.filter((item) => item.id !== value.agentID))),
+                Effect.as(true),
+              )
           : Effect.succeed(true)
       const recovered = yield* recover(
         deps.storage,
@@ -1637,6 +1644,9 @@ export namespace RayaTask {
       const items = yield* list()
       const found = items.find((item) => item.id === id)
       if (!found) return yield* new NotFoundError({ message: "Agent not found" })
+      yield* removals(deps.storage)
+        .check(id)
+        .pipe(Effect.mapError((err) => new GuardError({ message: err.message })))
       if ((yield* runsFor(id)).some(pending))
         return yield* new GuardError({ message: "This routine has unfinished runs. Resolve them before removing it." })
       if (deps.database && (yield* RayaTaskQueue.make(deps.database).active(id).pipe(Effect.orDie)).length)
@@ -1662,7 +1672,11 @@ export namespace RayaTask {
 
     const erase = (selected: Effect.Success<ReturnType<typeof remove>>) =>
       retain(selected.found).pipe(
-        Effect.andThen(removals(deps.storage).stage(selected.found.id)),
+        Effect.andThen(
+          removals(deps.storage)
+            .stage(selected.found.id)
+            .pipe(Effect.mapError((err) => new GuardError({ message: err.message }))),
+        ),
         Effect.andThen(save(selected.remaining)),
         Effect.as(true),
       )

@@ -39,7 +39,11 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
         if (!ids.length) return
         for (const id of ids) yield* queue.discard(id).pipe(Effect.orDie)
         yield* receipts.finish(ids)
-      }),
+      }).pipe(
+        Effect.catchTag("RayaTask.RemovalError", (err) =>
+          Effect.fail(new RayaTask.GuardError({ message: err.message })),
+        ),
+      ),
     )
   const retire = (id: string) =>
     mutate(

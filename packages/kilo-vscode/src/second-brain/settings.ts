@@ -12,10 +12,10 @@ import { normalize } from "./control/identity"
 import { review as closed, ClosedRequired, absent as closedAbsent } from "./closed-recovery"
 import { review as correlate, rebind } from "./committed-capture"
 import { records, confirmation } from "./capture-intake"
-import { associate, origin as captured } from "./managed/capture-upgrade"
+import { associate, ancestry, origin as captured } from "./managed/capture-upgrade"
 import { release } from "./control/catalog-capture"
 import { materialize } from "./managed/materialize"
-import { publish as upgrade } from "./managed/upgrade-publish"
+import { publish as upgrade, anchor, guard } from "./managed/upgrade-publish"
 import { randomUUID } from "node:crypto"
 import { current as supervisor } from "./managed/catalog"
 import { review as indexReview } from "./capture-index"
@@ -173,7 +173,7 @@ function captureTurn(
   retained: unknown,
 ) {
   if (isDeepStrictEqual(original, input)) return
-  const proof = confirmation(reviewed, original)
+  const proof = confirmation(reviewed, original, retained)
   if (!isDeepStrictEqual(input, proof.completed) || !isDeepStrictEqual(retained, proof))
     throw new Error("Original recovered capture confirmation required")
 }
@@ -509,7 +509,7 @@ export class BrainSettings {
     )
       throw new Error("Recovered capture belongs to a different Memory setup")
     const reviewed = await capture(this.storage, extension, previous, audit.debt, original)
-    if (!isDeepStrictEqual(current.setup, previous.setup)) await associate(this.storage, previous, current, reviewed)
+    await associate(this.storage, previous, current, reviewed)
     captureTurn(original, input, reviewed, this.storage.get(`${key}.confirmation`))
     const { producer, ...evidence } = reviewed
     if (
@@ -566,37 +566,79 @@ export class BrainSettings {
   upgradeCapture(extension: string, input: unknown) {
     return this.serial(async () => {
       if (!this.upgrading()) return this.reviewed(extension, input)
-      const turn = records(this.storage.get("raya.secondBrain.personalCapture.turns")).find((row) =>
-        isDeepStrictEqual(row, input),
-      )
+      const turns = records(this.storage.get("raya.secondBrain.personalCapture.turns"))
+      const turn = turns.find((row) => isDeepStrictEqual(row, input))
       if (!turn) throw new Error("Original capture upgrade ledger row required")
-      const audit = this.storage.get<{ previous: unknown; debt: unknown; turn: unknown }>(
-        `raya.secondBrain.committedCaptureRecovery.${turn.id}`,
+      const audit = structuredClone(
+        this.storage.get<{ previous: unknown; debt: unknown; turn: unknown }>(
+          `raya.secondBrain.committedCaptureRecovery.${turn.id}`,
+        ),
       )
       if (!audit) throw new Error("Original applied recovery is required before runtime upgrade")
       const previous = this.entry(audit.previous)
       const original = records([audit.turn])[0]
-      const reviewed = await capture(this.storage, extension, previous, audit.debt, original)
-      captured(this.storage, previous, reviewed)
-      captureTurn(
-        original,
-        input,
-        reviewed,
+      const held = structuredClone(
+        this.storage.get<{
+          format: string
+          audit: { artifact: Descriptor["plan"]; previous: { present: boolean; value?: unknown }[] }
+        }>(recovering),
+      )
+      const selected = structuredClone(this.entry(this.storage.get(state)))
+      const retained = structuredClone(
         this.storage.get(`raya.secondBrain.committedCaptureRecovery.${turn.id}.confirmation`),
       )
+      const stable = () => {
+        if (
+          !isDeepStrictEqual(this.storage.get(state), selected) ||
+          !isDeepStrictEqual(this.storage.get(recovering), held) ||
+          !isDeepStrictEqual(this.storage.get(`raya.secondBrain.committedCaptureRecovery.${turn.id}`), audit) ||
+          !isDeepStrictEqual(
+            this.storage.get(`raya.secondBrain.committedCaptureRecovery.${turn.id}.confirmation`),
+            retained,
+          ) ||
+          !isDeepStrictEqual(records(this.storage.get("raya.secondBrain.personalCapture.turns")), turns) ||
+          this.pending()
+        )
+          throw new Error("Original capture upgrade selection changed")
+      }
+      stable()
+      const scope = held ? await anchor(this.storage, held.audit.artifact) : undefined
+      stable()
+      const current = scope ? this.entry(scope.saved) : selected
+      if (scope) guard(this.storage, scope)
+      const reviewed = await capture(this.storage, extension, previous, audit.debt, original)
+      stable()
+      captured(this.storage, previous, reviewed)
+      if (scope) await ancestry(this.storage, previous, reviewed, scope)
+      if (!scope) await associate(this.storage, previous, current, reviewed)
+      stable()
+      captureTurn(original, input, reviewed, retained)
       await absent(reviewed.closure)
-      const prior = previous.launch as { phase: string; receipt: Receipt; history?: Receipt[] }
-      const closed = { ...previous, launch: { ...prior, phase: "closed", receipt: reviewed.closure.closed } }
-      const held = this.storage.get<{
-        format: string
-        audit: { artifact: Descriptor["plan"]; previous: { present: boolean; value?: unknown }[] }
-      }>(recovering)
+      stable()
+      const closed = current
+      if (closed.launch !== undefined) {
+        const phase = closed.launch as { phase?: string; receipt: Receipt }
+        if (phase.phase !== "closed") throw new Error("A genuinely closed capture runtime is required for upgrade")
+        await context(descriptor(closed.managed), parse(closed.setup), phase.receipt)
+        stable()
+      }
+      if (scope) guard(this.storage, scope)
       const artifact = held ? this.intent(held, closed) : await this.prepare(extension, closed)
+      stable()
       const rechecked = await capture(this.storage, extension, previous, audit.debt, original)
+      stable()
       captured(this.storage, previous, rechecked)
       if (fingerprint({ ...rechecked, producer: undefined }) !== fingerprint({ ...reviewed, producer: undefined }))
         throw new Error("Original capture changed during runtime preparation")
       await absent(rechecked.closure)
+      stable()
+      if (scope) {
+        await ancestry(this.storage, previous, rechecked, scope)
+        guard(this.storage, scope)
+      }
+      if (!scope) await associate(this.storage, previous, current, rechecked)
+      captureTurn(original, input, rechecked, retained)
+      stable()
       await upgrade(this.storage, artifact)
       this.original = undefined
       this.managedEntry = undefined

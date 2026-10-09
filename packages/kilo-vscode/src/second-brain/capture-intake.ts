@@ -8,7 +8,7 @@ import type { failure } from "./capture-failure"
 import type { review } from "./committed-capture"
 import { fingerprint } from "./failed-repair"
 import type { Setup } from "./settings"
-import { linked } from "./managed/capture-upgrade"
+import { fresh, historical, linked } from "./managed/capture-upgrade"
 import { review as refused } from "./capture-refusal"
 import { review as reserved } from "./capture-reserved"
 
@@ -141,9 +141,13 @@ export function records(input: unknown) {
   return rows.parse(input ?? [])
 }
 
-export function confirmation(value: Awaited<ReturnType<typeof review>>, original: ReturnType<typeof records>[number]) {
+export function confirmation(
+  value: Awaited<ReturnType<typeof review>>,
+  original: ReturnType<typeof records>[number],
+  retained?: unknown,
+) {
   const upgrade = linked(value)
-  return {
+  const base = {
     format: "raya.memory.committed-capture.confirmation",
     version: 1,
     original,
@@ -153,8 +157,15 @@ export function confirmation(value: Awaited<ReturnType<typeof review>>, original
     requestSettlement: false,
     replay: false,
     indexConfirmed: true,
-    ...(upgrade ? { upgrade } : {}),
   }
+  const proof = { ...base, ...(upgrade ? { upgrade } : {}) }
+  if (retained === undefined || isDeepStrictEqual(retained, proof)) return proof
+  if (!retained || typeof retained !== "object" || Array.isArray(retained))
+    throw new Error("Recovered capture confirmation differs")
+  const prefix = historical(value, "upgrade" in retained ? retained.upgrade : undefined)
+  const expected = { ...base, ...(prefix ? { upgrade: prefix } : {}) }
+  if (!isDeepStrictEqual(retained, expected)) throw new Error("Original recovered capture confirmation required")
+  return expected
 }
 const failures = z
   .array(
@@ -252,6 +263,14 @@ function recovery(
   )
     throw new Error("Original applied capture recovery audit required")
   return audit
+}
+
+function stable(storage: Storage, key: string, audit: unknown, proof: unknown, turns: unknown) {
+  return (
+    isDeepStrictEqual(storage.get(`${key}.confirmation`), proof) &&
+    isDeepStrictEqual(storage.get(key), audit) &&
+    isDeepStrictEqual(records(storage.get(ledger)), turns)
+  )
 }
 
 /** Host-private durable intake. A model or renderer cannot create saved consent. */
@@ -709,28 +728,31 @@ export class CaptureIntake {
       )
         throw new Error("Original capture and current derived index must agree")
       const key = `raya.secondBrain.committedCaptureRecovery.${prior.id}`
-      const audit = recovery(value, this.storage.get(key))
+      const audit = structuredClone(recovery(value, this.storage.get(key)))
       const original = record.parse(audit.turn)
       const completed = record.parse({ ...original, phase: "published", receipt: value.inputSHA })
       if (!isDeepStrictEqual(prior, original) && !isDeepStrictEqual(prior, completed))
         throw new Error("Recovered capture history changed")
       const target = `${key}.confirmation`
-      const retained = this.storage.get(target)
-      const proof = confirmation(value, original)
-      if (retained !== undefined && !isDeepStrictEqual(retained, proof))
-        throw new Error("Recovered capture confirmation differs")
-      await this.storage.update(target, proof)
+      const retained = structuredClone(this.storage.get(target))
+      if (retained === undefined && isDeepStrictEqual(prior, completed))
+        throw new Error("Original recovered capture confirmation required")
+      const proof = confirmation(value, original, retained)
+      await fresh(value, this.storage)
       check()
-      if (
-        !isDeepStrictEqual(this.storage.get(target), proof) ||
-        !isDeepStrictEqual(this.storage.get(key), audit) ||
-        !isDeepStrictEqual(records(this.storage.get(ledger)), saved)
-      )
-        throw new Error("Recovered capture confirmation changed")
+      if (!stable(this.storage, key, audit, retained, saved)) throw new Error("Recovered capture confirmation changed")
+      if (retained === undefined) await this.storage.update(target, proof)
+      check()
+      await fresh(value, this.storage)
+      check()
+      if (!stable(this.storage, key, audit, proof, saved)) throw new Error("Recovered capture confirmation changed")
+      if (isDeepStrictEqual(prior, completed)) return
       const next = saved.map((row) => (row.id === prior.id ? completed : row))
       await this.storage.update(ledger, next)
       check()
-      if (!isDeepStrictEqual(records(this.storage.get(ledger)), next))
+      await fresh(value, this.storage)
+      check()
+      if (!stable(this.storage, key, audit, proof, next))
         throw new Error("Recovered capture confirmation persistence failed")
       this.changed()
     })

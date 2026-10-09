@@ -32,6 +32,10 @@ type Audit = {
   indexConfirmed: false
 }
 type Marker = { format: "raya.memory.runtime.upgrade.pending"; version: 1; audit: Audit }
+const anchors = new WeakMap<
+  object,
+  { storage: Storage; marker: Marker; retained: unknown; slots: Slot[]; identity: string }
+>()
 
 function entry(input: unknown): Entry {
   check(input && typeof input === "object" && !Array.isArray(input), "Existing upgrade setup required")
@@ -143,7 +147,7 @@ function catalog(input: unknown, proof: Awaited<ReturnType<typeof review>>) {
   }
 }
 
-function intent(storage: Storage, artifact: Descriptor["plan"]) {
+function intent(storage: Storage, artifact: Descriptor["plan"], scope?: object) {
   const id = path.basename(path.dirname(artifact.path)).slice("raya-memory-fresh-".length)
   check(
     /^[a-f0-9]{32}$/.test(id) &&
@@ -152,7 +156,8 @@ function intent(storage: Storage, artifact: Descriptor["plan"]) {
     "Exact immutable upgrade publication location required",
   )
   const key = `raya.secondBrain.runtimeUpgrade.${id}`
-  const held = storage.get<Marker>(pending)
+  if (scope) guard(storage, scope)
+  const held = scope ? undefined : storage.get<Marker>(pending)
   check(
     held === undefined ||
       (held.format === "raya.memory.runtime.upgrade.pending" &&
@@ -162,6 +167,7 @@ function intent(storage: Storage, artifact: Descriptor["plan"]) {
     "Another Memory recovery or upgrade remains active",
   )
   const retained = storage.get<Audit>(key)
+  if (scope) check(retained?.phase === "applied", "Applied ancestor publication required")
   if (retained) check(isDeepStrictEqual(retained.artifact, artifact), "Retained upgrade artifact differs")
   const original = held?.audit.previous ?? retained?.previous ?? slots(storage)
   check(Array.isArray(original) && original.length === keys.length, "Exact original upgrade slots required")
@@ -198,10 +204,11 @@ async function apply(
   return applied
 }
 
-async function preparation(storage: Storage, artifact: Descriptor["plan"]) {
-  const { id, key, held, retained, original } = intent(storage, artifact)
+async function preparation(storage: Storage, artifact: Descriptor["plan"], scope?: object) {
+  const { id, key, held, retained, original } = intent(storage, artifact, scope)
   const previous = entry(value(original[0]))
   const proof = await review(artifact, { setup: parse(previous.setup), managed: previous.managed })
+  if (scope) guard(storage, scope)
   check(proof.id === id, "Original runtime publication selection differs")
   const selected = previous
   check(
@@ -235,6 +242,68 @@ async function preparation(storage: Storage, artifact: Descriptor["plan"]) {
   if (held) check(isDeepStrictEqual(held, marker), "Retained upgrade fence differs")
   if (retained) same(audit, retained)
   return { key, held, retained, selected, proof, audit, marker }
+}
+
+/** Authenticate an interrupted publication without treating its tentative successor as applied. */
+export async function anchor(storage: Storage, artifact: Descriptor["plan"]) {
+  const marker = structuredClone(storage.get<Marker>(pending))
+  check(marker && isDeepStrictEqual(marker.audit?.artifact, artifact), "Exact pending runtime upgrade required")
+  const current = slots(storage)
+  const retained = structuredClone(storage.get(`raya.secondBrain.runtimeUpgrade.${marker.audit.id}`))
+  const unchanged = () => {
+    check(
+      isDeepStrictEqual(storage.get(pending), marker) &&
+        isDeepStrictEqual(slots(storage), current) &&
+        isDeepStrictEqual(storage.get(`raya.secondBrain.runtimeUpgrade.${marker.audit.id}`), retained) &&
+        storage.get("raya.secondBrain.control.uncertainty") === undefined &&
+        digest(storage) === marker.audit.ledgerSHA,
+      "Pending runtime upgrade anchor changed",
+    )
+  }
+  unchanged()
+  const value = await preparation(storage, artifact)
+  unchanged()
+  check(isDeepStrictEqual(value.marker, marker), "Pending runtime upgrade projection differs")
+  const stage = prefix(current, value.audit)
+  check(!value.retained || stage >= value.retained.stage, "Runtime upgrade publication moved backwards")
+  if (value.retained?.phase === "applied") check(stage === 3, "Applied runtime upgrade state differs")
+  await admission(value.selected)
+  unchanged()
+  const grant = Object.freeze({ saved: structuredClone(value.selected), artifact: structuredClone(artifact), stage })
+  anchors.set(grant, { storage, marker, retained, slots: current, identity: fingerprint(grant) })
+  return grant
+}
+
+/** Only a genuine in-process read-only anchor can authorize ancestor review while its exact fence remains. */
+export function guard(storage: Storage, grant: object) {
+  const selected = anchors.get(grant)
+  check(selected?.storage === storage, "Fresh pending runtime upgrade anchor required")
+  check(
+    fingerprint(grant) === selected.identity &&
+      isDeepStrictEqual(storage.get(pending), selected.marker) &&
+      isDeepStrictEqual(slots(storage), selected.slots) &&
+      isDeepStrictEqual(
+        storage.get(`raya.secondBrain.runtimeUpgrade.${selected.marker.audit.id}`),
+        selected.retained,
+      ) &&
+      storage.get("raya.secondBrain.control.uncertainty") === undefined &&
+      digest(storage) === selected.marker.audit.ledgerSHA,
+    "Pending runtime upgrade anchor changed",
+  )
+}
+
+/** Inspect each already-applied ancestor from its own originals under an independently validated pending fence. */
+export async function inspectAncestor(storage: Storage, artifact: Descriptor["plan"], grant: object) {
+  guard(storage, grant)
+  const value = await preparation(storage, artifact, grant)
+  guard(storage, grant)
+  check(
+    value.retained?.phase === "applied" &&
+      value.retained.stage === 3 &&
+      isDeepStrictEqual(storage.get(value.key), value.retained),
+    "Applied ancestor runtime publication required",
+  )
+  return Object.freeze({ ...value.proof, publication: value.retained, saved: value.selected })
 }
 
 /** Fresh native review of an applied publication does not mutate settings or claim the index is ready. */

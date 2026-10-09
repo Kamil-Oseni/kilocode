@@ -48,7 +48,8 @@ function result(request: Request): ProposalResult {
     request.command.action === "context" ||
     request.command.action === "status" ||
     request.command.action === "capture" ||
-    request.command.action === "capturePolicy"
+    request.command.action === "capturePolicy" ||
+    request.command.action === "captureFailed"
   )
     throw new Error("Proposal request required")
   return {

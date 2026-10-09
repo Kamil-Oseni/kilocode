@@ -2024,6 +2024,22 @@ export type SecondBrainRequest = {
           }>
         }>
       }
+    | {
+        action: "captureFailed"
+        id: string
+        grant: string
+        messageID: string
+        source_sha256: string
+        reason:
+          | "duplicate_key"
+          | "secret_text"
+          | "restricted_key"
+          | "invalid_schema"
+          | "extraction_failed"
+          | "source_changed"
+          | "grant_expired"
+          | "cancelled"
+      }
 }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
@@ -6976,6 +6992,27 @@ export type SecondBrainResult =
       source_sha256: string
       status: "published" | "duplicate" | "skipped"
       receipt?: string
+    }
+  | {
+      action: "captureFailed"
+      id: string
+      project: string
+      sessionID: string
+      messageID: string
+      source_sha256: string
+      reason:
+        | "duplicate_key"
+        | "secret_text"
+        | "restricted_key"
+        | "invalid_schema"
+        | "extraction_failed"
+        | "source_changed"
+        | "grant_expired"
+        | "cancelled"
+      status: "skipped"
+      requestSettlement: false
+      indexConfirmed: false
+      replay: false
     }
 
 export type SecondBrainFailure = {

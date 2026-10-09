@@ -104,7 +104,7 @@ test("explicit exclusions retain no fallback facts and restricted or duplicate e
       original,
     )
     expect(parsed).toHaveLength(1)
-    expect(parsed[0].key).toBe("ask_cards")
+    expect(parsed[0].key).toBe("p0_ask_cards")
   }
   expect(() =>
     extracted(
@@ -112,16 +112,70 @@ test("explicit exclusions retain no fallback facts and restricted or duplicate e
       original,
     ),
   ).toThrow()
-  for (const key of ["health", "ask_cards"]) {
-    const parsed = extracted(
+  for (const key of ["health", "private_health"]) {
+    expect(() =>
+      extracted(
+        {
+          ...output,
+          preferences: { ...output.preferences, preference_2: { status: "retained", entry: { ...memory, key } } },
+        },
+        original,
+      ),
+    ).toThrow("restricted_key")
+  }
+  const equal = entries(
+    extracted(
       {
         ...output,
-        preferences: { ...output.preferences, preference_2: { status: "retained", entry: { ...memory, key } } },
+        preferences: {
+          ...output.preferences,
+          preference_2: { status: "retained", entry: { ...memory, key: cards.key } },
+        },
       },
       original,
-    )
-    expect(() => entries(parsed, original)).toThrow("duplicate or restricted")
+    ),
+    original,
+  )
+  expect(equal.map((entry) => entry.key)).toEqual(["p0_ask_cards", "p2_ask_cards"])
+  expect(equal.map((entry) => entry.text)).toEqual([cards.text, memory.text])
+  const other = { ...cards, origin: "assistant_interpretation", evidence: [{ ref: 4 }] }
+  expect(() => entries(extracted({ ...output, entries: [other, other] }, original), original)).toThrow("duplicate_key")
+})
+
+test("host prefixes preserve complete bounded suffixes and secret restrictions", () => {
+  const key = "a".repeat(77)
+  const value = {
+    ...output,
+    preferences: { ...output.preferences, preference_0: { status: "retained", entry: { ...cards, key } } },
   }
+  expect(entries(extracted(value, original), original)[0].key).toBe(`p0_${key}`)
+  expect(() =>
+    extracted(
+      {
+        ...value,
+        preferences: {
+          ...value.preferences,
+          preference_0: { status: "retained", entry: { ...cards, key: "a".repeat(78) } },
+        },
+      },
+      original,
+    ),
+  ).toThrow("bounded entry schema")
+  expect(() =>
+    extracted(
+      {
+        ...output,
+        preferences: {
+          ...output.preferences,
+          preference_0: {
+            status: "retained",
+            entry: { ...cards, text: "git clone https://alice:password@example.com/repo" },
+          },
+        },
+      },
+      original,
+    ),
+  ).toThrow("secret_text")
 })
 
 test("bounded clause segmentation preserves Unicode and leaves other extraction contracts unchanged", () => {

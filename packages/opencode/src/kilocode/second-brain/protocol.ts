@@ -1,7 +1,14 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
-import { Capture, CapturePolicy, CapturePolicyResult, CaptureResult } from "./capture-protocol"
+import {
+  Capture,
+  CapturePolicy,
+  CapturePolicyResult,
+  CaptureResult,
+  CaptureFailed,
+  CaptureFailedResult,
+} from "./capture-protocol"
 
 export const RequestID = Schema.String.pipe(Schema.brand("SecondBrainRequestID")).annotate({
   identifier: "SecondBrainRequestID",
@@ -41,7 +48,7 @@ export const Request = Schema.Struct({
   id: RequestID,
   sessionID: SessionID,
   project: Path,
-  command: Schema.Union([Command, Recall, Status, CapturePolicy, Capture]),
+  command: Schema.Union([Command, Recall, Status, CapturePolicy, Capture, CaptureFailed]),
 }).annotate({ identifier: "SecondBrainRequest" })
 export type Request = typeof Request.Type
 const Proposal = Schema.Struct({
@@ -110,6 +117,7 @@ export const Result = Schema.Union([
   StatusResult,
   CapturePolicyResult,
   CaptureResult,
+  CaptureFailedResult,
 ]).annotate({
   identifier: "SecondBrainResult",
 })

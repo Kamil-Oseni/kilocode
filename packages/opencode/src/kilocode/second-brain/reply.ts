@@ -8,16 +8,19 @@ const restricted = new Set(["system", "archive", ".git", "health", "medical", "p
 export function valid(request: Request, value: Result) {
   if (!Schema.is(Result)(value) || request.command.action !== value.action || request.project !== value.project)
     return false
-  if (value.action === "capturePolicy" || value.action === "capture") {
+  if (value.action === "capturePolicy" || value.action === "capture" || value.action === "captureFailed") {
     const command = request.command
     if (command.action !== value.action) return false
-    if (command.action !== "capturePolicy" && command.action !== "capture") return false
+    if (command.action !== "capturePolicy" && command.action !== "capture" && command.action !== "captureFailed")
+      return false
     if (
       value.sessionID !== request.sessionID ||
       value.messageID !== command.messageID ||
       value.source_sha256 !== command.source_sha256
     )
       return false
+    if (value.action === "captureFailed")
+      return command.action === "captureFailed" && value.id === command.id && value.reason === command.reason
     if (value.action === "capturePolicy")
       return value.enabled
         ? Boolean(value.grant && path.isAbsolute(value.grant.root) && value.grant.expires > Date.now())
@@ -38,7 +41,8 @@ export function valid(request: Request, value: Result) {
     if (
       request.command.action === "context" ||
       request.command.action === "capturePolicy" ||
-      request.command.action === "capture"
+      request.command.action === "capture" ||
+      request.command.action === "captureFailed"
     )
       return false
     return (

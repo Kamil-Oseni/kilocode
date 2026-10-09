@@ -200,9 +200,14 @@ test("durable original capture grants bind consent, generation, source and local
     ).toThrow("one-use")
     expect(await reopened.grant(next, binding, () => {})).toBeUndefined()
     expect(reopened.snapshot(binding).status).toBe("uncertain")
+    expect(await intake.grant({ ...turn, sessionID: "blocked" }, binding, () => {})).toBeUndefined()
+    // This controlled generation refusal has never dispatched transport; retain its terminal ID before more unit work.
+    await intake.finish(next, "skipped")
 
     const writing = { ...turn, sessionID: "writing" }
     await intake.grant(writing, binding, () => {})
+    const last = { ...turn, sessionID: "last" }
+    const third = await intake.grant(last, binding, () => {})
     await intake.begin(writing)
     expect(intake.snapshot(binding).status).toBe("saving")
     expect(states.at(-1)).toBe("saving")
@@ -222,8 +227,6 @@ test("durable original capture grants bind consent, generation, source and local
     expect(states.at(-1)).toBe("capacity")
     listener.dispose()
 
-    const last = { ...turn, sessionID: "last" }
-    const third = await intake.grant(last, binding, () => {})
     await intake.save({ ...cfg, enabled: false })
     expect(intake.saved(binding)?.enabled).toBe(false)
     expect(() => intake.consume(last, { ...command, grant: third!.id }, binding, () => {})).toThrow("one-use")

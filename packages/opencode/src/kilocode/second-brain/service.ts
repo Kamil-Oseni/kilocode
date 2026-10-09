@@ -15,7 +15,8 @@ function read(command: Request["command"]) {
   return command.action === "context" ||
     command.action === "status" ||
     command.action === "capturePolicy" ||
-    command.action === "capture"
+    command.action === "capture" ||
+    command.action === "captureFailed"
     ? command.action
     : undefined
 }
@@ -25,9 +26,11 @@ export type Input = WithoutID<Request>
 export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrainHostError", {
   code: ErrorCode,
   detail: Schema.String,
-  operation: Schema.optional(Schema.Literals(["context", "status", "capturePolicy", "capture"])),
+  operation: Schema.optional(Schema.Literals(["context", "status", "capturePolicy", "capture", "captureFailed"])),
 }) {
   override get message() {
+    if (this.operation === "captureFailed")
+      return `${this.detail}. The original extraction failure disposition is unconfirmed; do not replay the conversation.`
     if (this.operation === "capturePolicy")
       return `${this.detail}. Capture extraction and publication were not authorized.`
     if (this.operation === "capture")

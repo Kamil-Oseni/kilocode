@@ -34,6 +34,37 @@ export const CapturePolicy = Schema.Struct({
   messageID: text(256),
   source_sha256: hash,
 })
+export const CaptureFailure = Schema.Literals([
+  "duplicate_key",
+  "secret_text",
+  "restricted_key",
+  "invalid_schema",
+  "extraction_failed",
+  "source_changed",
+  "grant_expired",
+  "cancelled",
+])
+export const CaptureFailed = Schema.Struct({
+  action: Schema.Literal("captureFailed"),
+  id: uuid,
+  grant: uuid,
+  messageID: text(256),
+  source_sha256: hash,
+  reason: CaptureFailure,
+})
+export const CaptureFailedResult = Schema.Struct({
+  action: Schema.Literal("captureFailed"),
+  id: uuid,
+  project: text(4096),
+  sessionID: text(256),
+  messageID: text(256),
+  source_sha256: hash,
+  reason: CaptureFailure,
+  status: Schema.Literal("skipped"),
+  requestSettlement: Schema.Literal(false),
+  indexConfirmed: Schema.Literal(false),
+  replay: Schema.Literal(false),
+})
 export const Capture = Schema.Struct({
   action: Schema.Literal("capture"),
   id: uuid,

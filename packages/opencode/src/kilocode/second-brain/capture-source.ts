@@ -3,6 +3,10 @@ import { Schema } from "effect"
 import type { MessageV2 } from "@/session/message-v2"
 import { MemoryRedact } from "@kilocode/kilo-memory/redact"
 import { CaptureEntries, CaptureSource } from "./capture-protocol"
+import { CaptureRejected } from "./capture-errors"
+import * as Log from "@opencode-ai/core/util/log"
+
+const log = Log.create({ service: "capture.source" })
 
 export function digest(observed: string, source: CaptureSource) {
   return createHash("sha256")
@@ -105,13 +109,18 @@ export function source(messages: MessageV2.WithParts[], session: string, message
 export function entries(value: unknown, source: CaptureSource) {
   if (!Schema.is(CaptureEntries)(value)) throw new Error("Capture extraction does not match the bounded entry schema")
   const keys = new Set<string>()
-  for (const entry of value) {
-    if (
-      keys.has(entry.key) ||
-      MemoryRedact.has(entry.text) ||
-      /(^|[-_])(password|secret|credential|token|medical|health|financial|bank)([-_]|$)/.test(entry.key)
-    )
-      throw new Error("Capture extraction contains duplicate or restricted entries")
+  for (const [index, entry] of value.entries()) {
+    const reason = keys.has(entry.key)
+      ? "duplicate_key"
+      : MemoryRedact.has(entry.text)
+        ? "secret_text"
+        : /(^|[-_])(password|secret|credential|token|medical|health|financial|bank)([-_]|$)/.test(entry.key)
+          ? "restricted_key"
+          : undefined
+    if (reason) {
+      log.warn("capture entry rejected", { reason, index, origin: entry.origin })
+      throw new CaptureRejected(reason)
+    }
     keys.add(entry.key)
     const sources =
       entry.origin === "user_statement"

@@ -640,14 +640,15 @@ export class BrainHost {
     if (!request.command || typeof request.command !== "object" || Array.isArray(request.command))
       throw new Error("Proposal command required")
     const row = request.command as Record<string, unknown>
-    const guard = ["status", "context", "capturePolicy", "capture"].includes(String(row.action))
+    const guard = ["status", "context", "capturePolicy", "capture", "captureFailed"].includes(String(row.action))
       ? personal(project, () => ({
           trusted: vscode.workspace.isTrusted,
           folders: (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
         }))
       : () => trusted(project)
     guard()
-    if (["capturePolicy", "capture"].includes(String(row.action))) return this.capture(request, project, signal, guard)
+    if (["capturePolicy", "capture", "captureFailed"].includes(String(row.action)))
+      return this.capture(request, project, signal, guard)
     if (row.action === "status") {
       const result = await this.inspect(row, project, signal)
       guard()
@@ -726,6 +727,27 @@ export class BrainHost {
     const row = request.command as Record<string, unknown>
     const turn = captureTurn(request, row, project)
     const result = { project, sessionID: turn.sessionID, messageID: turn.messageID, source_sha256: turn.source_sha256 }
+    if (row.action === "captureFailed") {
+      const audit = await this.intake.fail(turn, row, (binding) => {
+        signal.throwIfAborted()
+        guard()
+        if (this.closing || !vscode.workspace.isTrusted || !this.service.captureCurrent(binding))
+          throw new Error("Original pre-transport extraction owner changed")
+      })
+      void vscode.window.showWarningMessage(
+        `Memory did not save this reply (${audit.reason}). The failed extraction is retained and will not be retried.`,
+      )
+      return {
+        action: "captureFailed" as const,
+        ...result,
+        id: audit.original.id,
+        reason: audit.reason,
+        status: "skipped" as const,
+        requestSettlement: false as const,
+        indexConfirmed: false as const,
+        replay: false as const,
+      }
+    }
     if (row.action === "capturePolicy") {
       if (Object.keys(row).sort().join() !== "action,messageID,source_sha256")
         throw new Error("Exact capture policy command required")

@@ -22,6 +22,7 @@ import { generate } from "../../../src/kilocode/memory/dream-generation"
 import { extraction, extracted } from "../../../src/kilocode/second-brain/capture-extraction"
 import { entries } from "../../../src/kilocode/second-brain/capture-source"
 import { structured } from "../../../src/kilocode/provider/ollama-context"
+import { stage } from "../../../src/kilocode/second-brain/capture-phase"
 
 const pid = ProviderV2.ID.make("test")
 const mid = ModelV2.ID.make("fake-memory-model")
@@ -98,8 +99,8 @@ test("capture sends its bounded schema through the real compatible SDK and still
     expect(invalid._tag).toBe("Failure")
     expect(requests).toHaveLength(2)
     content = JSON.stringify({ entries: [{ ...quoted, evidence: [{ ref: 1 }] }] })
-    const foreign = await Effect.runPromise(generate(selected, payload, schema))
-    expect(() => extracted(JSON.parse(foreign.text), source)).toThrow("actual original source reference")
+    const foreign = await Effect.runPromiseExit(generate(selected, payload, schema))
+    expect(foreign._tag).toBe("Failure")
     expect(requests).toHaveLength(3)
   } finally {
     await server.stop(true)
@@ -111,23 +112,35 @@ test("Dream Effect transport cancellation joins its original delayed SDK work", 
   const ready = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
   let ended = false
+  const events: string[] = []
   const work = Effect.runPromiseExit(
-    generate(
-      provider({
-        wait: async () => {
-          ready.resolve()
-          await release.promise
+    stage(
+      generate(
+        provider({
+          wait: async () => {
+            ready.resolve()
+            await release.promise
+            events.push("provider-joined")
+          },
+        }),
+        {
+          id: randomUUID(),
+          owner: randomUUID(),
+          model: "test/memory-config-model",
+          system: "Synthetic approved inputs",
+          prompt: "Return bounded text",
+          timeoutMs: 10000,
+          budget: { input: 1000, output: 500 },
         },
-      }),
-      {
-        id: randomUUID(),
-        owner: randomUUID(),
-        model: "test/memory-config-model",
-        system: "Synthetic approved inputs",
-        prompt: "Return bounded text",
-        timeoutMs: 10000,
-        budget: { input: 1000, output: 500 },
-      },
+      ),
+      () =>
+        Effect.sync(() => {
+          events.push("captureFailed")
+        }),
+      () =>
+        Effect.sync(() => {
+          events.push("capture")
+        }),
     ),
     { signal: controller.signal },
   ).finally(() => {
@@ -138,12 +151,14 @@ test("Dream Effect transport cancellation joins its original delayed SDK work", 
     controller.abort()
     await Bun.sleep(10)
     expect(ended).toBe(false)
+    expect(events).toEqual([])
   } finally {
     release.resolve()
   }
   const exit = await work
   expect(exit._tag).toBe("Failure")
   expect(ended).toBe(true)
+  expect(events).toEqual(["provider-joined", "captureFailed"])
 })
 
 test("Dream transport retains the original prepared payload through asynchronous model resolution", async () => {

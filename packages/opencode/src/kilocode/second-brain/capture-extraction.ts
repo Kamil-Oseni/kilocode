@@ -2,6 +2,8 @@ import { jsonSchema } from "ai"
 import { Schema, SchemaIssue, Result } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
 import { CaptureEntry, type CaptureSource } from "./capture-protocol"
+import { CaptureRejected } from "./capture-errors"
+import { entries } from "./capture-source"
 
 function blocks(source: CaptureSource) {
   const clauses =
@@ -45,6 +47,7 @@ function preference(ref: number) {
       status: Schema.Literal("retained"),
       entry: Schema.Struct({
         ...CaptureEntry.fields,
+        key: suffix(`p${ref}`),
         category: Schema.Literal("Preferences"),
         origin: Schema.Literal("user_statement"),
         evidence: Schema.Array(Schema.Struct({ ref: Schema.Literal(ref) })).check(
@@ -60,6 +63,10 @@ function preference(ref: number) {
   ])
 }
 
+function suffix(prefix: string) {
+  return Schema.String.check(Schema.isPattern(new RegExp(`^[a-z0-9][a-z0-9_-]{0,${78 - prefix.length}}$`)))
+}
+
 function contract(source: CaptureSource) {
   const rows = blocks(source)
   const preferences = rows.filter((row) => row.preference)
@@ -70,6 +77,7 @@ function contract(source: CaptureSource) {
     return [
       Schema.Struct({
         ...CaptureEntry.fields,
+        ...(preferences.length ? { key: suffix(origin.split("_")[0]) } : {}),
         origin: Schema.Literal(origin),
         evidence: Schema.Array(
           Schema.Struct({
@@ -152,7 +160,7 @@ function decode(value: unknown, source: CaptureSource) {
         ),
     )
   log.warn("capture schema rejected", { paths: JSON.stringify(paths) })
-  throw new Error("Capture extraction does not match the bounded entry schema")
+  throw new CaptureRejected("invalid_schema")
 }
 
 /** The model selects original source references; it never authors IDs or offsets. */
@@ -180,24 +188,36 @@ export function extracted(value: unknown, source: CaptureSource) {
     .flatMap((row) => {
       if (!slots) throw new Error("Capture extraction is missing preference dispositions")
       const slot = Schema.decodeUnknownSync(preference(row.ref))(slots[`preference_${row.ref}`])
-      return slot.status === "retained" ? [slot.entry] : []
+      return slot.status === "retained" ? [{ ...slot.entry, prefix: `p${row.ref}` }] : []
     })
-  return [...parsed.entries, ...preferences].map((entry) => ({
-    ...entry,
-    evidence: entry.evidence.map((evidence) => {
-      const original = rows[evidence.ref]
-      if (!original || original.origin !== entry.origin || !original.text.trim()) {
-        log.warn("capture reference rejected", {
-          ref: evidence.ref,
-          origin: entry.origin,
-          source: original?.origin,
-          blank: !original?.text.trim(),
-        })
-        throw new Error("Capture evidence does not identify an actual original source reference")
-      }
-      return { id: original.id, start: original.start, end: original.end }
-    }),
-  }))
+  return [
+    ...parsed.entries.map((entry) => ({
+      ...entry,
+      prefix: rows.some((row) => row.preference) ? entry.origin.split("_")[0] : undefined,
+    })),
+    ...preferences,
+  ].map(({ prefix, ...entry }) => {
+    const value = {
+      ...entry,
+      evidence: entry.evidence.map((evidence) => {
+        const original = rows[evidence.ref]
+        if (!original || original.origin !== entry.origin || !original.text.trim()) {
+          log.warn("capture reference rejected", {
+            ref: evidence.ref,
+            origin: entry.origin,
+            source: original?.origin,
+            blank: !original?.text.trim(),
+          })
+          throw new Error("Capture evidence does not identify an actual original source reference")
+        }
+        return { id: original.id, start: original.start, end: original.end }
+      }),
+    }
+    if (!prefix) return value
+    // Check the original full suffix before assigning a namespace; no restricted key or text is hidden.
+    entries([value], source)
+    return { ...value, key: `${prefix}_${value.key}` }
+  })
 }
 
 export function prepared(source: CaptureSource) {

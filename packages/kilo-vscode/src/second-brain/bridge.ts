@@ -110,9 +110,11 @@ export class BrainBridge {
                   ? "Memory recall could not be confirmed. Check the reviewed context-capable Memory release and service status"
                   : request.command.action === "capturePolicy"
                     ? "Automatic saving authorization could not be confirmed. This turn has not been confirmed saved; do not replay it."
-                    : request.command.action === "capture"
-                      ? "Automatic saving could not be confirmed. Review the original turn's saving status; do not replay it."
-                      : "The original Memory proposal request could not be confirmed. Review its pending ledger; do not replay a write.",
+                    : request.command.action === "captureFailed"
+                      ? "The original extraction failure disposition could not be confirmed. Review the retained attempt; do not replay it."
+                      : request.command.action === "capture"
+                        ? "Automatic saving could not be confirmed. Review the original turn's saving status; do not replay it."
+                        : "The original Memory proposal request could not be confirmed. Review its pending ledger; do not replay a write.",
           },
         },
         { signal },

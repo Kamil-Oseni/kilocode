@@ -17,13 +17,9 @@ import { KiloSessionPrompt } from "@/kilocode/session/prompt"
 import { MemoryModel, MemorySession } from "./ports"
 import { capture } from "../second-brain/capture"
 import type { SecondBrain } from "../second-brain/service"
+import { diagnosis as brief } from "../second-brain/capture-errors"
 
 const log = Log.create({ service: "memory.lifecycle" })
-
-function brief(cause: Cause.Cause<unknown>) {
-  const err = Cause.squash(cause)
-  return MemoryRedact.text(err instanceof Error ? err.message : String(err)).slice(0, 200)
-}
 
 /** Host turn-open/turn-close hooks: adapt opencode's session/provider services into the package
  * capture ports and delegate the orchestration (locking, idle-flush scheduling) to the package. */

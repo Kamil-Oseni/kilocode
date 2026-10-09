@@ -74,6 +74,25 @@ const command = z
       .max(8),
   })
   .strict()
+const failed = z
+  .object({
+    action: z.literal("captureFailed"),
+    id: z.string().uuid(),
+    grant: z.string().uuid(),
+    messageID: text(256),
+    source_sha256: hash,
+    reason: z.enum([
+      "duplicate_key",
+      "secret_text",
+      "restricted_key",
+      "invalid_schema",
+      "extraction_failed",
+      "source_changed",
+      "grant_expired",
+      "cancelled",
+    ]),
+  })
+  .strict()
 const consent = z
   .object({
     version: z.literal(1),
@@ -240,6 +259,7 @@ export class CaptureIntake {
   private tail = Promise.resolve()
   private grants = new Map<string, { turn: Turn; binding: CaptureBinding; consent: Consent; expires: number }>()
   private active = new Set<string>()
+  private fenced = new Set<string>()
   private listeners = new Set<() => void>()
   constructor(private readonly storage: Storage) {}
 
@@ -280,6 +300,24 @@ export class CaptureIntake {
     const saved = rows.parse(this.storage.get(ledger) ?? [])
     const selected = saved.filter((row) => row.root === cfg.root && row.release === cfg.release)
     if (selected.some((row) => this.active.has(row.id))) return { status: "saving" }
+    if (
+      selected.some((row) => {
+        if (this.fenced.has(row.id)) return true
+        const failure = this.storage.get<{ phase: string; original: unknown }>(
+          `raya.secondBrain.captureExtractionFailure.${row.id}`,
+        )
+        if (failure?.phase !== "prepared") return false
+        const review = this.storage.get<{ phase: string; original: unknown; completed: unknown }>(
+          `raya.secondBrain.captureReservation.${row.id}`,
+        )
+        return (
+          review?.phase !== "applied" ||
+          !isDeepStrictEqual(review.original, failure.original) ||
+          !isDeepStrictEqual(review.completed, row)
+        )
+      })
+    )
+      return { status: "uncertain" }
     if (saved.some((row) => row.root === cfg.root && (row.phase === "saving" || row.phase === "uncertain")))
       return { status: "uncertain" }
     if (selected.some((row) => row.phase === "capacity")) return { status: "capacity", reason: "source_capacity" }
@@ -362,6 +400,7 @@ export class CaptureIntake {
       check()
       const cfg = this.selected(binding)
       if (!cfg || binding.index !== "synced") return undefined
+      if (this.snapshot(binding).status !== "ready") return undefined
       const row = record.parse({
         ...turn,
         id: identity(turn),
@@ -394,6 +433,7 @@ export class CaptureIntake {
   }
 
   private claim(turn: Turn, command: Command, binding: CaptureBinding, check: () => void) {
+    if (this.fenced.has(identity(turn))) throw new Error("Original extraction failure remains fenced")
     const grant = this.grants.get(command.grant)
     this.grants.delete(command.grant)
     check()
@@ -463,6 +503,94 @@ export class CaptureIntake {
   }
 
   /** Review cannot consume a grant or hide original in-memory activity. */
+  fail(turn: Turn, input: unknown, current: (binding: CaptureBinding) => void) {
+    const command = failed.parse(input)
+    return this.serial(async () => {
+      const grant = this.grants.get(command.grant)
+      const id = identity(turn)
+      if (
+        !grant ||
+        command.id !== id ||
+        !isDeepStrictEqual(grant.turn, turn) ||
+        command.messageID !== turn.messageID ||
+        command.source_sha256 !== turn.source_sha256
+      )
+        throw new Error("Exact original unconsumed extraction grant required")
+      const saved = records(this.storage.get(ledger))
+      const original = saved.find((row) => row.id === id)
+      const diagnostics = structuredClone(this.storage.get<unknown>("raya.secondBrain.personalCapture.failures"))
+      const check = () => {
+        current(grant.binding)
+        if (
+          this.grants.get(command.grant) !== grant ||
+          !isDeepStrictEqual(this.selected(grant.binding), grant.consent) ||
+          this.active.has(id) ||
+          this.storage.get("raya.secondBrain.control.uncertainty") !== undefined ||
+          !isDeepStrictEqual(this.storage.get("raya.secondBrain.personalCapture.failures"), diagnostics)
+        )
+          throw new Error("Original extraction owner, consent, activity or debt changed")
+      }
+      check()
+      if (
+        !original ||
+        original.phase !== "reserved" ||
+        original.receipt !== undefined ||
+        original.source_sha256 !== turn.source_sha256 ||
+        original.root !== grant.binding.root ||
+        original.release !== grant.binding.release ||
+        failures.parse(diagnostics ?? []).some((row) => row.id === id)
+      )
+        throw new Error("Only an untouched pre-transport reservation can fail extraction")
+      const completed = { ...original, phase: "skipped" as const }
+      const key = `raya.secondBrain.captureExtractionFailure.${id}`
+      const prepared = {
+        format: "raya.capture.extraction.failure",
+        version: 1,
+        original,
+        completed,
+        reason: command.reason,
+        grantSHA: sha(command.grant),
+        owner: grant.binding.owner,
+        ledgerSHA: fingerprint({ turns: saved }),
+        failuresSHA: fingerprint({ failures: diagnostics }),
+        phase: "prepared",
+        requestSettlement: false,
+        indexConfirmed: false,
+        replay: false,
+      }
+      if (this.storage.get(key) !== undefined) throw new Error("Original extraction failure audit already exists")
+      // Fence before storage: a failed audit write must never leave this original grant usable for publication.
+      this.fenced.add(id)
+      this.changed()
+      await this.storage.update(key, prepared)
+      check()
+      if (
+        !isDeepStrictEqual(this.storage.get(key), prepared) ||
+        !isDeepStrictEqual(records(this.storage.get(ledger)), saved)
+      )
+        throw new Error("Original extraction audit or reservation changed")
+      const next = saved.map((row) => (row.id === id ? completed : row))
+      await this.storage.update(ledger, next)
+      check()
+      if (!isDeepStrictEqual(records(this.storage.get(ledger)), next))
+        throw new Error("Original failed extraction disposition was not retained")
+      // Remove only after the exact durable disposition CAS; no new grant or replay is minted.
+      this.grants.delete(command.grant)
+      const applied = { ...prepared, phase: "applied" }
+      await this.storage.update(key, applied)
+      current(grant.binding)
+      if (
+        !isDeepStrictEqual(this.storage.get(key), applied) ||
+        !isDeepStrictEqual(records(this.storage.get(ledger)), next)
+      )
+        throw new Error("Original extraction audit confirmation failed")
+      this.fenced.delete(id)
+      this.changed()
+      return applied
+    })
+  }
+
+  /** Review cannot consume a grant or hide original in-memory activity. */
   async reviewReservation(id: string, extension: string) {
     const check = () => {
       if (this.active.has(id) || Array.from(this.grants.values()).some((grant) => identity(grant.turn) === id))
@@ -478,6 +606,8 @@ export class CaptureIntake {
     return records(this.storage.get(ledger)).filter(
       (row) =>
         row.phase === "reserved" ||
+        this.storage.get<{ phase: string }>(`raya.secondBrain.captureExtractionFailure.${row.id}`)?.phase ===
+          "prepared" ||
         this.storage.get<{ phase: string }>(`raya.secondBrain.captureReservation.${row.id}`)?.phase === "prepared",
     )
   }

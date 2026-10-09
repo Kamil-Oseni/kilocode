@@ -82219,6 +82219,47 @@
                   "entries"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": ["captureFailed"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "grant": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "source_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "duplicate_key",
+                      "secret_text",
+                      "restricted_key",
+                      "invalid_schema",
+                      "extraction_failed",
+                      "source_changed",
+                      "grant_expired",
+                      "cancelled"
+                    ]
+                  }
+                },
+                "required": ["action", "id", "grant", "messageID", "source_sha256", "reason"],
+                "additionalProperties": false
               }
             ]
           }
@@ -97991,6 +98032,81 @@
               }
             },
             "required": ["action", "project", "sessionID", "messageID", "source_sha256", "status"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["captureFailed"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+              },
+              "project": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "sessionID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "messageID": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "source_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "duplicate_key",
+                  "secret_text",
+                  "restricted_key",
+                  "invalid_schema",
+                  "extraction_failed",
+                  "source_changed",
+                  "grant_expired",
+                  "cancelled"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": ["skipped"]
+              },
+              "requestSettlement": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "indexConfirmed": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "replay": {
+                "type": "boolean",
+                "enum": [false]
+              }
+            },
+            "required": [
+              "action",
+              "id",
+              "project",
+              "sessionID",
+              "messageID",
+              "source_sha256",
+              "reason",
+              "status",
+              "requestSettlement",
+              "indexConfirmed",
+              "replay"
+            ],
             "additionalProperties": false
           }
         ]

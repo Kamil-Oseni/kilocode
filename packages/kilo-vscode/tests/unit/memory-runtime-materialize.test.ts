@@ -16,6 +16,7 @@ import { fingerprint as digest } from "../../src/second-brain/failed-repair"
 import { command } from "../../src/second-brain/control/command"
 import { image } from "../../src/second-brain/control/identity"
 import { runtime } from "./fixtures/native-memory-runtime"
+import { observe } from "../../src/second-brain/managed/upgrade-observe"
 import { parse, type Setup } from "../../src/second-brain/settings"
 
 let outer: string
@@ -38,6 +39,7 @@ afterAll(async () => {
 
 test("materialize retains old native images and creates qualified independent plans/namespaces with no models", async () => {
   const original = await selection(cfg, setup)
+  expect(original.plan.directories.some((row: { path: string }) => row.path === cfg.root)).toBe(false)
   const next = await materialize(cfg, setup, path.resolve("."), "a".repeat(32))
   const result = await selection(next.next.managed, next.next.setup)
   expect(next.source).toBe(path.join(cfg.root, "raya-memory-source-upgrade-" + "a".repeat(32)))
@@ -136,6 +138,38 @@ print('two-native-plans-qualified-without-models')`
       { setup, managed: cfg },
     ),
   ).rejects.toThrow("Derived upgrade plan changed unrelated original bytes")
+}, 30000)
+
+test("native upgrade observes root-omitting inventories and refuses changed or duplicate retained directory rows", async () => {
+  const original = await image(cfg.plan.path, 16777216)
+  expect((await observe(cfg)).prior).toHaveLength(13)
+  const script = `import json,pathlib,sys
+file=pathlib.Path(sys.argv[1]);plan=json.loads(file.read_bytes());root=pathlib.Path(plan['root']);info=root.lstat()
+row={'path':str(root),'identity':[info.st_dev,info.st_ino,info.st_ctime_ns]}
+for name in ('root','changed','duplicate','missing','source'):
+ value={**plan,'directories':list(plan['directories'])}
+ if name in ('root','changed','duplicate'):
+  value['directories'].append({**row,'identity':list(row['identity'])})
+ if name=='changed': value['directories'][-1]['identity'][1]+=1
+ if name=='duplicate': value['directories'].append(row)
+ if name=='missing': value['directories']=[item for item in value['directories'] if item['path']!=plan['source']]
+ if name=='source':
+  value['directories']=[{**item,'identity':[item['identity'][0],item['identity'][1]+1,item['identity'][2]]} if item['path']==plan['source'] else item for item in value['directories']]
+ (root/('observe-'+name+'.json')).write_text(json.dumps(value,separators=(',',':')),encoding='utf-8')`
+  await command(cfg.python.path, ["-I", "-S", "-B", "-c", script, cfg.plan.path], { windowsHide: true })
+  for (const name of ["root", "changed", "duplicate", "missing", "source"]) {
+    const file = path.join(cfg.root, "observe-" + name + ".json")
+    const held = await image(file, 16777216)
+    const result = observe({ ...cfg, plan: { path: file, bytes: held.raw.length, sha256: held.digest } })
+    if (name === "root") {
+      expect((await result).prior).toHaveLength(13)
+      continue
+    }
+    await expect(result).rejects.toThrow("original_upgrade_directory_changed")
+  }
+  const retained = await image(cfg.plan.path, 16777216)
+  expect(retained.digest).toBe(original.digest)
+  expect(retained.tuple).toBe(original.tuple)
 }, 30000)
 
 test("reusable v2 upgrade retains its independent release and external notes witness", async () => {

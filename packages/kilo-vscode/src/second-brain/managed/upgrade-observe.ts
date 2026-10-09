@@ -33,7 +33,9 @@ for name,digest in plan['source_sha256'].items():
  prior.append(ref)
 for file in (root,source):
  info=file.lstat();candidates=[row for row in plan['directories'] if row['path']==str(file)]
- if file.resolve()!=file or not stat.S_ISDIR(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400 or len(candidates)!=1 or candidates[0]['identity']!=[info.st_dev,info.st_ino,info.st_ctime_ns]: raise ValueError('original_upgrade_directory_changed')
+ # Provisioning inventories source/dependency directories; the managed root has a separate selected-pair birth witness.
+ # Require the source row. If a root row was retained, enforce it exactly without adding authority to the old plan.
+ if file.resolve()!=file or not stat.S_ISDIR(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400 or len(candidates)>1 or (file==source and len(candidates)!=1) or (candidates and candidates[0]['identity']!=[info.st_dev,info.st_ino,info.st_ctime_ns]): raise ValueError('original_upgrade_directory_changed')
 images=[];directory=None
 if sys.argv[4]:
  folder=pathlib.Path(sys.argv[4]);module['acl'](folder,sid)

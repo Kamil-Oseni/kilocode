@@ -92,7 +92,7 @@ def generations(folder):
 spaces={kind:{'root':str(root/kind),'sid':sid,'generations':generations(root/kind)} for kind in ('memory','retrieval')}
 files=[image(root/'source'/'memory'/name) for name in pins]+[image(root/'source'/'retrieval'/name) for name in retrieval]+[image(root/'python'/'python.exe'),image(root/'source'/'supervise.py'),image(root/'deps'/'admitted.txt')]
 directories=[]
-for folder in [root,root/'source',root/'source'/'memory',root/'source'/'retrieval',root/'deps']:
+for folder in [root/'source',root/'source'/'memory',root/'source'/'retrieval',root/'deps']:
  info=folder.lstat();directories.append({'path':str(folder),'identity':[info.st_dev,info.st_ino,info.st_ctime_ns]})
 common={'format':'raya.memory.managed.supervisor','version':1,'execution_admitted':True,'root':str(root),'files':files,'directories':directories,'python_sha256':ref(root/'python'/'python.exe')['sha256'],'dependencies':str(root/'deps'),'protection':{'path':str(root/'protection.json'),'sha256':ref(root/'protection.json')['sha256']}}
 private={'HOME':str(root/'home'),'USERPROFILE':str(root/'home'),'TEMP':str(root/'cache'),'TMP':str(root/'cache'),'HF_HOME':str(root/'cache'),'HF_HUB_OFFLINE':'1','TRANSFORMERS_OFFLINE':'1','PYTHONDONTWRITEBYTECODE':'1'}

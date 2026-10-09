@@ -5,6 +5,7 @@ import { status } from "./index-status"
 import type { Publication } from "./client-v2"
 import { isDeepStrictEqual } from "node:util"
 import { Refused } from "./control/frames"
+import { CaptureFailure } from "./capture-failure"
 
 type Row = Record<string, unknown>
 export type Session = {
@@ -267,6 +268,7 @@ export class BrainControl {
 
   capture(body: Publication, authorize: () => void | Promise<void>) {
     let result: Awaited<ReturnType<BrainService["capture"]>> | undefined
+    let stage: CaptureFailure["stage"] = "authorization"
     return this.transaction(async (session, check, close) => {
       const gate = async () => {
         check()
@@ -283,9 +285,11 @@ export class BrainControl {
       await session.captureAuthorize(body, expected)
       await gate()
       this.state = Object.freeze({ status: "syncing", digest: expected })
+      stage = "publication"
       const receipt = await this.service.capture(body, expected, this.signal!.signal, close)
       await gate()
       let original: unknown
+      stage = "admission"
       const admitted = await session.captureAdmit(
         { id: body.id, input_sha256: receipt.input_sha256, expected_policy_sha256: expected },
         async (request) => {
@@ -299,6 +303,7 @@ export class BrainControl {
       const successor = digest(admitted.policy_sha256)
       // The native mutation journal clears only after its original child and pipes
       // join. Reindex then owns a different HTTP request and settlement record.
+      stage = "closure"
       await close()
       check()
       const debt = this.settings.pending()
@@ -309,14 +314,21 @@ export class BrainControl {
         throw err
       })
       await gate()
+      stage = "index"
       await this.service.sync(successor, this.signal!.signal, close)
       await gate()
       this.state = Object.freeze({ status: "synced", digest: successor })
       result = receipt
-    }).then(() => {
-      if (!result) throw new Error("Original capture and reindex were not confirmed")
-      return result
     })
+      .then(() => {
+        stage = "confirmation"
+        if (!result) throw new Error("Original capture and reindex were not confirmed")
+        return result
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Cancelled) throw err
+        throw new CaptureFailure(stage, err)
+      })
   }
 
   pause(confirm: (review: Review) => Promise<boolean>) {

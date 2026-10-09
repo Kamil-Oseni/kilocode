@@ -8,7 +8,8 @@ import { BrainSettings } from "../../src/second-brain/settings"
 import { BrainService } from "../../src/second-brain/service"
 import { BrainControl, type Session } from "../../src/second-brain/control"
 import { parseCatalog } from "../../src/second-brain/control/catalog"
-import { release, bridge } from "../../src/second-brain/control/catalog-v2"
+import { release as legacy, bridge as prior } from "../../src/second-brain/control/catalog-v2"
+import { release, bridge } from "../../src/second-brain/control/catalog-capture"
 
 const source = path.resolve(import.meta.dir, "../../script/memory/service")
 const python = process.env.RAYA_MEMORY_OPERATION_PYTHON
@@ -165,7 +166,7 @@ async function fixture() {
   }
 }
 
-test("selected v5 catalog refuses mixed legacy and unreviewed releases", () => {
+test("current capture files match their pins and preserved v5 catalog refuses mixed releases", () => {
   const value = {
     format: "raya.memory.control.catalog",
     version: 2,
@@ -173,10 +174,11 @@ test("selected v5 catalog refuses mixed legacy and unreviewed releases", () => {
     source: "C:/Synthetic/source",
     bridge: "C:/Synthetic/bridge.py",
     python_sha256: "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2",
-    bridge_sha256: bridge,
-    source_sha256: release,
+    bridge_sha256: prior,
+    source_sha256: legacy,
   }
   expect(parseCatalog(value).version).toBe(2)
+  expect(parseCatalog(value).source_sha256).toEqual(legacy)
   for (const [name, hash] of Object.entries(release))
     expect(sha(readFileSync(new URL(`../../script/memory/service/${name}`, import.meta.url)))).toBe(hash)
   expect(() => parseCatalog({ ...value, version: 1 })).toThrow()

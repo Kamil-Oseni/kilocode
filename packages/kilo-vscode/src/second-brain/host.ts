@@ -30,6 +30,7 @@ import { ClosedRequired } from "./closed-recovery"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
 import { CaptureIntake, type CapturePublication } from "./capture-intake"
+import { failure } from "./capture-failure"
 import { personal } from "./scope"
 
 type CaptureControl = { capture(body: CapturePublication, authorize: () => void): Promise<unknown> }
@@ -740,7 +741,7 @@ export class BrainHost {
     } catch (err) {
       const phase =
         err instanceof Error && "code" in err && err.code === "capture_source_capacity" ? "capacity" : "uncertain"
-      await this.intake.finish(turn, phase).catch((retained: unknown) => {
+      await this.intake.finish(turn, phase, undefined, failure(err)).catch((retained: unknown) => {
         throw new AggregateError([err, retained], "Original capture and outcome retention failed")
       })
       throw err

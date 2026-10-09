@@ -116,7 +116,12 @@ test("durable original capture grants bind consent, generation, source and local
     intake.end(writing)
     expect(intake.snapshot(binding).status).toBe("uncertain")
     await expect(intake.finish(writing, "published")).rejects.toThrow("receipt required")
-    await intake.finish(writing, "capacity")
+    await intake.finish(writing, "capacity", undefined, { stage: "authorization", errors: ["capture_source_capacity"] })
+    const retained = storage.get<Array<{ stage: string; errors: string[] }>>("raya.secondBrain.personalCapture.failures")!
+    expect(retained.at(-1)?.stage).toBe("authorization")
+    expect(retained.at(-1)?.errors).toEqual(["capture_source_capacity"])
+    const original = storage.get<Array<{ failure?: unknown }>>("raya.secondBrain.personalCapture.turns")!
+    expect(original.at(-1)).not.toHaveProperty("failure")
     expect(intake.snapshot(binding)).toEqual({ status: "capacity", reason: "source_capacity" })
     expect(states.at(-1)).toBe("capacity")
     listener.dispose()

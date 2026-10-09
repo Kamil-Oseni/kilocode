@@ -10,7 +10,7 @@ root = Path(sys.argv[1]).resolve(strict=True)
 cfg = json.loads(sys.stdin.buffer.read(16384))
 pins = cfg['release']
 names = {'server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
-         'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py'}
+         'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py', 'capture.py'}
 assert isinstance(pins, dict) and set(pins) == names
 for name, expected in pins.items():
     assert isinstance(expected, str) and len(expected) == 64 and set(expected) <= set('0123456789abcdef')

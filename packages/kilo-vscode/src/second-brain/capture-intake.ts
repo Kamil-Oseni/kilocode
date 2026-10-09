@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util"
 import type { SecondBrainRequest } from "@kilocode/sdk/v2/client"
 import { MemoryRedact } from "@kilocode/kilo-memory/redact"
 import type { BrainCapture } from "../shared/second-brain"
+import type { failure } from "./capture-failure"
 
 type Command = Extract<SecondBrainRequest["command"], { action: "capture" }>
 export type CaptureBinding = Readonly<{
@@ -17,6 +18,7 @@ type Turn = { project: string; sessionID: string; messageID: string; source_sha2
 type Storage = { get<T>(key: string): T | undefined; update(key: string, value: unknown): PromiseLike<void> }
 const key = "raya.secondBrain.personalCapture"
 const ledger = "raya.secondBrain.personalCapture.turns"
+const diagnostics = "raya.secondBrain.personalCapture.failures"
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const text = (max: number) => z.string().min(1).max(max)
 const source = z
@@ -100,6 +102,20 @@ const record = z
   })
   .strict()
 const rows = z.array(record).max(10000)
+const failures = z
+  .array(
+    z
+      .object({
+        id: z.string().uuid(),
+        stage: z.enum(["authorization", "publication", "admission", "closure", "index", "confirmation"]),
+        errors: z
+          .array(z.string().regex(/^[a-z_]{1,64}$/))
+          .min(1)
+          .max(8),
+      })
+      .strict(),
+  )
+  .max(10000)
 type Record = z.infer<typeof record>
 const sha = (value: string) => createHash("sha256").update(value).digest("hex")
 
@@ -371,11 +387,21 @@ export class CaptureIntake {
     this.changed()
   }
 
-  finish(turn: Turn, phase: Exclude<Record["phase"], "reserved" | "saving">, receipt?: string) {
-    return this.transition(turn, phase, receipt)
+  finish(
+    turn: Turn,
+    phase: Exclude<Record["phase"], "reserved" | "saving">,
+    receipt?: string,
+    diagnostic?: ReturnType<typeof failure>,
+  ) {
+    return this.transition(turn, phase, receipt, diagnostic)
   }
 
-  private transition(turn: Turn, phase: Exclude<Record["phase"], "reserved">, receipt?: string) {
+  private transition(
+    turn: Turn,
+    phase: Exclude<Record["phase"], "reserved">,
+    receipt?: string,
+    diagnostic?: ReturnType<typeof failure>,
+  ) {
     return this.serial(async () => {
       if (phase === "published" && !hash.safeParse(receipt).success)
         throw new Error("Original published capture receipt required")
@@ -384,8 +410,22 @@ export class CaptureIntake {
       const prior = saved.find((row) => row.id === id)
       if (!prior || prior.source_sha256 !== turn.source_sha256 || !["reserved", "saving"].includes(prior.phase))
         throw new Error("Original capture reservation cannot be replaced")
+      if (diagnostic) {
+        // Separate inert diagnostics keep the replay-fencing ledger compatible with retained older builds.
+        const saved = failures.parse(this.storage.get(diagnostics) ?? [])
+        const next = failures.parse([...saved.filter((row) => row.id !== id), { id, ...diagnostic }])
+        await this.storage.update(diagnostics, next)
+        if (!isDeepStrictEqual(this.storage.get(diagnostics), next))
+          throw new Error("Capture failure diagnostic persistence failed")
+      }
       const next = saved.map((row) =>
-        row.id === id ? record.parse({ ...row, phase, ...(receipt ? { receipt } : {}) }) : row,
+        row.id === id
+          ? record.parse({
+              ...row,
+              phase,
+              ...(receipt ? { receipt } : {}),
+            })
+          : row,
       )
       await this.storage.update(ledger, next)
       if (!isDeepStrictEqual(this.storage.get(ledger), next)) throw new Error("Capture outcome persistence failed")

@@ -137,7 +137,10 @@ test("explicit exclusions retain no fallback facts and restricted or duplicate e
     original,
   )
   expect(equal.map((entry) => entry.key)).toEqual(["p0_ask_cards", "p2_ask_cards"])
-  expect(equal.map((entry) => entry.text)).toEqual([cards.text, memory.text])
+  expect(equal.map((entry) => entry.text)).toEqual([
+    `${cards.text}\n\nOriginal user preference: ${first}`,
+    `${memory.text}\n\nOriginal user preference: ${second}`,
+  ])
   const other = { ...cards, origin: "assistant_interpretation", evidence: [{ ref: 4 }] }
   expect(() => entries(extracted({ ...output, entries: [other, other] }, original), original)).toThrow("duplicate_key")
 })
@@ -158,7 +161,10 @@ test("temporary command refs cannot publish duplicate preferences and other dura
     expect(() => extracted({ ...output, entries: [entry] }, original)).toThrow("bounded entry schema")
   }
   expect(schema).toBeDefined()
-  expect(entries(extracted(output, original), original).map((entry) => entry.text)).toEqual([cards.text, memory.text])
+  expect(entries(extracted(output, original), original).map((entry) => entry.text)).toEqual([
+    `${cards.text}\n\nOriginal user preference: ${first}`,
+    `${memory.text}\n\nOriginal user preference: ${second}`,
+  ])
   const source = {
     ...original,
     user: { ...original.user, text: `${original.user.text} My current project is Garden.` },
@@ -255,6 +261,10 @@ test("bounded clause segmentation preserves Unicode and leaves other extraction 
     unicode,
   )
   expect(parsed[0].evidence[0]).toEqual({ id: "msg_user", start: 0, end: "I like 😀 icons.".length })
+  expect(parsed.map((entry) => entry.text)).toEqual([
+    "Likes 😀 icons.\n\nOriginal user preference: I like 😀 icons.",
+    "Dislikes lengthy forms.\n\nOriginal user preference: I dislike lengthy forms.",
+  ])
   for (const text of [first, "I prefer quiet replies. ".repeat(5), "a".repeat(1001) + first + second]) {
     const source = { ...original, user: { id: "msg_user", text } }
     expect(JSON.parse(prepared(source)).some((row: { slot?: string }) => row.slot)).toBe(false)
@@ -276,6 +286,7 @@ test("general references admit only nonblank blocks of their own original origin
     { id: "prt_completed", start: 0, end: 23 },
     { id: "prt_error", start: 0, end: 17 },
   ])
+  expect(entries(extracted({ entries: [tool] }, source), source)[0].text).toBe(tool.text)
   for (const entry of [
     { ...cards, evidence: [{ ref: 1 }] },
     { ...tool, evidence: [{ ref: 0 }] },
@@ -286,4 +297,69 @@ test("general references admit only nonblank blocks of their own original origin
   const blank = { user: { id: "msg_user", text: " " }, assistant: { id: "msg_assistant", text: "\n" }, tools: [] }
   expect(extracted({ entries: [] }, blank)).toEqual([])
   expect(() => extracted({ entries: [cards] }, blank)).toThrow("bounded entry schema")
+})
+
+test("truncated retained summaries preserve both exact user preference clauses without excluded context", () => {
+  const source = { ...original, assistant: { id: "msg_assistant", text: "Understood." } }
+  const value = {
+    ...output,
+    preferences: {
+      preference_0: { status: "retained", entry: { ...cards, text: "Prefers concise ask cards." } },
+      preference_2: { status: "retained", entry: { ...memory, text: "Prefers the Memory tab." } },
+    },
+  }
+  const parsed = entries(extracted(value, source, true), source)
+  expect(parsed.map((entry) => entry.text)).toEqual([
+    `Prefers concise ask cards.\n\nOriginal user preference: ${first}`,
+    `Prefers the Memory tab.\n\nOriginal user preference: ${second}`,
+  ])
+  expect(parsed).toHaveLength(2)
+  expect(parsed.map((entry) => entry.evidence)).toEqual([
+    [{ id: "msg_user", start: 0, end: first.length }],
+    [{ id: "msg_user", start: first.length + 1, end: first.length + 1 + second.length }],
+  ])
+  expect(parsed.map((entry) => entry.text).join("\n")).not.toContain("Understood.")
+  expect(parsed.map((entry) => entry.text).join("\n")).not.toContain("Do not change lights or place orders.")
+})
+
+test("excluded preference dispositions never receive original-clause fallback", () => {
+  for (const reason of ["sensitive", "transient", "no_durable_fact"]) {
+    const value = {
+      ...output,
+      preferences: {
+        preference_0: { status: "excluded", reason },
+        preference_2: output.preferences.preference_2,
+      },
+    }
+    const parsed = entries(extracted(value, original, true), original)
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0].text).toBe(`${memory.text}\n\nOriginal user preference: ${second}`)
+    expect(parsed[0].text).not.toContain(first)
+  }
+})
+
+test("original-clause augmentation rejects original secrets and oversized completed text", () => {
+  const source = { ...original, user: { id: "msg_user", text: `I prefer using password=hunterx. ${second}` } }
+  expect(() => extracted(output, source, true)).toThrow("secret_text")
+  const excluded = {
+    ...output,
+    preferences: { ...output.preferences, preference_0: { status: "excluded", reason: "sensitive" } },
+  }
+  expect(entries(extracted(excluded, source, true), source)).toHaveLength(1)
+  const oversized = {
+    ...output,
+    preferences: {
+      ...output.preferences,
+      preference_0: { status: "retained", entry: { ...cards, text: "q".repeat(4096) } },
+    },
+  }
+  expect(() => extracted(oversized, original, true)).toThrow("bounded entry schema")
+  const multibyte = {
+    ...oversized,
+    preferences: {
+      ...oversized.preferences,
+      preference_0: { status: "retained", entry: { ...cards, text: "界".repeat(1340) } },
+    },
+  }
+  expect(() => extracted(multibyte, original, true)).toThrow("bounded entry schema")
 })

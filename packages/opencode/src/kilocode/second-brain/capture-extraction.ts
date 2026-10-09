@@ -232,7 +232,15 @@ export function extracted(value: unknown, source: CaptureSource, acknowledgement
     if (!prefix) return value
     // Check the original full suffix before assigning a namespace; no restricted key or text is hidden.
     entries([value], source)
-    return { ...value, key: `${prefix}_${value.key}` }
+    const original = entry.evidence.length === 1 ? rows[entry.evidence[0].ref] : undefined
+    // Retained compound preferences keep their exact original context beside the model summary.
+    // Excluded slots never reach this boundary; the same text and secret bounds apply to both.
+    const next = original?.preference
+      ? { ...value, text: `${value.text}\n\nOriginal user preference: ${original.text}` }
+      : value
+    if (original?.preference && Buffer.byteLength(next.text, "utf8") > 4096) throw new CaptureRejected("invalid_schema")
+    entries([next], source)
+    return { ...next, key: `${prefix}_${next.key}` }
   })
 }
 

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { command } from "../../src/second-brain/control/command"
 import path from "node:path"
 import { tmpdir } from "node:os"
+import { createHash } from "node:crypto"
 
 test("Memory helper retains a missed observation as failure after natural exit and both EOF", async () => {
   const error = await command(
@@ -67,6 +68,12 @@ test("Memory helper preserves nonzero original exit and drained stderr", async (
   )
   expect(error).toBeInstanceOf(AggregateError)
   expect(error).toMatchObject({
+    output: { stdout: "", stderr: "synthetic" },
+    diagnostic: {
+      stderrRetained: 9,
+      stderrSHA256: createHash("sha256").update("synthetic").digest("hex"),
+      truncated: false,
+    },
     receipt: {
       code: 7,
       signal: null,
@@ -77,6 +84,52 @@ test("Memory helper preserves nonzero original exit and drained stderr", async (
       forced: false,
     },
   })
+  expect((error as Error).message).toContain("exit=7")
+  expect((error as Error).message).not.toContain("synthetic")
+  expect(JSON.stringify(error)).not.toContain("synthetic")
+})
+
+test("Memory helper failure diagnostics retain only bounded original bytes without exposing private content", async () => {
+  const secret = "private-note-Ω-" + crypto.randomUUID()
+  const raw = "MemoryError: " + secret.repeat(2000)
+  const error = await command(
+    process.execPath,
+    ["-e", `process.stderr.write('MemoryError: '+${JSON.stringify(secret)}.repeat(2000));process.exitCode=3`],
+    {},
+    15000,
+    1024,
+  ).then(
+    () => undefined,
+    (err: unknown) => err,
+  )
+  expect(error).toBeInstanceOf(AggregateError)
+  expect(error).toMatchObject({
+    output: {
+      stdout: "",
+      stderr: Buffer.from(raw).subarray(0, 1024).toString("utf8"),
+      stderrBase64: Buffer.from(raw).subarray(0, 1024).toString("base64"),
+    },
+    diagnostic: {
+      exception: "MemoryError",
+      stderrRetained: 1024,
+      truncated: true,
+      stderrSHA256: createHash("sha256").update(Buffer.from(raw).subarray(0, 1024)).digest("hex"),
+    },
+    receipt: {
+      code: 3,
+      stderrBytes: Buffer.byteLength(raw),
+      stderrEOF: true,
+      originalJoined: true,
+      readersJoined: true,
+      forced: false,
+    },
+  })
+  expect((error as Error).message).toContain("truncated=true")
+  expect((error as Error).message).toContain("stderrClass=MemoryError")
+  expect((error as Error).message).not.toContain(secret)
+  expect(JSON.stringify(error)).not.toContain(secret)
+  expect(Object.keys(error as object)).not.toContain("output")
+  expect(Object.getOwnPropertyDescriptor(error, "output")).toMatchObject({ writable: false, configurable: false })
 })
 
 test("Memory helper returns bounded successful bytes only after all original joins", async () => {

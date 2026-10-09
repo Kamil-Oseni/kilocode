@@ -1,5 +1,6 @@
 import type { SpawnOptions } from "node:child_process"
 import { spawn } from "../../util/process"
+import { createHash } from "node:crypto"
 
 /** A deadline fences acceptance; the original child and both readers still join naturally. */
 export async function command(file: string, args: string[], opts: SpawnOptions, timeout = 15000, bound = 65536) {
@@ -65,8 +66,44 @@ export async function command(file: string, args: string[], opts: SpawnOptions, 
     observationExpired: state.expired,
     forced: false,
   })
-  if (errors.length)
-    throw Object.assign(new AggregateError(errors, "Memory helper failures retained after original joins"), { receipt })
+  if (errors.length) {
+    const output = Object.freeze({
+      stdout: Buffer.concat(chunks.stdout).toString("utf8"),
+      stderr: Buffer.concat(chunks.stderr).toString("utf8"),
+      stdoutBase64: Buffer.concat(chunks.stdout).toString("base64"),
+      stderrBase64: Buffer.concat(chunks.stderr).toString("base64"),
+    })
+    const digest = (name: "stdout" | "stderr") => createHash("sha256").update(Buffer.concat(chunks[name])).digest("hex")
+    const classes = [
+      "MemoryError",
+      "ModuleNotFoundError",
+      "ImportError",
+      "PermissionError",
+      "FileNotFoundError",
+      "RuntimeError",
+      "ValueError",
+      "TypeError",
+      "OSError",
+    ]
+    const exception =
+      classes.find((name) => new RegExp(`(?:^|\\r?\\n)${name}(?::|\\r?$)`).test(output.stderr)) ?? "unclassified"
+    const diagnostic = Object.freeze({
+      exception,
+      stdoutSHA256: digest("stdout"),
+      stderrSHA256: digest("stderr"),
+      stdoutRetained: Math.min(counts.stdout, bound),
+      stderrRetained: Math.min(counts.stderr, bound),
+      truncated: counts.stdout > bound || counts.stderr > bound,
+    })
+    const message =
+      `Memory helper failures retained after original joins: exit=${result.code}; signal=${result.signal}; ` +
+      `stdoutEOF=${eof.stdout}; stderrEOF=${eof.stderr}; stderrBytes=${counts.stderr}; ` +
+      `expired=${state.expired}; truncated=${diagnostic.truncated}; stderrClass=${exception}. Original operation remains unconfirmed.`
+    const error = Object.assign(new AggregateError(errors, message), { receipt, diagnostic })
+    // Original bytes are available to explicit diagnostics, but never serialized into UI/audit records.
+    Object.defineProperty(error, "output", { value: output, enumerable: false, writable: false, configurable: false })
+    throw error
+  }
   return {
     stdout: Buffer.concat(chunks.stdout).toString("utf8"),
     stderr: Buffer.concat(chunks.stderr).toString("utf8"),

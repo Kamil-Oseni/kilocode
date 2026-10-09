@@ -13,6 +13,7 @@ import { directory, image, normalize, environment } from "./control/identity"
 import { command } from "./control/command"
 
 const helper = "7f41ea4776d51da5c6f294fa0ddcfb78136d9a775462ec5fdb6bdc7f85c43a91"
+const qualified = new WeakSet<object>()
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const turn = z
   .object({
@@ -195,7 +196,7 @@ export async function review(extension: string, entry: Parameters<typeof closed>
       isDeepStrictEqual(await image(cfg.plan.path, 16777216), held),
     "Original capture review execution selection changed",
   )
-  return Object.freeze({
+  const reviewed = Object.freeze({
     ...value,
     root: setup.root,
     request: identity.request,
@@ -214,4 +215,29 @@ export async function review(extension: string, entry: Parameters<typeof closed>
     qualification:
       "Read-only committed-effect correlation; administrative review required, no original settlement authority",
   })
+  qualified.add(reviewed)
+  return reviewed
+}
+
+/** Retain the historical helper reference only after a fresh pinned helper reproduces every original effect field. */
+export function rebind(value: Awaited<ReturnType<typeof review>>, audit: unknown) {
+  if (audit === undefined) return value
+  check(qualified.has(value), "Fresh native capture review required")
+  const retained = audit as { reviewSHA?: unknown; review?: unknown }
+  check(retained.reviewSHA === fingerprint(retained.review), "Original capture review digest differs")
+  const prior = retained.review as Omit<typeof value, "producer">
+  check(prior?.evidence?.helper, "Original capture helper reference required")
+  const ref = receipt(prior.evidence.helper)
+  check(
+    ref.sha256 === helper && ref.sha256 === value.evidence.helper.sha256 && ref.bytes === value.evidence.helper.bytes,
+    "Original capture helper release differs",
+  )
+  const canonical = Object.freeze({ ...value, evidence: { ...value.evidence, helper: ref } })
+  const { producer, ...evidence } = canonical
+  check(
+    producer.code === 0 && producer.originalJoined && producer.readersJoined && isDeepStrictEqual(prior, evidence),
+    "Original capture effect changed across helper installation",
+  )
+  qualified.add(canonical)
+  return canonical
 }

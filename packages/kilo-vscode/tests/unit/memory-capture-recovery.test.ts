@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { readFileSync } from "node:fs"
-import { readFile, writeFile, rm, readdir } from "node:fs/promises"
+import { readFile, writeFile, rm, readdir, cp } from "node:fs/promises"
 import { BrainSettings } from "../../src/second-brain/settings"
 import { BrainService } from "../../src/second-brain/service"
 import { CaptureIntake } from "../../src/second-brain/capture-intake"
@@ -12,6 +12,7 @@ import { fingerprint } from "../../src/second-brain/failed-repair"
 import { release, bridge } from "../../src/second-brain/control/catalog-capture"
 import { linked } from "../../src/second-brain/managed/capture-upgrade"
 import { descriptor } from "../../src/second-brain/managed/descriptor"
+import { rebind } from "../../src/second-brain/committed-capture"
 
 async function fixture(hook?: (key: string, value: unknown) => Promise<void>, full = false) {
   const producer = await command(
@@ -125,7 +126,17 @@ for (const stage of ["confirmation", "ledger"] as const)
       const key = `raya.secondBrain.committedCaptureRecovery.${value.turn.id}`
       const audit = value.storage.get(key)
       expect(settings.upgrading()).toBe(true)
-      const reviewed = await service.upgradeCapture(value.turn)
+      const installed = path.join(value.root, "replacement-extension")
+      const successor = path.join(value.root, "cold-extension")
+      await cp(path.resolve("script/memory"), path.join(installed, "script/memory"), { recursive: true })
+      await cp(path.resolve("script/memory"), path.join(successor, "script/memory"), { recursive: true })
+      const replacement = new BrainService(value.settings(), installed)
+      const reviewed = await replacement.upgradeCapture(value.turn)
+      expect(reviewed.evidence.helper.path).toBe(path.resolve("script/memory/capture_recovery.py"))
+      expect(() => rebind(JSON.parse(JSON.stringify(reviewed)), audit)).toThrow("Fresh native capture review required")
+      expect(() => rebind(reviewed, { reviewSHA: "f".repeat(64), review: {} })).toThrow("review digest differs")
+      const altered = { ...reviewed, policySHA: "f".repeat(64), producer: undefined }
+      expect(() => rebind(reviewed, { reviewSHA: fingerprint(altered), review: altered })).toThrow("effect changed")
       expect(settings.upgrading()).toBe(false)
       expect(linked(reviewed)?.previousRelease).toBe(value.turn.release)
       expect(linked(reviewed)?.release).toBe(fingerprint(release))
@@ -166,7 +177,12 @@ for (const stage of ["confirmation", "ledger"] as const)
       const selected = intake.recoverable().find((row) => row.id === value.turn.id)!
       expect(selected.phase).toBe(stage === "ledger" ? "published" : "uncertain")
       const proof = value.storage.get(`${key}.confirmation`)
-      const cold = await value.settings().reviewCapture(process.cwd(), selected)
+      const helper = path.join(successor, "script/memory/capture_recovery.py")
+      const bytes = await readFile(helper)
+      await writeFile(helper, Buffer.concat([bytes, Buffer.from("\n# changed package helper\n")]))
+      await expect(value.settings().reviewCapture(successor, selected)).rejects.toThrow("review helper differs")
+      await writeFile(helper, bytes)
+      const cold = await value.settings().reviewCapture(successor, selected)
       expect(linked(cold)).toEqual(linked(reviewed))
       await intake.confirmRecovery(cold, binding, () => {})
       expect(value.storage.get(`${key}.confirmation`)).toEqual(proof)
@@ -175,6 +191,7 @@ for (const stage of ["confirmation", "ledger"] as const)
       ])
       expect(value.storage.get(key)).toEqual(audit)
       expect(await inventory(value.notes)).toEqual(before)
+      await replacement.dispose()
       await service.dispose()
     } finally {
       await value.cleanup()
@@ -332,7 +349,9 @@ for (const stage of ["state", "verified", "clear", "applied"])
       expect(prior?.phase).toBe(stage === "state" ? "prepared" : stage === "applied" ? "applied" : "verified")
       const settings = value.settings()
       await expect(settings.load()).rejects.toThrow("Interrupted Memory recovery must finish")
-      const result = await settings.recoverCapture(process.cwd(), value.turn, async () => true)
+      const installed = path.join(value.root, "replacement-extension")
+      await cp(path.resolve("script/memory"), path.join(installed, "script/memory"), { recursive: true })
+      const result = await settings.recoverCapture(installed, value.turn, async () => true)
       expect(result?.capture).toBe(value.turn.id)
       expect(settings.pending()).toBeUndefined()
       expect(value.storage.get("raya.secondBrain.personalCapture.turns")).toEqual(turns)

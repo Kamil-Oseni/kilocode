@@ -10,7 +10,7 @@ import { review as repair, fingerprint } from "./failed-repair"
 import { review as archive, absent } from "./failed-archive"
 import { normalize } from "./control/identity"
 import { review as closed, ClosedRequired } from "./closed-recovery"
-import { review as capture } from "./committed-capture"
+import { review as correlate, rebind } from "./committed-capture"
 import { records, confirmation } from "./capture-intake"
 import { associate, origin as captured } from "./managed/capture-upgrade"
 import { release } from "./control/catalog-capture"
@@ -23,6 +23,11 @@ const state = "raya.secondBrain.setup"
 const debt = "raya.secondBrain.control.uncertainty"
 const quarantine = "raya.secondBrain.quarantinedSetups"
 const recovering = "raya.secondBrain.committedCaptureRecovery.pending"
+
+async function capture(storage: Pick<Memento, "get">, ...args: Parameters<typeof correlate>) {
+  const value = await correlate(...args)
+  return rebind(value, storage.get(`raya.secondBrain.committedCaptureRecovery.${value.capture}`))
+}
 
 export type Setup =
   | ReturnType<typeof setup>
@@ -441,7 +446,7 @@ export class BrainSettings {
       descriptor(current.managed).root !== descriptor(previous.managed).root
     )
       throw new Error("Recovered capture belongs to a different Memory setup")
-    const reviewed = await capture(extension, previous, audit.debt, original)
+    const reviewed = await capture(this.storage, extension, previous, audit.debt, original)
     if (!isDeepStrictEqual(current.setup, previous.setup)) await associate(this.storage, previous, current, reviewed)
     captureTurn(original, input, reviewed, this.storage.get(`${key}.confirmation`))
     const { producer, ...evidence } = reviewed
@@ -482,7 +487,7 @@ export class BrainSettings {
       if (!audit) throw new Error("Original applied recovery is required before runtime upgrade")
       const previous = this.entry(audit.previous)
       const original = records([audit.turn])[0]
-      const reviewed = await capture(extension, previous, audit.debt, original)
+      const reviewed = await capture(this.storage, extension, previous, audit.debt, original)
       captured(this.storage, previous, reviewed)
       captureTurn(
         original,
@@ -498,7 +503,7 @@ export class BrainSettings {
         audit: { artifact: Descriptor["plan"]; previous: { present: boolean; value?: unknown }[] }
       }>(recovering)
       const artifact = held ? this.intent(held, closed) : await this.prepare(extension, closed)
-      const rechecked = await capture(extension, previous, audit.debt, original)
+      const rechecked = await capture(this.storage, extension, previous, audit.debt, original)
       captured(this.storage, previous, rechecked)
       if (fingerprint({ ...rechecked, producer: undefined }) !== fingerprint({ ...reviewed, producer: undefined }))
         throw new Error("Original capture changed during runtime preparation")
@@ -566,7 +571,7 @@ export class BrainSettings {
         isDeepStrictEqual(this.pending(), actual) &&
         isDeepStrictEqual(this.storage.get(recovering), fence.value) &&
         isDeepStrictEqual(records(this.storage.get(ledger)), turns)
-      const reviewed = await capture(extension, entry, metadata, input)
+      const reviewed = await capture(this.storage, extension, entry, metadata, input)
       const marker = { capture: turn.id, request: reviewed.request, audit: key, debtSHA: reviewed.debtSHA }
       if (fence.value !== undefined && !isDeepStrictEqual(fence.value, marker))
         throw new Error("Different committed capture recovery remains active")
@@ -577,7 +582,11 @@ export class BrainSettings {
       if (!(await confirm(reviewed))) return
       const stable = (value: typeof reviewed) => fingerprint({ ...value, producer: undefined })
       const verify = async () => {
-        if (!same() || stable(await capture(extension, entry, metadata, input)) !== stable(reviewed) || !same())
+        if (
+          !same() ||
+          stable(await capture(this.storage, extension, entry, metadata, input)) !== stable(reviewed) ||
+          !same()
+        )
           throw new Error("Reviewed committed capture changed")
       }
       await verify()

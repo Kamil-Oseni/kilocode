@@ -9,7 +9,16 @@ import type { Setup } from "./settings"
 
 /** Retain exact original publications; this grants no HTTP or cold settlement authority. */
 export async function retained(cfg: Descriptor, setup: Setup, input: unknown) {
-  check(Array.isArray(input) && input.length <= 16, "Bounded original failed downstream list required")
+  return publications(cfg, setup, input, false)
+}
+
+/** Retain completed publications for quarantine only; never infer worker release. */
+export async function finished(cfg: Descriptor, setup: Setup, input: unknown) {
+  return publications(cfg, setup, input, true)
+}
+
+async function publications(cfg: Descriptor, setup: Setup, input: unknown, completed: boolean) {
+  check(Array.isArray(input) && input.length <= 16, "Bounded original downstream list required")
   if (!input.length) return []
   const selected = await selection(cfg, setup)
   check(selected.retrieval, "Selected paired Retrieval required")
@@ -21,13 +30,18 @@ export async function retained(cfg: Descriptor, setup: Setup, input: unknown) {
       row.format === "raya.retrieval.request.settlement" &&
         row.version === 2 &&
         row.phase === "settled" &&
-        row.inference_outcome === "failed" &&
-        row.worker_created === false &&
-        row.cleanup_outcome === "not_started" &&
-        row.joins_observed === false &&
+        (completed
+          ? row.inference_outcome === "completed" &&
+            row.original_process_running === true &&
+            row.original_job_membership_observed === true &&
+            row.selected_images_unchanged === true
+          : row.inference_outcome === "failed" &&
+            row.worker_created === false &&
+            row.cleanup_outcome === "not_started" &&
+            row.joins_observed === false) &&
         row.selected_release_sha256 === env.RAYA_RETRIEVAL_RELEASE_SHA256 &&
         [row.request, row.owner_epoch].every((value) => typeof value === "string" && /^[a-f0-9]{32}$/.test(value)),
-      "Only exact selected failed noncreated downstream may be reviewed",
+      "Only exact selected downstream publications may be retained",
     )
     const folder = path.join(cfg.namespaces.retrieval.root, "Requests", String(row.owner_epoch))
     await directory(folder)
@@ -61,7 +75,9 @@ export async function retained(cfg: Descriptor, setup: Setup, input: unknown) {
       forms.add(String(value.phase))
       refs.push({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple })
     }
-    proofs.push({ request: row.request, receipt: { ...row }, files: refs })
+    // Persist nested worker metadata with ordinary JSON objects so file-backed
+    // audit readback preserves the same complete value and prototype contract.
+    proofs.push({ request: row.request, receipt: JSON.parse(JSON.stringify(row)) as typeof row, files: refs })
   }
   // The pinned native observer verifies the selected protected namespace and generations.
   await observe(cfg, "", cfg.namespaces)

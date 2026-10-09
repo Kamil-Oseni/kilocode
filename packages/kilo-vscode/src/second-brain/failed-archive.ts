@@ -8,6 +8,9 @@ import { inspect, fingerprint } from "./failed-repair"
 import { descriptor, receipt, selection } from "./managed/descriptor"
 import { parse } from "./settings"
 import { parse as value } from "./managed/value"
+import { inspect as completed } from "./completed-archive"
+import { release } from "./control/catalog-capture"
+import { current } from "./managed/catalog"
 
 async function retained(input: unknown) {
   const ref = receipt(input)
@@ -185,6 +188,17 @@ function native(
   return identity
 }
 
+async function historical(format: unknown, witness: ReturnType<typeof receipt>, entry: unknown, pending: unknown) {
+  if (format === "raya.memory.interrupted-startup.fresh-start") return startup(entry, pending, witness)
+  if (format === "raya.memory.completed-handoff.fresh-start") return completed(witness.path, entry, pending)
+  if (format === "raya.memory.unclosed-pair.fresh-start") return unclosed(entry, pending, witness)
+  return inspect(witness.path, entry, pending)
+}
+
+function completion(old: Awaited<ReturnType<typeof historical>>): old is Awaited<ReturnType<typeof completed>> {
+  return old.outcome === "completed" && "terminal" in old && "closed" in old && "downstream" in old
+}
+
 /** Historical failure is quarantined, never accepted as joined or settled. */
 export async function review(file: string, entry: unknown, pending: unknown) {
   await directory(path.dirname(file))
@@ -196,18 +210,13 @@ export async function review(file: string, entry: unknown, pending: unknown) {
         "raya.memory.failed-search.fresh-start",
         "raya.memory.unclosed-pair.fresh-start",
         "raya.memory.interrupted-startup.fresh-start",
+        "raya.memory.completed-handoff.fresh-start",
       ].includes(String(input.format)) &&
       input.version === 1,
     "Explicit reviewed fresh-start selection required",
   )
   const witness = receipt(input.observation)
-  const interrupted =
-    input.format === "raya.memory.interrupted-startup.fresh-start" ? await startup(entry, pending, witness) : undefined
-  const old =
-    interrupted ??
-    (input.format === "raya.memory.unclosed-pair.fresh-start"
-      ? await unclosed(entry, pending, witness)
-      : await inspect(witness.path, entry, pending))
+  const old = await historical(input.format, witness, entry, pending)
   check(
     old.held.digest === witness.sha256 && old.held.raw.length === witness.bytes && old.held.tuple === witness.tuple,
     "Fresh-start observation changed",
@@ -219,7 +228,9 @@ export async function review(file: string, entry: unknown, pending: unknown) {
       setup.protocol === old.setup.protocol &&
       setup.root === old.setup.root &&
       setup.origin !== old.setup.origin &&
-      fingerprint(setup.source_sha256) === fingerprint(old.setup.source_sha256),
+      (input.format === "raya.memory.completed-handoff.fresh-start"
+        ? isDeepStrictEqual(setup.source_sha256, release) && cfg.supervisor.sha256 === current
+        : fingerprint(setup.source_sha256) === fingerprint(old.setup.source_sha256)),
     "Fresh setup must preserve reviewed notes/release and use a different address",
   )
   check(
@@ -268,9 +279,12 @@ export async function review(file: string, entry: unknown, pending: unknown) {
     selection: Object.freeze({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple }),
     observation: witness,
     pids: Object.freeze([...new Set(pids)]),
-    ...(interrupted ? { identities: interrupted.identities } : {}),
+    ...("identities" in old ? { identities: old.identities } : {}),
     ports: Object.freeze(ports),
     outcome: old.outcome,
+    ...(completion(old)
+      ? { terminal: old.terminal, downstream: old.downstream, original: old.original, closed: old.closed }
+      : {}),
     closure: "unproven" as const,
     settlement: false as const,
     qualification:

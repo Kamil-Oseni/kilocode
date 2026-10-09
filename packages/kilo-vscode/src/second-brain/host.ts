@@ -1113,7 +1113,7 @@ export class BrainHost {
     if (!selected?.[0] || selected[0].scheme !== "file") return
     await this.service.archive(selected[0].fsPath, async (review) => {
       const accepted = await vscode.window.showWarningMessage(
-        `Archive the prior setup and start fresh for ${review.root}? ${review.outcome === "unknown" ? "Its original shutdown is unproven; this action does not claim that its work settled." : `Search ${review.request} failed without downstream requests.`} The old setup, credential reference and request records remain in a quarantined audit. Trust fresh setup SHA-256 ${review.selection.sha256} and observation ${review.observation.sha256}. New service addresses and request folders will be used. Your notes are preserved; prior work is not retried.`,
+        `Archive the prior setup and start fresh for ${review.root}? ${review.outcome === "completed" ? `Search ${review.request} completed, but its original worker release receipt is unavailable. Its completion record, downstream receipts and recovery record will remain preserved; this action does not settle that request.` : review.outcome === "unknown" ? "Its original shutdown is unproven; this action does not claim that its work settled." : `Search ${review.request} failed without downstream requests.`} The old setup, credential reference and request records remain in a quarantined audit. Trust fresh setup SHA-256 ${review.selection.sha256} and observation ${review.observation.sha256}. New service addresses and request folders will be used. Your notes are preserved; prior work is not retried.`,
         { modal: true },
         "Archive and start fresh",
       )

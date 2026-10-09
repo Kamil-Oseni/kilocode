@@ -30,6 +30,7 @@ import { ClosedRequired } from "./closed-recovery"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
 import { CaptureIntake, type CapturePublication } from "./capture-intake"
+import { personal } from "./scope"
 
 type CaptureControl = { capture(body: CapturePublication, authorize: () => void): Promise<unknown> }
 function capturing(value: object): value is object & CaptureControl {
@@ -455,7 +456,7 @@ export class BrainHost {
             const document = await vscode.workspace.openTextDocument(uri)
             await vscode.window.showTextDocument(document, { preview: false })
             const answer = await vscode.window.showWarningMessage(
-              "Authorize one manual consolidation of the selected source and note revisions shown? This prepares pending proposals; capture remains off and publication requires separate review.",
+              "Authorize one manual consolidation of the selected source and note revisions shown? This prepares pending proposals; publication requires separate review.",
               { modal: true },
               "Authorize selected inputs",
             )
@@ -611,16 +612,27 @@ export class BrainHost {
     const project = path.resolve(directory)
     if (project.toLowerCase() !== path.resolve(request.project).toLowerCase())
       throw new Error("Authenticated trusted project required")
-    trusted(project)
     if (!request.command || typeof request.command !== "object" || Array.isArray(request.command))
       throw new Error("Proposal command required")
     const row = request.command as Record<string, unknown>
-    if (["capturePolicy", "capture"].includes(String(row.action))) return this.capture(request, project, signal)
-    if (row.action === "status") return this.inspect(row, project, signal)
+    const guard = ["status", "context", "capturePolicy", "capture"].includes(String(row.action))
+      ? personal(project, () => ({
+          trusted: vscode.workspace.isTrusted,
+          folders: (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+        }))
+      : () => trusted(project)
+    guard()
+    if (["capturePolicy", "capture"].includes(String(row.action))) return this.capture(request, project, signal, guard)
+    if (row.action === "status") {
+      const result = await this.inspect(row, project, signal)
+      guard()
+      return result
+    }
     if (row.action === "context") {
       if (!recall(row)) throw new Error("Bounded context command required")
       const result = await this.service.context(row.query, row.budget, signal)
       signal.throwIfAborted()
+      guard()
       return {
         action: "context" as const,
         project,
@@ -684,6 +696,7 @@ export class BrainHost {
     request: { project: string; sessionID?: string; command: unknown },
     project: string,
     signal: AbortSignal,
+    guard: () => void,
   ) {
     const row = request.command as Record<string, unknown>
     const turn = captureTurn(request, row, project)
@@ -697,12 +710,10 @@ export class BrainHost {
     const cfg = this.intake.selected(binding)
     const check = () => {
       signal.throwIfAborted()
-      const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(project))
+      guard()
       if (
         this.closing ||
         !vscode.workspace.isTrusted ||
-        !folder ||
-        path.resolve(folder.uri.fsPath).toLowerCase() !== project.toLowerCase() ||
         !this.service.captureCurrent(binding) ||
         !isDeepStrictEqual(this.intake.selected(binding), cfg)
       )
@@ -840,7 +851,7 @@ export class BrainHost {
       const document = await vscode.workspace.openTextDocument(uri)
       await vscode.window.showTextDocument(document, { preview: false })
       const answer = await vscode.window.showWarningMessage(
-        `Apply the exact Second Brain changes shown for ${body.project}? Review SHA-256: ${body.digest}. Capture stays disabled.`,
+        `Apply the exact Second Brain changes shown for ${body.project}? Review SHA-256: ${body.digest}.`,
         { modal: true },
         "Apply reviewed changes",
       )
@@ -1173,7 +1184,7 @@ export class BrainHost {
       const document = await vscode.workspace.openTextDocument(uri)
       await vscode.window.showTextDocument(document, { preview: false })
       const answer = await vscode.window.showWarningMessage(
-        `${action === "Sync now" ? "Start local indexing for" : "Publish"} the complete policy shown in the read-only review? Enabled: ${value.enabled}. Policy SHA-256: ${value.digest}. Capture stays disabled.`,
+        `${action === "Sync now" ? "Start local indexing for" : "Publish"} the complete policy shown in the read-only review? Enabled: ${value.enabled}. Policy SHA-256: ${value.digest}.`,
         { modal: true },
         action,
       )

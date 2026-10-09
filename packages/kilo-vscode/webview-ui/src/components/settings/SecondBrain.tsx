@@ -292,10 +292,7 @@ export function SecondBrain() {
           </section>
         )}
       </Show>
-      <p>
-        Review and sync require separate native confirmations. Disconnect joins local transport only. Capture is
-        disabled.
-      </p>
+      <p>Manual source review and sync require confirmation.</p>
       <BrainConsolidation configured={state().configured} />
       <Show when={state().media}>{(value) => <MediaEvidence value={value()} />}</Show>
       <BrainProposals configured={state().configured} busy={busy()} index={(action) => request(action)} />

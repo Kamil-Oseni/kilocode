@@ -5,6 +5,7 @@ import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { RayaChief } from "../../src/kilocode/chief"
 import { settled, acknowledged } from "../../src/kilocode/second-brain/turn"
+import { ollama, OllamaBridgeError } from "../../src/kilocode/provider/ollama-bridge"
 
 const sid = SessionID.make("ses_recall_turn")
 const uid = MessageID.make("msg_user")
@@ -258,6 +259,119 @@ test("Memory setup status is not a completed note query", () => {
   expect(settled(original.messages, original.session, uid)).toBe(false)
   original.tool.state = { ...original.tool.state, input: { query: " " } }
   expect(settled(original.messages, original.session, uid)).toBe(false)
+})
+
+test("saved-note search continuation releases synthesis only after this turn's completed query", () => {
+  const original = fixture()
+  const text =
+    "Search my saved SecondBrain notes: what are my preferences for first-time Raya setup and for the Memory tab? Cite the saved sources. Do not change anything."
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text" || original.tool.state.status !== "completed")
+    throw new Error("Original completed fixture required")
+  part.text = text
+  original.session.metadata[RayaChief.requestKey] = text
+  expect(settled(original.messages, original.session, uid)).toBe(true)
+  expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+  original.tool.state = { ...original.tool.state, input: { action: "status" } }
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  original.tool.state = {
+    ...original.tool.state,
+    input: { query: "first-time Raya setup preferences and Memory tab settings" },
+  }
+  expect(settled(original.messages, original.session, uid)).toBe(true)
+  original.tool.messageID = MessageID.make("msg_foreign")
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+})
+
+test("saved-note search prefixes do not release mutation, stale-turn or goal-completion gates", () => {
+  for (const text of [
+    "Search my saved SecondBrain notes: what are my preferences? Edit the saved sources. Do not change anything.",
+    "Search my saved Memory notes: what are my preferences? Do not change anything, then deploy the project.",
+    "Search my saved SecondBrain notes: install the preferences. Do not change anything.",
+    "Search my saved SecondBrain notes: what are my preferences? Change settings. Do not change anything.",
+    "Search my saved SecondBrain notes: what are my preferences? Delete the old notes. Do not change anything.",
+    "Search my saved SecondBrain notes: what are my preferences? Send the saved sources. Do not change anything.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+  const original = fixture()
+  const text = "Search my saved Memory notes: which preferences are in my notes? Do not change anything."
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text") throw new Error("Original text required")
+  part.text = text
+  original.session.metadata[RayaChief.requestKey] = text
+  expect(settled(original.messages, original.session, uid)).toBe(true)
+  expect(settled(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
+  for (const phase of ["task", "verify", "goal", "done"])
+    expect(
+      settled(
+        original.messages,
+        { ...original.session, metadata: { ...original.session.metadata, [RayaChief.phaseKey]: phase } },
+        uid,
+      ),
+    ).toBe(false)
+  original.session.metadata[RayaChief.requestKey] = request
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+})
+
+test("actual Ollama bridge permits text continuation after the original Memory query while required acquisition still refuses", async () => {
+  const original = fixture()
+  const text =
+    "Search my saved SecondBrain notes: what are my preferences for first-time Raya setup and for the Memory tab? Cite the saved sources. Do not change anything."
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text") throw new Error("Original user fixture required")
+  part.text = text
+  original.session.metadata[RayaChief.requestKey] = text
+  const requests: Record<string, unknown>[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: async (request) => {
+      requests.push(await request.json())
+      return Response.json({
+        model: "fixture",
+        message: { role: "assistant", content: "Controlled sourced answer." },
+        done: true,
+        done_reason: "stop",
+      })
+    },
+  })
+  try {
+    const send = ollama({ localInference: true, localInferenceAPI: "ollama" }, globalThis.fetch)
+    const body = {
+      model: "fixture",
+      messages: [{ role: "user", content: text }],
+      tools: [{ type: "function", function: { name: "second_brain_recall", parameters: { type: "object" } } }],
+    }
+    const refused = await send(`${server.url}v1/chat/completions`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, tool_choice: "required" }),
+    }).then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+    expect(refused).toBeInstanceOf(OllamaBridgeError)
+    expect(refused instanceof OllamaBridgeError && refused.diagnostic).toMatchObject({
+      reason: "required-acquisition",
+      refusal: "tool-missing",
+    })
+    expect(settled(original.messages, original.session, uid)).toBe(true)
+    const response = await send(`${server.url}v1/chat/completions`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, tool_choice: "auto" }),
+    })
+    expect((await response.json()).choices[0].message.content).toBe("Controlled sourced answer.")
+    expect(requests).toHaveLength(2)
+    expect(JSON.stringify(requests[0].messages)).toContain("call at least one tool")
+    expect(JSON.stringify(requests[1].messages)).not.toContain("call at least one tool")
+  } finally {
+    await server.stop()
+  }
 })
 
 test("pending, failed and substituted tools cannot release synthesis", () => {

@@ -18,7 +18,8 @@ class Tests(unittest.TestCase):
         dependencies = python.parent.parent / 'Lib/site-packages'
         body = """import importlib.util,json,os,sys
 spec=importlib.util.spec_from_file_location('selected_supervisor',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-module.prepare({'kind':'memory','env':dict(os.environ),'dependencies':sys.argv[2],'source_sha256':module.CAPTURE})
+for sources in (module.CAPTURE, module.CLOSED):
+    module.prepare({'kind':'memory','env':dict(os.environ),'dependencies':sys.argv[2],'source_sha256':sources})
 assert 'numpy' in sys.modules and 'tokenizers' in sys.modules
 assert not any(name in sys.modules for name in ('torch','transformers','scipy','sklearn'))
 print(json.dumps({'counter':True,'model_stack':False}))
@@ -33,6 +34,9 @@ print(json.dumps({'counter':True,'model_stack':False}))
         current = {name: hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest() for name in module.CAPTURE}
         self.assertEqual(len(current), 13)
         self.assertEqual(module.release('memory', current), module.CAPTURE)
+        self.assertEqual(module.release('memory', module.CLOSED), module.CLOSED)
+        self.assertEqual({key for key in module.CAPTURE if module.CAPTURE[key] != module.CLOSED[key]}, {'index.py'})
+        self.assertEqual(module.CLOSED['index.py'], 'e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7')
         for prior in module.PREVIOUS:
             self.assertEqual(module.release('memory', prior), prior)
         self.assertEqual(module.release('memory', module.RELEASES['memory']), module.RELEASES['memory'])

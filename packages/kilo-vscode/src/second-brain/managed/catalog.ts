@@ -1,6 +1,6 @@
 export const interpreter = "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2"
 export const supervisor = "55530325cc6e8836b49722e39f0b7f87d93c2fe30699d2f5373ff650beb50618"
-export const current = "715dc3ff0bd136363c3b77e47c9c3e5717645518b9c98060139caf785566dbe4"
+export const current = "7c2286962a606fade513e4742369d0f084609549961650347b89f44f1f266bcd"
 export const supervisors = [
   supervisor,
   "31200051a3248182a01284fa0f8524d07c5360aaf21b5df76025574ff7497e60",
@@ -11,6 +11,7 @@ export const supervisors = [
   "0fc0c18acd7574b7fb0d9bff8378de953645113ac5619f4673688cd2ab27fb62",
   "ffbff9b96ada90e9d04e26a0d96dfd0a42abd13eb7aa5c787f6b7fe1f70ad4e4",
   current,
+  "715dc3ff0bd136363c3b77e47c9c3e5717645518b9c98060139caf785566dbe4",
 ] as const
 
 export const retrieval = Object.freeze({

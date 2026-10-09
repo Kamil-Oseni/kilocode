@@ -219,6 +219,7 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
   if (plan.source === original) return
   const pins = [
     current,
+    "715dc3ff0bd136363c3b77e47c9c3e5717645518b9c98060139caf785566dbe4",
     "0fc0c18acd7574b7fb0d9bff8378de953645113ac5619f4673688cd2ab27fb62",
     "2249c00ff1755613ca0d8eadf6e9b8e51ed2dd53ff91c52dae7e36153b4fa72f",
   ].includes(cfg.supervisor.sha256)

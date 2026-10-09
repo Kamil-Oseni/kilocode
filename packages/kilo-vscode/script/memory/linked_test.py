@@ -19,12 +19,54 @@ from policy import Policy
 # or service runtime. No implementation is copied into this test.
 SOURCE = HERE / 'service/index.py'
 TREE = ast.parse(SOURCE.read_bytes())
-NAMES = {'ordinary', 'image', 'address', 'links', 'passage', 'retrieve', 'headings', 'split', 'digest'}
+NAMES = {'ordinary', 'image', 'address', 'links', 'capture_passage', 'passage', 'retrieve', 'headings', 'split', 'digest'}
 CODE = ast.Module(body=[node for node in TREE.body if isinstance(node, ast.FunctionDef) and node.name in NAMES], type_ignores=[])
+# A conservative default only for isolated split tests; no tokenizer or model imports.
+tokens = len
 exec(compile(ast.fix_missing_locations(CODE), str(SOURCE), 'exec'), globals())
 
 
 class Tests(unittest.TestCase):
+    def capture(self, key, text):
+        return ('## Raya capture ' + key + '\n\nInterpretation of a recorded conversation; not independently verified.\n\n'
+                '### p0_cards\n\nOrigin: user_statement\nEvidence: [{"id":"original-user","start":0,"end":94}]\n\n' + text + '\n\n'
+                '### p2_memory\n\nOrigin: user_statement\nEvidence: [{"id":"original-user","start":95,"end":177}]\n\n'
+                'Inspect and adjust settings.\n\nOriginal user preference: I also prefer the Memory tab to be for manually inspecting and adjusting settings.\n\n'
+                'Recorded update: 2026-10-09T18:30:00Z. Source snapshots: [user_statement](System/Changes/original/source-0.txt).\n')
+
+    def test_latest_relevant_capture_is_complete_instead_of_an_early_duplicate_with_a_cut_tail(self):
+        old = self.capture('00000000-0000-5000-8000-000000000001', 'For first-time Raya setup, I prefer concise conversational ask cards instead of lengthy forms.')
+        latest = self.capture('00000000-0000-5000-8000-000000000002', 'Concise conversational ask cards.\n\nOriginal user preference: For first-time Raya setup, I prefer concise conversational ask cards instead of lengthy forms.')
+        text = '# Preferences\n\n' + old * 6 + '\n' + latest
+        query = 'first-time Raya setup preferences and Memory tab settings'
+        row = passage('Preferences/Raya.md', text, query, 2000, len, lambda: None)
+        self.assertIn('00000000-0000-5000-8000-000000000002', row['heading'])
+        self.assertEqual(row['text'], latest.rstrip('\n'))
+        self.assertEqual(row['text'], '\n'.join(text.splitlines()[row['line'] - 1:row['end_line']]))
+        self.assertIn('Interpretation of a recorded conversation; not independently verified.', row['text'])
+        self.assertIn('### p2_memory', row['text'])
+        self.assertIn('Memory tab to be for manually inspecting and adjusting settings.', row['text'])
+        self.assertLessEqual(row['tokens'], 2000)
+
+    def test_capture_does_not_fallback_to_older_or_partial_text_when_its_complete_record_cannot_fit(self):
+        text = self.capture('00000000-0000-5000-8000-000000000001', 'For first-time Raya setup, I prefer concise conversational ask cards instead of lengthy forms.')
+        text += self.capture('00000000-0000-5000-8000-000000000002', 'For first-time Raya setup, I prefer concise conversational ask cards instead of lengthy forms.\n' + 'extra supported detail ' * 100)
+        self.assertIsNone(passage('Preferences/Raya.md', text, 'first-time Raya setup', 2000, len, lambda: None))
+
+    def test_atomic_capture_keeps_general_selection_fences_and_cancellation(self):
+        text = '# General\n\nA lunar telescope aperture preference.\n\n'
+        text += self.capture('00000000-0000-5000-8000-000000000001', 'Prefer concise forms.')
+        row = passage('Preferences/Raya.md', text, 'lunar telescope aperture', 2000, len, lambda: None)
+        self.assertEqual(row['line'], 3)
+        plain = '# General\n\nA lunar telescope aperture preference.\n\n## Other\n\nAn ordinary fact.'
+        self.assertEqual(passage('Preferences/Raya.md', plain, 'lunar telescope', 2000, len, lambda: None)['text'], '\n'.join(plain.splitlines()[2:]))
+        fenced = '```md\n' + self.capture('00000000-0000-5000-8000-000000000001', 'For first-time Raya setup, prefer forms.') + '\n```\n'
+        self.assertFalse(capture_passage('Preferences/Raya.md', fenced.splitlines(), headings(fenced.splitlines(), lambda: None), {'setup'}, 2000, len, lambda: None)[0])
+        def cancel():
+            raise TimeoutError('cancelled')
+        with self.assertRaisesRegex(TimeoutError, 'cancelled'):
+            passage('Preferences/Raya.md', text, 'forms', 2000, len, cancel)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='raya-linked-')
         self.root = Path(self.tmp.name).resolve()

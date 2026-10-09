@@ -193,7 +193,11 @@ test("reusable selection binds exact source closure, protocol and independent re
 })
 
 test("reusable pins match source bytes and readiness cannot adopt a different release", async () => {
-  const prior = { ...capture, "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b" }
+  const prior = {
+    ...capture,
+    "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b",
+    "index.py": "e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7",
+  }
   expect(catalog(prior)).toEqual(prior)
   expect(catalog(capture)).toEqual(capture)
   expect(resident(prior)).toBe(true)

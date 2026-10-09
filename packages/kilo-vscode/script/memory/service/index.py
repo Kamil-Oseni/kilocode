@@ -542,12 +542,55 @@ def links(text):
             yield match.group(1) or match.group(2)
 
 
+def capture_passage(name, lines, sections, terms, limit, measure, check):
+    """Choose an entire relevant capture record; never cut its attribution or facts."""
+    records = []
+    covered = set()
+    for start, heading in sections.items():
+        check()
+        if not re.fullmatch(r'Raya capture [a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', heading) or not re.match(r'^ {0,3}##[ \t]+', lines[start]):
+            continue
+        end = next((index for index in sections if index > start and re.match(r'^ {0,3}#{1,2}(?:[ \t]+|$)', lines[index])), len(lines))
+        record = lines[start:end]
+        if 'Interpretation of a recorded conversation; not independently verified.' not in record:
+            continue
+        scores = []
+        for line in record:
+            check()
+            if re.match(r'^\s*(?:#{1,6}(?:[ \t]+|$)|Origin:|Evidence:|Recorded update:|Interpretation of a recorded conversation;)', line):
+                continue
+            scores.append(len(terms.intersection(re.findall(r'\w+', line.casefold()))))
+        covered.update(range(start, end))
+        records.append((max(scores, default=0), start, end, heading))
+    if not records:
+        return False, None
+    ordinary = 0
+    for index, line in enumerate(lines):
+        check()
+        if index not in covered:
+            ordinary = max(ordinary, len(terms.intersection(re.findall(r'\w+', line.casefold()))))
+    score, start, end, heading = max(records, key=lambda item: (item[0], item[1]))
+    if score == 0 or score < ordinary:
+        return False, None
+    selected = '\n'.join(lines[start:end])
+    prefix = f'Source: {name}\nSection: {heading}\n'
+    check()
+    tokens = measure(prefix + selected)
+    if tokens > limit:
+        return True, None
+    return True, {'line': start + 1, 'end_line': end, 'heading': heading,
+                  'text': selected, 'tokens': tokens, 'truncated': start != 0 or end != len(lines)}
+
+
 def passage(name, text, query, limit, measure, check):
     lines = text.splitlines()
     if not lines:
         return None
     sections = headings(lines, check)
     terms = set(re.findall(r'\w+', query.casefold()))
+    captured, row = capture_passage(name, lines, sections, terms, limit, measure, check)
+    if captured:
+        return row
     start = max(range(len(lines)), key=lambda index: len(terms.intersection(re.findall(r'\w+', lines[index].casefold()))))
     # Keep qualifiers around the matched fact in the same paragraph. Returning
     # only its matching line can turn a historical or disputed note into a fact.

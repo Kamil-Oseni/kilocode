@@ -21,9 +21,13 @@ const handoff = Object.freeze({
   "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b",
   "index.py": "e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7",
 })
-export const release = Object.freeze({
+const closed = Object.freeze({
   ...handoff,
   "server.py": "ddcffa6ec22432f1622850aa36e04e48cfe8cad94db28648e1b6b8dd2fefcf1d",
+})
+export const release = Object.freeze({
+  ...closed,
+  "index.py": "3c106c8e45267ee808a3c2bd8dfacf85a4d3c1ca47e23785706d7663d6791f65",
 })
 const previous = Object.freeze({
   ...historical,
@@ -36,6 +40,7 @@ const retained = Object.freeze({
 export function selected(pins: Readonly<Record<string, unknown>>) {
   if (!("capture.py" in pins)) return legacy
   if (pins["server.py"] === handoff["server.py"] && pins["index.py"] === handoff["index.py"]) return handoff
+  if (pins["server.py"] === closed["server.py"] && pins["index.py"] === closed["index.py"]) return closed
   if (pins["server.py"] === historical["server.py"] && pins["index.py"] === historical["index.py"]) return historical
   return pins["index.py"] === previous["index.py"]
     ? previous
@@ -46,7 +51,7 @@ export function selected(pins: Readonly<Record<string, unknown>>) {
 export function resident(pins: Readonly<Record<string, unknown>>) {
   const cohort = selected(pins)
   return (
-    (cohort === release || cohort === handoff) &&
+    (cohort === release || cohort === closed || cohort === handoff) &&
     Object.keys(pins).length === Object.keys(cohort).length &&
     Object.entries(cohort).every(([name, hash]) => pins[name] === hash)
   )

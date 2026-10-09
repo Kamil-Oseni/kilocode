@@ -14,13 +14,13 @@ from validation import canonical, decode, fingerprint
 
 HERE = Path(__file__).resolve().parent
 PINS = {'interpreter': 'b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2',
-        'bootstrap': 'cc424607c0b6d9b8565602d11027a4e1c65e769d06af8eaa89b581ec7ff30a6a',
+        'bootstrap': '9c16ad3d709d1cf4623cc6637c28a11654e7984d855210a4e3e898c9600c30a3',
         'worker': 'f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039',
         'models': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873',
         'lease': '308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d',
         'validation': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2',
-        'support': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d',
-        'finite': 'fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446',
+        'support': '27a1b3edd73c7f10d38aa4737a54601e9abc7acfa812327845b93e9b7af39646',
+        'finite': '374028df76227eb1b758b0c8fac07b444f5bbbf8b12c26faad2904d7bccebf1b',
         'living': 'bc75c4be4d9ced06e9bca4c2408430a1d1fb084a827762e81a3b5ec0043d261a'}
 
 

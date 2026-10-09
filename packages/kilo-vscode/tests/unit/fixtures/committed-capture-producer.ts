@@ -22,22 +22,23 @@ const source = full ? await mkdtemp(path.join(tmpdir(), "raya-original-capture-s
 if (source) {
   for (const name of Object.keys(release))
     await copyFile(path.resolve("script/memory/service", name), path.join(source, name))
-  const child = Bun.spawn(
-    ["git", "show", "5a4e669f0803ff5a52e22da85a69f5346ceeba41:packages/kilo-vscode/script/memory/service/index.py"],
-    { stdout: "pipe", stderr: "pipe" },
-  )
-  const [raw, errors, code] = await Promise.all([
-    new Response(child.stdout).arrayBuffer(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ])
-  if (
-    code !== 0 ||
-    errors ||
-    sha(Buffer.from(raw)) !== "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e"
-  )
-    throw new Error("Exact original capture source blob required")
-  await writeFile(path.join(source, "index.py"), Buffer.from(raw))
+  for (const [name, hash] of Object.entries({
+    "server.py": "8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e9b164443c",
+    "index.py": "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e",
+  })) {
+    const child = Bun.spawn(
+      ["git", "show", "5a4e669f0803ff5a52e22da85a69f5346ceeba41:packages/kilo-vscode/script/memory/service/" + name],
+      { stdout: "pipe", stderr: "pipe" },
+    )
+    const [raw, errors, code] = await Promise.all([
+      new Response(child.stdout).arrayBuffer(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    if (code !== 0 || errors || sha(Buffer.from(raw)) !== hash)
+      throw new Error("Exact original capture source blob required")
+    await writeFile(path.join(source, name), Buffer.from(raw))
+  }
 }
 const prepared = await command(
   "D:/Raya/Services/Packaging/Environments/PrimarySnapshot/Scripts/python.exe",

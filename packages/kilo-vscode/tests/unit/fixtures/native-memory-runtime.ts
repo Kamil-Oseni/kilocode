@@ -17,6 +17,7 @@ export async function runtime(
     pins: release,
   },
   notes?: string,
+  historical?: { path: string; pins: Readonly<Record<string, string>>; release: string; supervisor: string },
 ) {
   if (notes) await protection(outer)
   if (!notes) await protect(outer)
@@ -64,16 +65,27 @@ export async function runtime(
   )
   await Promise.all(
     Object.keys(retrieval).map((name) =>
-      copyFile(path.resolve("script/memory/retrieval", name), path.join(root, "source/retrieval", name)),
+      copyFile(
+        historical ? path.join(historical.path, "retrieval", name) : path.resolve("script/memory/retrieval", name),
+        path.join(root, "source/retrieval", name),
+      ),
     ),
   )
-  await copyFile(path.resolve("script/memory/supervise.py"), path.join(root, "source/supervise.py"))
+  await copyFile(
+    historical?.supervisor ?? path.resolve("script/memory/supervise.py"),
+    path.join(root, "source/supervise.py"),
+  )
   if (notes) {
     await mkdir(path.join(root, "source/retrieval_reuse"))
     await Promise.all(
-      Object.keys(images)
+      Object.keys(historical?.pins ?? images)
         .filter((name) => name.startsWith("retrieval_reuse/"))
-        .map((name) => copyFile(path.resolve("script/memory", name), path.join(root, "source", name))),
+        .map((name) =>
+          copyFile(
+            historical ? path.join(historical.path, name) : path.resolve("script/memory", name),
+            path.join(root, "source", name),
+          ),
+        ),
     )
   }
   await writeFile(path.join(root, "deps", "admitted.txt"), "synthetic nonmodel dependency")
@@ -128,8 +140,16 @@ print(json.dumps(cfg,separators=(',',':')))`
       root,
       sid,
       JSON.stringify(source.pins),
-      JSON.stringify(retrieval),
-      ...(notes ? [notes, JSON.stringify(images), fingerprint] : []),
+      JSON.stringify(
+        historical
+          ? Object.fromEntries(
+              Object.entries(historical.pins)
+                .filter(([name]) => name.startsWith("retrieval/"))
+                .map(([name, hash]) => [name.slice("retrieval/".length), hash]),
+            )
+          : retrieval,
+      ),
+      ...(notes ? [notes, JSON.stringify(historical?.pins ?? images), historical?.release ?? fingerprint] : []),
     ],
     { windowsHide: true },
   )

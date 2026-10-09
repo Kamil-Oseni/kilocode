@@ -1,6 +1,9 @@
+import { isDeepStrictEqual } from "node:util"
+import { check } from "../control/frames"
+
 export const interpreter = "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2"
 export const supervisor = "55530325cc6e8836b49722e39f0b7f87d93c2fe30699d2f5373ff650beb50618"
-export const current = "baed8f707876f323d4dac18492ac35a2af304f91fcc7a60422013b5c368d45c2"
+export const current = "e2a86b4b0947b31c67e210b33538e3730727c44934f8856d038e27e84c1b2048"
 export const supervisors = [
   supervisor,
   "31200051a3248182a01284fa0f8524d07c5360aaf21b5df76025574ff7497e60",
@@ -11,12 +14,13 @@ export const supervisors = [
   "0fc0c18acd7574b7fb0d9bff8378de953645113ac5619f4673688cd2ab27fb62",
   "ffbff9b96ada90e9d04e26a0d96dfd0a42abd13eb7aa5c787f6b7fe1f70ad4e4",
   current,
+  "baed8f707876f323d4dac18492ac35a2af304f91fcc7a60422013b5c368d45c2",
   "a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b",
   "7c2286962a606fade513e4742369d0f084609549961650347b89f44f1f266bcd",
   "715dc3ff0bd136363c3b77e47c9c3e5717645518b9c98060139caf785566dbe4",
 ] as const
 
-export const retrieval = Object.freeze({
+const finite = Object.freeze({
   "bootstrap.py": "530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d",
   "models.py": "2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873",
   "namespace.py": "5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3",
@@ -25,3 +29,14 @@ export const retrieval = Object.freeze({
   "validation.py": "905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2",
   "worker.py": "e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721",
 })
+export const retrieval = Object.freeze({
+  ...finite,
+  "bootstrap.py": "27a1b3edd73c7f10d38aa4737a54601e9abc7acfa812327845b93e9b7af39646",
+  "owner.py": "374028df76227eb1b758b0c8fac07b444f5bbbf8b12c26faad2904d7bccebf1b",
+})
+
+export function finitecohort(pins: Readonly<Record<string, unknown>>) {
+  if (isDeepStrictEqual({ ...pins }, retrieval)) return retrieval
+  check(isDeepStrictEqual({ ...pins }, finite), "Exact finite Retrieval cohort required")
+  return finite
+}

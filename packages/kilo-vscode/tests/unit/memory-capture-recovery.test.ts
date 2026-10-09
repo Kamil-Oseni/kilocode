@@ -11,7 +11,8 @@ import { sha } from "../../src/second-brain/control/frames"
 import { fingerprint } from "../../src/second-brain/failed-repair"
 import { release, bridge } from "../../src/second-brain/control/catalog-capture"
 import { linked } from "../../src/second-brain/managed/capture-upgrade"
-import { descriptor } from "../../src/second-brain/managed/descriptor"
+import { descriptor, selection } from "../../src/second-brain/managed/descriptor"
+import { images, fingerprint as cohort } from "../../src/second-brain/managed/reuse-catalog"
 import { image, powershell, environment } from "../../src/second-brain/control/identity"
 import { rebind } from "../../src/second-brain/committed-capture"
 import { retained } from "../../src/second-brain/failed-downstream"
@@ -245,10 +246,14 @@ for (const stage of ["confirmation", "ledger"] as const)
       }
     }, true)
     try {
-      const original = value.storage.get<{ setup: { source_sha256: Record<string, string> }; managed: unknown }>(
-        "raya.secondBrain.setup",
-      )!
+      const original = value.storage.get<{
+        setup: { source_sha256: Record<string, string> }
+        managed: unknown
+        credential: string
+      }>("raya.secondBrain.setup")!
       const cfg = descriptor(original.managed)
+      const pinned = await selection(cfg, parse(original.setup))
+      const sources = await inventory(path.join(cfg.root, "source"))
       const before = await inventory(value.notes)
       const consent = {
         version: 1,
@@ -285,6 +290,18 @@ for (const stage of ["confirmation", "ledger"] as const)
       await cp(path.resolve("script/memory"), path.join(successor, "script/memory"), { recursive: true })
       const replacement = new BrainService(value.settings(), installed)
       const reviewed = await replacement.upgradeCapture(value.turn)
+      const current = value.storage.get<{ setup: unknown; managed: unknown; credential: string }>(
+        "raya.secondBrain.setup",
+      )!
+      const managed = descriptor(current.managed)
+      const plans = await selection(managed, parse(current.setup))
+      expect(plans.retrieval!.source).toBe(path.dirname(managed.supervisor.path))
+      expect(plans.retrieval!.source_sha256).toEqual(images)
+      expect((plans.retrieval!.env as Record<string, unknown>).RAYA_RETRIEVAL_RELEASE_SHA256).toBe(cohort)
+      expect((plans.plan.env as Record<string, unknown>).RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256).toBe(cohort)
+      expect(managed.python).toEqual(cfg.python)
+      expect(managed.notes).toEqual(cfg.notes)
+      expect(current.credential).toBe(original.credential)
       expect(reviewed.evidence.helper.path).toBe(path.resolve("script/memory/capture_recovery.py"))
       expect(() => rebind(JSON.parse(JSON.stringify(reviewed)), audit)).toThrow("Fresh native capture review required")
       expect(() => rebind(reviewed, { reviewSHA: "f".repeat(64), review: {} })).toThrow("review digest differs")
@@ -344,6 +361,10 @@ for (const stage of ["confirmation", "ledger"] as const)
       ])
       expect(value.storage.get(key)).toEqual(audit)
       expect(await inventory(value.notes)).toEqual(before)
+      const retained = await selection(cfg, parse(original.setup))
+      expect(retained.files.map((item) => item.tuple)).toEqual(pinned.files.map((item) => item.tuple))
+      expect(retained.files.map((item) => item.digest)).toEqual(pinned.files.map((item) => item.digest))
+      expect(await inventory(path.join(cfg.root, "source"))).toEqual(sources)
       await replacement.dispose()
       await service.dispose()
     } finally {

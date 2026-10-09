@@ -12,6 +12,7 @@ import { protection } from "./protection"
 import { observe } from "./upgrade-observe"
 import { project } from "./upgrade"
 import { fresh } from "./generation"
+import { activate } from "./materialize-v2"
 
 async function save(file: string, raw: Buffer) {
   check(raw.length > 0 && raw.length <= 1048576, "Bounded upgrade publication required")
@@ -46,7 +47,8 @@ async function packaged(extension: string) {
 }
 
 /** Create a disjoint immutable runtime and fresh receipt namespaces. Partial directories remain sticky; no saved state changes. */
-export async function materialize(input: Descriptor, setup: Setup, extension: string, id: string) {
+export async function materialize(input: Descriptor, setup: Setup, extension: string, id: string, version: 1 | 2 = 2) {
+  if (version === 2) return activate(input, setup, extension, id)
   check(/^[a-f0-9]{32}$/.test(id), "Exact upgrade generation required")
   const cfg = descriptor(input)
   check(cfg.version === 2 && setup.version === 2, "Explicit paired capture setup required")

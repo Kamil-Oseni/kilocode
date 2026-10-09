@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import sys
 import time
@@ -122,7 +123,9 @@ def read(library, handle, bound):
 
 
 def private():
-    if HERE.name != 'retrieval' or HERE.parent.name != 'source' or not ROOT.name.startswith('raya-memory-managed-'):
+    if (HERE.name != 'retrieval' or
+            (HERE.parent.name != 'source' and not re.fullmatch('raya-memory-source-upgrade-[a-f0-9]{32}', HERE.parent.name)) or
+            not ROOT.name.startswith('raya-memory-managed-')):
         raise ValueError('private_source_layout')
     for key, value in ENV.items():
         if os.environ.get(key) != value:

@@ -3,7 +3,7 @@ import { check, document, sha } from "../control/frames"
 import { command } from "../control/command"
 import { environment } from "../control/identity"
 import { release } from "../control/catalog-capture"
-import { current } from "./catalog"
+import { current, supervisors } from "./catalog"
 import type { Descriptor } from "./descriptor"
 
 const body = `import hashlib,json,os,pathlib,stat,sys
@@ -80,7 +80,11 @@ type Observation = {
 }
 
 /** Observe existing old/new code with native uint64 tuples and actual inherited Windows ACLs; never repair. */
-export async function observe(cfg: Descriptor, source = "", namespaces?: Descriptor["namespaces"]) {
+export async function observe(cfg: Descriptor, source = "", namespaces?: Descriptor["namespaces"], expected = current) {
+  check(
+    supervisors.some((hash) => hash === expected),
+    "Known selected upgrade supervisor required",
+  )
   const result = await command(
     cfg.python.path,
     [
@@ -93,7 +97,7 @@ export async function observe(cfg: Descriptor, source = "", namespaces?: Descrip
       cfg.plan.sha256,
       cfg.namespaces.memory.sid,
       source,
-      JSON.stringify({ ...release, "supervise.py": current }),
+      JSON.stringify({ ...release, "supervise.py": expected }),
       namespaces ? JSON.stringify(namespaces) : "",
     ],
     { windowsHide: true, env: { ...environment(), TEMP: cfg.root, TMP: cfg.root } },

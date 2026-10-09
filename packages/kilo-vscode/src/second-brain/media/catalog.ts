@@ -55,7 +55,7 @@ const pins: Record<string, string> = Object.freeze({
   "media/session.py": "750242844fe1ccaa4bb556689541696eb72984a6e6a0639e4739c2ea12028bdc",
   "media/library.py": "d2fc538fbdc95bcf83f5949946b8a46e683a68c13758c07d565b945cf1a0e66a",
   "media/encoder.py": "5797459720dc326c62477372f94d28614fb77602573d02d58a7f95fa48e4324a",
-  "retrieval/owner.py": "fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446",
+  "retrieval/owner.py": "374028df76227eb1b758b0c8fac07b444f5bbbf8b12c26faad2904d7bccebf1b",
 })
 
 function relative(root: string, name: string) {

@@ -53,8 +53,11 @@ test("materialize retains old native images and creates qualified independent pl
   expect(result.plan.source).toBe(next.source)
   expect(result.plan.files).toEqual(result.retrieval!.files)
   expect(result.plan.directories).toEqual(result.retrieval!.directories)
-  expect(result.retrieval!.source).toBe(original.retrieval!.source)
-  expect(result.retrieval!.source_sha256).toEqual(original.retrieval!.source_sha256)
+  expect(next.version).toBe(2)
+  expect(result.retrieval!.source).toBe(next.source)
+  expect(result.retrieval!.source_sha256).toEqual(images)
+  expect(result.retrieval!.env.RAYA_RETRIEVAL_RELEASE_SHA256).toBe(fingerprint)
+  expect(result.plan.env.RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256).toBe(fingerprint)
   const after = await selection(cfg, setup)
   expect(after.files.map((item) => item.tuple)).toEqual(original.files.map((item) => item.tuple))
   expect(after.files.map((item) => item.digest)).toEqual(original.files.map((item) => item.digest))
@@ -379,6 +382,21 @@ test("successor review reconstructs actual native plans and refuses unrelated by
 
 test("runtime publication survives every physical save acknowledgement loss and a cold applied retry", async () => {
   const prepared = await materialize(cfg, setup, path.resolve("."), "f".repeat(32))
+  expect(prepared.version).toBe(2)
+  const before = await selection(cfg, setup)
+  const selected = await selection(prepared.next.managed, prepared.next.setup)
+  const env = selected.plan.env as Record<string, unknown>
+  const retrieval = selected.retrieval!.env as Record<string, unknown>
+  expect(selected.retrieval!.source).toBe(prepared.source)
+  expect(selected.retrieval!.source_sha256).toEqual(images)
+  expect(retrieval.RAYA_RETRIEVAL_RELEASE_SHA256).toBe(fingerprint)
+  expect(env.RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256).toBe(fingerprint)
+  expect(prepared.next.managed.python).toEqual(cfg.python)
+  expect(prepared.next.managed.notes).toEqual(cfg.notes)
+  expect(retrieval.RAYA_RETRIEVAL_TOKEN_FILE).toBe(
+    (before.retrieval!.env as Record<string, unknown>).RAYA_RETRIEVAL_TOKEN_FILE,
+  )
+  expect(env.RAYA_MEMORY_TOKEN_FILE).toBe((before.plan.env as Record<string, unknown>).RAYA_MEMORY_TOKEN_FILE)
   const key = "raya.secondBrain.setup"
   const pending = "raya.secondBrain.committedCaptureRecovery.pending"
   const ledger = "raya.secondBrain.personalCapture.turns"
@@ -537,6 +555,9 @@ test("runtime publication survives every physical save acknowledgement loss and 
       await cold.update(audit, recovered.publication)
     }
   }
+  const after = await selection(cfg, setup)
+  expect(after.files.map((item) => item.tuple)).toEqual(before.files.map((item) => item.tuple))
+  expect(after.files.map((item) => item.digest)).toEqual(before.files.map((item) => item.digest))
 }, 180000)
 
 test("materialize refuses a changed original file before creating replacement code", async () => {

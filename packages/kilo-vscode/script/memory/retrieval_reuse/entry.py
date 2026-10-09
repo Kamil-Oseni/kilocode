@@ -19,7 +19,8 @@ def build(env):
     if not sys.flags.isolated or not sys.flags.no_site or not sys.dont_write_bytecode:
         raise ValueError('reuse_fixed_interpreter_flags')
     capsule = ROOT.parent
-    if (ROOT.name != 'source' or not capsule.name.startswith('raya-memory-managed-') or
+    if ((ROOT.name != 'source' and not re.fullmatch('raya-memory-source-upgrade-[a-f0-9]{32}', ROOT.name)) or
+            not capsule.name.startswith('raya-memory-managed-') or
             ROOT.resolve() != ROOT or capsule.resolve() != capsule):
         raise ValueError('reuse_private_source_layout')
     if Path(sys.executable).resolve() != BASE.resolve():

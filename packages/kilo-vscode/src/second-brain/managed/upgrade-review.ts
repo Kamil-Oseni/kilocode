@@ -11,8 +11,12 @@ import { observe } from "./upgrade-observe"
 import { project } from "./upgrade"
 import { project as namespace } from "./generation"
 import type { materialize } from "./materialize"
+import { observe as activation } from "./upgrade-observe-v2"
+import { images, fingerprint as retrieval, cohort } from "./reuse-catalog"
 
 type Prepared = Awaited<ReturnType<typeof materialize>>
+type Without<T> = T extends { receipt: unknown } ? Omit<T, "receipt"> : never
+type Value = Without<Prepared>
 type Entry = { setup: Setup; managed: Descriptor }
 
 function entry(input: unknown): Entry {
@@ -43,7 +47,7 @@ function producer(input: Prepared["producer"]) {
   )
 }
 
-function metadata(value: Omit<Prepared, "receipt">, prior: Entry, id: string) {
+function metadata(value: Value, prior: Entry, id: string) {
   check(
     Object.keys(value).sort().join() ===
       [
@@ -62,17 +66,37 @@ function metadata(value: Omit<Prepared, "receipt">, prior: Entry, id: string) {
         "requestSettlement",
         "replay",
         "indexConfirmed",
+        ...(value.version === 2 ? ["retrieval"] : []),
       ]
         .sort()
         .join() &&
       value.format === "raya.memory.runtime.upgrade.prepared" &&
-      value.version === 1 &&
+      (value.version === 1 || value.version === 2) &&
       value.id === id &&
       value.requestSettlement === false &&
       value.replay === false &&
       value.indexConfirmed === false,
     "Exact prepared upgrade metadata required",
   )
+  if (value.version === 2) {
+    check("retrieval" in value, "Explicit v2 Retrieval upgrade provenance required")
+    const selected = value.retrieval
+    check(
+      Object.keys(selected).sort().join() === "directories,next,previous" &&
+        Object.keys(selected.previous).sort().join() === "images,pins,release,source" &&
+        Object.keys(selected.next).sort().join() === "pins,release,source",
+      "Exact v2 Retrieval provenance fields required",
+    )
+    check(
+      isDeepStrictEqual(selected.previous.pins, cohort(selected.previous.release)) &&
+        selected.previous.images.length === 16 &&
+        isDeepStrictEqual(selected.next, { source: value.source, pins: images, release: retrieval }) &&
+        selected.directories.length === 2 &&
+        selected.directories[0].path === path.join(value.source, "retrieval") &&
+        selected.directories[1].path === path.join(value.source, "retrieval_reuse"),
+      "Exact v2 Retrieval provenance required",
+    )
+  }
   const previous = entry(value.previous)
   const next = entry(value.next)
   check(
@@ -82,7 +106,7 @@ function metadata(value: Omit<Prepared, "receipt">, prior: Entry, id: string) {
   return next
 }
 
-function runtime(value: Omit<Prepared, "receipt">, prior: Entry, next: Entry, folder: string) {
+function runtime(value: Value, prior: Entry, next: Entry, folder: string) {
   check(
     next.managed.root === prior.managed.root &&
       next.managed.version === 2 &&
@@ -100,6 +124,28 @@ function runtime(value: Omit<Prepared, "receipt">, prior: Entry, next: Entry, fo
       Object.values(next.managed.namespaces).every((space) => space.sid === prior.managed.namespaces.memory.sid),
     "Selected fresh upgrade namespaces differ",
   )
+}
+
+function evidence(
+  observed: Awaited<ReturnType<typeof observe>> | Awaited<ReturnType<typeof activation>>,
+  value: Value,
+) {
+  const dirs = "directories" in observed ? observed.directories : [observed.directory]
+  const extra = "retrieval" in value ? value.retrieval : undefined
+  check(
+    observed.programSHA === value.programSHA &&
+      isDeepStrictEqual(observed.prior, value.original) &&
+      isDeepStrictEqual(observed.images, value.images) &&
+      isDeepStrictEqual(dirs[0], value.directory) &&
+      isDeepStrictEqual(observed.spaces, value.spaces) &&
+      dirs[0] &&
+      (!extra ||
+        ("retrieval" in observed &&
+          isDeepStrictEqual(observed.retrieval, extra.previous.images) &&
+          isDeepStrictEqual(dirs.slice(1), extra.directories))),
+    "Prepared native upgrade evidence changed",
+  )
+  return dirs
 }
 
 /** Reconstruct both derived plans from the retained originals; inspect native code/ACLs/spaces without changing saved state. */
@@ -120,7 +166,7 @@ export async function review(input: Descriptor["plan"], expected: Entry) {
   check(held.raw.length === ref.bytes && held.digest === ref.sha256, "Prepared upgrade receipt changed")
   document(held.raw, 65536)
   // Prepared metadata stores all native identities as decimal strings; only plans retain raw integer tokens.
-  const value = JSON.parse(held.raw.toString("utf8")) as Omit<Prepared, "receipt">
+  const value = JSON.parse(held.raw.toString("utf8")) as Value
   const next = metadata(value, prior, id)
   runtime(value, prior, next, folder)
   producer(value.producer)
@@ -131,27 +177,41 @@ export async function review(input: Descriptor["plan"], expected: Entry) {
   )
   const original = await selection(prior.managed, prior.setup)
   const selected = await selection(next.managed, next.setup)
-  const observed = await observe(prior.managed, value.source, next.managed.namespaces)
-  check(
-    observed.programSHA === value.programSHA &&
-      isDeepStrictEqual(observed.prior, value.original) &&
-      isDeepStrictEqual(observed.images, value.images) &&
-      isDeepStrictEqual(observed.directory, value.directory) &&
-      isDeepStrictEqual(observed.spaces, value.spaces) &&
-      observed.directory,
-    "Prepared native upgrade evidence changed",
-  )
+  const upgraded = "retrieval" in value ? value.retrieval : undefined
+  const observed = upgraded
+    ? await activation(prior.managed, upgraded.previous, value.source, next.managed.namespaces)
+    : await observe(prior.managed, value.source, next.managed.namespaces, next.managed.supervisor.sha256)
+  const observedDirs = evidence(observed, value)
   check(typeof original.plan.source === "string", "Original source location required")
   const replacements = new Map(
     observed.images
       .filter((item) => path.basename(item.path) !== "supervise.py")
-      .map((item) => [path.join(String(original.plan.source), path.basename(item.path)), item]),
+      .map((item) => {
+        const name = path.relative(value.source, item.path)
+        return [
+          path.join(
+            upgraded && name.includes(path.sep) ? upgraded.previous.source : String(original.plan.source),
+            name,
+          ),
+          item,
+        ] as const
+      }),
   )
   const supervisor = observed.images.find((item) => path.basename(item.path) === "supervise.py")
   check(supervisor, "Observed current supervisor required")
   const base = { path: original.plan.source, pins: prior.setup.source_sha256 }
   const plans = [2, 3].map((index) =>
-    project(original.files[index].raw, value.source, release, replacements, supervisor, observed.directory!, base),
+    project(
+      original.files[index].raw,
+      value.source,
+      release,
+      replacements,
+      supervisor,
+      observedDirs[0]!,
+      base,
+      upgraded ? { previous: upgraded.previous, directories: upgraded.directories } : undefined,
+      next.managed.supervisor.sha256,
+    ),
   )
   const parsed = document(plans[0], 16777216, 1000000)
   const node = child(parsed.tree, "directories")

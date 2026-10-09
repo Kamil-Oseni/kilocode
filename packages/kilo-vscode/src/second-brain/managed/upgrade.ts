@@ -2,11 +2,14 @@ import path from "node:path"
 import { check, child, document, object } from "../control/frames"
 import { release, selected } from "../control/catalog-capture"
 import { normalize } from "../control/identity"
-import { current } from "./catalog"
+import { current, supervisors } from "./catalog"
+import { images, fingerprint, cohort } from "./reuse-catalog"
+import type { Retrieval } from "./upgrade-observe-v2"
 
 type Image = Readonly<{ path: string; bytes: number; sha256: string; identity: readonly string[] }>
 type Directory = Readonly<{ path: string; identity: readonly string[] }>
 type Source = Readonly<{ path: string; pins: Readonly<Record<string, string>> }>
+type Activation = { previous: Retrieval; directories: readonly Directory[] }
 
 function same(input: Readonly<Record<string, unknown>>, pins: Readonly<Record<string, string>>) {
   return (
@@ -50,6 +53,7 @@ function selection(
   supervisor: Image,
   directory: Directory,
   prior: Source,
+  expected: string,
 ) {
   check(plan.kind === "memory" || plan.kind === "retrieval", "Paired upgrade plan required")
   check(plan.format === "raya.memory.managed.supervisor" && plan.version === 1, "Original managed plan required")
@@ -71,11 +75,56 @@ function selection(
     "Exact previous capture release required",
   )
   check(
-    supervisor.path === path.join(source, "supervise.py") && supervisor.sha256 === current,
+    supervisor.path === path.join(source, "supervise.py") &&
+      supervisor.sha256 === expected &&
+      supervisors.some((hash) => hash === expected),
     "Known new supervisor required",
   )
   if (plan.kind === "memory")
     check(plan.source === prior.path && same(object(plan.source_sha256), prior.pins), "Original Memory source differs")
+}
+
+function activation(plan: ReturnType<typeof object>, source: string, selected: Activation) {
+  check(same(selected.previous.pins, cohort(selected.previous.release)), "Exact previous Retrieval cohort required")
+  check(
+    selected.directories.length === 2 &&
+      selected.directories[0].path === path.join(source, "retrieval") &&
+      selected.directories[1].path === path.join(source, "retrieval_reuse"),
+    "Exact nested source directories required",
+  )
+  if (plan.kind === "retrieval")
+    check(
+      normalize(String(plan.source)) === normalize(selected.previous.source) &&
+        same(object(plan.source_sha256), selected.previous.pins),
+      "Original Retrieval source differs",
+    )
+  const env = object(plan.env)
+  check(
+    env[plan.kind === "memory" ? "RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256" : "RAYA_RETRIEVAL_RELEASE_SHA256"] ===
+      selected.previous.release,
+    "Original paired Retrieval release differs",
+  )
+}
+
+function inventory(
+  replacements: ReadonlyMap<string, Image>,
+  pins: Readonly<Record<string, string>>,
+  prior: Source,
+  activated?: Activation,
+) {
+  const count = Object.keys(pins).length + (activated ? Object.keys(images).length : 0)
+  check(replacements.size === count, "Exact replacement inventory required")
+  const mapping = new Map([...replacements].map(([name, ref]) => [normalize(name), ref]))
+  check(mapping.size === replacements.size, "Duplicate source replacement refused")
+  for (const name of Object.keys(pins))
+    check(mapping.has(normalize(path.join(prior.path, name))), "Original source replacement required")
+  if (activated)
+    for (const name of Object.keys(images))
+      check(
+        mapping.has(normalize(path.join(activated.previous.source, name))),
+        "Original Retrieval replacement required",
+      )
+  return mapping
 }
 
 /** Project only new source images; preserve every unrelated original plan token, including uint64 identities. */
@@ -87,16 +136,18 @@ export function project(
   supervisor: Image,
   directory: Directory,
   prior: Source,
+  activated?: Activation,
+  expected = current,
 ) {
   const parsed = document(raw, 16777216, 1000000)
   const plan = object(parsed.value)
-  selection(plan, source, pins, supervisor, directory, prior)
+  selection(plan, source, pins, supervisor, directory, prior, expected)
+  if (activated) activation(plan, source, activated)
   const files = child(parsed.tree, "files")
   const directories = child(parsed.tree, "directories")
   check(files.type === "array" && directories.type === "array", "Original dependency inventory required")
-  check(replacements.size === Object.keys(pins).length, "Exact replacement inventory required")
-  for (const name of Object.keys(pins))
-    check(replacements.has(path.join(prior.path, name)), "Original source replacement required")
+  const mapping = inventory(replacements, pins, prior, activated)
+  const count = mapping.size
   const paths = new Set<string>()
   const dirs = (directories.children ?? []).map((node) =>
     object(document(Buffer.from(parsed.text.slice(node.offset, node.offset + node.length))).value),
@@ -121,11 +172,16 @@ export function project(
         !key.startsWith(normalize(source) + "/") && key !== normalize(source),
         "New source location already declared",
       )
-      const selected = replacements.get(item.path)
+      const selected = mapping.get(key)
       if (!selected) return []
-      const name = path.basename(item.path)
+      const memory = Object.keys(pins).find((name) => normalize(path.join(prior.path, name)) === key)
+      const name =
+        memory ??
+        (activated && Object.keys(images).find((name) => normalize(path.join(activated.previous.source, name)) === key))
+      check(name, "Exact old source replacement required")
+      const digest = memory ? prior.pins[name] : activated!.previous.pins[name]
       check(
-        item.sha256 === prior.pins[name] && Number.isSafeInteger(item.bytes) && Number(item.bytes) > 0,
+        item.sha256 === digest && Number.isSafeInteger(item.bytes) && Number(item.bytes) > 0,
         "Original source image differs",
       )
       const identity = child(node, "identity")
@@ -135,19 +191,28 @@ export function project(
       )
       tuple(tokens, 6)
       check(tokens[2] === String(item.bytes) && tokens[5] === "1", "Ordinary original source required")
-      check(selected.path === path.join(source, name) && selected.sha256 === pins[name], "Upgrade source image differs")
+      check(
+        selected.path === path.join(source, name) &&
+          selected.sha256 === (memory ? pins[name] : images[name as keyof typeof images]),
+        "Upgrade source image differs",
+      )
       check(!found.has(item.path), "Duplicate upgrade source refused")
       found.add(item.path)
       return [{ node, text: image(selected) }]
     },
   )
-  check(
-    found.size === replacements.size && found.size === Object.keys(pins).length,
-    "Exact upgrade source inventory required",
-  )
+  check(found.size === replacements.size && found.size === count, "Exact upgrade source inventory required")
   const end = { offset: files.offset + files.length - 1, length: 0 }
   changes.push({ node: end, text: (files.children?.length ? "," : "") + image(supervisor) })
-  const addition = '{"path":' + JSON.stringify(directory.path) + ',"identity":' + tuple(directory.identity, 3) + "}"
+  const addition = [directory, ...(activated?.directories ?? [])]
+    .map((item) => {
+      check(
+        !dirs.some((row) => typeof row.path === "string" && normalize(row.path) === normalize(item.path)),
+        "Upgrade directory already declared",
+      )
+      return '{"path":' + JSON.stringify(item.path) + ',"identity":' + tuple(item.identity, 3) + "}"
+    })
+    .join(",")
   changes.push({
     node: { offset: directories.offset + directories.length - 1, length: 0 },
     text: (directories.children?.length ? "," : "") + addition,
@@ -155,6 +220,19 @@ export function project(
   if (plan.kind === "memory") {
     changes.push({ node: child(parsed.tree, "source"), text: JSON.stringify(source) })
     changes.push({ node: child(parsed.tree, "source_sha256"), text: JSON.stringify(pins) })
+  }
+  if (activated) {
+    if (plan.kind === "retrieval") {
+      changes.push({ node: child(parsed.tree, "source"), text: JSON.stringify(source) })
+      changes.push({ node: child(parsed.tree, "source_sha256"), text: JSON.stringify(images) })
+    }
+    changes.push({
+      node: child(
+        child(parsed.tree, "env"),
+        plan.kind === "memory" ? "RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256" : "RAYA_RETRIEVAL_RELEASE_SHA256",
+      ),
+      text: JSON.stringify(fingerprint),
+    })
   }
   let result = parsed.text
   for (const item of changes.sort((a, b) => b.node.offset - a.node.offset))

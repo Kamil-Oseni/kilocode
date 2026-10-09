@@ -4,8 +4,8 @@ import { document, child, check } from "../control/frames"
 import { image, directory, normalize } from "../control/identity"
 import { selected as catalog, resident } from "../control/catalog-capture"
 import type { Setup } from "../settings"
-import { interpreter, supervisors, current, retrieval as release7 } from "./catalog"
-import { cohort, fingerprint } from "./reuse-catalog"
+import { interpreter, supervisors, current, finitecohort } from "./catalog"
+import { cohort, fingerprint, images } from "./reuse-catalog"
 import { parse } from "./value"
 
 type Ref = Readonly<{ path: string; bytes: number; sha256: string }>
@@ -187,6 +187,7 @@ function reusable(memory: Record<string, unknown>, retrieval: Record<string, unk
     check(
       reuse &&
         (env.RAYA_RETRIEVAL_RELEASE_SHA256 === fingerprint ||
+          env.RAYA_RETRIEVAL_RELEASE_SHA256 === "42e505128a3bfbba2346e76031424d0805e3608e2582ec4932ed68c8792b8610" ||
           env.RAYA_RETRIEVAL_RELEASE_SHA256 === "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86"),
       "Current Memory handoff requires its paired Retrieval cohort",
     )
@@ -219,8 +220,21 @@ function credentials(cfg: Descriptor, memory: Record<string, unknown>, retrieval
 function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, reuse: boolean) {
   const original = path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind]))
   if (plan.source === original) return
+  if (kind === "retrieval" && reuse) {
+    check(
+      typeof plan.source === "string" &&
+        path.dirname(plan.source) === cfg.root &&
+        /^raya-memory-source-upgrade-[a-f0-9]{32}$/.test(path.basename(plan.source)) &&
+        cfg.supervisor.path === path.join(plan.source, "supervise.py") &&
+        cfg.supervisor.sha256 === current &&
+        isDeepStrictEqual({ ...row(plan.source_sha256) }, images),
+      "Paired Retrieval upgrade source differs",
+    )
+    return
+  }
   const pins = [
     current,
+    "baed8f707876f323d4dac18492ac35a2af304f91fcc7a60422013b5c368d45c2",
     "a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b",
     "7c2286962a606fade513e4742369d0f084609549961650347b89f44f1f266bcd",
     "715dc3ff0bd136363c3b77e47c9c3e5717645518b9c98060139caf785566dbe4",
@@ -247,6 +261,8 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
 export function paired(cfg: Descriptor, memory: Record<string, unknown>, retrieval: Record<string, unknown>) {
   check(cfg.version === 2 && cfg.retrieval, "Explicit paired descriptor required")
   const reuse = reusable(memory, retrieval)
+  if (reuse && retrieval.source !== path.join(cfg.root, "source"))
+    check(memory.source === retrieval.source, "Paired Retrieval upgrade must share the Memory source")
   check(
     retrieval.format === "raya.memory.managed.supervisor" &&
       retrieval.version === 1 &&
@@ -256,7 +272,7 @@ export function paired(cfg: Descriptor, memory: Record<string, unknown>, retriev
       retrieval.python_sha256 === cfg.python.sha256 &&
       isDeepStrictEqual(
         { ...row(retrieval.source_sha256) },
-        reuse ? cohort(row(retrieval.env).RAYA_RETRIEVAL_RELEASE_SHA256) : release7,
+        reuse ? cohort(row(retrieval.env).RAYA_RETRIEVAL_RELEASE_SHA256) : finitecohort(row(retrieval.source_sha256)),
       ),
     "Reviewed Retrieval release differs",
   )

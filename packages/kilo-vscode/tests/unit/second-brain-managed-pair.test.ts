@@ -7,7 +7,7 @@ import path from "node:path"
 import { Pair } from "../../src/second-brain/managed/pair"
 import { ManagedOwner, Pipes, publish, startup, type Receipt } from "../../src/second-brain/managed/owner"
 import { descriptor, paired } from "../../src/second-brain/managed/descriptor"
-import { interpreter, supervisor, retrieval } from "../../src/second-brain/managed/catalog"
+import { interpreter, supervisor, current, retrieval, finitecohort } from "../../src/second-brain/managed/catalog"
 import { release } from "../../src/second-brain/control/catalog-v2"
 import { release as capture, selected as catalog, resident } from "../../src/second-brain/control/catalog-capture"
 import { images, catalogs, fingerprint, readiness, cohort } from "../../src/second-brain/managed/reuse-catalog"
@@ -128,6 +128,33 @@ test("paired descriptor requires explicit Retrieval ref and exact selected relea
   expect(descriptor(single).version).toBe(1)
   expect(() => paired(descriptor(single), value.memory, value.plan)).toThrow()
 })
+
+test("finite Retrieval pairing admits only the exact current or preserved original seven images", async () => {
+  const value = plans("C:\\Synthetic\\raya-memory-managed-finite")
+  paired(value.cfg, value.memory, value.plan)
+  for (const [name, digest] of Object.entries(retrieval))
+    expect(sha(await readFile(path.join("script/memory/retrieval", name)))).toBe(digest)
+  const old = {
+    ...retrieval,
+    "bootstrap.py": "530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d",
+    "owner.py": "fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446",
+  }
+  expect(finitecohort(old)).toEqual(old)
+  const files = value.memory.files.map((item) =>
+    path.dirname(item.path) === value.plan.source
+      ? { ...item, sha256: old[path.basename(item.path) as keyof typeof old] }
+      : item,
+  )
+  paired(value.cfg, { ...value.memory, files }, { ...value.plan, files, source_sha256: old })
+  for (const changed of [
+    { ...old, "bootstrap.py": retrieval["bootstrap.py"] },
+    { ...retrieval, "owner.py": old["owner.py"] },
+    { ...old, "server.py": "a".repeat(64) },
+  ])
+    expect(() =>
+      paired(value.cfg, { ...value.memory, files }, { ...value.plan, files, source_sha256: changed }),
+    ).toThrow("Exact finite Retrieval cohort required")
+})
 test("reusable selection binds exact source closure, protocol and independent release", () => {
   const value = plans("C:\\Synthetic\\raya-memory-managed-reuse")
   const files = [
@@ -193,6 +220,21 @@ test("reusable selection binds exact source closure, protocol and independent re
       : item,
   )
   paired(upgraded, { ...original, source, files: assets }, { ...historical, files: assets })
+  const modern = descriptor({ ...upgraded, supervisor: { ...upgraded.supervisor, sha256: current } })
+  const closure = [
+    ...Object.entries(capture).map(([name, sha256]) => ({ path: path.join(source, name), sha256 })),
+    ...Object.entries(images).map(([name, sha256]) => ({ path: path.join(source, name), sha256 })),
+  ]
+  const upgradedMemory = { ...memory, source, source_sha256: capture, files: closure }
+  const upgradedRetrieval = { ...plan, source, files: closure }
+  paired(modern, upgradedMemory, upgradedRetrieval)
+  for (const changed of [
+    { ...upgradedRetrieval, source: path.join(source, "nested") },
+    { ...upgradedRetrieval, source: path.join(value.cfg.root, "raya-memory-source-upgrade-" + "b".repeat(32)) },
+    { ...upgradedRetrieval, source_sha256: cohort(prior) },
+  ])
+    expect(() => paired(modern, upgradedMemory, changed)).toThrow()
+  expect(() => paired(upgraded, upgradedMemory, upgradedRetrieval)).toThrow("Paired Retrieval upgrade source differs")
   expect(() => paired(value.cfg, original, { ...historical, source_sha256: images })).toThrow()
   expect(() => paired(value.cfg, original, { ...historical, env: plan.env })).toThrow()
   expect(() =>
@@ -262,6 +304,7 @@ test("reusable pins match source bytes and readiness cannot adopt a different re
   readiness(document(Buffer.from(JSON.stringify(health))).value as Record<string, unknown>, fingerprint)
   for (const release of [
     "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86",
+    "42e505128a3bfbba2346e76031424d0805e3608e2582ec4932ed68c8792b8610",
     "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b",
   ]) {
     const pins = cohort(release)

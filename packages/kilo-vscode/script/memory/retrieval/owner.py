@@ -18,7 +18,7 @@ BASE = ROOT/'python'/'python.exe'
 ENV = {'SystemRoot': 'C:\\Windows', 'HOME': str(ROOT/'home'), 'USERPROFILE': str(ROOT/'home'), 'TEMP': str(ROOT/'tmp'), 'TMP': str(ROOT/'tmp'), 'HF_HOME': str(ROOT/'hf'), 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_PROGRESS_BARS': '1', 'CUDA_VISIBLE_DEVICES': '-1'}
 BOOT = HERE/'bootstrap.py'
 PINS = {'interpreter': 'b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2',
-        'bootstrap': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d',
+        'bootstrap': '27a1b3edd73c7f10d38aa4737a54601e9abc7acfa812327845b93e9b7af39646',
         'worker': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721',
         'models': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873'}
 SIZE = ctypes.c_size_t
@@ -342,7 +342,9 @@ class Owner:
         return Limits()
 
     def spawn(self):
-        if HERE.name != 'retrieval' or HERE.parent.name != 'source' or not ROOT.name.startswith('raya-memory-managed-'):
+        if (HERE.name != 'retrieval' or
+                (HERE.parent.name != 'source' and not re.fullmatch('raya-memory-source-upgrade-[a-f0-9]{32}', HERE.parent.name)) or
+                not ROOT.name.startswith('raya-memory-managed-')):
             raise ValueError('private_source_layout')
         library = self.library
         if self.cancel.is_set() or time.monotonic() >= self.until:

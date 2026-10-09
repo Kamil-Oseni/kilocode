@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test"
-import { context } from "@/kilocode/provider/ollama-context"
+import { context, structured } from "@/kilocode/provider/ollama-context"
 import { Effect } from "effect"
 import * as Stream from "effect/Stream"
 import { LLMEvent } from "@opencode-ai/llm"
@@ -14,7 +14,16 @@ import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import { SessionID, MessageID } from "@/session/schema"
 import { disposeAllInstances } from "../../fixture/fixture"
 import { testEffect } from "../../lib/effect"
+import { generate } from "@/kilocode/memory/dream-generation"
+import { extraction } from "@/kilocode/second-brain/capture-extraction"
+import { randomUUID } from "node:crypto"
 const previous = process.env.KILO_DISABLE_MODELS_FETCH
+test("only the explicit compatible Ollama bridge advertises structured output", () => {
+  expect(structured({ localInference: true, localInferenceAPI: "ollama" }, "@ai-sdk/openai-compatible")).toBe(true)
+  expect(structured({ localInference: true }, "@ai-sdk/openai-compatible")).toBe(false)
+  expect(structured({ localInferenceAPI: "ollama" }, "@ai-sdk/openai-compatible")).toBe(false)
+  expect(structured({ localInference: true, localInferenceAPI: "ollama" }, "@ai-sdk/openai")).toBe(false)
+})
 test("configured context overrides stale transport options and validates integer bounds", () => {
   const options = { localInference: true, localInferenceAPI: "ollama", ollamaContext: 123, ollamaModel: "old" }
   expect(context(options, { api: { id: "current" }, limit: { context: 0 } })).toEqual({
@@ -39,6 +48,7 @@ type Row = {
   shift: boolean
   truncate: boolean
   options: Record<string, unknown>
+  format?: Record<string, unknown>
 }
 const rows: Row[] = []
 const server = Bun.serve({
@@ -52,7 +62,7 @@ const server = Bun.serve({
     return new Response(
       JSON.stringify({
         model: rows.at(-1)!.model,
-        message: { role: "assistant", content: "SYNTHETIC_TRANSPORT_OK" },
+        message: { role: "assistant", content: rows.at(-1)!.format ? '{"entries":[]}' : "SYNTHETIC_TRANSPORT_OK" },
         done: true,
         done_reason: "stop",
         prompt_eval_count: 8,
@@ -166,6 +176,31 @@ run.instance(
             .join("\n"),
         ).toContain("SYNTHETIC SYSTEM HEADER\nSYNTHETIC SYSTEM ROW A\nSYNTHETIC SYSTEM ROW B")
       }
+      const result = yield* generate(
+        service,
+        {
+          id: randomUUID(),
+          owner: randomUUID(),
+          model: "local/small",
+          system: "Synthetic bounded capture extraction",
+          prompt: "No durable memories",
+          timeoutMs: 10000,
+          budget: { input: 2000, output: 512 },
+        },
+        extraction,
+      )
+      expect(JSON.parse(result.text)).toEqual({ entries: [] })
+      expect(rows).toHaveLength(6)
+      expect(rows[5]).toMatchObject({
+        model: "small",
+        options: { num_ctx: 32768, num_predict: 512 },
+        format: {
+          type: "object",
+          properties: { entries: { type: "array", allOf: [{ maxItems: 8 }] } },
+          required: ["entries"],
+          additionalProperties: false,
+        },
+      })
     }),
   { config },
   45000,

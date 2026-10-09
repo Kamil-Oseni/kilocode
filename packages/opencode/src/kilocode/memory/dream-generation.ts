@@ -5,16 +5,18 @@ import { MemoryError, MemoryInvalidInputError } from "@kilocode/kilo-memory/effe
 import { EffectBridge } from "@/effect/bridge"
 import type { Provider } from "@/provider/provider"
 import { MemoryModel } from "./ports"
+import type { FlexibleSchema } from "ai"
 
 /** Prepared-text transport only. Native input grants, notes and proposal publication stay outside it. */
 export const generate = Effect.fn("MemoryDream.generate")(function* (
   provider: Provider.Interface,
   input: typeof MemoryContract.DreamGeneratePayload.Type,
+  schema?: FlexibleSchema<unknown>,
 ) {
   const payload = structuredClone(input)
   const selected = MemoryConfig.parse(payload.model)
   if (!selected) return yield* Effect.fail(new MemoryInvalidInputError({ reason: "Select an explicit Dream model" }))
-  const model = MemoryModel.port({ provider })
+  const model = MemoryModel.port({ provider, schema })
   const resolved = yield* model.resolve({ configured: payload.model, session: selected })
   if (resolved.fallback)
     return yield* Effect.fail(new MemoryInvalidInputError({ reason: "Dream model selection changed; review it again" }))

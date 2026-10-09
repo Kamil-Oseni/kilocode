@@ -1,4 +1,4 @@
-import { generateText, streamText } from "ai"
+import { generateText, streamText, Output, type FlexibleSchema } from "ai"
 import { Effect } from "effect"
 import { MemoryConfig } from "@kilocode/kilo-memory/effect/config"
 import { MemoryError } from "@kilocode/kilo-memory/effect/errors"
@@ -187,7 +187,11 @@ async function memoryText(input: {
   signal?: AbortSignal
   local: boolean
   budget?: { input: number; output: number }
+  schema?: FlexibleSchema<unknown>
 }) {
+  input.signal?.throwIfAborted()
+  const output = input.schema ? Output.object({ schema: input.schema, name: "personal_capture" }) : undefined
+  const format = output ? await output.responseFormat : undefined
   input.signal?.throwIfAborted()
   if (input.budget) {
     const budget = input.budget
@@ -208,7 +212,12 @@ async function memoryText(input: {
       budget.input + budget.output + 32 > context
     )
       throw new Error("Memory model budget is invalid or exceeds its configured model limits")
-    const tokens = Math.ceil(MemoryToken.estimate(`${input.system}\n${input.prompt}`) * 1.3) + 32
+    const tokens =
+      Math.ceil(
+        MemoryToken.estimate(
+          `${input.system}\n${input.prompt}\n${format?.type === "json" ? JSON.stringify(format.schema) : ""}`,
+        ) * 1.3,
+      ) + 32
     if (tokens > budget.input) throw new Error("Memory model prompt exceeds its estimated input budget")
   }
   const ctl = new AbortController()
@@ -228,9 +237,13 @@ async function memoryText(input: {
     topK: input.topK,
     maxRetries: 1,
     ...(input.budget ? { maxOutputTokens: input.budget.output } : {}),
+    ...(output ? { output } : {}),
   }
   const work = async () => {
-    if (!openai) return generateText(common)
+    if (!openai) {
+      const result = await generateText(common)
+      return { text: input.schema ? JSON.stringify(result.output) : result.text, usage: result.usage }
+    }
 
     const result = streamText(common)
     const text: string[] = []
@@ -241,7 +254,7 @@ async function memoryText(input: {
       if (part.type === "finish") usage = part.totalUsage
       if (part.type === "error") throw part.error
     }
-    return { text: text.join(""), usage }
+    return { text: input.schema ? JSON.stringify(await result.output) : text.join(""), usage }
   }
   const timer = setTimeout(() => ctl.abort(new DOMException("memory model timed out", "TimeoutError")), ms)
   try {
@@ -326,7 +339,10 @@ export namespace MemorySession {
 /** Host ModelPort: resolves the consolidation model through opencode's provider and runs it via the
  * `ai` SDK, exposing the resolved model to the package as an opaque handle. */
 export namespace MemoryModel {
-  export function port(input: { provider: Provider.Interface }): MemoryPorts.ModelPort {
+  export function port(input: {
+    provider: Provider.Interface
+    schema?: FlexibleSchema<unknown>
+  }): MemoryPorts.ModelPort {
     return {
       resolve: ({ configured, session }) =>
         Effect.gen(function* () {
@@ -374,6 +390,7 @@ export namespace MemoryModel {
           signal,
           local: resolved.local,
           budget,
+          schema: input.schema,
         })
       },
     }

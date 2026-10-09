@@ -3,6 +3,13 @@ import { asSchema, type Tool } from "ai"
 
 const originals = new WeakMap<object, readonly { name: string; parameters: Record<string, unknown> }[]>()
 
+/** Only the explicitly selected native bridge promises JSON-schema generation. */
+export function structured(options: Readonly<Record<string, unknown>>, npm: string) {
+  return (
+    options.localInference === true && options.localInferenceAPI === "ollama" && npm === "@ai-sdk/openai-compatible"
+  )
+}
+
 export function schemas(options: Readonly<Record<string, unknown>>) {
   return originals.get(options)
 }

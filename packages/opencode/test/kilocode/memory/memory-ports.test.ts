@@ -19,9 +19,90 @@ import type { SessionSummary } from "../../../src/session/summary"
 import type { Snapshot } from "../../../src/snapshot"
 import { MemoryModel, MemorySession } from "../../../src/kilocode/memory/ports"
 import { generate } from "../../../src/kilocode/memory/dream-generation"
+import { extraction, extracted } from "../../../src/kilocode/second-brain/capture-extraction"
+import { entries } from "../../../src/kilocode/second-brain/capture-source"
+import { structured } from "../../../src/kilocode/provider/ollama-context"
 
 const pid = ProviderV2.ID.make("test")
 const mid = ModelV2.ID.make("fake-memory-model")
+
+test("capture sends its bounded schema through the real compatible SDK and still checks original evidence", async () => {
+  const requests: Record<string, unknown>[] = []
+  const source = {
+    user: { id: "msg_user", text: "I prefer dim warm lights." },
+    assistant: { id: "msg_assistant", text: "Acknowledged." },
+    tools: [],
+  }
+  const entry = {
+    category: "Preferences" as const,
+    key: "warm-lights",
+    text: "Prefers dim warm lights.",
+    origin: "user_statement" as const,
+    evidence: [{ id: source.user.id, start: 0, end: source.user.text.length }],
+  }
+  let content = JSON.stringify({ entries: [entry] })
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: async (request) => {
+      requests.push(await request.json())
+      return Response.json({
+        id: "capture",
+        object: "chat.completion",
+        created: 0,
+        model: "memory-config-model",
+        choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 },
+      })
+    },
+  })
+  try {
+    const sdk = createOpenAICompatible({
+      name: "test",
+      baseURL: `http://127.0.0.1:${server.port}/v1`,
+      supportsStructuredOutputs: structured(
+        { localInference: true, localInferenceAPI: "ollama" },
+        "@ai-sdk/openai-compatible",
+      ),
+    })
+    const selected = {
+      ...provider({ npm: "@ai-sdk/openai-compatible" }),
+      getLanguage: () => Effect.succeed(sdk.languageModel("memory-config-model")),
+    }
+    const payload = {
+      id: randomUUID(),
+      owner: randomUUID(),
+      model: "test/memory-config-model",
+      system: "Extract only original source evidence.",
+      prompt: JSON.stringify(source),
+      timeoutMs: 10000,
+      budget: { input: 2000, output: 512 },
+    }
+    const result = await Effect.runPromise(generate(selected, payload, extraction))
+    expect(entries(extracted(JSON.parse(result.text)), source)).toEqual([entry])
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({
+      max_tokens: 512,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "personal_capture",
+          schema: { properties: { entries: { type: "array", allOf: [{ maxItems: 8 }] } } },
+        },
+      },
+    })
+    content = JSON.stringify({ entries: [{ ...entry, key: "Warm Lights" }] })
+    const invalid = await Effect.runPromiseExit(generate(selected, payload, extraction))
+    expect(invalid._tag).toBe("Failure")
+    expect(requests).toHaveLength(2)
+    content = JSON.stringify({ entries: [{ ...entry, evidence: [{ id: source.assistant.id, start: 0, end: 5 }] }] })
+    const foreign = await Effect.runPromise(generate(selected, payload, extraction))
+    expect(() => entries(extracted(JSON.parse(foreign.text)), source)).toThrow("actual original source span")
+    expect(requests).toHaveLength(3)
+  } finally {
+    await server.stop(true)
+  }
+})
 
 test("Dream Effect transport cancellation joins its original delayed SDK work", async () => {
   const controller = new AbortController()

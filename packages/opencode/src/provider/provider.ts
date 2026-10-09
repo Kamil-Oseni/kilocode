@@ -49,7 +49,7 @@ import * as ModelsRefresh from "@/kilocode/provider/models-refresh"
 import * as Pricing from "@/kilocode/provider/pricing"
 import { bedrockAuth, providerKey, vertexAuth, vertexCredentials, vertexOptions } from "@/kilocode/provider/cloud-auth"
 import { localFetch } from "@/kilocode/provider/local-scheduler"
-import { context as ollamaContext } from "@/kilocode/provider/ollama-context"
+import { context as ollamaContext, structured as ollamaStructured } from "@/kilocode/provider/ollama-context"
 import { substitute } from "@/kilocode/provider/helper-policy"
 // kilocode_change end
 import { ProviderError } from "./error"
@@ -1829,6 +1829,7 @@ const layer = Layer.effect(
           },
           model,
         ) // kilocode_change - bind local model context before SDK cache selection
+        if (ollamaStructured(cfg, model.api.npm)) options["supportsStructuredOutputs"] = true // kilocode_change - native bridge supports bounded JSON schemas
         const key = Hash.fast(
           JSON.stringify({
             providerID: model.providerID,

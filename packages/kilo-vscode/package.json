@@ -140,6 +140,11 @@
         "category": "Raya"
       },
       {
+        "command": "kilo-code.new.memory.recoverClosedPair",
+        "title": "Recover a Closed Memory Pair",
+        "category": "Raya"
+      },
+      {
         "command": "kilo-code.new.memory.recoverInterruptedRead",
         "title": "Recover an Interrupted Memory Read",
         "category": "Raya"

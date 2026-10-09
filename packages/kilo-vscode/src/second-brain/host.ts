@@ -537,6 +537,10 @@ export class BrainHost {
       }),
       vscode.commands.registerCommand("raya.memory.archiveFailedSetup", () => this.archive()),
       vscode.commands.registerCommand("raya.memory.resumeClosedPair", () => this.resume()),
+      vscode.commands.registerCommand("kilo-code.new.memory.recoverClosedPair", (...args: unknown[]) => {
+        if (args.length || !vscode.workspace.isTrusted) throw new Error("Trusted native Memory recovery required")
+        return this.resume()
+      }),
       vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
       vscode.commands.registerCommand("kilo-code.new.memory.activateReviewedCapture", (...args: unknown[]) => {
         if (args.length) throw new Error("Native capture activation accepts no command arguments")

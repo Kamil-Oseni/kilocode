@@ -1,6 +1,27 @@
 import type { MessageV2 } from "@/session/message-v2"
 import { RayaChief } from "../chief"
 
+/** An explicit preference acknowledgement has no tool action or goal-completion authority. */
+export function acknowledged(
+  messages: readonly MessageV2.WithParts[],
+  session: { id: string; parentID?: string; metadata?: Record<string, unknown> },
+  user: string,
+) {
+  if (session.parentID || RayaChief.phase(session.metadata) !== "route") return false
+  const current = messages.findLast((row) => row.info.role === "user")
+  if (!current || current.info.id !== user || current.info.sessionID !== session.id) return false
+  if (current.info.role !== "user" || current.info.format?.type === "json_schema") return false
+  if (current.parts.some((part) => part.type !== "text")) return false
+  const request = RayaChief.requestText(current.parts)
+  if (request !== RayaChief.request(session.metadata) || request.length > 1000) return false
+  const match =
+    /^(I (?:prefer|like|dislike|would prefer)\b[^?!`]+?)\s+Please (?:just )?acknowledge (?:this|my|that) preference(?:[.;]\s*(?:do not|don't)\b[^.!?]*)?[.!]?$/i.exec(
+      request,
+    )
+  if (!match || /\b(?:please|then|also|instead|but)\b/i.test(match[1])) return false
+  return !/\.\s+(?!I\b|My\b|The\b)[a-z]/i.test(match[1])
+}
+
 /** A personal-memory question can finish after its own read, without closing a work goal. */
 export function settled(
   messages: readonly MessageV2.WithParts[],

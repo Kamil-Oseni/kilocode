@@ -28,7 +28,7 @@ import { KiloReadObject } from "@/kilocode/tool/read-object" // kilocode_change
 import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_change - Milestone D child step ceiling
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
-import { settled as recalled } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory question synthesis
+import { settled as recalled, acknowledged } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and explicit acknowledgement
 import { RayaToolModel } from "@/kilocode/chief/tool-model" // kilocode_change
 import { isInterrupted } from "@/kilocode/effect/cause" // kilocode_change
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
@@ -1872,18 +1872,21 @@ export const layer = Layer.effect(
           // raya_change start - Auto exposes its bounded workflow until goal handling releases synthesis
           const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
           const complete = yield* GoalGate.closed(resolved) // kilocode_change - current original dispatch only
-          const tools = complete
-            ? {}
-            : agent.name === "auto"
-              ? RayaChief.tools(resolved, current.metadata, { session: sessionID, user: lastUser.id })
-              : resolved
+          const conversation = agent.name === "auto" && acknowledged(msgs, current, lastUser.id)
+          const tools =
+            complete || conversation
+              ? {}
+              : agent.name === "auto"
+                ? RayaChief.tools(resolved, current.metadata, { session: sessionID, user: lastUser.id })
+                : resolved
           const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
           const direct =
-            agent.name === "auto" &&
-            phase === "route" &&
-            ((HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
-              (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id))) ||
-              recalled(msgs, current, lastUser.id)) // kilocode_change - original read-only Memory questions or selected device requests can release synthesis
+            conversation ||
+            (agent.name === "auto" &&
+              phase === "route" &&
+              ((HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
+                (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id))) ||
+                recalled(msgs, current, lastUser.id))) // kilocode_change - original read-only Memory questions or selected device requests can release synthesis
           // raya_change end
           // kilocode_change end
 
@@ -1985,17 +1988,18 @@ export const layer = Layer.effect(
             model,
             // kilocode_change start
             // raya_change - require orchestration until goal handling deterministically releases synthesis
-            toolChoice: complete
-              ? "none"
-              : format.type === "json_schema"
-                ? "required"
-                : agent.name === "auto"
-                  ? phase === "done" || (direct && isLastStep)
-                    ? "none"
-                    : direct
-                      ? "auto"
-                      : "required"
-                  : undefined,
+            toolChoice:
+              complete || conversation
+                ? "none"
+                : format.type === "json_schema"
+                  ? "required"
+                  : agent.name === "auto"
+                    ? phase === "done" || (direct && isLastStep)
+                      ? "none"
+                      : direct
+                        ? "auto"
+                        : "required"
+                    : undefined,
             // kilocode_change end
             // kilocode_change start - feed the provider-reported context size from the last finished
             // turn into the output-token cap, so image/vision input is measured by the provider

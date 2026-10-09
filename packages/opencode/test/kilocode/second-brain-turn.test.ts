@@ -4,12 +4,14 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { RayaChief } from "../../src/kilocode/chief"
-import { settled } from "../../src/kilocode/second-brain/turn"
+import { settled, acknowledged } from "../../src/kilocode/second-brain/turn"
 
 const sid = SessionID.make("ses_recall_turn")
 const uid = MessageID.make("msg_user")
 const aid = MessageID.make("msg_reader")
 const request = "Which local speech engine and fallback did I choose? Please use saved Memory and cite the note."
+const preference =
+  "I prefer first-time Raya setup inside the conversation, using the existing Ask cards with minimal text. The Memory tab should be for inspecting and managing settings later. Please acknowledge this preference; do not run setup or control any lights."
 function fixture() {
   const user: MessageV2.WithParts = {
     info: {
@@ -67,6 +69,56 @@ test("original completed Memory read releases conversational synthesis without c
   if (original.tool.state.status !== "completed") throw new Error("Completed fixture required")
   original.tool.state = { ...original.tool.state, metadata: { count: 0 } }
   expect(settled(original.messages, original.session, uid)).toBe(true)
+})
+
+test("the actual installed preference acknowledgement needs no acquisition or goal completion", () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text") throw new Error("Original text required")
+  part.text = preference
+  original.session.metadata[RayaChief.requestKey] = preference
+  expect(acknowledged(original.messages, original.session, uid)).toBe(true)
+  expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+  expect(acknowledged(original.messages, original.session, "foreign")).toBe(false)
+  expect(acknowledged(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
+  for (const phase of ["task", "verify", "goal", "done"])
+    expect(
+      acknowledged(
+        original.messages,
+        { ...original.session, metadata: { ...original.session.metadata, [RayaChief.phaseKey]: phase } },
+        uid,
+      ),
+    ).toBe(false)
+  original.messages.push({
+    ...original.messages[0],
+    info: { ...original.messages[0].info, id: MessageID.make("msg_successor") },
+  })
+  expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+})
+
+test("compound work, memory retrieval and structured output do not become acknowledgement-only turns", () => {
+  for (const text of [
+    request,
+    "I prefer dark mode. Please install it. Please acknowledge this preference.",
+    "I prefer dark mode. Install it. Please acknowledge this preference.",
+    "I prefer dark mode. Please acknowledge this preference, then deploy it.",
+    "I prefer dark mode and then deploy it. Please acknowledge this preference.",
+    "Please acknowledge this preference and save a note.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+  }
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text" || original.messages[0].info.role !== "user") throw new Error("Original user required")
+  part.text = preference
+  original.session.metadata[RayaChief.requestKey] = preference
+  original.messages[0].info.format = { type: "json_schema", schema: {} }
+  expect(acknowledged(original.messages, original.session, uid)).toBe(false)
 })
 
 test("historical, foreign and queued successor reads never release the original turn", () => {

@@ -17,6 +17,9 @@ function blocks(source: CaptureSource) {
         })
       : []
   const preferences = clauses.length >= 2 && clauses.length <= 4 ? clauses : []
+  const sentences = preferences.length
+    ? Array.from(source.user.text.matchAll(/[^.!?]+(?:[.!?]+|$)/g), (match) => match.index + match[0].length)
+    : []
   const rows = [
     { ...source.user, origin: "user_statement" },
     { ...source.assistant, origin: "assistant_interpretation" },
@@ -24,7 +27,8 @@ function blocks(source: CaptureSource) {
   ].flatMap((row) => {
     const spans = []
     for (let start = 0; start < row.text.length; ) {
-      const cuts = row.origin === "user_statement" ? preferences.flatMap((span) => [span.start, span.end]) : []
+      const cuts =
+        row.origin === "user_statement" ? [...sentences, ...preferences.flatMap((span) => [span.start, span.end])] : []
       const edge = Math.min(start + 1024, row.text.length, ...cuts.filter((cut) => cut > start))
       const end =
         edge < row.text.length && /[\uD800-\uDBFF]/.test(row.text[edge - 1]) && /[\uDC00-\uDFFF]/.test(row.text[edge])
@@ -32,7 +36,11 @@ function blocks(source: CaptureSource) {
           : edge
       const preference =
         row.origin === "user_statement" && preferences.some((span) => span.start === start && span.end === end)
-      spans.push({ ...row, text: row.text.slice(start, end), start, end, preference })
+      const text = row.text.slice(start, end)
+      const transient =
+        row.origin === "user_statement" &&
+        /^(?:do not|don't|please (?:do not|don't)) change lights or place orders[.!?]?$/i.test(text.trim())
+      spans.push({ ...row, text, start, end, preference, transient })
       start = end
     }
     return spans
@@ -72,7 +80,9 @@ function contract(source: CaptureSource) {
   const preferences = rows.filter((row) => row.preference)
   const origins = ["user_statement", "assistant_interpretation", "tool_observation"] as const
   const groups = origins.flatMap((origin) => {
-    const refs = rows.filter((row) => !row.preference && row.origin === origin && row.text.trim()).map((row) => row.ref)
+    const refs = rows
+      .filter((row) => !row.preference && !row.transient && row.origin === origin && row.text.trim())
+      .map((row) => row.ref)
     if (!refs.length) return []
     return [
       Schema.Struct({
@@ -222,9 +232,10 @@ export function extracted(value: unknown, source: CaptureSource) {
 
 export function prepared(source: CaptureSource) {
   return JSON.stringify(
-    blocks(source).map(({ start: _start, end: _end, preference, ...row }) => ({
+    blocks(source).map(({ start: _start, end: _end, preference, transient, ...row }) => ({
       ...row,
       ...(preference ? { slot: `preference_${row.ref}` } : {}),
+      ...(transient ? { excluded: "temporary_action_restriction" } : {}),
     })),
   )
 }

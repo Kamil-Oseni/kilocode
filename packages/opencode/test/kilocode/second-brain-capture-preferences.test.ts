@@ -142,6 +142,70 @@ test("explicit exclusions retain no fallback facts and restricted or duplicate e
   expect(() => entries(extracted({ ...output, entries: [other, other] }, original), original)).toThrow("duplicate_key")
 })
 
+test("temporary command refs cannot publish duplicate preferences and other durable preferences remain available", async () => {
+  const rows = JSON.parse(prepared(original)) as { ref: number; text: string; excluded?: string }[]
+  const tail = rows.find((row) => row.text.includes("Do not change lights"))!
+  expect(tail.excluded).toBe("temporary_action_restriction")
+  const schema = await asSchema(extraction(original)).jsonSchema
+  const validate = asSchema(extraction(original)).validate!
+  for (const entry of [
+    { ...cards, evidence: [{ ref: tail.ref }] },
+    { ...memory, evidence: [{ ref: tail.ref }] },
+    { ...cards, key: "no_auto_actions", text: "Do not change lights or place orders.", evidence: [{ ref: tail.ref }] },
+    { ...cards, category: "Decisions", evidence: [{ ref: tail.ref }] },
+  ]) {
+    expect((await validate({ ...output, entries: [entry] })).success).toBe(false)
+    expect(() => extracted({ ...output, entries: [entry] }, original)).toThrow("bounded entry schema")
+  }
+  expect(schema).toBeDefined()
+  expect(entries(extracted(output, original), original).map((entry) => entry.text)).toEqual([cards.text, memory.text])
+  const source = {
+    ...original,
+    user: { ...original.user, text: `${original.user.text} My current project is Garden.` },
+  }
+  const project = (JSON.parse(prepared(source)) as { ref: number; text: string }[]).find((row) =>
+    row.text.includes("My current project"),
+  )!
+  const parsed = entries(
+    extracted(
+      {
+        ...output,
+        entries: [
+          {
+            ...cards,
+            category: "Projects",
+            key: "garden",
+            text: "Current project is Garden.",
+            evidence: [{ ref: project.ref }],
+          },
+        ],
+      },
+      source,
+    ),
+    source,
+  )
+  expect(parsed).toHaveLength(3)
+  expect(source.user.text.slice(parsed[0].evidence[0].start, parsed[0].evidence[0].end).trim()).toBe(
+    "My current project is Garden.",
+  )
+  const third = {
+    ...original,
+    user: { ...original.user, text: `${original.user.text} My preference is quiet replies.` },
+  }
+  const ref = (JSON.parse(prepared(third)) as { ref: number; text: string }[]).find((row) =>
+    row.text.includes("My preference is quiet"),
+  )!.ref
+  expect(
+    entries(
+      extracted(
+        { ...output, entries: [{ ...cards, key: "quiet", text: "Prefers quiet replies.", evidence: [{ ref }] }] },
+        third,
+      ),
+      third,
+    )[0].text,
+  ).toBe("Prefers quiet replies.")
+})
+
 test("host prefixes preserve complete bounded suffixes and secret restrictions", () => {
   const key = "a".repeat(77)
   const value = {

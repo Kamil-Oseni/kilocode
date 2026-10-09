@@ -24,6 +24,7 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
   const queue = RayaTaskQueue.make(input.database)
   const tasks = RayaTask.make(input)
   const reviews = schedulerReview(input.storage)
+  let next: string | undefined
   const clean = () =>
     mutate(
       input.storage,
@@ -32,13 +33,18 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
         const pending = yield* receipts.pending()
         if (!pending.length) return
         const roster = new Set((yield* tasks.list(true)).map((item) => item.id))
-        const ids = pending
-          .filter((item) => !roster.has(item.agentID))
-          .slice(0, 256)
-          .map((item) => item.agentID)
+        const eligible = pending.filter((item) => !roster.has(item.agentID)).map((item) => item.agentID)
+        const index = Math.max(0, eligible.indexOf(next ?? ""))
+        const ids = [...eligible.slice(index), ...eligible.slice(0, index)].slice(0, 256)
         if (!ids.length) return
-        for (const id of ids) yield* queue.discard(id).pipe(Effect.orDie)
-        yield* receipts.finish(ids)
+        const limit = Math.floor(1024 / ids.length)
+        const complete: string[] = []
+        for (const id of ids) {
+          const result = yield* queue.discard(id, undefined, limit).pipe(Effect.orDie)
+          if (result.complete) complete.push(id)
+        }
+        if (complete.length) yield* receipts.finish(complete)
+        next = eligible[(index + ids.length) % eligible.length]
       }).pipe(
         Effect.catchTag("RayaTask.RemovalError", (err) =>
           Effect.fail(new RayaTask.GuardError({ message: err.message })),

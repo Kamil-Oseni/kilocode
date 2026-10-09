@@ -645,6 +645,11 @@ export default {
       // kilocode_change end
       // kilocode_change start
       yield* tx.run(
+        `CREATE INDEX \`raya_routine_occurrence_cleanup\` ON \`raya_routine_occurrence\` (\`agent_id\`,\`state\`,\`schedule_version\`,\`scheduled_at\`,\`id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
         `CREATE INDEX \`raya_routine_organization_coordinator_ledger\` ON \`raya_routine_organization_coordinator\` (\`organization_id\`,\`state\`);`,
       )
       // kilocode_change end

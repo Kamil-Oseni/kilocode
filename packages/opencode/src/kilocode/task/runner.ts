@@ -1498,7 +1498,13 @@ export namespace RayaTaskRunner {
           )
         }
         yield* collect(
-          queue.discard(id, "Stopped because the organization was archived.").pipe(Effect.orDie, Effect.asVoid),
+          Effect.gen(function* () {
+            const result = yield* queue.discard(id, "Stopped because the organization was archived.").pipe(Effect.orDie)
+            if (!result.complete)
+              yield* new RayaTask.GuardError({
+                message: "Queued worker occurrences are still being stopped. Retry organization archive.",
+              })
+          }),
         )
         if ((yield* schedule.active(id)).length || (yield* inspect(input.storage, id)))
           yield* collect(

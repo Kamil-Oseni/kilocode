@@ -3,6 +3,7 @@ import type { Storage } from "@/storage/storage"
 
 const key = ["raya", "agent-removals"]
 const limit = 1024
+const bytes = 2 * 1024 * 1024
 const identity = Schema.String.check(
   Schema.isMinLength(1),
   Schema.makeFilter((id) => Buffer.byteLength(id, "utf8") <= 256),
@@ -19,11 +20,17 @@ const records = Schema.Array(
 )
 
 /** Call mutations only while holding the shared routine mutation gate. */
-export function removals(storage: Pick<Storage.Interface, "read" | "replace">) {
+export function removals(storage: Pick<Storage.Interface, "readBounded" | "replace">) {
   const pending = () =>
-    storage.read(key).pipe(
+    storage.readBounded(key, bytes).pipe(
       Effect.catchTag("NotFoundError", () => Effect.succeed([])),
-      Effect.orDie,
+      Effect.mapError(
+        () =>
+          new RemovalError({
+            message:
+              "Retained routine removal evidence exceeds 2 MiB or cannot be read as valid UTF-8 JSON. Review it before changing routines; no records were discarded.",
+          }),
+      ),
       Effect.flatMap((value) => {
         if (Array.isArray(value) && value.length > limit)
           return Effect.fail(

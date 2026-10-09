@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "b1fdf8d4-e565-4378-805e-b1cac24b75d4",
+  "id": "26d23574-02b1-474e-bff6-777c302b105b",
   "prevIds": [
-    "de452715-06c5-4e79-a00c-26affa2c032f"
+    "b1fdf8d4-e565-4378-805e-b1cac24b75d4"
   ],
   "ddl": [
     {
@@ -4466,6 +4466,36 @@
       "where": null,
       "origin": "manual",
       "name": "raya_routine_occurrence_lease",
+      "entityType": "indexes",
+      "table": "raya_routine_occurrence"
+    },
+    {
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        },
+        {
+          "value": "schedule_version",
+          "isExpression": false
+        },
+        {
+          "value": "scheduled_at",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_occurrence_cleanup",
       "entityType": "indexes",
       "table": "raya_routine_occurrence"
     },

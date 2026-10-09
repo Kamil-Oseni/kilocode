@@ -8,6 +8,7 @@ import { Git } from "@/git"
 import { publish } from "@/kilocode/session/review-publish" // kilocode_change - atomic review receipt persistence
 import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode_change - profile migration admission
 import { storageAdmission } from "@/kilocode/migration/storage-admission" // kilocode_change - cross-process JSON maintenance exclusion
+import * as bounded from "@/kilocode/storage/bounded-read" // kilocode_change - bounded receipt reads
 
 type Migration = (dir: string, fs: FSUtil.Interface, git: Git.Interface) => Effect.Effect<void, FSUtil.Error>
 
@@ -60,6 +61,7 @@ export interface Interface {
   // kilocode_change end
   readonly remove: (key: string[]) => Effect.Effect<void, FSUtil.Error>
   readonly read: <T>(key: string[]) => Effect.Effect<T, Error>
+  readonly readBounded: <T>(key: string[], maximum: number) => Effect.Effect<T, Error | bounded.LimitError> // kilocode_change - bounded receipt reads
   readonly update: <T>(key: string[], fn: (draft: T) => void) => Effect.Effect<T, Error>
   readonly write: <T>(key: string[], content: T) => Effect.Effect<void, FSUtil.Error>
   readonly list: (prefix: string[]) => Effect.Effect<string[][], FSUtil.Error>
@@ -313,6 +315,19 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
           return value as T
         })
 
+      // kilocode_change start - bounded reads share the resolved root and existing read lock
+      const readBounded: Interface["readBounded"] = <T>(key: string[], maximum: number) =>
+        Effect.gen(function* () {
+          const value = yield* withResolved(key, (target, rw) =>
+            TxReentrantLock.withReadLock(
+              rw,
+              bounded.read(fs, target, maximum).pipe(Effect.catchIf(missing, () => fail(target))),
+            ),
+          )
+          return value as T
+        })
+      // kilocode_change end
+
       const update: Interface["update"] = <T>(key: string[], fn: (draft: T) => void) =>
         mutate(key, (target, rw) =>
           TxReentrantLock.withWriteLock(
@@ -356,6 +371,7 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
         // kilocode_change end
         remove,
         read,
+        readBounded, // kilocode_change - bounded receipt reads
         update,
         write,
         list,

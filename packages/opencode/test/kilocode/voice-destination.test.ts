@@ -30,6 +30,7 @@ test("invalid media destinations fail before parent lookup or delegate creation"
     replace: unused,
     remove: unused,
     read: unused,
+    readBounded: unused,
     update: unused,
     write: unused,
     list: unused,

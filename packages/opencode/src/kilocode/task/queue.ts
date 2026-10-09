@@ -287,12 +287,45 @@ export namespace RayaTaskQueue {
           ),
         )
         .run()
-    const discard = (agentID: string, reason = "Routine removed from the roster.") =>
-      db
-        .update(Occurrence)
-        .set({ state: "skipped", reason, time_updated: Date.now() })
-        .where(and(eq(Occurrence.agent_id, agentID), eq(Occurrence.state, "queued")))
-        .run()
+    const discard = Effect.fn("RayaTaskQueue.discard")(function* (
+      agentID: string,
+      reason = "Routine removed from the roster.",
+      limit = 1024,
+    ) {
+      yield* Schema.decodeUnknownEffect(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1024 })))(limit)
+      return yield* db.transaction(
+        (tx) =>
+          Effect.gen(function* () {
+            const queued = and(eq(Occurrence.agent_id, agentID), eq(Occurrence.state, "queued"))
+            const rows = yield* tx
+              .select({ id: Occurrence.id })
+              .from(Occurrence)
+              .where(queued)
+              .orderBy(asc(Occurrence.schedule_version), asc(Occurrence.scheduled_at), asc(Occurrence.id))
+              .limit(limit)
+              .all()
+            const changed = rows.length
+              ? yield* tx
+                  .update(Occurrence)
+                  .set({ state: "skipped", reason, time_updated: Date.now() })
+                  .where(
+                    and(
+                      queued,
+                      inArray(
+                        Occurrence.id,
+                        rows.map((row) => row.id),
+                      ),
+                    ),
+                  )
+                  .returning({ id: Occurrence.id })
+                  .all()
+              : []
+            const remaining = yield* tx.select({ id: Occurrence.id }).from(Occurrence).where(queued).limit(1).get()
+            return { removed: changed.length, complete: remaining === undefined }
+          }),
+        { behavior: "immediate" },
+      )
+    })
     return {
       cursor,
       publish,

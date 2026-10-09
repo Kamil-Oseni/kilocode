@@ -8,6 +8,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
+import { fromRow } from "@/session/session"
 import { Permission } from "@/permission"
 import { KiloSession } from "@/kilocode/session"
 import { upcoming } from "@/kilocode/task/cron"
@@ -15,10 +16,12 @@ import { RayaTask } from "@/kilocode/task"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { read as bounded } from "../../fixture/bounded-memory"
 
 function memory() {
   const data = new Map<string, unknown>()
   return {
+    readBounded: <T>(key: string[], maximum: number) => bounded<T>(data, key, maximum),
     create: (key: string[], value: unknown) =>
       Effect.sync(() => {
         const id = key.join("/")
@@ -77,36 +80,51 @@ test("returning reviewer inspects schema then single-worker and delegation journ
     Effect.gen(function* () {
       const database = yield* Database.Service
       const db = database.db
-      const tables = (
-        yield* db.all<{ name: string }>(
-          sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'raya_routine%' ORDER BY name`,
-        )
-      ).map((row) => row.name)
+      const tables = (yield* db.all<{ name: string }>(
+        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'raya_routine%' ORDER BY name`,
+      )).map((row) => row.name)
       expect(tables).toEqual([
         "raya_routine_archive",
         "raya_routine_archive_import",
+        "raya_routine_attachment",
         "raya_routine_conversation",
         "raya_routine_cursor",
         "raya_routine_delegation",
         "raya_routine_message",
         "raya_routine_occurrence",
+        "raya_routine_organization",
+        "raya_routine_organization_coordinator",
+        "raya_routine_organization_delegation",
+        "raya_routine_organization_member",
+        "raya_routine_organization_reservation",
+        "raya_routine_organization_revision",
       ])
-      const migrated = (
-        yield* db.all<{ id: string }>(
-          sql`SELECT id FROM migration WHERE id LIKE '%kilocode-routine%' ORDER BY id`,
-        )
-      ).map((row) => row.id)
+      const migrated = (yield* db.all<{ id: string }>(
+        sql`SELECT id FROM migration WHERE id LIKE '%kilocode-routine%' ORDER BY id`,
+      )).map((row) => row.id)
       expect(migrated).toEqual([
         "20260908092112_kilocode-routine-occurrence",
         "20260908124554_kilocode-routine-archive",
         "20260911033250_kilocode-routine-inbox",
         "20260911183445_kilocode-routine-delegation",
         "20260911194749_kilocode-routine-delegation-cost",
+        "20260911234600_kilocode-routine-inbox-files",
+        "20260912150000_kilocode-routine-user-attachments",
+        "20260912210000_kilocode-routine-organization",
+        "20260912231306_kilocode-routine-organization-delegation",
+        "20260915143138_kilocode-routine-organization-policy",
+        "20260916221534_kilocode-routine-draft-revision",
+        "20260917021944_kilocode-routine-organization-budget",
+        "20260921060802_kilocode-routine-delegation-artifacts",
+        "20260921084500_kilocode-routine-organization-reservation",
+        "20260921093000_kilocode-routine-organization-coordinator",
+        "20260925201938_kilocode-routine-organization-stop",
+        "20261009233719_kilocode-routine-cleanup",
       ])
       expect(
-        (yield* db.all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'raya_routine_message%'`)).map(
-          (row) => row.name,
-        ),
+        (yield* db.all<{ name: string }>(
+          sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'raya_routine_message%'`,
+        )).map((row) => row.name),
       ).toContain("raya_routine_message_source")
       expect(
         (yield* db.all<{ name: string }>(sql`PRAGMA foreign_key_list('raya_routine_message')`)).some(
@@ -135,7 +153,10 @@ test("returning reviewer inspects schema then single-worker and delegation journ
         .onConflictDoNothing()
         .run()
         .pipe(Effect.orDie)
-      const persist = (info: ReturnType<typeof session>, input?: { metadata?: unknown; permission?: Permission.Ruleset }) =>
+      const persist = (
+        info: ReturnType<typeof session>,
+        input?: { metadata?: unknown; permission?: Permission.Ruleset },
+      ) =>
         db
           .insert(SessionTable)
           .values({
@@ -170,7 +191,17 @@ test("returning reviewer inspects schema then single-worker and delegation journ
               yield* persist(info, input)
               return info
             }),
-          get: () => Effect.die("unused"),
+          get: (id) =>
+            Effect.gen(function* () {
+              const row = yield* db
+                .select()
+                .from(SessionTable)
+                .where(sql`${SessionTable.id} = ${id}`)
+                .get()
+                .pipe(Effect.orDie)
+              if (!row) return yield* new Storage.NotFoundError({ message: `Session not found: ${id}` })
+              return fromRow(row)
+            }),
           messages: () => Effect.succeed([]),
           children: () => Effect.succeed([]),
         },
@@ -255,9 +286,9 @@ test("returning reviewer inspects schema then single-worker and delegation journ
       })
       yield* runner.settle(run.sessionID)
       expect(
-        (yield* db.get<{ state: string; session_id: string | null }>(
+        yield* db.get<{ state: string; session_id: string | null }>(
           sql`SELECT state, session_id FROM raya_routine_occurrence WHERE session_id = ${run.sessionID}`,
-        )),
+        ),
       ).toMatchObject({ session_id: run.sessionID })
       const reported = yield* inbox.page(books.id)
       expect(reported.messages).toHaveLength(1)
@@ -329,12 +360,16 @@ test("returning reviewer inspects schema then single-worker and delegation journ
       })
       yield* runner.settle(child.sessionID!)
       const cards = yield* inbox.page(chief.id)
-      expect(cards.messages.some((item) => item.kind === "delegation" && item.body.includes("Travel receipts are still missing."))).toBe(
-        true,
-      )
-      expect(cards.messages.some((item) => item.body.includes("paused") && item.body.includes("not a completed worker reply"))).toBe(
-        true,
-      )
+      expect(
+        cards.messages.some(
+          (item) => item.kind === "delegation" && item.body.includes("Travel receipts are still missing."),
+        ),
+      ).toBe(true)
+      expect(
+        cards.messages.some(
+          (item) => item.body.includes("paused") && item.body.includes("not a completed worker reply"),
+        ),
+      ).toBe(true)
 
       yield* runner.tick(second + 30_000)
       const later = (yield* runner.tasks.runsFor(books.id)).find(
@@ -382,9 +417,12 @@ test("returning reviewer inspects schema then single-worker and delegation journ
       const work = (yield* db.select({ id: SessionTable.id }).from(SessionTable).where(only)).map((row) => row.id)
       expect(work).toContain(run.sessionID)
       expect(work).not.toContain(SessionID.make("ses_chat"))
-      expect((yield* db.select({ id: SessionTable.id }).from(SessionTable).where(sql`${SessionTable.id} = ${run.sessionID}`))[0]?.id).toBe(
-        run.sessionID,
-      )
+      expect(
+        (yield* db
+          .select({ id: SessionTable.id })
+          .from(SessionTable)
+          .where(sql`${SessionTable.id} = ${run.sessionID}`))[0]?.id,
+      ).toBe(run.sessionID)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

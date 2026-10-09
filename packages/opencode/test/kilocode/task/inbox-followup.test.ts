@@ -5,6 +5,7 @@ import { Deferred, Effect, Exit } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Storage } from "@/storage/storage"
+import { read as bounded } from "../../fixture/bounded-memory"
 import { PartID, SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
@@ -23,6 +24,7 @@ import { Agent } from "@/agent/agent"
 function memory() {
   const data = new Map<string, unknown>()
   return {
+    readBounded: <T>(key: string[], maximum: number) => bounded<T>(data, key, maximum),
     create: (key: string[], value: unknown) =>
       Effect.sync(() => {
         const id = key.join("/")

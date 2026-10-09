@@ -1,14 +1,22 @@
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
+import { eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Storage } from "@/storage/storage"
+import { read as bounded } from "../../fixture/bounded-memory"
 import { MessageID, SessionID } from "@/session/schema"
+import { fromRow } from "@/session/session"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 
 function memory() {
   const data = new Map<string, unknown>()
   return {
+    readBounded: <T>(key: string[], maximum: number) => bounded<T>(data, key, maximum),
     create: (key: string[], value: unknown) =>
       Effect.sync(() => {
         const id = key.join("/")
@@ -57,7 +65,17 @@ test("settlement publishes one durable inbox report and retries without duplicat
       const storage = memory()
       const sessions = {
         create: () => Effect.die("must not create another session"),
-        get: () => Effect.die("unused"),
+        get: (id: SessionID) =>
+          Effect.gen(function* () {
+            const row = yield* database.db
+              .select()
+              .from(SessionTable)
+              .where(eq(SessionTable.id, id))
+              .get()
+              .pipe(Effect.orDie)
+            if (!row) return yield* new Storage.NotFoundError({ message: `Session not found: ${id}` })
+            return fromRow(row)
+          }),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       }
@@ -73,6 +91,28 @@ test("settlement publishes one durable inbox report and retries without duplicat
       })
       const sid = SessionID.make("ses_inbox_report")
       const now = Date.now()
+      yield* database.db
+        .insert(ProjectTable)
+        .values({
+          id: ProjectV2.ID.global,
+          worktree: AbsolutePath.make(process.cwd()),
+          sandboxes: [],
+          time_created: now,
+          time_updated: now,
+        })
+        .onConflictDoNothing()
+      yield* database.db.insert(SessionTable).values(
+        [sid, SessionID.make("ses_inbox_wait")].map((id) => ({
+          id,
+          project_id: ProjectV2.ID.global,
+          slug: id,
+          directory: AbsolutePath.make(process.cwd()),
+          title: "Retained inbox report",
+          version: "test",
+          time_created: now,
+          time_updated: now,
+        })),
+      )
       const goal = {
         objective: "Review accounts",
         createdAt: now,
@@ -106,7 +146,8 @@ test("settlement publishes one durable inbox report and retries without duplicat
       const waiting = yield* inbox.page(agent.id)
       expect(waiting.messages.map((item) => item.source)).toEqual(["report:occ1", "need:occ2"])
       expect(waiting.messages[1].kind).toBe("decision")
-      expect(waiting.messages[1].body).toContain("not a completed report")
+      expect(waiting.messages[1].body).toBe("Reply when you're ready so this work can continue.")
+      expect(waiting.messages.filter((item) => item.kind === "report")).toEqual(first.messages)
       yield* runner.park(later, false)
       yield* storage.write(["raya", "goal", later], {
         ...goal,

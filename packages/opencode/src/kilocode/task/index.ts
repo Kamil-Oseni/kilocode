@@ -170,7 +170,7 @@ export namespace RayaTask {
     message: Schema.String,
   }) {}
 
-  type Store = Pick<Storage.Interface, "read" | "replace" | "create" | "remove" | "list">
+  type Store = Pick<Storage.Interface, "read" | "readBounded" | "replace" | "create" | "remove" | "list">
   const roster = ["raya", "agent"]
   const history = (id: string) => ["raya", "agent-runs", id]
   const memory = (id: string) => ["raya", "agent-memory", id]

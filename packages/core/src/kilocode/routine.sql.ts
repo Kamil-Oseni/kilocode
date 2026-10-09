@@ -37,6 +37,13 @@ export const RayaRoutineOccurrenceTable = sqliteTable(
       table.scheduled_at,
     ),
     index("raya_routine_occurrence_lease").on(table.state, table.lease_until),
+    index("raya_routine_occurrence_cleanup").on(
+      table.agent_id,
+      table.state,
+      table.schedule_version,
+      table.scheduled_at,
+      table.id,
+    ),
   ],
 )
 

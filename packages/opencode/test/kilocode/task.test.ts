@@ -21,6 +21,7 @@ import { PlanArtifact } from "@/kilocode/plan-artifact"
 import { english } from "@/kilocode/tool/schedule-task"
 import { GlobalBus } from "@/bus/global"
 import { tmpdir } from "../fixture/fixture"
+import { read as bounded } from "../fixture/bounded-memory"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Git } from "@/git"
@@ -41,6 +42,7 @@ afterAll(() => Effect.runPromise(Scope.close(scope, Exit.succeed(undefined))))
 function memory() {
   const data = new Map<string, unknown>()
   return {
+    readBounded: <T>(key: string[], maximum: number) => bounded<T>(data, key, maximum),
     create: (key: string[], value: unknown) =>
       Effect.sync(() => {
         const id = key.join("/")

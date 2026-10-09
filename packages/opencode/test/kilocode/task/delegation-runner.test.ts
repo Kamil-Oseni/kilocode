@@ -6,6 +6,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import { Storage } from "@/storage/storage"
+import { read as bounded } from "../../fixture/bounded-memory"
 import { SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
 import { RayaTask } from "@/kilocode/task"
@@ -21,6 +22,7 @@ import { owner } from "@/kilocode/task/owner"
 function memory() {
   const data = new Map<string, unknown>()
   return {
+    readBounded: <T>(key: string[], maximum: number) => bounded<T>(data, key, maximum),
     create: (key: string[], value: unknown) =>
       Effect.sync(() => {
         const id = key.join("/")

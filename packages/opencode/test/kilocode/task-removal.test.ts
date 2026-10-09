@@ -19,6 +19,7 @@ import { tmpdirScoped } from "../fixture/fixture"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const key = ["raya", "agent-removals"]
+const cap = 2 * 1024 * 1024
 const rows = (count: number) =>
   Array.from({ length: count }, (_, index) => ({ version: 1 as const, agentID: `pending-${index}`, at: index }))
 const state = (directory: string) =>
@@ -158,4 +159,133 @@ it.live("oversized legacy evidence and oversized UTF-8 identities fail closed wi
       }
     }).pipe(Effect.provide(state(directory)))
   }),
+)
+
+it.live("the byte cap admits the complete worst-case escaped opaque identity backlog without rewriting retries", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const original = Array.from({ length: 1024 }, (_, index) => ({
+      version: 1 as const,
+      agentID: String.fromCharCode(...Array.from({ length: 256 }, (_, offset) => (index >> offset % 10) & 1)),
+      at: Number.MAX_VALUE,
+    }))
+    expect(new Set(original.map((row) => row.agentID)).size).toBe(1024)
+    expect(original.every((row) => Buffer.byteLength(row.agentID, "utf8") === 256)).toBe(true)
+    const saved = yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      yield* storage.replace(key, original)
+      const held = yield* bytes(directory)
+      expect(Buffer.byteLength(held, "utf8")).toBeGreaterThan(1536 * 1024)
+      expect(Buffer.byteLength(held, "utf8")).toBeLessThan(cap)
+      expect(yield* removals(storage).pending()).toEqual(original)
+      yield* removals(storage).stage(original[1023].agentID)
+      expect(yield* bytes(directory)).toBe(held)
+      return held
+    }).pipe(Effect.provide(state(directory)))
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      expect(yield* removals(storage).pending()).toEqual(original)
+      yield* removals(storage).check(original[0].agentID)
+      expect(yield* bytes(directory)).toBe(saved)
+    }).pipe(Effect.provide(state(directory)))
+  }),
+)
+
+it.live("the exact raw byte boundary is accepted and an oversized extra field is preserved on refusal", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      expect(yield* removals(storage).pending()).toEqual([])
+      expect(
+        yield* Effect.promise(() => Bun.file(path.join(directory, "storage/raya/agent-removals.json")).exists()),
+      ).toBe(false)
+      yield* storage.replace(key, [])
+      const filename = path.join(directory, "storage/raya/agent-removals.json")
+      const exact = "[]" + " ".repeat(cap - 2)
+      yield* Effect.promise(() => Bun.write(filename, exact))
+      expect(yield* removals(storage).pending()).toEqual([])
+      expect(yield* bytes(directory)).toBe(exact)
+      const prefix = '[{"version":1,"agentID":"retained","at":1,"extra":"'
+      const suffix = '"}]'
+      const overflow = prefix + "x".repeat(cap + 1 - prefix.length - suffix.length) + suffix
+      expect(Buffer.byteLength(overflow)).toBe(cap + 1)
+      yield* Effect.promise(() => Bun.write(filename, overflow))
+      for (const action of [
+        removals(storage).pending(),
+        removals(storage).stage("new"),
+        removals(storage).finish([]),
+      ]) {
+        const failed = yield* action.pipe(Effect.exit)
+        expect(Exit.isFailure(failed)).toBe(true)
+        if (Exit.isFailure(failed)) expect(Cause.pretty(failed.cause)).toContain("RayaTask.RemovalError")
+        expect(yield* bytes(directory)).toBe(overflow)
+      }
+    }).pipe(Effect.provide(state(directory)))
+  }),
+)
+
+it.live(
+  "invalid UTF-8, malformed JSON and raw overflow preserve actual roster, archive, queue and claims after reopening",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const filename = path.join(directory, "storage/raya/agent-removals.json")
+      const saved = yield* Effect.gen(function* () {
+        const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+        const tasks = RayaTask.make(input)
+        const removed = yield* tasks.create({
+          name: "Archived",
+          objective: "Retain archive",
+          schedule: { kind: "manual" },
+        })
+        yield* tasks.remove(removed.id)
+        const agent = yield* tasks.create({
+          name: "Preserved",
+          objective: "Keep queued work",
+          schedule: { kind: "manual" },
+        })
+        const queue = RayaTaskQueue.make(input.database)
+        yield* queue.publish({ agentID: agent.id, version: 1, occurrences: [{ at: 1000, observedAt: 1000 }] })
+        return {
+          id: agent.id,
+          roster: yield* input.storage.read(["raya", "agent"]),
+          archive: yield* tasks.page(),
+          queued: yield* queue.pending(agent.id, 1),
+        }
+      }).pipe(Effect.provide(state(directory)))
+      const invalid = Buffer.concat([
+        Buffer.from('[{"version":1,"agentID":"'),
+        Buffer.from([0xc3, 0x28]),
+        Buffer.from('","at":1}]'),
+      ])
+      for (const original of [invalid, Buffer.from("["), Buffer.from("[]" + " ".repeat(cap - 1))]) {
+        yield* Effect.promise(() => Bun.write(filename, original))
+        yield* Effect.gen(function* () {
+          const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+          const tasks = RayaTask.make(input)
+          const receipts = removals(input.storage)
+          for (const action of [
+            receipts.pending(),
+            receipts.check(saved.id),
+            receipts.stage(saved.id),
+            receipts.finish([saved.id]),
+          ]) {
+            const failed = yield* action.pipe(Effect.exit)
+            expect(Exit.isFailure(failed)).toBe(true)
+            if (Exit.isFailure(failed)) expect(Cause.pretty(failed.cause)).toContain("RayaTask.RemovalError")
+          }
+          for (const action of [tasks.remove(saved.id), scheduler(input).clean()]) {
+            const failed = yield* action.pipe(Effect.exit)
+            expect(Exit.isFailure(failed)).toBe(true)
+            if (Exit.isFailure(failed)) expect(Cause.pretty(failed.cause)).toContain("RayaTask.GuardError")
+          }
+          expect(yield* input.storage.read(["raya", "agent"])).toEqual(saved.roster)
+          expect(yield* tasks.page()).toEqual(saved.archive)
+          expect(yield* RayaTaskQueue.make(input.database).pending(saved.id, 1)).toEqual(saved.queued)
+          expect(yield* inspect(input.storage, saved.id)).toBeUndefined()
+          expect(Buffer.from(yield* Effect.promise(() => Bun.file(filename).arrayBuffer()))).toEqual(original)
+        }).pipe(Effect.provide(state(directory)))
+      }
+    }),
 )

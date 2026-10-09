@@ -27,6 +27,7 @@ import { SessionID } from "@/session/schema"
 import { InstanceStore } from "@/project/instance-store"
 import { Storage } from "@/storage/storage"
 import { tmpdir, withTestInstance } from "../../fixture/fixture"
+import { read as bounded } from "../../fixture/bounded-memory"
 
 function layer() {
   return LayerNode.compile(LayerNode.group([Database.node, PtyArchive.node]), [
@@ -62,6 +63,7 @@ function saved(database: Database.Interface, id: SessionID, dir: string) {
 function memory() {
   const data = new Map<string, unknown>()
   return {
+    readBounded: <T>(key: string[], maximum: number) => bounded<T>(data, key, maximum),
     create: (key: string[], value: unknown) =>
       Effect.sync(() => {
         const id = key.join("/")
@@ -997,7 +999,9 @@ test("organization archive attempts later worker stops after an earlier halt fai
             },
             halt: (id) =>
               Effect.sync(() => halted.push(id)).pipe(
-                Effect.andThen(id === first ? Effect.die("First worker halt failed") : Effect.void),
+                Effect.andThen(
+                  Effect.suspend(() => (halted.length === 1 ? Effect.die("First worker halt failed") : Effect.void)),
+                ),
               ),
           })
           const workers = yield* Effect.forEach([first, second], (id) =>
@@ -1032,9 +1036,11 @@ test("organization archive attempts later worker stops after an earlier halt fai
               yield* organizations.archive(team.id, { expectedRevision: team.revision }).pipe(Effect.exit),
             ),
           ).toBe(true)
-          expect(halted).toEqual([first, second])
-          expect((yield* runner.tasks.runsFor(workers[0].id))[0]?.status).toBe("running")
-          expect((yield* runner.tasks.runsFor(workers[1].id))[0]?.status).toBe("error")
+          expect(halted.toSorted()).toEqual([first, second].toSorted())
+          const histories = yield* Effect.forEach(workers, (worker) => runner.tasks.runsFor(worker.id))
+          const attempts = new Map(histories.map((runs) => [runs[0].sessionID, runs[0].status]))
+          expect(attempts.get(halted[0])).toBe("running")
+          expect(attempts.get(halted[1])).toBe("error")
           expect((yield* organizations.get(team.id)).archived).toBe(false)
           for (const worker of workers) expect((yield* runner.tasks.get(worker.id)).enabled).toBe(false)
         }).pipe(Effect.provide(layer()), Effect.scoped),

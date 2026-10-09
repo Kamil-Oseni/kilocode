@@ -107,7 +107,7 @@ export class BrainBridge {
               request.command.action === "status"
                 ? "Memory setup status could not be confirmed. Check Memory settings; no note changes were requested."
                 : request.command.action === "context"
-                  ? "Memory recall could not be confirmed. Check the reviewed context-capable Memory release and service status; no note changes were requested."
+                  ? "Memory recall could not be confirmed. Check the reviewed context-capable Memory release and service status"
                   : request.command.action === "capturePolicy"
                     ? "Automatic saving authorization could not be confirmed. This turn has not been confirmed saved; do not replay it."
                     : request.command.action === "capture"

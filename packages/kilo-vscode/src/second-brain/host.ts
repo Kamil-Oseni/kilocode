@@ -1090,8 +1090,12 @@ export class BrainHost {
     if (!selected?.[0] || selected[0].scheme !== "file") return
     await this.service.repair(selected[0].fsPath, async (review) => {
       const action = review.outcome === "cancelled" ? "Recover interrupted search" : "Recover failed search"
+      const count = review.downstream.length
+      const downstream = count
+        ? `${count} reviewed failed downstream request${count === 1 ? " that never started a worker" : "s that never started workers"}`
+        : "no downstream requests"
       const accepted = await vscode.window.showWarningMessage(
-        `Recover the saved Memory setup for ${review.root}? Original search ${review.request} ended ${review.outcome} with no downstream requests, and its original producer pair closed cleanly. Trust the reviewed observation SHA-256 ${review.observation.sha256}. Previous setup and request metadata are retained in an audit. This administrative recovery does not settle or retry the original HTTP request; source indexing and capture remain separate actions.`,
+        `Recover the saved Memory setup for ${review.root}? Original search ${review.request} ended ${review.outcome} with ${downstream}, and its original producer pair closed cleanly. Trust the reviewed observation SHA-256 ${review.observation.sha256}. Previous setup and request metadata are retained in an audit. This administrative recovery does not settle or retry the original HTTP request; source indexing and capture remain separate actions.`,
         { modal: true },
         action,
       )

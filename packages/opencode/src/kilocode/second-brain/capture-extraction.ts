@@ -4,6 +4,17 @@ import * as Log from "@opencode-ai/core/util/log"
 import { CaptureEntry, type CaptureSource } from "./capture-protocol"
 
 function blocks(source: CaptureSource) {
+  const clauses =
+    source.user.text.length <= 1000
+      ? Array.from(source.user.text.matchAll(/[^.!?]+(?:[.!?]+|$)/g)).flatMap((match) => {
+          const text = match[0].trim()
+          if (!/^(?:For [^.!?`]{1,120}, )?I (?:also )?(?:prefer|like|dislike|would prefer) [^.!?`]+[.!?]?$/i.test(text))
+            return []
+          const start = match.index + match[0].indexOf(text)
+          return [{ start, end: start + text.length }]
+        })
+      : []
+  const preferences = clauses.length >= 2 && clauses.length <= 4 ? clauses : []
   const rows = [
     { ...source.user, origin: "user_statement" },
     { ...source.assistant, origin: "assistant_interpretation" },
@@ -11,12 +22,15 @@ function blocks(source: CaptureSource) {
   ].flatMap((row) => {
     const spans = []
     for (let start = 0; start < row.text.length; ) {
-      const edge = Math.min(start + 1024, row.text.length)
+      const cuts = row.origin === "user_statement" ? preferences.flatMap((span) => [span.start, span.end]) : []
+      const edge = Math.min(start + 1024, row.text.length, ...cuts.filter((cut) => cut > start))
       const end =
         edge < row.text.length && /[\uD800-\uDBFF]/.test(row.text[edge - 1]) && /[\uDC00-\uDFFF]/.test(row.text[edge])
           ? edge - 1
           : edge
-      spans.push({ ...row, text: row.text.slice(start, end), start, end })
+      const preference =
+        row.origin === "user_statement" && preferences.some((span) => span.start === start && span.end === end)
+      spans.push({ ...row, text: row.text.slice(start, end), start, end, preference })
       start = end
     }
     return spans
@@ -25,22 +39,64 @@ function blocks(source: CaptureSource) {
   return rows.map((row, ref) => ({ ...row, ref }))
 }
 
-function contract(source: CaptureSource) {
-  return Schema.Struct({
-    entries: Schema.Array(
-      Schema.Struct({
+function preference(ref: number) {
+  return Schema.Union([
+    Schema.Struct({
+      status: Schema.Literal("retained"),
+      entry: Schema.Struct({
         ...CaptureEntry.fields,
-        evidence: Schema.Array(
-          Schema.Struct({
-            ref: Schema.Literals(blocks(source).map((row) => row.ref)),
-          }),
-        ).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+        category: Schema.Literal("Preferences"),
+        origin: Schema.Literal("user_statement"),
+        evidence: Schema.Array(Schema.Struct({ ref: Schema.Literal(ref) })).check(
+          Schema.isMinLength(1),
+          Schema.isMaxLength(1),
+        ),
       }),
-    ).check(Schema.isMaxLength(8)),
+    }),
+    Schema.Struct({
+      status: Schema.Literal("excluded"),
+      reason: Schema.Literals(["sensitive", "transient", "no_durable_fact"]),
+    }),
+  ])
+}
+
+function contract(source: CaptureSource) {
+  const rows = blocks(source)
+  const preferences = rows.filter((row) => row.preference)
+  const entry = (refs: number[]) =>
+    Schema.Struct({
+      ...CaptureEntry.fields,
+      evidence: Schema.Array(
+        Schema.Struct({
+          ref: Schema.Literals(refs),
+        }),
+      ).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+    })
+  const entries = Schema.Array(entry(rows.filter((row) => !row.preference).map((row) => row.ref))).check(
+    Schema.isMaxLength(8 - preferences.length),
+  )
+  if (!preferences.length) return Schema.Struct({ entries })
+  return Schema.Struct({
+    entries,
+    preferences: Schema.Struct(
+      Object.fromEntries(preferences.map((row) => [`preference_${row.ref}`, preference(row.ref)])),
+    ),
   })
 }
 const log = Log.create({ service: "capture.extraction" })
-const fields = new Set(["entries", "category", "key", "text", "origin", "evidence", "ref"])
+const fields = new Set([
+  "entries",
+  "category",
+  "key",
+  "text",
+  "origin",
+  "evidence",
+  "ref",
+  "preferences",
+  "status",
+  "entry",
+  "reason",
+])
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -110,7 +166,16 @@ export function extraction(source: CaptureSource) {
 
 export function extracted(value: unknown, source: CaptureSource) {
   const rows = blocks(source)
-  return decode(value, source).entries.map((entry) => ({
+  const parsed = decode(value, source)
+  const slots = "preferences" in parsed && record(parsed.preferences) ? parsed.preferences : undefined
+  const preferences = rows
+    .filter((row) => row.preference)
+    .flatMap((row) => {
+      if (!slots) throw new Error("Capture extraction is missing preference dispositions")
+      const slot = Schema.decodeUnknownSync(preference(row.ref))(slots[`preference_${row.ref}`])
+      return slot.status === "retained" ? [slot.entry] : []
+    })
+  return [...parsed.entries, ...preferences].map((entry) => ({
     ...entry,
     evidence: entry.evidence.map((evidence) => {
       const original = rows[evidence.ref]
@@ -122,5 +187,10 @@ export function extracted(value: unknown, source: CaptureSource) {
 }
 
 export function prepared(source: CaptureSource) {
-  return JSON.stringify(blocks(source).map(({ start: _start, end: _end, ...row }) => row))
+  return JSON.stringify(
+    blocks(source).map(({ start: _start, end: _end, preference, ...row }) => ({
+      ...row,
+      ...(preference ? { slot: `preference_${row.ref}` } : {}),
+    })),
+  )
 }

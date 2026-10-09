@@ -55,7 +55,7 @@ export const capture = Effect.fn("SecondBrain.captureTurn")(function* (input: {
       id,
       owner: policy.grant.id,
       model: policy.grant.model,
-      system,
+      system: `${system} If original user blocks have a slot, the schema requires a preferences object with every named slot. Decide each clause independently: retain its own durable preference in that slot with status retained and entry citing only that clause, or explicitly exclude it with status excluded and reason sensitive, transient or no_durable_fact. Never skip a slot or substitute the first clause for another. Preserve that clause's intended purpose, location, qualifiers and negation. Do not put slotted preferences in the general entries array; that array is for other supported memories. Exclusion is allowed and must not be replaced by invented facts.`,
       prompt: prepared(original.source),
       timeoutMs: Math.min(30000, Math.max(1, policy.grant.expires - Date.now())),
       budget: budget(model.limit),

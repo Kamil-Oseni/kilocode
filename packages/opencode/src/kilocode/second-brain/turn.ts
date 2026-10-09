@@ -20,7 +20,7 @@ export function acknowledged(
     )
   if (!match || !/\b(?:I (?:prefer|like|dislike|want|would prefer|would like)|My preference is)\b/i.test(match[1]))
     return false
-  return !/\b(?:please|install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|configure|control|apply|revert|undo|redo)\b/i.test(
+  return !/\bplease\b|(?:^|[.;]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\byou (?:to|must|should|need to)\s+)(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|configure|control|apply|revert|undo|redo)\b/i.test(
     match[1],
   )
 }
@@ -35,7 +35,8 @@ export function settled(
   const current = messages.findLast((row) => row.info.role === "user")
   if (!current || current.info.id !== user || current.info.sessionID !== session.id) return false
   const request = RayaChief.requestText(current.parts)
-  if (request !== RayaChief.request(session.metadata) || !question(request)) return false
+  const state = status(request)
+  if (request !== RayaChief.request(session.metadata) || (!state && !question(request))) return false
   return messages.some(
     (row) =>
       row.info.role === "assistant" &&
@@ -50,10 +51,19 @@ export function settled(
           part.messageID === row.info.id &&
           part.sessionID === session.id &&
           part.state.status === "completed" &&
-          !("action" in part.state.input) &&
-          typeof part.state.input.query === "string" &&
-          !!part.state.input.query.trim(),
+          (state
+            ? part.state.input.action === "status" && Object.keys(part.state.input).length === 1
+            : !("action" in part.state.input) &&
+              typeof part.state.input.query === "string" &&
+              !!part.state.input.query.trim()),
       ),
+  )
+}
+
+/** Setup state can answer only an explicit status question, never a question about saved facts. */
+function status(request: string) {
+  return /^(?:is (?:my |personal |raya(?:'s)? )?memory (?:configured|connected|ready|enabled|disabled|paused|saving|working|set up)|what is (?:my |personal |raya(?:'s)? )?memory(?:'s)? (?:setup )?status)\??$/i.test(
+    request,
   )
 }
 

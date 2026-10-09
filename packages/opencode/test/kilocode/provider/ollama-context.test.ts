@@ -187,7 +187,11 @@ run.instance(
           timeoutMs: 10000,
           budget: { input: 2000, output: 512 },
         },
-        extraction,
+        extraction({
+          user: { id: "u", text: "No durable memories" },
+          assistant: { id: "a", text: "Acknowledged" },
+          tools: [],
+        }),
       )
       expect(JSON.parse(result.text)).toEqual({ entries: [] })
       expect(rows).toHaveLength(6)
@@ -196,7 +200,7 @@ run.instance(
         options: { num_ctx: 32768, num_predict: 512 },
         format: {
           type: "object",
-          properties: { entries: { type: "array", allOf: [{ maxItems: 8 }] } },
+          properties: { entries: { type: "array", maxItems: 8 } },
           required: ["entries"],
           additionalProperties: false,
         },

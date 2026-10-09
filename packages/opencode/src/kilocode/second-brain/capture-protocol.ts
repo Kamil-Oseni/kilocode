@@ -17,18 +17,17 @@ export const CaptureSource = Schema.Struct({
   ).check(Schema.isMaxLength(16)),
 })
 export type CaptureSource = typeof CaptureSource.Type
-export const CaptureEntries = Schema.Array(
-  Schema.Struct({
-    category: Schema.Literals(["Daily", "Preferences", "Projects", "Areas", "Commitments", "Decisions"]),
-    key: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,79}$/)),
-    text: text(4096),
-    origin: Schema.Literals(["user_statement", "tool_observation", "assistant_interpretation"]),
-    evidence: Schema.Array(Schema.Struct({ id: text(256), start: integer(16000), end: integer(16000) })).check(
-      Schema.isMinLength(1),
-      Schema.isMaxLength(4),
-    ),
-  }),
-).check(Schema.isMaxLength(8))
+export const CaptureEntry = Schema.Struct({
+  category: Schema.Literals(["Daily", "Preferences", "Projects", "Areas", "Commitments", "Decisions"]),
+  key: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,79}$/)),
+  text: text(4096),
+  origin: Schema.Literals(["user_statement", "tool_observation", "assistant_interpretation"]),
+  evidence: Schema.Array(Schema.Struct({ id: text(256), start: integer(16000), end: integer(16000) })).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(4),
+  ),
+})
+export const CaptureEntries = Schema.Array(CaptureEntry).check(Schema.isMaxLength(8))
 export type CaptureEntries = typeof CaptureEntries.Type
 export const CapturePolicy = Schema.Struct({
   action: Schema.Literal("capturePolicy"),

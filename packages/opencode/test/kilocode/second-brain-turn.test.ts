@@ -71,6 +71,44 @@ test("original completed Memory read releases conversational synthesis without c
   expect(settled(original.messages, original.session, uid)).toBe(true)
 })
 
+test("an original status read answers only a status question without releasing a work goal", () => {
+  for (const text of ["Is my Memory connected?", "Is Memory set up?", "What is Memory's setup status?"]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+    original.tool.state = { ...original.tool.state, input: { action: "status" } }
+    expect(settled(original.messages, original.session, uid)).toBe(true)
+    expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+    expect(settled(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
+    expect(settled(original.messages, original.session, "foreign")).toBe(false)
+    expect(
+      settled(
+        original.messages,
+        { ...original.session, metadata: { ...original.session.metadata, [RayaChief.phaseKey]: "task" } },
+        uid,
+      ),
+    ).toBe(false)
+    original.tool.state = { ...original.tool.state, input: { action: "status", query: "invented" } }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+  for (const text of [
+    "Is Memory ready? Delete old notes.",
+    "Is my saved preference remembered?",
+    "Which preferences are saved?",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    original.tool.state = { ...original.tool.state, input: { action: "status" } }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("the actual installed preference acknowledgement needs no acquisition or goal completion", () => {
   const original = fixture()
   const part = original.messages[0].parts[0]
@@ -100,6 +138,9 @@ test("natural preference wording can acknowledge without acquisition or goal com
   for (const text of [
     "For first-time setup, I want Raya to guide me inside the conversation using its existing Ask cards. Keep Memory for manual inspection and settings. Please acknowledge this preference.",
     "My preference is concise replies while I work. Please acknowledge my preference.",
+    "I prefer brief build-chat updates, with reports when work is complete rather than frequent messages. Please acknowledge this preference.",
+    "I prefer brief build reports and concise update messages. Please acknowledge this preference.",
+    "My preference is to keep PC checks on my second display, leaving my main display clear. Please acknowledge my preference.",
     "I would like shorter replies, but I also like clear explanations. Please acknowledge that preference.",
     "I prefer Raya PC checks on my second display so the main display stays clear. Please acknowledge this preference.",
   ]) {
@@ -120,6 +161,8 @@ test("compound work, memory retrieval and structured output do not become acknow
     "I prefer dark mode. Install it. Please acknowledge this preference.",
     "I prefer dark mode. Please acknowledge this preference, then deploy it.",
     "I prefer dark mode and then deploy it. Please acknowledge this preference.",
+    "I prefer dark mode and run the installer. Please acknowledge this preference.",
+    "I want you to delete the old notes. Please acknowledge this preference.",
     "Please acknowledge this preference and save a note.",
   ]) {
     const original = fixture()

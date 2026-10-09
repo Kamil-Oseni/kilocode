@@ -40,7 +40,9 @@ test("capture sends its bounded schema through the real compatible SDK and still
     origin: "user_statement" as const,
     evidence: [{ id: source.user.id, start: 0, end: source.user.text.length }],
   }
-  let content = JSON.stringify({ entries: [entry] })
+  const quoted = { ...entry, evidence: [{ ref: 0 }] }
+  const schema = extraction(source)
+  let content = JSON.stringify({ entries: [quoted] })
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
@@ -78,8 +80,8 @@ test("capture sends its bounded schema through the real compatible SDK and still
       timeoutMs: 10000,
       budget: { input: 2000, output: 512 },
     }
-    const result = await Effect.runPromise(generate(selected, payload, extraction))
-    expect(entries(extracted(JSON.parse(result.text)), source)).toEqual([entry])
+    const result = await Effect.runPromise(generate(selected, payload, schema))
+    expect(entries(extracted(JSON.parse(result.text), source), source)).toEqual([entry])
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({
       max_tokens: 512,
@@ -87,17 +89,17 @@ test("capture sends its bounded schema through the real compatible SDK and still
         type: "json_schema",
         json_schema: {
           name: "personal_capture",
-          schema: { properties: { entries: { type: "array", allOf: [{ maxItems: 8 }] } } },
+          schema: { properties: { entries: { type: "array", maxItems: 8 } } },
         },
       },
     })
-    content = JSON.stringify({ entries: [{ ...entry, key: "Warm Lights" }] })
-    const invalid = await Effect.runPromiseExit(generate(selected, payload, extraction))
+    content = JSON.stringify({ entries: [{ ...quoted, key: "Warm Lights" }] })
+    const invalid = await Effect.runPromiseExit(generate(selected, payload, schema))
     expect(invalid._tag).toBe("Failure")
     expect(requests).toHaveLength(2)
-    content = JSON.stringify({ entries: [{ ...entry, evidence: [{ id: source.assistant.id, start: 0, end: 5 }] }] })
-    const foreign = await Effect.runPromise(generate(selected, payload, extraction))
-    expect(() => entries(extracted(JSON.parse(foreign.text)), source)).toThrow("actual original source span")
+    content = JSON.stringify({ entries: [{ ...quoted, evidence: [{ ref: 1 }] }] })
+    const foreign = await Effect.runPromise(generate(selected, payload, schema))
+    expect(() => extracted(JSON.parse(foreign.text), source)).toThrow("actual original source reference")
     expect(requests).toHaveLength(3)
   } finally {
     await server.stop(true)

@@ -6,11 +6,89 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { digest, entries, identity, source } from "../../src/kilocode/second-brain/capture-source"
 import { valid } from "../../src/kilocode/second-brain/reply"
 import { RequestID, type Request } from "../../src/kilocode/second-brain/protocol"
+import { asSchema } from "ai"
+import { extraction, extracted, prepared } from "../../src/kilocode/second-brain/capture-extraction"
 
 const sid = SessionID.make("ses_capture")
 const uid = MessageID.make("msg_user")
 const aid = MessageID.make("msg_assistant")
 const stamp = Date.parse("2026-10-09T01:30:00Z")
+test("source references resolve original UTF-16 spans without splitting Unicode or accepting foreign evidence", () => {
+  const original = {
+    user: { id: uid, text: "😀 I prefer quiet notifications." },
+    assistant: { id: aid, text: "Acknowledged." },
+    tools: [],
+  }
+  const entry = {
+    category: "Preferences",
+    key: "quiet-notifications",
+    text: "Prefers quiet notifications.",
+    origin: "user_statement",
+    evidence: [{ ref: 0 }],
+  }
+  const parsed = extracted({ entries: [entry] }, original)
+  expect(parsed[0].evidence).toEqual([{ id: uid, start: 0, end: 32 }])
+  expect(entries(parsed, original)).toHaveLength(1)
+  const long = { ...original, user: { id: uid, text: "a".repeat(1023) + "😀b" } }
+  const blocks = JSON.parse(prepared(long))
+  expect(blocks[0].text).toBe("a".repeat(1023))
+  expect(blocks[1].text).toBe("😀b")
+  expect(extracted({ entries: [{ ...entry, evidence: [{ ref: 1 }] }] }, long)[0].evidence).toEqual([
+    { id: uid, start: 1023, end: 1026 },
+  ])
+  for (const evidence of [[{ ref: 1 }], [{ ref: 42 }], [{ ref: "0" }], [{ ref: 0, id: "foreign" }]])
+    expect(() => extracted({ entries: [{ ...entry, evidence }] }, original)).toThrow()
+})
+test("native extraction schema preserves every bound while rejecting excess output fields", async () => {
+  const original = source(messages(), sid, aid)!.source
+  const schema = await asSchema(extraction(original)).jsonSchema
+  expect(schema).toMatchObject({
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      entries: {
+        type: "array",
+        maxItems: 8,
+        items: {
+          additionalProperties: false,
+          properties: {
+            key: { pattern: "^[a-z0-9][a-z0-9_-]{0,79}$" },
+            text: { minLength: 1, maxLength: 4096 },
+            evidence: {
+              minItems: 1,
+              maxItems: 4,
+              items: {
+                additionalProperties: false,
+                properties: {
+                  ref: { enum: [0, 1] },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  expect(JSON.stringify(schema)).not.toContain('"allOf"')
+  expect(extracted({ entries: [] }, original)).toEqual([])
+  expect(() => extracted({ entries: [], private_field: "secret value" }, original)).toThrow("bounded entry schema")
+  expect(() =>
+    extracted(
+      {
+        entries: [
+          {
+            category: "Preferences",
+            key: "bad key",
+            text: "Preference",
+            origin: "user_statement",
+            evidence: [{ ref: 0 }],
+          },
+        ],
+      },
+      original,
+    ),
+  ).toThrow("bounded entry schema")
+})
 function text(id: MessageID, body: string): MessageV2.TextPart {
   return { id: PartID.make(`prt_${id}`), sessionID: sid, messageID: id, type: "text", text: body }
 }

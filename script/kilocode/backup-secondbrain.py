@@ -9,6 +9,14 @@ import re
 import uuid
 
 
+def read(file):
+    with file.open("rb") as stream:
+        raw = stream.read(2 * 1024 * 1024 + 1)
+    if len(raw) > 2 * 1024 * 1024:
+        raise ValueError("Source exceeds the bounded snapshot size")
+    return raw
+
+
 def inventory(root):
     files = {}
     for file in sorted(root.rglob("*")):
@@ -25,9 +33,7 @@ def inventory(root):
         )
         if file.suffix.lower() != ".md" and file.name != ".rayaignore" and not journal and not capture:
             continue
-        raw = file.read_bytes()
-        if len(raw) > 2 * 1024 * 1024:
-            raise ValueError("Source exceeds the bounded snapshot size")
+        raw = read(file)
         files[name] = {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
     if not files:
         raise ValueError("Source inventory is empty")
@@ -44,14 +50,14 @@ def backup(root, dest):
     files = inventory(root)
     dest.mkdir(parents=True, exist_ok=False)
     for name, pin in files.items():
-        raw = (root / name).read_bytes()
+        raw = read(root / name)
         if len(raw) != pin["bytes"] or hashlib.sha256(raw).hexdigest() != pin["sha256"]:
             raise ValueError("Source changed before copying")
         copy = dest / "Files" / name
         copy.parent.mkdir(parents=True, exist_ok=True)
         with copy.open("xb") as stream:
             stream.write(raw)
-        saved = copy.read_bytes()
+        saved = read(copy)
         if len(saved) != pin["bytes"] or hashlib.sha256(saved).hexdigest() != pin["sha256"]:
             raise ValueError("Copied source differs")
     if inventory(root) != files:

@@ -25,6 +25,7 @@ import { LanceDBRuntime } from "../src/kilocode/lancedb"
 import { KiloSandboxWorker } from "./kilocode/kilo-sandbox-worker"
 import { KiloSandboxNetwork } from "./kilocode/kilo-sandbox-network"
 import { ProcessHost } from "./kilocode/process-host"
+import * as BuildEvidence from "./kilocode/build-evidence"
 // kilocode_change end
 
 const singleFlag = process.argv.includes("--single")
@@ -305,7 +306,27 @@ for (const item of targets) {
 
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
 
-  await Bun.build({
+  // kilocode_change start - evidence observes the existing in-process compiler without changing its recipe
+  const phase = await BuildEvidence.begin(name, {
+    conditions: ["bun", "node"],
+    tsconfig: "./tsconfig.json",
+    format: "esm",
+    minify: true,
+    splitting: false,
+    sourcemap: Script.release ? "none" : "external",
+    target: name.replace(pkg.name, "bun"),
+    entrypoints: [
+      "./src/kilocode/cli/entry.ts",
+      workerPath,
+      treeSitterWorkerPath,
+      sessionExportWorkerPath,
+      indexingWorkerPath,
+    ],
+    version: Script.version,
+    modelsSHA: (await import("node:crypto")).createHash("sha256").update(generated.modelsData).digest("hex"),
+  })
+  const compiled = await Bun.build({
+    // kilocode_change end
     conditions: ["bun", "node"], // kilocode_change - port anomalyco/opencode#30873; current form from #31566
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
@@ -338,7 +359,13 @@ for (const item of targets) {
     },
     // kilocode_change start - packages/app was removed; no embedded web UI
     files: { [treeSitterWorkerPath]: treeSitterWorker },
-    entrypoints: ["./src/kilocode/cli/entry.ts", workerPath, treeSitterWorkerPath, sessionExportWorkerPath, indexingWorkerPath],
+    entrypoints: [
+      "./src/kilocode/cli/entry.ts",
+      workerPath,
+      treeSitterWorkerPath,
+      sessionExportWorkerPath,
+      indexingWorkerPath,
+    ],
     // kilocode_change end
     define: {
       FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
@@ -362,6 +389,15 @@ for (const item of targets) {
       ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
     },
   })
+
+  // kilocode_change start - original parent separately observes process exit and both pipe EOFs
+  await BuildEvidence.finish(
+    phase,
+    compiled,
+    path.resolve(dir, `dist/${name}/bin/kilo${item.os === "win32" ? ".exe" : ""}`),
+  )
+
+  // kilocode_change end
 
   // kilocode_change start
   await copyTreeSitterWasms(path.resolve(dir, `dist/${name}/bin`))

@@ -16,6 +16,7 @@ import { currentBwrapTarget, ensureBwrapForTarget } from "./bwrap-helper"
 import { currentFfmpegTarget, ensureFfmpegForTarget } from "./ffmpeg-helper"
 import { fingerprint as repairFingerprint } from "../../opencode/src/kilocode/self-heal/build-input"
 import { ProcessHost } from "../../opencode/script/kilocode/process-host"
+import { execute as compileEvidence } from "./cli-evidence"
 
 const forceRebuild = process.argv.includes("--force")
 const compiledOnly = process.argv.includes("--compiled")
@@ -103,6 +104,7 @@ async function cliInputs() {
     "packages/kilo-vscode/script/bwrap-helper.ts",
     "packages/kilo-vscode/script/ffmpeg-helper.ts",
     "packages/kilo-vscode/script/local-bin.ts",
+    "packages/kilo-vscode/script/cli-evidence.ts",
     "packages/kilo-vscode/src/services/cli-backend/cli-resources.ts",
   ]
 }
@@ -260,11 +262,28 @@ async function ensureBuiltBinary(): Promise<string> {
   const pkg = await Bun.file(join(repoDir, "package.json")).json()
   const bun = String(pkg.packageManager)
   log("Building CLI binary...")
-  try {
-    await $`bunx ${bun} run build --single --skip-install`.cwd(opencodeDir)
-  } catch (err) {
-    log(`Pinned bunx build failed (${err}), running via active bun runtime...`)
-    await $`bun run script/build.ts --single --skip-install`.cwd(opencodeDir)
+  if (process.env.RAYA_CLI_BUILD_EVIDENCE) {
+    if (process.env.RAYA_REPAIR_BUILD_INPUT)
+      throw new Error("CLI compiler evidence does not replace the declared repair build contract")
+    const evidence = await compileEvidence({
+      root: repoDir,
+      cwd: opencodeDir,
+      paths: await cliInputs(),
+      manager: bun,
+      evidence: process.env.RAYA_CLI_BUILD_EVIDENCE,
+      script: join(opencodeDir, "script", "build.ts"),
+      args: ["--single", "--skip-install"],
+    })
+    if (evidence.source !== (await cliSourceHash()))
+      throw new Error("Compiler evidence differs from the unchanged CLI cache recipe")
+    log(`Original compiler evidence retained: ${evidence.dir}`)
+  } else {
+    try {
+      await $`bunx ${bun} run build --single --skip-install`.cwd(opencodeDir)
+    } catch (err) {
+      log(`Pinned bunx build failed (${err}), running via active bun runtime...`)
+      await $`bun run script/build.ts --single --skip-install`.cwd(opencodeDir)
+    }
   }
 
   const built = await findKiloBinaryInOpencodeDist()
@@ -326,6 +345,7 @@ async function writeSourceWrapper() {
 }
 
 async function main() {
+  requireEvidence()
   for (const file of [join(targetBinDir, ".cli-version"), join(targetBinDir, ".ffmpeg-target")]) {
     rmSync(file, { force: true })
   }
@@ -333,7 +353,7 @@ async function main() {
   const exists = await targetFile.exists()
   const ready = exists && hasTreeSitterResources(targetBinPath) && hasKiloSandboxWorker(targetBinPath)
 
-  const stale = ready && !forceRebuild && (await isStale())
+  const stale = await outdated(ready)
   const rebuild = forceRebuild || stale || !ready
 
   if (ready && !rebuild) {
@@ -381,6 +401,15 @@ async function main() {
   await writeVersion("compiled")
 
   log(`Copied CLI binary from ${relative(packagesDir, sourceBinPath)} -> ${relative(kiloVscodeDir, targetBinPath)}`)
+}
+
+function requireEvidence() {
+  if (process.env.RAYA_CLI_BUILD_EVIDENCE && !forceRebuild)
+    throw new Error("Original compiler evidence requires the already requested --force build")
+}
+
+async function outdated(ready: boolean) {
+  return ready && !forceRebuild && (await isStale())
 }
 
 function removeDist() {

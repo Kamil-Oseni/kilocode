@@ -29,6 +29,9 @@ test("capture catalog pins actual thirteen-file source and preserves separate le
     source_sha256: release,
   }
   expect(parseCatalog(cfg).source_sha256).toEqual(release)
+  const retained = { ...release, "index.py": "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e" }
+  expect(parseCatalog({ ...cfg, source_sha256: retained }).source_sha256).toEqual(retained)
+  expect(() => parseCatalog({ ...cfg, source_sha256: { ...retained, "capture.py": "f".repeat(64) } })).toThrow()
   expect(parseCatalog({ ...cfg, bridge_sha256: prior, source_sha256: legacy }).source_sha256).toEqual(legacy)
   expect(() => parseCatalog({ ...cfg, bridge_sha256: prior })).toThrow()
   expect(() => parseCatalog({ ...cfg, source_sha256: { ...release, "capture.py": "f".repeat(64) } })).toThrow()

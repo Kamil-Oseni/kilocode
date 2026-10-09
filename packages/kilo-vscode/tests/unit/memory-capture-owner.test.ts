@@ -18,6 +18,7 @@ for (const mode of ["owner", "control"] as const)
         "D:/Raya/Services/Packaging/Environments/PrimarySnapshot/Scripts/python.exe",
         "-B",
         path.resolve("script/memory/capture_owner_fixture.py"),
+        ...(mode === "control" ? ["--indexed-empty"] : []),
       ],
       { stdin: "pipe", stdout: "pipe", stderr: "pipe", windowsHide: true },
     )
@@ -106,7 +107,12 @@ for (const mode of ["owner", "control"] as const)
           source_sha256: fixture.source_sha256,
         })
         control = new BrainControl(service, settings, (setup) => Control.open(setup.root, catalog, process.cwd()))
-        const binding = await service.captureSelection(new AbortController().signal)
+        await expect(service.captureSelection(new AbortController().signal, "0".repeat(64))).rejects.toThrow(
+          "exact current derived index",
+        )
+        const binding = await service.captureSelection(new AbortController().signal, fixture.policy_sha256)
+        expect(binding.digest).toBe(fixture.policy_sha256)
+        expect(binding.index).toBe("synced")
         const original = await control
           .capture(fixture.body, () => {
             if (!service!.captureCurrent(binding)) throw new Error("Original test binding changed")
@@ -122,6 +128,10 @@ for (const mode of ["owner", "control"] as const)
         expect(settings.pending()?.request).toHaveProperty("op", "sync")
         return
       }
+      service = new BrainService(settings)
+      await expect(service.captureSelection(new AbortController().signal, fixture.policy_sha256)).rejects.toThrow(
+        "exact current derived index",
+      )
       owner = new OperationOwner(settings, cfg.key, cfg.setup)
       const result = await owner.capture(fixture.body, fixture.policy_sha256, {
         id: crypto.randomUUID().replaceAll("-", ""),

@@ -11,7 +11,7 @@ import { review as archive, absent } from "./failed-archive"
 import { normalize } from "./control/identity"
 import { review as closed, ClosedRequired } from "./closed-recovery"
 import { review as capture } from "./committed-capture"
-import { records } from "./capture-intake"
+import { records, confirmation } from "./capture-intake"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
@@ -138,6 +138,18 @@ function captureAudit<T extends { phase: string; observed: number; helper: unkno
   audit.observed = retained.observed
   audit.helper = retained.helper
   audit.absence = retained.absence
+}
+
+function captureTurn(
+  original: ReturnType<typeof records>[number],
+  input: unknown,
+  reviewed: Awaited<ReturnType<typeof capture>>,
+  retained: unknown,
+) {
+  if (isDeepStrictEqual(original, input)) return
+  const proof = confirmation(reviewed, original)
+  if (!isDeepStrictEqual(input, proof.completed) || !isDeepStrictEqual(retained, proof))
+    throw new Error("Original recovered capture confirmation required")
 }
 
 export class BrainSettings {
@@ -382,6 +394,66 @@ export class BrainSettings {
   }
 
   /** Reviewed committed effects may recover intake; this never settles the original request. */
+  reviewCapture(extension: string, input: unknown) {
+    return this.serial(async () => {
+      this.available()
+      if (this.pending()) throw new Error("Original Memory uncertainty must be recovered first")
+      const turn = records(this.storage.get("raya.secondBrain.personalCapture.turns")).find((row) =>
+        isDeepStrictEqual(row, input),
+      )
+      if (!turn) throw new Error("Original recovered capture row required")
+      const key = `raya.secondBrain.committedCaptureRecovery.${turn.id}`
+      const audit = this.storage.get<{
+        format: string
+        version: number
+        phase: string
+        previous: ReturnType<BrainSettings["entry"]>
+        debt: unknown
+        turn: unknown
+        reviewSHA: string
+        review: unknown
+        requestSettlement: boolean
+        replay: boolean
+        indexConfirmed: boolean
+      }>(key)
+      if (
+        audit?.format !== "raya.memory.committed-capture.recovery" ||
+        audit.version !== 1 ||
+        audit.phase !== "applied" ||
+        audit.requestSettlement !== false ||
+        audit.replay !== false ||
+        audit.indexConfirmed !== false
+      )
+        throw new Error("Applied original capture recovery audit required")
+      const original = records([audit.turn])[0]
+      const current = structuredClone(this.entry(this.storage.get(state)))
+      const previous = this.entry(audit.previous)
+      if (
+        !isDeepStrictEqual(current.setup, previous.setup) ||
+        current.credential !== previous.credential ||
+        descriptor(current.managed).root !== descriptor(previous.managed).root
+      )
+        throw new Error("Recovered capture belongs to a different Memory setup")
+      const reviewed = await capture(extension, previous, audit.debt, original)
+      captureTurn(original, input, reviewed, this.storage.get(`${key}.confirmation`))
+      const { producer, ...evidence } = reviewed
+      if (
+        producer.code !== 0 ||
+        fingerprint({ ...reviewed, producer: undefined }) !== audit.reviewSHA ||
+        !isDeepStrictEqual(audit.review, evidence) ||
+        !isDeepStrictEqual(this.storage.get(key), audit) ||
+        !isDeepStrictEqual(this.storage.get(state), current) ||
+        !records(this.storage.get("raya.secondBrain.personalCapture.turns")).some((row) =>
+          isDeepStrictEqual(row, input),
+        ) ||
+        this.pending()
+      )
+        throw new Error("Recovered capture evidence changed")
+      this.available()
+      return reviewed
+    })
+  }
+
   recoverCapture(
     extension: string,
     input: unknown,

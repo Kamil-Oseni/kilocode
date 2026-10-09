@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs"
 import { readFile, writeFile, rm, readdir } from "node:fs/promises"
 import { BrainSettings } from "../../src/second-brain/settings"
 import { BrainService } from "../../src/second-brain/service"
+import { CaptureIntake } from "../../src/second-brain/capture-intake"
 import { command } from "../../src/second-brain/control/command"
 import { sha } from "../../src/second-brain/control/frames"
 
@@ -191,3 +192,97 @@ for (const stage of ["state", "verified", "clear", "applied"])
       await value.cleanup()
     }
   }, 60000)
+
+test("recovered capture ledger requires the applied original audit and matching current index inputs", async () => {
+  const value = await fixture()
+  try {
+    const settings = value.settings()
+    const result = (await settings.recoverCapture(process.cwd(), value.turn, async () => true))!
+    const before = await inventory(value.notes)
+    const audit = value.storage.get(`raya.secondBrain.committedCaptureRecovery.${value.turn.id}`)
+    const turns = value.storage.get("raya.secondBrain.personalCapture.turns")
+    const reviewed = await settings.reviewCapture(process.cwd(), value.turn)
+    expect(reviewed.inputSHA).toBe(result.inputSHA)
+    const binding = {
+      root: reviewed.root,
+      release: value.storage.get<Array<{ release: string }>>("raya.secondBrain.personalCapture.turns")![0].release,
+      generation: {},
+      owner: "synthetic-current-index-input",
+      index: "synced" as const,
+      digest: reviewed.policySHA,
+    }
+    const intake = new CaptureIntake(value.storage)
+    for (const changed of [
+      { ...binding, index: "approved" as const },
+      { ...binding, digest: "0".repeat(64) },
+      { ...binding, root: binding.root + "-other" },
+      { ...binding, release: "0".repeat(64) },
+    ])
+      await expect(intake.confirmRecovery(reviewed, changed, () => {})).rejects.toThrow("must agree")
+    await expect(
+      intake.confirmRecovery(reviewed, binding, () => {
+        throw new Error("Original generation changed")
+      }),
+    ).rejects.toThrow("generation changed")
+    expect(value.storage.get("raya.secondBrain.personalCapture.turns")).toEqual(turns)
+    await intake.confirmRecovery(reviewed, binding, () => {})
+    const completed = value.storage.get<Array<{ phase: string; receipt: string }>>(
+      "raya.secondBrain.personalCapture.turns",
+    )!
+    expect(completed[0]).toEqual({ ...value.turn, phase: "published", receipt: reviewed.inputSHA })
+    expect(value.storage.get(`raya.secondBrain.committedCaptureRecovery.${value.turn.id}`)).toEqual(audit)
+    expect(value.storage.get(`raya.secondBrain.committedCaptureRecovery.${value.turn.id}.confirmation`)).toMatchObject({
+      original: value.turn,
+      requestSettlement: false,
+      replay: false,
+      indexConfirmed: true,
+    })
+    await new CaptureIntake(value.storage).confirmRecovery(reviewed, binding, () => {})
+    expect(await inventory(value.notes)).toEqual(before)
+    expect(value.storage.get("raya.secondBrain.personalCapture.turns")).toEqual(completed)
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)
+
+test("recovered capture confirmation resumes after a physical ledger write fails to acknowledge", async () => {
+  const fault = { enabled: false }
+  const value = await fixture(async (key) => {
+    if (fault.enabled && key === "raya.secondBrain.personalCapture.turns") {
+      fault.enabled = false
+      throw new Error("Synthetic confirmation acknowledgement failure")
+    }
+  })
+  try {
+    const result = (await value.settings().recoverCapture(process.cwd(), value.turn, async () => true))!
+    const before = await inventory(value.notes)
+    const binding = {
+      root: result.root,
+      release: value.storage.get<Array<{ release: string }>>("raya.secondBrain.personalCapture.turns")![0].release,
+      generation: {},
+      owner: "synthetic-current-index-input",
+      index: "synced" as const,
+      digest: result.policySHA,
+    }
+    fault.enabled = true
+    await expect(new CaptureIntake(value.storage).confirmRecovery(result, binding, () => {})).rejects.toThrow(
+      "acknowledgement failure",
+    )
+    const intake = new CaptureIntake(value.storage)
+    const selected = intake.recoverable().find((row) => row.id === value.turn.id)!
+    expect(selected.phase).toBe("published")
+    const key = `raya.secondBrain.committedCaptureRecovery.${value.turn.id}.confirmation`
+    const proof = value.storage.get<object>(key)!
+    await value.storage.update(key, { ...proof, policySHA: "0".repeat(64) })
+    await expect(value.settings().reviewCapture(process.cwd(), selected)).rejects.toThrow("confirmation required")
+    await value.storage.update(key, proof)
+    const reviewed = await value.settings().reviewCapture(process.cwd(), selected)
+    await intake.confirmRecovery(reviewed, binding, () => {})
+    expect(value.storage.get<Array<{ phase: string }>>("raya.secondBrain.personalCapture.turns")![0].phase).toBe(
+      "published",
+    )
+    expect(await inventory(value.notes)).toEqual(before)
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)

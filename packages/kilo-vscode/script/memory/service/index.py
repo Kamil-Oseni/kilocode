@@ -116,8 +116,6 @@ def space(name):
 SPACE = space(os.environ.get('RAYA_MEMORY_EMBEDDING_MODEL', 'qwen3-embedding-0.6b'))
 MODEL = json.loads((CATALOG / SPACE['catalog']).read_text(encoding='utf-8-sig'))
 RANKER = json.loads((CATALOG / 'Qwen--Qwen3-Reranker-0.6B.json').read_text(encoding='utf-8-sig'))
-TOKENIZER = None
-GATE = threading.Lock()
 KEY = Path(os.environ['RAYA_MEMORY_RETRIEVAL_TOKEN_FILE']).read_text().strip()
 RELEASE = os.environ['RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256']
 PROTOCOL = os.environ.get('RAYA_MEMORY_RETRIEVAL_PROTOCOL', 'raya.retrieval.retirement.v1')
@@ -302,32 +300,8 @@ def api(path, body, gate=None):
             raise RuntimeError('Retrieval API rejected request: ' + str(err.code)) from err
 
 
-def tokenizer():
-    global TOKENIZER
-    remaining()
-    while not GATE.acquire(timeout=min(0.05, remaining())):
-        remaining()
-    try:
-        remaining()
-        if TOKENIZER is not None:
-            return TOKENIZER
-        from transformers import AutoTokenizer
-        remaining()
-        value = AutoTokenizer.from_pretrained(MODEL['path'], local_files_only=True)
-        remaining()
-        TOKENIZER = value
-        return value
-    finally:
-        GATE.release()
-
-
 def tokens(text):
-    remaining()
-    value = tokenizer()
-    remaining()
-    result = len(value.encode(text, add_special_tokens=False))
-    remaining()
-    return result
+    return measure()(text)
 
 
 def semantic(text):
@@ -842,7 +816,8 @@ class Index:
         remaining()
         signature = SIGNATURE + ':admission:' + self.lease.sha
         snapshot = scan(self.root, self.lease.policy)
-        chunks = [chunk for path, note in snapshot.items() for chunk in split(path, note)]
+        count = measure() if snapshot else tokens
+        chunks = [chunk for path, note in snapshot.items() for chunk in split(path, note, count)]
         if len(chunks) > 10000:
             raise ValueError('The first index supports at most 10000 chunks.')
         with self.connect() as db:

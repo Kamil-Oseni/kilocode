@@ -5,6 +5,8 @@ import type { SecondBrainRequest } from "@kilocode/sdk/v2/client"
 import { MemoryRedact } from "@kilocode/kilo-memory/redact"
 import type { BrainCapture } from "../shared/second-brain"
 import type { failure } from "./capture-failure"
+import type { review } from "./committed-capture"
+import { fingerprint } from "./failed-repair"
 
 type Command = Extract<SecondBrainRequest["command"], { action: "capture" }>
 export type CaptureBinding = Readonly<{
@@ -13,6 +15,7 @@ export type CaptureBinding = Readonly<{
   owner: string
   generation: object
   index?: "unchecked" | "approved" | "synced" | "policy_disabled"
+  digest?: string
 }>
 type Turn = { project: string; sessionID: string; messageID: string; source_sha256: string }
 type Storage = { get<T>(key: string): T | undefined; update(key: string, value: unknown): PromiseLike<void> }
@@ -105,6 +108,20 @@ const rows = z.array(record).max(10000)
 export function records(input: unknown) {
   return rows.parse(input ?? [])
 }
+
+export function confirmation(value: Awaited<ReturnType<typeof review>>, original: ReturnType<typeof records>[number]) {
+  return {
+    format: "raya.memory.committed-capture.confirmation",
+    version: 1,
+    original,
+    completed: record.parse({ ...original, phase: "published", receipt: value.inputSHA }),
+    reviewSHA: fingerprint({ ...value, producer: undefined }),
+    policySHA: value.policySHA,
+    requestSettlement: false,
+    replay: false,
+    indexConfirmed: true,
+  }
+}
 const failures = z
   .array(
     z
@@ -186,6 +203,23 @@ function evidence(command: Command) {
   }
 }
 
+function recovery(
+  value: Awaited<ReturnType<typeof review>>,
+  audit: { phase: string; turn: unknown; reviewSHA: string; review: unknown } | undefined,
+) {
+  const { producer, ...evidence } = value
+  if (
+    producer.code !== 0 ||
+    !producer.originalJoined ||
+    !producer.readersJoined ||
+    audit?.phase !== "applied" ||
+    audit.reviewSHA !== fingerprint(evidence) ||
+    !isDeepStrictEqual(audit.review, evidence)
+  )
+    throw new Error("Original applied capture recovery audit required")
+  return audit
+}
+
 /** Host-private durable intake. A model or renderer cannot create saved consent. */
 export class CaptureIntake {
   private tail = Promise.resolve()
@@ -257,6 +291,16 @@ export class CaptureIntake {
   enabled() {
     const value = this.storage.get(key)
     return value !== undefined && consent.parse(value).enabled
+  }
+
+  recoverable() {
+    return records(this.storage.get(ledger)).filter(
+      (turn) =>
+        turn.phase === "saving" ||
+        turn.phase === "uncertain" ||
+        (turn.phase === "published" &&
+          this.storage.get(`raya.secondBrain.committedCaptureRecovery.${turn.id}.confirmation`) !== undefined),
+    )
   }
 
   private serial<T>(body: () => Promise<T>): Promise<T> {
@@ -397,6 +441,49 @@ export class CaptureIntake {
     diagnostic?: ReturnType<typeof failure>,
   ) {
     return this.transition(turn, phase, receipt, diagnostic)
+  }
+
+  /** Native recovery may confirm an existing effect only after current authenticated index inspection. */
+  confirmRecovery(value: Awaited<ReturnType<typeof review>>, binding: CaptureBinding, check: () => void) {
+    return this.serial(async () => {
+      check()
+      const saved = records(this.storage.get(ledger))
+      const prior = saved.find((row) => row.id === value.capture)
+      if (
+        !prior ||
+        binding.root !== value.root ||
+        prior.root !== binding.root ||
+        prior.release !== binding.release ||
+        binding.index !== "synced" ||
+        binding.digest !== value.policySHA
+      )
+        throw new Error("Original capture and current derived index must agree")
+      const key = `raya.secondBrain.committedCaptureRecovery.${prior.id}`
+      const audit = recovery(value, this.storage.get(key))
+      const original = record.parse(audit.turn)
+      const completed = record.parse({ ...original, phase: "published", receipt: value.inputSHA })
+      if (!isDeepStrictEqual(prior, original) && !isDeepStrictEqual(prior, completed))
+        throw new Error("Recovered capture history changed")
+      const target = `${key}.confirmation`
+      const retained = this.storage.get(target)
+      const proof = confirmation(value, original)
+      if (retained !== undefined && !isDeepStrictEqual(retained, proof))
+        throw new Error("Recovered capture confirmation differs")
+      await this.storage.update(target, proof)
+      check()
+      if (
+        !isDeepStrictEqual(this.storage.get(target), proof) ||
+        !isDeepStrictEqual(this.storage.get(key), audit) ||
+        !isDeepStrictEqual(records(this.storage.get(ledger)), saved)
+      )
+        throw new Error("Recovered capture confirmation changed")
+      const next = saved.map((row) => (row.id === prior.id ? completed : row))
+      await this.storage.update(ledger, next)
+      check()
+      if (!isDeepStrictEqual(records(this.storage.get(ledger)), next))
+        throw new Error("Recovered capture confirmation persistence failed")
+      this.changed()
+    })
   }
 
   private transition(

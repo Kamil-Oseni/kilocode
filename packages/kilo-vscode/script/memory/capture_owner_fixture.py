@@ -16,6 +16,8 @@ def main():
     unavailable.bind(('127.0.0.1', 0))
     os.environ['RAYA_RETRIEVAL_PORT'] = str(unavailable.getsockname()[1])
     try:
+        if sys.argv[1:] == ['--indexed-empty']:
+            fixture.server.INDEX.sync(expected=fixture.sha)
         listener = socket.socket()
         listener.bind(('127.0.0.1', 0))
         listener.listen()
@@ -32,6 +34,8 @@ def main():
             policy_sha256=fixture.sha, source_sha256=fixture.server.SOURCE)), flush=True)
         server.run(sockets=[listener])
         reader.join()
+        if sys.argv[1:] == ['--indexed-empty']:
+            assert not any(name in sys.modules for name in ('torch', 'transformers', 'scipy', 'sklearn'))
     finally:
         fixture.doCleanups()
         unavailable.close()

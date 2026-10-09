@@ -29,7 +29,7 @@ import { unchanged } from "./review"
 import { ClosedRequired } from "./closed-recovery"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
-import { CaptureIntake, records, type CapturePublication } from "./capture-intake"
+import { CaptureIntake, type CapturePublication } from "./capture-intake"
 import { failure } from "./capture-failure"
 import { personal } from "./scope"
 
@@ -1122,9 +1122,8 @@ export class BrainHost {
 
   private async recoverCapture() {
     if (!vscode.workspace.isTrusted) throw new Error("Trusted workspace required for Memory recovery")
-    const turns = records(this.context.globalState.get("raya.secondBrain.personalCapture.turns"))
-    const choices = turns
-      .filter((turn) => turn.phase === "saving" || turn.phase === "uncertain")
+    const choices = this.intake
+      .recoverable()
       .map((turn) => ({ label: turn.id, description: turn.root, detail: `Original message: ${turn.messageID}`, turn }))
     if (!choices.length) throw new Error("No interrupted capture is available for committed-effect review")
     const selected = await vscode.window.showQuickPick(choices, {
@@ -1132,19 +1131,54 @@ export class BrainHost {
       ignoreFocusOut: true,
     })
     if (!selected) return
-    const result = await this.service.recoverCapture(selected.turn, async (review) => {
-      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection is unavailable")
-      const accepted = await vscode.window.showWarningMessage(
-        `The original save ${review.capture} is present in ${review.root}. Its note bytes, change journal, policy and original completed request agree, and both original services closed successfully. Recover the saved service setup? The original request and capture history remain in the audit; the save will not be repeated. Search indexing still needs verification.`,
-        { modal: true },
-        "Recover committed save",
-      )
-      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
-      return accepted === "Recover committed save"
-    })
+    const key = `raya.secondBrain.committedCaptureRecovery.${selected.turn.id}`
+    const retained = this.context.globalState.get<{ phase: string }>(key)
+    const result =
+      retained?.phase === "applied"
+        ? await this.settings.reviewCapture(this.context.extensionPath, selected.turn)
+        : await this.service.recoverCapture(selected.turn, async (review) => {
+            if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection is unavailable")
+            const accepted = await vscode.window.showWarningMessage(
+              `The original save ${review.capture} is present in ${review.root}. Its note bytes, change journal, policy and original completed request agree, and both original services closed successfully. Recover the setup and refresh this verified source policy's search index? The original request and capture history remain in the audit; the save will not be repeated.`,
+              { modal: true },
+              "Recover committed save",
+            )
+            if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
+            return accepted === "Recover committed save"
+          })
     if (!result) return
+    await this.confirmCapture(result, selected.turn)
     await vscode.window.showInformationMessage(
-      "Memory service setup recovered. Original capture history is retained; capture history reconciliation and search indexing remain to be verified.",
+      "The original Memory save is confirmed and its current source policy is indexed. The original audit is retained.",
+    )
+  }
+
+  private async confirmCapture(
+    result: Awaited<ReturnType<BrainSettings["reviewCapture"]>>,
+    turn: Parameters<BrainSettings["reviewCapture"]>[1],
+  ) {
+    const check = () => {
+      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
+    }
+    check()
+    await this.control.sync(
+      async (review) => {
+        check()
+        if (review.digest !== result.policySHA) throw new Error("Recovered capture source policy changed")
+        return true
+      },
+      (expected, signal, close) => this.service.sync(expected, signal, close),
+    )
+    const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn)
+    check()
+    const binding = await this.service.captureSelection(AbortSignal.timeout(35000), reviewed.policySHA)
+    await this.service.configure(
+      () =>
+        this.intake.confirmRecovery(reviewed, binding, () => {
+          check()
+          if (!this.service.captureCurrent(binding)) throw new Error("Recovered capture generation changed")
+        }),
+      false,
     )
   }
 

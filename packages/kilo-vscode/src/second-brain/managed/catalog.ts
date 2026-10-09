@@ -4,6 +4,7 @@ export const supervisors = [
   supervisor,
   "31200051a3248182a01284fa0f8524d07c5360aaf21b5df76025574ff7497e60",
   "953e159d25e57ac862bd96be56b2b53a2febaf89f2e74628b8a11c92cabceb1b",
+  "6f6d15bc6d9d8e041ef8afbde4a7b9ca21fcef024c4b5cfc8cad3643d13c224a",
 ] as const
 
 export const retrieval = Object.freeze({

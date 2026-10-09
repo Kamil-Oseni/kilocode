@@ -230,7 +230,7 @@ export class BrainService {
     }
   }
 
-  async captureSelection(signal: AbortSignal): Promise<CaptureBinding> {
+  async captureSelection(signal: AbortSignal, expected?: string): Promise<CaptureBinding> {
     if (this.closed || this.changing || this.pending.size || this.settings.pending())
       throw new Error("Memory capture selection is busy or uncertain")
     const cfg = await this.prepare(signal)
@@ -244,6 +244,8 @@ export class BrainService {
     this.operation ??= new OperationOwner(this.settings, cfg.key, cfg.setup)
     const original = this.operation
     const health = await original.health(signal)
+    if (expected !== undefined && (health.index?.status !== "synced" || health.index.digest !== expected))
+      throw new Error("Recovered capture requires its exact current derived index")
     signal.throwIfAborted()
     return this.bind(cfg.setup, original, health)
   }
@@ -262,6 +264,7 @@ export class BrainService {
       owner: health.epoch,
       generation: original,
       index: captureIndex(health),
+      ...(health.index && "digest" in health.index ? { digest: health.index.digest } : {}),
     })
     this.captures.set(binding, setup)
     this.selection = binding

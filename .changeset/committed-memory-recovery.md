@@ -2,4 +2,4 @@
 "raya": patch
 ---
 
-Recover an interrupted Memory save after verifying its original committed notes and clean service shutdown. Preserve the original audit and protect recovery across restarts without repeating the save.
+Recover an interrupted Memory save after verifying its original committed notes and clean service shutdown. Confirm retained capture history only after the current index matches, preserve the original audit and resume interrupted confirmations without repeating the save. Count indexing tokens without loading the model stack.

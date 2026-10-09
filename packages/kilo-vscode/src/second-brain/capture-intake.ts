@@ -275,7 +275,8 @@ export class CaptureIntake {
     const saved = rows.parse(this.storage.get(ledger) ?? [])
     const selected = saved.filter((row) => row.root === cfg.root && row.release === cfg.release)
     if (selected.some((row) => this.active.has(row.id))) return { status: "saving" }
-    if (selected.some((row) => row.phase === "saving" || row.phase === "uncertain")) return { status: "uncertain" }
+    if (saved.some((row) => row.root === cfg.root && (row.phase === "saving" || row.phase === "uncertain")))
+      return { status: "uncertain" }
     if (selected.some((row) => row.phase === "capacity")) return { status: "capacity", reason: "source_capacity" }
     if (saved.length >= 10000) return { status: "capacity", reason: "ledger_capacity" }
     if (
@@ -364,6 +365,9 @@ export class CaptureIntake {
         phase: "reserved",
       })
       const saved = rows.parse(this.storage.get(ledger) ?? [])
+      // An upgrade changes future consent, never permission to bypass an unresolved original effect on these notes.
+      if (saved.some((row) => row.root === binding.root && (row.phase === "saving" || row.phase === "uncertain")))
+        return undefined
       const id = identity(turn)
       // Retain uncertainty and exact completed IDs across reopen; never evict to permit replay.
       if (saved.some((row) => row.id === id)) return undefined

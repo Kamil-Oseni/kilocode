@@ -1,5 +1,6 @@
 import path from "node:path"
 import { mkdir, open } from "node:fs/promises"
+import { isDeepStrictEqual } from "node:util"
 import { check, child, document, sha } from "../control/frames"
 import { directory, environment, image, normalize, powershell } from "../control/identity"
 import { command } from "../control/command"
@@ -132,6 +133,54 @@ print(json.dumps({'namespaces':namespaces,'directories':directories},separators=
   return value
 }
 
+/** Read-only reconstruction proves a successor changed only its reviewed native request namespaces. */
+export async function review(cfg: Descriptor, launch: Launch, current: Descriptor, files: readonly { raw: Buffer }[]) {
+  location(cfg, launch)
+  check(
+    isDeepStrictEqual({ ...current, plan: cfg.plan, retrieval: cfg.retrieval, namespaces: cfg.namespaces }, cfg),
+    "Successor changed immutable runtime selection",
+  )
+  for (const kind of ["memory", "retrieval"] as const)
+    check(
+      current.namespaces[kind].root === path.join(launch.root, kind) &&
+        current.namespaces[kind].sid === cfg.namespaces[kind].sid,
+      "Successor native namespace location differs",
+    )
+  check(
+    current.plan.path === path.join(launch.root, "memory-plan.json") &&
+      current.retrieval?.path === path.join(launch.root, "retrieval-plan.json"),
+    "Successor plan location differs",
+  )
+  const observed = await observe(cfg, launch, current.namespaces)
+  check(
+    isDeepStrictEqual(JSON.parse(JSON.stringify(observed.namespaces)), current.namespaces),
+    "Successor native namespace witnesses differ",
+  )
+  const dirs = directories(files[2].raw, observed.directories)
+  for (const [index, kind] of ["memory", "retrieval"].entries()) {
+    const ref = kind === "memory" ? current.plan : current.retrieval!
+    const selected = await image(ref.path, 16777216)
+    check(
+      selected.digest === ref.sha256 &&
+        selected.raw.length === ref.bytes &&
+        project(files[index + 2].raw, kind as "memory" | "retrieval", current.namespaces, dirs).equals(selected.raw),
+      "Successor changed unrelated original plan bytes",
+    )
+  }
+  return Object.freeze({ namespaces: current.namespaces, directories: observed.directories })
+}
+
+function directories(raw: Buffer, additions: { path: string; identity: string[] }[]) {
+  const parsed = document(raw, 16777216, 1000000)
+  const node = child(parsed.tree, "directories")
+  check(node.type === "array", "Original directory inventory required")
+  const values = additions.map(
+    (item) => '{"path":' + JSON.stringify(item.path) + ',"identity":[' + item.identity.join(",") + "]}",
+  )
+  const original = parsed.text.slice(node.offset, node.offset + node.length)
+  return original.slice(0, -1) + (node.children?.length ? "," : "") + values.join(",") + "]"
+}
+
 /** Creation is never resumed or replayed: any partial generation remains an exclusive sticky collision. */
 export async function generation(cfg: Descriptor, launch: Launch, files: readonly { raw: Buffer }[]) {
   location(cfg, launch)
@@ -163,14 +212,7 @@ async function create(cfg: Descriptor, launch: Launch, files: readonly { raw: Bu
   }
   const observed = await observe(cfg, launch, roots)
   const namespaces = observed.namespaces
-  const parsed = document(files[2].raw, 16777216, 1000000)
-  const node = child(parsed.tree, "directories")
-  check(node.type === "array", "Original directory inventory required")
-  const additions = observed.directories.map(
-    (item) => '{"path":' + JSON.stringify(item.path) + ',"identity":[' + item.identity.join(",") + "]}",
-  )
-  const original = parsed.text.slice(node.offset, node.offset + node.length)
-  const dirs = original.slice(0, -1) + (node.children?.length ? "," : "") + additions.join(",") + "]"
+  const dirs = directories(files[2].raw, observed.directories)
   const plan = await save(path.join(launch.root, "memory-plan.json"), project(files[2].raw, "memory", namespaces, dirs))
   const retrieval = await save(
     path.join(launch.root, "retrieval-plan.json"),

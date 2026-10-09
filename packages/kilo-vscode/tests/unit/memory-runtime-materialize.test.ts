@@ -4,7 +4,10 @@ import path from "node:path"
 import os from "node:os"
 import { materialize } from "../../src/second-brain/managed/materialize"
 import { review } from "../../src/second-brain/managed/upgrade-review"
-import { publish } from "../../src/second-brain/managed/upgrade-publish"
+import { publish, inspect } from "../../src/second-brain/managed/upgrade-publish"
+import { generation, review as successor } from "../../src/second-brain/managed/generation"
+import { launch } from "../../src/second-brain/managed/restart"
+import { lineage } from "../../src/second-brain/managed/upgrade-lineage"
 import { descriptor, paired, selection, type Descriptor } from "../../src/second-brain/managed/descriptor"
 import { current, retrieval } from "../../src/second-brain/managed/catalog"
 import { images, fingerprint } from "../../src/second-brain/managed/reuse-catalog"
@@ -296,6 +299,90 @@ print('reusable-v2-external-notes-qualified')`
   expect(await readFile(path.join(notes, "README.md"))).toEqual(before)
 }, 30000)
 
+test("successor review reconstructs actual native plans and refuses unrelated bytes or namespace witnesses", async () => {
+  const prepared = await materialize(cfg, setup, path.resolve("."), "1".repeat(32))
+  const selected = prepared.next.managed
+  const before = await selection(selected, prepared.next.setup)
+  const first = await launch(selected, prepared.next.setup)
+  const current = await generation(selected, first, before.files)
+  const proof = await successor(selected, first, current, before.files)
+  expect(proof.namespaces).toEqual(current.namespaces)
+  expect(proof.directories).toHaveLength(7)
+  const after = await selection(selected, prepared.next.setup)
+  expect(after.files.map((item) => item.digest)).toEqual(before.files.map((item) => item.digest))
+  expect(after.files.map((item) => item.tuple)).toEqual(before.files.map((item) => item.tuple))
+  expect((await lineage(selected, prepared.next.setup, selected, undefined)).generations).toBe(0)
+  const inputs = await selection(current, prepared.next.setup)
+  const root = await stat(cfg.root, { bigint: true })
+  // This inert selected-phase receipt describes real files/namespaces; it asserts no live producer or closure.
+  const file = path.join(first.root, "managed-reservation.json")
+  const metadata = {
+    format: "raya.memory.managed.pair.selected",
+    version: 2,
+    descriptor: current,
+    rootIdentity: [root.dev, root.ino, root.birthtimeNs].map(String),
+    images: inputs.files.map((item, index) => ({
+      ref: [current.python, current.supervisor, current.plan, current.retrieval][index],
+      sha256: item.digest,
+      tuple: item.tuple,
+    })),
+    containment: "two original processes and their pipes only",
+  }
+  await writeFile(file, JSON.stringify(metadata))
+  const receipt = await image(file)
+  const state = {
+    phase: "selected",
+    receipt: { path: file, bytes: receipt.raw.length, sha256: receipt.digest, tuple: receipt.tuple },
+  }
+  expect((await lineage(selected, prepared.next.setup, current, state)).generations).toBe(1)
+  await expect(lineage(selected, prepared.next.setup, current, { ...state, phase: "running" })).rejects.toThrow(
+    "Exact runtime lineage phase receipt required",
+  )
+  await expect(lineage(selected, prepared.next.setup, selected, state)).rejects.toThrow(
+    "Current runtime differs from reviewed successor lineage",
+  )
+  const raw = await readFile(current.plan.path)
+  const value = JSON.parse(raw.toString("utf8")) as { env: Record<string, string> }
+  await writeFile(
+    current.plan.path,
+    JSON.stringify({ ...value, env: { ...value.env, HOME: path.join(outer, "foreign-home") } }),
+  )
+  const changed = await image(current.plan.path)
+  await expect(
+    successor(
+      selected,
+      first,
+      { ...current, plan: { path: current.plan.path, bytes: changed.raw.length, sha256: changed.digest } },
+      before.files,
+    ),
+  ).rejects.toThrow("Successor changed unrelated original plan bytes")
+  await writeFile(current.plan.path, raw)
+  const witness = current.namespaces.memory.generations.root
+  await expect(
+    successor(
+      selected,
+      first,
+      {
+        ...current,
+        namespaces: {
+          ...current.namespaces,
+          memory: {
+            ...current.namespaces.memory,
+            generations: {
+              ...current.namespaces.memory.generations,
+              root: [witness[0], witness[1], String(BigInt(witness[2]) + 1n)],
+            },
+          },
+        },
+      },
+      before.files,
+    ),
+  ).rejects.toThrow("Successor native namespace witnesses differ")
+  await expect(
+    successor(selected, first, { ...current, python: { ...current.python, sha256: "a".repeat(64) } }, before.files),
+  ).rejects.toThrow("Successor changed immutable runtime selection")
+}, 30000)
+
 test("runtime publication survives every physical save acknowledgement loss and a cold applied retry", async () => {
   const prepared = await materialize(cfg, setup, path.resolve("."), "f".repeat(32))
   const key = "raya.secondBrain.setup"
@@ -393,6 +480,31 @@ test("runtime publication survives every physical save acknowledgement loss and 
       consent ? { ...consent, release: digest(prepared.next.setup.source_sha256) } : undefined,
     )
     expect((await publish(cold, prepared.receipt)).publication).toEqual(recovered.publication)
+    if (failure === 11) {
+      const inspected = await inspect(cold, prepared.receipt)
+      expect(inspected.saved).toEqual(original)
+      expect(inspected.publication).toEqual(recovered.publication)
+      expect(inspected.indexConfirmed).toBe(false)
+      expect(inspected.requestSettlement).toBe(false)
+      const audit = `raya.secondBrain.runtimeUpgrade.${prepared.id}`
+      await cold.update(audit, { ...recovered.publication, phase: "prepared" })
+      await expect(inspect(cold, prepared.receipt)).rejects.toThrow(
+        "Applied runtime publication and cleared startup fence required",
+      )
+      await cold.update(audit, recovered.publication)
+      await cold.update(audit, {
+        ...recovered.publication,
+        next: [
+          {
+            present: true,
+            value: { ...original, credential: "raya.secondBrain.key.bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" },
+          },
+          ...recovered.publication.next.slice(1),
+        ],
+      })
+      await expect(inspect(cold, prepared.receipt)).rejects.toThrow("Retained runtime upgrade publication differs")
+      await cold.update(audit, recovered.publication)
+    }
   }
 }, 180000)
 

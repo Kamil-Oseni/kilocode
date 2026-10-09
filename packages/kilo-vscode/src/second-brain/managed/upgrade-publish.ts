@@ -187,8 +187,7 @@ async function apply(
   return applied
 }
 
-/** Prefix publication is resumable after physical-write/ack loss. An unresolved fence remains; no rollback overwrites foreign state. */
-export async function publish(storage: Storage, artifact: Descriptor["plan"]) {
+async function preparation(storage: Storage, artifact: Descriptor["plan"]) {
   const { id, key, held, retained, original } = intent(storage, artifact)
   const previous = entry(value(original[0]))
   const proof = await review(artifact, { setup: parse(previous.setup), managed: previous.managed })
@@ -220,9 +219,29 @@ export async function publish(storage: Storage, artifact: Descriptor["plan"]) {
   }
   if (original[2].present && !original[1].present)
     throw new Error("Automatic saving requires its retained control catalog")
+  check(/^[a-f0-9]{64}$/.test(audit.ledgerSHA), "Original capture ledger digest required")
   const marker: Marker = { format: "raya.memory.runtime.upgrade.pending", version: 1, audit }
   if (held) check(isDeepStrictEqual(held, marker), "Retained upgrade fence differs")
   if (retained) same(audit, retained)
+  return { key, held, retained, selected, proof, audit, marker }
+}
+
+/** Fresh native review of an applied publication does not mutate settings or claim the index is ready. */
+export async function inspect(storage: Storage, artifact: Descriptor["plan"]) {
+  const value = await preparation(storage, artifact)
+  check(
+    value.retained?.phase === "applied" &&
+      value.retained.stage === 3 &&
+      storage.get(pending) === undefined &&
+      isDeepStrictEqual(storage.get(value.key), value.retained),
+    "Applied runtime publication and cleared startup fence required",
+  )
+  return Object.freeze({ ...value.proof, publication: value.retained, saved: value.selected })
+}
+
+/** Prefix publication is resumable after physical-write/ack loss. An unresolved fence remains; no rollback overwrites foreign state. */
+export async function publish(storage: Storage, artifact: Descriptor["plan"]) {
+  const { key, held, retained, selected, proof, audit, marker } = await preparation(storage, artifact)
   const verify = () => {
     check(
       storage.get("raya.secondBrain.control.uncertainty") === undefined && digest(storage) === audit.ledgerSHA,

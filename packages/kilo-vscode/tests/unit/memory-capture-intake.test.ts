@@ -44,6 +44,61 @@ test("runtime consent migration preserves human authorization and refuses unrela
   expect(() => migrate(consent, previous, parse({ ...next, root: "D:/Other" }))).toThrow()
 })
 
+test("an unresolved original save fences future grants across a source release upgrade", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "raya-capture-upgrade-fence-"))
+  const file = path.join(dir, "state.json")
+  const storage = {
+    get<T>(key: string): T | undefined {
+      return existsSync(file) ? JSON.parse(readFileSync(file, "utf8"))[key] : undefined
+    },
+    async update(key: string, value: unknown) {
+      const prior = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {}
+      await Bun.write(file, JSON.stringify({ ...prior, [key]: value }))
+    },
+  }
+  try {
+    const intake = new CaptureIntake(storage)
+    const old = {
+      root: path.join(dir, "notes"),
+      release: "a".repeat(64),
+      owner: "old-owner",
+      generation: {},
+      index: "synced" as const,
+    }
+    const current = { ...old, release: "b".repeat(64), owner: "current-owner", generation: {} }
+    const consent = {
+      version: 1,
+      enabled: true,
+      root: old.root,
+      release: old.release,
+      zone: "America/Toronto",
+      model: "pinned-local-model",
+      authorization: { source: "Original human authorization", sha256: "c".repeat(64) },
+    }
+    await intake.save(consent, old)
+    const turn = { project: dir, sessionID: "original", messageID: "message", source_sha256: "d".repeat(64) }
+    expect(await intake.grant(turn, old, () => {})).toBeDefined()
+    await intake.begin(turn)
+    intake.end(turn)
+    const ledger = storage.get("raya.secondBrain.personalCapture.turns")
+    await intake.save({ ...consent, release: current.release }, current)
+    const cold = new CaptureIntake(storage)
+    expect(cold.snapshot(current).status).toBe("uncertain")
+    expect(await cold.grant({ ...turn, sessionID: "new" }, current, () => {})).toBeUndefined()
+    expect(storage.get("raya.secondBrain.personalCapture.turns")).toEqual(ledger)
+    await intake.finish(turn, "published", "e".repeat(64))
+    expect(cold.snapshot(current).status).toBe("ready")
+    expect(await cold.grant({ ...turn, sessionID: "new" }, current, () => {})).toBeDefined()
+    expect(storage.get<Array<{ release: string }>>("raya.secondBrain.personalCapture.turns")![0].release).toBe(
+      old.release,
+    )
+  } finally {
+    expect(path.dirname(dir)).toBe(tmpdir())
+    expect(path.basename(dir).startsWith("raya-capture-upgrade-fence-")).toBe(true)
+    await rm(dir, { recursive: true })
+  }
+})
+
 test("durable original capture grants bind consent, generation, source and local day without replay", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "raya-capture-intake-"))
   const file = path.join(dir, "state.json")

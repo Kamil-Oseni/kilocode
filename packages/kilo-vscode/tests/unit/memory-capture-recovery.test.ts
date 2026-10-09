@@ -539,7 +539,7 @@ for (const stage of ["state", "verified", "clear", "applied"])
   }, 60000)
 
 test("recovered capture ledger requires the applied original audit and matching current index inputs", async () => {
-  const value = await fixture()
+  const value = await fixture(undefined, true)
   try {
     const settings = value.settings()
     const result = (await settings.recoverCapture(process.cwd(), value.turn, async () => true))!
@@ -597,7 +597,7 @@ test("recovered capture confirmation resumes after a physical ledger write fails
       fault.enabled = false
       throw new Error("Synthetic confirmation acknowledgement failure")
     }
-  })
+  }, true)
   try {
     const result = (await value.settings().recoverCapture(process.cwd(), value.turn, async () => true))!
     const before = await inventory(value.notes)

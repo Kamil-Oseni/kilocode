@@ -90,7 +90,7 @@ const services = new WeakMap<
 const catalogKey = "raya.secondBrain.control.catalog"
 
 export function drainBrain() {
-  return drain()
+  return drain(true)
 }
 
 export class BrainHost {
@@ -545,7 +545,10 @@ export class BrainHost {
         return this.recoverCapture()
       }),
     )
-    const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
+    const close = (terminating = false) => {
+      if (terminating) this.settings.retire()
+      return join([this.control.dispose(), this.service.dispose(), Control.drain()])
+    }
     register(close)
     context.subscriptions.push({
       dispose: () => {

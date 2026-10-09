@@ -177,6 +177,8 @@ export class BrainSettings {
   private managedEntry: ReturnType<BrainSettings["entry"]> | undefined
   private readonly launches = new WeakMap<object, Launch>()
   private reopening?: Promise<void>
+  private retiring = false
+  private deferred?: Receipt
   constructor(
     private readonly storage: Pick<Memento, "get" | "update">,
     private readonly secrets: Pick<SecretStorage, "get" | "store" | "delete">,
@@ -225,6 +227,7 @@ export class BrainSettings {
   }
 
   private available() {
+    if (this.retiring) throw new Error("Memory settings are retired")
     if (this.storage.get(recovering) !== undefined)
       throw new Error("Interrupted Memory recovery must finish before Memory can start")
   }
@@ -258,6 +261,11 @@ export class BrainSettings {
     return launch
   }
 
+  /** Explicit extension termination only; ordinary disconnect still publishes through Memento. */
+  retire() {
+    this.retiring = true
+  }
+
   /** Original owner retains this exact selected entry; persisted references never mint cold proof. */
   managed(input: unknown) {
     const entry = this.loaded.get(input as object)
@@ -268,7 +276,7 @@ export class BrainSettings {
     return async (phase: "selected" | "running" | "closed" | "uncertain", receipt: Receipt, managed?: Descriptor) => {
       const proof = checked(receipt)
       await this.serial(async () => {
-        const current = this.entry(this.storage.get<unknown>(state))
+        const current = this.publication()
         const pending = this.pending()
         if (!isDeepStrictEqual(current, retained.entry) || (pending && phase !== "closed"))
           throw new Error("Original managed setup/debt changed")
@@ -289,13 +297,50 @@ export class BrainSettings {
           ...(selected ? { managed: selected } : {}),
           launch: { phase, receipt: proof, ...(history?.length ? { history } : {}) },
         }
-        await this.storage.update(state, next)
-        if (!isDeepStrictEqual(this.storage.get<unknown>(state), next) || !isDeepStrictEqual(this.pending(), pending))
-          throw new Error("Original managed receipt publication changed")
-        retained.entry = next
-        this.managedEntry = next
+        const saved = await this.commit(current, pending, next, phase, proof)
+        retained.entry = saved
+        this.managedEntry = saved
       })
     }
+  }
+
+  private publication() {
+    if (this.deferred) throw new Error("Original managed shutdown publication already deferred")
+    return this.entry(this.storage.get<unknown>(state))
+  }
+
+  private async commit(
+    entry: ReturnType<BrainSettings["entry"]>,
+    pending: ReturnType<BrainSettings["pending"]>,
+    next: ReturnType<BrainSettings["entry"]>,
+    phase: string,
+    proof: Receipt,
+  ) {
+    if (await this.defer(entry, pending, phase, proof)) return entry
+    await this.storage.update(state, next)
+    if (!isDeepStrictEqual(this.storage.get<unknown>(state), next) || !isDeepStrictEqual(this.pending(), pending))
+      throw new Error("Original managed receipt publication changed")
+    return next
+  }
+
+  private async defer(
+    entry: ReturnType<BrainSettings["entry"]>,
+    pending: ReturnType<BrainSettings["pending"]>,
+    phase: string,
+    proof: Receipt,
+  ) {
+    if (!this.retiring || phase !== "closed" || entry.managed?.version !== 2) return false
+    // VS Code disconnects storage RPC before deactivate. The exact durable
+    // original closure is reconciled by supported cold recovery on next load.
+    if (!isDeepStrictEqual((await closed(entry)).closed, proof))
+      throw new Error("Original deferred shutdown receipt differs")
+    if (
+      !isDeepStrictEqual(this.entry(this.storage.get<unknown>(state)), entry) ||
+      !isDeepStrictEqual(this.pending(), pending)
+    )
+      throw new Error("Original deferred shutdown selection changed")
+    this.deferred = proof
+    return true
   }
 
   pending() {

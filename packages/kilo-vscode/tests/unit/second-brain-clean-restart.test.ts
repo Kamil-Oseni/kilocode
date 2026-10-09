@@ -20,7 +20,7 @@ import { image } from "../../src/second-brain/control/identity"
 import { review as archive, absent } from "../../src/second-brain/failed-archive"
 import { review as closure, ClosedRequired } from "../../src/second-brain/closed-recovery"
 
-test("missed shutdown publication recovers only the exact closed pair after its original parent exits", async () => {
+test("missed shutdown publication after explicit termination recovers only the exact closed pair after its original parent exits", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "raya-closed-pair-parent-"))
   const runner = path.join(dir, "producer.ts")
   const source = await readFile(import.meta.filename, "utf8")
@@ -32,7 +32,7 @@ test("missed shutdown publication recovers only the exact closed pair after its 
     runner,
     header +
       imports +
-      "\nconst value = await fixture(); console.log(JSON.stringify({root:value.root,file:value.file,running:value.running,closed:value.closed}));\n",
+      '\nconst value = await fixture("raya.memory.operation.v1", undefined, async (settings, record, closed) => { settings.retire(); await record("closed", closed); await expect(settings.load()).rejects.toThrow("retired"); }); console.log(JSON.stringify({root:value.root,file:value.file,running:value.running,closed:value.closed}));\n',
   )
   const child = Bun.spawn([process.execPath, runner], {
     cwd: process.cwd(),
@@ -71,7 +71,7 @@ test("missed shutdown publication recovers only the exact closed pair after its 
   })
   const key = "raya.secondBrain.setup"
   try {
-    await storage.update(key, value.running)
+    expect(storage.get(key)).toEqual(value.running)
     const reviewed = await closure(value.running as Parameters<typeof closure>[0])
     expect(reviewed.pids).toContain(child.pid)
     expect((await absent(reviewed)).helper.code).toBe(0)
@@ -349,6 +349,55 @@ function uncertain(root: string, pins = release) {
     },
   }
 }
+
+test("ordinary disconnect retains a storage failure instead of deferring its original closure", async () => {
+  const failure = new Error("Storage RPC unavailable")
+  const value = await fixture(
+    "raya.memory.operation.v1",
+    async (key, item) => {
+      if (key !== "raya.secondBrain.setup" || !item || typeof item !== "object" || !("launch" in item)) return
+      if ((item.launch as { phase: string }).phase === "closed") throw failure
+    },
+    async (_, record, proof) => {
+      await expect(record("closed", proof)).rejects.toBe(failure)
+    },
+  )
+  try {
+    expect((await image(value.closed.path)).digest).toBe(value.closed.sha256)
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)
+
+test("explicit termination defers only verified original closure and preserves request debt without storage writes", async () => {
+  const calls = { closed: 0 }
+  const value = await fixture(
+    "raya.memory.operation.v2",
+    async (key, item) => {
+      if (key !== "raya.secondBrain.setup" || !item || typeof item !== "object" || !("launch" in item)) return
+      if ((item.launch as { phase: string }).phase !== "closed") return
+      calls.closed++
+      throw new Error("Storage RPC unavailable")
+    },
+    async (settings, record, proof) => {
+      await settings.record(uncertain(path.dirname(proof.path)))
+      settings.retire()
+      await expect(record("closed", { ...proof, sha256: "0".repeat(64) })).rejects.toThrow("receipt differs")
+      await record("closed", proof)
+      await expect(record("closed", proof)).rejects.toThrow("already deferred")
+      await expect(settings.load()).rejects.toThrow("retired")
+    },
+  )
+  try {
+    const data = JSON.parse(await readFile(value.file, "utf8"))
+    expect(data["raya.secondBrain.setup"]).toEqual(value.running)
+    expect(data["raya.secondBrain.control.uncertainty"]).toEqual(uncertain(value.root))
+    expect(calls.closed).toBe(0)
+    await expect(value.settings().resume(async () => true)).rejects.toThrow("Request debt requires original settlement")
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)
 
 test("original managed shutdown records both joined producers while preserving capture debt", async () => {
   const value = await fixture(

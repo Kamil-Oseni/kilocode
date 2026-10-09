@@ -171,6 +171,42 @@ test("natural preference wording can acknowledge without acquisition or goal com
   }
 })
 
+test("the installed preference statement can finish after status without treating status as saved-note evidence", () => {
+  const original = fixture()
+  const text =
+    "For Raya's first-time setup, I prefer brief conversational ask cards instead of long forms with lots of text. Keep the Memory tab for manually inspecting and adjusting settings. Do not change lights or place orders."
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+  part.text = text
+  original.session.metadata[RayaChief.requestKey] = text
+  original.tool.state = { ...original.tool.state, input: { action: "status" } }
+  expect(acknowledged(original.messages, original.session, uid)).toBe(true)
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+  expect(acknowledged(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
+  for (const value of [
+    "I prefer concise replies.",
+    "I would prefer brief conversational ask cards.",
+    "For first-time setup, I prefer brief ask cards. Do not change lights or place orders.",
+  ]) {
+    part.text = value
+    original.session.metadata[RayaChief.requestKey] = value
+    expect(acknowledged(original.messages, original.session, uid)).toBe(true)
+  }
+  for (const value of [
+    "I prefer concise replies and deploy the app.",
+    "I prefer you delete the old notes.",
+    "I prefer brief ask cards. Change the settings.",
+    "I prefer brief ask cards. Keep the lights on.",
+    "I prefer you recall my saved preferences.",
+    "I prefer brief ask cards. Do not change lights or place orders, then install the extension.",
+  ]) {
+    part.text = value
+    original.session.metadata[RayaChief.requestKey] = value
+    expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("compound work, memory retrieval and structured output do not become acknowledgement-only turns", () => {
   for (const text of [
     request,

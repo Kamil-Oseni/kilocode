@@ -10,6 +10,7 @@ import { fingerprint } from "./failed-repair"
 import type { Setup } from "./settings"
 import { linked } from "./managed/capture-upgrade"
 import { review as refused } from "./capture-refusal"
+import { review as reserved } from "./capture-reserved"
 
 type Command = Extract<SecondBrainRequest["command"], { action: "capture" }>
 export type CaptureBinding = Readonly<{
@@ -459,6 +460,63 @@ export class CaptureIntake {
     diagnostic?: ReturnType<typeof failure>,
   ) {
     return this.transition(turn, phase, receipt, diagnostic)
+  }
+
+  /** Review cannot consume a grant or hide original in-memory activity. */
+  async reviewReservation(id: string, extension: string) {
+    const check = () => {
+      if (this.active.has(id) || Array.from(this.grants.values()).some((grant) => identity(grant.turn) === id))
+        throw new Error("Original capture grant or activity still belongs to this host")
+    }
+    check()
+    const proof = await reserved(id, this.storage, extension)
+    check()
+    return proof
+  }
+
+  reservations() {
+    return records(this.storage.get(ledger)).filter(
+      (row) =>
+        row.phase === "reserved" ||
+        this.storage.get<{ phase: string }>(`raya.secondBrain.captureReservation.${row.id}`)?.phase === "prepared",
+    )
+  }
+
+  /** Native-only abandonment retains the original reservation and never grants its replay. */
+  abandonReservation(id: string, extension: string, check: () => void) {
+    return this.serial(async () => {
+      check()
+      const proof = await this.reviewReservation(id, extension)
+      const key = `raya.secondBrain.captureReservation.${id}`
+      const held = this.storage.get<{ phase: string; observation: unknown }>(key)
+      const { observation, ...stable } = proof
+      const prepared = { ...stable, observation: held?.observation ?? observation, phase: "prepared" }
+      const applied = { ...prepared, phase: "applied" }
+      if (held !== undefined && !isDeepStrictEqual(held, prepared) && !isDeepStrictEqual(held, applied))
+        throw new Error("Original reservation abandonment audit differs")
+      if (held === undefined) await this.storage.update(key, prepared)
+      check()
+      if (!isDeepStrictEqual(this.storage.get(key), held ?? prepared))
+        throw new Error("Original reservation audit was not retained")
+      const verify = async () => {
+        const { observation: _observation, ...current } = await this.reviewReservation(id, extension)
+        if (!isDeepStrictEqual(current, stable)) throw new Error("Original reservation review changed")
+        check()
+      }
+      await verify()
+      const saved = records(this.storage.get(ledger))
+      const next = saved.map((row) => (row.id === id ? proof.completed : row))
+      await this.storage.update(ledger, next)
+      check()
+      if (!isDeepStrictEqual(records(this.storage.get(ledger)), next))
+        throw new Error("Original reservation disposition was not retained")
+      await this.storage.update(key, applied)
+      await verify()
+      if (!isDeepStrictEqual(this.storage.get(key), applied))
+        throw new Error("Original reservation audit confirmation changed")
+      this.changed()
+      return applied
+    })
   }
 
   /** Native review retains a source-qualified pre-launch refusal; the original ID stays fenced. */

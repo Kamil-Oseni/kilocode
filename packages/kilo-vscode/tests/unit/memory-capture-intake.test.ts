@@ -179,6 +179,8 @@ test("durable original capture grants bind consent, generation, source and local
         source: { ...source, tools: [{ id: "tool", name: "read", status: "pretended", text: "success" }] },
       }),
     ).toThrow()
+    await expect(intake.reviewReservation(command.id, "unused-while-granted")).rejects.toThrow("grant or activity")
+    expect(storage.get("raya.secondBrain.captureReservation." + command.id)).toBeUndefined()
     const body = intake.consume(turn, command, binding, () => {})
     expect(body.day).toBe("2026-01-01")
     expect(body.entries).toEqual([])

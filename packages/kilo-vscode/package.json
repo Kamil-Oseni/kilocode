@@ -125,6 +125,11 @@
         "category": "Raya"
       },
       {
+        "command": "kilo-code.new.memory.abandonReservedCapture",
+        "title": "Review Interrupted Memory Extraction",
+        "category": "Raya"
+      },
+      {
         "command": "kilo-code.new.memory.upgradeRuntime",
         "title": "Update a Closed Memory Runtime",
         "category": "Raya"

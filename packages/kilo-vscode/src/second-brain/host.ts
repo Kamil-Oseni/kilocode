@@ -549,6 +549,10 @@ export class BrainHost {
         if (args.length) throw new Error("Native capture refusal review accepts no command arguments")
         return this.reconcileRefusal()
       }),
+      vscode.commands.registerCommand("kilo-code.new.memory.abandonReservedCapture", (...args: unknown[]) => {
+        if (args.length) throw new Error("Native reservation review accepts no command arguments")
+        return this.abandonReservation()
+      }),
     )
     const close = (terminating = false) => {
       if (terminating) this.settings.retire()
@@ -1202,6 +1206,42 @@ export class BrainHost {
     await this.service.configure(() => this.intake.reconcileRefusal(input, check).then(() => undefined), false)
     await vscode.window.showInformationMessage(
       "The original refused save is retained in its audit. Only new conversations may save.",
+    )
+  }
+
+  private async abandonReservation() {
+    const check = () => {
+      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Native reservation review is unavailable")
+    }
+    check()
+    const rows = this.intake.reservations()
+    const picked = await vscode.window.showQuickPick(
+      rows.map((row) => ({
+        label: row.id,
+        description: row.sessionID,
+        detail: `Reserved attempt · ${row.root}`,
+      })),
+      {
+        title: "Review an interrupted Memory extraction",
+        placeHolder: "Choose the original reserved attempt to abandon",
+      },
+    )
+    if (!picked) return
+    const proof = await this.intake.reviewReservation(picked.label, this.context.extensionPath)
+    check()
+    const accepted = await vscode.window.showWarningMessage(
+      `Attempt ${proof.original.id} remains reserved and has no grant or active save in this host. Its exact current runtime is closed with verified producer absence. Retain the original attempt and closure in an audit and mark it skipped? This saves no facts, settles no transport request and never retries this conversation. Only new conversations may save.`,
+      { modal: true },
+      "Retain attempt and allow new saves",
+    )
+    if (accepted !== "Retain attempt and allow new saves") return
+    check()
+    await this.service.configure(
+      () => this.intake.abandonReservation(picked.label, this.context.extensionPath, check).then(() => undefined),
+      false,
+    )
+    await vscode.window.showInformationMessage(
+      "The interrupted extraction is retained in its audit. Its original conversation will not be retried.",
     )
   }
 

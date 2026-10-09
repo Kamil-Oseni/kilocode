@@ -98,9 +98,14 @@ function contract(source: CaptureSource, acknowledgement = false) {
       }),
     ]
   })
-  const entries = Schema.Array(groups.length ? Schema.Union(groups) : Schema.Never).check(
-    Schema.isMaxLength(8 - preferences.length),
-  )
+  const entries = groups.length
+    ? Schema.Array(Schema.Union(groups)).check(Schema.isMaxLength(8 - preferences.length))
+    : Schema.Array(
+        Schema.Struct({
+          ...CaptureEntry.fields,
+          evidence: Schema.Array(Schema.Struct({ ref: Schema.Int })),
+        }),
+      ).check(Schema.isMaxLength(0))
   if (!preferences.length) return Schema.Struct({ entries })
   return Schema.Struct({
     entries,

@@ -16,6 +16,7 @@ import { fingerprint as digest } from "../../src/second-brain/failed-repair"
 import { command } from "../../src/second-brain/control/command"
 import { image } from "../../src/second-brain/control/identity"
 import { runtime } from "./fixtures/native-memory-runtime"
+import { protect } from "../../src/second-brain/control/protection"
 import { observe } from "../../src/second-brain/managed/upgrade-observe"
 import { parse, type Setup } from "../../src/second-brain/settings"
 
@@ -25,7 +26,10 @@ let setup: Setup
 
 beforeAll(async () => {
   outer = await mkdtemp(path.join(os.tmpdir(), "raya-memory-control-materialize-"))
-  const value = await runtime(outer)
+  await protect(outer)
+  const notes = path.join(outer, "notes")
+  await mkdir(path.join(notes, "System"), { recursive: true })
+  const value = await runtime(outer, undefined, notes)
   cfg = value.cfg
   setup = value.setup
 }, 30000)
@@ -435,7 +439,7 @@ test("runtime publication survives every physical save acknowledgement loss and 
             format: "raya.memory.control.catalog",
             version: 2,
             python: cfg.python.path,
-            source: path.join(cfg.root, "source/memory"),
+            source: path.join(cfg.root, "source/memory").replaceAll("\\", "/"),
             bridge: path.join(outer, "retained-bridge.py"),
             python_sha256: cfg.python.sha256,
             bridge_sha256: bridge,
@@ -452,6 +456,35 @@ test("runtime publication survives every physical save acknowledgement loss and 
         "raya.secondBrain.control.catalog": catalog,
       }),
     )
+    if (catalog) {
+      // Retained Windows catalogs may use slashes; only equivalent spelling may migrate.
+      expect(prepared.original.every((item) => path.dirname(item.path) === catalog.catalog.source)).toBe(false)
+      const saved = await readFile(file, "utf8")
+      for (const [selected, reason] of [
+        [
+          { ...catalog, catalog: { ...catalog.catalog, source: path.join(cfg.root, "source/foreign") } },
+          "Original control release differs",
+        ],
+        [{ ...catalog, root: path.join(outer, "foreign-notes") }, "Retained control notes root differs"],
+        [
+          {
+            ...catalog,
+            catalog: {
+              ...catalog.catalog,
+              source_sha256: { ...catalog.catalog.source_sha256, "server.py": "f".repeat(64) },
+            },
+          },
+          "Unreviewed control source refused",
+        ],
+      ] as const) {
+        const raw = JSON.stringify({ ...JSON.parse(saved), "raya.secondBrain.control.catalog": selected })
+        await writeFile(file, raw)
+        await expect(publish(await open(file), prepared.receipt)).rejects.toThrow(reason)
+        expect(await readFile(file, "utf8")).toBe(raw)
+        expect((await open(file)).get(pending)).toBeUndefined()
+      }
+      await writeFile(file, saved)
+    }
     await expect(publish(await open(file, failure === 11 ? 10 : failure), prepared.receipt)).rejects.toThrow(
       "physical save acknowledgement lost",
     )

@@ -133,7 +133,7 @@ function catalog(input: unknown, proof: Awaited<ReturnType<typeof review>>) {
   check(
     isDeepStrictEqual(value.source_sha256, proof.previous.setup.source_sha256) &&
       proof.original.length > 0 &&
-      proof.original.every((item) => path.dirname(item.path) === value.source),
+      proof.original.every((item) => path.resolve(path.dirname(item.path)) === path.resolve(value.source)),
     "Original control release differs",
   )
   // Original Python/bridge execution images stay selected; only the reviewed source directory/release changes.

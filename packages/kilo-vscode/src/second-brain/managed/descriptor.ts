@@ -2,9 +2,9 @@ import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { document, child, check } from "../control/frames"
 import { image, directory, normalize } from "../control/identity"
-import { selected as catalog } from "../control/catalog-capture"
+import { selected as catalog, release as capture } from "../control/catalog-capture"
 import type { Setup } from "../settings"
-import { interpreter, supervisors, retrieval as release7 } from "./catalog"
+import { interpreter, supervisors, current, retrieval as release7 } from "./catalog"
 import { images, fingerprint } from "./reuse-catalog"
 import { parse } from "./value"
 
@@ -209,6 +209,21 @@ function credentials(cfg: Descriptor, memory: Record<string, unknown>, retrieval
   )
 }
 
+function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, reuse: boolean) {
+  const original = path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind]))
+  if (plan.source === original) return
+  check(
+    kind === "memory" &&
+      typeof plan.source === "string" &&
+      path.dirname(plan.source) === cfg.root &&
+      /^raya-memory-source-upgrade-[a-f0-9]{32}$/.test(path.basename(plan.source)) &&
+      cfg.supervisor.path === path.join(plan.source, "supervise.py") &&
+      cfg.supervisor.sha256 === current &&
+      isDeepStrictEqual({ ...row(plan.source_sha256) }, capture),
+    "Paired source directory differs",
+  )
+}
+
 /** Two independently selected plans share assets but never an HTTP-derived owner. */
 export function paired(cfg: Descriptor, memory: Record<string, unknown>, retrieval: Record<string, unknown>) {
   check(cfg.version === 2 && cfg.retrieval, "Explicit paired descriptor required")
@@ -237,10 +252,7 @@ export function paired(cfg: Descriptor, memory: Record<string, unknown>, retriev
     ["memory", memory],
     ["retrieval", retrieval],
   ] as const) {
-    check(
-      plan.source === path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind])),
-      "Paired source directory differs",
-    )
+    source(cfg, plan, kind, reuse)
     const hashes = row(plan.source_sha256)
     for (const [name, hash] of Object.entries(hashes)) {
       const candidates = memory.files.filter((value) => row(value).path === path.join(String(plan.source), name))

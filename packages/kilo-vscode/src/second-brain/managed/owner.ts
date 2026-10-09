@@ -1,11 +1,11 @@
+import { protection } from "./protection"
 import { open, lstat } from "node:fs/promises"
 import path from "node:path"
 import type { ChildProcess } from "node:child_process"
 import { isDeepStrictEqual } from "node:util"
 import { spawn } from "../../util/process"
 import { check, sha, document } from "../control/frames"
-import { image, observe, powershell, environment } from "../control/identity"
-import { command } from "../control/command"
+import { image, observe } from "../control/identity"
 import { packaged } from "../control/index"
 import { descriptor, selection, type Descriptor } from "./descriptor"
 import type { Setup } from "../settings"
@@ -202,18 +202,6 @@ export async function publish(file: string, value: unknown): Promise<Receipt> {
   const receipt = await image(file, 65536)
   check(receipt.digest === sha(raw) && receipt.raw.equals(raw), "Managed publication readback differs")
   return Object.freeze({ path: file, bytes: raw.length, sha256: receipt.digest, tuple: receipt.tuple })
-}
-
-async function protection(root: string) {
-  const script = `$ErrorActionPreference='Stop';$dir=Get-Item -LiteralPath '${root.replace(/'/g, "''")}';if(!$dir.PSIsContainer -or ($dir.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Managed root differs'};$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User;$allowed=@($sid.Value,'S-1-5-18','S-1-5-32-544');$acl=Get-Acl -LiteralPath $dir.FullName;$rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]));if(!$acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -cne $sid.Value -or $rules.Count -ne 3 -or @($rules.IdentityReference.Value|Select-Object -Unique).Count -ne 3){throw 'Managed ACL differs'};foreach($rule in $rules){if($rule.IdentityReference.Value -notin $allowed -or $rule.AccessControlType -ne 'Allow' -or $rule.FileSystemRights -ne 'FullControl' -or $rule.InheritanceFlags -ne 'ContainerInherit,ObjectInherit' -or $rule.PropagationFlags -ne 'None' -or $rule.IsInherited){throw 'Managed rights differ'}};[ordered]@{sid=$sid.Value;protected=$true}|ConvertTo-Json -Compress`
-  const output = await command(
-    powershell(),
-    ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
-    { windowsHide: true, env: environment() },
-  )
-  const value = JSON.parse(output.stdout) as { sid: string; protected: boolean }
-  check(value.protected === true, "Managed root protection refused")
-  return value.sid
 }
 
 export class ManagedOwner {

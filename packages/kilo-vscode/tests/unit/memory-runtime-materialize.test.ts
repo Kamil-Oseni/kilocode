@@ -6,6 +6,7 @@ import { materialize } from "../../src/second-brain/managed/materialize"
 import { review } from "../../src/second-brain/managed/upgrade-review"
 import { descriptor, paired, selection, type Descriptor } from "../../src/second-brain/managed/descriptor"
 import { current, retrieval } from "../../src/second-brain/managed/catalog"
+import { images, fingerprint } from "../../src/second-brain/managed/reuse-catalog"
 import { release } from "../../src/second-brain/control/catalog-capture"
 import { protect } from "../../src/second-brain/control/protection"
 import { protection } from "../../src/second-brain/managed/protection"
@@ -219,6 +220,78 @@ print('two-native-plans-qualified-without-models')`
       { setup, managed: cfg },
     ),
   ).rejects.toThrow("Derived upgrade plan changed unrelated original bytes")
+}, 30000)
+
+test("reusable v2 upgrade retains its independent release and external notes witness", async () => {
+  const notes = path.join(outer, "external-notes")
+  await mkdir(path.join(notes, "System"), { recursive: true })
+  await writeFile(path.join(notes, "README.md"), "# Retained synthetic external note\n")
+  for (const name of Object.keys(images)) {
+    const file = path.join(cfg.root, "source", name)
+    await mkdir(path.dirname(file), { recursive: true })
+    if (name.startsWith("retrieval_reuse/")) await copyFile(path.join("script/memory", name), file)
+  }
+  const script = `import hashlib,json,pathlib,sys
+root=pathlib.Path(sys.argv[1]);notes=pathlib.Path(sys.argv[2]);pins=json.loads(sys.argv[3]);release=sys.argv[4]
+memory=json.loads((root/'memory-plan.json').read_bytes());other=json.loads((root/'retrieval-plan.json').read_bytes());files=list(memory['files']);directories=list(memory['directories'])
+for name,digest in pins.items():
+ file=root/'source'/name
+ if name.startswith('retrieval_reuse/'):
+  raw=file.read_bytes();info=file.lstat();assert hashlib.sha256(raw).hexdigest()==digest
+  files.append({'path':str(file),'bytes':len(raw),'sha256':digest,'identity':[info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns,info.st_nlink]})
+folder=root/'source'/'retrieval_reuse';info=folder.lstat();directories.append({'path':str(folder),'identity':[info.st_dev,info.st_ino,info.st_ctime_ns]})
+generations={}
+for name,file in (('root',notes),('system',notes/'System')):
+ info=file.lstat();generations[name]=[info.st_dev,info.st_ino,info.st_birthtime_ns]
+memory.update(files=files,directories=directories,notes_selection={'root':str(notes),'system':str(notes/'System'),'generations':{name:[str(value) for value in row] for name,row in generations.items()}})
+memory['env'].update(RAYA_MEMORY_ROOT=str(notes),RAYA_MEMORY_NOTE_GENERATIONS=json.dumps(generations,separators=(',',':')),RAYA_MEMORY_RETRIEVAL_PROTOCOL='raya.retrieval.request.settlement.v2',RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256=release)
+other.update(files=files,directories=directories,source=str(root/'source'),source_sha256=pins,retrieval_protocol='raya.retrieval.request.settlement.v2')
+other['env']['RAYA_RETRIEVAL_RELEASE_SHA256']=release
+result={}
+for name,value in (('memory-v2-plan.json',memory),('retrieval-v2-plan.json',other)):
+ file=root/name;raw=json.dumps(value,separators=(',',':')).encode();file.write_bytes(raw);result[name]={'path':str(file),'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+result['notes']=memory['notes_selection'];print(json.dumps(result,separators=(',',':')))`
+  const output = await command(
+    cfg.python.path,
+    ["-I", "-S", "-B", "-c", script, cfg.root, notes, JSON.stringify(images), fingerprint],
+    { windowsHide: true },
+  )
+  const refs = JSON.parse(output.stdout) as Record<string, unknown>
+  const managed = descriptor({
+    ...cfg,
+    plan: refs["memory-v2-plan.json"],
+    retrieval: refs["retrieval-v2-plan.json"],
+    notes: refs.notes,
+  })
+  const selected = parse({ ...setup, protocol: "raya.memory.operation.v2", root: notes })
+  const before = await readFile(path.join(notes, "README.md"))
+  const next = await materialize(managed, selected, path.resolve("."), "e".repeat(32))
+  const cold = await review(next.receipt, { setup: selected, managed })
+  expect(cold.next.managed.notes).toEqual(managed.notes)
+  expect(cold.next.setup.root).toBe(notes)
+  const plans = await selection(cold.next.managed, cold.next.setup)
+  expect(plans.retrieval!.source_sha256).toEqual(images)
+  expect((plans.plan.env as Record<string, unknown>).RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256).toBe(fingerprint)
+  const check = `import importlib.util,json,sys
+spec=importlib.util.spec_from_file_location('actual_v2_upgrade',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+for file,digest in json.loads(sys.argv[2]): module.load(file,digest,True)
+assert not any(name in sys.modules for name in ('torch','transformers','scipy','sklearn'))
+print('reusable-v2-external-notes-qualified')`
+  const result = await command(
+    cfg.python.path,
+    [
+      "-I",
+      "-S",
+      "-B",
+      "-c",
+      check,
+      cold.next.managed.supervisor.path,
+      JSON.stringify([cold.next.managed.plan, cold.next.managed.retrieval!].map((item) => [item.path, item.sha256])),
+    ],
+    { windowsHide: true },
+  )
+  expect(result.stdout.trim()).toBe("reusable-v2-external-notes-qualified")
+  expect(await readFile(path.join(notes, "README.md"))).toEqual(before)
 }, 30000)
 
 test("materialize refuses a changed original file before creating replacement code", async () => {

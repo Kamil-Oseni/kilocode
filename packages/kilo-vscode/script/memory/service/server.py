@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse
-from index import Index, execute, Cancelled, PROTOCOL, CANCEL, operation
+from index import Index, execute, Cancelled, PROTOCOL, CANCEL, operation, residency
 from admission import Retirement, failures
 from operations import Journal
 from dispatch import prepare, submit
@@ -202,6 +202,38 @@ async def handle(request: Request, path: str):
         return JSONResponse(value, headers={'Cache-Control': 'no-store'})
     if request.headers.get('x-raya-memory-owner-epoch') != EPOCH:
         return fail('owner_epoch_changed', 'Select the original Memory owner epoch.', 409)
+    if request.method in ('GET', 'POST') and path.startswith('v2/memory/requests/') and path.endswith('/idle'):
+        key = path[len('v2/memory/requests/'):-len('/idle')]
+        if not hex(key, 32) or request.headers.get('x-raya-memory-request-id') != key:
+            return fail('invalid_request_id', 'Select the retained original request.', 400)
+        with GUARD:
+            record = RECORDS.get(key)
+            if (record is None or record['phase'] != 'terminal' or record['terminal']['operation_outcome'] != 'completed' or
+                    UNCERTAIN or PROTOCOL != 'raya.retrieval.request.settlement.v2'):
+                return fail('settlement_required', 'Original completed Memory settlement required.', 409)
+            if request.method == 'GET':
+                if record.get('idle') is None:
+                    return fail('residency_unconfirmed', 'No original residency proof was published.', 503)
+                return JSONResponse(record['idle'], headers={'Cache-Control': 'no-store'})
+            if READS:
+                return fail('inspection_pending', 'Original residency observation is still pending.', 409)
+            def release():
+                value = residency()
+                proof = {'format': 'raya.memory.residency.release', 'version': 2, 'request': key,
+                         'owner_epoch': EPOCH, 'selected_release_sha256': RELEASE,
+                         'operation_receipt_sha256': record['terminal']['receipt_sha256'], 'downstream': value}
+                JOURNAL.namespace.publish(JOURNAL.folder, key+'-idle-'+secrets.token_hex(16)+'.json', canonical(proof))
+                with GUARD:
+                    record['idle'] = proof
+                return proof
+            future = STORAGE.submit(release)
+            READS[future] = {'until': time.monotonic()+20, 'cancel': threading.Event()}
+        future.add_done_callback(inspected)
+        try:
+            proof = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), 20)
+            return JSONResponse(proof, headers={'Cache-Control': 'no-store'})
+        except Exception:
+            return fail('residency_unconfirmed', 'Original worker release remains unconfirmed.', 503)
     if request.method == 'POST' and path == 'v1/memory/proposals':
         if request.headers.get('content-type', '').split(';')[0] != 'application/json':
             return fail('unsupported_media', 'Use application/json.', 415)

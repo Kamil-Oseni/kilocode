@@ -85,6 +85,28 @@ class Tests(unittest.TestCase):
         self.assertEqual(receipt['root_exit'], 0)
         self.assertFalse(receipt['ownership_retained'])
 
+    def test_coordinator_idle_handoff_and_next_admission_keep_original_authority(self):
+        from pool import Pool
+        self.owner.start()
+        pool = Pool(uuid.uuid4().hex, self.owner.release, {'embeddinggemma-2': 'b'*40}, self.namespace)
+        with pool.condition:
+            pool.owner = self.owner
+            pool.start()
+        try:
+            self.assertFalse(pool.idle())
+            self.assertTrue(pool.handoff.wait(3))
+            self.assertTrue(pool.idle())
+            self.joined(self.owner.state)
+            self.assertEqual(self.owner.state['root_exit'], 0)
+            self.assertFalse(pool.draining)
+            pool.reserve = 1 << 50
+            ticket = pool.submit('embeddings', {'model': 'embeddinggemma-2', 'input': ['Next synthetic search.']}, time.monotonic()+2)
+            self.assertTrue(ticket.done.wait(1))
+            self.assertEqual(ticket.error, 'pool_memory_reserve')
+            self.assertFalse(ticket.cancel.is_set())
+            self.assertIsNone(pool.owner)
+        finally:
+            self.assertTrue(pool.close()['original_coordinator_joined'])
     def test_forced_retirement_keeps_original_cleanup(self):
         self.owner.start()
         value = self.owner.retire(True)
@@ -126,7 +148,7 @@ class Tests(unittest.TestCase):
 
     def test_actual_idle_expiry(self):
         self.owner.start()
-        time.sleep(0.06)
+        time.sleep(0.15)
         value = self.owner.tick()
         self.joined(value)
         self.assertEqual(value['root_exit'], 0)

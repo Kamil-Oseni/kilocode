@@ -4,7 +4,7 @@ import { createHash } from "node:crypto"
 import path from "node:path"
 import { ClientV2 } from "../../src/second-brain/client-v2"
 import { object } from "../../src/second-brain/control/frames"
-import { release } from "../../src/second-brain/control/catalog-v2"
+import { release } from "../../src/second-brain/control/catalog-capture"
 
 type Case = {
   name: string

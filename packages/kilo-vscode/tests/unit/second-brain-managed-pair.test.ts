@@ -9,6 +9,7 @@ import { ManagedOwner, Pipes, publish, startup } from "../../src/second-brain/ma
 import { descriptor, paired } from "../../src/second-brain/managed/descriptor"
 import { interpreter, supervisor, retrieval } from "../../src/second-brain/managed/catalog"
 import { release } from "../../src/second-brain/control/catalog-v2"
+import { release as capture } from "../../src/second-brain/control/catalog-capture"
 import { images, catalogs, fingerprint, readiness } from "../../src/second-brain/managed/reuse-catalog"
 import { document, canonical, sha } from "../../src/second-brain/control/frames"
 import { protect } from "../../src/second-brain/control/protection"
@@ -151,6 +152,26 @@ test("reusable selection binds exact source closure, protocol and independent re
     env: { ...value.plan.env, RAYA_RETRIEVAL_RELEASE_SHA256: fingerprint },
   }
   paired(value.cfg, memory, plan)
+  expect(() =>
+    paired(
+      value.cfg,
+      {
+        ...memory,
+        source_sha256: capture,
+        env: {
+          ...memory.env,
+          RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256: "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b",
+        },
+      },
+      {
+        ...plan,
+        env: {
+          ...plan.env,
+          RAYA_RETRIEVAL_RELEASE_SHA256: "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b",
+        },
+      },
+    ),
+  ).toThrow("Current Memory handoff requires its paired Retrieval cohort")
   for (const change of [
     { retrieval_protocol: "unknown" },
     { retrieval_protocol: "raya.retrieval.retirement.v1" },
@@ -179,6 +200,7 @@ test("reusable pins match source bytes and readiness cannot adopt a different re
   const health = {
     ownership_protocol: "raya.retrieval.request.settlement.v2",
     selected_release_sha256: fingerprint,
+    source_sha256: images,
     catalog_sha256: catalogs,
     retirement_unconfirmed: false,
     draining: false,

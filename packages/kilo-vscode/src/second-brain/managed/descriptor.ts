@@ -5,7 +5,7 @@ import { image, directory, normalize } from "../control/identity"
 import { selected as catalog, release as capture } from "../control/catalog-capture"
 import type { Setup } from "../settings"
 import { interpreter, supervisors, current, retrieval as release7 } from "./catalog"
-import { images, fingerprint } from "./reuse-catalog"
+import { cohort, fingerprint } from "./reuse-catalog"
 import { parse } from "./value"
 
 type Ref = Readonly<{ path: string; bytes: number; sha256: string }>
@@ -179,9 +179,14 @@ function reusable(memory: Record<string, unknown>, retrieval: Record<string, unk
   check(choice(original, "RAYA_MEMORY_RETRIEVAL_PROTOCOL") === protocol, "Paired Retrieval protocol differs")
   if (reuse)
     check(
-      env.RAYA_RETRIEVAL_RELEASE_SHA256 === fingerprint &&
-        original.RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256 === fingerprint,
+      cohort(env.RAYA_RETRIEVAL_RELEASE_SHA256) &&
+        original.RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256 === env.RAYA_RETRIEVAL_RELEASE_SHA256,
       "Independently selected reusable release differs",
+    )
+  if (isDeepStrictEqual(row(memory.source_sha256), capture))
+    check(
+      reuse && env.RAYA_RETRIEVAL_RELEASE_SHA256 === fingerprint,
+      "Current Memory handoff requires its paired Retrieval cohort",
     )
   return reuse
 }
@@ -212,12 +217,14 @@ function credentials(cfg: Descriptor, memory: Record<string, unknown>, retrieval
 function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, reuse: boolean) {
   const original = path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind]))
   if (plan.source === original) return
-  const pins = [current, "2249c00ff1755613ca0d8eadf6e9b8e51ed2dd53ff91c52dae7e36153b4fa72f"].includes(
-    cfg.supervisor.sha256,
-  )
-    ? capture
+  const pins = [
+    current,
+    "0fc0c18acd7574b7fb0d9bff8378de953645113ac5619f4673688cd2ab27fb62",
+    "2249c00ff1755613ca0d8eadf6e9b8e51ed2dd53ff91c52dae7e36153b4fa72f",
+  ].includes(cfg.supervisor.sha256)
+    ? catalog(row(plan.source_sha256))
     : cfg.supervisor.sha256 === "a1128d8f746e5827127a67a2c6e022c72e405a4598b3eed790b8a672a3427dd4"
-      ? { ...capture, "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3" }
+      ? catalog(row(plan.source_sha256))
       : undefined
   check(
     kind === "memory" &&
@@ -242,7 +249,10 @@ export function paired(cfg: Descriptor, memory: Record<string, unknown>, retriev
       retrieval.execution_admitted === true &&
       retrieval.root === cfg.root &&
       retrieval.python_sha256 === cfg.python.sha256 &&
-      isDeepStrictEqual({ ...row(retrieval.source_sha256) }, reuse ? images : release7),
+      isDeepStrictEqual(
+        { ...row(retrieval.source_sha256) },
+        reuse ? cohort(row(retrieval.env).RAYA_RETRIEVAL_RELEASE_SHA256) : release7,
+      ),
     "Reviewed Retrieval release differs",
   )
   check(isDeepStrictEqual(memory.files, retrieval.files) && Array.isArray(memory.files), "Paired assets differ")

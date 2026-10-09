@@ -7,6 +7,7 @@ import threading
 import time
 from types import MappingProxyType
 import uuid
+import urllib.request
 
 from lease import Lease
 from resident import Resident
@@ -16,7 +17,7 @@ from validation import canonical, decode
 GIB = 1024 ** 3
 
 
-def available():
+def resources():
     class Status(ctypes.Structure):
         _fields_ = [('length', w.DWORD), ('load', w.DWORD)] + [(name, ctypes.c_ulonglong) for name in
                     ('total', 'free', 'paging', 'available_paging', 'virtual', 'available_virtual', 'extended')]
@@ -27,7 +28,31 @@ def available():
     library.GlobalMemoryStatusEx.restype = w.BOOL
     if not library.GlobalMemoryStatusEx(ctypes.byref(value)):
         raise OSError(ctypes.get_last_error(), 'GlobalMemoryStatusEx_retrieval')
-    return value.free
+    return value.free, value.available_paging
+
+
+def available():
+    return resources()[0]
+
+
+def budget(kind, model, revision, text=False, warm=False):
+    if warm:
+        return GIB // 2
+    if model != 'embeddinggemma-2':
+        return 13 * GIB // 4
+    # Exact selected float32 text adapter: actual maximum 512-token batch2
+    # peaked at 3.312 GiB commit; 4 GiB keeps 0.688 GiB loading margin.
+    selected = text and kind == 'embeddings' and revision == '914f7f89142e33e77833254d9c9b90c3cef7303b'
+    return (4 if selected else 5) * GIB
+
+
+def admitted(free, commit, reserve, headroom, cold=False):
+    return free >= reserve + headroom and (not cold or commit >= 5 * GIB)
+
+
+class Redirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
 
 
 class Ticket:
@@ -44,11 +69,11 @@ class Ticket:
 
 
 class Pool:
-    def __init__(self, epoch, release, revisions, namespace, reserve=6 * GIB):
+    def __init__(self, epoch, release, revisions, namespace, reserve=6 * GIB, text=False, settle=False):
         if (not isinstance(revisions, dict) or not revisions or
                 set(revisions) - {'embeddinggemma-2', 'qwen3-embedding-0.6b', 'qwen3-reranker-0.6b'} or
                 any(not isinstance(value, str) or not re.fullmatch('[a-f0-9]{40}', value) for value in revisions.values()) or
-                type(reserve) is not int or reserve < 6 * GIB):
+                type(reserve) is not int or reserve < 6 * GIB or type(text) is not bool or type(settle) is not bool):
             raise ValueError('pool_selection')
         name = next(iter(revisions))
         Lease(uuid.uuid4().hex, epoch, release, 'rerank' if name == 'qwen3-reranker-0.6b' else 'embeddings', name)
@@ -58,6 +83,8 @@ class Pool:
         self.revisions = MappingProxyType(dict(revisions))
         self.namespace = namespace
         self.reserve = reserve
+        self.text = text
+        self.settle = settle
         self.slots = threading.BoundedSemaphore(4)
         self.condition = threading.Condition()
         self.queue = deque()
@@ -68,6 +95,8 @@ class Pool:
         self.fenced = False
         self.draining = False
         self.drained = threading.Event()
+        self.handoff = threading.Event()
+        self.requested = False
         self.errors = deque(maxlen=16)
 
     def pressure(self):
@@ -135,6 +164,46 @@ class Pool:
             raise ValueError('pool_retirement_unconfirmed')
         self.owner = None
 
+    def idle(self):
+        # Preserve queued admissions and their coordinator. No global pause,
+        # cancellation or replacement is authorized by an idle handoff.
+        with self.condition:
+            if self.fenced or self.stop.is_set() or self.draining:
+                raise ValueError('pool_idle_unavailable')
+            if self.active is not None or self.queue:
+                return False
+            if self.owner is None:
+                return True
+            self.handoff.clear()
+            self.requested = True
+            self.condition.notify_all()
+            return False
+
+    def settling(self, ticket, headroom):
+        until = min(ticket.until, time.monotonic() + 20)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), Redirect())
+        while True:
+            if ticket.cancel.is_set() or self.stop.is_set() or time.monotonic() >= ticket.until:
+                raise ValueError('pool_before_dispatch_cancelled_or_expired')
+            free, commit = resources()
+            # This selected local zero-keepalive policy never unloads a model,
+            # changes Ollama settings, follows redirects or resubmits inference.
+            try:
+                with opener.open('http://127.0.0.1:11434/api/ps', timeout=min(0.5, max(0.001, until-time.monotonic()))) as response:
+                    if response.url != 'http://127.0.0.1:11434/api/ps':
+                        raise ValueError('pool_residency_origin')
+                    row = decode(response.read(65537), 65536)
+                    if not isinstance(row, dict) or not isinstance(row.get('models'), list):
+                        raise ValueError('pool_residency_response')
+                    empty = not row['models']
+            except (OSError, ValueError):
+                empty = False
+            if empty and admitted(free, commit, self.reserve, headroom, True):
+                return
+            if time.monotonic() >= until:
+                raise ValueError('pool_memory_reserve')
+            ticket.cancel.wait(min(0.05, max(0, until - time.monotonic())))
+
     def invoke(self, ticket):
         if ticket.cancel.is_set() or self.stop.is_set() or time.monotonic() >= ticket.until:
             raise ValueError('pool_before_dispatch_cancelled_or_expired')
@@ -145,10 +214,11 @@ class Pool:
                     time.monotonic() - self.owner.last >= self.owner.idle or
                     self.owner.model != model or self.owner.kind != ticket.kind):
                 self.retire(expired)
-        # The clean Gemma runtime exceeded the earlier 3.25 GiB loading margin
-        # in a guarded live attempt. Keep the reserve and require more cold room.
-        headroom = GIB // 2 if self.owner is not None else (5 * GIB if model == 'embeddinggemma-2' else 13 * GIB // 4)
-        if available() < self.reserve + headroom:
+        headroom = budget(ticket.kind, model, self.revisions[model], self.text, self.owner is not None)
+        if self.owner is None and self.text and self.settle and model == 'embeddinggemma-2':
+            self.settling(ticket, headroom)
+        free, commit = resources()
+        if not admitted(free, commit, self.reserve, headroom, self.owner is None and model == 'embeddinggemma-2'):
             if self.owner is not None:
                 self.retire(True)
             raise ValueError('pool_memory_reserve')
@@ -235,6 +305,15 @@ class Pool:
                             if self.draining and not self.stop.is_set():
                                 self.drained.set()
                                 self.condition.wait(0.1)
+                        continue
+                    if self.requested:
+                        # Only this original coordinator touches/joins the owner;
+                        # HTTP waiters merely request and observe its handoff.
+                        self.retire(False)
+                        with self.condition:
+                            self.requested = False
+                            self.handoff.set()
+                            self.condition.notify_all()
                         continue
                     if self.owner is not None:
                         if self.pressure():

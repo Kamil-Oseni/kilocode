@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util"
 import { check } from "../control/frames"
 
-export const images = Object.freeze({
+const retained = Object.freeze({
   "retrieval/bootstrap.py": "530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d",
   "retrieval/models.py": "2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873",
   "retrieval/namespace.py": "5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3",
@@ -20,20 +20,38 @@ export const images = Object.freeze({
   "retrieval_reuse/session.py": "487cbfdb0724162b1772e685350c212d16328eaa800d644a18a4de009793fb5c",
 })
 
+export const images = Object.freeze({
+  ...retained,
+  "retrieval_reuse/entry.py": "fbb6113cb571ef682001aacf5877e3fa3b5927714223889391fde29b226dea9b",
+  "retrieval_reuse/pool.py": "c6938930c0090dfab5369de422b659aa28410c714fc1e1ac6e88d8dcbdb0955a",
+  "retrieval_reuse/server.py": "dece9b933f6a62ae5886c9fe66607bc505b177aaa410791030ac06b7d2858280",
+})
+
 export const catalogs = Object.freeze({
   "Qwen--Qwen3-Embedding-0.6B.json": "60cae741077a5b3f79f531c139674a1461bda80a5fb8ca767ec1a9ba25975b7d",
   "Qwen--Qwen3-Reranker-0.6B.json": "ef8b5bbc099e513ad2ddcd0d20e1ce0006a87e1701228631652d278eecb3f0a3",
   "google--embeddinggemma-2.json": "7f28a34d9d8e9cc67372be2bc8d1c5ad4e386914e59aa18ae7351e1e95646f54",
 })
 
-export const fingerprint = "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b"
+export const fingerprint = "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86"
+
+export function cohort(release: unknown) {
+  check(
+    release === fingerprint || release === "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b",
+    "Exact reusable cohort required",
+  )
+  return release === fingerprint ? images : retained
+}
 
 /** Health correlates the selected release; original process ownership stays with the launcher. */
 export function readiness(health: Record<string, unknown>, release: unknown) {
   check(
-    release === fingerprint &&
+    health.source_sha256 !== null &&
+      typeof health.source_sha256 === "object" &&
+      !Array.isArray(health.source_sha256) &&
+      isDeepStrictEqual({ ...health.source_sha256 }, cohort(release)) &&
       health.ownership_protocol === "raya.retrieval.request.settlement.v2" &&
-      health.selected_release_sha256 === fingerprint &&
+      health.selected_release_sha256 === release &&
       health.catalog_sha256 !== null &&
       typeof health.catalog_sha256 === "object" &&
       !Array.isArray(health.catalog_sha256) &&

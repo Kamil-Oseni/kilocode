@@ -84,9 +84,10 @@ with tempfile.TemporaryDirectory(prefix='raya-memory-operation-codec-') as temp:
             ('sync', 'completed', True, ''), ('sync', 'failed', False, ''), ('search', 'cancelled', False, ''),
             ('search', 'completed', False, 'escape'), ('search', 'completed', False, 'score'),
             ('search', 'completed', False, 'line'), ('sync', 'completed', False, 'counts'),
-            ('search', 'failed', False, 'empty'), ('search', 'failed', False, 'empty-v2')]):
-        journal.protocol = 'raya.retrieval.request.settlement.v2' if invalid == 'empty-v2' else 'raya.retrieval.retirement.v1'
-        journal.format = 'raya.memory.operation.v2' if invalid == 'empty-v2' else 'raya.memory.operation.v1'
+            ('search', 'failed', False, 'empty'), ('search', 'failed', False, 'empty-v2'),
+            ('search', 'completed', False, 'empty-v2-completed')]):
+        journal.protocol = 'raya.retrieval.request.settlement.v2' if invalid.startswith('empty-v2') else 'raya.retrieval.retirement.v1'
+        journal.format = 'raya.memory.operation.v2' if invalid.startswith('empty-v2') else 'raya.memory.operation.v1'
         request = format(index+1, '032x')
         body = {'query': 'Synthetic café 日本語 😀', 'top': 5} if kind == 'search' else {
             'force_rebuild': rebuilt, 'expected_policy_sha256': 'e'*64}
@@ -112,7 +113,7 @@ with tempfile.TemporaryDirectory(prefix='raya-memory-operation-codec-') as temp:
         terminal = journal.complete(pending, result if outcome == 'completed' else None, outcome, proofs)
         selected = {'request': request, 'epoch': journal.epoch, 'release': journal.release,
                     'kind': kind, 'digest': fingerprint(body)}
-        if invalid == 'empty-v2':
+        if invalid.startswith('empty-v2'):
             selected['protocol'] = journal.format
         expected = [{'request': value['request'], 'epoch': value['owner_epoch'],
                      'release': value['selected_release_sha256'], 'digest': value['request_sha256']} for value in proofs]

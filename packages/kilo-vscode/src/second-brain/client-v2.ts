@@ -8,7 +8,7 @@ import type { SecondBrainRequest } from "@kilocode/sdk/v2/client"
 import { raw } from "./raw-response"
 import { search } from "./search-results"
 import { context } from "./linked-results"
-import { selected as catalog } from "./control/catalog-capture"
+import { selected as catalog, release } from "./control/catalog-capture"
 import type { BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 
 type Selection = Parameters<typeof operation>[1]
@@ -38,6 +38,7 @@ type Record = {
   retiring?: boolean
   retired?: boolean
   value?: ReturnType<typeof operation>
+  idle?: boolean
 }
 const authorized = new WeakMap<object, { client: ClientV2; setup: ReturnType<typeof parse>; request: unknown }>()
 
@@ -62,6 +63,31 @@ function json(bytes: Uint8Array) {
 function fingerprint(value: object) {
   const parsed = json(Buffer.from(JSON.stringify(value)))
   return sha(canonical(parsed.tree, parsed.text, true).replace(/\u007f/g, "\\u007f"))
+}
+
+function residency(value: ReturnType<typeof object>, selected: Selection, terminal: Parameters<typeof object>[0]) {
+  const downstream = object(value.downstream)
+  if (
+    value.format !== "raya.memory.residency.release" ||
+    value.version !== 2 ||
+    value.request !== selected.request ||
+    value.owner_epoch !== selected.epoch ||
+    value.selected_release_sha256 !== selected.release ||
+    value.operation_receipt_sha256 !== object(terminal).receipt_sha256 ||
+    downstream.format !== "raya.retrieval.idle.release" ||
+    downstream.version !== 2 ||
+    !hex(downstream.owner_epoch, 32) ||
+    !hex(downstream.selected_release_sha256, 64) ||
+    [
+      "original_worker_retired",
+      "request_publications_confirmed",
+      "request_admissions_joined",
+      "coordinator_retained",
+    ].some((name) => downstream[name] !== true) ||
+    downstream.queued_requests_cancelled !== false ||
+    downstream.draining !== false
+  )
+    throw new Failure("retirement_unconfirmed", "Original residency handoff was not confirmed", 0)
 }
 
 /** Retained v2 selection; raw certificate bytes survive through original HTTP settlement. */
@@ -269,6 +295,7 @@ export class ClientV2 {
       !record.prepared ||
       record.retiring ||
       record.retired ||
+      (issued.completed && this.residency() && record.idle !== true) ||
       (issued.failed
         ? !record.sent || !record.failed
         : issued.completed
@@ -368,6 +395,34 @@ export class ClientV2 {
     const record = this.#records.get(id)
     if (!record?.sent) throw new Error("Only an original attempted request can be inspected")
     return record
+  }
+
+  private residency() {
+    return (
+      this.#setup.protocol === "raya.memory.operation.v2" &&
+      Object.entries(release).every(([name, hash]) => this.#setup.source_sha256[name] === hash)
+    )
+  }
+
+  async idle(id: string, signal: AbortSignal, recovery = false) {
+    // Older retained selections have no handoff endpoint and remain unchanged.
+    if (!this.residency()) return
+    const record = this.original(id)
+    if (!record.completed || !record.value || !record.settled || record.retired)
+      throw new Failure(
+        "retirement_unconfirmed",
+        "Original completed Memory settlement required before residency handoff",
+        0,
+      )
+    const scope = AbortSignal.any([signal, AbortSignal.timeout(25000)])
+    record.idle = false
+    const value = object(
+      json(await this.request(`/v2/memory/requests/${id}/idle`, scope, recovery ? "GET" : "POST", record.selected))
+        .value,
+    )
+    residency(value, record.selected, record.value.operation)
+    scope.throwIfAborted()
+    record.idle = true
   }
 
   async observe(id: string, signal?: AbortSignal) {

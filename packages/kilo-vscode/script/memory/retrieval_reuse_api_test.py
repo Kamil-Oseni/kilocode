@@ -331,6 +331,28 @@ class Tests(unittest.TestCase):
                 self.assertTrue(self.runtime.draining)
         asyncio.run(run())
 
+    def test_idle_waits_for_pending_admission_without_cancelling_and_next_search_stays_open(self):
+        async def run():
+            async with self.app.router.lifespan_context(self.app):
+                original = self.runtime.pool.thread
+                gate = asyncio.Event()
+                post = asyncio.create_task(self.request('POST', 'v2/embeddings', self.body(), gate=gate))
+                await asyncio.sleep(0.03)
+                idle = asyncio.create_task(self.request('POST', 'v2/idle'))
+                await asyncio.sleep(0.03)
+                self.assertFalse(idle.done())
+                self.assertFalse(self.runtime.draining)
+                self.assertFalse(self.runtime.pool.draining)
+                gate.set()
+                results = await asyncio.gather(post, idle)
+                self.assertEqual([row[0] for row in results], [503, 200])
+                self.assertFalse(results[1][1]['queued_requests_cancelled'])
+                self.assertIs(self.runtime.pool.thread, original)
+                status, _ = await self.request('POST', 'v2/embeddings', self.body())
+                self.assertEqual(status, 503)
+                self.assertFalse(self.runtime.pool.stop.is_set())
+        asyncio.run(run())
+
 
 if __name__ == '__main__':
     unittest.main()

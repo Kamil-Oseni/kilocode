@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { release } from "../../src/second-brain/control/catalog-v2"
+import { release } from "../../src/second-brain/control/catalog-capture"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
@@ -81,6 +81,7 @@ async function harness(
     status?: number
     repeat?: string
     terminal?: (value: string) => Uint8Array
+    idle?: "lost" | "absent"
   } = {},
 ) {
   const data = await fixture()
@@ -155,6 +156,30 @@ async function harness(
       expect([item.selected.request, ...(opts.repeat ? [opts.repeat] : [])]).toContain(
         request.headers.get("X-Raya-Memory-Request-ID"),
       )
+      if (new URL(request.url).pathname.endsWith("/idle")) {
+        if (opts.idle && (request.method === "POST" || opts.idle === "absent"))
+          return Response.json({}, { status: 503 })
+        return Response.json({
+          format: "raya.memory.residency.release",
+          version: 2,
+          request: item.selected.request,
+          owner_epoch: item.selected.epoch,
+          selected_release_sha256: item.selected.release,
+          operation_receipt_sha256: JSON.parse(Buffer.from(item.terminal, "base64").toString()).receipt_sha256,
+          downstream: {
+            format: "raya.retrieval.idle.release",
+            version: 2,
+            owner_epoch: "b".repeat(32),
+            selected_release_sha256: "c".repeat(64),
+            original_worker_retired: true,
+            request_publications_confirmed: true,
+            request_admissions_joined: true,
+            coordinator_retained: true,
+            queued_requests_cancelled: false,
+            draining: false,
+          },
+        })
+      }
       if (request.method === "DELETE")
         return Response.json({
           request: item.selected.request,
@@ -194,6 +219,33 @@ async function harness(
   }
   return { item, owner, settings, setup, calls, file, dir, cleanup }
 }
+
+genuine("completed Memory waits for idle proof and lost handoff reply recovers by GET without replay", async () => {
+  const value = await harness("search-completed-empty-v2-completed", { idle: "lost" })
+  try {
+    await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow()
+    expect(value.settings.pending()).toBeDefined()
+    await value.owner.reconcile()
+    expect(value.settings.pending()).toBeUndefined()
+    expect(value.owner.retired()).toBe(true)
+    expect(value.calls.filter((row) => row.method === "POST")).toHaveLength(2)
+  } finally {
+    await value.cleanup()
+  }
+})
+
+genuine("missing saved idle proof preserves completed operation uncertainty and never repeats POST", async () => {
+  const value = await harness("search-completed-empty-v2-completed", { idle: "absent" })
+  try {
+    await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow()
+    await expect(value.owner.reconcile()).rejects.toThrow()
+    expect(value.settings.pending()).toBeDefined()
+    expect(value.owner.retired()).toBe(false)
+    expect(value.calls.filter((row) => row.method === "POST")).toHaveLength(2)
+  } finally {
+    await value.cleanup()
+  }
+})
 
 genuine("search settles original HTTP selection before exact debt clearance", async () => {
   const value = await harness()

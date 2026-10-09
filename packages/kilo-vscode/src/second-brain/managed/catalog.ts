@@ -1,6 +1,6 @@
 export const interpreter = "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2"
 export const supervisor = "55530325cc6e8836b49722e39f0b7f87d93c2fe30699d2f5373ff650beb50618"
-export const current = "0fc0c18acd7574b7fb0d9bff8378de953645113ac5619f4673688cd2ab27fb62"
+export const current = "ffbff9b96ada90e9d04e26a0d96dfd0a42abd13eb7aa5c787f6b7fe1f70ad4e4"
 export const supervisors = [
   supervisor,
   "31200051a3248182a01284fa0f8524d07c5360aaf21b5df76025574ff7497e60",
@@ -8,6 +8,7 @@ export const supervisors = [
   "6f6d15bc6d9d8e041ef8afbde4a7b9ca21fcef024c4b5cfc8cad3643d13c224a",
   "a1128d8f746e5827127a67a2c6e022c72e405a4598b3eed790b8a672a3427dd4",
   "2249c00ff1755613ca0d8eadf6e9b8e51ed2dd53ff91c52dae7e36153b4fa72f",
+  "0fc0c18acd7574b7fb0d9bff8378de953645113ac5619f4673688cd2ab27fb62",
   current,
 ] as const
 

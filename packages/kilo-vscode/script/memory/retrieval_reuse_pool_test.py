@@ -9,7 +9,11 @@ import uuid
 SOURCE = Path(__file__).parent
 sys.path.insert(0, str(SOURCE/'retrieval'))
 sys.path.insert(0, str(SOURCE/'retrieval_reuse'))
-from pool import available, Pool
+from pool import available, resources, budget, admitted, GIB, Pool, Ticket, Redirect
+import urllib.request
+import urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import threading
 
 spec = importlib.util.spec_from_file_location('pool_namespace_fixture', SOURCE/'namespace_publication_test.py')
 fixture = importlib.util.module_from_spec(spec)
@@ -32,6 +36,51 @@ class Tests(unittest.TestCase):
 
     def body(self):
         return {'model': 'qwen3-embedding-0.6b', 'input': ['Synthetic queued request.']}
+
+    def test_selected_text_budget_and_actual_commit_boundaries(self):
+        revision = '914f7f89142e33e77833254d9c9b90c3cef7303b'
+        self.assertEqual(budget('embeddings', 'embeddinggemma-2', revision, True), 4*GIB)
+        for kind, selected, image in [('embeddings', False, revision), ('media', True, revision), ('embeddings', True, 'a'*40)]:
+            self.assertEqual(budget(kind, 'embeddinggemma-2', image, selected), 5*GIB)
+        self.assertTrue(admitted(10*GIB, 5*GIB, 6*GIB, 4*GIB, True))
+        self.assertFalse(admitted(10*GIB-1, 5*GIB, 6*GIB, 4*GIB, True))
+        self.assertFalse(admitted(10*GIB, 5*GIB-1, 6*GIB, 4*GIB, True))
+        self.assertTrue(all(value > 0 for value in resources()))
+
+    def test_settling_cancelled_and_expired_before_any_worker(self):
+        ticket = Ticket('embeddings', self.body(), time.monotonic()+1)
+        ticket.cancel.set()
+        with self.assertRaisesRegex(ValueError, 'cancelled_or_expired'):
+            self.pool.settling(ticket, 4*GIB)
+        ticket.cancel.clear()
+        ticket.until = time.monotonic()-1
+        with self.assertRaisesRegex(ValueError, 'cancelled_or_expired'):
+            self.pool.settling(ticket, 4*GIB)
+        self.assertIsNone(self.pool.owner)
+
+    def test_residency_opener_refuses_redirect_before_destination(self):
+        hits = []
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                hits.append(self.path)
+                self.send_response(302)
+                self.send_header('Location', '/destination')
+                self.end_headers()
+            def log_message(self, *args):
+                return
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), Redirect())
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                opener.open(f'http://127.0.0.1:{server.server_port}/source', timeout=1)
+            raised.exception.close()
+            self.assertEqual(hits, ['/source'])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
     def test_four_total_admissions_and_no_hidden_executor(self):
         tickets = [self.pool.submit('embeddings', self.body(), time.monotonic() + 2) for _ in range(4)]

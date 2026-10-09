@@ -58,7 +58,13 @@ def build(env):
     if (not re.fullmatch('[0-9]{4,5}', port) or not 1024 <= int(port) <= 65535 or
             not re.fullmatch('[0-9]{1,4}', reserve) or not 6 <= int(reserve) <= 1024):
         raise ValueError('reuse_bounded_port_or_reserve')
-    pool = Pool(uuid.uuid4().hex, release, revisions, namespace, reserve=int(reserve)*GIB)
+    # Authenticated selected text image only; unknown or media cohorts retain
+    # the larger cold fallback. This is not a caller-controlled environment flag.
+    text = images['retrieval/models.py'][1] == '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873'
+    settle = env.get('RAYA_RETRIEVAL_OLLAMA_SETTLE', '0')
+    if settle not in ('0', '1') or (settle == '1' and not text):
+        raise ValueError('reuse_selected_residency_policy')
+    pool = Pool(uuid.uuid4().hex, release, revisions, namespace, reserve=int(reserve)*GIB, text=text, settle=settle == '1')
     return Runtime(pool, namespace, images, catalogs, key, int(port))
 
 

@@ -147,6 +147,35 @@ class Redirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def residency():
+    if PROTOCOL != 'raya.retrieval.request.settlement.v2':
+        raise Retirement('Idle release requires the selected reusable protocol.')
+    port = int(os.environ.get('RAYA_RETRIEVAL_PORT', '8873'))
+    if not 1024 <= port <= 65535:
+        raise ValueError('Retrieval port is outside the local service range.')
+    origin = f'http://127.0.0.1:{port}'
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), Redirect())
+    auth = {'Authorization': 'Bearer '+KEY}
+    with opener.open(urllib.request.Request(origin+'/health', headers=auth), timeout=2) as response:
+        health = metadata(response.read(65537))
+    if (not isinstance(health, dict) or health.get('ready') is not True or health.get('draining') is not False or
+            health.get('retirement_unconfirmed') is not False or health.get('selected_release_sha256') != RELEASE or
+            health.get('ownership_protocol') != PROTOCOL or not hexadecimal(health.get('owner_epoch'), 32) or
+            fingerprint({'source_sha256': health.get('source_sha256'), 'catalog_sha256': health.get('catalog_sha256')}) != RELEASE):
+        raise Retirement('Selected idle release owner differs.')
+    epoch = health['owner_epoch']
+    auth['X-Raya-Owner-Epoch'] = epoch
+    with opener.open(urllib.request.Request(origin+'/v2/idle', method='POST', headers=auth), timeout=17) as response:
+        value = metadata(response.read(65537))
+    if (not isinstance(value, dict) or value.get('format') != 'raya.retrieval.idle.release' or value.get('version') != 2 or
+            value.get('owner_epoch') != epoch or value.get('selected_release_sha256') != RELEASE or
+            any(value.get(name) is not True for name in ('original_worker_retired', 'request_publications_confirmed',
+                                                        'request_admissions_joined', 'coordinator_retained')) or
+            value.get('queued_requests_cancelled') is not False or value.get('draining') is not False):
+        raise Retirement('Original idle worker release remains unconfirmed.')
+    return value
+
+
 def api(path, body, gate=None):
     if path == '/v1/embeddings' and isinstance(body.get('input'), str):
         body = dict(body, input=[body['input']])

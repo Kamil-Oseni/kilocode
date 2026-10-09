@@ -101,6 +101,16 @@ class Runtime:
             self.slots.release()
             self.admissions -= 1
 
+    def idle(self):
+        with self.lock:
+            self.integrity()
+            self.reap()
+            if self.fenced or self.pool.fenced or self.draining:
+                raise ValueError('reuse_idle_unavailable')
+            if self.admissions or any(record.get('settlement') is None for record in self.records.values()):
+                return False
+            return self.pool.idle()
+
     def pause(self):
         with self.lock:
             self.integrity()
@@ -185,6 +195,23 @@ def create(runtime):
             return reply(runtime.health())
         if request.headers.get('x-raya-owner-epoch') != runtime.pool.epoch:
             return fail('owner_epoch_changed', 409)
+        if request.method == 'POST' and path == 'v2/idle':
+            until = time.monotonic() + 15
+            while True:
+                if await request.is_disconnected():
+                    return fail('idle_caller_disconnected', 499)
+                try:
+                    if runtime.idle():
+                        return reply({'format': 'raya.retrieval.idle.release', 'version': 2,
+                                      'owner_epoch': runtime.pool.epoch, 'selected_release_sha256': runtime.pool.release,
+                                      'original_worker_retired': True, 'request_publications_confirmed': True,
+                                      'request_admissions_joined': True, 'coordinator_retained': True,
+                                      'queued_requests_cancelled': False, 'draining': False})
+                except Exception:
+                    return fail('idle_release_unconfirmed', 503)
+                if time.monotonic() >= until:
+                    return fail('idle_busy', 409)
+                await asyncio.sleep(0.01)
         if request.method == 'POST' and path in ('v2/drain', 'v2/resume'):
             try:
                 if path == 'v2/resume':

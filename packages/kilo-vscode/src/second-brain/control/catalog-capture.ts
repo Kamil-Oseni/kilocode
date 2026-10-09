@@ -1,7 +1,7 @@
 /** Exact source-qualified thirteen-file capture release; native activation is separate. */
 import { release as legacy } from "./catalog-v2"
 
-export const release = Object.freeze({
+const historical = Object.freeze({
   "server.py": "8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e9b164443c",
   "index.py": "89fcbf572c83a25bc39f8e646fcd080330ddb1605cb89c65c8240f9d2ae0a9dc",
   "notes.py": "e43105220aa739664bfbaecc6638d36fb201e0da55052da6403f7015f9034643",
@@ -16,16 +16,22 @@ export const release = Object.freeze({
   "proposals.py": "fbfd07c0bbe71439d21399d06eac37f8712aff1f24f509697e01f39802c301e0",
   "capture.py": "b059c9bb84a176c86e5ff7b7e35b1470cba30fdfec5fb7dcdef4d829298b0dfe",
 })
+export const release = Object.freeze({
+  ...historical,
+  "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b",
+  "index.py": "e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7",
+})
 const previous = Object.freeze({
-  ...release,
+  ...historical,
   "index.py": "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e",
 })
 const retained = Object.freeze({
-  ...release,
+  ...historical,
   "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3",
 })
 export function selected(pins: Readonly<Record<string, unknown>>) {
   if (!("capture.py" in pins)) return legacy
+  if (pins["server.py"] === historical["server.py"] && pins["index.py"] === historical["index.py"]) return historical
   return pins["index.py"] === previous["index.py"]
     ? previous
     : pins["index.py"] === retained["index.py"]

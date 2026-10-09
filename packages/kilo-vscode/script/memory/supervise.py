@@ -26,16 +26,18 @@ RELEASES = {'memory': {'server.py': '544647a72b12536dcd7223d3bec10c49f547ead30fe
 
 CAPTURE = {'server.py': '8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e9b164443c', 'index.py': 'dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e', 'notes.py': 'e43105220aa739664bfbaecc6638d36fb201e0da55052da6403f7015f9034643', 'policy.py': '87c931cfa7cceb7386e6d2b4b05fdacf916360fd2cb0ff590d0fccf5dd334ae2', 'admission.py': '347561aafc7467a24f7871714fc08f511e1f1509c3ade56fbfa00d71a30eae86', 'host.py': '4854ab90b06085450136e764ec1f70034ae27c597af9b6fa98a99860aa049a97', 'operations.py': 'a0641dc9072841c30c207ab5327ce5adc19e1151626a1b3e43259a6b2ca123cb', 'retirement.py': 'f31e2535b7793f93ce0c556eb50c9bf774270bce6e86582e1c47ef661794a1da', 'namespace.py': '0df00525c58bc5c57bb11dbee48cb71785a6c40ee178a011c90a5883dbe26a72', 'historical.py': '2d97c96d13b906d8aadcae47a89704cb1b839f5e09da144ca28bd20a0af779bc', 'dispatch.py': '50c6c5ab29519e3cdad4f226b8d5f0c5e30fc407966dd0706a10bd328f96dc35', 'proposals.py': 'fbfd07c0bbe71439d21399d06eac37f8712aff1f24f509697e01f39802c301e0', 'capture.py': 'b059c9bb84a176c86e5ff7b7e35b1470cba30fdfec5fb7dcdef4d829298b0dfe'}
 
-REUSE = {'retrieval/bootstrap.py': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d', 'retrieval/models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873', 'retrieval/namespace.py': '5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3', 'retrieval/owner.py': 'fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446', 'retrieval/server.py': '6bba99a267420d0e519d8db1f26848af16999ac7b339487f2da4fd0261e73ecb', 'retrieval/validation.py': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2', 'retrieval/worker.py': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721', 'retrieval_reuse/bootstrap.py': 'cc424607c0b6d9b8565602d11027a4e1c65e769d06af8eaa89b581ec7ff30a6a', 'retrieval_reuse/entry.py': '88d9a50d99e1ed1930847b38f79142d13e4d443b180eb616956a8d8b3b6292ce', 'retrieval_reuse/lease.py': '308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d', 'retrieval_reuse/living.py': 'bc75c4be4d9ced06e9bca4c2408430a1d1fb084a827762e81a3b5ec0043d261a', 'retrieval_reuse/pool.py': '4a0c0c12964ae99ae0a949d9d561c78226a71d42e2404052abc3c8760040db1c', 'retrieval_reuse/receipts.py': 'cab18d5ac5461e045eb283f480eefbd175fa96b8b4fefe8e0353af5f4269ffa3', 'retrieval_reuse/resident.py': 'f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039', 'retrieval_reuse/server.py': 'f1cee409152d2a5832411087dea53ae8fe92857aceee86947de27ee60c8258ee', 'retrieval_reuse/session.py': '487cbfdb0724162b1772e685350c212d16328eaa800d644a18a4de009793fb5c'}
+REUSE = {'retrieval/bootstrap.py': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d', 'retrieval/models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873', 'retrieval/namespace.py': '5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3', 'retrieval/owner.py': 'fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446', 'retrieval/server.py': '6bba99a267420d0e519d8db1f26848af16999ac7b339487f2da4fd0261e73ecb', 'retrieval/validation.py': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2', 'retrieval/worker.py': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721', 'retrieval_reuse/bootstrap.py': 'cc424607c0b6d9b8565602d11027a4e1c65e769d06af8eaa89b581ec7ff30a6a', 'retrieval_reuse/entry.py': 'fbb6113cb571ef682001aacf5877e3fa3b5927714223889391fde29b226dea9b', 'retrieval_reuse/lease.py': '308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d', 'retrieval_reuse/living.py': 'bc75c4be4d9ced06e9bca4c2408430a1d1fb084a827762e81a3b5ec0043d261a', 'retrieval_reuse/pool.py': 'c6938930c0090dfab5369de422b659aa28410c714fc1e1ac6e88d8dcbdb0955a', 'retrieval_reuse/receipts.py': 'cab18d5ac5461e045eb283f480eefbd175fa96b8b4fefe8e0353af5f4269ffa3', 'retrieval_reuse/resident.py': 'f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039', 'retrieval_reuse/server.py': 'dece9b933f6a62ae5886c9fe66607bc505b177aaa410791030ac06b7d2858280', 'retrieval_reuse/session.py': '487cbfdb0724162b1772e685350c212d16328eaa800d644a18a4de009793fb5c'}
 
 
+REUSED = {'retrieval/bootstrap.py': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d', 'retrieval/models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873', 'retrieval/namespace.py': '5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3', 'retrieval/owner.py': 'fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446', 'retrieval/server.py': '6bba99a267420d0e519d8db1f26848af16999ac7b339487f2da4fd0261e73ecb', 'retrieval/validation.py': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2', 'retrieval/worker.py': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721', 'retrieval_reuse/bootstrap.py': 'cc424607c0b6d9b8565602d11027a4e1c65e769d06af8eaa89b581ec7ff30a6a', 'retrieval_reuse/entry.py': '88d9a50d99e1ed1930847b38f79142d13e4d443b180eb616956a8d8b3b6292ce', 'retrieval_reuse/lease.py': '308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d', 'retrieval_reuse/living.py': 'bc75c4be4d9ced06e9bca4c2408430a1d1fb084a827762e81a3b5ec0043d261a', 'retrieval_reuse/pool.py': '4a0c0c12964ae99ae0a949d9d561c78226a71d42e2404052abc3c8760040db1c', 'retrieval_reuse/receipts.py': 'cab18d5ac5461e045eb283f480eefbd175fa96b8b4fefe8e0353af5f4269ffa3', 'retrieval_reuse/resident.py': 'f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039', 'retrieval_reuse/server.py': 'f1cee409152d2a5832411087dea53ae8fe92857aceee86947de27ee60c8258ee', 'retrieval_reuse/session.py': '487cbfdb0724162b1772e685350c212d16328eaa800d644a18a4de009793fb5c'}
 PREVIOUS = [CAPTURE, dict(CAPTURE, **{'index.py': '8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3'})]
-CAPTURE = dict(CAPTURE, **{'index.py': '89fcbf572c83a25bc39f8e646fcd080330ddb1605cb89c65c8240f9d2ae0a9dc'})
+PREVIOUS += (dict(CAPTURE, **{'index.py': '89fcbf572c83a25bc39f8e646fcd080330ddb1605cb89c65c8240f9d2ae0a9dc'}),)
+CAPTURE = dict(CAPTURE, **{'server.py': 'deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b', 'index.py': 'e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7'})
 
 
 def release(kind, pins, reuse=False):
     capture = next((value for value in PREVIOUS if pins == value), CAPTURE)
-    selected = REUSE if reuse else capture if kind == 'memory' and 'capture.py' in pins else RELEASES[kind]
+    selected = (REUSED if pins == REUSED else REUSE) if reuse else capture if kind == 'memory' and 'capture.py' in pins else RELEASES[kind]
     if len(pins) != len(selected) or pins != selected:
         reject('Exact selected service release required')
     return selected
@@ -175,6 +177,7 @@ def diagnostics():
     import pool
     original = pool.Pool
     available = pool.available
+    resources = getattr(pool, 'resources', lambda: (available(), None))
     local = threading.local()
     causes = {'pool_memory_reserve': 503, 'lease_memory_pressure': 503,
               'pool_queue_expired': 504, 'pool_before_dispatch_cancelled_or_expired': 504,
@@ -186,16 +189,17 @@ def diagnostics():
               'pool_worker_failed': 500}
 
     def measured():
-        value = available()
+        value, commit = resources()
         current = getattr(local, 'current', None)
         if current is not None and len(current['samples']) < 32:
             owner, ticket = current['pool'], current['ticket']
-            headroom = (pool.GIB // 2 if owner.owner is not None else
+            headroom = (pool.budget(ticket.kind, ticket.body['model'], owner.revisions[ticket.body['model']], owner.text, owner.owner is not None)
+                        if hasattr(pool, 'budget') else pool.GIB // 2 if owner.owner is not None else
                         5 * pool.GIB if ticket.body['model'] == 'embeddinggemma-2' else 13 * pool.GIB // 4)
             current['samples'].append({'observed_unix_ms': time.time_ns() // 1000000,
                                       'available_ram_bytes': value,
                                       'required_ram_bytes': owner.reserve + headroom if not current['samples'] else owner.reserve})
-        return value
+        return value, commit
 
     class Observed(original):
         def invoke(self, ticket):
@@ -228,7 +232,10 @@ def diagnostics():
                               'settlement_authority': False})
             return super().complete(ticket, error, result)
 
-    pool.available = measured
+    if hasattr(pool, 'resources'):
+        pool.resources = measured
+    else:
+        pool.available = lambda: measured()[0]
     pool.Pool = Observed
 
 
@@ -287,6 +294,9 @@ def load(file, expected, managed=False):
                  'RAYA_RETRIEVAL_MIN_RAM_GIB', 'RAYA_RETRIEVAL_TIMEOUT'}
     if reuse:
         retrieval.add('RAYA_RETRIEVAL_RELEASE_SHA256')
+        retrieval.add('RAYA_RETRIEVAL_OLLAMA_SETTLE')
+        if env.get('RAYA_RETRIEVAL_OLLAMA_SETTLE', '0') not in ('0', '1'):
+            reject('Selected local residency policy differs')
         value = env.get('RAYA_RETRIEVAL_RELEASE_SHA256')
         if not isinstance(value, str) or len(value) != 64 or any(char not in '0123456789abcdef' for char in value):
             reject('Independent reusable release selection required')

@@ -175,28 +175,45 @@ export class OperationOwner {
       ),
     )
     const errors: unknown[] = result.ok ? [] : [result.error]
-    let proof = this.#client.settlement(id)
-    const cleanup: unknown[] = []
-    // Inspection always uses the same client/selection. Health and DELETE ACK cannot clear debt.
-    if (debt !== undefined && !proof) cleanup.push(...(await this.inspect(id, !result.ok || signal.aborted)))
-    const closed = await outcome(Promise.resolve().then(() => close?.()))
-    if (!closed.ok) cleanup.push(closed.error)
-    if (debt !== undefined && closed.ok) this.#recovery = { id, debt }
-    if (!proof) proof = this.proof(id, result.ok && !signal.aborted, cleanup)
-    if (debt !== undefined && proof && cleanup.length === 0) {
+    const closure = await this.closure(id, signal, result, debt, close)
+    if (debt !== undefined && closure.proof && closure.cleanup.length === 0) {
       const settled = await outcome(
-        this.#client.settle(proof, id, () => this.settings.settle(debt, this.#lease, proof)),
+        this.#client.settle(closure.proof, id, () => this.settings.settle(debt, this.#lease, closure.proof!)),
       )
-      if (!settled.ok) cleanup.push(settled.error)
+      if (!settled.ok) closure.cleanup.push(settled.error)
       if (settled.ok) this.#retired = true
     }
-    errors.push(...cleanup)
+    errors.push(...closure.cleanup)
     if (signal.aborted) errors.push(signal.reason)
     raise(errors)
     if (!result.ok) throw result.error
     if (debt === undefined) throw new Error("Original Memory journal was not observed")
-    if (!proof) throw new Error("Original completed Memory settlement was not observed")
+    if (!closure.proof) throw new Error("Original completed Memory settlement was not observed")
     return result.value
+  }
+
+  private async closure(
+    id: string,
+    signal: AbortSignal,
+    result: Outcome<unknown>,
+    debt: unknown,
+    close?: () => Promise<void>,
+  ) {
+    let proof = this.#client.settlement(id)
+    const cleanup: unknown[] = []
+    // Complete original terminal evidence precedes worker handoff. Health and
+    // DELETE acknowledgments cannot clear debt or authorize an idle release.
+    if (debt !== undefined && !proof) cleanup.push(...(await this.inspect(id, !result.ok || signal.aborted)))
+    if (!proof) proof = this.proof(id, result.ok && !signal.aborted, cleanup)
+    if (result.ok && !signal.aborted && proof) {
+      const idle = await outcome(this.#client.idle(id, signal))
+      if (!idle.ok) cleanup.push(idle.error)
+    }
+    const closed = await outcome(Promise.resolve().then(() => close?.()))
+    if (!closed.ok) cleanup.push(closed.error)
+    if (debt !== undefined && closed.ok) this.#recovery = { id, debt }
+    if (!proof) proof = this.proof(id, result.ok && !signal.aborted, cleanup)
+    return { proof, cleanup }
   }
 
   private proof(id: string, completed: boolean, errors: readonly unknown[]) {
@@ -214,8 +231,11 @@ export class OperationOwner {
     const job = (async () => {
       const errors = await this.inspect(retained.id, false)
       raise(errors)
-      const proof = this.#client.closed(retained.id)
-      if (!proof) throw new Failure("retirement_unconfirmed", "Original unsuccessful terminal is unconfirmed", 0)
+      const completed = this.#client.completed(retained.id)
+      if (completed) await this.#client.idle(retained.id, controller.signal, true)
+      const proof = completed ?? this.#client.closed(retained.id)
+      if (!proof)
+        throw new Failure("retirement_unconfirmed", "Original terminal and residency evidence are unconfirmed", 0)
       await this.#client.settle(proof, retained.id, () => this.settings.settle(retained.debt, this.#lease, proof))
       this.#retired = true
       return error

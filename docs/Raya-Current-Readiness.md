@@ -18,6 +18,10 @@ The owned test window closed naturally. Paired run `9c7035266d4cf93479c7d630f9d3
 
 Detailed original-turn evidence: [personal capture integration](Raya-Personal-Capture-Integration.md). Earlier versions, failures and delivery records are retained verbatim in [readiness history](Raya-Readiness-History.md#archived-current-readiness-snapshot--october-9-before-consolidation).
 
+## Latest source progress
+
+Save-stage diagnostics and genuine host lifecycle regressions are committed in `324ac735db`, with19 tests /291 assertions and extension build checks passing. The separate diagnostics key preserves the old replay-fencing ledger shape. This source is not installed, and unmanaged/JSON-file tests do not establish the remaining managed/native persistence boundary. See the latest implementation-progress entry for the original retained failure and reconstruction qualifications. Readiness remains48/100 with38 unfinished requirements.
+
 ## Next delivery work
 
 1. Correct the original save-confirmation failure and verify the full capture, indexing and new-conversation recall sequence.

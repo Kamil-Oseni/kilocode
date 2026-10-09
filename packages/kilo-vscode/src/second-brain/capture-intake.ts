@@ -9,6 +9,7 @@ import type { review } from "./committed-capture"
 import { fingerprint } from "./failed-repair"
 import type { Setup } from "./settings"
 import { linked } from "./managed/capture-upgrade"
+import { review as refused } from "./capture-refusal"
 
 type Command = Extract<SecondBrainRequest["command"], { action: "capture" }>
 export type CaptureBinding = Readonly<{
@@ -458,6 +459,45 @@ export class CaptureIntake {
     diagnostic?: ReturnType<typeof failure>,
   ) {
     return this.transition(turn, phase, receipt, diagnostic)
+  }
+
+  /** Native review retains a source-qualified pre-launch refusal; the original ID stays fenced. */
+  reconcileRefusal(input: unknown, check: () => void) {
+    return this.serial(async () => {
+      check()
+      const proof = await refused(input, this.storage)
+      check()
+      const key = `raya.secondBrain.captureRefusal.${proof.original.id}`
+      const retained = this.storage.get<{ phase: string }>(key)
+      const prepared = { ...proof, phase: "prepared" }
+      const applied = { ...proof, phase: "applied" }
+      if (retained !== undefined && !isDeepStrictEqual(retained, prepared) && !isDeepStrictEqual(retained, applied))
+        throw new Error("Original catalog refusal audit differs")
+      const saved = records(this.storage.get(ledger))
+      const prior = saved.find((row) => row.id === proof.original.id)
+      if (!isDeepStrictEqual(prior, proof.original) && !(retained && isDeepStrictEqual(prior, proof.completed)))
+        throw new Error("Original catalog refusal reservation changed")
+      if (retained === undefined) await this.storage.update(key, prepared)
+      check()
+      if (!isDeepStrictEqual(this.storage.get(key), retained ?? prepared))
+        throw new Error("Original catalog refusal audit publication changed")
+      if (!isDeepStrictEqual(await refused(input, this.storage), proof))
+        throw new Error("Original catalog refusal review changed")
+      const next = saved.map((row) => (row.id === proof.original.id ? proof.completed : row))
+      await this.storage.update(ledger, next)
+      check()
+      if (!isDeepStrictEqual(records(this.storage.get(ledger)), next))
+        throw new Error("Original catalog refusal publication changed")
+      await this.storage.update(key, applied)
+      check()
+      if (
+        !isDeepStrictEqual(this.storage.get(key), applied) ||
+        !isDeepStrictEqual(await refused(input, this.storage), proof)
+      )
+        throw new Error("Original catalog refusal confirmation changed")
+      this.changed()
+      return proof
+    })
   }
 
   /** Native recovery may confirm an existing effect only after current authenticated index inspection. */

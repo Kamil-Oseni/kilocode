@@ -14,6 +14,7 @@ import { Control, parseCatalog } from "./control/index"
 import { drain, register } from "./retirement"
 import { descriptor, selection, type Descriptor } from "./managed/descriptor"
 import { diagnostic } from "./diagnostic"
+import { review as refusedCapture } from "./capture-refusal"
 import { selection as dreamSelection } from "./dream-selection"
 import { picked as dreamSources } from "./dream-sources"
 import { targets as dreamTargets } from "./dream-sources"
@@ -543,6 +544,10 @@ export class BrainHost {
       vscode.commands.registerCommand("kilo-code.new.memory.recoverCommittedCapture", (...args: unknown[]) => {
         if (args.length) throw new Error("Native capture recovery accepts no command arguments")
         return this.recoverCapture()
+      }),
+      vscode.commands.registerCommand("kilo-code.new.memory.reconcileRefusedCapture", (...args: unknown[]) => {
+        if (args.length) throw new Error("Native capture refusal review accepts no command arguments")
+        return this.reconcileRefusal()
       }),
     )
     const close = (terminating = false) => {
@@ -1169,6 +1174,34 @@ export class BrainHost {
     await this.confirmCapture(reviewed, selected.turn)
     await vscode.window.showInformationMessage(
       "The original Memory save is confirmed and its current source policy is indexed. The original audit is retained.",
+    )
+  }
+
+  private async reconcileRefusal() {
+    const check = () => {
+      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Native capture refusal review is unavailable")
+    }
+    check()
+    const files = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      canSelectFolders: false,
+      filters: { "Original catalog refusal review": ["json"] },
+      title: "Review a refused automatic Memory save",
+    })
+    if (!files?.[0] || files[0].scheme !== "file") return
+    const input = await metadata(files[0].fsPath, (value) => value)
+    const proof = await refusedCapture(input, this.context.globalState)
+    check()
+    const accepted = await vscode.window.showWarningMessage(
+      `Save ${proof.original.id} was refused before native control could start under its exact reviewed source and catalog bindings. Retain the original uncertain record and diagnostic in an audit, and mark that attempt skipped so new conversations may save? The original conversation will not be retried. This does not settle a transport request or confirm indexing.`,
+      { modal: true },
+      "Retain refusal and allow new saves",
+    )
+    if (accepted !== "Retain refusal and allow new saves") return
+    check()
+    await this.service.configure(() => this.intake.reconcileRefusal(input, check).then(() => undefined), false)
+    await vscode.window.showInformationMessage(
+      "The original refused save is retained in its audit. Only new conversations may save.",
     )
   }
 

@@ -120,6 +120,11 @@
         "category": "Raya"
       },
       {
+        "command": "kilo-code.new.memory.reconcileRefusedCapture",
+        "title": "Review Refused Memory Save",
+        "category": "Raya"
+      },
+      {
         "command": "kilo-code.new.memory.upgradeRuntime",
         "title": "Update a Closed Memory Runtime",
         "category": "Raya"

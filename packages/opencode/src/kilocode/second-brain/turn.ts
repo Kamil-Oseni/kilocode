@@ -23,7 +23,7 @@ export function acknowledged(
     )
   if (!match) return statement(request)
   if (!/\b(?:I (?:prefer|like|dislike|want|would prefer|would like)|My preference is)\b/i.test(match[1])) return false
-  return !/\bplease\b|(?:^|[.;]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\byou (?:to|must|should|need to)\s+)(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|configure|control|apply|revert|undo|redo)\b/i.test(
+  return !/\bplease\b|(?:^|[.;]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\b(?:you|Raya|SecondBrain) (?:(?:to|must|should|needs? to) )?)(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|place|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|configure|control|apply|revert|undo|redo)\b/i.test(
     match[1],
   )
 }
@@ -34,16 +34,30 @@ function statement(request: string) {
     .replace(/\.\s*Do not change lights or place orders\.?$/i, "")
     .replace(/\.\s*Keep the Memory tab for manually inspecting and adjusting settings\.?$/i, "")
   const rows = text.replace(/\.$/, "").split(/\.\s+/)
-  if (
-    rows.length > 4 ||
-    !rows.every((row) =>
-      /^(?:For [^.!?`]{1,120}, )?I (?:also )?(?:prefer|like|dislike|would prefer) [^.!?`]+$/i.test(row),
+  if (rows.length > 4) return false
+  const items =
+    "(?:what I (?:lack|need)|(?:(?:the|my) )?(?:(?:missing|needed) )?(?:groceries|items)(?: (?:that )?I (?:lack|need))?)"
+  const list = "(?:(?:a|my|the) )?(?:shopping list|grocery list|list to buy)"
+  const assistance = new RegExp(`^(?:remember|track|keep track of) ${items} and (?:keep|maintain) ${list}$`, "i")
+  return rows.every((row) => {
+    const help =
+      /^(?:For [^.!?`]{1,120}, )?(?:I (?:also )?(?:prefer|would prefer) (?:Raya|SecondBrain) to |(?:Raya|SecondBrain) should help me )([^.!?`]+)$/i.exec(
+        row,
+      )
+    // Ongoing assistance is a complete missing-item and list-maintenance description, without an action tail.
+    if (
+      help &&
+      /\b(?:groceries|grocery|shopping)\b/i.test(row) &&
+      /\b(?:missing|lack|need)\b/i.test(help[1]) &&
+      assistance.test(help[1])
+    ) {
+      return true
+    }
+    if (!/^(?:For [^.!?`]{1,120}, )?I (?:also )?(?:prefer|like|dislike|would prefer) [^.!?`]+$/i.test(row)) return false
+    return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|orders|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|control|apply|revert|undo|redo|turn|place|adjust|keep|maintain|track|recall|remember|retrieve)\b/i.test(
+      row,
     )
-  )
-    return false
-  return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|control|apply|revert|undo|redo|turn|place|adjust|keep|recall|remember|retrieve)\b/i.test(
-    text,
-  )
+  })
 }
 
 /** A personal-memory question can finish after its own read, without closing a work goal. */
@@ -89,9 +103,19 @@ function status(request: string) {
 }
 
 function question(request: string) {
-  const text = request
+  const original = request
     .replace(/[.!?]\s*(?:do not|don't)\s+change (?:anything|files|lights)(?: or (?:files|lights))?[.!]?$/i, "")
     .replace(/^(?:please )?search (?:my |the )?saved (?:SecondBrain|Memory) notes?\s*:\s*/i, "")
+  // Only a single factual preference-purpose question may describe a list "to buy".
+  // A second imperative or an urgency/action tail cannot be normalized into recall.
+  const purpose =
+    /\b(?:for|about|regarding) (?:keeping|maintaining|using|having) (?:a|my|the) (?:grocery |shopping )?list to buy(?: in [\p{L}]+(?: [\p{L}]+){0,2})?(?=\??(?:\s+Cite (?:the saved |the |my )?sources[.!]?)?$)/iu
+  const text =
+    purpose.test(original) &&
+    /^[^.!?;`]+\??(?:\s+Cite (?:the saved |the |my )?sources[.!]?)?$/i.test(original) &&
+    !/\b(?:then|now|today|tonight|tomorrow|immediately|at once|right away)\b/i.test(original)
+      ? original.replace(purpose, (value) => value.replace(/\blist to buy\b/i, "shopping list"))
+      : original
   if (
     request.length > 1000 ||
     !/^(?:please )?(?:recall|what|which|who|when|where|how|did|do|does|have|has|is|are|remind me|can you remind)\b/i.test(
@@ -100,7 +124,7 @@ function question(request: string) {
   )
     return false
   if (!/\b(?:memory|remember|saved|notes?|preferences?)\b/i.test(request)) return false
-  return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|set up)\b/i.test(
+  return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|orders|place|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|set up)\b/i.test(
     text,
   )
 }

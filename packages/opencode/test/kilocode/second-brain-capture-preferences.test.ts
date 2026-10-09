@@ -31,6 +31,45 @@ const output = {
   },
 }
 
+test("acknowledged natural grocery originals accept valid extraction without assistant attribution", async () => {
+  // Parser acceptance does not guarantee that a model will choose to extract a memory.
+  for (const text of [
+    "I prefer Raya to keep track of missing groceries and maintain my shopping list.",
+    "For grocery shopping, I prefer Raya to keep track of missing groceries and maintain my shopping list.",
+    "SecondBrain should help me remember groceries I lack and keep a list to buy.",
+  ]) {
+    const source = {
+      user: { id: "msg_user", text },
+      assistant: {
+        id: "msg_assistant",
+        text: "Understood: I can help track missing groceries and your shopping list.",
+      },
+      tools: [],
+    }
+    const entry = { ...cards, key: "grocery_support", text, evidence: [{ ref: 0 }] }
+    const value = { entries: [entry] }
+    expect((await asSchema(extraction(source, true)).validate!(value)).success).toBe(true)
+    expect(entries(extracted(value, source, true), source)).toEqual([
+      {
+        category: "Preferences",
+        key: entry.key,
+        text,
+        origin: "user_statement",
+        evidence: [{ id: source.user.id, start: 0, end: text.length }],
+      },
+    ])
+    expect(extracted({ entries: [] }, source, true)).toEqual([])
+    for (const entry of [
+      { ...value.entries[0], evidence: [{ ref: 1 }] },
+      { ...value.entries[0], origin: "assistant_interpretation", evidence: [{ ref: 1 }] },
+    ]) {
+      const invalid = { entries: [entry] }
+      expect((await asSchema(extraction(source, true)).validate!(invalid)).success).toBe(false)
+      expect(() => extracted(invalid, source, true)).toThrow("bounded entry schema")
+    }
+  }
+})
+
 test("compound preference slots bind independent original sentence spans", () => {
   const blocks = JSON.parse(prepared(original))
   expect(blocks.filter((row: { slot?: string }) => row.slot)).toEqual([

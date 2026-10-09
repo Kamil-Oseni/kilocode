@@ -213,6 +213,99 @@ test("the installed preference statement can finish after status without treatin
   }
 })
 
+test("grocery assistance preferences acknowledge without purchase or acquisition authority", () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+  const text =
+    "For groceries, I prefer Raya to remember what I lack and keep a list to buy. I also prefer shopping options that support Canada. Do not change lights or place orders."
+  part.text = text
+  original.session.metadata[RayaChief.requestKey] = text
+  expect(acknowledged(original.messages, original.session, uid)).toBe(true)
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  original.tool.state = { ...original.tool.state, input: { action: "status" } }
+  expect(acknowledged(original.messages, original.session, uid)).toBe(true)
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+  for (const request of [
+    "For groceries, I prefer Raya to remember missing items and keep a shopping list.",
+    "For groceries, I would prefer Raya to remember what I need and keep a shopping list.",
+    "I prefer Raya to keep track of missing groceries and maintain my shopping list.",
+    "For grocery shopping, I prefer Raya to remember what I lack and keep a list to buy.",
+    "SecondBrain should help me remember the groceries I lack and maintain a list to buy.",
+    "I prefer SecondBrain to track missing items and keep my grocery list.",
+  ]) {
+    part.text = request
+    original.session.metadata[RayaChief.requestKey] = request
+    expect(acknowledged(original.messages, original.session, uid)).toBe(true)
+  }
+  for (const request of [
+    "I prefer you to buy groceries now.",
+    "I prefer you to place orders now.",
+    "I prefer Raya to order groceries now.",
+    "For groceries, I prefer Raya to remember what I lack and keep a list to buy now.",
+    "For groceries, I prefer Raya to remember what I lack and keep a list to buy and place orders.",
+    "For groceries, I prefer Raya to remember what I lack and keep a list to buy, then purchase groceries.",
+    "For groceries, I prefer Raya to remember what I lack and keep a list to buy. Buy milk now.",
+    "For groceries, I prefer Raya to remember what I lack and keep a list to buy. I also prefer you to place orders.",
+    "For groceries, I prefer Raya to remember what I lack and keep a list to buy. Do not change lights or place orders, then buy milk.",
+    "For groceries, I prefer you to remember what I lack and keep a list to buy.",
+    "For groceries, I prefer Raya to delete old notes and keep a shopping list.",
+    "I prefer Raya to keep track of missing groceries and maintain my shopping list now.",
+    "SecondBrain should help me remember the groceries I lack and maintain a list to buy, then place orders.",
+    "SecondBrain should help me buy the groceries I lack and keep my shopping list.",
+    "I prefer Raya to keep the lights on and maintain a shopping list of missing groceries.",
+    "I prefer Raya to keep track of missing groceries and maintain my shopping list; buy milk.",
+    "For groceries, I prefer Raya to remember missing items and keep a shopping list and transfer money.",
+    "For groceries, I prefer Raya to remember missing items and keep a shopping list and book a delivery.",
+    "For groceries, I prefer Raya to remember missing items and keep a shopping list at once.",
+    "For groceries, I prefer Raya to remember missing items and keep a shopping list and do it right away.",
+    "I prefer Raya to buy groceries now. Please acknowledge this preference.",
+    "I prefer Raya to place orders now. Please acknowledge this preference.",
+    "I prefer SecondBrain to order groceries. Please acknowledge this preference.",
+    "I prefer SecondBrain should place orders. Please acknowledge this preference.",
+  ]) {
+    part.text = request
+    original.session.metadata[RayaChief.requestKey] = request
+    expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
+test("shopping-list purpose remains a saved-note question only after its original completed query", () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+  const text = "What are my saved preferences for keeping a grocery list to buy in Canada?"
+  part.text = text
+  original.session.metadata[RayaChief.requestKey] = text
+  expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+  expect(settled(original.messages, original.session, uid)).toBe(true)
+  expect(settled(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
+  expect(settled(original.messages, original.session, "foreign-user")).toBe(false)
+  const state = original.tool.state
+  original.tool.state = { ...state, input: { action: "status" } }
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  original.tool.state = { ...state, status: "running", time: { start: 12 } }
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  original.tool.state = state
+  for (const request of [
+    "What are my saved grocery preferences? Buy groceries now.",
+    "What are my saved preferences for a list to buy? Then place orders now.",
+    "What are my saved preferences for keeping a grocery list to buy and purchase milk now?",
+    "Recall my saved grocery preferences and order milk now.",
+    "What are my saved preferences? Make a list to buy milk now.",
+    "What are my saved preferences? Then list to buy milk now.",
+    "What are my saved preferences for keeping a grocery list to buy and transfer money?",
+    "What are my saved preferences for keeping a grocery list to buy and book a delivery?",
+    "What are my saved preferences for keeping a grocery list to buy in book delivery?",
+    "What are my saved preferences for keeping a list to buy in transfer money?",
+  ]) {
+    part.text = request
+    original.session.metadata[RayaChief.requestKey] = request
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("compound work, memory retrieval and structured output do not become acknowledgement-only turns", () => {
   for (const text of [
     request,
@@ -375,6 +468,9 @@ test("actual Ollama bridge permits text continuation after the original Memory q
 })
 
 test("pending, failed and substituted tools cannot release synthesis", () => {
+  const media = fixture()
+  media.tool.tool = "second_brain_media_recall"
+  expect(settled(media.messages, media.session, uid)).toBe(false)
   for (const status of ["pending", "running", "error"] as const) {
     const original = fixture()
     original.tool.state =

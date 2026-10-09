@@ -62,6 +62,21 @@ async function retained(input: unknown, limit = 65536) {
   return held
 }
 
+async function retrieval(cfg: ReturnType<typeof descriptor>) {
+  check(cfg.retrieval !== undefined, "Original capture Retrieval plan required")
+  const held = await image(cfg.retrieval.path, 16777216)
+  check(
+    held.raw.length === cfg.retrieval.bytes && held.digest === cfg.retrieval.sha256,
+    "Original capture Retrieval plan differs",
+  )
+  const value = object(plan(held.raw))
+  check(
+    Number.isInteger(value.port) && Number(value.port) > 0 && Number(value.port) <= 65535,
+    "Original capture Retrieval port differs",
+  )
+  return { port: Number(value.port), ref: { ...cfg.retrieval, tuple: held.tuple } }
+}
+
 function selection(entry: Parameters<typeof closed>[0], pending: unknown, input: unknown) {
   const setup = parse(entry.setup)
   const cfg = descriptor(entry.managed)
@@ -98,6 +113,7 @@ export async function review(extension: string, entry: Parameters<typeof closed>
   const ended = prior.phase === "closed" ? object(document((await retained(prior.receipt)).raw).value) : undefined
   const running = ended ? { ...entry, launch: { phase: "running", receipt: receipt(ended.original) } } : entry
   const closure = await closed(running)
+  const paired = await retrieval(cfg)
   if (ended) check(isDeepStrictEqual(receipt(prior.receipt), closure.closed), "Saved capture closure differs")
   const held = await image(cfg.plan.path, 16777216)
   check(held.raw.length === cfg.plan.bytes && held.digest === cfg.plan.sha256, "Original capture plan differs")
@@ -171,7 +187,7 @@ export async function review(extension: string, entry: Parameters<typeof closed>
     "Committed capture review identity differs",
   )
   operation(Buffer.from(JSON.stringify({ ...value.result, operation: terminal })), identity, "response")
-  await Promise.all([...pins, ...records.map((item) => item.ref)].map((ref) => retained(ref)))
+  await Promise.all([...pins, paired.ref, ...records.map((item) => item.ref)].map((ref) => retained(ref, 16777216)))
   check(isDeepStrictEqual(await closed(running), closure), "Original capture closure changed during review")
   check(
     isDeepStrictEqual(await image(script), code) &&
@@ -185,7 +201,15 @@ export async function review(extension: string, entry: Parameters<typeof closed>
     request: identity.request,
     entrySHA: fingerprint(entry),
     debtSHA: fingerprint(debt),
-    closure,
+    evidence: {
+      plan: { ...cfg.plan, tuple: held.tuple },
+      retrieval: paired.ref,
+      source: pins,
+      operations: records.map((item) => item.ref),
+      helper: { path: script, bytes: code.raw.length, sha256: code.digest, tuple: code.tuple },
+      python: { ...cfg.python, tuple: python.tuple },
+    },
+    closure: { ...closure, ports: [...new Set([...closure.ports, paired.port])].sort((a, b) => a - b) },
     producer: result.receipt,
     qualification:
       "Read-only committed-effect correlation; administrative review required, no original settlement authority",

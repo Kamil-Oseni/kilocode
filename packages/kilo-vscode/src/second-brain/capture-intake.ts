@@ -102,6 +102,9 @@ const record = z
   })
   .strict()
 const rows = z.array(record).max(10000)
+export function records(input: unknown) {
+  return rows.parse(input ?? [])
+}
 const failures = z
   .array(
     z

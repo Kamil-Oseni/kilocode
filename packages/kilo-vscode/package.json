@@ -115,6 +115,11 @@
     },
     "commands": [
       {
+        "command": "kilo-code.new.memory.recoverCommittedCapture",
+        "title": "Recover an Interrupted Memory Save",
+        "category": "Raya"
+      },
+      {
         "command": "kilo-code.new.memory.activateReviewedCapture",
         "title": "Activate Reviewed Memory Saving",
         "category": "Raya"

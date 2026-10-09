@@ -160,20 +160,28 @@ export class BrainService {
     return this.recovery(() => this.settings.resume(confirm))
   }
 
-  private recovery(body: () => Promise<void>) {
+  recoverCapture(input: unknown, confirm: Parameters<BrainSettings["recoverCapture"]>[2]) {
+    if (!this.extension) return Promise.reject(new Error("Installed Memory recovery sources required"))
+    const extension = this.extension
+    return this.recovery(() => this.settings.recoverCapture(extension, input, confirm))
+  }
+
+  private recovery<T>(body: () => Promise<T>) {
     if (this.closed || this.changing || this.pending.size || this.operation || this.managed)
       return Promise.reject(
         new Failure("control_uncertain", "Historical repair requires a fresh host with no owned work", 0),
       )
     const job = body()
-      .then(() => {
+      .then((result) => {
         this.opening = undefined
         this.state = { configured: true, status: "disconnected", results: [] }
+        return result
       })
       .finally(() => {
         this.changing = undefined
       })
-    this.changing = job
+    this.changing = job.then(() => undefined)
+    void this.changing.catch(() => undefined)
     return job
   }
 

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import unittest
 import uuid
+import sys
 import httpx
 import capture_http_test as support
 from capture_recovery import review
@@ -99,4 +100,13 @@ class Recovery(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    if sys.argv[1:] == ['--prepare']:
+        fixture = Recovery('test_committed_effect_and_original_request_are_verified_without_writes')
+        fixture.setUp()
+        fixture.server.POOL.shutdown(wait=True)
+        fixture.server.STORAGE.shutdown(wait=True)
+        print(json.dumps(dict(root=str(fixture.root), notes=str(fixture.notes), cfg=fixture.cfg,
+                              result=fixture.result, operations=str(fixture.server.JOURNAL.folder))))
+        fixture._cleanups.clear()
+        sys.exit(0)
     unittest.main()

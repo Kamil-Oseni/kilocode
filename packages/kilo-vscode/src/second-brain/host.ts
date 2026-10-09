@@ -29,7 +29,7 @@ import { unchanged } from "./review"
 import { ClosedRequired } from "./closed-recovery"
 import type { KiloConnectionService } from "../services/cli-backend/connection-service"
 
-import { CaptureIntake, type CapturePublication } from "./capture-intake"
+import { CaptureIntake, records, type CapturePublication } from "./capture-intake"
 import { failure } from "./capture-failure"
 import { personal } from "./scope"
 
@@ -531,6 +531,10 @@ export class BrainHost {
       vscode.commands.registerCommand("kilo-code.new.memory.activateReviewedCapture", (...args: unknown[]) => {
         if (args.length) throw new Error("Native capture activation accepts no command arguments")
         return this.activateCapture()
+      }),
+      vscode.commands.registerCommand("kilo-code.new.memory.recoverCommittedCapture", (...args: unknown[]) => {
+        if (args.length) throw new Error("Native capture recovery accepts no command arguments")
+        return this.recoverCapture()
       }),
     )
     const close = () => join([this.control.dispose(), this.service.dispose(), Control.drain()])
@@ -1114,6 +1118,34 @@ export class BrainHost {
       )
       return accepted === "Restore closed Memory setup"
     })
+  }
+
+  private async recoverCapture() {
+    if (!vscode.workspace.isTrusted) throw new Error("Trusted workspace required for Memory recovery")
+    const turns = records(this.context.globalState.get("raya.secondBrain.personalCapture.turns"))
+    const choices = turns
+      .filter((turn) => turn.phase === "saving" || turn.phase === "uncertain")
+      .map((turn) => ({ label: turn.id, description: turn.root, detail: `Original message: ${turn.messageID}`, turn }))
+    if (!choices.length) throw new Error("No interrupted capture is available for committed-effect review")
+    const selected = await vscode.window.showQuickPick(choices, {
+      title: "Review an interrupted Memory save",
+      ignoreFocusOut: true,
+    })
+    if (!selected) return
+    const result = await this.service.recoverCapture(selected.turn, async (review) => {
+      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection is unavailable")
+      const accepted = await vscode.window.showWarningMessage(
+        `The original save ${review.capture} is present in ${review.root}. Its note bytes, change journal, policy and original completed request agree, and both original services closed successfully. Recover the saved service setup? The original request and capture history remain in the audit; the save will not be repeated. Search indexing still needs verification.`,
+        { modal: true },
+        "Recover committed save",
+      )
+      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
+      return accepted === "Recover committed save"
+    })
+    if (!result) return
+    await vscode.window.showInformationMessage(
+      "Memory service setup recovered. Original capture history is retained; capture history reconciliation and search indexing remain to be verified.",
+    )
   }
 
   private async review() {

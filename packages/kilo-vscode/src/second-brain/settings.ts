@@ -6,15 +6,18 @@ import { settlement, ClientV2 } from "./client-v2"
 import { descriptor, receipt as checked, type Descriptor } from "./managed/descriptor"
 import type { Receipt } from "./managed/owner"
 import { launch as context, admission, transition, history as managedHistory, type Launch } from "./managed/restart"
-import { review as repair } from "./failed-repair"
+import { review as repair, fingerprint } from "./failed-repair"
 import { review as archive, absent } from "./failed-archive"
 import { normalize } from "./control/identity"
 import { review as closed, ClosedRequired } from "./closed-recovery"
+import { review as capture } from "./committed-capture"
+import { records } from "./capture-intake"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
 const debt = "raya.secondBrain.control.uncertainty"
 const quarantine = "raya.secondBrain.quarantinedSetups"
+const recovering = "raya.secondBrain.committedCaptureRecovery.pending"
 
 export type Setup =
   | ReturnType<typeof setup>
@@ -99,6 +102,44 @@ async function shutdown(
     throw new Error("Original managed shutdown receipt differs")
 }
 
+function captureCurrent(
+  current: unknown,
+  entry: unknown,
+  next: unknown,
+  actual: unknown,
+  metadata: unknown,
+  phase?: string,
+) {
+  if (
+    (!isDeepStrictEqual(current, entry) && !isDeepStrictEqual(current, next)) ||
+    (actual !== undefined && !isDeepStrictEqual(actual, metadata)) ||
+    (actual === undefined && (!phase || !["verified", "applied"].includes(phase) || !isDeepStrictEqual(current, next)))
+  )
+    throw new Error("Original interrupted capture transaction differs")
+}
+
+function captureAudit<T extends { phase: string; observed: number; helper: unknown; absence: unknown }>(
+  audit: T,
+  retained?: T,
+) {
+  if (retained === undefined) return
+  if (
+    !["prepared", "failed", "verified", "applied"].includes(retained.phase) ||
+    !Number.isSafeInteger(retained.observed) ||
+    !isDeepStrictEqual(retained, {
+      ...audit,
+      observed: retained.observed,
+      helper: retained.helper,
+      absence: retained.absence,
+      phase: retained.phase,
+    })
+  )
+    throw new Error("Original committed-capture recovery already exists or differs")
+  audit.observed = retained.observed
+  audit.helper = retained.helper
+  audit.absence = retained.absence
+}
+
 export class BrainSettings {
   private tail = Promise.resolve()
   private leases = new WeakMap<object, { entry: ReturnType<BrainSettings["entry"]>; client: ClientV2 }>()
@@ -118,6 +159,7 @@ export class BrainSettings {
   }
 
   current(input: unknown) {
+    if (this.storage.get(recovering) !== undefined) return false
     const selected = this.loaded.get(input as object)
     if (!selected || this.pending()) return false
     const raw = this.storage.get<unknown>(state)
@@ -125,6 +167,7 @@ export class BrainSettings {
   }
 
   async load(): Promise<{ setup: Setup; key: string; managed?: Descriptor; launch?: Launch } | undefined> {
+    this.available()
     const raw = this.storage.get<unknown>(state)
     if (raw === undefined) return undefined
     const entry = structuredClone(this.entry(raw))
@@ -144,11 +187,17 @@ export class BrainSettings {
     if (!key) return undefined
     if (!isDeepStrictEqual(this.storage.get<unknown>(state), entry))
       throw new Error("Original Memory credential selection changed during load")
+    this.available()
     if (setup.version === 2 && this.pending())
       throw new Error("Memory v2 operation is unavailable pending original settlement")
     this.loaded.set(setup, entry)
     if (launch) this.launches.set(setup, launch)
     return { setup, key, ...(entry.managed ? { managed: entry.managed } : {}), ...(launch ? { launch } : {}) }
+  }
+
+  private available() {
+    if (this.storage.get(recovering) !== undefined)
+      throw new Error("Interrupted committed capture recovery must finish before Memory can start")
   }
 
   private async reopen(entry: ReturnType<BrainSettings["entry"]>) {
@@ -332,6 +381,131 @@ export class BrainSettings {
     })
   }
 
+  /** Reviewed committed effects may recover intake; this never settles the original request. */
+  recoverCapture(
+    extension: string,
+    input: unknown,
+    confirm: (value: Awaited<ReturnType<typeof capture>>) => Promise<boolean>,
+  ) {
+    return this.serial(async () => {
+      const ledger = "raya.secondBrain.personalCapture.turns"
+      const turns = records(this.storage.get(ledger))
+      const turn = turns.find((turn) => isDeepStrictEqual(turn, input))
+      if (!turn) throw new Error("Original capture ledger row required")
+      const key = `raya.secondBrain.committedCaptureRecovery.${turn.id}`
+      const current = structuredClone(this.entry(this.storage.get<unknown>(state)))
+      const actual = this.pending()
+      const fence = { value: this.storage.get<unknown>(recovering) }
+      const interrupted = this.storage.get<{
+        phase: string
+        previous: ReturnType<BrainSettings["entry"]>
+        debt: unknown
+      }>(key)
+      const entry = interrupted ? structuredClone(this.entry(interrupted.previous)) : current
+      const metadata = interrupted ? journal(interrupted.debt) : actual
+      const same = () =>
+        isDeepStrictEqual(this.storage.get(state), current) &&
+        isDeepStrictEqual(this.pending(), actual) &&
+        isDeepStrictEqual(this.storage.get(recovering), fence.value) &&
+        isDeepStrictEqual(records(this.storage.get(ledger)), turns)
+      const reviewed = await capture(extension, entry, metadata, input)
+      const marker = { capture: turn.id, request: reviewed.request, audit: key, debtSHA: reviewed.debtSHA }
+      if (fence.value !== undefined && !isDeepStrictEqual(fence.value, marker))
+        throw new Error("Different committed capture recovery remains active")
+      const prior = entry.launch as { phase: string; receipt: Receipt; history?: Receipt[] }
+      const next = { ...entry, launch: { ...prior, phase: "closed", receipt: reviewed.closure.closed } }
+      captureCurrent(current, entry, next, actual, metadata, interrupted?.phase)
+      await absent(reviewed.closure)
+      if (!(await confirm(reviewed))) return
+      const stable = (value: typeof reviewed) => fingerprint({ ...value, producer: undefined })
+      const verify = async () => {
+        if (!same() || stable(await capture(extension, entry, metadata, input)) !== stable(reviewed) || !same())
+          throw new Error("Reviewed committed capture changed")
+      }
+      await verify()
+      const observation = await absent(reviewed.closure)
+      if (!same()) throw new Error("Committed capture selection changed during absence check")
+      const { producer, ...evidence } = reviewed
+      const audit = {
+        format: "raya.memory.committed-capture.recovery",
+        version: 1,
+        previous: entry,
+        debt: metadata,
+        turn: input,
+        reviewSHA: stable(reviewed),
+        review: evidence,
+        helper: producer,
+        absence: observation,
+        observed: Date.now(),
+        phase: "prepared",
+        requestSettlement: false,
+        replay: false,
+        indexConfirmed: false,
+      }
+      const retained = this.storage.get<typeof audit>(key)
+      captureAudit(audit, retained)
+      if (retained?.phase === "applied") {
+        if (actual !== undefined) throw new Error("Completed capture recovery has conflicting uncertainty")
+        if (!same() || !isDeepStrictEqual(this.storage.get(key), retained))
+          throw new Error("Completed capture recovery changed")
+        if (fence.value !== undefined) {
+          await this.storage.update(recovering, undefined)
+          fence.value = undefined
+          if (!same() || !isDeepStrictEqual(this.storage.get(key), retained))
+            throw new Error("Completed capture recovery fence changed")
+        }
+        return reviewed
+      }
+      await this.storage.update(key, audit)
+      if (!same() || !isDeepStrictEqual(this.storage.get(key), audit))
+        throw new Error("Committed capture audit publication changed")
+      const apply = async () => {
+        fence.value = marker
+        await this.storage.update(recovering, marker)
+        if (!same()) throw new Error("Committed capture recovery fence changed")
+        await verify()
+        await absent(reviewed.closure)
+        if (!same()) throw new Error("Committed capture changed before recovery publication")
+        await this.storage.update(state, next)
+        if (!isDeepStrictEqual(this.storage.get(state), next) || !isDeepStrictEqual(this.pending(), actual))
+          throw new Error("Committed capture selection publication changed")
+        // Persist the verified administrative intent before the final intake commit.
+        // A cold host may finish this exact audit; it never replays the save.
+        await this.storage.update(key, { ...audit, phase: "verified" })
+        if (
+          !isDeepStrictEqual(this.storage.get(key), { ...audit, phase: "verified" }) ||
+          !isDeepStrictEqual(this.storage.get(state), next) ||
+          !isDeepStrictEqual(this.pending(), actual)
+        )
+          throw new Error("Committed capture verified checkpoint changed")
+        await this.storage.update(debt, undefined)
+        if (!isDeepStrictEqual(this.storage.get(state), next) || this.pending() !== undefined)
+          throw new Error("Committed capture uncertainty publication changed")
+        await this.storage.update(key, { ...audit, phase: "applied" })
+        if (
+          !isDeepStrictEqual(this.storage.get(state), next) ||
+          this.pending() !== undefined ||
+          !isDeepStrictEqual(records(this.storage.get(ledger)), turns) ||
+          !isDeepStrictEqual(this.storage.get(key), { ...audit, phase: "applied" })
+        )
+          throw new Error("Committed capture recovery audit changed")
+        if (!isDeepStrictEqual(this.storage.get(recovering), marker))
+          throw new Error("Committed capture recovery fence changed before completion")
+        await this.storage.update(recovering, undefined)
+        if (this.storage.get(recovering) !== undefined)
+          throw new Error("Committed capture recovery fence clearance changed")
+      }
+      try {
+        await apply()
+        this.original = undefined
+        this.managedEntry = undefined
+        return reviewed
+      } catch (err) {
+        await this.restore(entry, next, metadata, err, key, audit)
+      }
+    })
+  }
+
   private async restore(
     entry: unknown,
     next: unknown,
@@ -362,7 +536,11 @@ export class BrainSettings {
     if (!isDeepStrictEqual(this.pending(), metadata))
       throw new AggregateError([err, new Error("Repair journal restoration changed")], "Failed-search repair failed")
     const retained = this.storage.get<unknown>(key)
-    if (!isDeepStrictEqual(retained, audit) && !isDeepStrictEqual(retained, { ...audit, phase: "applied" }))
+    if (
+      ![audit, { ...audit, phase: "verified" }, { ...audit, phase: "applied" }].some((value) =>
+        isDeepStrictEqual(retained, value),
+      )
+    )
       throw new AggregateError(
         [err, new Error("Repair audit restoration identity changed")],
         "Failed-search repair failed",
@@ -490,6 +668,7 @@ export class BrainSettings {
         if (
           metadata?.version !== 2 ||
           !selected ||
+          this.storage.get(recovering) !== undefined ||
           !isDeepStrictEqual(this.storage.get<unknown>(state), selected.entry) ||
           this.pending() !== undefined
         )
@@ -502,6 +681,8 @@ export class BrainSettings {
   }
 
   selection(input: unknown, client: ClientV2) {
+    if (this.storage.get(recovering) !== undefined)
+      throw new Error("Committed capture recovery must finish before selection")
     const entry = input && typeof input === "object" ? this.loaded.get(input) : undefined
     if (!(client instanceof ClientV2) || !entry || !isDeepStrictEqual(this.storage.get<unknown>(state), entry))
       throw new Error("Original loaded Memory credential selection differs")
@@ -597,7 +778,7 @@ export class BrainSettings {
       await this.secrets.delete(this.entry(prior).credential)
   }
 
-  private serial(body: () => Promise<void>) {
+  private serial<T>(body: () => Promise<T>) {
     const task = this.tail.then(body)
     this.tail = task.then(
       () => undefined,

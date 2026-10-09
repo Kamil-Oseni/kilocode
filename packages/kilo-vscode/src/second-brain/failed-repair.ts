@@ -32,9 +32,10 @@ function observation(raw: Uint8Array, entry: unknown) {
       ]
         .sort()
         .join() &&
-      witness.format === "raya.memory.failed-search.observation" &&
+      ((witness.format === "raya.memory.failed-search.observation" && witness.authenticated_original_http === true) ||
+        (witness.format === "raya.memory.cancelled-search.observation" &&
+          witness.authenticated_original_http === false)) &&
       witness.version === 1 &&
-      witness.authenticated_original_http === true &&
       witness.settlement_authority === false &&
       typeof witness.observed === "number" &&
       Number.isFinite(witness.observed) &&
@@ -82,7 +83,11 @@ export async function inspect(file: string, entry: unknown, pending: unknown) {
     downstream: [],
   }
   const terminal = object(operation(Buffer.from(JSON.stringify(witness.terminal)), selected, "terminal").operation)
-  check(terminal.operation_outcome === "failed", "Only a failed search with no downstream work may be repaired")
+  const outcome = witness.format === "raya.memory.cancelled-search.observation" ? "cancelled" : "failed"
+  check(
+    terminal.operation_outcome === outcome,
+    "Only the selected failed or cancelled search without downstream work may be repaired",
+  )
   const ref = object(witness.terminal_file)
   const expected = path.join(
     cfg.namespaces.memory.root,
@@ -104,11 +109,11 @@ export async function inspect(file: string, entry: unknown, pending: unknown) {
       isDeepStrictEqual(document(current.raw, 65536).value, witness.terminal),
     "Original failed terminal changed",
   )
-  return { setup, cfg, original: receipt(prior.receipt), selected, held }
+  return { setup, cfg, original: receipt(prior.receipt), selected, held, outcome }
 }
 
 export async function review(file: string, entry: unknown, pending: unknown) {
-  const { setup, cfg, original, selected, held } = await inspect(file, entry, pending)
+  const { setup, cfg, original, selected, held, outcome } = await inspect(file, entry, pending)
   const location = path.join(path.dirname(original.path), "managed-closed.json")
   await directory(path.dirname(location))
   const ended = await image(location, 65536)
@@ -119,7 +124,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
   return Object.freeze({
     request: selected.request,
     root: setup.root,
-    outcome: "failed" as const,
+    outcome,
     closed,
     observation: Object.freeze({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple }),
     qualification: "Explicit metadata repair; original clean producer pair only, no model or native family acceptance",

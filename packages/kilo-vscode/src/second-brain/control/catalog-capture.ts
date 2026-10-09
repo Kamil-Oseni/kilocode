@@ -3,7 +3,7 @@ import { release as legacy } from "./catalog-v2"
 
 export const release = Object.freeze({
   "server.py": "8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e9b164443c",
-  "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3",
+  "index.py": "89fcbf572c83a25bc39f8e646fcd080330ddb1605cb89c65c8240f9d2ae0a9dc",
   "notes.py": "e43105220aa739664bfbaecc6638d36fb201e0da55052da6403f7015f9034643",
   "policy.py": "87c931cfa7cceb7386e6d2b4b05fdacf916360fd2cb0ff590d0fccf5dd334ae2",
   "admission.py": "347561aafc7467a24f7871714fc08f511e1f1509c3ade56fbfa00d71a30eae86",
@@ -20,8 +20,16 @@ const previous = Object.freeze({
   ...release,
   "index.py": "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e",
 })
+const retained = Object.freeze({
+  ...release,
+  "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3",
+})
 export function selected(pins: Readonly<Record<string, unknown>>) {
   if (!("capture.py" in pins)) return legacy
-  return pins["index.py"] === previous["index.py"] ? previous : release
+  return pins["index.py"] === previous["index.py"]
+    ? previous
+    : pins["index.py"] === retained["index.py"]
+      ? retained
+      : release
 }
 export const bridge = "a07325ca6e504cca3ce8714469423706d3e333c2399bfa451f41c896170b898c"

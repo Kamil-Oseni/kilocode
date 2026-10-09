@@ -17,6 +17,7 @@ import { sha } from "../../../src/second-brain/control/frames"
 
 const base = "D:/Raya/Services/Packaging/Python/3.12.14/python.exe"
 const full = process.argv.includes("--runtime")
+const cancelled = process.argv.includes("--cancelled-search")
 const source = full ? await mkdtemp(path.join(tmpdir(), "raya-original-capture-source-")) : undefined
 if (source) {
   for (const name of Object.keys(release))
@@ -40,7 +41,12 @@ if (source) {
 }
 const prepared = await command(
   "D:/Raya/Services/Packaging/Environments/PrimarySnapshot/Scripts/python.exe",
-  ["-B", path.resolve("script/memory/capture_recovery_test.py"), "--prepare", ...(source ? ["--source", source] : [])],
+  [
+    "-B",
+    path.resolve(cancelled ? "script/memory/cancelled_search_producer.py" : "script/memory/capture_recovery_test.py"),
+    "--prepare",
+    ...(source ? ["--source", source] : []),
+  ],
   { cwd: process.cwd() },
 )
 const data = JSON.parse(prepared.stdout) as {
@@ -213,7 +219,7 @@ await settings.record({
   protocol: loaded.setup.version === 2 ? loaded.setup.protocol : "",
   root: data.notes,
   request: {
-    op: "capture",
+    op: cancelled ? "search" : "capture",
     id: operation.request,
     root: data.notes,
     owner_epoch: operation.owner_epoch,

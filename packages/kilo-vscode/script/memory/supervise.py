@@ -29,12 +29,12 @@ CAPTURE = {'server.py': '8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e
 REUSE = {'retrieval/bootstrap.py': '530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d', 'retrieval/models.py': '2b60cf34c3532374e3e68748240850525a5c46a7056a126be26ee5356decb873', 'retrieval/namespace.py': '5cc018c7340b6225544ab43120a71eadcd1699ad38a05be7df3826115c7689b3', 'retrieval/owner.py': 'fb629212836e2958df0beb49fbc6b56fa38da7956d81eac06f8aeaa9ecf6a446', 'retrieval/server.py': '6bba99a267420d0e519d8db1f26848af16999ac7b339487f2da4fd0261e73ecb', 'retrieval/validation.py': '905626e694e5ac1f8742ecad6bddbc619301f8a8f8e5ab0da4ed60990be0d6e2', 'retrieval/worker.py': 'e5e3d135ebe3806097c9937c3d0429574622358a77b4beb14c2f9ee932e0d721', 'retrieval_reuse/bootstrap.py': 'cc424607c0b6d9b8565602d11027a4e1c65e769d06af8eaa89b581ec7ff30a6a', 'retrieval_reuse/entry.py': '88d9a50d99e1ed1930847b38f79142d13e4d443b180eb616956a8d8b3b6292ce', 'retrieval_reuse/lease.py': '308eeeab2ffbd8ae1e7db9b1da238c442829aec0cd1ab9ea5202a8d8e3412a3d', 'retrieval_reuse/living.py': 'bc75c4be4d9ced06e9bca4c2408430a1d1fb084a827762e81a3b5ec0043d261a', 'retrieval_reuse/pool.py': '4a0c0c12964ae99ae0a949d9d561c78226a71d42e2404052abc3c8760040db1c', 'retrieval_reuse/receipts.py': 'cab18d5ac5461e045eb283f480eefbd175fa96b8b4fefe8e0353af5f4269ffa3', 'retrieval_reuse/resident.py': 'f5ba90a93cdb55aecef91ba0017a30cc824719c0e840aacf0e5f2026a72fb039', 'retrieval_reuse/server.py': 'f1cee409152d2a5832411087dea53ae8fe92857aceee86947de27ee60c8258ee', 'retrieval_reuse/session.py': '487cbfdb0724162b1772e685350c212d16328eaa800d644a18a4de009793fb5c'}
 
 
-PREVIOUS = CAPTURE
-CAPTURE = dict(CAPTURE, **{'index.py': '8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3'})
+PREVIOUS = [CAPTURE, dict(CAPTURE, **{'index.py': '8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3'})]
+CAPTURE = dict(CAPTURE, **{'index.py': '89fcbf572c83a25bc39f8e646fcd080330ddb1605cb89c65c8240f9d2ae0a9dc'})
 
 
 def release(kind, pins, reuse=False):
-    capture = PREVIOUS if pins == PREVIOUS else CAPTURE
+    capture = next((value for value in PREVIOUS if pins == value), CAPTURE)
     selected = REUSE if reuse else capture if kind == 'memory' and 'capture.py' in pins else RELEASES[kind]
     if len(pins) != len(selected) or pins != selected:
         reject('Exact selected service release required')

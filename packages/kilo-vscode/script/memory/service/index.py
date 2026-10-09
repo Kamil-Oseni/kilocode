@@ -449,8 +449,13 @@ def measure(model=MODEL):
     remaining()
     def count(text):
         remaining()
+        ordinary(path)
+        if fields(path.stat()) != fields(before):
+            raise Refused('Pinned tokenizer identity changed during counting.')
         result = len(value.encode(text, add_special_tokens=False).ids)
         remaining()
+        if fields(path.stat()) != fields(before):
+            raise Refused('Pinned tokenizer identity changed during counting.')
         return result
     return count
 
@@ -731,9 +736,9 @@ class Index:
         lease.check()
         return current
 
-    def rows(self, rows, snapshot):
+    def rows(self, rows, snapshot, count):
         expected = {tuple(chunk[key] for key in ('path', 'start', 'end', 'heading', 'text', 'filehash'))
-                    for path, note in snapshot.items() for chunk in split(path, note)}
+                    for path, note in snapshot.items() for chunk in split(path, note, count)}
         if any(tuple(row[:6]) not in expected for row in rows):
             raise Refused('Derived index contains an unapproved or altered source chunk.')
 
@@ -753,7 +758,7 @@ class Index:
 
     @bounded
     @admitted
-    def sync(self, force=False, expected=None):
+    def sync(self, force=False, expected=None, count=None):
         import msvcrt
         if expected is not None:
             if not isinstance(expected, str) or not re.fullmatch('[a-f0-9]{64}', expected):
@@ -796,7 +801,7 @@ class Index:
                     with closing(restore):
                         with leaf(stage, None, self.lease.check) as (_, held, generation):
                             self.leaves[stage] = generation
-                            result = self.rebuild()
+                            result = self.rebuild(count)
                             held()
                         remaining()
                         self.lease.check()
@@ -808,15 +813,15 @@ class Index:
                         if entry(original) != generation:
                             raise Refused('Published database differs from the original rebuild stage.')
                         return dict(result, rebuilt=True)
-                return self.rebuild()
+                return self.rebuild(count)
 
-    def rebuild(self):
+    def rebuild(self, count=None):
         remaining()
         import numpy as np
         remaining()
         signature = SIGNATURE + ':admission:' + self.lease.sha
         snapshot = scan(self.root, self.lease.policy)
-        count = measure() if snapshot else tokens
+        count = count if count is not None else measure() if snapshot else tokens
         chunks = [chunk for path, note in snapshot.items() for chunk in split(path, note, count)]
         if len(chunks) > 10000:
             raise ValueError('The first index supports at most 10000 chunks.')
@@ -864,31 +869,33 @@ class Index:
     def context(self, query, budget=3000, top=5):
         if type(budget) is not int or not 1 <= budget <= 12000:
             raise ValueError('Linked recall budget is outside its bounds.')
+        count = measure()
         seeds = [{'relative': row['relative'], 'sha256': row['source_sha256']}
-                 for row in self.search(query, top)]
-        value = retrieve(self.root, self.lease.policy, seeds, query, budget, tokens, remaining)
+                 for row in self.search(query, top, count)]
+        value = retrieve(self.root, self.lease.policy, seeds, query, budget, count, remaining)
         clean(self.root)
         self.lease.check()
         return value
 
     @bounded
     @admitted
-    def search(self, query, top=5):
+    def search(self, query, top=5, count=None):
         remaining()
         import numpy as np
         remaining()
-        if not isinstance(query, str) or not query.strip() or tokens(query) > 96:
+        count = measure() if count is None else count
+        if not isinstance(query, str) or not query.strip() or count(query) > 96:
             raise ValueError('Search query must contain 1–96 tokens.')
         if type(top) is not int or not 1 <= top <= 10:
             raise ValueError('top must be an integer from 1 to 10.')
-        self.sync()
+        self.sync(count=count)
         snapshot = scan(self.root, self.lease.policy)
         with self.connect() as db:
             meta = dict(db.execute('SELECT key,value FROM meta'))
             if meta.get('signature') != SIGNATURE + ':admission:' + self.lease.sha:
                 raise Refused('Derived index belongs to an obsolete admission policy.')
             rows = list(db.execute('SELECT path,start,end,heading,text,filehash,vector FROM chunks ORDER BY id'))
-        self.rows(rows, snapshot)
+        self.rows(rows, snapshot, count)
         self.guard(snapshot)
         if not rows:
             return []
@@ -901,7 +908,7 @@ class Index:
         matrix = np.stack([decode(row[6]) for row in rows])
         scores = matrix @ vector
         indexes = np.argsort(scores)[::-1][:min(10, len(rows))].tolist()
-        self.rows(rows, self.guard(snapshot))
+        self.rows(rows, self.guard(snapshot), count)
         ranked = api('/v1/rerank', {'model': 'qwen3-reranker-0.6b', 'query': query, 'documents': [semantic(rows[index][4]) for index in indexes], 'top_n': min(top, len(indexes))}, gate=lambda: self.guard(snapshot))
         if ranked.get('revision') != RANKER['revision']:
             raise RuntimeError('Reranker revision changed.')

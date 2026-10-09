@@ -525,6 +525,14 @@ export class BrainHost {
       ),
       vscode.commands.registerCommand("raya.memory.reconcileOperation", () => this.service.reconcile()),
       vscode.commands.registerCommand("raya.memory.repairFailedSearch", () => this.repair()),
+      vscode.commands.registerCommand("kilo-code.new.memory.recoverInterruptedRead", (...args: unknown[]) => {
+        if (args.length) throw new Error("Native Memory read recovery accepts no command arguments")
+        return this.repair()
+      }),
+      vscode.commands.registerCommand("kilo-code.new.memory.upgradeRuntime", (...args: unknown[]) => {
+        if (args.length || !vscode.workspace.isTrusted) throw new Error("Trusted native Memory update required")
+        return this.service.upgradeRuntime()
+      }),
       vscode.commands.registerCommand("raya.memory.archiveFailedSetup", () => this.archive()),
       vscode.commands.registerCommand("raya.memory.resumeClosedPair", () => this.resume()),
       vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
@@ -1081,12 +1089,13 @@ export class BrainHost {
     })
     if (!selected?.[0] || selected[0].scheme !== "file") return
     await this.service.repair(selected[0].fsPath, async (review) => {
+      const action = review.outcome === "cancelled" ? "Recover interrupted search" : "Recover failed search"
       const accepted = await vscode.window.showWarningMessage(
-        `Recover the saved Memory setup for ${review.root}? Original search ${review.request} failed with no downstream requests, and its original producer pair closed cleanly. Trust the reviewed observation SHA-256 ${review.observation.sha256}. Previous setup and failed-request metadata are retained in an audit. The search is not retried; source indexing and capture remain separate actions.`,
+        `Recover the saved Memory setup for ${review.root}? Original search ${review.request} ended ${review.outcome} with no downstream requests, and its original producer pair closed cleanly. Trust the reviewed observation SHA-256 ${review.observation.sha256}. Previous setup and request metadata are retained in an audit. This administrative recovery does not settle or retry the original HTTP request; source indexing and capture remain separate actions.`,
         { modal: true },
-        "Recover failed search",
+        action,
       )
-      return accepted === "Recover failed search"
+      return accepted === action
     })
   }
 

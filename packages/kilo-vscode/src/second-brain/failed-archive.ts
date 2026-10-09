@@ -116,7 +116,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
   const old =
     input.format === "raya.memory.unclosed-pair.fresh-start"
       ? await unclosed(entry, pending, witness)
-      : { ...(await inspect(witness.path, entry, pending)), outcome: "failed" as const }
+      : await inspect(witness.path, entry, pending)
   check(
     old.held.digest === witness.sha256 && old.held.raw.length === witness.bytes && old.held.tuple === witness.tuple,
     "Fresh-start observation changed",

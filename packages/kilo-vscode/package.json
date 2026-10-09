@@ -120,6 +120,16 @@
         "category": "Raya"
       },
       {
+        "command": "kilo-code.new.memory.upgradeRuntime",
+        "title": "Update a Closed Memory Runtime",
+        "category": "Raya"
+      },
+      {
+        "command": "kilo-code.new.memory.recoverInterruptedRead",
+        "title": "Recover an Interrupted Memory Read",
+        "category": "Raya"
+      },
+      {
         "command": "kilo-code.new.memory.activateReviewedCapture",
         "title": "Activate Reviewed Memory Saving",
         "category": "Raya"

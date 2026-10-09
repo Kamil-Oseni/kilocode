@@ -12,12 +12,17 @@ import { fingerprint } from "../../src/second-brain/failed-repair"
 import { release, bridge } from "../../src/second-brain/control/catalog-capture"
 import { linked } from "../../src/second-brain/managed/capture-upgrade"
 import { descriptor } from "../../src/second-brain/managed/descriptor"
+import { image } from "../../src/second-brain/control/identity"
 import { rebind } from "../../src/second-brain/committed-capture"
 
-async function fixture(hook?: (key: string, value: unknown) => Promise<void>, full = false) {
+async function fixture(hook?: (key: string, value: unknown) => Promise<void>, full = false, cancelled = false) {
   const producer = await command(
     process.execPath,
-    [path.resolve("tests/unit/fixtures/committed-capture-producer.ts"), ...(full ? ["--runtime"] : [])],
+    [
+      path.resolve("tests/unit/fixtures/committed-capture-producer.ts"),
+      ...(full ? ["--runtime"] : []),
+      ...(cancelled ? ["--cancelled-search"] : []),
+    ],
     {
       cwd: process.cwd(),
     },
@@ -75,6 +80,85 @@ async function inventory(root: string) {
   await walk(root)
   return rows
 }
+
+test("native cancelled read recovery retains original debt and updates a closed runtime across physical save loss", async () => {
+  const fault = { enabled: false }
+  const value = await fixture(
+    async (key, item) => {
+      if (
+        fault.enabled &&
+        key === "raya.secondBrain.setup" &&
+        fingerprint((item as { setup: { source_sha256: unknown } }).setup.source_sha256) === fingerprint(release)
+      ) {
+        fault.enabled = false
+        throw new Error("Runtime update acknowledgement loss")
+      }
+    },
+    true,
+    true,
+  )
+  try {
+    const settings = value.settings()
+    const previous = value.storage.get<{ managed: unknown; launch: { receipt: unknown } }>("raya.secondBrain.setup")!
+    const debt = settings.pending()!
+    const request = debt.request as { id: string; owner_epoch: string }
+    const cfg = descriptor(previous.managed)
+    const file = path.join(cfg.namespaces.memory.root, "Requests", request.owner_epoch, request.id + "-terminal.json")
+    const held = await image(file, 65536)
+    const before = await inventory(value.notes)
+    const ledger = value.storage.get("raya.secondBrain.personalCapture.turns")
+    const observation = path.join(value.root, "cancelled-read.json")
+    const witness = {
+      format: "raya.memory.cancelled-search.observation",
+      version: 1,
+      observed: Date.now(),
+      entry_sha256: fingerprint(previous),
+      debt,
+      original: previous.launch.receipt,
+      terminal: JSON.parse(held.raw.toString()),
+      terminal_file: { path: file, bytes: held.raw.length, sha256: held.digest },
+      authenticated_original_http: false,
+      settlement_authority: false,
+      qualification: "Real original cancelled read receipt; no HTTP settlement or replay authority",
+    }
+    await writeFile(observation, JSON.stringify({ ...witness, authenticated_original_http: true }))
+    await expect(settings.repair(observation, async () => true)).rejects.toThrow("observation required")
+    expect(settings.pending()).toEqual(debt)
+    await writeFile(observation, JSON.stringify(witness))
+    await settings.repair(observation, async (review) => {
+      expect(review.outcome).toBe("cancelled")
+      return true
+    })
+    const key = "raya.secondBrain.failedSearchRecovery." + request.id
+    const audit = value.storage.get(key)
+    expect(audit).toMatchObject({
+      format: "raya.memory.cancelled-search.repair",
+      previous,
+      debt,
+      phase: "applied",
+      requestSettlement: false,
+      replay: false,
+      indexConfirmed: false,
+    })
+    expect(settings.pending()).toBeUndefined()
+    fault.enabled = true
+    const service = new BrainService(value.settings(), process.cwd())
+    await expect(service.upgradeRuntime()).rejects.toThrow("acknowledgement loss")
+    await service.dispose()
+    const cold = new BrainService(value.settings(), process.cwd())
+    await cold.upgradeRuntime()
+    expect(value.storage.get(key)).toEqual(audit)
+    expect(value.storage.get("raya.secondBrain.personalCapture.turns")).toEqual(ledger)
+    expect(await inventory(value.notes)).toEqual(before)
+    expect(
+      value.storage.get<{ setup: { source_sha256: unknown } }>("raya.secondBrain.setup")?.setup.source_sha256,
+    ).toEqual(release)
+    expect(value.storage.get("raya.secondBrain.committedCaptureRecovery.pending")).toBeUndefined()
+    await cold.dispose()
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
 
 for (const stage of ["confirmation", "ledger"] as const)
   test(`cross-release original capture recovery preserves exact proof after ${stage} acknowledgement loss`, async () => {

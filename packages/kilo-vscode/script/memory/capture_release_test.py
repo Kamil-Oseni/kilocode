@@ -33,7 +33,8 @@ print(json.dumps({'counter':True,'model_stack':False}))
         current = {name: hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest() for name in module.CAPTURE}
         self.assertEqual(len(current), 13)
         self.assertEqual(module.release('memory', current), module.CAPTURE)
-        self.assertEqual(module.release('memory', module.PREVIOUS), module.PREVIOUS)
+        for prior in module.PREVIOUS:
+            self.assertEqual(module.release('memory', prior), prior)
         self.assertEqual(module.release('memory', module.RELEASES['memory']), module.RELEASES['memory'])
         self.assertEqual(module.release('retrieval', module.RELEASES['retrieval']), module.RELEASES['retrieval'])
         for changed in [dict(current, **{'capture.py': 'f' * 64}),

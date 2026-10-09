@@ -29,6 +29,12 @@ async function capture(storage: Pick<Memento, "get">, ...args: Parameters<typeof
   return rebind(value, storage.get(`raya.secondBrain.committedCaptureRecovery.${value.capture}`))
 }
 
+function administration(outcome: string) {
+  return outcome === "cancelled"
+    ? { format: "raya.memory.cancelled-search.repair", requestSettlement: false, replay: false, indexConfirmed: false }
+    : { format: "raya.memory.failed-search.repair" }
+}
+
 export type Setup =
   | ReturnType<typeof setup>
   | Readonly<{
@@ -358,7 +364,7 @@ export class BrainSettings {
       const prior = entry.launch as { phase: string; receipt: Receipt; history?: Receipt[] }
       const next = { ...entry, launch: { ...prior, phase: "closed", receipt: reviewed.closed } }
       const audit = {
-        format: "raya.memory.failed-search.repair",
+        ...administration(reviewed.outcome),
         version: 1,
         previous: entry,
         debt: metadata,
@@ -471,6 +477,28 @@ export class BrainSettings {
     if (held?.format === "raya.memory.runtime.upgrade.pending") return true
     const raw = this.storage.get(state)
     return raw !== undefined && !isDeepStrictEqual(parse(this.entry(raw).setup).source_sha256, release)
+  }
+
+  /** Update only a genuinely closed runtime; preserve notes, original audits and capture history. */
+  upgradeRuntime(extension: string) {
+    return this.serial(async () => {
+      if (this.pending()) throw new Error("Original Memory uncertainty must be recovered before runtime update")
+      if (!this.upgrading()) return
+      const held = this.storage.get<{
+        format: string
+        audit: { artifact: Descriptor["plan"]; previous: { present: boolean; value?: unknown }[] }
+      }>(recovering)
+      if (!held) this.available()
+      const previous = this.entry(held ? held.audit.previous[0]?.value : this.storage.get(state))
+      const prior = previous.launch as { phase?: string; receipt: Receipt } | undefined
+      if (!prior || prior.phase !== "closed")
+        throw new Error("A genuinely closed Memory pair is required for runtime update")
+      await context(descriptor(previous.managed), parse(previous.setup), prior.receipt)
+      const artifact = held ? this.intent(held, previous) : await this.prepare(extension, previous)
+      await upgrade(this.storage, artifact)
+      this.original = undefined
+      this.managedEntry = undefined
+    })
   }
 
   /** A fresh ownerless host publishes only a source-qualified successor to the original applied recovery. */

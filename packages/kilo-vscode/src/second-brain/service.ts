@@ -172,6 +172,12 @@ export class BrainService {
     return this.recovery(() => this.settings.upgradeCapture(extension, input))
   }
 
+  upgradeRuntime() {
+    if (!this.extension) return Promise.reject(new Error("Installed Memory upgrade sources required"))
+    const extension = this.extension
+    return this.recovery(() => this.settings.upgradeRuntime(extension))
+  }
+
   private recovery<T>(body: () => Promise<T>) {
     if (this.closed || this.changing || this.pending.size || this.operation || this.managed)
       return Promise.reject(

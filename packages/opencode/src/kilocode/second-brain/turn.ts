@@ -33,7 +33,14 @@ function statement(request: string) {
   const text = request
     .replace(/\.\s*Do not change lights or place orders\.?$/i, "")
     .replace(/\.\s*Keep the Memory tab for manually inspecting and adjusting settings\.?$/i, "")
-  if (!/^(?:For [^.!?`]{1,120}, )?I (?:prefer|like|dislike|would prefer) [^.!?`]+\.?$/i.test(text)) return false
+  const rows = text.replace(/\.$/, "").split(/\.\s+/)
+  if (
+    rows.length > 4 ||
+    !rows.every((row) =>
+      /^(?:For [^.!?`]{1,120}, )?I (?:also )?(?:prefer|like|dislike|would prefer) [^.!?`]+$/i.test(row),
+    )
+  )
+    return false
   return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|control|apply|revert|undo|redo|turn|place|adjust|keep|recall|remember|retrieve)\b/i.test(
     text,
   )

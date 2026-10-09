@@ -188,6 +188,8 @@ test("the installed preference statement can finish after status without treatin
     "I prefer concise replies.",
     "I would prefer brief conversational ask cards.",
     "For first-time setup, I prefer brief ask cards. Do not change lights or place orders.",
+    "For first-time Raya setup, I prefer concise conversational ask cards instead of lengthy forms. I also prefer the Memory tab to be for manually inspecting and adjusting settings. Do not change lights or place orders.",
+    "I prefer concise replies. I also like clear citations.",
   ]) {
     part.text = value
     original.session.metadata[RayaChief.requestKey] = value
@@ -200,6 +202,9 @@ test("the installed preference statement can finish after status without treatin
     "I prefer brief ask cards. Keep the lights on.",
     "I prefer you recall my saved preferences.",
     "I prefer brief ask cards. Do not change lights or place orders, then install the extension.",
+    "I prefer concise replies. I also prefer you delete the old notes.",
+    "I prefer concise replies. I also prefer brief notes. Deploy the app.",
+    "I prefer concise replies. I like citations. I prefer brief notes. I like examples. I prefer more details.",
   ]) {
     part.text = value
     original.session.metadata[RayaChief.requestKey] = value

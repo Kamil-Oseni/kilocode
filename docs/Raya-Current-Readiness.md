@@ -16,6 +16,8 @@ Confirmation then failed: the capture ledger is uncertain and native Memory repo
 
 The owned test window closed naturally. Paired run `9c7035266d4cf93479c7d630f9d30441`, closure SHA-256 `5b77edf23bf36a625a13ee78e02dc356fb3117e461adbd690950958120e856ea`, records Memory 2260 and Retrieval 30372 exiting zero, streams at EOF and original/readers joined without force. Root checked referenced metadata hashes and isolated backend 3360 is absent. This covers those two original processes and streams only.
 
+The later native shutdown warning exposed a separate saved-lifecycle defect: recording the verified closed phase refused while a save remained pending. Source commit `555b8882d4` now accepts only the live owner's exact original joined closure and preserves unchanged pending debt. The build owner reports 31 tests / 322 assertions and extension types, lint, bundle, Knip and guards passing; root independently reviewed the committed delta. This fix is not installed. Dedicated recovery of the already-written preference remains in progress; neither shutdown success nor source tests settle its capture or prove indexed recall.
+
 Detailed original-turn evidence: [personal capture integration](Raya-Personal-Capture-Integration.md). Earlier versions, failures and delivery records are retained verbatim in [readiness history](Raya-Readiness-History.md#archived-current-readiness-snapshot--october-9-before-consolidation).
 
 ## Latest source progress

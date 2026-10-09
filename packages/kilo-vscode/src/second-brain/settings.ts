@@ -78,6 +78,27 @@ export function parse(input: unknown): Setup {
   })
 }
 
+async function shutdown(
+  entry: Parameters<typeof closed>[0],
+  pending: Record<string, unknown> | undefined,
+  proof: Receipt,
+) {
+  if (!pending) return
+  const setup = parse(entry.setup)
+  const request = pending.request as Record<string, unknown>
+  if (
+    pending.root !== setup.root ||
+    (pending.version === 2 &&
+      (setup.version !== 2 ||
+        pending.protocol !== setup.protocol ||
+        !isDeepStrictEqual(request.source_sha256, setup.source_sha256)))
+  )
+    throw new Error("Original managed shutdown debt selection differs")
+  // Record only this live owner's exact joined pair; request debt remains unresolved.
+  if (!isDeepStrictEqual((await closed(entry)).closed, proof))
+    throw new Error("Original managed shutdown receipt differs")
+}
+
 export class BrainSettings {
   private tail = Promise.resolve()
   private leases = new WeakMap<object, { entry: ReturnType<BrainSettings["entry"]>; client: ClientV2 }>()
@@ -170,14 +191,19 @@ export class BrainSettings {
       const proof = checked(receipt)
       await this.serial(async () => {
         const current = this.entry(this.storage.get<unknown>(state))
-        if (!isDeepStrictEqual(current, retained.entry) || this.pending())
+        const pending = this.pending()
+        if (!isDeepStrictEqual(current, retained.entry) || (pending && phase !== "closed"))
           throw new Error("Original managed setup/debt changed")
         const original = current.launch as { phase?: string; receipt: Receipt; history?: Receipt[] } | undefined
         const restart = transition(original?.phase, phase, launch, original?.receipt)
         if (restart && !managed) throw new Error("Fresh restart descriptor required")
         if (managed && phase !== "selected") throw new Error("Original restart selection required")
+        await shutdown(current, pending, proof)
         const selected = managed ? await admission(cfg, launch, proof, managed) : current.managed
-        if (!isDeepStrictEqual(this.entry(this.storage.get<unknown>(state)), current) || this.pending())
+        if (
+          !isDeepStrictEqual(this.entry(this.storage.get<unknown>(state)), current) ||
+          !isDeepStrictEqual(this.pending(), pending)
+        )
           throw new Error("Original managed selection changed during admission")
         const history = managedHistory(original?.history, restart ? original!.receipt : undefined)
         const next = {
@@ -186,7 +212,7 @@ export class BrainSettings {
           launch: { phase, receipt: proof, ...(history?.length ? { history } : {}) },
         }
         await this.storage.update(state, next)
-        if (!isDeepStrictEqual(this.storage.get<unknown>(state), next))
+        if (!isDeepStrictEqual(this.storage.get<unknown>(state), next) || !isDeepStrictEqual(this.pending(), pending))
           throw new Error("Original managed receipt publication changed")
         retained.entry = next
         this.managedEntry = next

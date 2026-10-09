@@ -17,8 +17,9 @@ root = Path(sys.argv[1]).resolve(strict=True)
 review = None
 if len(sys.argv) == 3:
     pins = json.loads(sys.argv[2])
-    assert set(pins) == {'server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
-                         'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py'}
+    names = {'server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
+             'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py'}
+    assert set(pins) in (names, names | {'capture.py'})
     sources = [{'name': name, 'sha256': sha, 'bytes': (root / name).stat().st_size} for name, sha in pins.items()]
 else:
     review = root / 'source-review.json'

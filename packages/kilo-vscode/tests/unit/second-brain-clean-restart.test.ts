@@ -6,14 +6,14 @@ import { tmpdir } from "node:os"
 import { spawn } from "../../src/util/process"
 import { BrainSettings } from "../../src/second-brain/settings"
 import { descriptor } from "../../src/second-brain/managed/descriptor"
-import { interpreter, supervisor } from "../../src/second-brain/managed/catalog"
+import { interpreter } from "../../src/second-brain/managed/catalog"
 import { Pair } from "../../src/second-brain/managed/pair"
 import { Pipes, publish } from "../../src/second-brain/managed/owner"
 import { launch, history, transition } from "../../src/second-brain/managed/restart"
 import { protect } from "../../src/second-brain/control/protection"
 import { observe } from "../../src/second-brain/control/identity"
 import { packaged } from "../../src/second-brain/control/index"
-import { release } from "../../src/second-brain/control/catalog-v2"
+import { release } from "../../src/second-brain/control/catalog-capture"
 import { fingerprint } from "../../src/second-brain/failed-repair"
 import { images, fingerprint as reusable } from "../../src/second-brain/managed/reuse-catalog"
 import { image } from "../../src/second-brain/control/identity"
@@ -121,6 +121,12 @@ print(json.dumps({'format':'raya.memory.disposable.supervisor.closed','passed':T
 async function fixture(
   protocol: "raya.memory.operation.v1" | "raya.memory.operation.v2" = "raya.memory.operation.v1",
   hook?: (key: string, value: unknown) => Promise<void>,
+  finish?: (
+    settings: BrainSettings,
+    record: ReturnType<BrainSettings["managed"]>,
+    closed: Awaited<ReturnType<typeof publish>>,
+  ) => Promise<void>,
+  pins: Readonly<Record<string, string>> = release,
 ) {
   const root = await mkdtemp(path.join(tmpdir(), "raya-memory-control-restart-"))
   await protect(root)
@@ -159,12 +165,15 @@ async function fixture(
     sid: "S-1-5-21-1-2-3-1001",
     generations: { root: ["1", "2", "3"], Runs: ["4", "5", "6"], Requests: ["7", "8", "9"] },
   })
+  const script = path.join(root, "supervise.py")
+  await copyFile(path.resolve("script/memory/supervise.py"), script)
+  const held = await image(script)
   const cfg = descriptor({
     format: "raya.memory.managed.launch",
     version: 2,
     root,
     python: { path: python, bytes: Number((await lstat(python)).size), sha256: interpreter },
-    supervisor: ref("supervise.py", supervisor),
+    supervisor: { path: script, bytes: held.raw.length, sha256: held.digest },
     plan: ref("memory.json", "a".repeat(64)),
     retrieval: ref("retrieval.json", "b".repeat(64)),
     namespaces: { memory: space("memory"), retrieval: space("retrieval") },
@@ -175,7 +184,7 @@ async function fixture(
     protocol,
     origin: "http://127.0.0.1:58741",
     root,
-    source_sha256: release,
+    source_sha256: pins,
   }
   const first = settings()
   await first.save(setup, "synthetic", cfg)
@@ -241,13 +250,16 @@ async function fixture(
     closures,
     qualification: "Original process/streams only; no downstream cold settlement authority",
   })
-  await record("closed", closed)
+  if (finish) await finish(first, record, closed)
+  if (!finish) await record("closed", closed)
   return {
     root,
     cfg,
     setup,
     file,
     settings,
+    first,
+    record,
     closed,
     selected,
     running,
@@ -319,6 +331,124 @@ async function failed(value: Awaited<ReturnType<typeof fixture>>) {
   await writeFile(value.file, JSON.stringify(data))
   return { file, witness, debt, ref }
 }
+
+function uncertain(root: string, pins = release) {
+  return {
+    format: "raya.memory.control.uncertainty",
+    version: 2,
+    protocol: "raya.memory.operation.v2",
+    root,
+    request: {
+      op: "capture",
+      id: "a".repeat(32),
+      root,
+      owner_epoch: "b".repeat(32),
+      selected_release_sha256: "c".repeat(64),
+      bodySHA: "d".repeat(64),
+      source_sha256: pins,
+    },
+  }
+}
+
+test("original managed shutdown records both joined producers while preserving capture debt", async () => {
+  const value = await fixture(
+    "raya.memory.operation.v2",
+    undefined,
+    async (settings, record, proof) => {
+      const root = path.dirname(proof.path)
+      await settings.record(uncertain(root))
+      await expect(record("selected", proof)).rejects.toThrow("setup/debt changed")
+      await expect(record("running", proof)).rejects.toThrow("setup/debt changed")
+      await expect(record("uncertain", proof)).rejects.toThrow("setup/debt changed")
+      await expect(record("closed", { ...proof, sha256: "0".repeat(64) })).rejects.toThrow("receipt differs")
+      await record("closed", proof)
+    },
+    release,
+  )
+  try {
+    const data = JSON.parse(await readFile(value.file, "utf8"))
+    expect(data["raya.secondBrain.setup"].launch).toEqual({ phase: "closed", receipt: value.closed })
+    expect(value.first.pending()).toEqual(uncertain(value.root))
+    expect(data["raya.secondBrain.control.uncertainty"]).toEqual(uncertain(value.root))
+    await expect(value.first.load()).rejects.toThrow("pending original settlement")
+    await expect(value.settings().load()).rejects.toThrow("pending original settlement")
+    await expect(value.first.resume(async () => true)).rejects.toThrow("Request debt requires original settlement")
+    await expect(value.record("closed", value.closed)).rejects.toThrow("replayed")
+    await expect(value.record("selected", value.selected)).rejects.toThrow("setup/debt changed")
+    expect(value.first.pending()).toEqual(uncertain(value.root))
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)
+
+test("original managed shutdown refuses debt from a different note selection", async () => {
+  const value = await fixture(
+    "raya.memory.operation.v2",
+    undefined,
+    async (settings, record, proof) => {
+      await settings.record(uncertain(path.join(path.dirname(proof.path), "other")))
+      await expect(record("closed", proof)).rejects.toThrow("debt selection differs")
+    },
+    release,
+  )
+  try {
+    const data = JSON.parse(await readFile(value.file, "utf8"))
+    expect(data["raya.secondBrain.setup"]).toEqual(value.running)
+    expect(value.first.pending()).toEqual(uncertain(path.join(value.root, "other")))
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)
+
+test("original managed shutdown refuses changed closure bytes without clearing debt", async () => {
+  const value = await fixture(
+    "raya.memory.operation.v2",
+    undefined,
+    async (settings, record, proof) => {
+      await settings.record(uncertain(path.dirname(proof.path)))
+      const data = JSON.parse(await readFile(proof.path, "utf8"))
+      data.closures.memory.code = 1
+      await writeFile(proof.path, JSON.stringify(data))
+      await expect(record("closed", proof)).rejects.toThrow("Original managed exit required")
+    },
+    release,
+  )
+  try {
+    const data = JSON.parse(await readFile(value.file, "utf8"))
+    expect(data["raya.secondBrain.setup"]).toEqual(value.running)
+    expect(value.first.pending()).toEqual(uncertain(value.root))
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)
+
+test("original managed shutdown detects a concurrent debt change during state publication", async () => {
+  const value = await fixture(
+    "raya.memory.operation.v2",
+    async (key, item) => {
+      if (key !== "raya.secondBrain.setup" || !item || typeof item !== "object" || !("launch" in item)) return
+      if ((item.launch as { phase: string }).phase !== "closed") return
+      const setup = (item as { setup: { root: string } }).setup
+      const file = path.join(setup.root, "settings.json")
+      const data = JSON.parse(await readFile(file, "utf8"))
+      data["raya.secondBrain.control.uncertainty"].request.id = "e".repeat(32)
+      await writeFile(file, JSON.stringify(data))
+    },
+    async (settings, record, proof) => {
+      await settings.record(uncertain(path.dirname(proof.path)))
+      await expect(record("closed", proof)).rejects.toThrow("receipt publication changed")
+    },
+    release,
+  )
+  try {
+    const debt = uncertain(value.root)
+    debt.request.id = "e".repeat(32)
+    expect(value.first.pending()).toEqual(debt)
+    await expect(value.first.load()).rejects.toThrow("pending original settlement")
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)
 
 async function fresh(value: Awaited<ReturnType<typeof fixture>>) {
   const failure = await failed(value)

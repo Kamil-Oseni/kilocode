@@ -1,6 +1,9 @@
 import type { MessageV2 } from "@/session/message-v2"
 import { RayaChief } from "../chief"
 
+export const acknowledgement =
+  "This turn states a personal preference. Briefly acknowledge the user's actual preference in one sentence. Treat references to first-time setup as the preference being described; do not begin setup or ask configuration questions. Preserve the user's restrictions. Do not claim that anything was changed or saved: separately authorized automatic Memory saving runs after the reply and must confirm its own result."
+
 /** An explicit preference acknowledgement has no tool action or goal-completion authority. */
 export function acknowledged(
   messages: readonly MessageV2.WithParts[],
@@ -19,8 +22,7 @@ export function acknowledged(
       request,
     )
   if (!match) return statement(request)
-  if (!/\b(?:I (?:prefer|like|dislike|want|would prefer|would like)|My preference is)\b/i.test(match[1]))
-    return false
+  if (!/\b(?:I (?:prefer|like|dislike|want|would prefer|would like)|My preference is)\b/i.test(match[1])) return false
   return !/\bplease\b|(?:^|[.;]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\byou (?:to|must|should|need to)\s+)(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|configure|control|apply|revert|undo|redo)\b/i.test(
     match[1],
   )

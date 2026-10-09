@@ -4,10 +4,12 @@ import path from "node:path"
 import os from "node:os"
 import { materialize } from "../../src/second-brain/managed/materialize"
 import { review } from "../../src/second-brain/managed/upgrade-review"
+import { publish } from "../../src/second-brain/managed/upgrade-publish"
 import { descriptor, paired, selection, type Descriptor } from "../../src/second-brain/managed/descriptor"
 import { current, retrieval } from "../../src/second-brain/managed/catalog"
 import { images, fingerprint } from "../../src/second-brain/managed/reuse-catalog"
-import { release } from "../../src/second-brain/control/catalog-capture"
+import { release, bridge } from "../../src/second-brain/control/catalog-capture"
+import { fingerprint as digest } from "../../src/second-brain/failed-repair"
 import { protect } from "../../src/second-brain/control/protection"
 import { protection } from "../../src/second-brain/managed/protection"
 import { command } from "../../src/second-brain/control/command"
@@ -293,6 +295,106 @@ print('reusable-v2-external-notes-qualified')`
   expect(result.stdout.trim()).toBe("reusable-v2-external-notes-qualified")
   expect(await readFile(path.join(notes, "README.md"))).toEqual(before)
 }, 30000)
+
+test("runtime publication survives every physical save acknowledgement loss and a cold applied retry", async () => {
+  const prepared = await materialize(cfg, setup, path.resolve("."), "f".repeat(32))
+  const key = "raya.secondBrain.setup"
+  const pending = "raya.secondBrain.committedCaptureRecovery.pending"
+  const ledger = "raya.secondBrain.personalCapture.turns"
+  const original = {
+    setup,
+    managed: cfg,
+    credential: "raya.secondBrain.key." + "a".repeat(8) + "-aaaa-aaaa-aaaa-" + "a".repeat(12),
+  }
+  const rows = [
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      project: outer,
+      sessionID: "session",
+      messageID: "message",
+      source_sha256: "a".repeat(64),
+      root: setup.root,
+      release: "b".repeat(64),
+      phase: "uncertain",
+    },
+  ]
+  const open = async (file: string, fail = 0) => {
+    const state = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>
+    let count = 0
+    return {
+      get<T>(key: string): T | undefined {
+        return structuredClone(state[key]) as T | undefined
+      },
+      async update(key: string, value: unknown) {
+        if (value === undefined) delete state[key]
+        if (value !== undefined) state[key] = value
+        await writeFile(file, JSON.stringify(state))
+        // Read the actual JSON persistence back, including absent slots, before simulating lost acknowledgement.
+        const persisted = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>
+        for (const name of Object.keys(state)) delete state[name]
+        Object.assign(state, persisted)
+        if (++count === fail) throw new Error("physical save acknowledgement lost")
+      },
+    }
+  }
+  // Absent catalog/consent are intentionally persisted: JSON must never turn them into null-valued selections.
+  for (const failure of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
+    const file = path.join(outer, `publication-${failure}.json`)
+    const consent =
+      failure === 11
+        ? {
+            version: 1,
+            enabled: true,
+            root: setup.root,
+            release: digest(setup.source_sha256),
+            zone: "America/Toronto",
+            model: "pinned-local-model",
+            authorization: { source: "Original human authorization", sha256: "c".repeat(64) },
+          }
+        : undefined
+    const catalog = consent
+      ? {
+          format: "raya.memory.control.catalog",
+          version: 2,
+          python: cfg.python.path,
+          source: path.join(cfg.root, "source/memory"),
+          bridge: path.join(outer, "retained-bridge.py"),
+          python_sha256: cfg.python.sha256,
+          bridge_sha256: bridge,
+          source_sha256: setup.source_sha256,
+        }
+      : undefined
+    await writeFile(
+      file,
+      JSON.stringify({
+        [key]: original,
+        [ledger]: rows,
+        "raya.secondBrain.personalCapture": consent,
+        "raya.secondBrain.control.catalog": catalog,
+      }),
+    )
+    await expect(publish(await open(file, failure === 11 ? 10 : failure), prepared.receipt)).rejects.toThrow(
+      "physical save acknowledgement lost",
+    )
+    const recovered = await publish(await open(file), prepared.receipt)
+    expect(recovered.publication.phase).toBe("applied")
+    const cold = await open(file)
+    expect(cold.get(pending)).toBeUndefined()
+    expect(cold.get(ledger)).toEqual(rows)
+    expect(cold.get(key)).toEqual({
+      setup: prepared.next.setup,
+      managed: prepared.next.managed,
+      credential: original.credential,
+    })
+    expect(cold.get("raya.secondBrain.control.catalog")).toEqual(
+      catalog ? { ...catalog, source: prepared.source, source_sha256: prepared.next.setup.source_sha256 } : undefined,
+    )
+    expect(cold.get("raya.secondBrain.personalCapture")).toEqual(
+      consent ? { ...consent, release: digest(prepared.next.setup.source_sha256) } : undefined,
+    )
+    expect((await publish(cold, prepared.receipt)).publication).toEqual(recovered.publication)
+  }
+}, 180000)
 
 test("materialize refuses a changed original file before creating replacement code", async () => {
   await writeFile(path.join(cfg.root, "source/memory/server.py"), "# changed synthetic original")

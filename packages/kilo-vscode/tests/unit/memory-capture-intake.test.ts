@@ -4,8 +4,45 @@ import { existsSync, readFileSync } from "node:fs"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { CaptureIntake } from "../../src/second-brain/capture-intake"
+import { CaptureIntake, migrate } from "../../src/second-brain/capture-intake"
+import { release, selected } from "../../src/second-brain/control/catalog-capture"
+import { fingerprint } from "../../src/second-brain/failed-repair"
+import { parse } from "../../src/second-brain/settings"
 import { metadata } from "../../src/second-brain/manifest"
+
+test("runtime consent migration preserves human authorization and refuses unrelated roots/releases", () => {
+  const previous = parse({
+    format: "raya.memory.setup",
+    version: 2,
+    protocol: "raya.memory.operation.v2",
+    origin: "http://127.0.0.1:58741",
+    root: "D:/Raya/SecondBrain",
+    source_sha256: selected({
+      ...release,
+      "index.py": "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e",
+    }),
+  })
+  const next = parse({ ...previous, source_sha256: release })
+  const consent = {
+    version: 1,
+    enabled: true,
+    root: previous.root,
+    release: fingerprint(previous.source_sha256),
+    zone: "America/Toronto",
+    model: "pinned-local-model",
+    authorization: {
+      source: "Original human request",
+      sha256: "a".repeat(64),
+      original: { source: "Original setup", sha256: "b".repeat(64) },
+    },
+  }
+  expect(migrate(consent, previous, next)).toEqual({ ...consent, release: fingerprint(release) })
+  expect(consent.release).toBe(fingerprint(previous.source_sha256))
+  expect(migrate(undefined, previous, next)).toBeUndefined()
+  expect(() => migrate({ ...consent, root: "D:/Other" }, previous, next)).toThrow()
+  expect(() => migrate({ ...consent, release: "c".repeat(64) }, previous, next)).toThrow()
+  expect(() => migrate(consent, previous, parse({ ...next, root: "D:/Other" }))).toThrow()
+})
 
 test("durable original capture grants bind consent, generation, source and local day without replay", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "raya-capture-intake-"))
@@ -117,7 +154,9 @@ test("durable original capture grants bind consent, generation, source and local
     expect(intake.snapshot(binding).status).toBe("uncertain")
     await expect(intake.finish(writing, "published")).rejects.toThrow("receipt required")
     await intake.finish(writing, "capacity", undefined, { stage: "authorization", errors: ["capture_source_capacity"] })
-    const retained = storage.get<Array<{ stage: string; errors: string[] }>>("raya.secondBrain.personalCapture.failures")!
+    const retained = storage.get<Array<{ stage: string; errors: string[] }>>(
+      "raya.secondBrain.personalCapture.failures",
+    )!
     expect(retained.at(-1)?.stage).toBe("authorization")
     expect(retained.at(-1)?.errors).toEqual(["capture_source_capacity"])
     const original = storage.get<Array<{ failure?: unknown }>>("raya.secondBrain.personalCapture.turns")!

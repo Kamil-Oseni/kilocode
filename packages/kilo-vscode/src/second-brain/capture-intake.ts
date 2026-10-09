@@ -7,6 +7,7 @@ import type { BrainCapture } from "../shared/second-brain"
 import type { failure } from "./capture-failure"
 import type { review } from "./committed-capture"
 import { fingerprint } from "./failed-repair"
+import type { Setup } from "./settings"
 
 type Command = Extract<SecondBrainRequest["command"], { action: "capture" }>
 export type CaptureBinding = Readonly<{
@@ -91,6 +92,15 @@ const consent = z
   })
   .strict()
 type Consent = z.infer<typeof consent>
+
+/** Preserve the existing human authorization/model/zone; this grants no turn and changes no retained history. */
+export function migrate(input: unknown, previous: Setup, next: Setup) {
+  if (input === undefined) return undefined
+  const value = consent.parse(input)
+  if (value.root !== previous.root || value.root !== next.root || value.release !== fingerprint(previous.source_sha256))
+    throw new Error("Original automatic-saving authorization differs from the reviewed setup")
+  return consent.parse({ ...value, release: fingerprint(next.source_sha256) })
+}
 const record = z
   .object({
     id: z.string().uuid(),

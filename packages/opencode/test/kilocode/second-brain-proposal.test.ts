@@ -46,6 +46,7 @@ const it = testEffect(
 function result(request: Request): ProposalResult {
   if (
     request.command.action === "context" ||
+    request.command.action === "mediaContext" ||
     request.command.action === "status" ||
     request.command.action === "capture" ||
     request.command.action === "capturePolicy" ||

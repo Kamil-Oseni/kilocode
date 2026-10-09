@@ -234,6 +234,22 @@ describe("Raya Chief routing", () => {
   })
 
   // raya_change start - Auto phase enforcement regression
+  it("exposes read-only media alongside personal recall without releasing verification tools", () => {
+    const tools = {
+      chief_route: { id: "chief" },
+      second_brain_recall: { id: "notes" },
+      second_brain_media_recall: { id: "media" },
+      get_goal: { id: "goal" },
+      edit: { id: "edit" },
+    }
+    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "route" }))).toEqual([
+      "chief_route",
+      "second_brain_recall",
+      "second_brain_media_recall",
+    ])
+    expect(Object.keys(RayaChief.tools(tools, { [RayaChief.phaseKey]: "verify" }))).toEqual(["get_goal"])
+  })
+
   it("advertises only Chief until an ordinary fresh request is routed", () => {
     const tools = {
       chief_route: { id: "chief" },

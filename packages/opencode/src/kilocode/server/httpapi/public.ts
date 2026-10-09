@@ -52,6 +52,15 @@ export function matchLegacyKiloOpenApi(input: Record<string, unknown>) {
     const sources = view?.properties?.sources?.items?.properties
     if (sources?.event_time) sources.event_time = nullable(sources.event_time)
   }
+  const media = proposals?.SecondBrainMediaResult?.properties
+  const attachment = media?.selection?.properties?.authorized?.items?.properties
+  if (attachment?.duration_ms) attachment.duration_ms = nullable(attachment.duration_ms)
+  const candidate = media?.candidates?.items?.properties
+  for (const field of ["span", "verifier"]) {
+    if (candidate?.[field]) candidate[field] = nullable(candidate[field])
+  }
+  const evidence = candidate?.evidence?.items?.properties
+  if (evidence?.span) evidence.span = nullable(evidence.span)
   const rules = spec.paths?.["/config/rules"]?.get?.parameters?.find(
     (param) => param.in === "query" && param.name === "scope",
   )

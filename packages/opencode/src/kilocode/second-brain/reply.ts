@@ -1,6 +1,7 @@
 import path from "node:path"
 import { Schema } from "effect"
 import { Result, type Request } from "./protocol"
+import { valid as media } from "./media-protocol"
 
 const restricted = new Set(["system", "archive", ".git", "health", "medical", "private", "sensitive"])
 
@@ -8,6 +9,7 @@ const restricted = new Set(["system", "archive", ".git", "health", "medical", "p
 export function valid(request: Request, value: Result) {
   if (!Schema.is(Result)(value) || request.command.action !== value.action || request.project !== value.project)
     return false
+  if (value.action === "mediaContext") return request.command.action === "mediaContext" && media(request.command, value)
   if (value.action === "capturePolicy" || value.action === "capture" || value.action === "captureFailed") {
     const command = request.command
     if (command.action !== value.action) return false
@@ -40,6 +42,7 @@ export function valid(request: Request, value: Result) {
   if (value.action !== "context") {
     if (
       request.command.action === "context" ||
+      request.command.action === "mediaContext" ||
       request.command.action === "capturePolicy" ||
       request.command.action === "capture" ||
       request.command.action === "captureFailed"

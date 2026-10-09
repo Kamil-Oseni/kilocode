@@ -13,6 +13,7 @@ const log = Log.create({ service: "second-brain-host" })
 
 function read(command: Request["command"]) {
   return command.action === "context" ||
+    command.action === "mediaContext" ||
     command.action === "status" ||
     command.action === "capturePolicy" ||
     command.action === "capture" ||
@@ -26,7 +27,9 @@ export type Input = WithoutID<Request>
 export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrainHostError", {
   code: ErrorCode,
   detail: Schema.String,
-  operation: Schema.optional(Schema.Literals(["context", "status", "capturePolicy", "capture", "captureFailed"])),
+  operation: Schema.optional(
+    Schema.Literals(["context", "mediaContext", "status", "capturePolicy", "capture", "captureFailed"]),
+  ),
 }) {
   override get message() {
     if (this.operation === "captureFailed")
@@ -177,6 +180,12 @@ export function layer(timeout: Duration.Input = "2 minutes") {
             code: "invalid_request",
             operation,
             detail: "Second Brain request exceeds the bounded review size",
+          })
+        if (input.command.action === "mediaContext" && Buffer.byteLength(input.command.query, "utf8") > 2048)
+          return yield* new HostError({
+            code: "invalid_request",
+            operation,
+            detail: "Multimedia recall query exceeds its byte limit",
           })
         const ctx = yield* context
         if (input.project !== ctx.directory)

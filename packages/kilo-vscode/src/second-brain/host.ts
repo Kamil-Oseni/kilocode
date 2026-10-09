@@ -34,6 +34,8 @@ import { CaptureIntake, type CapturePublication } from "./capture-intake"
 import { failure } from "./capture-failure"
 import { personal } from "./scope"
 import { admission } from "./index-admission"
+import { MediaCoordinator } from "./media/coordinator"
+import { register as mediaCommands } from "./media/native"
 
 type CaptureControl = { capture(body: CapturePublication, authorize: () => void): Promise<unknown> }
 function capturing(value: object): value is object & CaptureControl {
@@ -85,9 +87,29 @@ function recall(row: Record<string, unknown>): row is { action: "context"; query
   )
 }
 
+function multimedia(row: Record<string, unknown>): row is { action: "mediaContext"; query: string; top: number } {
+  return (
+    Object.keys(row).sort().join("|") === "action|query|top" &&
+    row.action === "mediaContext" &&
+    typeof row.query === "string" &&
+    !!row.query.trim() &&
+    Buffer.byteLength(row.query, "utf8") <= 2048 &&
+    typeof row.top === "number" &&
+    Number.isSafeInteger(row.top) &&
+    row.top >= 1 &&
+    row.top <= 10
+  )
+}
+
 const services = new WeakMap<
   vscode.ExtensionContext,
-  { settings: BrainSettings; service: BrainService; control: BrainControl; intake: CaptureIntake }
+  {
+    settings: BrainSettings
+    service: BrainService
+    control: BrainControl
+    intake: CaptureIntake
+    media: MediaCoordinator
+  }
 >()
 const catalogKey = "raya.secondBrain.control.catalog"
 
@@ -100,6 +122,7 @@ export class BrainHost {
   private readonly service: BrainService
   private readonly control: BrainControl
   private readonly intake: CaptureIntake
+  private readonly media: MediaCoordinator
   private readonly observer: ReturnType<CaptureIntake["observe"]>
   private view: { id: string; state: BrainResponse["state"]; post: (value: BrainResponse) => void } | undefined
   private current: { id: string; owner: object } | undefined
@@ -485,6 +508,14 @@ export class BrainHost {
     this.settings = existing?.settings ?? new BrainSettings(context.globalState, context.secrets, context.extensionPath)
     this.service = existing?.service ?? new BrainService(this.settings, context.extensionPath)
     this.intake = existing?.intake ?? new CaptureIntake(context.globalState)
+    this.media =
+      existing?.media ??
+      new MediaCoordinator({
+        extension: context.extensionPath,
+        storage: context.globalStorageUri.fsPath,
+        store: context.globalState,
+        trusted,
+      })
     this.control =
       existing?.control ??
       new BrainControl(this.service, this.settings, async (setup) => {
@@ -520,7 +551,10 @@ export class BrainHost {
       service: this.service,
       control: this.control,
       intake: this.intake,
+      media: this.media,
     })
+    register(() => this.media.retire())
+    mediaCommands(context, this.media, this.settings, trusted)
     context.subscriptions.push(
       vscode.commands.registerCommand("raya.memory.inspectConfiguration", () =>
         diagnostic(this.settings, context.globalState),
@@ -663,6 +697,7 @@ export class BrainHost {
       guard()
       return result
     }
+    if (row.action === "mediaContext") return this.multimedia(row, project, signal, guard)
     if (row.action === "context") {
       if (!recall(row)) throw new Error("Bounded context command required")
       const result = await this.service.context(row.query, row.budget, signal)
@@ -694,6 +729,14 @@ export class BrainHost {
     if (row.action === "propose" && proposals[0]?.status !== "pending")
       throw new Error("Original proposal creation is unconfirmed")
     return { action: row.action as "list" | "read" | "propose", project, proposals }
+  }
+
+  private async multimedia(row: Record<string, unknown>, project: string, signal: AbortSignal, guard: () => void) {
+    if (!multimedia(row)) throw new Error("Exact bounded media context command required")
+    const result = await this.media.context(project, row.query, row.top, signal)
+    signal.throwIfAborted()
+    guard()
+    return result
   }
 
   /** Native setup only: original human authorization must accompany saved capture choices. */

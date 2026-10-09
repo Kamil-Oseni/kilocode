@@ -67,3 +67,15 @@ test("actual model tool schema preserves null creation and source timestamps", (
   }
   expect(node(sources?.properties?.event_time)?.anyOf).toContainEqual({ type: "null" })
 })
+
+test("actual public media schema preserves image duration and unavailable verification nulls", () => {
+  const spec = OpenApi.fromApi(PublicApi)
+  const schemas = spec.components.schemas as Record<string, Node>
+  const media = schemas.SecondBrainMediaResult.properties
+  const source = media?.selection?.properties?.authorized?.items?.properties
+  const candidate = media?.candidates?.items?.properties
+  expect(source?.duration_ms?.anyOf).toContainEqual({ type: "null" })
+  expect(candidate?.span?.anyOf).toContainEqual({ type: "null" })
+  expect(candidate?.verifier?.anyOf).toContainEqual({ type: "null" })
+  expect(candidate?.evidence?.items?.properties?.span?.anyOf).toContainEqual({ type: "null" })
+})

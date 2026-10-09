@@ -170,6 +170,36 @@
         "category": "Raya"
       },
       {
+        "command": "kilo-code.new.memory.mediaSetup",
+        "title": "Review Media Library Selection",
+        "category": "Raya"
+      },
+      {
+        "command": "kilo-code.new.memory.mediaInspect",
+        "title": "Inspect an Approved Media Attachment",
+        "category": "Raya"
+      },
+      {
+        "command": "kilo-code.new.memory.mediaImport",
+        "title": "Import an Approved Media Attachment",
+        "category": "Raya"
+      },
+      {
+        "command": "kilo-code.new.memory.mediaIndex",
+        "title": "Index an Approved Media Attachment",
+        "category": "Raya"
+      },
+      {
+        "command": "kilo-code.new.memory.mediaForget",
+        "title": "Forget a Media Library Attachment",
+        "category": "Raya"
+      },
+      {
+        "command": "kilo-code.new.memory.mediaCancel",
+        "title": "Stop the Current Media Operation",
+        "category": "Raya"
+      },
+      {
         "command": "raya.setupHomeAssistant",
         "title": "Connect Home Assistant",
         "category": "Raya"

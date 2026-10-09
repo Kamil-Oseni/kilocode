@@ -29,6 +29,7 @@ import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_chang
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
 import { settled as recalled, acknowledged, acknowledgement } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
+import { settled as mediaRecalled } from "@/kilocode/second-brain/media-turn" // kilocode_change - qualified original media-read synthesis only
 import { remember as captureRouting } from "@/kilocode/second-brain/capture-routing" // kilocode_change - retain original extraction route before successor metadata
 import { RayaToolModel } from "@/kilocode/chief/tool-model" // kilocode_change
 import { isInterrupted } from "@/kilocode/effect/cause" // kilocode_change
@@ -1893,7 +1894,8 @@ export const layer = Layer.effect(
               phase === "route" &&
               ((HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
                 (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id))) ||
-                recalled(msgs, current, lastUser.id))) // kilocode_change - original read-only Memory questions or selected device requests can release synthesis
+                recalled(msgs, current, lastUser.id) ||
+                mediaRecalled(msgs, current, lastUser.id))) // kilocode_change - original read-only Memory/media questions or selected device requests can release synthesis
           // raya_change end
           // kilocode_change end
 

@@ -1976,6 +1976,12 @@ export type SecondBrainStatus = {
   action: "status"
 }
 
+export type SecondBrainMediaRecall = {
+  action: "mediaContext"
+  query: string
+  top: number
+}
+
 export type SecondBrainRequest = {
   id: SecondBrainRequestId
   sessionID: string
@@ -2040,6 +2046,7 @@ export type SecondBrainRequest = {
           | "grant_expired"
           | "cancelled"
       }
+    | SecondBrainMediaRecall
 }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
@@ -6964,6 +6971,63 @@ export type SecondBrainStatusResult = {
   preparation: "unavailable"
 }
 
+export type SecondBrainMediaResult = {
+  action: "mediaContext"
+  project: string
+  query_sha256: string
+  selection: {
+    root: string
+    policy_sha256: string
+    release_sha256: string
+    generation: string
+    authorized: Array<{
+      id: string
+      path: string
+      relative: string
+      sha256: string
+      kind: "image" | "audio" | "video"
+      bytes: number
+      snapshot: {
+        path: string
+        sha256: string
+        bytes: number
+      }
+      duration_ms: number | null
+    }>
+  }
+  candidates: Array<{
+    source: {
+      id: string
+      path: string
+      relative: string
+      sha256: string
+      kind: "image" | "audio" | "video"
+    }
+    span: {
+      start_ms: number
+      end_ms: number
+    } | null
+    verdict: "supported" | "rejected" | "uncertain"
+    evidence: Array<{
+      text: string
+      sha256: string
+      span: {
+        start_ms: number
+        end_ms: number
+      } | null
+    }>
+    verifier: {
+      id: string
+      sha256: string
+    } | null
+    provenance: string
+    query_sha256: string
+    policy_sha256: string
+  }>
+  truncated: boolean
+  capture_enabled: false
+}
+
 export type SecondBrainResult =
   | SecondBrainProposalResult
   | SecondBrainContextResult
@@ -7014,6 +7078,7 @@ export type SecondBrainResult =
       indexConfirmed: false
       replay: false
     }
+  | SecondBrainMediaResult
 
 export type SecondBrainFailure = {
   code: "cancelled" | "disconnected" | "invalid_request" | "not_found" | "timeout" | "unsupported" | "conflict"

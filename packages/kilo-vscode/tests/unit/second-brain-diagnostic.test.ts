@@ -158,13 +158,14 @@ test("native-host command registers once per real host context and uses its sing
       secrets: cfg.secrets,
       subscriptions: [],
       extensionPath: "C:\\Private-Extension",
+      globalStorageUri: { fsPath: "C:\\Private-Storage" },
     } as unknown as vscode.ExtensionContext
     new BrainHost(context)
     new BrainHost(context)
-    expect(commands.map((command) => command.name)).toEqual([
-      "raya.memory.inspectConfiguration",
-      "raya.memory.inspectDream",
-    ])
+    expect(new Set(commands.map((command) => command.name)).size).toBe(commands.length)
+    expect(commands.map((command) => command.name)).toContain("raya.memory.inspectConfiguration")
+    expect(commands.map((command) => command.name)).toContain("raya.memory.inspectDream")
+    expect(commands.filter((command) => command.name.startsWith("kilo-code.new.memory.media"))).toHaveLength(6)
     const command = commands.find((command) => command.name === "raya.memory.inspectConfiguration")!
     expect((await command.body()) as { status: string }).toHaveProperty("status", "unconfigured")
     await cfg.settings.save(cfg.setup, "private-credential")

@@ -108,7 +108,11 @@ export class BrainBridge {
                 ? "Memory setup status could not be confirmed. Check Memory settings; no note changes were requested."
                 : request.command.action === "context"
                   ? "Memory recall could not be confirmed. Check the reviewed context-capable Memory release and service status; no note changes were requested."
-                  : "The original Memory proposal request could not be confirmed. Review its pending ledger; do not replay a write.",
+                  : request.command.action === "capturePolicy"
+                    ? "Automatic saving authorization could not be confirmed. This turn has not been confirmed saved; do not replay it."
+                    : request.command.action === "capture"
+                      ? "Automatic saving could not be confirmed. Review the original turn's saving status; do not replay it."
+                      : "The original Memory proposal request could not be confirmed. Review its pending ledger; do not replay a write.",
           },
         },
         { signal },

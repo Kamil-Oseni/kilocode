@@ -17,6 +17,7 @@ import { release } from "./control/catalog-capture"
 import { materialize } from "./managed/materialize"
 import { publish as upgrade } from "./managed/upgrade-publish"
 import { randomUUID } from "node:crypto"
+import { current as supervisor } from "./managed/catalog"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
@@ -476,7 +477,12 @@ export class BrainSettings {
     const held = this.storage.get<{ format: string }>(recovering)
     if (held?.format === "raya.memory.runtime.upgrade.pending") return true
     const raw = this.storage.get(state)
-    return raw !== undefined && !isDeepStrictEqual(parse(this.entry(raw).setup).source_sha256, release)
+    if (raw === undefined) return false
+    const entry = this.entry(raw)
+    return (
+      !isDeepStrictEqual(parse(entry.setup).source_sha256, release) ||
+      (entry.managed?.version === 2 && entry.managed.supervisor.sha256 !== supervisor)
+    )
   }
 
   /** Update only a genuinely closed runtime; preserve notes, original audits and capture history. */

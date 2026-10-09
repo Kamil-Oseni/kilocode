@@ -170,6 +170,68 @@ def phase(name):
               'elapsed': round(time.monotonic() - BEGUN, 6)})
 
 
+def diagnostics():
+    """Observe the original selected pool without changing its admission or settlement."""
+    import pool
+    original = pool.Pool
+    available = pool.available
+    local = threading.local()
+    causes = {'pool_memory_reserve': 503, 'lease_memory_pressure': 503,
+              'pool_queue_expired': 504, 'pool_before_dispatch_cancelled_or_expired': 504,
+              'pool_queue_cancelled': 499, 'pool_closed': 499,
+              'pool_before_inference_cancelled_or_expired': 500, 'lease_start_expired': 500,
+              'lease_start_deadline': 500, 'lease_selection': 500, 'fixed_request_identity': 500,
+              'receipt_namespace_changed': 500, 'receipt_directory_identity': 500,
+              'source_identity': 500, 'source_selection': 500, 'source_changed': 500,
+              'pool_worker_failed': 500}
+
+    def measured():
+        value = available()
+        current = getattr(local, 'current', None)
+        if current is not None and len(current['samples']) < 32:
+            owner, ticket = current['pool'], current['ticket']
+            headroom = (pool.GIB // 2 if owner.owner is not None else
+                        5 * pool.GIB if ticket.body['model'] == 'embeddinggemma-2' else 13 * pool.GIB // 4)
+            current['samples'].append({'observed_unix_ms': time.time_ns() // 1000000,
+                                      'available_ram_bytes': value,
+                                      'required_ram_bytes': owner.reserve + headroom if not current['samples'] else owner.reserve})
+        return value
+
+    class Observed(original):
+        def invoke(self, ticket):
+            current = {'pool': self, 'ticket': ticket, 'samples': []}
+            ticket.diagnostic = current['samples']
+            local.current = current
+            try:
+                return super().invoke(ticket)
+            finally:
+                local.current = None
+
+        def complete(self, ticket, error=None, result=None):
+            if error is not None and result is None and (ticket.owner is None or not ticket.owner.created):
+                cause = error if error in causes else 'preworker_unclassified'
+                value = {'format': 'raya.retrieval.preworker.refusal', 'version': 1,
+                         'request': ticket.request, 'owner_epoch': self.epoch,
+                         'selected_release_sha256': self.release,
+                         'cause': cause, 'http_status': 499 if ticket.cancel.is_set() else causes.get(cause, 500),
+                         'observed_unix_ms': time.time_ns() // 1000000,
+                         'memory': getattr(ticket, 'diagnostic', []),
+                         'settlement_authority': False, 'replay': False}
+                try:
+                    folder = self.namespace.folder('Runs', self.epoch, ticket.request)
+                    self.namespace.publish(folder, '000000.json',
+                                           json.dumps(value, sort_keys=True, separators=(',', ':')).encode('utf-8'))
+                except Exception:
+                    # Diagnostic persistence cannot reclassify the original request or conceal its failure.
+                    with PHASE:
+                        emit({'format': 'raya.retrieval.preworker.diagnostic-failure', 'version': 1,
+                              'settlement_authority': False})
+            return super().complete(ticket, error, result)
+
+    pool.available = measured
+    pool.Pool = Observed
+
+
 def load(file, expected, managed=False):
     raw = read(file, 16777216)
     if digest(raw) != expected:
@@ -434,6 +496,8 @@ def serve(plan, images):
         prepare(plan)
         thread.start()
         sys.meta_path.insert(0, Sources(Path(plan['source']), images, reusable(plan)))
+        if reusable(plan):
+            diagnostics()
         phase('import-started')
         import uvicorn
 

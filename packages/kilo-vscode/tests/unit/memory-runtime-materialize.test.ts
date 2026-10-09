@@ -191,6 +191,15 @@ test("upgraded source metadata admits only its exact historical or current super
   // Schema-only admission checks; altered fixture metadata is not a native image or launch proof.
   expect(() => paired(prior, memory, retrieval)).not.toThrow()
   expect(() => paired(next.next.managed, selected.plan, selected.retrieval!)).not.toThrow()
+  const retained = {
+    ...next.next.managed,
+    supervisor: {
+      ...next.next.managed.supervisor,
+      sha256: "2249c00ff1755613ca0d8eadf6e9b8e51ed2dd53ff91c52dae7e36153b4fa72f",
+    },
+  }
+  expect(() => paired(retained, selected.plan, selected.retrieval!)).not.toThrow()
+  expect(() => paired(retained, memory, retrieval)).toThrow("Paired source directory differs")
   expect(() => paired(next.next.managed, memory, retrieval)).toThrow("Paired source directory differs")
   expect(() => paired(prior, selected.plan, selected.retrieval!)).toThrow("Paired source directory differs")
   expect(() =>

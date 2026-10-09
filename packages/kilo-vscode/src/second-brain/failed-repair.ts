@@ -7,6 +7,7 @@ import { launch } from "./managed/restart"
 import { journal } from "./journal"
 import { parse as operation } from "./operation"
 import { parse } from "./settings"
+import { retained } from "./failed-downstream"
 
 export function fingerprint(value: unknown) {
   const parsed = document(Buffer.from(JSON.stringify(value)), 65536)
@@ -80,14 +81,10 @@ export async function inspect(file: string, entry: unknown, pending: unknown) {
     digest: String(request.bodySHA),
     kind: "search" as const,
     protocol: "raya.memory.operation.v2" as const,
-    downstream: [],
   }
   const terminal = object(operation(Buffer.from(JSON.stringify(witness.terminal)), selected, "terminal").operation)
   const outcome = witness.format === "raya.memory.cancelled-search.observation" ? "cancelled" : "failed"
-  check(
-    terminal.operation_outcome === outcome,
-    "Only the selected failed or cancelled search without downstream work may be repaired",
-  )
+  check(terminal.operation_outcome === outcome, "Only the selected failed or cancelled search may be repaired")
   const ref = object(witness.terminal_file)
   const expected = path.join(
     cfg.namespaces.memory.root,
@@ -109,11 +106,12 @@ export async function inspect(file: string, entry: unknown, pending: unknown) {
       isDeepStrictEqual(document(current.raw, 65536).value, witness.terminal),
     "Original failed terminal changed",
   )
-  return { setup, cfg, original: receipt(prior.receipt), selected, held, outcome }
+  const downstream = await retained(cfg, setup, terminal.downstream)
+  return { setup, cfg, original: receipt(prior.receipt), selected, held, outcome, downstream }
 }
 
 export async function review(file: string, entry: unknown, pending: unknown) {
-  const { setup, cfg, original, selected, held, outcome } = await inspect(file, entry, pending)
+  const { setup, cfg, original, selected, held, outcome, downstream } = await inspect(file, entry, pending)
   const location = path.join(path.dirname(original.path), "managed-closed.json")
   await directory(path.dirname(location))
   const ended = await image(location, 65536)
@@ -125,6 +123,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
     request: selected.request,
     root: setup.root,
     outcome,
+    downstream,
     closed,
     observation: Object.freeze({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple }),
     qualification: "Explicit metadata repair; original clean producer pair only, no model or native family acceptance",

@@ -212,12 +212,13 @@ function credentials(cfg: Descriptor, memory: Record<string, unknown>, retrieval
 function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, reuse: boolean) {
   const original = path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind]))
   if (plan.source === original) return
-  const pins =
-    cfg.supervisor.sha256 === current
-      ? capture
-      : cfg.supervisor.sha256 === "a1128d8f746e5827127a67a2c6e022c72e405a4598b3eed790b8a672a3427dd4"
-        ? { ...capture, "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3" }
-        : undefined
+  const pins = [current, "2249c00ff1755613ca0d8eadf6e9b8e51ed2dd53ff91c52dae7e36153b4fa72f"].includes(
+    cfg.supervisor.sha256,
+  )
+    ? capture
+    : cfg.supervisor.sha256 === "a1128d8f746e5827127a67a2c6e022c72e405a4598b3eed790b8a672a3427dd4"
+      ? { ...capture, "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3" }
+      : undefined
   check(
     kind === "memory" &&
       typeof plan.source === "string" &&

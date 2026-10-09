@@ -12,8 +12,10 @@ import { fingerprint } from "../../src/second-brain/failed-repair"
 import { release, bridge } from "../../src/second-brain/control/catalog-capture"
 import { linked } from "../../src/second-brain/managed/capture-upgrade"
 import { descriptor } from "../../src/second-brain/managed/descriptor"
-import { image } from "../../src/second-brain/control/identity"
+import { image, powershell, environment } from "../../src/second-brain/control/identity"
 import { rebind } from "../../src/second-brain/committed-capture"
+import { retained } from "../../src/second-brain/failed-downstream"
+import { parse } from "../../src/second-brain/settings"
 
 async function fixture(hook?: (key: string, value: unknown) => Promise<void>, full = false, cancelled = false) {
   const producer = await command(
@@ -80,6 +82,73 @@ async function inventory(root: string) {
   await walk(root)
   return rows
 }
+
+test("failed downstream review binds real noncreated ASGI publications and bounded supervisor diagnostics", async () => {
+  const value = await fixture(undefined, true, true)
+  try {
+    const entry = value.storage.get<{ managed: unknown; setup: unknown }>("raya.secondBrain.setup")!
+    const cfg = descriptor(entry.managed)
+    // Protect only this disposable fixture's two selected namespaces with its original root ACL.
+    const script =
+      `$ErrorActionPreference='Stop';$acl=Get-Acl -LiteralPath '${cfg.root.replace(/'/g, "''")}';` +
+      [cfg.namespaces.memory.root, cfg.namespaces.retrieval.root]
+        .map((dir) => `Set-Acl -LiteralPath '${dir.replace(/'/g, "''")}' -AclObject $acl;`)
+        .join("")
+    await command(
+      powershell(),
+      ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
+      { windowsHide: true, env: environment() },
+    )
+    const file = path.join(value.root, "downstream-cfg.json")
+    await writeFile(file, JSON.stringify(cfg))
+    const child = Bun.spawn(
+      [
+        "D:/Raya/Services/Packaging/Environments/PrimarySnapshot/Scripts/python.exe",
+        "-B",
+        path.resolve("script/memory/retrieval_preworker_producer.py"),
+        file,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    )
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    expect(code, stderr).toBe(0)
+    const data = JSON.parse(stdout)
+    const before = await inventory(value.notes)
+    const ledger = value.storage.get("raya.secondBrain.personalCapture.turns")
+    const proof = await retained(cfg, parse(entry.setup), [data.proof])
+    expect(proof[0].receipt).toEqual(data.proof)
+    expect(proof[0].files).toHaveLength(2)
+    expect(data.diagnostic).toMatchObject({
+      cause: "pool_memory_reserve",
+      http_status: 503,
+      settlement_authority: false,
+      replay: false,
+    })
+    for (const change of [
+      { worker_created: true },
+      { inference_outcome: "completed" },
+      { selected_release_sha256: "f".repeat(64) },
+      { request: "e".repeat(32) },
+    ])
+      await expect(retained(cfg, parse(entry.setup), [{ ...data.proof, ...change }])).rejects.toThrow()
+    const ref = proof[0].files[0]
+    const raw = await readFile(ref.path)
+    await writeFile(ref.path, JSON.stringify({ ...JSON.parse(raw.toString()), request_sha256: "f".repeat(64) }))
+    await expect(retained(cfg, parse(entry.setup), [data.proof])).rejects.toThrow("publication differs")
+    await writeFile(ref.path, raw)
+    const extra = path.join(path.dirname(ref.path), data.proof.request + "-" + "f".repeat(32) + ".json")
+    await writeFile(extra, raw)
+    await expect(retained(cfg, parse(entry.setup), [data.proof])).rejects.toThrow("reservation and settlement")
+    expect(await inventory(value.notes)).toEqual(before)
+    expect(value.storage.get("raya.secondBrain.personalCapture.turns")).toEqual(ledger)
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
 
 test("native cancelled read recovery retains original debt and updates a closed runtime across physical save loss", async () => {
   const fault = { enabled: false }

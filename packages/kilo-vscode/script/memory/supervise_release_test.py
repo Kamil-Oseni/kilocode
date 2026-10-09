@@ -28,7 +28,7 @@ class Release(unittest.TestCase):
         deps = self.root/'dependencies'
         source.mkdir()
         deps.mkdir()
-        for name, sha in module.RELEASES['memory'].items():
+        for name, sha in module.CAPTURE.items():
             raw = (BASE/'service'/name).read_bytes()
             self.assertEqual(digest(raw), sha)
             (source/name).write_bytes(raw)
@@ -49,7 +49,7 @@ class Release(unittest.TestCase):
             'directories': [{'path': str(path), 'identity': [path.stat().st_dev, path.stat().st_ino,
                              path.stat().st_ctime_ns]} for path in (self.root, source, deps)],
             'python_sha256': digest(Path(sys.executable).read_bytes()), 'source': str(source),
-            'source_sha256': dict(module.RELEASES['memory']), 'files': files, 'dependencies': str(deps),
+            'source_sha256': dict(module.CAPTURE), 'files': files, 'dependencies': str(deps),
             'env': {'HOME': str(self.root), 'USERPROFILE': str(self.root), 'TEMP': str(self.root),
                     'TMP': str(self.root), 'HF_HOME': str(self.root), 'HF_HUB_OFFLINE': '1',
                     'TRANSFORMERS_OFFLINE': '1', 'PYTHONDONTWRITEBYTECODE': '1',
@@ -70,8 +70,8 @@ class Release(unittest.TestCase):
     def test_current_release_admits_all_original_bytes(self):
         plan, images = self.load()
         self.assertEqual(plan, self.plan)
-        self.assertEqual(len(images), 12)
-        self.assertEqual(set(images), {Path(plan['source'])/name for name in module.RELEASES['memory']})
+        self.assertEqual(len(images), 13)
+        self.assertEqual(set(images), {Path(plan['source'])/name for name in module.CAPTURE})
         for path, raw in images.items():
             self.assertEqual(raw, path.read_bytes())
 

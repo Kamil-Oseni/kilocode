@@ -222,7 +222,7 @@ async def handle(request: Request, path: str):
                 proof = {'format': 'raya.memory.residency.release', 'version': 2, 'request': key,
                          'owner_epoch': EPOCH, 'selected_release_sha256': RELEASE,
                          'operation_receipt_sha256': record['terminal']['receipt_sha256'], 'downstream': value}
-                JOURNAL.namespace.publish(JOURNAL.folder, key+'-idle-'+secrets.token_hex(16)+'.json', canonical(proof))
+                JOURNAL.namespace.publish(JOURNAL.folder, key+'-'+secrets.token_hex(16)+'.json', canonical(proof))
                 with GUARD:
                     record['idle'] = proof
                 return proof

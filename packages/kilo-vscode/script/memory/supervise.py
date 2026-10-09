@@ -34,6 +34,8 @@ PREVIOUS = [CAPTURE, dict(CAPTURE, **{'index.py': '8ae8274ff8f46f906efc9c6c5e2db
 PREVIOUS += (dict(CAPTURE, **{'index.py': '89fcbf572c83a25bc39f8e646fcd080330ddb1605cb89c65c8240f9d2ae0a9dc'}),)
 CAPTURE = dict(CAPTURE, **{'server.py': 'deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b', 'index.py': 'e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7'})
 
+PREVIOUS.append(CAPTURE)
+CAPTURE = dict(CAPTURE, **{'server.py': 'ddcffa6ec22432f1622850aa36e04e48cfe8cad94db28648e1b6b8dd2fefcf1d'})
 
 def release(kind, pins, reuse=False):
     capture = next((value for value in PREVIOUS if pins == value), CAPTURE)

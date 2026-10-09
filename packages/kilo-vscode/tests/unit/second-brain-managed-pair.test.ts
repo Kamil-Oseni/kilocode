@@ -9,7 +9,7 @@ import { ManagedOwner, Pipes, publish, startup } from "../../src/second-brain/ma
 import { descriptor, paired } from "../../src/second-brain/managed/descriptor"
 import { interpreter, supervisor, retrieval } from "../../src/second-brain/managed/catalog"
 import { release } from "../../src/second-brain/control/catalog-v2"
-import { release as capture } from "../../src/second-brain/control/catalog-capture"
+import { release as capture, selected as catalog } from "../../src/second-brain/control/catalog-capture"
 import { images, catalogs, fingerprint, readiness } from "../../src/second-brain/managed/reuse-catalog"
 import { document, canonical, sha } from "../../src/second-brain/control/frames"
 import { protect } from "../../src/second-brain/control/protection"
@@ -193,6 +193,9 @@ test("reusable selection binds exact source closure, protocol and independent re
 })
 
 test("reusable pins match source bytes and readiness cannot adopt a different release", async () => {
+  const prior = { ...capture, "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b" }
+  expect(catalog(prior)).toEqual(prior)
+  expect(catalog(capture)).toEqual(capture)
   for (const [name, digest] of Object.entries(images))
     expect(sha(await readFile(path.join("script/memory", name)))).toBe(digest)
   const parsed = document(Buffer.from(JSON.stringify({ source_sha256: images, catalog_sha256: catalogs })))

@@ -1,10 +1,12 @@
 """Real protected Windows namespaces; no services, models, tokens or personal roots."""
+import ast
 import ctypes
 from ctypes import wintypes as w
 import importlib.util
 import json
 from pathlib import Path
 import shutil
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -86,6 +88,21 @@ class Tests(unittest.TestCase):
         self.assertEqual(pending['status'], 'pending')
         with self.assertRaises(FileExistsError):
             journal.reserve('1'*32, 'sync', {'force_rebuild': False})
+
+    def test_actual_idle_release_publication_name(self):
+        tree = ast.parse((HERE/'service'/'server.py').read_text())
+        calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and
+                 ast.unparse(node.func) == 'JOURNAL.namespace.publish']
+        self.assertEqual(len(calls), 1)
+        expression = ast.Expression(body=calls[0].args[1])
+        name = eval(compile(expression, str(HERE/'service'/'server.py'), 'eval'),
+                    {'key': 'b'*32, 'secrets': secrets})
+        raw = json.dumps({'format': 'raya.memory.residency.release', 'request': 'b'*32}).encode()
+        self.namespace.publish(self.folder, name, raw)
+        self.assertEqual((self.folder/name).read_bytes(), raw)
+        MODULE.acl(self.folder/name, self.sid)
+        with self.assertRaises(FileExistsError):
+            self.namespace.publish(self.folder, name, raw)
 
     def test_malformed_traversal_and_unselected(self):
         for name in ('pending.json', 'b'*31+'-pending.json', 'b'*32+'-arbitrary.json', 'b'*32+'-PENDING.json', '../escape.json', 'a/b.json', 'a\\b.json'):

@@ -1,5 +1,11 @@
 # Recovery verification and remaining work
 
+## October 9 source backup and capture recovery inputs
+
+The reproducible source backup helper is [backup-secondbrain.py](../script/kilocode/backup-secondbrain.py). Run it with Python 3.12 or later; the default source is `D:/Raya/SecondBrain`, and each run creates a new snapshot under `D:/RayaBackups`. Optional `--root` and `--destination` select separate source/backup paths. It includes original capture `input.json` and `request.json` alongside Markdown, note-change manifests and captured text, preventing the older helper's two-file omission. It refuses linked sources, live-root overlap, existing destinations, oversized sources and source changes during copying. Partial copies have no verified manifest and must not be used as successful snapshots.
+
+The actual run created `D:/RayaBackups/SecondBrain-Sources-20261009-8775db4b`: 73 files, 184,322 bytes. A separate staged restore verified every copied file and exact inventory at `D:/Raya/Tools/Readiness-20261008/SecondBrain-Restore-6964deb750cd46deadaa958fef6ee703/restore-proof.json`; manifest SHA-256 is `c2b46665e2ad1545588a6cbf8ca30d48798b216de2bfa389c5f1274a32389343`. Existing-destination and live-root refusal checks passed. The original committed preference and capture records remain unchanged. This is source recovery evidence only: service credentials, operation debt, indexes and binary media are excluded; copying capture records neither settles the pending save nor permits replay. Installed recall and off-PC recovery remain pending.
+
 Reviewed 2026-10-05 against the saved recovery records and current local launcher source. This supplements `D:/RayaBackups/RECOVERY.md`; it does not authorize a restore or restart.
 
 ## October 6 recovery update

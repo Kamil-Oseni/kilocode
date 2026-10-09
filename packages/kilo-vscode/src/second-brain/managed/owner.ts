@@ -204,6 +204,28 @@ export async function publish(file: string, value: unknown): Promise<Receipt> {
   return Object.freeze({ path: file, bytes: raw.length, sha256: receipt.digest, tuple: receipt.tuple })
 }
 
+/** Retained startup pipes prove cleanup only; incomplete pairs stay quarantined. */
+export async function startup(
+  pair: Pair,
+  folder: string,
+  selected: Receipt,
+  originals: Partial<Record<"memory" | "retrieval", Receipt>>,
+) {
+  const closures = await pair.close("eof")
+  return publish(path.join(folder, "managed-startup-closed.json"), {
+    format: "raya.memory.managed.pair.startup-closed",
+    version: 1,
+    selected,
+    originals,
+    closures,
+    uncreated: ["memory", "retrieval"].filter((kind) => !Object.hasOwn(closures, kind)),
+    serviceAdmission: false,
+    requestSettlement: false,
+    coldSettlementAuthority: false,
+    qualification: "Retained startup processes and streams only; quarantine remains unresolved",
+  })
+}
+
 export class ManagedOwner {
   private pair?: Pair
   private pipes?: Pipes
@@ -212,6 +234,7 @@ export class ManagedOwner {
   private failed = false
   private selected?: Receipt
   private original?: Receipt
+  private cleanup?: Receipt
   constructor(
     private cfg: Descriptor,
     private readonly setup: Setup,
@@ -413,7 +436,12 @@ export class ManagedOwner {
       this.failed = true
       const errors = [err]
       await this.record("uncertain", before).catch((error: unknown) => errors.push(error))
-      await pair.close("eof").catch((error: unknown) => errors.push(error))
+      await startup(pair, folder, before, originals).then(
+        (receipt) => {
+          this.cleanup = receipt
+        },
+        (error: unknown) => errors.push(error),
+      )
       throw new AggregateError(errors, "Original managed pair remains quarantined")
     }
   }
@@ -490,6 +518,17 @@ export class ManagedOwner {
     const closures = await this.pair!.close()
     // Failed validation owns no child and publishes no producer closure.
     if (this.failed && Object.keys(closures).length === 0) return
+    if (this.failed && this.cleanup) {
+      const held = await image(this.cleanup.path, 65536)
+      check(
+        held.digest === this.cleanup.sha256 &&
+          held.raw.length === this.cleanup.bytes &&
+          held.tuple === this.cleanup.tuple,
+        "Original startup cleanup publication changed",
+      )
+      // Cleanup succeeded, but neither a full pair closure nor fresh admission is granted.
+      return
+    }
     if (this.failed) throw new Error("Failed managed pair remains quarantined")
     check(this.selected && this.original, "Original paired publication references required")
     for (const kind of ["memory", "retrieval"]) {

@@ -26,7 +26,12 @@ function disjoint(a: string, b: string) {
   return left !== right && !left.startsWith(right + "/") && !right.startsWith(left + "/")
 }
 
-async function originals(old: Pick<Awaited<ReturnType<typeof inspect>>, "original" | "cfg">) {
+async function originals(
+  old: Pick<Awaited<ReturnType<typeof inspect>>, "original" | "cfg"> & {
+    identities?: { pid: number; parent: number }[]
+  },
+) {
+  if (old.identities) return old.identities.flatMap((item) => [item.pid, item.parent])
   const original = await retained(old.original)
   check(
     original.format === "raya.memory.managed.pair.originals" && original.version === 2,
@@ -99,6 +104,87 @@ async function unclosed(entry: unknown, pending: unknown, witness: ReturnType<ty
   return { setup, cfg, original, held, selected: { request: original.sha256 }, outcome: "unknown" as const }
 }
 
+async function startup(entry: unknown, pending: unknown, witness: ReturnType<typeof receipt>) {
+  check(pending === undefined, "Request debt cannot enter interrupted-startup recovery")
+  const saved = object(entry as Parameters<typeof object>[0])
+  const setup = parse(saved.setup)
+  const cfg = descriptor(saved.managed)
+  const prior = object(saved.launch)
+  check(
+    setup.version === 2 &&
+      cfg.version === 2 &&
+      prior.phase === "uncertain" &&
+      isDeepStrictEqual(receipt(prior.receipt), witness) &&
+      path.basename(witness.path) === "managed-reservation.json" &&
+      normalize(witness.path).startsWith(normalize(cfg.root) + "/"),
+    "Exact interrupted-startup reservation required",
+  )
+  const reservation = await retained(witness)
+  const root = await lstat(cfg.root, { bigint: true })
+  check(
+    reservation.format === "raya.memory.managed.pair.selected" &&
+      reservation.version === 2 &&
+      isDeepStrictEqual(descriptor(reservation.descriptor), cfg) &&
+      isDeepStrictEqual(reservation.rootIdentity, [root.dev, root.ino, root.birthtimeNs].map(String)),
+    "Historical startup selection differs",
+  )
+  const identities: { ref: ReturnType<typeof receipt>; pid: number; parent: number }[] = []
+  for (const kind of ["memory", "retrieval"] as const) {
+    const file = path.join(path.dirname(witness.path), `managed-${kind}-original.json`)
+    const exists = await lstat(file).then(
+      () => true,
+      (err: unknown) => {
+        if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return false
+        throw err
+      },
+    )
+    if (!exists) continue
+    const held = await image(file, 65536)
+    const ref = receipt({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple })
+    const producer = object(document(held.raw, 65536).value)
+    const identity = native(producer, cfg, witness, kind)
+    identities.push({ ref, pid: Number(identity.pid), parent: Number(identity.parent) })
+  }
+  check(identities.length > 0, "Retained startup identity required")
+  const held = await image(witness.path, 65536)
+  return {
+    setup,
+    cfg,
+    original: witness,
+    held,
+    selected: { request: witness.sha256 },
+    outcome: "unknown" as const,
+    identities,
+  }
+}
+
+function native(
+  producer: Record<string, unknown>,
+  cfg: ReturnType<typeof descriptor>,
+  witness: ReturnType<typeof receipt>,
+  kind: "memory" | "retrieval",
+) {
+  const identity = object(producer.identity as Parameters<typeof object>[0])
+  check(
+    producer.format === "raya.memory.managed.pair.original" &&
+      producer.version === 2 &&
+      producer.kind === kind &&
+      isDeepStrictEqual(receipt(producer.selected), witness) &&
+      producer.nativeFamilyRetirement === false &&
+      Number.isSafeInteger(identity.pid) &&
+      Number(identity.pid) > 0 &&
+      Number.isSafeInteger(identity.parent) &&
+      Number(identity.parent) > 0 &&
+      typeof identity.birth === "string" &&
+      /^\d{1,20}$/.test(identity.birth) &&
+      identity.digest === cfg.python.sha256 &&
+      typeof identity.executable === "string" &&
+      normalize(identity.executable) === normalize(cfg.python.path),
+    "Historical startup process selection differs",
+  )
+  return identity
+}
+
 /** Historical failure is quarantined, never accepted as joined or settled. */
 export async function review(file: string, entry: unknown, pending: unknown) {
   await directory(path.dirname(file))
@@ -106,17 +192,22 @@ export async function review(file: string, entry: unknown, pending: unknown) {
   const input = object(document(held.raw, 65536).value)
   check(
     Object.keys(input).sort().join() === "format,managed,observation,setup,version" &&
-      ["raya.memory.failed-search.fresh-start", "raya.memory.unclosed-pair.fresh-start"].includes(
-        String(input.format),
-      ) &&
+      [
+        "raya.memory.failed-search.fresh-start",
+        "raya.memory.unclosed-pair.fresh-start",
+        "raya.memory.interrupted-startup.fresh-start",
+      ].includes(String(input.format)) &&
       input.version === 1,
     "Explicit reviewed fresh-start selection required",
   )
   const witness = receipt(input.observation)
+  const interrupted =
+    input.format === "raya.memory.interrupted-startup.fresh-start" ? await startup(entry, pending, witness) : undefined
   const old =
-    input.format === "raya.memory.unclosed-pair.fresh-start"
+    interrupted ??
+    (input.format === "raya.memory.unclosed-pair.fresh-start"
       ? await unclosed(entry, pending, witness)
-      : await inspect(witness.path, entry, pending)
+      : await inspect(witness.path, entry, pending))
   check(
     old.held.digest === witness.sha256 && old.held.raw.length === witness.bytes && old.held.tuple === witness.tuple,
     "Fresh-start observation changed",
@@ -134,7 +225,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
   check(
     cfg.version === 2 &&
       cfg.python.sha256 === old.cfg.python.sha256 &&
-      (input.format === "raya.memory.unclosed-pair.fresh-start" || cfg.supervisor.sha256 === old.cfg.supervisor.sha256),
+      (input.format !== "raya.memory.failed-search.fresh-start" || cfg.supervisor.sha256 === old.cfg.supervisor.sha256),
     "Reviewed paired fresh runtime required",
   )
   const spaces = Object.values(cfg.namespaces)
@@ -177,6 +268,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
     selection: Object.freeze({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple }),
     observation: witness,
     pids: Object.freeze([...new Set(pids)]),
+    ...(interrupted ? { identities: interrupted.identities } : {}),
     ports: Object.freeze(ports),
     outcome: old.outcome,
     closure: "unproven" as const,

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { Pipes, publish, ManagedOwner } from "../../src/second-brain/managed/owner"
 import { descriptor } from "../../src/second-brain/managed/descriptor"
-import { interpreter, supervisor } from "../../src/second-brain/managed/catalog"
+import { interpreter, supervisor, current } from "../../src/second-brain/managed/catalog"
 import { protect } from "../../src/second-brain/control/protection"
 import { BrainSettings } from "../../src/second-brain/settings"
 import { sources } from "../../src/second-brain/setup-v2"
@@ -57,7 +57,7 @@ function child(dir: string) {
 }
 
 test("reviewed supervisor and interpreter are fixed, namespace generations are immutable lossless strings", async () => {
-  expect(sha(await readFile(source))).toBe(supervisor)
+  expect(sha(await readFile(source))).toBe(current)
   expect(sha(await readFile(python))).toBe(interpreter)
   const input = selected()
   const cfg = descriptor(input)

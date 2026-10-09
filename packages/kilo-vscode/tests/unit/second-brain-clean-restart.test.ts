@@ -561,6 +561,126 @@ async function fresh(value: Awaited<ReturnType<typeof fixture>>) {
   return { ...failure, file, input }
 }
 
+async function interrupted(value: Awaited<ReturnType<typeof fixture>>) {
+  const selected = await fresh(value)
+  const folder = path.join(value.root, "memory", "Runs", "e".repeat(32))
+  await mkdir(folder)
+  const reservation = JSON.parse(await readFile(value.selected.path, "utf8"))
+  reservation.descriptor = value.running.managed
+  const witness = await publish(path.join(folder, "managed-reservation.json"), reservation)
+  const identity = JSON.parse(await readFile(path.join(value.root, "managed-retrieval-original.json"), "utf8"))
+  identity.selected = witness
+  await publish(path.join(folder, "managed-retrieval-original.json"), identity)
+  const entry = { ...value.running, launch: { phase: "uncertain", receipt: witness } }
+  const saved = JSON.parse(await readFile(value.file, "utf8"))
+  saved["raya.secondBrain.setup"] = entry
+  delete saved["raya.secondBrain.control.uncertainty"]
+  await writeFile(value.file, JSON.stringify(saved))
+  selected.input.format = "raya.memory.interrupted-startup.fresh-start"
+  selected.input.observation = witness
+  await writeFile(selected.file, JSON.stringify(selected.input))
+  return { file: value.file, root: value.root, selection: selected.file, entry, input: selected.input, witness }
+}
+
+test("interrupted startup preserves unknown retirement and fresh admission requires original parent absence", async () => {
+  const value = await fixture("raya.memory.operation.v2")
+  try {
+    const selected = await interrupted(value)
+    const reviewed = await archive(selected.selection, selected.entry, undefined)
+    expect(reviewed.closure).toBe("unproven")
+    expect(reviewed.settlement).toBe(false)
+    expect(reviewed.outcome).toBe("unknown")
+    expect(reviewed.pids).toContain(process.pid)
+    expect(reviewed.identities).toHaveLength(1)
+    const before = await readFile(value.file)
+    await expect(value.settings().archive(selected.selection, async () => true)).rejects.toThrow()
+    expect(await readFile(value.file)).toEqual(before)
+    await expect(archive(selected.selection, selected.entry, uncertain(value.root))).rejects.toThrow("Request debt")
+    const other = { ...selected.entry, launch: { ...selected.entry.launch, phase: "running" } }
+    await expect(archive(selected.selection, other, undefined)).rejects.toThrow("reservation required")
+  } finally {
+    await value.cleanup()
+  }
+}, 60000)
+
+test("file-backed interrupted startup archive applies after actual parent exit without fabricating paired closure", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "raya-startup-parent-"))
+  const runner = path.join(dir, "producer.ts")
+  const source = await readFile(import.meta.filename, "utf8")
+  const header = source
+    .slice(0, source.indexOf('test("missed shutdown'))
+    .replace(/from "(\.[^"]+)"/g, (_, name: string) => `from ${JSON.stringify(path.resolve(import.meta.dir, name))}`)
+  const fixture = source.slice(source.indexOf("\nconst python ="), source.indexOf("\nasync function failed("))
+  const helpers = source.slice(
+    source.indexOf("\nasync function failed("),
+    source.indexOf('\ntest("original managed shutdown'),
+  )
+  const fresh = source.slice(
+    source.indexOf("\nasync function fresh("),
+    source.indexOf('\ntest("interrupted startup preserves'),
+  )
+  await writeFile(
+    runner,
+    header +
+      fixture +
+      helpers.replaceAll("import.meta.dir", JSON.stringify(import.meta.dir)) +
+      fresh +
+      '\nconst value = await fixture("raya.memory.operation.v2"); console.log(JSON.stringify(await interrupted(value)));\n',
+  )
+  const child = Bun.spawn([process.execPath, runner], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+    windowsHide: true,
+  })
+  const [code, out, err] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ])
+  expect(code, err).toBe(0)
+  const value = JSON.parse(out)
+  const storage = {
+    get<T>(key: string) {
+      return JSON.parse(readFileSync(value.file, "utf8"))[key] as T | undefined
+    },
+    async update(key: string, item: unknown) {
+      const saved = JSON.parse(await readFile(value.file, "utf8"))
+      saved[key] = item
+      await writeFile(value.file, JSON.stringify(saved))
+    },
+  }
+  const host = new BrainSettings(storage, {
+    async get() {
+      return "synthetic"
+    },
+    async store() {},
+    async delete() {},
+  })
+  try {
+    const before = await readFile(value.witness.path)
+    await host.archive(value.selection, async () => false)
+    expect(storage.get("raya.secondBrain.setup")).toEqual(value.entry)
+    await host.archive(value.selection, async (review) => {
+      expect(review.closure).toBe("unproven")
+      expect(review.pids).toContain(child.pid)
+      return true
+    })
+    const audit = storage.get<Record<string, unknown>>(`raya.secondBrain.failedSearchArchive.${value.witness.sha256}`)!
+    expect(audit.previous).toEqual(value.entry)
+    expect(audit.closure).toBe("unproven")
+    expect(audit.phase).toBe("applied")
+    expect(audit.settlement).toBe(false)
+    expect(storage.get("raya.secondBrain.quarantinedSetups")).toEqual([value.entry])
+    expect(await readFile(value.witness.path)).toEqual(before)
+    expect(await Bun.file(path.join(path.dirname(value.witness.path), "managed-closed.json")).exists()).toBe(false)
+    expect((await host.load())!.setup).toEqual(value.input.setup)
+  } finally {
+    await rm(value.root, { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true })
+  }
+}, 60000)
+
 test("missing producer closure quarantines the exact prior pair without claiming request settlement", async () => {
   const value = await fixture("raya.memory.operation.v2")
   try {

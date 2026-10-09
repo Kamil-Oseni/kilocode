@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { Pair } from "../../src/second-brain/managed/pair"
-import { ManagedOwner, Pipes, publish } from "../../src/second-brain/managed/owner"
+import { ManagedOwner, Pipes, publish, startup } from "../../src/second-brain/managed/owner"
 import { descriptor, paired } from "../../src/second-brain/managed/descriptor"
 import { interpreter, supervisor, retrieval } from "../../src/second-brain/managed/catalog"
 import { release } from "../../src/second-brain/control/catalog-v2"
@@ -344,6 +344,8 @@ test("first original nonzero closure still drains second original and durable un
     })
     await value.record("uncertain", value.selection)
     await expect(value.settings.load()).rejects.toThrow("retained")
+    await expect(startup(value.pair, value.root, value.selection, value.originals)).rejects.toThrow("uncertain")
+    expect(await Bun.file(path.join(value.root, "managed-startup-closed.json")).exists()).toBe(false)
   } finally {
     await value.cleanup()
   }
@@ -360,7 +362,22 @@ test("held Retrieval callback failure cleans the original and never publishes ru
     ).rejects.toThrow("canceled")
     expect(await Bun.file(path.join(value.root, "original.json")).exists()).toBe(false)
     await value.record("uncertain", value.selection)
-    const closures = await value.pair.close("eof")
+    const receipt = await startup(value.pair, value.root, value.selection, value.originals)
+    const retained = JSON.parse(await readFile(receipt.path, "utf8"))
+    const closures = retained.closures
+    expect(retained).toMatchObject({
+      format: "raya.memory.managed.pair.startup-closed",
+      selected: value.selection,
+      originals: value.originals,
+      uncreated: ["memory"],
+      serviceAdmission: false,
+      requestSettlement: false,
+      coldSettlementAuthority: false,
+    })
+    expect(sha(await readFile(receipt.path))).toBe(receipt.sha256)
+    await expect(startup(value.pair, value.root, value.selection, value.originals)).rejects.toThrow()
+    await expect(value.settings.load()).rejects.toThrow("retained")
+    expect(await Bun.file(path.join(value.root, "managed-closed.json")).exists()).toBe(false)
     expect(closures).toMatchObject({
       retrieval: { originalJoined: true, readersJoined: true, producerRetirement: true },
     })

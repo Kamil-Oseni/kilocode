@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile, stat } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile, stat } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 import { materialize } from "../../src/second-brain/managed/materialize"
@@ -179,7 +179,11 @@ for name in ('root','changed','duplicate','missing','source'):
 test("upgraded source metadata admits only its exact historical or current supervisor cohort", async () => {
   const next = await materialize(cfg, setup, path.resolve("."), "e".repeat(32))
   const selected = await selection(next.next.managed, next.next.setup)
-  const pins = { ...release, "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3" }
+  const pins = {
+    ...release,
+    "server.py": "8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e9b164443c",
+    "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3",
+  }
   const prior = {
     ...next.next.managed,
     supervisor: {
@@ -188,7 +192,11 @@ test("upgraded source metadata admits only its exact historical or current super
     },
   }
   const files = (selected.plan.files as { path: string; sha256: string }[]).map((row) =>
-    row.path === path.join(next.source, "index.py") ? { ...row, sha256: pins["index.py"] } : row,
+    row.path === path.join(next.source, "index.py")
+      ? { ...row, sha256: pins["index.py"] }
+      : row.path === path.join(next.source, "server.py")
+        ? { ...row, sha256: pins["server.py"] }
+        : row,
   )
   const memory = { ...selected.plan, source_sha256: pins, files }
   const retrieval = { ...selected.retrieval!, files }
@@ -203,9 +211,13 @@ test("upgraded source metadata admits only its exact historical or current super
     },
   }
   expect(() => paired(retained, selected.plan, selected.retrieval!)).not.toThrow()
-  expect(() => paired(retained, memory, retrieval)).toThrow("Paired source directory differs")
-  expect(() => paired(next.next.managed, memory, retrieval)).toThrow("Paired source directory differs")
-  expect(() => paired(prior, selected.plan, selected.retrieval!)).toThrow("Paired source directory differs")
+  expect(() => paired(retained, memory, retrieval)).not.toThrow()
+  expect(() => paired(next.next.managed, memory, retrieval)).not.toThrow()
+  expect(() => paired(prior, selected.plan, selected.retrieval!)).not.toThrow()
+  expect(() =>
+    paired(prior, { ...memory, source_sha256: { ...pins, "server.py": release["server.py"] } }, retrieval),
+  ).toThrow("Paired source directory differs")
+  expect(() => paired(prior, memory, { ...retrieval, files: files.slice(1) })).toThrow("Paired assets differ")
   expect(() =>
     paired({ ...prior, supervisor: { ...prior.supervisor, sha256: "f".repeat(64) } }, memory, retrieval),
   ).toThrow("Paired source directory differs")
@@ -224,20 +236,9 @@ test("reusable v2 upgrade retains its independent release and external notes wit
   const notes = path.join(outer, "external-notes")
   await mkdir(path.join(notes, "System"), { recursive: true })
   await writeFile(path.join(notes, "README.md"), "# Retained synthetic external note\n")
-  for (const name of Object.keys(images)) {
-    const file = path.join(cfg.root, "source", name)
-    await mkdir(path.dirname(file), { recursive: true })
-    if (name.startsWith("retrieval_reuse/")) await copyFile(path.join("script/memory", name), file)
-  }
   const script = `import hashlib,json,pathlib,sys
 root=pathlib.Path(sys.argv[1]);notes=pathlib.Path(sys.argv[2]);pins=json.loads(sys.argv[3]);release=sys.argv[4]
 memory=json.loads((root/'memory-plan.json').read_bytes());other=json.loads((root/'retrieval-plan.json').read_bytes());files=list(memory['files']);directories=list(memory['directories'])
-for name,digest in pins.items():
- file=root/'source'/name
- if name.startswith('retrieval_reuse/'):
-  raw=file.read_bytes();info=file.lstat();assert hashlib.sha256(raw).hexdigest()==digest
-  files.append({'path':str(file),'bytes':len(raw),'sha256':digest,'identity':[info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns,info.st_nlink]})
-folder=root/'source'/'retrieval_reuse';info=folder.lstat();directories.append({'path':str(folder),'identity':[info.st_dev,info.st_ino,info.st_ctime_ns]})
 generations={}
 for name,file in (('root',notes),('system',notes/'System')):
  info=file.lstat();generations[name]=[info.st_dev,info.st_ino,info.st_birthtime_ns]
@@ -263,7 +264,7 @@ result['notes']=memory['notes_selection'];print(json.dumps(result,separators=(',
   })
   const selected = parse({ ...setup, protocol: "raya.memory.operation.v2", root: notes })
   const before = await readFile(path.join(notes, "README.md"))
-  const next = await materialize(managed, selected, path.resolve("."), "e".repeat(32))
+  const next = await materialize(managed, selected, path.resolve("."), "2".repeat(32))
   const cold = await review(next.receipt, { setup: selected, managed })
   expect(cold.next.managed.notes).toEqual(managed.notes)
   expect(cold.next.setup.root).toBe(notes)

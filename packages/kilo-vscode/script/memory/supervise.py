@@ -372,6 +372,9 @@ def prepare(plan):
     if plan['kind'] == 'memory':
         # NumPy native initialization must precede the blocking stdin reader.
         import numpy
+        if plan['source_sha256'] == CAPTURE:
+            import tokenizers
+            return
         from transformers import AutoTokenizer
 
 

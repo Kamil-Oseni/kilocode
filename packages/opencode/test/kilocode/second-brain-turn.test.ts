@@ -306,6 +306,50 @@ test("shopping-list purpose remains a saved-note question only after its origina
   }
 })
 
+test("coordinated shopping topics release only this turn's completed saved-note query", () => {
+  for (const text of [
+    "What are my saved preferences for keeping a grocery list to buy and shopping services in Canada? Cite the saved sources. Do not change anything.",
+    "Which saved preferences apply regarding maintaining my shopping list to buy and local retailers in Canada?",
+    "What are my saved preferences about using a list to buy and preferred grocery options and local stores? Cite my sources.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+    expect(settled(original.messages, original.session, uid)).toBe(true)
+    expect(settled(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
+    expect(settled(original.messages, original.session, "foreign-user")).toBe(false)
+    expect(
+      settled(
+        original.messages,
+        { ...original.session, metadata: { ...original.session.metadata, [RayaChief.phaseKey]: "task" } },
+        uid,
+      ),
+    ).toBe(false)
+    original.tool.state = { ...original.tool.state, input: { action: "status" } }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+  for (const text of [
+    "What are my saved preferences for keeping a grocery list to buy and transfer money?",
+    "What are my saved preferences for keeping a grocery list to buy and book a delivery?",
+    "What are my saved preferences for keeping a grocery list to buy and launch a service?",
+    "What are my saved preferences for keeping a grocery list to buy and shopping services now?",
+    "What are my saved preferences for keeping a grocery list to buy and shopping services in transfer money?",
+    "What are my saved preferences for keeping a grocery list to buy and shopping services? Then order milk.",
+    "What are my saved preferences for keeping a grocery list to buy and shopping services in Canada and buy milk?",
+    "What are my saved preferences for keeping a grocery list to buy and shopping services in Canada? Cite the saved sources. Do not change anything, then place orders.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original fixture required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("compound work, memory retrieval and structured output do not become acknowledgement-only turns", () => {
   for (const text of [
     request,
@@ -415,7 +459,7 @@ test("saved-note search prefixes do not release mutation, stale-turn or goal-com
 test("actual Ollama bridge permits text continuation after the original Memory query while required acquisition still refuses", async () => {
   const original = fixture()
   const text =
-    "Search my saved SecondBrain notes: what are my preferences for first-time Raya setup and for the Memory tab? Cite the saved sources. Do not change anything."
+    "What are my saved preferences for keeping a grocery list to buy and shopping services in Canada? Cite the saved sources. Do not change anything."
   const part = original.messages[0].parts[0]
   if (part.type !== "text") throw new Error("Original user fixture required")
   part.text = text

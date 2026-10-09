@@ -108,8 +108,12 @@ function question(request: string) {
     .replace(/^(?:please )?search (?:my |the )?saved (?:SecondBrain|Memory) notes?\s*:\s*/i, "")
   // Only a single factual preference-purpose question may describe a list "to buy".
   // A second imperative or an urgency/action tail cannot be normalized into recall.
-  const purpose =
-    /\b(?:for|about|regarding) (?:keeping|maintaining|using|having) (?:a|my|the) (?:grocery |shopping )?list to buy(?: in [\p{L}]+(?: [\p{L}]+){0,2})?(?=\??(?:\s+Cite (?:the saved |the |my )?sources[.!]?)?$)/iu
+  const topic =
+    "(?:(?:(?:the|my|local|Canadian|preferred|available) )?(?:(?:grocery|shopping|delivery) (?:services|options|providers)|stores|retailers|vendors|suppliers))"
+  const purpose = new RegExp(
+    `\\b(?:for|about|regarding) (?:keeping|maintaining|using|having) (?:a|my|the) (?:grocery |shopping )?list to buy(?: and ${topic}){0,2}(?: in [\\p{L}]+(?: [\\p{L}]+){0,2})?(?=\\??(?:\\s+Cite (?:the saved |the |my )?sources[.!]?)?$)`,
+    "iu",
+  )
   const text =
     purpose.test(original) &&
     /^[^.!?;`]+\??(?:\s+Cite (?:the saved |the |my )?sources[.!]?)?$/i.test(original) &&

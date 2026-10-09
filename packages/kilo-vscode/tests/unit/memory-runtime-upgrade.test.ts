@@ -102,10 +102,25 @@ test("paired Retrieval plan preserves its original source and pin tokens", () =>
 
 test("upgrade accepts the exact retained thirteen-file cohort and refuses a mixed historical release", () => {
   const old = "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e"
-  const pins = { ...release, "index.py": old }
-  const raw = fixture.raw.replaceAll(release["index.py"], old)
+  const pins = {
+    ...release,
+    "index.py": old,
+    "server.py": "8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e9b164443c",
+  }
+  const raw = fixture.raw.replaceAll(release["index.py"], old).replaceAll(release["server.py"], pins["server.py"])
   expect(JSON.parse(run(raw, fixture.rows, release, pins).toString()).source_sha256).toEqual(release)
   expect(() => run(raw, fixture.rows, release, { ...pins, "server.py": "f".repeat(64) })).toThrow()
+})
+
+test("upgrade accepts the exact retained handoff cohort without changing Retrieval selection", () => {
+  const pins = { ...release, "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b" }
+  const raw = fixture.raw.replaceAll(release["server.py"], pins["server.py"])
+  expect(JSON.parse(run(raw, fixture.rows, release, pins).toString()).source_sha256).toEqual(release)
+  const paired = raw.replace('"kind":"memory"', '"kind":"retrieval"')
+  const output = run(paired, fixture.rows, release, pins).toString()
+  const begin = paired.indexOf('"source":')
+  const end = paired.indexOf(',"files":')
+  expect(output).toContain(paired.slice(begin, end))
 })
 
 test("upgrade refuses altered old bytes, mixed pins and nonordinary native identities", () => {

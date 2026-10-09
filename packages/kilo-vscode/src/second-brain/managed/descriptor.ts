@@ -2,7 +2,7 @@ import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { document, child, check } from "../control/frames"
 import { image, directory, normalize } from "../control/identity"
-import { selected as catalog, release as capture } from "../control/catalog-capture"
+import { selected as catalog, resident } from "../control/catalog-capture"
 import type { Setup } from "../settings"
 import { interpreter, supervisors, current, retrieval as release7 } from "./catalog"
 import { cohort, fingerprint } from "./reuse-catalog"
@@ -183,7 +183,7 @@ function reusable(memory: Record<string, unknown>, retrieval: Record<string, unk
         original.RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256 === env.RAYA_RETRIEVAL_RELEASE_SHA256,
       "Independently selected reusable release differs",
     )
-  if (isDeepStrictEqual(row(memory.source_sha256), capture))
+  if (resident(row(memory.source_sha256)))
     check(
       reuse && env.RAYA_RETRIEVAL_RELEASE_SHA256 === fingerprint,
       "Current Memory handoff requires its paired Retrieval cohort",

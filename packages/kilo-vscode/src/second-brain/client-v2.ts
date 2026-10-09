@@ -8,7 +8,7 @@ import type { SecondBrainRequest } from "@kilocode/sdk/v2/client"
 import { raw } from "./raw-response"
 import { search } from "./search-results"
 import { context } from "./linked-results"
-import { selected as catalog, release } from "./control/catalog-capture"
+import { selected as catalog, resident } from "./control/catalog-capture"
 import type { BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 
 type Selection = Parameters<typeof operation>[1]
@@ -398,10 +398,7 @@ export class ClientV2 {
   }
 
   private residency() {
-    return (
-      this.#setup.protocol === "raya.memory.operation.v2" &&
-      Object.entries(release).every(([name, hash]) => this.#setup.source_sha256[name] === hash)
-    )
+    return this.#setup.protocol === "raya.memory.operation.v2" && resident(this.#setup.source_sha256)
   }
 
   async idle(id: string, signal: AbortSignal, recovery = false) {

@@ -30,10 +30,22 @@ function deferred() {
   return { promise, resolve }
 }
 let memo: Promise<Fixture> | undefined
-function fixture() {
-  return (memo ??= (async () => {
+function fixture(pins = release) {
+  const run = async () => {
     if (!python) throw new Error("Pinned pure producer interpreter required")
     expect(digest(await readFile(python))).toBe("b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2")
+    const source = path.join(import.meta.dir, "../../script/memory/service")
+    const retained = pins === release ? undefined : await mkdtemp(path.join(tmpdir(), "raya-memory-retained-cohort-"))
+    if (retained)
+      for (const [name, hash] of Object.entries(pins)) {
+        const raw = await readFile(path.join(source, name))
+        const bytes =
+          name === "server.py"
+            ? Buffer.from(raw.toString().replace("key+'-'+secrets.token_hex(16)", "key+'-idle-'+secrets.token_hex(16)"))
+            : raw
+        expect(digest(bytes)).toBe(hash)
+        await writeFile(path.join(retained, name), bytes)
+      }
     const child = Bun.spawn(
       [
         python,
@@ -41,8 +53,8 @@ function fixture() {
         "-S",
         "-B",
         path.join(import.meta.dir, "fixtures/memory-client-v2-producer.py"),
-        path.join(import.meta.dir, "../../script/memory/service"),
-        JSON.stringify(release),
+        retained ?? source,
+        JSON.stringify(pins),
       ],
       {
         windowsHide: true,
@@ -62,14 +74,16 @@ function fixture() {
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ])
+    if (retained) await rm(retained, { recursive: true })
     expect(code, err).toBe(0)
     expect(err).toBe("")
     expect(Buffer.byteLength(out)).toBeLessThan(65536)
     const value = JSON.parse(out)
     expect(value.sourceReviewSHA).toBeNull()
-    expect(value.source_sha256).toEqual(release)
+    expect(value.source_sha256).toEqual(pins)
     return value as Fixture
-  })())
+  }
+  return pins === release ? (memo ??= run()) : run()
 }
 
 async function harness(
@@ -82,9 +96,14 @@ async function harness(
     repeat?: string
     terminal?: (value: string) => Uint8Array
     idle?: "lost" | "absent"
+    retained?: boolean
   } = {},
 ) {
-  const data = await fixture()
+  const data = await fixture(
+    opts.retained
+      ? { ...release, "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b" }
+      : release,
+  )
   const item = data.cases.find((row) => row.name === name)!
   expect(item).toBeDefined()
   const dir = await mkdtemp(path.join(tmpdir(), "raya-memory-v2-owner-"))
@@ -236,6 +255,19 @@ genuine("completed Memory waits for idle proof and lost handoff reply recovers b
 
 genuine("missing saved idle proof preserves completed operation uncertainty and never repeats POST", async () => {
   const value = await harness("search-completed-empty-v2-completed", { idle: "absent" })
+  try {
+    await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow()
+    await expect(value.owner.reconcile()).rejects.toThrow()
+    expect(value.settings.pending()).toBeDefined()
+    expect(value.owner.retired()).toBe(false)
+    expect(value.calls.filter((row) => row.method === "POST")).toHaveLength(2)
+  } finally {
+    await value.cleanup()
+  }
+})
+
+genuine("retained handoff cohort still requires saved original idle proof", async () => {
+  const value = await harness("search-completed-empty-v2-completed", { idle: "absent", retained: true })
   try {
     await expect(value.owner.search(value.item.body.query!, { id: value.item.selected.request })).rejects.toThrow()
     await expect(value.owner.reconcile()).rejects.toThrow()

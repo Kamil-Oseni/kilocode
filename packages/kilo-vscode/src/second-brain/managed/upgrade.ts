@@ -66,7 +66,8 @@ function selection(
   )
   check(same(pins, release), "Exact current Memory release required")
   check(
-    same(prior.pins, selected(prior.pins)) && same({ ...prior.pins, "index.py": pins["index.py"] }, pins),
+    same(prior.pins, selected(prior.pins)) &&
+      same({ ...prior.pins, "server.py": pins["server.py"], "index.py": pins["index.py"] }, pins),
     "Exact previous capture release required",
   )
   check(

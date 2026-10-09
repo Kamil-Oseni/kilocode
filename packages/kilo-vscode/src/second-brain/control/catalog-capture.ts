@@ -43,4 +43,12 @@ export function selected(pins: Readonly<Record<string, unknown>>) {
       ? retained
       : release
 }
+export function resident(pins: Readonly<Record<string, unknown>>) {
+  const cohort = selected(pins)
+  return (
+    (cohort === release || cohort === handoff) &&
+    Object.keys(pins).length === Object.keys(cohort).length &&
+    Object.entries(cohort).every(([name, hash]) => pins[name] === hash)
+  )
+}
 export const bridge = "a07325ca6e504cca3ce8714469423706d3e333c2399bfa451f41c896170b898c"

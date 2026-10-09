@@ -15,11 +15,14 @@ export function acknowledged(
   const request = RayaChief.requestText(current.parts)
   if (request !== RayaChief.request(session.metadata) || request.length > 1000) return false
   const match =
-    /^(I (?:prefer|like|dislike|would prefer)\b[^?!`]+?)\s+Please (?:just )?acknowledge (?:this|my|that) preference(?:[.;]\s*(?:do not|don't)\b[^.!?]*)?[.!]?$/i.exec(
+    /^([^?!`]+?)\s+Please (?:just )?acknowledge (?:this|my|that) preference(?:[.;]\s*(?:do not|don't)\b[^.!?]*)?[.!]?$/i.exec(
       request,
     )
-  if (!match || /\b(?:please|then|also|instead|but)\b/i.test(match[1])) return false
-  return !/\.\s+(?!I\b|My\b|The\b)[a-z]/i.test(match[1])
+  if (!match || !/\b(?:I (?:prefer|like|dislike|want|would prefer|would like)|My preference is)\b/i.test(match[1]))
+    return false
+  return !/\b(?:please|install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|configure|control|apply|revert|undo|redo)\b/i.test(
+    match[1],
+  )
 }
 
 /** A personal-memory question can finish after its own read, without closing a work goal. */
@@ -46,7 +49,10 @@ export function settled(
           part.tool === "second_brain_recall" &&
           part.messageID === row.info.id &&
           part.sessionID === session.id &&
-          part.state.status === "completed",
+          part.state.status === "completed" &&
+          !("action" in part.state.input) &&
+          typeof part.state.input.query === "string" &&
+          !!part.state.input.query.trim(),
       ),
   )
 }

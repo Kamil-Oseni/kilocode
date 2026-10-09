@@ -96,6 +96,23 @@ test("the actual installed preference acknowledgement needs no acquisition or go
   expect(acknowledged(original.messages, original.session, uid)).toBe(false)
 })
 
+test("natural preference wording can acknowledge without acquisition or goal completion", () => {
+  for (const text of [
+    "For first-time setup, I want Raya to guide me inside the conversation using its existing Ask cards. Keep Memory for manual inspection and settings. Please acknowledge this preference.",
+    "My preference is concise replies while I work. Please acknowledge my preference.",
+    "I would like shorter replies, but I also like clear explanations. Please acknowledge that preference.",
+    "I prefer Raya PC checks on my second display so the main display stays clear. Please acknowledge this preference.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(acknowledged(original.messages, original.session, uid)).toBe(true)
+    expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+  }
+})
+
 test("compound work, memory retrieval and structured output do not become acknowledgement-only turns", () => {
   for (const text of [
     request,
@@ -130,6 +147,15 @@ test("historical, foreign and queued successor reads never release the original 
     ...original.messages[0],
     info: { ...original.messages[0].info, id: MessageID.make("msg_next") },
   })
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+})
+
+test("Memory setup status is not a completed note query", () => {
+  const original = fixture()
+  if (original.tool.state.status !== "completed") throw new Error("Completed fixture required")
+  original.tool.state = { ...original.tool.state, input: { action: "status" } }
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  original.tool.state = { ...original.tool.state, input: { query: " " } }
   expect(settled(original.messages, original.session, uid)).toBe(false)
 })
 

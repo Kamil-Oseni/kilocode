@@ -34,6 +34,11 @@ Do not operate lights or sleep routines during acceptance. Video inference and P
 ## Latest source recovery copy
 
 SecondBrain's October 9 source snapshot contains 73 verified files, 184,322 bytes, including the newly committed preference and original capture input/request records: `D:/RayaBackups/SecondBrain-Sources-20261009-6deb0712`. Manifest SHA-256 is `0ce3c6300a72f6df6238379277f3ec5ef0dc425aeb2d7d89d1a88aa5b93926aa`. A separate staging restore verified all copied files and exact inventory; proof is `D:/Raya/Tools/Readiness-20261008/SecondBrain-Restore-e2ca6528ff1b4cdfa3283efbe2249a47/restore-proof.json`. Live notes/services were unchanged. This is source recovery only; operation settlement, live restore, semantic retrieval, binary media and off-PC recovery remain unproved. Follow `D:/RayaBackups/RECOVERY.md` and preserve pending debt before any supported restoration.
+## Current PC reliability observation — October 9
+
+Read-only observation confirms Balanced power-plan AC sleep and AC hibernation timers are both zero (never). Home Assistant VM is running with 2,048 MiB RAM, two CPUs, UTC RTC and effective KVM paravirtualization. The startup task is enabled; last recorded run October 7 at 17:01:50 EDT returned zero. It launches the existing headless starter 45 seconds after Windows sign-in. This is a sign-in trigger, not unattended pre-login startup; a restart without sign-in can leave Home Assistant offline.
+
+The starter exits successfully if the VM is already running and resets a resumed saved-state guest to avoid a stale clock. Configuration review does not prove the earlier clock stalls are fixed, current guest HTTP readiness, or matching-version postboot recovery. No boot, sleep, VM reset, service restart, guest-console or lighting action was performed. Evidence: `D:/Raya/Tools/Readiness-20261009/pc-reliability-observation.json`. Preserve the real postboot workflow gate below.
 ## Scope and recorded classifications
 
 All **38 unfinished requirements** remain active: **35 in progress and 3 planned**. The tracker also records **23 verified requirements**, one maintenance item and one deferred item. These are recorded classifications, not fresh certification of every historical result against the current installed candidate.

@@ -10,14 +10,14 @@ import { readFile } from "node:fs/promises"
 const native = process.platform === "win32" ? test : test.skip
 
 native(
-  "supervisor resource observations retain every cold admission floor without changing actual gates",
+  "supervisor observations report the total six-GiB cold gate and retain commit and resident boundaries",
   async () => {
     const result = await exec(
       "D:/Raya/Services/Packaging/Python/3.12.14/python.exe",
       ["-I", "-S", "-B", path.resolve(import.meta.dir, "../fixtures/memory_supervisor_settlement.py")],
       { maxBuffer: 65536 },
     )
-    expect(result.stderr).toContain("Ran 7 tests")
+    expect(result.stderr).toContain("Ran 8 tests")
     expect(result.stderr).toContain("OK")
     expect(result.stdout).toBe("")
   },

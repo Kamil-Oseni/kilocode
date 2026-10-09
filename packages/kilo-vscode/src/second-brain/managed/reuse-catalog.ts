@@ -20,11 +20,16 @@ const retained = Object.freeze({
   "retrieval_reuse/session.py": "487cbfdb0724162b1772e685350c212d16328eaa800d644a18a4de009793fb5c",
 })
 
-export const images = Object.freeze({
+const prior = Object.freeze({
   ...retained,
   "retrieval_reuse/entry.py": "fbb6113cb571ef682001aacf5877e3fa3b5927714223889391fde29b226dea9b",
   "retrieval_reuse/pool.py": "c6938930c0090dfab5369de422b659aa28410c714fc1e1ac6e88d8dcbdb0955a",
   "retrieval_reuse/server.py": "dece9b933f6a62ae5886c9fe66607bc505b177aaa410791030ac06b7d2858280",
+})
+
+export const images = Object.freeze({
+  ...prior,
+  "retrieval_reuse/pool.py": "5abd1acf33a4dd0bf4de83f1bd392add89948b113e9c381039369fed56247e8e",
 })
 
 export const catalogs = Object.freeze({
@@ -33,14 +38,17 @@ export const catalogs = Object.freeze({
   "google--embeddinggemma-2.json": "7f28a34d9d8e9cc67372be2bc8d1c5ad4e386914e59aa18ae7351e1e95646f54",
 })
 
-export const fingerprint = "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86"
+export const fingerprint = "42e505128a3bfbba2346e76031424d0805e3608e2582ec4932ed68c8792b8610"
 
 export function cohort(release: unknown) {
   check(
-    release === fingerprint || release === "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b",
+    release === fingerprint ||
+      release === "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86" ||
+      release === "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b",
     "Exact reusable cohort required",
   )
-  return release === fingerprint ? images : retained
+  if (release === fingerprint) return images
+  return release === "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86" ? prior : retained
 }
 
 /** Health correlates the selected release; original process ownership stays with the launcher. */

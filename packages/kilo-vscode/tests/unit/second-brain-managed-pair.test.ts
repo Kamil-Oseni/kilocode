@@ -10,7 +10,7 @@ import { descriptor, paired } from "../../src/second-brain/managed/descriptor"
 import { interpreter, supervisor, retrieval } from "../../src/second-brain/managed/catalog"
 import { release } from "../../src/second-brain/control/catalog-v2"
 import { release as capture, selected as catalog, resident } from "../../src/second-brain/control/catalog-capture"
-import { images, catalogs, fingerprint, readiness } from "../../src/second-brain/managed/reuse-catalog"
+import { images, catalogs, fingerprint, readiness, cohort } from "../../src/second-brain/managed/reuse-catalog"
 import { document, canonical, sha } from "../../src/second-brain/control/frames"
 import { protect } from "../../src/second-brain/control/protection"
 import { observe } from "../../src/second-brain/control/identity"
@@ -152,6 +152,49 @@ test("reusable selection binds exact source closure, protocol and independent re
     env: { ...value.plan.env, RAYA_RETRIEVAL_RELEASE_SHA256: fingerprint },
   }
   paired(value.cfg, memory, plan)
+  const resident = [
+    ...Object.entries(capture).map(([name, sha256]) => ({ path: path.join(value.memory.source, name), sha256 })),
+    ...Object.entries(images).map(([name, sha256]) => ({ path: path.join(value.cfg.root, "source", name), sha256 })),
+  ]
+  paired(value.cfg, { ...memory, files: resident, source_sha256: capture }, { ...plan, files: resident })
+  const prior = "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86"
+  const retained = [
+    ...Object.entries(capture).map(([name, sha256]) => ({ path: path.join(value.memory.source, name), sha256 })),
+    ...Object.entries(cohort(prior)).map(([name, sha256]) => ({
+      path: path.join(value.cfg.root, "source", name),
+      sha256,
+    })),
+  ]
+  const original = {
+    ...memory,
+    files: retained,
+    source_sha256: capture,
+    env: { ...memory.env, RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256: prior },
+  }
+  const historical = {
+    ...plan,
+    files: retained,
+    source_sha256: cohort(prior),
+    env: { ...plan.env, RAYA_RETRIEVAL_RELEASE_SHA256: prior },
+  }
+  paired(value.cfg, original, historical)
+  const source = path.join(value.cfg.root, "raya-memory-source-upgrade-" + "a".repeat(32))
+  const upgraded = descriptor({
+    ...value.cfg,
+    supervisor: {
+      ...value.cfg.supervisor,
+      path: path.join(source, "supervise.py"),
+      sha256: "a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b",
+    },
+  })
+  const assets = retained.map((item) =>
+    path.dirname(item.path) === value.memory.source
+      ? { ...item, path: path.join(source, path.basename(item.path)) }
+      : item,
+  )
+  paired(upgraded, { ...original, source, files: assets }, { ...historical, files: assets })
+  expect(() => paired(value.cfg, original, { ...historical, source_sha256: images })).toThrow()
+  expect(() => paired(value.cfg, original, { ...historical, env: plan.env })).toThrow()
   expect(() =>
     paired(
       value.cfg,
@@ -217,6 +260,16 @@ test("reusable pins match source bytes and readiness cannot adopt a different re
   }
   readiness(health, fingerprint)
   readiness(document(Buffer.from(JSON.stringify(health))).value as Record<string, unknown>, fingerprint)
+  for (const release of [
+    "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86",
+    "366c881ade5833f36eb3002e530b7b56c9f114dc3ad62f2314b4204d0077834b",
+  ]) {
+    const pins = cohort(release)
+    const parsed = document(Buffer.from(JSON.stringify({ source_sha256: pins, catalog_sha256: catalogs })))
+    expect(sha(canonical(parsed.tree, parsed.text))).toBe(release)
+    readiness({ ...health, selected_release_sha256: release, source_sha256: pins }, release)
+    expect(() => readiness({ ...health, selected_release_sha256: release }, release)).toThrow()
+  }
   for (const change of [
     { ownership_protocol: "raya.retrieval.retirement.v1" },
     { selected_release_sha256: "a".repeat(64) },

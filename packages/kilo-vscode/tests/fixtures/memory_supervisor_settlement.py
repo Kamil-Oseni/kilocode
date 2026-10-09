@@ -18,6 +18,15 @@ spec.loader.exec_module(module)
 
 
 class Tests(unittest.TestCase):
+    def test_exact_new_and_retained_retrieval_cohorts(self):
+        for pins in (module.REUSE, module.REUSE_PREVIOUS, module.REUSED):
+            self.assertEqual(module.release('retrieval', dict(pins), True), pins)
+        self.assertEqual(module.REUSE['retrieval_reuse/pool.py'], hashlib.sha256((path.parent / 'retrieval_reuse/pool.py').read_bytes()).hexdigest())
+        self.assertEqual(module.REUSE_PREVIOUS['retrieval_reuse/pool.py'], 'c6938930c0090dfab5369de422b659aa28410c714fc1e1ac6e88d8dcbdb0955a')
+        mixed = dict(module.REUSE, **{'retrieval_reuse/entry.py': module.REUSED['retrieval_reuse/entry.py']})
+        with self.assertRaises(ValueError):
+            module.release('retrieval', mixed, True)
+
     def test_every_cold_resource_sample_preserves_original_admission_floor(self):
         root = path.parent
         sys.path[:0] = [str(root / 'retrieval_reuse'), str(root / 'retrieval')]
@@ -40,15 +49,17 @@ class Tests(unittest.TestCase):
         samples = local.current['samples']
         self.assertEqual(len(samples), 32)
         for row in samples:
-            self.assertEqual(row['required_ram_bytes'], 10 * pool.GIB)
+            self.assertEqual(row['required_ram_bytes'], 6 * pool.GIB)
             self.assertEqual(row['reserve_ram_bytes'], 6 * pool.GIB)
-            self.assertEqual(row['admission_headroom_bytes'], 4 * pool.GIB)
+            self.assertEqual(row['admission_headroom_bytes'], 0)
+            self.assertEqual(row['model_budget_bytes'], 4 * pool.GIB)
+            self.assertTrue(row['cold_gemma'])
             self.assertFalse(row['original_owner_present'])
             self.assertTrue(row['settling_enabled'])
             self.assertGreater(row['available_commit_bytes'], 0)
-        self.assertFalse(pool.admitted(9 * pool.GIB, 6 * pool.GIB, owner.reserve, 4 * pool.GIB, True))
-        self.assertTrue(pool.admitted(10 * pool.GIB, 5 * pool.GIB, owner.reserve, 4 * pool.GIB, True))
-        self.assertFalse(pool.admitted(10 * pool.GIB, 4 * pool.GIB, owner.reserve, 4 * pool.GIB, True))
+        self.assertFalse(pool.admitted(6 * pool.GIB - 1, 5 * pool.GIB, owner.reserve, 4 * pool.GIB, True))
+        self.assertTrue(pool.admitted(6 * pool.GIB, 5 * pool.GIB, owner.reserve, 4 * pool.GIB, True))
+        self.assertFalse(pool.admitted(6 * pool.GIB, 5 * pool.GIB - 1, owner.reserve, 4 * pool.GIB, True))
         self.assertNotIn('torch', sys.modules)
         self.assertNotIn('models', sys.modules)
 

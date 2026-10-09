@@ -185,7 +185,9 @@ function reusable(memory: Record<string, unknown>, retrieval: Record<string, unk
     )
   if (resident(row(memory.source_sha256)))
     check(
-      reuse && env.RAYA_RETRIEVAL_RELEASE_SHA256 === fingerprint,
+      reuse &&
+        (env.RAYA_RETRIEVAL_RELEASE_SHA256 === fingerprint ||
+          env.RAYA_RETRIEVAL_RELEASE_SHA256 === "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86"),
       "Current Memory handoff requires its paired Retrieval cohort",
     )
   return reuse
@@ -219,6 +221,7 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
   if (plan.source === original) return
   const pins = [
     current,
+    "a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b",
     "7c2286962a606fade513e4742369d0f084609549961650347b89f44f1f266bcd",
     "715dc3ff0bd136363c3b77e47c9c3e5717645518b9c98060139caf785566dbe4",
     "0fc0c18acd7574b7fb0d9bff8378de953645113ac5619f4673688cd2ab27fb62",

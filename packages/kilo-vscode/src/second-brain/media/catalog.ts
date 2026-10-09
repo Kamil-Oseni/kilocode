@@ -51,7 +51,7 @@ const manifest = z
 // Independently qualified media images; existing Memory releases remain immutable.
 const pins: Record<string, string> = Object.freeze({
   "media/supervisor.py": "3d4b7cf6b5895d00cce76f20ce8cf5dd790727964e4722e471ef1dfe505f2e38",
-  "media/worker.py": "ec1061669ce674cc986f887bf08190621762f64d42d54cd2248830ea26021869",
+  "media/worker.py": "7def05dabc6644289bd24422e919aa20219489d1b284a3ce013e79aef33d6020",
   "media/session.py": "750242844fe1ccaa4bb556689541696eb72984a6e6a0639e4739c2ea12028bdc",
   "media/library.py": "d2fc538fbdc95bcf83f5949946b8a46e683a68c13758c07d565b945cf1a0e66a",
   "media/encoder.py": "5797459720dc326c62477372f94d28614fb77602573d02d58a7f95fa48e4324a",

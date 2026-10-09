@@ -46,8 +46,14 @@ def budget(kind, model, revision, text=False, warm=False):
     return (4 if selected else 5) * GIB
 
 
+def required(reserve, headroom, cold=False):
+    # Cold Gemma uses the selected reserve as its total free-RAM floor.
+    # The model budget is not added again; resident admission remains unchanged.
+    return max(6 * GIB, reserve) if cold else reserve + headroom
+
+
 def admitted(free, commit, reserve, headroom, cold=False):
-    return free >= reserve + headroom and (not cold or commit >= 5 * GIB)
+    return free >= required(reserve, headroom, cold) and (not cold or commit >= 5 * GIB)
 
 
 class Redirect(urllib.request.HTTPRedirectHandler):

@@ -42,9 +42,16 @@ class Tests(unittest.TestCase):
         self.assertEqual(budget('embeddings', 'embeddinggemma-2', revision, True), 4*GIB)
         for kind, selected, image in [('embeddings', False, revision), ('media', True, revision), ('embeddings', True, 'a'*40)]:
             self.assertEqual(budget(kind, 'embeddinggemma-2', image, selected), 5*GIB)
-        self.assertTrue(admitted(10*GIB, 5*GIB, 6*GIB, 4*GIB, True))
-        self.assertFalse(admitted(10*GIB-1, 5*GIB, 6*GIB, 4*GIB, True))
-        self.assertFalse(admitted(10*GIB, 5*GIB-1, 6*GIB, 4*GIB, True))
+        self.assertTrue(admitted(6*GIB, 5*GIB, 6*GIB, 4*GIB, True))
+        self.assertFalse(admitted(6*GIB-1, 5*GIB, 6*GIB, 4*GIB, True))
+        self.assertFalse(admitted(6*GIB, 5*GIB-1, 6*GIB, 4*GIB, True))
+        self.assertTrue(admitted(6*GIB, 5*GIB, 6*GIB, 5*GIB, True))
+        self.assertFalse(admitted(6*GIB, 5*GIB, 6*GIB, GIB//2, False))
+        self.assertTrue(admitted(6*GIB+GIB//2, 0, 6*GIB, GIB//2, False))
+        self.assertFalse(admitted(8*GIB-1, 5*GIB, 8*GIB, 4*GIB, True))
+        self.assertTrue(admitted(8*GIB, 5*GIB, 8*GIB, 4*GIB, True))
+        self.assertFalse(admitted(6*GIB-1, 5*GIB, 4*GIB, 4*GIB, True))
+        self.assertTrue(admitted(6*GIB, 5*GIB, 4*GIB, 4*GIB, True))
         self.assertTrue(all(value > 0 for value in resources()))
 
     def test_settling_cancelled_and_expired_before_any_worker(self):

@@ -23,10 +23,15 @@ def admission():
     api.restype = wintypes.BOOL
     if not api(ctypes.byref(row)):
         raise ctypes.WinError(ctypes.get_last_error())
+    return capacity(row)
+
+
+def capacity(row):
+    """Apply cold admission to the original native free totals, without extra RAM reserves."""
     if row.free > row.physical or row.available > row.commit:
         raise ValueError('Native media resource observation inconsistent.')
-    if row.free < 10 * 1073741824 or row.available < 5 * 1073741824:
-        raise ValueError('Cold media inference requires 10 GiB free RAM and 5 GiB free commit.')
+    if row.free < 6 * 1073741824 or row.available < 5 * 1073741824:
+        raise ValueError('Cold media inference requires 6 GiB free RAM and 5 GiB free commit.')
     return dict(free=row.free, available=row.available)
 
 

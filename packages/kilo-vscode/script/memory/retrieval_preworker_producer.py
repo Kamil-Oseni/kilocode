@@ -49,7 +49,10 @@ async def run():
             diagnostic = json.loads(file.read_bytes())
             assert diagnostic['cause'] == 'pool_memory_reserve' and diagnostic['http_status'] == response.status_code
             assert len(diagnostic['memory']) == 1 and diagnostic['memory'][0]['available_ram_bytes'] > 0
-            assert diagnostic['memory'][0]['required_ram_bytes'] == selected.reserve + 5 * pool.GIB
+            assert diagnostic['memory'][0]['required_ram_bytes'] == selected.reserve
+            assert diagnostic['memory'][0]['admission_headroom_bytes'] == 0
+            assert diagnostic['memory'][0]['model_budget_bytes'] == 5 * pool.GIB
+            assert diagnostic['memory'][0]['cold_gemma'] is True
             assert diagnostic['settlement_authority'] is False and diagnostic['replay'] is False
             assert 'Synthetic refusal input' not in file.read_text()
             return {'proof': proof, 'diagnostic': diagnostic, 'file': str(file)}

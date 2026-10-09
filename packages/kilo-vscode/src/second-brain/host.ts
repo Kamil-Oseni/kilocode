@@ -33,6 +33,7 @@ import type { KiloConnectionService } from "../services/cli-backend/connection-s
 import { CaptureIntake, type CapturePublication } from "./capture-intake"
 import { failure } from "./capture-failure"
 import { personal } from "./scope"
+import { admission } from "./index-admission"
 
 type CaptureControl = { capture(body: CapturePublication, authorize: () => void): Promise<unknown> }
 function capturing(value: object): value is object & CaptureControl {
@@ -544,6 +545,10 @@ export class BrainHost {
       vscode.commands.registerCommand("kilo-code.new.memory.recoverCommittedCapture", (...args: unknown[]) => {
         if (args.length) throw new Error("Native capture recovery accepts no command arguments")
         return this.recoverCapture()
+      }),
+      vscode.commands.registerCommand("kilo-code.new.memory.indexRecoveredCapture", (...args: unknown[]) => {
+        if (args.length) throw new Error("Native recovered-save indexing accepts no command arguments")
+        return this.indexCapture()
       }),
       vscode.commands.registerCommand("kilo-code.new.memory.reconcileRefusedCapture", (...args: unknown[]) => {
         if (args.length) throw new Error("Native capture refusal review accepts no command arguments")
@@ -1182,13 +1187,27 @@ export class BrainHost {
     const retained = this.context.globalState.get<{ phase: string }>(key)
     const result =
       retained?.phase === "applied"
-        ? this.settings.upgrading()
-          ? await this.service.upgradeCapture(selected.turn)
-          : await this.settings.reviewCapture(this.context.extensionPath, selected.turn)
+        ? this.settings.pending() ||
+          this.context.globalState.get<{ format?: string }>("raya.secondBrain.committedCaptureRecovery.pending")
+            ?.format === "raya.memory.capture-index.recovery.pending"
+          ? await this.service.recoverIndex(selected.turn, async (review) => {
+              if (!vscode.workspace.isTrusted || this.closing)
+                throw new Error("Memory recovery selection is unavailable")
+              const accepted = await vscode.window.showWarningMessage(
+                `Retain failed index ${review.request} and recover the setup for the original verified save ${selected.turn.id}? Its exact failed request and downstream evidence remain in a separate audit linked to the applied original save recovery. This does not retry indexing or confirm that indexing succeeded. The original save and notes remain unchanged.`,
+                { modal: true },
+                "Retain failed index and recover setup",
+              )
+              if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
+              return accepted === "Retain failed index and recover setup"
+            })
+          : this.settings.upgrading()
+            ? await this.service.upgradeCapture(selected.turn)
+            : await this.settings.reviewCapture(this.context.extensionPath, selected.turn)
         : await this.service.recoverCapture(selected.turn, async (review) => {
             if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection is unavailable")
             const accepted = await vscode.window.showWarningMessage(
-              `The original save ${review.capture} is present in ${review.root}. Its note bytes, change journal, policy and original completed request agree, and both original services closed successfully.${"indexFailure" in review ? " Its separate index request failed before creating a worker and remains in the audit; this does not confirm that indexing succeeded." : ""} Recover the setup and approve a new indexing operation for this verified source policy? The original requests and capture history remain in the audit; the save will not be repeated.`,
+              `The original save ${review.capture} is present in ${review.root}. Its note bytes, change journal, policy and original completed request agree, and both original services closed successfully.${"indexFailure" in review ? " Its separate index request failed before creating a worker and remains in the audit; this does not confirm that indexing succeeded." : ""} Recover the setup for this verified save? Indexing requires the separate Index a Recovered Memory Save command. The original requests and capture history remain in the audit; the save will not be repeated.`,
               { modal: true },
               "Recover committed save",
             )
@@ -1196,10 +1215,36 @@ export class BrainHost {
             return accepted === "Recover committed save"
           })
     if (!result) return
-    const reviewed = this.settings.upgrading() ? await this.service.upgradeCapture(selected.turn) : result
-    await this.confirmCapture(reviewed, selected.turn)
     await vscode.window.showInformationMessage(
-      "The original Memory save is confirmed and its current source policy is indexed. The original audit is retained.",
+      "The original Memory save recovery is retained. Indexing remains pending; use Index a Recovered Memory Save when ready.",
+    )
+  }
+
+  private async indexCapture() {
+    if (!vscode.workspace.isTrusted || this.closing) throw new Error("Trusted workspace required for Memory indexing")
+    const choices = this.intake.recoverable().filter((turn) => {
+      const audit = this.context.globalState.get<{ format: string; version: number; phase: string }>(
+        `raya.secondBrain.committedCaptureRecovery.${turn.id}`,
+      )
+      return (
+        audit?.format === "raya.memory.committed-capture.recovery" && audit.version === 1 && audit.phase === "applied"
+      )
+    })
+    if (!choices.length) throw new Error("No applied Memory save recovery is available for indexing")
+    const selected = await vscode.window.showQuickPick(
+      choices.map((turn) => ({
+        label: turn.id,
+        description: turn.root,
+        detail: `Original message: ${turn.messageID}`,
+        turn,
+      })),
+      { title: "Index a recovered Memory save", ignoreFocusOut: true },
+    )
+    if (!selected) return
+    const reviewed = await this.settings.reviewCapture(this.context.extensionPath, selected.turn)
+    if (!(await this.confirmCapture(reviewed, selected.turn))) return
+    await vscode.window.showInformationMessage(
+      "The recovered Memory save's verified current source policy is indexed. Its original recovery and request audits are retained.",
     )
   }
 
@@ -1275,14 +1320,36 @@ export class BrainHost {
       if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
     }
     check()
+    const resources = async () => {
+      const current = await this.settings.load()
+      check()
+      if (!current?.managed) throw new Error("Reviewed managed Memory setup required for indexing")
+      await admission(descriptor(current.managed).python)
+      check()
+    }
+    await resources()
+    let accepted = false
     await this.control.sync(
       async (review) => {
         check()
         if (review.digest !== result.policySHA) throw new Error("Recovered capture source policy changed")
-        return true
+        const answer = await vscode.window.showWarningMessage(
+          `Start a new indexing operation for recovered save ${result.capture}? The original save will not be repeated. This indexes only the verified enabled source policy below. Failed historical requests remain in their audits.\n\n${review.text}`,
+          { modal: true },
+          "Index recovered save",
+        )
+        check()
+        accepted = answer === "Index recovered save"
+        return accepted
       },
-      (expected, signal, close) => this.service.sync(expected, signal, close),
+      async (expected, signal, close) => {
+        await resources()
+        if (signal.aborted) throw new Error("Recovered-save indexing was cancelled before publication")
+        if (expected !== result.policySHA) throw new Error("Recovered capture source policy changed")
+        await this.service.sync(expected, signal, close)
+      },
     )
+    if (!accepted) return false
     const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn)
     check()
     const binding = await this.service.captureSelection(AbortSignal.timeout(35000), reviewed.policySHA)
@@ -1294,6 +1361,7 @@ export class BrainHost {
         }),
       false,
     )
+    return true
   }
 
   private async review() {

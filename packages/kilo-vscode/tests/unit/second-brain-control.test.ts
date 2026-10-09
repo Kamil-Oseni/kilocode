@@ -13,6 +13,7 @@ import { observe } from "../../src/second-brain/control/identity"
 import { spawn } from "../../src/util/process"
 import { drain, register } from "../../src/second-brain/retirement"
 import { join } from "../../src/second-brain/join"
+import { IndexUnavailable, resources } from "../../src/second-brain/index-admission"
 
 const sources = {
   "server.py": "51a19ed48dc3ec36ca608a141b3d1acca681c6993dde189ac8fc2ab04ae288b2",
@@ -126,11 +127,16 @@ async function fixture(update?: (key: string, value: unknown) => Promise<void>) 
 test("indexing without approval joins the actual read-only control child and permits a new source review", async () => {
   const value = await fixture()
   try {
-    await expect(value.control.sync(async () => {
-      throw new Error("Unapproved policy must not request indexing consent")
-    }, async () => {
-      throw new Error("Unapproved policy must not index")
-    })).rejects.toMatchObject({ code: "source_policy_required" })
+    await expect(
+      value.control.sync(
+        async () => {
+          throw new Error("Unapproved policy must not request indexing consent")
+        },
+        async () => {
+          throw new Error("Unapproved policy must not index")
+        },
+      ),
+    ).rejects.toMatchObject({ code: "source_policy_required" })
     expect(value.control.snapshot().status).toBe("unchecked")
     expect(value.settings.pending()).toBeUndefined()
     expect(Control.held()).toEqual([])
@@ -138,6 +144,44 @@ test("indexing without approval joins the actual read-only control child and per
     await value.control.review(["first.md"], true, async () => true)
     expect(value.control.snapshot().status).toBe("approved")
     expect(value.settings.pending()).toBeUndefined()
+  } finally {
+    await Promise.all([value.control.dispose(), value.service.dispose()])
+  }
+}, 60000)
+
+test("resource refusal after approval joins actual control without new request uncertainty", async () => {
+  const value = await fixture()
+  try {
+    await value.control.review(["first.md"], true, async () => true)
+    const before = await readFile(value.stored)
+    const note = await readFile(path.join(value.root, "first.md"))
+    const policy = await readFile(path.join(value.root, "System", "general-admission.json"))
+    await expect(
+      value.control.sync(
+        async () => true,
+        async () => {
+          resources(
+            JSON.stringify({
+              format: "raya.memory.index.resources",
+              version: 1,
+              physical: 32 * 1073741824,
+              free: 8 * 1073741824,
+              commit: 64 * 1073741824,
+              available: 16 * 1073741824,
+            }),
+          )
+          throw new Error("Insufficient resources must refuse before request publication")
+        },
+      ),
+    ).rejects.toBeInstanceOf(IndexUnavailable)
+    expect(value.control.snapshot().status).toBe("unchecked")
+    expect(value.settings.pending()).toBeUndefined()
+    expect(Control.held()).toEqual([])
+    expect(await readFile(value.stored)).toEqual(before)
+    expect(await readFile(path.join(value.root, "first.md"))).toEqual(note)
+    expect(await readFile(path.join(value.root, "System", "general-admission.json"))).toEqual(policy)
+    await value.control.review(["first.md"], true, async () => false)
+    expect(value.control.snapshot().status).toBe("unchecked")
   } finally {
     await Promise.all([value.control.dispose(), value.service.dispose()])
   }

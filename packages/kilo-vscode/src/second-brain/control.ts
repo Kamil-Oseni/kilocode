@@ -6,6 +6,7 @@ import type { Publication } from "./client-v2"
 import { isDeepStrictEqual } from "node:util"
 import { Refused } from "./control/frames"
 import { CaptureFailure } from "./capture-failure"
+import { IndexUnavailable } from "./index-admission"
 
 type Row = Record<string, unknown>
 export type Session = {
@@ -135,6 +136,7 @@ export class BrainControl {
   private unapproved(err: unknown, closed: boolean) {
     const safe =
       err instanceof Unapproved ||
+      err instanceof IndexUnavailable ||
       (err instanceof Refused && err.code === "capture_source_capacity" && err.publication === "none")
     if (!safe || !closed || this.settings.pending()) return false
     this.state = Object.freeze({ status: "unchecked" })

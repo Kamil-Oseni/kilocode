@@ -18,6 +18,7 @@ import { materialize } from "./managed/materialize"
 import { publish as upgrade } from "./managed/upgrade-publish"
 import { randomUUID } from "node:crypto"
 import { current as supervisor } from "./managed/catalog"
+import { review as indexReview } from "./capture-index"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
@@ -34,6 +35,14 @@ function administration(outcome: string) {
   return outcome === "cancelled"
     ? { format: "raya.memory.cancelled-search.repair", requestSettlement: false, replay: false, indexConfirmed: false }
     : { format: "raya.memory.failed-search.repair" }
+}
+
+function indexRequest(pending: ReturnType<typeof journal> | undefined, fence: unknown) {
+  const held = fence as { format?: string; request?: string } | undefined
+  const request = pending?.request as { id?: unknown } | undefined
+  const id = request?.id ?? held?.request
+  if (typeof id !== "string" || !/^[a-f0-9]{32}$/.test(id)) throw new Error("Exact failed index request required")
+  return id
 }
 
 export type Setup =
@@ -741,6 +750,153 @@ export class BrainSettings {
         await this.storage.update(recovering, undefined)
         if (this.storage.get(recovering) !== undefined)
           throw new Error("Committed capture recovery fence clearance changed")
+      }
+      try {
+        await apply()
+        this.original = undefined
+        this.managedEntry = undefined
+        return reviewed
+      } catch (err) {
+        await this.restore(entry, next, metadata, err, key, audit)
+      }
+    })
+  }
+
+  /** Recover only a separately failed index; retain the original applied save audit unchanged. */
+  recoverIndex(
+    extension: string,
+    input: unknown,
+    confirm: (value: Awaited<ReturnType<typeof indexReview>>) => Promise<boolean>,
+  ) {
+    return this.serial(async () => {
+      const ledger = "raya.secondBrain.personalCapture.turns"
+      const turns = records(this.storage.get(ledger))
+      const turn = turns.find((row) => isDeepStrictEqual(row, input))
+      if (!turn) throw new Error("Original recovered capture row required")
+      const origin = `raya.secondBrain.committedCaptureRecovery.${turn.id}`
+      const saved = structuredClone(this.storage.get<unknown>(origin))
+      const current = structuredClone(this.entry(this.storage.get(state)))
+      const actual = this.pending()
+      const fence = { value: this.storage.get<unknown>(recovering) }
+      const id = indexRequest(actual, fence.value)
+      const key = `raya.secondBrain.captureIndexRecovery.${id}`
+      const interrupted = this.storage.get<{
+        phase: string
+        previous: ReturnType<BrainSettings["entry"]>
+        debt: unknown
+      }>(key)
+      const entry = interrupted ? structuredClone(this.entry(interrupted.previous)) : current
+      const metadata = interrupted ? journal(interrupted.debt) : actual
+      const same = () =>
+        isDeepStrictEqual(
+          [
+            this.storage.get(state),
+            this.pending(),
+            this.storage.get(recovering),
+            this.storage.get(origin),
+            records(this.storage.get(ledger)),
+          ],
+          [current, actual, fence.value, saved, turns],
+        )
+      const reviewed = await indexReview(extension, entry, metadata, input, saved)
+      const marker = {
+        format: "raya.memory.capture-index.recovery.pending",
+        capture: turn.id,
+        request: id,
+        audit: key,
+        debtSHA: reviewed.debtSHA,
+      }
+      if (reviewed.request !== id || (fence.value !== undefined && !isDeepStrictEqual(fence.value, marker)))
+        throw new Error("Different failed index recovery remains active")
+      const prior = entry.launch as { phase: string; receipt: Receipt; history?: Receipt[] }
+      const next = { ...entry, launch: { ...prior, phase: "closed", receipt: reviewed.closure.closed } }
+      captureCurrent(current, entry, next, actual, metadata, interrupted?.phase)
+      const previous = this.entry((saved as { previous: unknown }).previous)
+      if (!isDeepStrictEqual(previous.setup, entry.setup))
+        await associate(this.storage, previous, entry, reviewed.capture)
+      await closedAbsent(reviewed.closure, extension)
+      if (!(await confirm(reviewed))) return
+      const stable = (value: typeof reviewed) =>
+        fingerprint({ ...value, capture: { ...value.capture, producer: undefined } })
+      const verify = async () => {
+        if (
+          !same() ||
+          stable(await indexReview(extension, entry, metadata, input, saved)) !== stable(reviewed) ||
+          !same()
+        )
+          throw new Error("Reviewed failed index or original committed save changed")
+      }
+      await verify()
+      const observation = await closedAbsent(reviewed.closure, extension)
+      if (!same()) throw new Error("Failed index selection changed during absence check")
+      const { producer, ...capture } = reviewed.capture
+      const audit = {
+        format: "raya.memory.capture-index.recovery",
+        version: 1,
+        previous: entry,
+        debt: metadata,
+        turn: input,
+        originalAuditSHA: fingerprint(saved),
+        reviewSHA: stable(reviewed),
+        review: { ...reviewed, capture },
+        helper: producer,
+        absence: observation,
+        observed: Date.now(),
+        phase: "prepared",
+        requestSettlement: false,
+        replay: false,
+        indexConfirmed: false,
+      }
+      const retained = this.storage.get<typeof audit>(key)
+      captureAudit(audit, retained)
+      const consistent = () =>
+        isDeepStrictEqual(
+          [this.storage.get(state), this.pending(), this.storage.get(origin), records(this.storage.get(ledger))],
+          [next, undefined, saved, turns],
+        )
+      if (retained?.phase === "applied") {
+        if (!isDeepStrictEqual([same(), consistent(), this.storage.get(key)], [true, true, retained]))
+          throw new Error("Applied failed index recovery changed")
+        if (fence.value !== undefined) await this.storage.update(recovering, undefined)
+        if (!isDeepStrictEqual([this.storage.get(recovering), consistent()], [undefined, true]))
+          throw new Error("Applied failed index recovery fence changed")
+        return reviewed
+      }
+      await this.storage.update(key, audit)
+      if (!isDeepStrictEqual([same(), this.storage.get(key)], [true, audit]))
+        throw new Error("Failed index audit publication changed")
+      const apply = async () => {
+        fence.value = marker
+        await this.storage.update(recovering, marker)
+        await verify()
+        await closedAbsent(reviewed.closure, extension)
+        if (!same()) throw new Error("Failed index changed before recovery publication")
+        await this.storage.update(state, next)
+        if (
+          !isDeepStrictEqual([this.storage.get(state), this.pending(), this.storage.get(origin)], [next, actual, saved])
+        )
+          throw new Error("Failed index setup publication changed")
+        await this.storage.update(key, { ...audit, phase: "verified" })
+        if (
+          !isDeepStrictEqual(
+            [this.storage.get(key), this.storage.get(state), this.pending()],
+            [{ ...audit, phase: "verified" }, next, actual],
+          )
+        )
+          throw new Error("Failed index verified checkpoint changed")
+        await this.storage.update(debt, undefined)
+        if (!consistent()) throw new Error("Failed index uncertainty publication changed")
+        await this.storage.update(key, { ...audit, phase: "applied" })
+        if (
+          !isDeepStrictEqual(
+            [consistent(), this.storage.get(key), this.storage.get(recovering)],
+            [true, { ...audit, phase: "applied" }, marker],
+          )
+        )
+          throw new Error("Failed index recovery audit changed")
+        await this.storage.update(recovering, undefined)
+        if (!isDeepStrictEqual([this.storage.get(recovering), consistent()], [undefined, true]))
+          throw new Error("Failed index recovery fence clearance changed")
       }
       try {
         await apply()

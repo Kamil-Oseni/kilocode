@@ -172,6 +172,12 @@ export class BrainService {
     return this.recovery(() => this.settings.upgradeCapture(extension, input))
   }
 
+  recoverIndex(input: unknown, confirm: Parameters<BrainSettings["recoverIndex"]>[2]) {
+    if (!this.extension) return Promise.reject(new Error("Installed Memory recovery sources required"))
+    const extension = this.extension
+    return this.recovery(() => this.settings.recoverIndex(extension, input, confirm))
+  }
+
   upgradeRuntime() {
     if (!this.extension) return Promise.reject(new Error("Installed Memory upgrade sources required"))
     const extension = this.extension

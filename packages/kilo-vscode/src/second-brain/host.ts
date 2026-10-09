@@ -481,7 +481,7 @@ export class BrainHost {
       },
     })
     const existing = services.get(context)
-    this.settings = existing?.settings ?? new BrainSettings(context.globalState, context.secrets)
+    this.settings = existing?.settings ?? new BrainSettings(context.globalState, context.secrets, context.extensionPath)
     this.service = existing?.service ?? new BrainService(this.settings, context.extensionPath)
     this.intake = existing?.intake ?? new CaptureIntake(context.globalState)
     this.control =

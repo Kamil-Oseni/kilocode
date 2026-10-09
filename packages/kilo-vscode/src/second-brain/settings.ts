@@ -9,7 +9,7 @@ import { launch as context, admission, transition, history as managedHistory, ty
 import { review as repair, fingerprint } from "./failed-repair"
 import { review as archive, absent } from "./failed-archive"
 import { normalize } from "./control/identity"
-import { review as closed, ClosedRequired } from "./closed-recovery"
+import { review as closed, ClosedRequired, absent as closedAbsent } from "./closed-recovery"
 import { review as correlate, rebind } from "./committed-capture"
 import { records, confirmation } from "./capture-intake"
 import { associate, origin as captured } from "./managed/capture-upgrade"
@@ -182,6 +182,7 @@ export class BrainSettings {
   constructor(
     private readonly storage: Pick<Memento, "get" | "update">,
     private readonly secrets: Pick<SecretStorage, "get" | "store" | "delete">,
+    private readonly extension?: string,
   ) {}
 
   version() {
@@ -354,11 +355,11 @@ export class BrainSettings {
       const entry = structuredClone(this.entry(this.storage.get<unknown>(state)))
       if (this.pending()) throw new Error("Request debt requires original settlement before closed-pair recovery")
       const reviewed = await closed(entry)
-      await absent(reviewed)
+      await closedAbsent(reviewed, this.extension)
       if (!(await confirm(reviewed))) return
       const same = () => isDeepStrictEqual(this.storage.get<unknown>(state), entry) && this.pending() === undefined
       if (!same() || !isDeepStrictEqual(await closed(entry), reviewed)) throw new Error("Reviewed closed pair changed")
-      const observation = await absent(reviewed)
+      const observation = await closedAbsent(reviewed, this.extension)
       if (!same()) throw new Error("Closed-pair selection changed during absence check")
       const key = `raya.secondBrain.closedPairRecovery.${reviewed.closed.sha256}`
       if (this.storage.get(key) !== undefined) throw new Error("Closed-pair recovery audit already exists")

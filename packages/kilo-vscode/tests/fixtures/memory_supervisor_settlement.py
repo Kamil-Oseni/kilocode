@@ -1,10 +1,15 @@
 """Join genuine failed/cancelled Futures without confusing published outcomes with cleanup failure."""
 from concurrent.futures import Future, ThreadPoolExecutor
+import ast
 import hashlib
 import importlib.util
 import json
 from pathlib import Path
 import unittest
+import sys
+import threading
+import time
+from types import SimpleNamespace
 
 path = Path(__file__).resolve().parents[2] / 'script/memory/supervise.py'
 spec = importlib.util.spec_from_file_location('supervisor', path)
@@ -13,6 +18,40 @@ spec.loader.exec_module(module)
 
 
 class Tests(unittest.TestCase):
+    def test_every_cold_resource_sample_preserves_original_admission_floor(self):
+        root = path.parent
+        sys.path[:0] = [str(root / 'retrieval_reuse'), str(root / 'retrieval')]
+        import pool
+        # Evaluate the exact production observation closure; pool probes and gates remain actual code.
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        diagnostic = next(row for row in tree.body if isinstance(row, ast.FunctionDef) and row.name == 'diagnostics')
+        measured = next(row for row in diagnostic.body if isinstance(row, ast.FunctionDef) and row.name == 'measured')
+        owner = SimpleNamespace(reserve=6 * pool.GIB, text=True, settle=True, owner=None,
+                                revisions={'embeddinggemma-2': '914f7f89142e33e77833254d9c9b90c3cef7303b'})
+        ticket = pool.Ticket('embeddings', {'model': 'embeddinggemma-2'}, time.monotonic() + 10)
+        local = threading.local()
+        local.current = {'pool': owner, 'ticket': ticket, 'samples': []}
+        scope = dict(pool=pool, resources=pool.resources, local=local, time=time)
+        exec(compile(ast.Module(body=[measured], type_ignores=[]), str(path), 'exec'), scope)
+        for _ in range(35):
+            free, commit = scope['measured']()
+            self.assertGreater(free, 0)
+            self.assertGreater(commit, 0)
+        samples = local.current['samples']
+        self.assertEqual(len(samples), 32)
+        for row in samples:
+            self.assertEqual(row['required_ram_bytes'], 10 * pool.GIB)
+            self.assertEqual(row['reserve_ram_bytes'], 6 * pool.GIB)
+            self.assertEqual(row['admission_headroom_bytes'], 4 * pool.GIB)
+            self.assertFalse(row['original_owner_present'])
+            self.assertTrue(row['settling_enabled'])
+            self.assertGreater(row['available_commit_bytes'], 0)
+        self.assertFalse(pool.admitted(9 * pool.GIB, 6 * pool.GIB, owner.reserve, 4 * pool.GIB, True))
+        self.assertTrue(pool.admitted(10 * pool.GIB, 5 * pool.GIB, owner.reserve, 4 * pool.GIB, True))
+        self.assertFalse(pool.admitted(10 * pool.GIB, 4 * pool.GIB, owner.reserve, 4 * pool.GIB, True))
+        self.assertNotIn('torch', sys.modules)
+        self.assertNotIn('models', sys.modules)
+
     def record(self, outcome='cancelled'):
         pending = dict(format='raya.memory.operation.v2', request='a'*32, owner_epoch='b'*32,
                        selected_release_sha256='c'*64, kind='search', request_sha256='d'*64, status='pending')

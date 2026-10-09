@@ -113,9 +113,18 @@ test("upgrade accepts the exact retained thirteen-file cohort and refuses a mixe
 })
 
 test("upgrade accepts the exact retained handoff cohort without changing Retrieval selection", () => {
-  const pins = { ...release, "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b" }
-  const raw = fixture.raw.replaceAll(release["server.py"], pins["server.py"])
+  const pins = {
+    ...release,
+    "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b",
+    "index.py": "e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7",
+  }
+  const raw = fixture.raw
+    .replaceAll(release["server.py"], pins["server.py"])
+    .replaceAll(release["index.py"], pins["index.py"])
   expect(JSON.parse(run(raw, fixture.rows, release, pins).toString()).source_sha256).toEqual(release)
+  expect(() => run(raw, fixture.rows, release, { ...pins, "index.py": release["index.py"] })).toThrow(
+    "Exact previous capture release required",
+  )
   const paired = raw.replace('"kind":"memory"', '"kind":"retrieval"')
   const output = run(paired, fixture.rows, release, pins).toString()
   const begin = paired.indexOf('"source":')

@@ -203,7 +203,12 @@ def diagnostics():
                         5 * pool.GIB if ticket.body['model'] == 'embeddinggemma-2' else 13 * pool.GIB // 4)
             current['samples'].append({'observed_unix_ms': time.time_ns() // 1000000,
                                       'available_ram_bytes': value,
-                                      'required_ram_bytes': owner.reserve + headroom if not current['samples'] else owner.reserve})
+                                      'available_commit_bytes': commit,
+                                      'reserve_ram_bytes': owner.reserve,
+                                      'admission_headroom_bytes': headroom,
+                                      'original_owner_present': owner.owner is not None,
+                                      'settling_enabled': getattr(owner, 'settle', False),
+                                      'required_ram_bytes': owner.reserve + headroom})
         return value, commit
 
     class Observed(original):

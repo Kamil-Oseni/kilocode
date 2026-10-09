@@ -50,21 +50,32 @@ test("native extraction schema preserves every bound while rejecting excess outp
         type: "array",
         maxItems: 8,
         items: {
-          additionalProperties: false,
-          properties: {
-            key: { pattern: "^[a-z0-9][a-z0-9_-]{0,79}$" },
-            text: { minLength: 1, maxLength: 4096 },
-            evidence: {
-              minItems: 1,
-              maxItems: 4,
-              items: {
-                additionalProperties: false,
-                properties: {
-                  ref: { enum: [0, 1] },
+          anyOf: [
+            {
+              additionalProperties: false,
+              properties: {
+                key: { pattern: "^[a-z0-9][a-z0-9_-]{0,79}$" },
+                text: { minLength: 1, maxLength: 4096 },
+                evidence: {
+                  minItems: 1,
+                  maxItems: 4,
+                  items: {
+                    additionalProperties: false,
+                    properties: {
+                      ref: { enum: [0] },
+                    },
+                  },
                 },
               },
             },
-          },
+            {
+              additionalProperties: false,
+              properties: {
+                origin: { enum: ["assistant_interpretation"] },
+                evidence: { items: { properties: { ref: { enum: [1] } } } },
+              },
+            },
+          ],
         },
       },
     },

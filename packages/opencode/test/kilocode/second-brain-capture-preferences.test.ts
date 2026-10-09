@@ -62,6 +62,9 @@ test("native contract requires every slot and keeps general and preference bound
     { entries: [], preferences: { preference_0: output.preferences.preference_0 } },
     { ...output, preferences: { ...output.preferences, invented: output.preferences.preference_0 } },
     { ...output, entries: [cards] },
+    { ...output, entries: [{ ...cards, evidence: [{ ref: 1 }] }] },
+    { ...output, entries: [{ ...cards, evidence: [{ ref: 4 }] }] },
+    { ...output, entries: [{ ...cards, origin: "assistant_interpretation", evidence: [{ ref: 3 }] }] },
     { ...output, preferences: { ...output.preferences, preference_2: { status: "retained", entry: cards } } },
     {
       ...output,
@@ -80,6 +83,9 @@ test("native contract requires every slot and keeps general and preference bound
   ])
     expect(() => extracted(value, original)).toThrow("bounded entry schema")
   const other = { ...cards, origin: "assistant_interpretation", evidence: [{ ref: 4 }] }
+  expect(
+    entries(extracted({ ...output, entries: [{ ...other, key: "assistant_summary" }] }, original), original),
+  ).toHaveLength(3)
   expect(() =>
     extracted(
       { ...output, entries: Array.from({ length: 7 }, (_, index) => ({ ...other, key: `other_${index}` })) },
@@ -136,4 +142,30 @@ test("bounded clause segmentation preserves Unicode and leaves other extraction 
     expect(JSON.parse(prepared(source)).some((row: { slot?: string }) => row.slot)).toBe(false)
     expect(extracted({ entries: [] }, source)).toEqual([])
   }
+})
+
+test("general references admit only nonblank blocks of their own original origin", () => {
+  const source = {
+    ...original,
+    user: { id: "msg_user", text: first },
+    tools: [
+      { id: "prt_completed", name: "read", status: "completed" as const, text: "Observed file contents." },
+      { id: "prt_error", name: "read", status: "error" as const, text: "File unavailable." },
+    ],
+  }
+  const tool = { ...cards, key: "tool_observation", origin: "tool_observation", evidence: [{ ref: 2 }, { ref: 3 }] }
+  expect(entries(extracted({ entries: [tool] }, source), source)[0].evidence).toEqual([
+    { id: "prt_completed", start: 0, end: 23 },
+    { id: "prt_error", start: 0, end: 17 },
+  ])
+  for (const entry of [
+    { ...cards, evidence: [{ ref: 1 }] },
+    { ...tool, evidence: [{ ref: 0 }] },
+    { ...tool, evidence: [{ ref: 2 }, { ref: 1 }] },
+    { ...cards, origin: "assistant_interpretation", evidence: [{ ref: 2 }] },
+  ])
+    expect(() => extracted({ entries: [entry] }, source)).toThrow("bounded entry schema")
+  const blank = { user: { id: "msg_user", text: " " }, assistant: { id: "msg_assistant", text: "\n" }, tools: [] }
+  expect(extracted({ entries: [] }, blank)).toEqual([])
+  expect(() => extracted({ entries: [cards] }, blank)).toThrow("bounded entry schema")
 })

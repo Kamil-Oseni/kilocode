@@ -63,16 +63,23 @@ function preference(ref: number) {
 function contract(source: CaptureSource) {
   const rows = blocks(source)
   const preferences = rows.filter((row) => row.preference)
-  const entry = (refs: number[]) =>
-    Schema.Struct({
-      ...CaptureEntry.fields,
-      evidence: Schema.Array(
-        Schema.Struct({
-          ref: Schema.Literals(refs),
-        }),
-      ).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
-    })
-  const entries = Schema.Array(entry(rows.filter((row) => !row.preference).map((row) => row.ref))).check(
+  const origins = ["user_statement", "assistant_interpretation", "tool_observation"] as const
+  const groups = origins.flatMap((origin) => {
+    const refs = rows.filter((row) => !row.preference && row.origin === origin && row.text.trim()).map((row) => row.ref)
+    if (!refs.length) return []
+    return [
+      Schema.Struct({
+        ...CaptureEntry.fields,
+        origin: Schema.Literal(origin),
+        evidence: Schema.Array(
+          Schema.Struct({
+            ref: refs.length === 1 ? Schema.Literal(refs[0]) : Schema.Literals(refs),
+          }),
+        ).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+      }),
+    ]
+  })
+  const entries = Schema.Array(groups.length ? Schema.Union(groups) : Schema.Never).check(
     Schema.isMaxLength(8 - preferences.length),
   )
   if (!preferences.length) return Schema.Struct({ entries })
@@ -179,8 +186,15 @@ export function extracted(value: unknown, source: CaptureSource) {
     ...entry,
     evidence: entry.evidence.map((evidence) => {
       const original = rows[evidence.ref]
-      if (!original || original.origin !== entry.origin || !original.text.trim())
+      if (!original || original.origin !== entry.origin || !original.text.trim()) {
+        log.warn("capture reference rejected", {
+          ref: evidence.ref,
+          origin: entry.origin,
+          source: original?.origin,
+          blank: !original?.text.trim(),
+        })
         throw new Error("Capture evidence does not identify an actual original source reference")
+      }
       return { id: original.id, start: original.start, end: original.end }
     }),
   }))

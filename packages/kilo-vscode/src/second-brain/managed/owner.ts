@@ -235,6 +235,7 @@ export class ManagedOwner {
   private selected?: Receipt
   private original?: Receipt
   private cleanup?: Receipt
+  private stage?: "children" | "validation" | "publication" | "persistence"
   constructor(
     private cfg: Descriptor,
     private readonly setup: Setup,
@@ -511,10 +512,11 @@ export class ManagedOwner {
       const errors = [err]
       const receipt = this.original ?? this.selected
       if (receipt) await this.record("uncertain", receipt).catch((error: unknown) => errors.push(error))
-      throw new AggregateError(errors, "Original paired closure remains uncertain")
+      throw new AggregateError(errors, `Original paired closure remains uncertain (${this.stage ?? "unknown"})`)
     }
   }
   private async closepair() {
+    this.stage = "children"
     const closures = await this.pair!.close()
     // Failed validation owns no child and publishes no producer closure.
     if (this.failed && Object.keys(closures).length === 0) return
@@ -530,6 +532,7 @@ export class ManagedOwner {
       return
     }
     if (this.failed) throw new Error("Failed managed pair remains quarantined")
+    this.stage = "validation"
     check(this.selected && this.original, "Original paired publication references required")
     for (const kind of ["memory", "retrieval"]) {
       const closure = closures[kind] as Record<string, unknown> | undefined
@@ -538,6 +541,7 @@ export class ManagedOwner {
         "Original paired producer closure unavailable",
       )
     }
+    this.stage = "publication"
     const receipt = await publish(path.join(this.context?.root ?? this.cfg.root, "managed-closed.json"), {
       format: "raya.memory.managed.pair.closed",
       version: 2,
@@ -546,6 +550,7 @@ export class ManagedOwner {
       closures,
       qualification: "Two original processes/streams only; no downstream family or cold settlement authority",
     })
+    this.stage = "persistence"
     await this.record("closed", receipt)
   }
   valid() {

@@ -70,11 +70,14 @@ function status(request: string) {
 function question(request: string) {
   if (
     request.length > 1000 ||
-    !/^(?:what|which|who|when|where|how|did|do|does|have|has|is|are|remind me|can you remind)\b/i.test(request)
+    !/^(?:please )?(?:recall|what|which|who|when|where|how|did|do|does|have|has|is|are|remind me|can you remind)\b/i.test(
+      request,
+    )
   )
     return false
   if (!/\b(?:memory|remember|saved|notes?|preferences?)\b/i.test(request)) return false
+  const text = request.replace(/[.!?]\s*(?:do not|don't)\s+change (?:files|lights)(?: or (?:files|lights))?[.!]?$/i, "")
   return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|set up)\b/i.test(
-    request,
+    text,
   )
 }

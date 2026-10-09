@@ -71,6 +71,23 @@ test("original completed Memory read releases conversational synthesis without c
   expect(settled(original.messages, original.session, uid)).toBe(true)
 })
 
+test("explicit recall releases synthesis after the original read while preserving file and light restrictions", () => {
+  for (const text of [
+    "Recall my saved preferences for delivering Raya builds and choosing how much testing to do. Use my local notes and cite the source. Do not change files or lights.",
+    "Please recall my saved preferences. Don't change files.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled(original.messages, original.session, uid)).toBe(true)
+    expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+    original.tool.state = { status: "running", input: { query: "preferences" }, time: { start: 12 } }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("an original status read answers only a status question without releasing a work goal", () => {
   for (const text of ["Is my Memory connected?", "Is Memory set up?", "What is Memory's setup status?"]) {
     const original = fixture()
@@ -233,6 +250,9 @@ test("work, verification, goal completion and compound action requests keep thei
     "Which saved Memory note applies? Implement its plan.",
     "Use Memory and install the speech engine.",
     "What is in my notes? Delete outdated entries.",
+    "Recall my saved preferences and implement them. Do not change lights.",
+    "Recall my saved notes. Do not change files or lights, but run the installer.",
+    "Recall my saved preferences. Do not change files or lights. Deploy the project.",
   ]) {
     const original = fixture()
     const part = original.messages[0].parts[0]

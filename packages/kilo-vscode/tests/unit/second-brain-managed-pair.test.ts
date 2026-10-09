@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { Pair } from "../../src/second-brain/managed/pair"
-import { ManagedOwner, Pipes, publish, startup } from "../../src/second-brain/managed/owner"
+import { ManagedOwner, Pipes, publish, startup, type Receipt } from "../../src/second-brain/managed/owner"
 import { descriptor, paired } from "../../src/second-brain/managed/descriptor"
 import { interpreter, supervisor, retrieval } from "../../src/second-brain/managed/catalog"
 import { release } from "../../src/second-brain/control/catalog-v2"
@@ -496,6 +496,38 @@ test("actual ManagedOwner wiring publishes running through the post-readiness co
   expect(running(calls[0].arguments[0])).toBe(0)
   expect(running(calls[0].arguments[1])).toBe(1)
 })
+
+test("actual original pair joins preserve closure evidence when phase persistence fails and reports its stage", async () => {
+  const value = await fixture()
+  const failure = new Error("Synthetic phase publication rejected")
+  try {
+    await value.open("retrieval")
+    await value.open("memory")
+    await value.commit()
+    const cfg = await value.settings.load()
+    if (!cfg?.managed) throw new Error("Original fixture selection required")
+    const saved = JSON.parse(await Bun.file(path.join(value.root, "settings.json")).text())
+    const owner = new ManagedOwner(cfg.managed, cfg.setup, path.resolve("."), async (phase, receipt) => {
+      if (phase === "closed") throw failure
+      await value.record(phase, receipt)
+    })
+    const internal = owner as unknown as { pair: Pair; selected: Receipt; original: Receipt }
+    internal.pair = value.pair
+    internal.selected = value.selection
+    internal.original = saved["raya.secondBrain.setup"].launch.receipt
+    const error = await owner.close().catch((err: unknown) => err)
+    expect(error).toBeInstanceOf(AggregateError)
+    if (!(error instanceof AggregateError)) throw new Error("Original aggregate error required")
+    expect(error.message).toContain("uncertain (persistence)")
+    expect(error.errors).toContain(failure)
+    const closed = await Bun.file(path.join(value.root, "managed-closed.json")).json()
+    for (const kind of ["memory", "retrieval"])
+      expect(closed.closures[kind]).toMatchObject({ code: 0, originalJoined: true, readersJoined: true, forced: false })
+    expect(closed.original).toEqual(internal.original)
+  } finally {
+    await value.cleanup()
+  }
+}, 30000)
 
 test("both live originals with failed Memory readiness never commit running and both drain", async () => {
   const value = await fixture()

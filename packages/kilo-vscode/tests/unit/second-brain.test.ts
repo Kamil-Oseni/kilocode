@@ -5,6 +5,8 @@ import { BrainService } from "../../src/second-brain/service"
 import type { BrainState } from "../../src/shared/second-brain"
 import { manifest } from "../../src/second-brain/manifest"
 import { sources } from "../../src/second-brain/setup-v2"
+import { release } from "../../src/second-brain/control/catalog-capture"
+import { createHash } from "node:crypto"
 import { mkdtemp, writeFile, link, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -54,6 +56,80 @@ function storage() {
     },
   )
 }
+
+test("checked capture health restores saving status without another request or grant", async () => {
+  const calls: string[] = []
+  const digest = createHash("sha256")
+    .update(JSON.stringify(Object.fromEntries(Object.entries(release).sort())))
+    .digest("hex")
+  const state = { status: "synced", digest: "b".repeat(64) }
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      calls.push(request.method + " " + new URL(request.url).pathname)
+      expect(request.headers.get("Authorization")).toBe("Bearer private-fixture-key")
+      return Response.json({
+        ready: true,
+        namespace_valid: true,
+        draining: false,
+        retirement_pending: false,
+        retirement_unconfirmed: false,
+        active: 0,
+        capture_enabled: false,
+        admission_required: true,
+        root,
+        source_sha256: release,
+        owner_epoch: "c".repeat(32),
+        selected_release_sha256: digest,
+        operation_protocol: "raya.memory.operation.v2",
+        index: state,
+      })
+    },
+  })
+  const settings = storage()
+  const service = new BrainService(settings)
+  try {
+    await settings.save(
+      {
+        format: "raya.memory.setup",
+        version: 2,
+        protocol: "raya.memory.operation.v2",
+        origin: server.url.origin,
+        root,
+        source_sha256: release,
+      },
+      "private-fixture-key",
+    )
+    expect(service.captureSnapshot()).toBeUndefined()
+    await service.run(
+      undefined,
+      (value) => {
+        if (value.status !== "ready") return
+        expect(service.captureSnapshot()).toMatchObject({
+          root,
+          release: digest,
+          owner: "c".repeat(32),
+          index: "synced",
+        })
+      },
+      {},
+    )
+    const binding = service.captureSnapshot()!
+    expect(service.captureCurrent(binding)).toBe(true)
+    expect(calls).toEqual(["GET /health"])
+    state.status = "policy_disabled"
+    await service.run(undefined, () => {}, {})
+    expect(service.captureSnapshot()?.index).toBe("policy_disabled")
+    expect(calls).toEqual(["GET /health", "GET /health"])
+    await service.configure(async () => {})
+    expect(service.captureSnapshot()).toBeUndefined()
+    expect(service.captureCurrent(binding)).toBe(false)
+  } finally {
+    await service.dispose()
+    await server.stop()
+  }
+})
 
 test("fresh Memory status retains the saved folder without starting a service or exposing credentials", async () => {
   const requests: string[] = []

@@ -1,7 +1,7 @@
 import { BrainClient, Failure } from "./client"
 import type { BrainState, BrainContext, BrainProposalCommand, BrainProposalResult } from "../shared/second-brain"
 import { ClientV2 } from "./client-v2"
-import type { BrainSettings } from "./settings"
+import type { BrainSettings, Setup } from "./settings"
 import { join } from "./join"
 import { OperationOwner } from "./operation-owner"
 import { ManagedOwner } from "./managed/owner"
@@ -237,16 +237,25 @@ export class BrainService {
     const original = this.operation
     const health = await original.health(signal)
     signal.throwIfAborted()
-    if (this.operation !== original || !this.settings.current(cfg.setup) || (this.managed && !this.managed.valid()))
+    return this.bind(cfg.setup, original, health)
+  }
+
+  private bind(setup: Setup, original: OperationOwner, health: Awaited<ReturnType<OperationOwner["health"]>>) {
+    if (
+      this.closed ||
+      this.operation !== original ||
+      !this.settings.current(setup) ||
+      (this.managed && !this.managed.valid())
+    )
       throw new Error("Original Memory capture generation changed")
     const binding = Object.freeze({
-      root: cfg.setup.root,
+      root: setup.root,
       release: health.release,
       owner: health.epoch,
       generation: original,
       index: captureIndex(health),
     })
-    this.captures.set(binding, cfg.setup)
+    this.captures.set(binding, setup)
     this.selection = binding
     return binding
   }
@@ -345,7 +354,7 @@ export class BrainService {
     if (cfg.setup.version === 2) {
       this.operation ??= new OperationOwner(this.settings, cfg.key, cfg.setup)
       const original = this.operation
-      await this.search(query, budget, signal, post, cfg.setup.root, original)
+      await this.search(query, budget, signal, post, cfg.setup, original)
       return
     }
     const client = new BrainClient(cfg.key, cfg.setup)
@@ -381,14 +390,17 @@ export class BrainService {
     budget: number | undefined,
     signal: AbortSignal,
     post: (state: BrainState) => void,
-    root: string,
+    setup: Setup,
     original: OperationOwner,
   ) {
+    const root = setup.root
     try {
       if (query === undefined) {
         const health = await original.health(signal)
         signal.throwIfAborted()
         if (this.managed && !this.managed.valid()) throw new Error("Original managed generation is unavailable")
+        if (setup.version === 2 && setup.protocol === "raya.memory.operation.v2" && "capture.py" in setup.source_sha256)
+          this.bind(setup, original, health)
         post({
           configured: true,
           status: "ready",

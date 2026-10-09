@@ -47,7 +47,7 @@ interface EffectCmdOpts<Args, A> {
    * `serve`, `web`, `account`, `db`, `upgrade`).
    */
   instance?: boolean | ((args: Args) => boolean)
-  watcher?: boolean // kilocode_change - metadata commands retain project config without eager search/watch startup
+  watcher?: boolean | ((args: Args) => boolean) // kilocode_change - metadata commands retain project config without eager search/watch startup
   /** Defaults to process.cwd(). Override for commands that take a directory positional. */
   directory?: (args: Args) => string
   handler: (args: WithDoubleDash<Args>) => Effect.Effect<A, CliError, AppServices | InstanceStore.Service>
@@ -89,7 +89,8 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
       const { InstanceRef } = await import("@/effect/instance-ref")
       const directory = opts.directory?.(args) ?? process.cwd()
       // kilocode_change start - request-local metadata mode retains the original project instance/configuration
-      const { store, ctx } = await BootstrapMode.run(opts.watcher, () =>
+      const watch = typeof opts.watcher === "function" ? opts.watcher(args) : opts.watcher
+      const { store, ctx } = await BootstrapMode.run(watch, () =>
         AppRuntime.runPromise(
           InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
         ),

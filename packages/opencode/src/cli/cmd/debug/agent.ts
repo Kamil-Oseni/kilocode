@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { effectCmd } from "../../effect-cmd"
 
 export const AgentCommand = effectCmd({
+  watcher: (args: { name: string; tool?: string; params?: string }) => Boolean(args.tool), // kilocode_change - inspect metadata without warming searches; actual tool execution retains bootstrap
   command: "agent <name>",
   describe: "show agent configuration details",
   builder: (yargs) =>

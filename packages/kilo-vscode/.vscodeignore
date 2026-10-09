@@ -14,8 +14,15 @@ coverage/**
 src/**
 webview-ui/**
 script/**
-# Keep the pinned, read-only interrupted-save reviewer available in installed builds.
+# Keep reviewed Memory runtimes and their read-only interrupted-save reviewer available in installed builds.
 !script/memory/capture_recovery.py
+!script/memory/control.py
+!script/memory/supervise.py
+!script/memory/service/*.py
+!script/memory/retrieval/*.py
+!script/memory/retrieval_reuse/*.py
+!script/memory/media/*.py
+!script/memory/media/requirements-media.txt
 native/**
 .gitignore
 .yarnrc

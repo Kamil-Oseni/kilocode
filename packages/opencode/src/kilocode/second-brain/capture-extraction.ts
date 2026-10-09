@@ -75,11 +75,12 @@ function suffix(prefix: string) {
   return Schema.String.check(Schema.isPattern(new RegExp(`^[a-z0-9][a-z0-9_-]{0,${78 - prefix.length}}$`)))
 }
 
-function contract(source: CaptureSource) {
+function contract(source: CaptureSource, acknowledgement = false) {
   const rows = blocks(source)
   const preferences = rows.filter((row) => row.preference)
   const origins = ["user_statement", "assistant_interpretation", "tool_observation"] as const
   const groups = origins.flatMap((origin) => {
+    if (acknowledgement && origin === "assistant_interpretation") return []
     const refs = rows
       .filter((row) => !row.preference && !row.transient && row.origin === origin && row.text.trim())
       .map((row) => row.ref)
@@ -150,8 +151,8 @@ function flatten(value: unknown): unknown {
   return Object.assign(rest, ...allOf)
 }
 
-function decode(value: unknown, source: CaptureSource) {
-  const result = Schema.decodeUnknownResult(contract(source), { onExcessProperty: "error" })(value)
+function decode(value: unknown, source: CaptureSource, acknowledgement = false) {
+  const result = Schema.decodeUnknownResult(contract(source, acknowledgement), { onExcessProperty: "error" })(value)
   if (Result.isSuccess(result)) return result.success
   const issues = SchemaIssue.makeFormatterStandardSchemaV1({ leafHook: () => "invalid", checkHook: () => "invalid" })(
     result.failure.issue,
@@ -174,14 +175,14 @@ function decode(value: unknown, source: CaptureSource) {
 }
 
 /** The model selects original source references; it never authors IDs or offsets. */
-export function extraction(source: CaptureSource) {
-  const cfg = contract(source)
+export function extraction(source: CaptureSource, acknowledgement = false) {
+  const cfg = contract(source, acknowledgement)
   const schema = flatten(Schema.toJsonSchemaDocument(cfg).schema)
   if (!record(schema)) throw new Error("Capture generation requires an object schema")
   return jsonSchema<typeof cfg.Type>(schema, {
     validate: async (value) => {
       try {
-        return { success: true, value: decode(value, source) }
+        return { success: true, value: decode(value, source, acknowledgement) }
       } catch {
         return { success: false, error: new Error("Capture extraction does not match the bounded entry schema") }
       }
@@ -189,9 +190,9 @@ export function extraction(source: CaptureSource) {
   })
 }
 
-export function extracted(value: unknown, source: CaptureSource) {
+export function extracted(value: unknown, source: CaptureSource, acknowledgement = false) {
   const rows = blocks(source)
-  const parsed = decode(value, source)
+  const parsed = decode(value, source, acknowledgement)
   const slots = "preferences" in parsed && record(parsed.preferences) ? parsed.preferences : undefined
   const preferences = rows
     .filter((row) => row.preference)
@@ -230,12 +231,15 @@ export function extracted(value: unknown, source: CaptureSource) {
   })
 }
 
-export function prepared(source: CaptureSource) {
+export function prepared(source: CaptureSource, acknowledgement = false) {
   return JSON.stringify(
     blocks(source).map(({ start: _start, end: _end, preference, transient, ...row }) => ({
       ...row,
       ...(preference ? { slot: `preference_${row.ref}` } : {}),
       ...(transient ? { excluded: "temporary_action_restriction" } : {}),
+      ...(acknowledgement && row.origin === "assistant_interpretation"
+        ? { excluded: "preference_acknowledgement" }
+        : {}),
     })),
   )
 }

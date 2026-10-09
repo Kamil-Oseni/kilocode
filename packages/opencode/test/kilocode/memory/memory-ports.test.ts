@@ -102,6 +102,13 @@ test("capture sends its bounded schema through the real compatible SDK and still
     const foreign = await Effect.runPromiseExit(generate(selected, payload, schema))
     expect(foreign._tag).toBe("Failure")
     expect(requests).toHaveLength(3)
+    content = JSON.stringify({ entries: [{ ...quoted, origin: "assistant_interpretation", evidence: [{ ref: 1 }] }] })
+    const acknowledgement = await Effect.runPromiseExit(generate(selected, payload, extraction(source, true)))
+    expect(acknowledgement._tag).toBe("Failure")
+    content = JSON.stringify({ entries: [quoted] })
+    const retained = await Effect.runPromise(generate(selected, payload, extraction(source, true)))
+    expect(entries(extracted(JSON.parse(retained.text), source, true), source)).toEqual([entry])
+    expect(requests).toHaveLength(5)
   } finally {
     await server.stop(true)
   }

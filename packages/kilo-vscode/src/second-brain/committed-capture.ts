@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 import { parse } from "./settings"
 import { journal } from "./journal"
-import { descriptor, receipt } from "./managed/descriptor"
+import { descriptor, receipt, selection as managedSelection } from "./managed/descriptor"
 import { parse as plan } from "./managed/value"
 import { review as closed } from "./closed-recovery"
 import { fingerprint } from "./failed-repair"
@@ -11,6 +11,7 @@ import { parse as operation } from "./operation"
 import { check, document, object } from "./control/frames"
 import { directory, image, normalize, environment } from "./control/identity"
 import { command } from "./control/command"
+import { review as refusedIndex } from "./capture-sync"
 
 const helper = "7f41ea4776d51da5c6f294fa0ddcfb78136d9a775462ec5fdb6bdc7f85c43a91"
 const qualified = new WeakSet<object>()
@@ -102,7 +103,7 @@ function selection(entry: Parameters<typeof closed>[0], pending: unknown, input:
 }
 
 /** Correlate committed effects only. This review never settles, replays or indexes a request. */
-export async function review(extension: string, entry: Parameters<typeof closed>[0], pending: unknown, input: unknown) {
+async function correlate(extension: string, entry: Parameters<typeof closed>[0], pending: unknown, input: unknown) {
   const choice = selection(entry, pending, input)
   const setup = choice.setup
   const cfg = choice.cfg
@@ -119,9 +120,10 @@ export async function review(extension: string, entry: Parameters<typeof closed>
   const held = await image(cfg.plan.path, 16777216)
   check(held.raw.length === cfg.plan.bytes && held.digest === cfg.plan.sha256, "Original capture plan differs")
   const source = object(plan(held.raw))
+  const approved = await managedSelection(cfg, setup)
   check(
     typeof source.source === "string" &&
-      normalize(source.source) === normalize(path.join(cfg.root, "source", "memory")) &&
+      source.source === approved.plan.source &&
       fingerprint(source.source_sha256) === fingerprint(setup.source_sha256),
     "Original capture source plan differs",
   )
@@ -215,6 +217,15 @@ export async function review(extension: string, entry: Parameters<typeof closed>
     qualification:
       "Read-only committed-effect correlation; administrative review required, no original settlement authority",
   })
+  qualified.add(reviewed)
+  return reviewed
+}
+
+export async function review(extension: string, entry: Parameters<typeof closed>[0], pending: unknown, input: unknown) {
+  const debt = journal(pending)
+  if (object(debt.request as Parameters<typeof object>[0]).op !== "sync")
+    return correlate(extension, entry, pending, input)
+  const reviewed = await refusedIndex(extension, entry, pending, input, correlate)
   qualified.add(reviewed)
   return reviewed
 }

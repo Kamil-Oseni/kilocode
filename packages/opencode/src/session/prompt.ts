@@ -29,6 +29,7 @@ import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_chang
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
 import { settled as recalled, acknowledged, acknowledgement } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
+import { remember as captureRouting } from "@/kilocode/second-brain/capture-routing" // kilocode_change - retain original extraction route before successor metadata
 import { RayaToolModel } from "@/kilocode/chief/tool-model" // kilocode_change
 import { isInterrupted } from "@/kilocode/effect/cause" // kilocode_change
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
@@ -1873,6 +1874,12 @@ export const layer = Layer.effect(
           const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
           const complete = yield* GoalGate.closed(resolved) // kilocode_change - current original dispatch only
           const conversation = agent.name === "auto" && acknowledged(msgs, current, lastUser.id)
+          yield* captureRouting(
+            current,
+            { info: lastUser, parts: msgs.find((row) => row.info.id === lastUser.id)?.parts ?? [] },
+            msg.id,
+            conversation,
+          ) // kilocode_change - durable original message-bound capture route
           const tools =
             complete || conversation
               ? {}

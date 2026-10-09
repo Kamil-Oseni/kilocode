@@ -1188,7 +1188,7 @@ export class BrainHost {
         : await this.service.recoverCapture(selected.turn, async (review) => {
             if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection is unavailable")
             const accepted = await vscode.window.showWarningMessage(
-              `The original save ${review.capture} is present in ${review.root}. Its note bytes, change journal, policy and original completed request agree, and both original services closed successfully. Recover the setup and refresh this verified source policy's search index? The original request and capture history remain in the audit; the save will not be repeated.`,
+              `The original save ${review.capture} is present in ${review.root}. Its note bytes, change journal, policy and original completed request agree, and both original services closed successfully.${"indexFailure" in review ? " Its separate index request failed before creating a worker and remains in the audit; this does not confirm that indexing succeeded." : ""} Recover the setup and approve a new indexing operation for this verified source policy? The original requests and capture history remain in the audit; the save will not be repeated.`,
               { modal: true },
               "Recover committed save",
             )

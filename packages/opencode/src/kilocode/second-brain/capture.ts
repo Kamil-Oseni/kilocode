@@ -33,7 +33,7 @@ export const capture = Effect.fn("SecondBrain.captureTurn")(function* (input: {
   if (path.resolve(session.directory) !== path.resolve(ctx.directory))
     throw new Error("Capture session belongs to another project")
   if (session.parentID || session.metadata?.private === true || session.metadata?.capture === false) return undefined
-  const original = yield* load(input.sessionID, input.messageID).pipe(
+  const original = yield* load(input.sessionID, input.messageID, session).pipe(
     Effect.provideService(Database.Service, input.database),
   )
   if (!original) return undefined
@@ -62,14 +62,15 @@ export const capture = Effect.fn("SecondBrain.captureTurn")(function* (input: {
           owner: grant.id,
           model: grant.model,
           system: `${system} If original user blocks have a slot, the schema requires a preferences object with every named slot. Decide each clause independently: retain its own durable preference in that slot with status retained and entry citing only that clause, or explicitly exclude it with status excluded and reason sensitive, transient or no_durable_fact. Never skip a slot or substitute the first clause for another. Preserve that clause's intended purpose, location, qualifiers and negation. Do not put slotted preferences in the general entries array; that array is for other supported memories. Exclusion is allowed and must not be replaced by invented facts.`,
-          prompt: prepared(original.source),
+          prompt: prepared(original.source, original.acknowledgement),
           timeoutMs: Math.min(30000, Math.max(1, grant.expires - Date.now())),
           budget: budget(model.limit),
         },
-        extraction(original.source),
+        extraction(original.source, original.acknowledgement),
       )
       const parsed = yield* Effect.try({
-        try: () => entries(extracted(JSON.parse(result.text), original.source), original.source),
+        try: () =>
+          entries(extracted(JSON.parse(result.text), original.source, original.acknowledgement), original.source),
         catch: (err) => err,
       })
       if (grant.expires <= Date.now()) throw new CaptureRejected("grant_expired")
@@ -110,7 +111,9 @@ export const capture = Effect.fn("SecondBrain.captureTurn")(function* (input: {
           id,
           grant: grant.id,
           messageID: input.messageID,
-          ...original,
+          observed_utc: original.observed_utc,
+          source_sha256: original.source_sha256,
+          source: original.source,
           entries: parsed,
         },
       })

@@ -149,6 +149,8 @@ import type {
   GlobalEventResponses,
   GlobalHealthErrors,
   GlobalHealthResponses,
+  GlobalSourceExportSelectionErrors,
+  GlobalSourceExportSelectionResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   IndexingConsentErrors,
@@ -1868,6 +1870,19 @@ export class Global extends HeyApiClient {
       url: "/global/health",
       ...options,
     })
+  }
+
+  /**
+   * Review partial paused-profile archive sources
+   *
+   * Inspect the actual running native database and live storage selection. This does not authorize capture or promise a complete backup.
+   */
+  public sourceExportSelection<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      GlobalSourceExportSelectionResponses,
+      GlobalSourceExportSelectionErrors,
+      ThrowOnError
+    >({ url: "/global/source-export-selection", ...options })
   }
 
   /**

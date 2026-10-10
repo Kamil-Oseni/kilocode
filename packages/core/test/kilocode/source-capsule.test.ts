@@ -9,6 +9,23 @@ import type { Ticket } from "../../src/kilocode/source-launch"
 import { validatePolicy } from "../../src/kilocode/source-policy"
 import { decode, encode } from "../../src/kilocode/source-transfer"
 
+test("private source transfer enforces encryption password UTF-8 byte boundaries", () => {
+  const value = {
+    format: "raya.source-export" as const,
+    version: 1 as const,
+    id: randomUUID(),
+    source: { pid: process.pid, birth: "1", executable: process.execPath, digest: "a".repeat(64) },
+    profile: { database: path.resolve("selected.db"), storage: path.resolve("storage") },
+    output: path.resolve("partial.raya"),
+  }
+  for (const password of ["é".repeat(6), "é".repeat(512)])
+    expect(decode(encode({ ...value, password })).password).toBe(password)
+  for (const password of ["p".repeat(11), "p".repeat(1025), "😀".repeat(300)]) {
+    expect(() => encode({ ...value, password })).toThrow("Invalid source export request")
+    expect(() => decode(JSON.stringify({ ...value, password }))).toThrow("Invalid source export request")
+  }
+})
+
 test("signed capsule preserves safe historical owner metadata and verifies original and staged bytes", async () => {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "raya-source-capsule-")))
   const data = path.join(root, "data")

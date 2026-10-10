@@ -15,6 +15,7 @@ import { MarketplaceNotifier } from "./services/marketplace/notifier"
 import { SubAgentViewerProvider } from "./SubAgentViewerProvider"
 import { EXTENSION_DISPLAY_NAME } from "./constants"
 import { KiloConnectionService } from "./services/cli-backend"
+import { registerArchive } from "./profile/command"
 import { registerAutocompleteProvider } from "./services/autocomplete"
 import { ensureBackendForAutocomplete } from "./services/autocomplete/ensure-backend"
 import { AutocompleteServiceManager } from "./services/autocomplete/AutocompleteServiceManager"
@@ -79,6 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Create shared connection service (one server for all webviews)
   const connectionService = new KiloConnectionService(context)
+  registerArchive(context, connectionService)
   const homeAssistant = registerHomeAssistant(context, connectionService)
   context.subscriptions.push(new PersonalTodoReminderCoordinator(connectionService))
   context.subscriptions.push(registerDiagnostics(context, connectionService))

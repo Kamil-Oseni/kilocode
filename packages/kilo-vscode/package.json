@@ -115,6 +115,11 @@
     },
     "commands": [
       {
+        "command": "kilo-code.new.exportPartialProfileArchive",
+        "title": "Create a Partial Paused-Profile Archive",
+        "category": "Raya"
+      },
+      {
         "command": "kilo-code.new.memory.recoverCommittedCapture",
         "title": "Recover an Interrupted Memory Save",
         "category": "Raya"

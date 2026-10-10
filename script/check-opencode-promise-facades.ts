@@ -55,6 +55,11 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     count: 2,
     reason: "actual public Goal Stop and native encrypted transfer use the same production application writer graph",
   },
+  "kilocode/fixtures/source-selection-http.ts": {
+    count: 4,
+    reason:
+      "isolated owned native HTTP source selection seeds and reads the actual live Storage service, diagnoses rejected selections through that same application runtime, and joins its original retirement",
+  },
   "kilocode/fixtures/config-rmw.ts": {
     count: 10,
     reason:

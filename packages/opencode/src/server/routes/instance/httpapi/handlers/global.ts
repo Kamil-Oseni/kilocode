@@ -9,10 +9,11 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi" // kilocode_change - selection refusal
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
 import { GlobalUpgradeInput } from "../groups/global"
+import { selection } from "@/kilocode/migration/source-selection" // kilocode_change - actual selected source metadata
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -205,6 +206,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
 
     return handlers
       .handle("health", health)
+      .handle("sourceExportSelection", () => selection().pipe(Effect.catchCause(() => Effect.fail(new HttpApiError.BadRequest())))) // kilocode_change - fail closed without private diagnostics
       .handleRaw("event", event)
       .handle("configGet", configGet)
       .handle("configUpdate", configUpdate)

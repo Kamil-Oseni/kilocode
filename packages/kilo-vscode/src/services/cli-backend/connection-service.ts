@@ -221,6 +221,10 @@ export class KiloConnectionService {
     return !this.captureRetired && this.state === "connected" && this.client === client
   }
 
+  matchesSource(value: Readonly<{ pid: number; birth: string; executable: string; digest: string }>) {
+    return !this.capturing && !this.captureRetired && this.serverManager.matchesSource(value)
+  }
+
   /**
    * Get the shared SDK client, auto-connecting if not yet started.
    * Accepts an optional directory to use as the workspace root; falls back

@@ -9,6 +9,7 @@ import { publish } from "@/kilocode/session/review-publish" // kilocode_change -
 import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode_change - profile migration admission
 import { storageAdmission } from "@/kilocode/migration/storage-admission" // kilocode_change - cross-process JSON maintenance exclusion
 import * as bounded from "@/kilocode/storage/bounded-read" // kilocode_change - bounded receipt reads
+import { bind as scope } from "@/kilocode/migration/storage-scope" // kilocode_change - actual live storage selection metadata
 
 type Migration = (dir: string, fs: FSUtil.Interface, git: Git.Interface) => Effect.Effect<void, FSUtil.Error>
 
@@ -360,7 +361,7 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
           .toSorted((a, b) => a.join("/").localeCompare(b.join("/")))
       })
 
-      return Service.of({
+      const service = Service.of({ // kilocode_change - bind the original selected storage service below
         // kilocode_change start - keep receipt publication separate from legacy JSON write behavior
         create: (key, content) =>
           mutate(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content))),
@@ -376,6 +377,11 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
         write,
         list,
       })
+      // kilocode_change start - dispose exact metadata with its original service layer
+      const retire = scope(service, root ?? path.join(Global.Path.data, "storage"))
+      yield* Effect.addFinalizer(() => Effect.sync(retire))
+      return service
+      // kilocode_change end
     }),
   )
 

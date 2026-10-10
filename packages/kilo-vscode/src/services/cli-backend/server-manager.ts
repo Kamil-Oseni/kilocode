@@ -9,6 +9,7 @@ import { resolveLocalBwrapEnv, resolveTreeSitterEnv } from "./cli-resources"
 import { t } from "./i18n"
 import { launch, parseServerPort } from "./server-utils"
 import { Sources, stop, type ManagedSource } from "./managed-source"
+import { correlated } from "../../profile/correlation"
 
 export interface ServerInstance {
   port: number
@@ -77,6 +78,12 @@ export class ServerManager {
   private capturing = false
   private capture: Promise<ManagedSource> | undefined
   private readonly sources = new Sources()
+
+  /** Compare metadata only with this manager's current owned native source. */
+  matchesSource(value: Readonly<{ pid: number; birth: string; executable: string; digest: string }>) {
+    if (this.closed || this.capturing) return false
+    return correlated(this.instance?.source, value)
+  }
 
   constructor(
     private readonly context: vscode.ExtensionContext,

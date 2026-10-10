@@ -9,6 +9,7 @@ import "@/kilocode/indexing-event" // kilocode_change - register indexing.status
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { described } from "./metadata"
+import { SourceSelection } from "@opencode-ai/core/kilocode/source-selection-schema" // kilocode_change - partial archive selection metadata
 
 const GlobalHealth = Schema.Struct({
   healthy: Schema.Literal(true),
@@ -85,6 +86,16 @@ export const GlobalApi = HttpApi.make("global").add(
           description: "Get health information about the Raya server.", // kilocode_change
         }),
       ),
+      // kilocode_change start - canonical read-only selection, not capture authority
+      HttpApiEndpoint.get("sourceExportSelection", "/global/source-export-selection", {
+        success: SourceSelection,
+        error: HttpApiError.BadRequest,
+      }).annotateMerge(OpenApi.annotations({
+        identifier: "global.sourceExportSelection",
+        summary: "Review partial paused-profile archive sources",
+        description: "Inspect the actual running native database and live storage selection. This does not authorize capture or promise a complete backup.",
+      })),
+      // kilocode_change end
       HttpApiEndpoint.get("event", GlobalPaths.event, {
         success: GlobalEventSchema,
       }).annotateMerge(

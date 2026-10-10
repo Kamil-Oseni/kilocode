@@ -27,7 +27,10 @@ const request = z
         exports: file.optional(),
       })
       .strict(),
-    password: z.string().min(12).max(1024),
+    password: z.string().refine((value) => {
+      const bytes = Buffer.byteLength(value, "utf8")
+      return bytes >= 12 && bytes <= 1024
+    }),
     output: file,
   })
   .strict()

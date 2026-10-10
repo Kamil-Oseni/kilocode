@@ -14701,6 +14701,53 @@ export type GlobalHealthResponses = {
 
 export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthResponses]
 
+export type GlobalSourceExportSelectionData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/source-export-selection"
+}
+
+export type GlobalSourceExportSelectionErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type GlobalSourceExportSelectionError =
+  GlobalSourceExportSelectionErrors[keyof GlobalSourceExportSelectionErrors]
+
+export type GlobalSourceExportSelectionResponses = {
+  /**
+   * Success
+   */
+  200: {
+    format: "raya.source-export-selection"
+    version: 1
+    source: {
+      pid: number
+      birth: string
+      executable: string
+      digest: string
+    }
+    profile: {
+      database: string
+      storage: string
+      data: string
+      exports?: string
+    }
+    fingerprint: string
+    preferences: "authenticated-capture-only"
+    completeProfileCoverage: false
+    portableCaptureAuthorized: false
+    restartRequired: true
+  }
+}
+
+export type GlobalSourceExportSelectionResponse =
+  GlobalSourceExportSelectionResponses[keyof GlobalSourceExportSelectionResponses]
+
 export type GlobalEventData = {
   body?: never
   path?: never

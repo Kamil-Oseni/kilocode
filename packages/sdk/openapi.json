@@ -321,6 +321,148 @@
         ]
       }
     },
+    "/global/source-export-selection": {
+      "get": {
+        "tags": ["global"],
+        "operationId": "global.sourceExportSelection",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "format": {
+                      "type": "string",
+                      "enum": ["raya.source-export-selection"]
+                    },
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "pid": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "birth": {
+                          "type": "string",
+                          "pattern": "^\\d{1,20}$"
+                        },
+                        "executable": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096,
+                          "pattern": "^[^\\0\\r\\n]+$"
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": ["pid", "birth", "executable", "digest"],
+                      "additionalProperties": false
+                    },
+                    "profile": {
+                      "type": "object",
+                      "properties": {
+                        "database": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096,
+                          "pattern": "^[^\\0\\r\\n]+$"
+                        },
+                        "storage": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096,
+                          "pattern": "^[^\\0\\r\\n]+$"
+                        },
+                        "data": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096,
+                          "pattern": "^[^\\0\\r\\n]+$"
+                        },
+                        "exports": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4096,
+                          "pattern": "^[^\\0\\r\\n]+$"
+                        }
+                      },
+                      "required": ["database", "storage", "data"],
+                      "additionalProperties": false
+                    },
+                    "fingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "preferences": {
+                      "type": "string",
+                      "enum": ["authenticated-capture-only"]
+                    },
+                    "completeProfileCoverage": {
+                      "type": "boolean",
+                      "enum": [false]
+                    },
+                    "portableCaptureAuthorized": {
+                      "type": "boolean",
+                      "enum": [false]
+                    },
+                    "restartRequired": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": [
+                    "format",
+                    "version",
+                    "source",
+                    "profile",
+                    "fingerprint",
+                    "preferences",
+                    "completeProfileCoverage",
+                    "portableCaptureAuthorized",
+                    "restartRequired"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Inspect the actual running native database and live storage selection. This does not authorize capture or promise a complete backup.",
+        "summary": "Review partial paused-profile archive sources",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.global.sourceExportSelection({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/global/event": {
       "get": {
         "tags": ["global"],

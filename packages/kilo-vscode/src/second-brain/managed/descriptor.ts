@@ -257,6 +257,22 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
   )
 }
 
+function indexed(values: unknown[]) {
+  const inventory = new Map<string, { count: number; file: Record<string, unknown> }>()
+  for (const value of values) {
+    const file = row(value)
+    const name = file.path
+    if (typeof name !== "string") continue
+    const prior = inventory.get(name)
+    if (prior) {
+      prior.count++
+      continue
+    }
+    inventory.set(name, { count: 1, file })
+  }
+  return inventory
+}
+
 /** Two independently selected plans share assets but never an HTTP-derived owner. */
 export function paired(cfg: Descriptor, memory: Record<string, unknown>, retrieval: Record<string, unknown>) {
   check(cfg.version === 2 && cfg.retrieval, "Explicit paired descriptor required")
@@ -286,15 +302,18 @@ export function paired(cfg: Descriptor, memory: Record<string, unknown>, retriev
   const selected = row(memory.retrieval_selection)
   for (const key of ["RAYA_RETRIEVAL_RECEIPT_ROOT", "RAYA_RETRIEVAL_RECEIPT_SID", "RAYA_RETRIEVAL_RECEIPT_GENERATIONS"])
     check(env[key] === selected[key], "Paired original namespace selection differs")
+  let inventory: Map<string, { count: number; file: Record<string, unknown> }> | undefined
   for (const [kind, plan] of [
     ["memory", memory],
     ["retrieval", retrieval],
   ] as const) {
     source(cfg, plan, kind, reuse)
     const hashes = row(plan.source_sha256)
+    inventory ??= indexed(memory.files)
     for (const [name, hash] of Object.entries(hashes)) {
-      const candidates = memory.files.filter((value) => row(value).path === path.join(String(plan.source), name))
-      check(candidates.length === 1 && row(candidates[0]).sha256 === hash, "Selected paired source file differs")
+      const target = path.join(String(plan.source), name)
+      const candidate = inventory.get(target)
+      check(candidate?.count === 1 && candidate.file.sha256 === hash, "Selected paired source file differs")
     }
   }
 }

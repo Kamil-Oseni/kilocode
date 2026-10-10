@@ -52,12 +52,13 @@ type Scope = {
     release: string
     source_sha256: Record<string, string>
   }[]
+  dispose?: () => void
   refresh?: () => Promise<void>
 }
 type Config = { root: string; python: Ref; plan: Ref; retrieval?: Ref }
 const proofs = new WeakMap<
   object,
-  { policy: string; refresh: () => Promise<void>; guard: () => void; digest: string }
+  { policy: string; refresh: () => Promise<void>; guard: () => void; digest: string; dispose?: () => void }
 >()
 const required = new Set<string>()
 const eligible = new WeakMap<object, ReadonlyMap<string, string>>()
@@ -71,6 +72,7 @@ export async function review(extension: string, runtime: Config, input: string, 
     operations: structuredClone(opts.operations ?? []),
     guard: opts.guard,
     refresh: opts.refresh,
+    dispose: opts.dispose,
   })
   scope.guard()
   const body = JSON.parse(input) as { root: string; turn: { id: string } }
@@ -217,6 +219,7 @@ export async function review(extension: string, runtime: Config, input: string, 
   scope.guard()
   const proof = Object.freeze({
     policy: observed.value.policySHA,
+    dispose: scope.dispose,
     guard: scope.guard,
     refresh: async () => {
       scope.guard()
@@ -295,4 +298,9 @@ export function currentPolicy(value: object) {
 
 export async function freshHistory(value: object) {
   await selected(value)?.refresh()
+}
+
+/** Retire pure projection buffers; full freshness remains available uncached. */
+export function disposeHistory(value: object) {
+  proofs.get(value)?.dispose?.()
 }

@@ -1,4 +1,5 @@
 import path from "node:path"
+import { paired } from "./projection-cache"
 import { isDeepStrictEqual } from "node:util"
 import { check, child, document } from "../control/frames"
 import { directory, image } from "../control/identity"
@@ -13,6 +14,8 @@ import { project as namespace } from "./generation"
 import type { materialize } from "./materialize"
 import { observe as activation } from "./upgrade-observe-v2"
 import { images, fingerprint as retrieval, cohort } from "./reuse-catalog"
+
+const projector = Object.freeze({})
 
 type Prepared = Awaited<ReturnType<typeof materialize>>
 type Without<T> = T extends { receipt: unknown } ? Omit<T, "receipt"> : never
@@ -149,7 +152,7 @@ function evidence(
 }
 
 /** Reconstruct both derived plans from the retained originals; inspect native code/ACLs/spaces without changing saved state. */
-export async function review(input: Descriptor["plan"], expected: Entry) {
+export async function review(input: Descriptor["plan"], expected: Entry, cache?: object) {
   const prior = entry(expected)
   const ref = descriptor({ ...prior.managed, plan: input }).plan
   const folder = path.dirname(ref.path)
@@ -200,33 +203,51 @@ export async function review(input: Descriptor["plan"], expected: Entry) {
   const supervisor = observed.images.find((item) => path.basename(item.path) === "supervise.py")
   check(supervisor, "Observed current supervisor required")
   const base = { path: original.plan.source, pins: prior.setup.source_sha256 }
-  const plans = [2, 3].map((index) =>
-    project(
-      original.files[index].raw,
-      value.source,
+  const outputs = paired(
+    cache,
+    projector,
+    original.files.slice(2, 4).map((file) => file.raw),
+    {
+      protocol: "raya.upgrade.pure-projection.v1",
+      source: value.source,
       release,
-      replacements,
+      replacements: [...replacements.entries()],
       supervisor,
-      observedDirs[0]!,
+      directories: observedDirs[0],
       base,
-      upgraded ? { previous: upgraded.previous, directories: upgraded.directories } : undefined,
-      next.managed.supervisor.sha256,
-    ),
+      retrieval: upgraded ? { previous: upgraded.previous, directories: upgraded.directories } : null,
+      expected: next.managed.supervisor.sha256,
+      spaces: observed.spaces,
+      namespaces: next.managed.namespaces,
+    },
+    () => {
+      const plans = [2, 3].map((index) =>
+        project(
+          original.files[index].raw,
+          value.source,
+          release,
+          replacements,
+          supervisor,
+          observedDirs[0]!,
+          base,
+          upgraded ? { previous: upgraded.previous, directories: upgraded.directories } : undefined,
+          next.managed.supervisor.sha256,
+        ),
+      )
+      const parsed = document(plans[0], 16777216, 1000000)
+      const node = child(parsed.tree, "directories")
+      const dirs = parsed.text.slice(node.offset, node.offset + node.length)
+      const additions = observed.spaces.map(
+        (item) => '{"path":' + JSON.stringify(item.path) + ',"identity":[' + item.identity.join(",") + "]}",
+      )
+      const projected = dirs.slice(0, -1) + (node.children?.length ? "," : "") + additions.join(",") + "]"
+      return ["memory", "retrieval"].map((kind, index) =>
+        namespace(plans[index], kind as "memory" | "retrieval", next.managed.namespaces, projected),
+      )
+    },
   )
-  const parsed = document(plans[0], 16777216, 1000000)
-  const node = child(parsed.tree, "directories")
-  const dirs = parsed.text.slice(node.offset, node.offset + node.length)
-  const additions = observed.spaces.map(
-    (item) => '{"path":' + JSON.stringify(item.path) + ',"identity":[' + item.identity.join(",") + "]}",
-  )
-  const projected = dirs.slice(0, -1) + (node.children?.length ? "," : "") + additions.join(",") + "]"
-  for (const [index, kind] of ["memory", "retrieval"].entries())
-    check(
-      namespace(plans[index], kind as "memory" | "retrieval", next.managed.namespaces, projected).equals(
-        selected.files[index + 2].raw,
-      ),
-      "Derived upgrade plan changed unrelated original bytes",
-    )
+  for (const [index, raw] of outputs.entries())
+    check(raw.equals(selected.files[index + 2].raw), "Derived upgrade plan changed unrelated original bytes")
   const after = await image(ref.path, 65536)
   check(after.tuple === held.tuple && after.digest === held.digest, "Prepared upgrade receipt rebound")
   return Object.freeze({

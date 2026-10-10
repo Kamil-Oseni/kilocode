@@ -23,6 +23,7 @@ async function method() {
     "currentPolicy",
     "freshHistory",
     "isDeepStrictEqual",
+    "disposeHistory",
     compiled + ";return run",
   )
 }
@@ -49,6 +50,7 @@ async function fixture(stage?: "sync" | "selection" | "confirmation" | "start") 
         throw new Error("Original capture revision changed")
     },
     isDeepStrictEqual,
+    () => calls.push("dispose"),
   )
   const host = {
     context: { extensionPath: "controlled-source-only" },
@@ -99,6 +101,7 @@ async function fixture(stage?: "sync" | "selection" | "confirmation" | "start") 
 test("actual recovered-capture host indexes current private policy and preserves original historical policy", async () => {
   const value = await fixture()
   expect(await value.run()).toBe(true)
+  expect(value.calls.at(-1)).toBe("dispose")
   expect(value.calls.filter((item) => ["sync", "selection", "confirmation"].includes(item))).toEqual([
     "sync",
     "selection",
@@ -110,6 +113,7 @@ test("actual recovered-capture host refuses revision drift after each asynchrono
   for (const stage of ["sync", "selection", "confirmation"] as const) {
     const value = await fixture(stage)
     await expect(value.run()).rejects.toThrow("Original capture revision changed")
+    expect(value.calls.at(-1)).toBe("dispose")
     if (stage === "sync") expect(value.calls).not.toContain("selection")
     if (stage !== "confirmation") expect(value.calls).not.toContain("confirmation")
   }

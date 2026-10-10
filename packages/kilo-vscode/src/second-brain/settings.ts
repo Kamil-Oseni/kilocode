@@ -19,6 +19,7 @@ import { publish as upgrade, anchor, guard } from "./managed/upgrade-publish"
 import { randomUUID } from "node:crypto"
 import { current as supervisor } from "./managed/catalog"
 import { review as indexReview } from "./capture-index"
+import { disposeHistory } from "./capture-revisions"
 import { locate } from "./capture-operations"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
@@ -82,18 +83,24 @@ async function capture(storage: Pick<Memento, "get" | "update">, ...args: Parame
     rows.filter((row) => row.root === original.root && row.id !== original.id && row.phase === "published"),
     guard,
   )
-  guard()
-  const value = await correlate(args[0], args[1], args[2], args[3], {
-    audit,
-    ledger: saved,
-    guard,
-    operations: history.operations,
-    refresh: history.fresh,
-  })
-  guard()
-  const bound = rebind(value, audit)
-  guard()
-  return bound
+  try {
+    guard()
+    const value = await correlate(args[0], args[1], args[2], args[3], {
+      audit,
+      ledger: saved,
+      guard,
+      operations: history.operations,
+      refresh: history.fresh,
+      dispose: history.dispose,
+    })
+    guard()
+    const bound = rebind(value, audit)
+    guard()
+    return bound
+  } catch (err) {
+    history.dispose()
+    throw err
+  }
 }
 
 function administration(outcome: string) {
@@ -574,23 +581,28 @@ export class BrainSettings {
     )
       throw new Error("Recovered capture belongs to a different Memory setup")
     const reviewed = await capture(this.storage, extension, previous, audit.debt, original)
-    await associate(this.storage, previous, current, reviewed)
-    captureTurn(original, input, reviewed, this.storage.get(`${key}.confirmation`))
-    const { producer, ...evidence } = reviewed
-    if (
-      producer.code !== 0 ||
-      fingerprint({ ...reviewed, producer: undefined }) !== audit.reviewSHA ||
-      !isDeepStrictEqual(audit.review, evidence) ||
-      !isDeepStrictEqual(this.storage.get(key), audit) ||
-      !isDeepStrictEqual(this.storage.get(state), current) ||
-      !records(this.storage.get("raya.secondBrain.personalCapture.turns")).some((row) =>
-        isDeepStrictEqual(row, input),
-      ) ||
-      this.pending()
-    )
-      throw new Error("Recovered capture evidence changed")
-    this.available()
-    return reviewed
+    try {
+      await associate(this.storage, previous, current, reviewed)
+      captureTurn(original, input, reviewed, this.storage.get(`${key}.confirmation`))
+      const { producer, ...evidence } = reviewed
+      if (
+        producer.code !== 0 ||
+        fingerprint({ ...reviewed, producer: undefined }) !== audit.reviewSHA ||
+        !isDeepStrictEqual(audit.review, evidence) ||
+        !isDeepStrictEqual(this.storage.get(key), audit) ||
+        !isDeepStrictEqual(this.storage.get(state), current) ||
+        !records(this.storage.get("raya.secondBrain.personalCapture.turns")).some((row) =>
+          isDeepStrictEqual(row, input),
+        ) ||
+        this.pending()
+      )
+        throw new Error("Recovered capture evidence changed")
+      this.available()
+      return reviewed
+    } catch (err) {
+      disposeHistory(reviewed)
+      throw err
+    }
   }
 
   upgrading() {
@@ -672,41 +684,48 @@ export class BrainSettings {
       const current = scope ? this.entry(scope.saved) : selected
       if (scope) guard(this.storage, scope)
       const reviewed = await capture(this.storage, extension, previous, audit.debt, original)
-      stable()
-      captured(this.storage, previous, reviewed)
-      if (scope) await ancestry(this.storage, previous, reviewed, scope)
-      if (!scope) await associate(this.storage, previous, current, reviewed)
-      stable()
-      captureTurn(original, input, reviewed, retained)
-      await absent(reviewed.closure)
-      stable()
-      const closed = current
-      if (closed.launch !== undefined) {
-        const phase = closed.launch as { phase?: string; receipt: Receipt }
-        if (phase.phase !== "closed") throw new Error("A genuinely closed capture runtime is required for upgrade")
-        await context(descriptor(closed.managed), parse(closed.setup), phase.receipt)
+      const caches = [reviewed]
+      try {
         stable()
+        captured(this.storage, previous, reviewed)
+        if (scope) await ancestry(this.storage, previous, reviewed, scope)
+        if (!scope) await associate(this.storage, previous, current, reviewed)
+        stable()
+        captureTurn(original, input, reviewed, retained)
+        await absent(reviewed.closure)
+        stable()
+        const closed = current
+        if (closed.launch !== undefined) {
+          const phase = closed.launch as { phase?: string; receipt: Receipt }
+          if (phase.phase !== "closed") throw new Error("A genuinely closed capture runtime is required for upgrade")
+          await context(descriptor(closed.managed), parse(closed.setup), phase.receipt)
+          stable()
+        }
+        if (scope) guard(this.storage, scope)
+        const artifact = held ? this.intent(held, closed) : await this.prepare(extension, closed)
+        stable()
+        disposeHistory(reviewed)
+        const rechecked = await capture(this.storage, extension, previous, audit.debt, original)
+        caches.push(rechecked)
+        stable()
+        captured(this.storage, previous, rechecked)
+        if (fingerprint({ ...rechecked, producer: undefined }) !== fingerprint({ ...reviewed, producer: undefined }))
+          throw new Error("Original capture changed during runtime preparation")
+        await absent(rechecked.closure)
+        stable()
+        if (scope) {
+          await ancestry(this.storage, previous, rechecked, scope)
+          guard(this.storage, scope)
+        }
+        if (!scope) await associate(this.storage, previous, current, rechecked)
+        captureTurn(original, input, rechecked, retained)
+        stable()
+        await upgrade(this.storage, artifact)
+        this.original = undefined
+        this.managedEntry = undefined
+      } finally {
+        for (const value of caches) disposeHistory(value)
       }
-      if (scope) guard(this.storage, scope)
-      const artifact = held ? this.intent(held, closed) : await this.prepare(extension, closed)
-      stable()
-      const rechecked = await capture(this.storage, extension, previous, audit.debt, original)
-      stable()
-      captured(this.storage, previous, rechecked)
-      if (fingerprint({ ...rechecked, producer: undefined }) !== fingerprint({ ...reviewed, producer: undefined }))
-        throw new Error("Original capture changed during runtime preparation")
-      await absent(rechecked.closure)
-      stable()
-      if (scope) {
-        await ancestry(this.storage, previous, rechecked, scope)
-        guard(this.storage, scope)
-      }
-      if (!scope) await associate(this.storage, previous, current, rechecked)
-      captureTurn(original, input, rechecked, retained)
-      stable()
-      await upgrade(this.storage, artifact)
-      this.original = undefined
-      this.managedEntry = undefined
       return this.reviewed(extension, input)
     })
   }
@@ -768,6 +787,7 @@ export class BrainSettings {
         isDeepStrictEqual(this.storage.get(recovering), fence.value) &&
         isDeepStrictEqual(records(this.storage.get(ledger)), turns)
       const reviewed = await capture(this.storage, extension, entry, metadata, input)
+      disposeHistory(reviewed)
       const marker = { capture: turn.id, request: reviewed.request, audit: key, debtSHA: reviewed.debtSHA }
       if (fence.value !== undefined && !isDeepStrictEqual(fence.value, marker))
         throw new Error("Different committed capture recovery remains active")
@@ -780,7 +800,11 @@ export class BrainSettings {
       const verify = async () => {
         if (
           !same() ||
-          stable(await capture(this.storage, extension, entry, metadata, input)) !== stable(reviewed) ||
+          (await (async () => {
+            const value = await capture(this.storage, extension, entry, metadata, input)
+            disposeHistory(value)
+            return stable(value) !== stable(reviewed)
+          })()) ||
           !same()
         )
           throw new Error("Reviewed committed capture changed")

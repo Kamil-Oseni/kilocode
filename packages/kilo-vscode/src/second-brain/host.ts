@@ -34,7 +34,7 @@ import { CaptureIntake, type CapturePublication } from "./capture-intake"
 import { failure } from "./capture-failure"
 import { personal } from "./scope"
 import { admission } from "./index-admission"
-import { currentPolicy, freshHistory } from "./capture-revisions"
+import { currentPolicy, freshHistory, disposeHistory } from "./capture-revisions"
 import { MediaCoordinator } from "./media/coordinator"
 import { register as mediaCommands } from "./media/native"
 
@@ -1263,6 +1263,7 @@ export class BrainHost {
             return accepted === "Recover committed save"
           })
     if (!result) return
+    disposeHistory(result)
     await vscode.window.showInformationMessage(
       "The original Memory save recovery is retained. Indexing remains pending; use Index a Recovered Memory Save when ready.",
     )
@@ -1364,76 +1365,85 @@ export class BrainHost {
     result: Awaited<ReturnType<BrainSettings["reviewCapture"]>>,
     turn: Parameters<BrainSettings["reviewCapture"]>[1],
   ) {
-    const check = () => {
-      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
-    }
-    check()
-    const active = { value: result }
-    const fresh = async (value = active.value) => {
+    const retained = [result]
+    try {
+      const check = () => {
+        if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
+      }
       check()
-      await freshHistory(value)
-      check()
-    }
-    await fresh()
-    const policy = currentPolicy(result)
-    const resources = async () => {
-      await fresh()
-      const current = await this.settings.load()
-      await fresh()
-      if (!current?.managed) throw new Error("Reviewed managed Memory setup required for indexing")
-      await admission(descriptor(current.managed).python)
-      await fresh()
-    }
-    await resources()
-    let accepted = false
-    await this.control.sync(
-      async (review) => {
-        await fresh()
-        if (review.digest !== policy) throw new Error("Recovered capture source policy changed")
-        const answer = await vscode.window.showWarningMessage(
-          `Start a new indexing operation for recovered save ${result.capture}? The original save will not be repeated. This indexes only the verified enabled source policy below. Failed historical requests remain in their audits.\n\n${review.text}`,
-          { modal: true },
-          "Index recovered save",
-        )
-        await fresh()
-        accepted = answer === "Index recovered save"
-        return accepted
-      },
-      async (expected, signal, close) => {
-        await resources()
-        if (signal.aborted) throw new Error("Recovered-save indexing was cancelled before publication")
-        if (expected !== policy) throw new Error("Recovered capture source policy changed")
-        await fresh()
-        await this.service.sync(expected, signal, close)
-        const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn)
+      const active = { value: result }
+      const fresh = async (value = active.value) => {
         check()
-        if (
-          currentPolicy(reviewed) !== policy ||
-          !isDeepStrictEqual({ ...reviewed, producer: undefined }, { ...result, producer: undefined })
-        )
-          throw new Error("Original recovered capture changed after indexing")
+        await freshHistory(value)
+        check()
+      }
+      await fresh()
+      const policy = currentPolicy(result)
+      const resources = async () => {
+        await fresh()
+        const current = await this.settings.load()
+        await fresh()
+        if (!current?.managed) throw new Error("Reviewed managed Memory setup required for indexing")
+        await admission(descriptor(current.managed).python)
+        await fresh()
+      }
+      await resources()
+      let accepted = false
+      await this.control.sync(
+        async (review) => {
+          await fresh()
+          if (review.digest !== policy) throw new Error("Recovered capture source policy changed")
+          const answer = await vscode.window.showWarningMessage(
+            `Start a new indexing operation for recovered save ${result.capture}? The original save will not be repeated. This indexes only the verified enabled source policy below. Failed historical requests remain in their audits.\n\n${review.text}`,
+            { modal: true },
+            "Index recovered save",
+          )
+          await fresh()
+          accepted = answer === "Index recovered save"
+          return accepted
+        },
+        async (expected, signal, close) => {
+          await resources()
+          if (signal.aborted) throw new Error("Recovered-save indexing was cancelled before publication")
+          if (expected !== policy) throw new Error("Recovered capture source policy changed")
+          await fresh()
+          await this.service.sync(expected, signal, close)
+          disposeHistory(active.value)
+          const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn)
+          retained.push(reviewed)
+          check()
+          if (
+            currentPolicy(reviewed) !== policy ||
+            !isDeepStrictEqual({ ...reviewed, producer: undefined }, { ...result, producer: undefined })
+          )
+            throw new Error("Original recovered capture changed after indexing")
+          await fresh(reviewed)
+          active.value = reviewed
+          await fresh()
+        },
+      )
+      await fresh()
+      if (!accepted) return false
+      disposeHistory(active.value)
+      const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn)
+      retained.push(reviewed)
+      await fresh(reviewed)
+      if (currentPolicy(reviewed) !== policy) throw new Error("Recovered capture source policy changed")
+      const binding = await this.service.captureSelection(AbortSignal.timeout(35000), policy)
+      await fresh(reviewed)
+      await this.service.configure(async () => {
         await fresh(reviewed)
-        active.value = reviewed
-        await fresh()
-      },
-    )
-    await fresh()
-    if (!accepted) return false
-    const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn)
-    await fresh(reviewed)
-    if (currentPolicy(reviewed) !== policy) throw new Error("Recovered capture source policy changed")
-    const binding = await this.service.captureSelection(AbortSignal.timeout(35000), policy)
-    await fresh(reviewed)
-    await this.service.configure(async () => {
+        await this.intake.confirmRecovery(reviewed, binding, () => {
+          check()
+          if (!this.service.captureCurrent(binding)) throw new Error("Recovered capture generation changed")
+        })
+        await fresh(reviewed)
+      }, false)
       await fresh(reviewed)
-      await this.intake.confirmRecovery(reviewed, binding, () => {
-        check()
-        if (!this.service.captureCurrent(binding)) throw new Error("Recovered capture generation changed")
-      })
-      await fresh(reviewed)
-    }, false)
-    await fresh(reviewed)
-    return true
+      return true
+    } finally {
+      for (const value of retained) disposeHistory(value)
+    }
   }
 
   private async review() {

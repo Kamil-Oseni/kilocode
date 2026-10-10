@@ -204,10 +204,10 @@ async function apply(
   return applied
 }
 
-async function preparation(storage: Storage, artifact: Descriptor["plan"], scope?: object) {
+async function preparation(storage: Storage, artifact: Descriptor["plan"], scope?: object, cache?: object) {
   const { id, key, held, retained, original } = intent(storage, artifact, scope)
   const previous = entry(value(original[0]))
-  const proof = await review(artifact, { setup: parse(previous.setup), managed: previous.managed })
+  const proof = await review(artifact, { setup: parse(previous.setup), managed: previous.managed }, cache)
   if (scope) guard(storage, scope)
   check(proof.id === id, "Original runtime publication selection differs")
   const selected = previous
@@ -293,9 +293,9 @@ export function guard(storage: Storage, grant: object) {
 }
 
 /** Inspect each already-applied ancestor from its own originals under an independently validated pending fence. */
-export async function inspectAncestor(storage: Storage, artifact: Descriptor["plan"], grant: object) {
+export async function inspectAncestor(storage: Storage, artifact: Descriptor["plan"], grant: object, cache?: object) {
   guard(storage, grant)
-  const value = await preparation(storage, artifact, grant)
+  const value = await preparation(storage, artifact, grant, cache)
   guard(storage, grant)
   check(
     value.retained?.phase === "applied" &&
@@ -307,8 +307,8 @@ export async function inspectAncestor(storage: Storage, artifact: Descriptor["pl
 }
 
 /** Fresh native review of an applied publication does not mutate settings or claim the index is ready. */
-export async function inspect(storage: Storage, artifact: Descriptor["plan"]) {
-  const value = await preparation(storage, artifact)
+export async function inspect(storage: Storage, artifact: Descriptor["plan"], cache?: object) {
+  const value = await preparation(storage, artifact, undefined, cache)
   check(
     value.retained?.phase === "applied" &&
       value.retained.stage === 3 &&

@@ -1,4 +1,5 @@
 import path from "node:path"
+import { scope, dispose } from "./managed/projection-cache"
 import { opendir } from "node:fs/promises"
 import { isDeepStrictEqual } from "node:util"
 import { check, document, object } from "./control/frames"
@@ -59,6 +60,7 @@ export async function locate(
   const marker = structuredClone(
     storage.get<{ audit: { artifact: Descriptor["plan"] } }>("raya.secondBrain.committedCaptureRecovery.pending"),
   )
+  const cache = scope()
   const prove = async () => {
     guard()
     check(isDeepStrictEqual(storage.get("raya.secondBrain.setup"), current), "Capture operation selection changed")
@@ -96,8 +98,8 @@ export async function locate(
       const value = structuredClone(storage.get<{ artifact: Descriptor["plan"] }>(key))
       check(value?.artifact, "Retained capture operation upgrade required")
       const edge = grant
-        ? await inspectAncestor(storage, value.artifact, grant)
-        : await inspect(storage, value.artifact)
+        ? await inspectAncestor(storage, value.artifact, grant, cache)
+        : await inspect(storage, value.artifact, cache)
       verify()
       check(edge.id === id && isDeepStrictEqual(storage.get(key), value), "Capture operation upgrade changed")
       const projected = await lineage(edge.next.managed, setup(entry.setup), descriptor(entry.managed), entry.launch)
@@ -291,12 +293,17 @@ export async function locate(
     guard()
     return { operations, refs, captures, proven }
   }
-  const observed = await collect()
-  const fresh = async () => {
-    guard()
-    check(isDeepStrictEqual(await collect(), observed), "Capture operation history changed")
-    guard()
+  try {
+    const observed = await collect()
+    const fresh = async () => {
+      guard()
+      check(isDeepStrictEqual(await collect(), observed), "Capture operation history changed")
+      guard()
+    }
+    await fresh()
+    return { operations: observed.operations, fresh, dispose: () => dispose(cache) }
+  } catch (err) {
+    dispose(cache)
+    throw err
   }
-  await fresh()
-  return { operations: observed.operations, fresh }
 }

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test"
+import { afterAll, beforeAll, expect, test, spyOn } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm, writeFile, copyFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -14,6 +14,8 @@ import { release } from "../../src/second-brain/control/catalog-capture"
 import { image } from "../../src/second-brain/control/identity"
 import { document, child, sha } from "../../src/second-brain/control/frames"
 import { command } from "../../src/second-brain/control/command"
+import * as projection from "../../src/second-brain/managed/upgrade"
+import { scope, dispose } from "../../src/second-brain/managed/projection-cache"
 import { project } from "../../src/second-brain/managed/upgrade"
 import { observe } from "../../src/second-brain/managed/upgrade-observe-v2"
 import { fresh } from "../../src/second-brain/managed/generation"
@@ -364,4 +366,37 @@ print('retained-finite-qualified')`
     { windowsHide: true },
   )
   expect(observed.stdout.trim()).toBe("retained-finite-qualified")
+}, 30000)
+
+test("request-owned projection hits retain genuine native validation and refuse source drift", async () => {
+  const value = await materialize(cfg, setup, path.resolve("."), "9".repeat(32))
+  const cache = scope()
+  const held = spyOn(projection, "project")
+  try {
+    const first = await review(value.receipt, { setup, managed: cfg }, cache)
+    const count = held.mock.calls.length
+    expect(count).toBe(2)
+    const second = await review(value.receipt, { setup, managed: cfg }, cache)
+    expect(second.next).toEqual(first.next)
+    expect(held.mock.calls.length).toBe(count)
+    dispose(cache)
+    await review(value.receipt, { setup, managed: cfg }, cache)
+    expect(held.mock.calls.length).toBe(count + 2)
+    const active = scope()
+    await review(value.receipt, { setup, managed: cfg }, active)
+    const latest = held.mock.calls.length
+    const leaf = path.join(value.source, "index.py")
+    const bytes = await readFile(leaf)
+    try {
+      await writeFile(leaf, Buffer.concat([bytes, Buffer.from("\n")]))
+      await expect(review(value.receipt, { setup, managed: cfg }, active)).rejects.toThrow()
+      expect(held.mock.calls.length).toBe(latest)
+    } finally {
+      await writeFile(leaf, bytes)
+      dispose(active)
+    }
+  } finally {
+    held.mockRestore()
+    dispose(cache)
+  }
 }, 30000)

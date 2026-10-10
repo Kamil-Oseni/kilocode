@@ -112,6 +112,8 @@ Object.defineProperty(navigator, "mediaDevices", {
 
 function Probe() {
   const [box, setBox] = createSignal("voice-mounted")
+  const [composer, setComposer] = createSignal(true)
+  window.__composer = setComposer
   window.__box = setBox
   const session = useSession()
   window.__session = session
@@ -147,7 +149,7 @@ function Probe() {
   })
   return (
     <>
-      <PromptInput boxId={box()} />
+      {composer() && <PromptInput boxId={box()} />}
       <output id="sid">{session.currentSessionID()}</output>
     </>
   )

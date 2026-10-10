@@ -33,6 +33,7 @@ await build({
       import { render } from "solid-js/web";
       import { VoiceProvider, useVoice } from "./webview-ui/src/context/voice";
       export { DEFAULT_SPEECH_SETTINGS } from "./src/shared/speech";
+      export { createSignal } from "solid-js";
       export function mount(node) {
         return render(() => createComponent(VoiceProvider, {
           get children() { return createComponent(() => { window.fixture.voice = useVoice(); return null; }, {}); }
@@ -126,8 +127,14 @@ try {
       locals.every((peer) => peer.connectionState === "closed") &&
       tracks.every((track) => track.readyState === "ended") &&
       captures.every((stream) => stream.getTracks().every((track) => track.readyState === "ended"))
+    const [current, setCurrent] = Provider.createSignal("session-provider")
+    const activity = { listen: 0, cancel: 0 }
+    const listening = () => activity.listen++
+    const cancelling = () => activity.cancel++
+    window.addEventListener("rayaVoiceListen", listening)
+    window.addEventListener("rayaVoiceCancel", cancelling)
     window.fixture = {
-      session: { currentSessionID: () => "session-provider" },
+      session: { currentSessionID: current },
       host: {
         postMessage(message) {
           posts.push(message)
@@ -167,9 +174,9 @@ try {
       hasSttKey: false,
       hasTtsKey: false,
     }
-    const mount = () => {
+    const mount = (selected = settings) => {
       const dispose = Provider.mount(document.getElementById("root"))
-      send({ type: "speechSettingsLoaded", settings })
+      send({ type: "speechSettingsLoaded", settings: selected })
       return dispose
     }
     const start = async () => {
@@ -263,8 +270,77 @@ try {
         "reloaded provider ignores prior generation transport messages",
       )
       check(captures.length === 3, "handoff clones synthetic capture without microphone reacquisition")
+      dispose()
+      setCurrent("local-A")
+      dispose = mount({ ...settings, voiceEngine: "cascade-v1" })
+      await until(() => !window.fixture.voice.startBlocked())
+      const starts = () => posts.filter((message) => message.type === "speechRealtimeStart")
+      const ends = () => posts.filter((message) => message.type === "speechRealtimeStop")
+      const before = starts().length
+      window.fixture.voice.start("foreign-session")
+      check(
+        starts().length === before && window.fixture.voice.status() === "off",
+        "foreign local session cannot start audio or host transport",
+      )
+      window.fixture.voice.start("local-A")
+      check(starts().at(-1)?.sessionID === "local-A", "local voice start retains the selected session")
+      const wakes = activity.listen
+      send({
+        type: "speechRealtimeError",
+        code: "unavailable",
+        error: "Synthetic cascade fallback",
+        fallback: "cascade-v1",
+      })
+      await until(() => activity.listen > wakes)
+      check(window.fixture.voice.cascade(), "owned local fallback can enter hands-free listening")
+      const ended = ends().length
+      const cancelled = activity.cancel
+      setCurrent("local-B")
+      await until(() => window.fixture.voice.status() === "off")
+      check(
+        ends().length > ended && activity.cancel > cancelled && !window.fixture.voice.cascade(),
+        "local session excursion cancels capture and retires voice before another task",
+      )
+      const listened = activity.listen
+      setCurrent("local-A")
+      send({ type: "speechRealtimeError", code: "unavailable", error: "Late old fallback", fallback: "cascade-v1" })
+      await Promise.resolve()
+      check(
+        window.fixture.voice.status() === "off" && activity.listen === listened,
+        "A to B to A cannot revive the former local voice owner",
+      )
+      const capturesBefore = captures.length
+      const readyEnds = ends().length
+      send({
+        type: "speechRealtimeReady",
+        connection: {
+          id: "old-local",
+          livekitURL: "ws://127.0.0.1:1",
+          clientToken: "synthetic-unused",
+          engine: "qwen-realtime",
+          acceptsTruncation: true,
+        },
+      })
+      await Promise.resolve()
+      check(
+        ends().length > readyEnds && captures.length === capturesBefore && window.fixture.voice.status() === "off",
+        "late local Ready after excursion cannot reacquire microphone",
+      )
+      setCurrent("local-B")
+      window.fixture.voice.start("local-B")
+      check(starts().at(-1)?.sessionID === "local-B", "explicit local restart binds the new selected session")
+      window.fixture.voice.stop()
+      setCurrent("local-A")
+      send({ type: "speechRealtimeError", code: "unavailable", error: "Late stopped fallback", fallback: "cascade-v1" })
+      await Promise.resolve()
+      check(
+        window.fixture.voice.status() === "off" && !window.fixture.voice.cascade(),
+        "manual local Stop discards ownership before later route and fallback events",
+      )
     } finally {
       dispose()
+      window.removeEventListener("rayaVoiceListen", listening)
+      window.removeEventListener("rayaVoiceCancel", cancelling)
       navigator.mediaDevices.getUserMedia = original
       window.RTCPeerConnection = Native
       for (const peer of [...peers, ...remotes]) peer.close()
@@ -272,7 +348,7 @@ try {
     }
     return checks
   })
-  assert.equal(result.length, 12)
+  assert.equal(result.length, 20)
   console.log(`${result.length} actual VoiceProvider implementation assertions passed`)
 } finally {
   await browser.close()

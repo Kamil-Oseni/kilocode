@@ -109,7 +109,11 @@ export const VoiceProvider: ParentComponent = (props) => {
     return false
   }
   const [cascade, setCascade] = createSignal(false)
-  const state = { request: "", generation: 0, terminal: false }
+  const state: { request: string; generation: number; terminal: boolean; owner?: string } = {
+    request: "",
+    generation: 0,
+    terminal: false,
+  }
   const diagnostics = { count: 0 }
   const trace = (event: string, request: string) => {
     if (diagnostics.count++ >= 24) return
@@ -136,6 +140,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   )
   const legacy = () =>
     loaded() && !["openai-realtime", "openai-live"].includes(settings().voiceEngine) && !call && !recovery.blocked()
+  const owned = () => state.owner !== undefined && state.owner === session.currentSessionID()
   const echo = new VoiceEcho()
   const player = new StreamPlayer(
     () => {
@@ -498,6 +503,12 @@ export const VoiceProvider: ParentComponent = (props) => {
     return false
   }
 
+  function foreign(message: ExtensionMessage) {
+    if (!message.type.startsWith("speechRealtime") || owned()) return false
+    if (message.type === "speechRealtimeReady") vscode.postMessage({ type: "speechRealtimeStop" })
+    return true
+  }
+
   function receive(value: SpeechState) {
     if (!valid(value)) return
     if (!loaded()) setError(undefined)
@@ -540,6 +551,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     }
     if (selection(message)) return
     if (playback(message)) return
+    if (foreign(message)) return
     if (message.type === "speechRealtimeReady") {
       if (loop.paused()) {
         vscode.postMessage({ type: "speechRealtimeStop" })
@@ -604,6 +616,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
   request()
   onCleanup(() => {
+    delete state.owner
     window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
     loop.pause()
     loading.closed = true
@@ -657,6 +670,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     })
   }
   const stop = () => {
+    delete state.owner
     window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
     state.terminal = false
     setCascade(false)
@@ -683,6 +697,11 @@ export const VoiceProvider: ParentComponent = (props) => {
 
   const start = (sessionID: string) => {
     if (!available()) return
+    if (
+      !["openai-realtime", "openai-live"].includes(settings().voiceEngine) &&
+      (!sessionID || session.currentSessionID() !== sessionID)
+    )
+      return
     if (call || recovery.blocked()) {
       setError("End the previous voice call and wait for cleanup before starting another.")
       return
@@ -699,13 +718,14 @@ export const VoiceProvider: ParentComponent = (props) => {
       startOpenAI(sessionID)
       return
     }
+    state.owner = sessionID
     loop.set("hands-free")
     vscode.postMessage({ type: "speechRealtimeStart", sessionID })
   }
 
   createEffect((previous: string | undefined) => {
     const id = session.currentSessionID()
-    if (call && call.session !== id) {
+    if ((call && call.session !== id) || (state.owner !== undefined && state.owner !== id)) {
       stop()
       setTranscript(undefined)
       setCaptions(undefined)

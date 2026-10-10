@@ -1542,9 +1542,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
   onCleanup(shortcut.reset)
   // raya_change start - hands-free resumes listening after spoken playback completes
+  let retry: ReturnType<typeof setTimeout> | undefined
+  let epoch = 0
+  const clear = () => {
+    epoch++
+    if (retry !== undefined) clearTimeout(retry)
+    retry = undefined
+  }
+  createEffect(on([speechScope, () => voice.settings().mode, () => voice.settings().voiceEngine, voice.cascade], clear))
+  createEffect(() => {
+    if (voice.status() === "off" || voice.status() === "degraded") clear()
+  })
   const voiceListen = () => {
     if (
       voice.settings().mode !== "hands-free" ||
+      voice.status() === "off" ||
       voice.status() === "degraded" ||
       !voice.cascade() ||
       speech.active() ||
@@ -1552,14 +1564,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     )
       return
     if (isBusy()) {
-      setTimeout(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")), 100)
+      if (retry !== undefined) return
+      const origin = speechScope()
+      const generation = epoch
+      retry = setTimeout(() => {
+        retry = undefined
+        if (generation !== epoch || speechScope() !== origin) return
+        voiceListen()
+      }, 100)
       return
     }
+    clear()
     startSpeech()
   }
   window.addEventListener("rayaVoiceListen", voiceListen)
-  onCleanup(() => window.removeEventListener("rayaVoiceListen", voiceListen))
+  onCleanup(() => {
+    clear()
+    window.removeEventListener("rayaVoiceListen", voiceListen)
+  })
   const voiceCancel = () => {
+    clear()
     voiceSession.cancel()
     speech.cancel()
   }

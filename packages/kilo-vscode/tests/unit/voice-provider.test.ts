@@ -14,9 +14,9 @@ test("actual VoiceProvider fences sequential handoff failures, Stop and reload",
   const timer = setTimeout(() => child.kill(), 45_000)
   const code = await new Promise<number | null>((resolve, reject) => {
     child.on("error", reject)
-    child.on("exit", resolve)
+    child.on("close", resolve)
   }).finally(() => clearTimeout(timer))
   const output = Buffer.concat(chunks).toString()
-  expect(output).toContain("12 actual VoiceProvider implementation assertions passed")
+  expect(output).toContain("20 actual VoiceProvider implementation assertions passed")
   expect(code).toBe(0)
 }, 50_000)

@@ -147,6 +147,34 @@ test("Memory helper returns bounded successful bytes only after all original joi
   })
 })
 
+test("Memory helper surfaces only the fixed historical guard location after original joins", async () => {
+  const raw =
+    "Historical capture revision refused; stage=image; line=42; caller=review; caller_line=123; class=FileNotFoundError.\n"
+  const error = await command(
+    process.execPath,
+    ["-e", `process.stderr.write(${JSON.stringify(raw)});process.exitCode=1`],
+    {},
+  ).catch((err: unknown) => err)
+  expect(error).toMatchObject({
+    diagnostic: { exception: "FileNotFoundError", stage: "image", line: 42, caller: "review", callerLine: 123 },
+    receipt: { originalJoined: true, readersJoined: true, forced: false },
+  })
+  if (!(error instanceof Error)) throw new Error("Expected the original helper failure")
+  expect(error.message).toContain("Historical stage=image; line=42.")
+  expect(error.message).toContain("Caller=review; line=123.")
+  const secret = "private-path-" + crypto.randomUUID()
+  const invalid = raw.replace("caller=review", "caller=" + secret)
+  const refusal = await command(
+    process.execPath,
+    ["-e", `process.stderr.write(${JSON.stringify(invalid)});process.exitCode=1`],
+    {},
+  ).catch((err: unknown) => err)
+  expect(refusal).toMatchObject({ diagnostic: { exception: "unclassified" } })
+  if (!(refusal instanceof Error)) throw new Error("Expected the original helper refusal")
+  expect(refusal.message).not.toContain(secret)
+  expect(JSON.stringify(refusal)).not.toContain(secret)
+})
+
 test("Memory helper retains actual spawn error and failed-child reader closure", async () => {
   const file = path.join(tmpdir(), "raya-absent-helper-" + crypto.randomUUID(), "absent.exe")
   const error = await command(file, [], {}).then(

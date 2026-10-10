@@ -236,7 +236,7 @@ def review(cfg):
         records = {row['relative'].casefold(): row for row in value['files']}
         candidates = []
         for key, state in states.items():
-            if key == turn['id'] or key in used or not state['changes']:
+            if key == turn['id'] or key in used or key not in operations or not state['changes']:
                 continue
             if all(records.get(row['path'].casefold()) == dict(relative=row['path'], sha256=row['new_sha256'], classification='general', review='approved') for row in state['changes']):
                 later, checked, data = effect(key)
@@ -310,10 +310,29 @@ def review(cfg):
     return dict(format='raya.memory.capture-revisions.v1', effect=effectvalue, policySHA=current, chain=list(reversed(used)), membership=[item.name for item in names], ignore_present=ignore.exists(), witnesses=list(witnesses.values()), requestSettlement=False, replay=False, indexConfirmed=False)
 
 
+def diagnostic(err):
+    classes = {AssertionError: 'AssertionError', ValueError: 'ValueError', TypeError: 'TypeError', KeyError: 'KeyError', OSError: 'OSError', RuntimeError: 'RuntimeError', FileNotFoundError: 'FileNotFoundError', PermissionError: 'PermissionError', NotADirectoryError: 'NotADirectoryError', IsADirectoryError: 'IsADirectoryError'}
+    name = classes.get(type(err), 'Exception')
+    stage = 'main'
+    line = 0
+    caller = 'main'
+    prior = 0
+    trace = err.__traceback__
+    while trace:
+        code = trace.tb_frame.f_code
+        if code.co_filename == __file__ and code.co_name in {'<module>', 'review', 'image', 'members', 'effect', 'operation'}:
+            caller, prior = stage, line
+            stage = 'main' if code.co_name == '<module>' else code.co_name
+            line = trace.tb_lineno
+        trace = trace.tb_next
+    location = f'; caller={caller}; caller_line={prior}' if prior else ''
+    return f'Historical capture revision refused; stage={stage}; line={line}{location}; class={name}.'
+
+
 if __name__ == '__main__':
     try:
         assert len(sys.argv) == 2 and len(sys.argv[1].encode()) <= 8192
         print(json.dumps(review(json.loads(sys.argv[1])), sort_keys=True, separators=(',', ':')))
-    except Exception:
-        print('Historical capture revision chain could not be verified.', file=sys.stderr)
+    except Exception as err:
+        print(diagnostic(err), file=sys.stderr)
         sys.exit(1)

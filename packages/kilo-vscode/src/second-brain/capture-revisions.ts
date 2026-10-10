@@ -6,7 +6,7 @@ import { directory, environment, image } from "./control/identity"
 import { check } from "./control/frames"
 import { command } from "./control/command"
 
-const pin = "f2264e433158029edfa51f4c2ea1d53f526b6dfcaac25d6edfcc4a88fcf647e1"
+const pin = "8ee7bc82dc5e1e2b15bbf51a48e678833fc6d3a8ea4116521dc89e36fc3e5259"
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const schema = z
   .object({

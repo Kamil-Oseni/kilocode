@@ -14,14 +14,14 @@ export async function image(name: string, limit = 1048576) {
   const held = await file(name, "r")
   const result = await (async () => {
     const initial = await held.stat({ bigint: true })
-    const buffer = Buffer.alloc(limit + 1)
+    const buffer = Buffer.alloc(Number(before.size) + 1)
     let offset = 0
     while (offset < buffer.length) {
       const next = await held.read(buffer, offset, buffer.length - offset, offset)
       if (!next.bytesRead) break
       offset += next.bytesRead
     }
-    check(offset <= limit, "Image read exceeded bound")
+    check(offset <= Number(before.size), "Image read exceeded bound")
     const raw = buffer.subarray(0, offset)
     const final = await held.stat({ bigint: true })
     const after = await lstat(name, { bigint: true })

@@ -2,6 +2,38 @@ import type { SpawnOptions } from "node:child_process"
 import { spawn } from "../../util/process"
 import { createHash } from "node:crypto"
 
+function classify(stderr: string) {
+  const classes = [
+    "AssertionError",
+    "KeyError",
+    "MemoryError",
+    "ModuleNotFoundError",
+    "ImportError",
+    "PermissionError",
+    "FileNotFoundError",
+    "RuntimeError",
+    "ValueError",
+    "TypeError",
+    "OSError",
+  ]
+  const history =
+    /^Historical capture revision refused; stage=(main|review|image|members|effect|operation); line=([1-9][0-9]{0,5});(?: caller=(main|review|image|members|effect|operation); caller_line=([1-9][0-9]{0,5});)? class=(AssertionError|ValueError|TypeError|KeyError|FileNotFoundError|PermissionError|NotADirectoryError|IsADirectoryError|OSError|RuntimeError|Exception)\.\r?\n?$/.exec(
+      stderr,
+    )
+  const exception =
+    history?.[5] ?? classes.find((name) => new RegExp(`(?:^|\\r?\\n)${name}(?::|\\r?$)`).test(stderr)) ?? "unclassified"
+  return {
+    fields: {
+      exception,
+      ...(history ? { stage: history[1], line: Number(history[2]) } : {}),
+      ...(history?.[3] ? { caller: history[3], callerLine: Number(history[4]) } : {}),
+    },
+    suffix:
+      (history ? `Historical stage=${history[1]}; line=${history[2]}. ` : "") +
+      (history?.[3] ? `Caller=${history[3]}; line=${history[4]}. ` : ""),
+  }
+}
+
 /** A deadline fences acceptance; the original child and both readers still join naturally. */
 export async function command(file: string, args: string[], opts: SpawnOptions, timeout = 15000, bound = 65536) {
   if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 15000)
@@ -74,21 +106,9 @@ export async function command(file: string, args: string[], opts: SpawnOptions, 
       stderrBase64: Buffer.concat(chunks.stderr).toString("base64"),
     })
     const digest = (name: "stdout" | "stderr") => createHash("sha256").update(Buffer.concat(chunks[name])).digest("hex")
-    const classes = [
-      "MemoryError",
-      "ModuleNotFoundError",
-      "ImportError",
-      "PermissionError",
-      "FileNotFoundError",
-      "RuntimeError",
-      "ValueError",
-      "TypeError",
-      "OSError",
-    ]
-    const exception =
-      classes.find((name) => new RegExp(`(?:^|\\r?\\n)${name}(?::|\\r?$)`).test(output.stderr)) ?? "unclassified"
+    const known = classify(output.stderr)
     const diagnostic = Object.freeze({
-      exception,
+      ...known.fields,
       stdoutSHA256: digest("stdout"),
       stderrSHA256: digest("stderr"),
       stdoutRetained: Math.min(counts.stdout, bound),
@@ -98,7 +118,9 @@ export async function command(file: string, args: string[], opts: SpawnOptions, 
     const message =
       `Memory helper failures retained after original joins: exit=${result.code}; signal=${result.signal}; ` +
       `stdoutEOF=${eof.stdout}; stderrEOF=${eof.stderr}; stderrBytes=${counts.stderr}; ` +
-      `expired=${state.expired}; truncated=${diagnostic.truncated}; stderrClass=${exception}. Original operation remains unconfirmed.`
+      `expired=${state.expired}; truncated=${diagnostic.truncated}; stderrClass=${known.fields.exception}. ` +
+      known.suffix +
+      `Original operation remains unconfirmed.`
     const error = Object.assign(new AggregateError(errors, message), { receipt, diagnostic })
     // Original bytes are available to explicit diagnostics, but never serialized into UI/audit records.
     Object.defineProperty(error, "output", { value: output, enumerable: false, writable: false, configurable: false })

@@ -1,12 +1,13 @@
-import { afterAll, beforeAll, expect, test } from "bun:test"
+import { afterAll, beforeAll, expect, spyOn, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 import { release } from "../../src/second-brain/control/catalog-capture"
 import { project } from "../../src/second-brain/managed/upgrade"
+import * as frames from "../../src/second-brain/control/frames"
 
 type Image = { path: string; bytes: number; sha256: string; identity: string[] }
-type Fixture = { raw: string; rows: Image[]; directory: { path: string; identity: string[] } }
+type Fixture = { raw: string; bulk: string; rows: Image[]; directory: { path: string; identity: string[] } }
 let root: string
 let fixture: Fixture
 
@@ -28,13 +29,19 @@ def image(file):
 for name in pins:
  files.append(image(root/'prior'/name));rows.append(image(root/'next'/name))
 rows.append(image(root/'next'/'supervise.py'))
+extra=[];folders=[]
+for index in range(128):
+ file=root/('dependency-'+str(index)+'.txt');file.write_bytes(b'owned projection inventory');extra.append(image(file))
+for index in range(32):
+ folder=root/('directory-'+str(index));folder.mkdir();info=folder.lstat();folders.append({'path':str(folder),'identity':[info.st_dev,info.st_ino,info.st_ctime_ns]})
 directories=[]
 for directory in (root,root/'prior'):
  info=directory.lstat();directories.append({'path':str(directory),'identity':[info.st_dev,info.st_ino,info.st_ctime_ns]})
 info=(root/'next').lstat();directory={'path':str(root/'next'),'identity':[str(info.st_dev),str(info.st_ino),str(info.st_ctime_ns)]}
 plan={'format':'raya.memory.managed.supervisor','version':1,'kind':'memory','root':str(root),'source':str(root/'prior'),'source_sha256':pins,'files':files,'directories':directories,'retained':{'identity':[18446744073709551615,1791503155482873601]}}
+bulk={**plan,'files':files+extra,'directories':directories+folders}
 for row in rows: row['identity']=[str(value) for value in row['identity']]
-print(json.dumps({'raw':json.dumps(plan,separators=(',',':')),'rows':rows,'directory':directory}))`
+print(json.dumps({'raw':json.dumps(plan,separators=(',',':')),'bulk':json.dumps(bulk,separators=(',',':')),'rows':rows,'directory':directory}))`
   const child = Bun.spawn(
     [
       "D:/Raya/Services/Packaging/Python/3.12.14/python.exe",
@@ -98,6 +105,37 @@ test("paired Retrieval plan preserves its original source and pin tokens", () =>
   const end = raw.indexOf(',"files":')
   expect(output).toContain(raw.slice(begin, end))
   expect(output).toContain('"retained":{"identity":[18446744073709551615,1791503155482873601]}')
+})
+
+test("upgrade parses the complete native inventory only twice without reparsing each row", () => {
+  // Call-through instrumentation counts the real strict parser; no parser results are replaced.
+  const held = spyOn(frames, "document")
+  try {
+    const output = run(fixture.bulk).toString()
+    expect(held).toHaveBeenCalledTimes(2)
+    const original = JSON.parse(fixture.bulk)
+    const selected = JSON.parse(output)
+    expect(selected.files).toHaveLength(142)
+    expect(selected.directories).toHaveLength(35)
+    expect(selected.files.slice(13, -1)).toEqual(original.files.slice(13))
+    expect(selected.directories.slice(0, -1)).toEqual(original.directories)
+    expect(output).toContain('"retained":{"identity":[18446744073709551615,1791503155482873601]}')
+    for (const row of fixture.rows) expect(output).toContain('"identity":[' + row.identity.join(",") + "]")
+  } finally {
+    held.mockRestore()
+  }
+})
+
+test("one complete parse still refuses duplicate fields and nonobject inventory rows", () => {
+  expect(() => run(fixture.raw.replace('"files":[', '"files":[null,'))).toThrow("Object required")
+  expect(() => run(fixture.raw.replace('"directories":[', '"directories":[null,'))).toThrow("Object required")
+  expect(() => run(fixture.raw.replace('"files":[', '"files":{},"ignored":['))).toThrow()
+  expect(() => run(fixture.raw.replace('"directories":[', '"directories":{},"ignored":['))).toThrow()
+  expect(() => run(fixture.raw.replace('"sha256":', '"sha256":"' + "f".repeat(64) + '","sha256":'))).toThrow(
+    "Duplicate JSON field",
+  )
+  expect(() => run(fixture.raw.replace('"identity":[', '"identity":[],"identity":['))).toThrow("Duplicate JSON field")
+  expect(() => run(fixture.raw.replace('"path":', '"path":null,"path":'))).toThrow("Duplicate JSON field")
 })
 
 test("upgrade accepts the exact retained thirteen-file cohort and refuses a mixed historical release", () => {

@@ -9,13 +9,39 @@ import sys
 from pathlib import Path
 import os
 import importlib.util
+import subprocess
 import httpx
 from capture_recovery_test import Recovery
 from capture_recovery import review as original
-from capture_revision import review
+from capture_revision import review, diagnostic
 
 
 class Revisions(Recovery):
+    def test_actual_helper_failure_diagnostics_do_not_print_private_input(self):
+        helper = Path(__file__).with_name('capture_revision.py')
+        result = subprocess.run([sys.executable, '-I', '-S', '-B', str(helper), '{"private-note-secret":'], capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, b'')
+        self.assertRegex(result.stderr.decode(), r'^Historical capture revision refused; stage=main; line=[1-9]\d*; class=Exception\.\r?\n$')
+        self.assertNotIn(b'private-note-secret', result.stderr)
+        self.assertNotIn(str(helper).encode(), result.stderr)
+
+    def test_diagnostics_expose_only_static_stage_line_and_exception_class(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg['pins'] = {'private-path-and-note-secret': 'private-exception-secret'}
+        try:
+            review(cfg)
+        except Exception as err:
+            text = diagnostic(err)
+        else:
+            self.fail('Wrong selected pins must refuse')
+        self.assertRegex(text, r'^Historical capture revision refused; stage=review; line=\d+; class=AssertionError\.$')
+        self.assertNotIn('private', text)
+        self.assertNotIn(str(self.notes), text)
+        class Secret(Exception):
+            pass
+        self.assertEqual(diagnostic(Secret('private-exception-secret')), 'Historical capture revision refused; stage=main; line=0; class=Exception.')
+
     def setUp(self):
         super().setUp()
         self.anchor = original(self.cfg)
@@ -174,6 +200,58 @@ class Revisions(Recovery):
         self.later('after-new-anchor')
         self.assertEqual(review(self.cfg)['effect'], anchor)
         self.assertEqual(len(review(self.cfg)['chain']), 1)
+
+    def test_actual_non_capture_journal_before_anchor_is_not_a_backward_capture_candidate(self):
+        from notes import Store
+        from admission import Store as Admission
+        source = self.notes / 'System/manual-source.txt'
+        source.write_bytes(b'Actual explicit non-capture source')
+        change = str(uuid.uuid4())
+        result = Store(self.notes).apply(dict(id=change, changes=[dict(path='Projects/Manual.md', expected=None, content='# Explicit manual note\n')], sources=[dict(path=str(source), sha256=hashlib.sha256(source.read_bytes()).hexdigest(), kind='document', event_time=None)]))
+        self.assertEqual(result['status'], 'committed')
+        file = self.notes / 'System/general-admission.json'
+        policy = json.loads(file.read_bytes())
+        policy['revision'] += 1
+        policy['files'].append(dict(relative='Projects/Manual.md', sha256=result['note_sha256']['Projects/Manual.md'], classification='general', review='approved'))
+        Admission(self.notes, existing=True).replace(policy, hashlib.sha256(file.read_bytes()).hexdigest())
+        predecessor = dict(self.cfg['turn'], root=str(self.notes), phase='published', receipt=self.anchor['inputSHA'], release=self.server.RELEASE)
+        body, result = self.later('anchor-after-real-journal', 'Areas')
+        self.cfg.update(bodySHA=result['operation']['request_sha256'], resultSHA=result['operation']['result_sha256'], turn=dict(id=body['id'], project=body['project'], sessionID=body['session'], messageID=body['message'], source_sha256=body['source_sha256']))
+        anchor = original(self.cfg)
+        self.cfg['history'] = {name: anchor[name] for name in ['policySHA', 'previousPolicySHA', 'journalSHA']}
+        self.cfg['history'].update(rows=[predecessor], operations=[])
+        later, _ = self.later('later-after-real-journal')
+        before = self.inventory()
+        self.assertEqual(review(self.cfg)['effect'], anchor)
+        self.assertEqual(self.inventory(), before)
+        self.assertFalse((self.notes / 'System/Capture' / change).exists())
+        input = self.notes / 'System/Capture' / later['id'] / 'input.json'
+        raw = input.read_bytes()
+        input.unlink()
+        with self.assertRaises(FileNotFoundError):
+            review(self.cfg)
+        input.write_bytes(raw)
+        self.assertEqual(review(self.cfg)['effect'], anchor)
+        cfg = copy.deepcopy(self.cfg)
+        cfg['history']['operations'] = []
+        with self.assertRaises(AssertionError):
+            review(cfg)
+        note = self.notes / 'Projects/Manual.md'
+        raw = note.read_bytes()
+        note.write_bytes(raw + b'Unexplained current drift')
+        with self.assertRaises(Exception):
+            review(self.cfg)
+        note.write_bytes(raw)
+        self.assertEqual(review(self.cfg)['effect'], anchor)
+        future = Store(self.notes).apply(dict(id=str(uuid.uuid4()), changes=[dict(path='Projects/Manual.md', expected=hashlib.sha256(raw).hexdigest(), content='# Later explicit manual change\n')], sources=[dict(path=str(source), sha256=hashlib.sha256(source.read_bytes()).hexdigest(), kind='document', event_time=None)]))
+        policy = json.loads(file.read_bytes())
+        policy['revision'] += 1
+        for row in policy['files']:
+            if row['relative'] == 'Projects/Manual.md':
+                row['sha256'] = future['note_sha256']['Projects/Manual.md']
+        Admission(self.notes, existing=True).replace(policy, hashlib.sha256(file.read_bytes()).hexdigest())
+        with self.assertRaises(AssertionError):
+            review(self.cfg)
 
     def test_same_bytes_policy_replacement_during_review_is_refused(self):
         from policy import Policy

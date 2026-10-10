@@ -146,12 +146,12 @@ export function project(
   const files = child(parsed.tree, "files")
   const directories = child(parsed.tree, "directories")
   check(files.type === "array" && directories.type === "array", "Original dependency inventory required")
+  check(Array.isArray(plan.files) && Array.isArray(plan.directories), "Original dependency inventory required")
+  const rows = plan.files
   const mapping = inventory(replacements, pins, prior, activated)
   const count = mapping.size
   const paths = new Set<string>()
-  const dirs = (directories.children ?? []).map((node) =>
-    object(document(Buffer.from(parsed.text.slice(node.offset, node.offset + node.length))).value),
-  )
+  const dirs = plan.directories.map((row) => object(row))
   check(
     dirs.some((item) => item.path === prior.path),
     "Original source directory missing",
@@ -162,8 +162,8 @@ export function project(
   )
   const found = new Set<string>()
   const changes: { node: { offset: number; length: number }; text: string }[] = (files.children ?? []).flatMap(
-    (node) => {
-      const item = object(document(Buffer.from(parsed.text.slice(node.offset, node.offset + node.length))).value)
+    (node, index) => {
+      const item = object(rows[index])
       check(typeof item.path === "string", "Original dependency path required")
       const key = normalize(item.path)
       check(!paths.has(key), "Duplicate original dependency refused")

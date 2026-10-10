@@ -243,30 +243,26 @@ testEffect(
                 },
               },
             })
-            yield* tasks
-              .runsFor(agent.id)
-              .pipe(
-                Effect.repeat({
-                  schedule: Schedule.spaced(10),
-                  until: (rows) => rows.some((row) => row.blockedReason === "waiting on you"),
-                }),
-                Effect.timeout("5 seconds"),
-              )
+            yield* tasks.runsFor(agent.id).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced(10),
+                until: (rows) => rows.some((row) => row.blockedReason === "waiting on you"),
+              }),
+              Effect.timeout("5 seconds"),
+            )
             GlobalBus.emit("event", {
               payload: {
                 type: "permission.replied",
                 properties: { sessionID: sid, requestID: "per_authority_receipt", reply: "once" },
               },
             })
-            const page = yield* inbox
-              .page(agent.id)
-              .pipe(
-                Effect.repeat({
-                  schedule: Schedule.spaced(10),
-                  until: (value) => value.messages.some((message) => message.kind === "system"),
-                }),
-                Effect.timeout("5 seconds"),
-              )
+            const page = yield* inbox.page(agent.id).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced(10),
+                until: (value) => value.messages.some((message) => message.kind === "system"),
+              }),
+              Effect.timeout("5 seconds"),
+            )
             const receipt = page.messages.find((message) => message.kind === "system")
             if (!receipt) throw new Error("Expected an authority receipt")
             const body = receipt.body

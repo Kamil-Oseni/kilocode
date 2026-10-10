@@ -1,6 +1,8 @@
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import path from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Database } from "@opencode-ai/core/database/database"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Git } from "../../../src/git"
 import { Storage } from "../../../src/storage/storage"
@@ -16,7 +18,7 @@ await Effect.runPromise(
   Effect.gen(function* () {
     const storage = yield* Storage.Service
     if (owner === "crash")
-        yield* mutate(
+      yield* mutate(
         storage,
         Effect.sync(() => process.exit(21)),
       )
@@ -32,7 +34,12 @@ await Effect.runPromise(
       })
     }
   }).pipe(
-    Effect.provide(Storage.layerFromDir(directory)),
+    Effect.provide(
+      Storage.layerWithDatabase(directory).pipe(
+        Layer.provide(Database.layerFromPath(path.join(path.dirname(directory), "authority.sqlite"))),
+        Layer.fresh,
+      ),
+    ),
     Effect.provide(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node]))),
   ),
 )

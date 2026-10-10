@@ -10,6 +10,8 @@ import { ProfileWriterLive } from "@/kilocode/migration/writer-live" // kilocode
 import { storageAdmission } from "@/kilocode/migration/storage-admission" // kilocode_change - cross-process JSON maintenance exclusion
 import * as bounded from "@/kilocode/storage/bounded-read" // kilocode_change - bounded receipt reads
 import { bind as scope } from "@/kilocode/migration/storage-scope" // kilocode_change - actual live storage selection metadata
+import { Database } from "@opencode-ai/core/database/database" // kilocode_change - original selected negative authority barrier
+import { make as effectAuthority } from "@/kilocode/storage/effect-authority" // kilocode_change - revoke before filesystem publication
 
 type Migration = (dir: string, fs: FSUtil.Interface, git: Git.Interface) => Effect.Effect<void, FSUtil.Error>
 
@@ -231,6 +233,12 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const git = yield* Git.Service
+      const selected = yield* Effect.serviceOption(Database.Service) // kilocode_change - no fallback database for standalone storage
+      const authority = effectAuthority(
+        fs,
+        Option.getOrUndefined(selected),
+        root ?? path.join(Global.Path.data, "storage"),
+      ) // kilocode_change
       const writer = storageAdmission(root ?? path.join(Global.Path.data, "storage"), admission) // kilocode_change
       const locks = yield* RcMap.make({
         lookup: () => TxReentrantLock.make(),
@@ -285,27 +293,40 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
           }),
         )
 
-      const mutate = <A, E>(
+      // kilocode_change start - original negative barrier precedes the existing filesystem write admission
+      const publication = <A, E>(
         key: string[],
-        fn: (target: string, rw: TxReentrantLock.TxReentrantLock) => Effect.Effect<A, E>,
+        mode: "create" | "replace" | "write" | "update" | "remove",
+        content: unknown,
+        update: ((value: unknown) => void) | undefined,
+        fn: (target: string, value: unknown) => Effect.Effect<A, E>,
+        read?: (target: string) => Effect.Effect<unknown, E>,
       ): Effect.Effect<A, E | FSUtil.Error> =>
-        Effect.gen(function* () {
-          const dir = (yield* state).dir
-          return yield* writer.run(
-            // kilocode_change - hold JSON root through settled mutation
-            Effect.scoped(
-              Effect.gen(function* () {
-                const target = file(dir, key)
-                return yield* fn(target, yield* RcMap.get(locks, target))
-              }),
-            ),
-          )
-        })
+        Effect.scoped(
+          Effect.gen(function* () {
+            key = [...key]
+            const dir = (yield* state).dir
+            const target = file(dir, key)
+            const rw = yield* RcMap.get(locks, target)
+            return yield* authority.run<A, E>(
+              key,
+              target,
+              rw,
+              mode,
+              content,
+              update,
+              (body) => writer.run(body),
+              (value) => fn(target, value),
+              read && (() => read(target)),
+            )
+          }),
+        )
+      // kilocode_change end
 
       const remove: Interface["remove"] = Effect.fn("Storage.remove")(function* (key: string[]) {
-        yield* mutate(key, (target, rw) =>
-          TxReentrantLock.withWriteLock(rw, fs.remove(target).pipe(Effect.catchIf(missing, () => Effect.void))),
-        )
+        yield* publication(key, "remove", undefined, undefined, (target) =>
+          fs.remove(target).pipe(Effect.catchIf(missing, () => Effect.void)),
+        ) // kilocode_change
       })
 
       const read: Interface["read"] = <T>(key: string[]) =>
@@ -330,22 +351,19 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
       // kilocode_change end
 
       const update: Interface["update"] = <T>(key: string[], fn: (draft: T) => void) =>
-        mutate(key, (target, rw) =>
-          TxReentrantLock.withWriteLock(
-            rw,
-            Effect.gen(function* () {
-              const content = yield* wrap(target, fs.readJson(target))
-              fn(content as T)
-              // kilocode_change start - publish updates atomically so failed replacements retain prior JSON
-              yield* publish(fs, target, content, true).pipe(Effect.asVoid)
-              // kilocode_change end
-              return content as T
-            }),
-          ),
+        // kilocode_change start - evaluate callback once before revocation, then exact-byte CAS under the original write gate
+        publication<T, Error>(
+          key,
+          "update",
+          undefined,
+          (value) => fn(value as T),
+          (target, value) => publish(fs, target, value, true).pipe(Effect.as(value as T)),
+          (target) => wrap(target, fs.readJson(target)),
         )
+      // kilocode_change end
 
       const write: Interface["write"] = (key: string[], content: unknown) =>
-        mutate(key, (target, rw) => TxReentrantLock.withWriteLock(rw, writeJson(target, content)))
+        publication(key, "write", content, undefined, writeJson) // kilocode_change
 
       const list: Interface["list"] = Effect.fn("Storage.list")(function* (prefix: string[]) {
         const dir = (yield* state).dir
@@ -361,13 +379,14 @@ const make = (root?: string, admission: ProfileWriterLive.Admission = ProfileWri
           .toSorted((a, b) => a.join("/").localeCompare(b.join("/")))
       })
 
-      const service = Service.of({ // kilocode_change - bind the original selected storage service below
+      const service = Service.of({
+        // kilocode_change - bind the original selected storage service below
         // kilocode_change start - keep receipt publication separate from legacy JSON write behavior
         create: (key, content) =>
-          mutate(key, (target, rw) => TxReentrantLock.withWriteLock(rw, publish(fs, target, content))),
+          publication(key, "create", content, undefined, (target, value) => publish(fs, target, value)),
         replace: (key, content) =>
-          mutate(key, (target, rw) =>
-            TxReentrantLock.withWriteLock(rw, publish(fs, target, content, true).pipe(Effect.asVoid)),
+          publication(key, "replace", content, undefined, (target, value) =>
+            publish(fs, target, value, true).pipe(Effect.asVoid),
           ),
         // kilocode_change end
         remove,
@@ -390,8 +409,16 @@ const layer = make()
 // kilocode_change start
 /** Storage rooted at an explicit directory — for tests and multi-instance isolation. */
 export const layerFromDir = (dir: string, admission?: ProfileWriterLive.Admission) => make(dir, admission)
+/** Explicit private Storage backed by the actual Database service dependency. */
+export const layerWithDatabase = (dir: string, admission?: ProfileWriterLive.Admission) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      return make(dir, admission).pipe(Layer.provide(Layer.succeed(Database.Service, database)))
+    }),
+  )
 // kilocode_change end
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, Git.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, Git.node, Database.node] }) // kilocode_change - capture original selected SQL service
 
 export * as Storage from "./storage"

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import { Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Database } from "@opencode-ai/core/database/database"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Git } from "@/git"
 import { Storage } from "@/storage/storage"
@@ -12,6 +13,12 @@ import { RayaTask } from "@/kilocode/task"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+
+const bound = (dir: string) =>
+  Storage.layerWithDatabase(dir).pipe(
+    Layer.provide(Database.layerFromPath(path.join(path.dirname(dir), "authority.sqlite"))),
+    Layer.fresh,
+  )
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 
@@ -32,7 +39,7 @@ describe("routine persistence", () => {
           [{ id: "legacy", agentID: agent.id, at: 1000, sessionID: SessionID.make("ses_legacy"), status: "complete" }],
         )
         return agent.id
-      }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+      }).pipe(Effect.provide(bound(directory)))
       yield* Effect.gen(function* () {
         const storage = yield* Storage.Service
         const tasks = RayaTask.make({ storage })
@@ -49,7 +56,7 @@ describe("routine persistence", () => {
           scheduleVersion: 2,
           trigger: { kind: "timer", id: "revised-occurrence", scheduledAt: 2000, observedAt: 2500 },
         })
-      }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+      }).pipe(Effect.provide(bound(directory)))
       yield* Effect.gen(function* () {
         const storage = yield* Storage.Service
         const tasks = RayaTask.make({ storage })
@@ -60,7 +67,7 @@ describe("routine persistence", () => {
           undefined,
           { kind: "timer", id: "revised-occurrence", scheduledAt: 2000, observedAt: 2500 },
         ])
-      }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+      }).pipe(Effect.provide(bound(directory)))
     }),
   )
 
@@ -99,7 +106,7 @@ describe("routine persistence", () => {
         yield* tasks.update(legacy[0].id, { schedule: { kind: "once", at } })
         expect((yield* tasks.preview(at))[0].note).toBe("Keep this note.")
         expect((yield* tasks.ready(at)).map((item) => item.id)).toEqual([legacy[0].id, valid.id])
-      }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+      }).pipe(Effect.provide(bound(directory)))
     }),
   )
 
@@ -121,7 +128,7 @@ describe("routine persistence", () => {
           }
           yield* storage.replace(["raya", "agent-runs", agent.id], [run])
           return (yield* tasks.runsFor(agent.id))[0]
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         yield* Effect.gen(function* () {
           const tasks = RayaTask.make({ storage: yield* Storage.Service })
           expect(
@@ -131,12 +138,12 @@ describe("routine persistence", () => {
           expect(yield* tasks.transition(waiting, { ...waiting, status: "running", blockedReason: undefined })).toBe(
             true,
           )
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         yield* Effect.gen(function* () {
           const tasks = RayaTask.make({ storage: yield* Storage.Service })
           expect(yield* tasks.transition(expected, { ...expected, status: "error" })).toBe(false)
           expect((yield* tasks.runsFor(expected.agentID))[0]?.status).toBe("running")
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
       }),
     30_000,
   )
@@ -157,7 +164,7 @@ describe("routine persistence", () => {
             status: "running",
           })
           return (yield* tasks.runsFor(agent.id))[0]
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         const results = yield* Effect.all(
           Array.from({ length: 3 }, (_, index) =>
             Effect.gen(function* () {
@@ -167,7 +174,7 @@ describe("routine persistence", () => {
                 status: "complete",
                 outcome: { kind: "notify", summary: String(index), cost: 0 },
               })
-            }).pipe(Effect.provide(Storage.layerFromDir(directory))),
+            }).pipe(Effect.provide(bound(directory))),
           ),
           { concurrency: 3 },
         )
@@ -181,7 +188,7 @@ describe("routine persistence", () => {
           ).toBe(false)
           expect(yield* tasks.transition(current, { ...current, status: "running" })).toBe(false)
           expect((yield* tasks.runsFor(expected.agentID))[0]).toEqual(current)
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
       }),
     30_000,
   )
@@ -198,7 +205,7 @@ describe("routine persistence", () => {
             objective: "Work",
             schedule: { kind: "manual" },
           })
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         const fixture = fileURLToPath(new URL("./fixtures/task-write.ts", import.meta.url))
         const crash = yield* spawner.exitCode(
           ChildProcess.make(process.execPath, [fixture, directory, "crash", seed.id], {
@@ -228,7 +235,7 @@ describe("routine persistence", () => {
               .flat()
               .sort(),
           )
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
       }),
     30_000,
   )
@@ -244,7 +251,7 @@ describe("routine persistence", () => {
             objective: "Work",
             schedule: { kind: "manual" },
           })
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         const created = yield* Effect.all(
           Array.from({ length: 12 }, (_, index) =>
             Effect.gen(function* () {
@@ -253,7 +260,7 @@ describe("routine persistence", () => {
                 objective: "Work",
                 schedule: { kind: "manual" },
               })
-            }).pipe(Effect.provide(Storage.layerFromDir(directory))),
+            }).pipe(Effect.provide(bound(directory))),
           ),
           { concurrency: 12 },
         )
@@ -262,7 +269,7 @@ describe("routine persistence", () => {
           expect((yield* tasks.list()).map((item) => item.id).sort()).toEqual(
             [seed.id, ...created.map((item) => item.id)].sort(),
           )
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         yield* Effect.all(
           Array.from({ length: 12 }, (_, index) =>
             Effect.gen(function* () {
@@ -275,7 +282,7 @@ describe("routine persistence", () => {
                 status: "complete",
               })
               yield* tasks.append(seed.id, `note-${index}`)
-            }).pipe(Effect.provide(Storage.layerFromDir(directory))),
+            }).pipe(Effect.provide(bound(directory))),
           ),
           { concurrency: 12 },
         )
@@ -287,7 +294,7 @@ describe("routine persistence", () => {
           expect((yield* tasks.recall(seed.id)).split("\n\n").sort()).toEqual(
             Array.from({ length: 12 }, (_, index) => `note-${index}`).sort(),
           )
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
       }),
     30_000,
   )
@@ -301,21 +308,21 @@ describe("routine persistence", () => {
         const agent = yield* Effect.gen(function* () {
           const tasks = RayaTask.make({ storage: yield* Storage.Service })
           return yield* tasks.create({ name: "A", objective: "A".repeat(size), schedule: { kind: "manual" } })
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         const writer = Effect.gen(function* () {
           const tasks = RayaTask.make({ storage: yield* Storage.Service })
           for (let index = 0; index < 20; index++) {
             const name = index % 2 ? "A" : "B"
             yield* tasks.update(agent.id, { name, objective: name.repeat(size) })
           }
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         const reader = Effect.gen(function* () {
           const tasks = RayaTask.make({ storage: yield* Storage.Service })
           for (let index = 0; index < 40; index++) {
             const current = yield* tasks.get(agent.id)
             expect(current.objective).toBe(current.name.repeat(size))
           }
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
         yield* Effect.all([writer, reader], { concurrency: 2 })
       }),
     30_000,
@@ -327,7 +334,7 @@ describe("routine persistence", () => {
       Effect.gen(function* () {
         const directory = path.join(yield* tmpdirScoped(), "storage")
         const fs = yield* FSUtil.Service
-        const layer = Storage.layerFromDir(directory)
+        const layer = bound(directory)
         const original = yield* Effect.gen(function* () {
           const tasks = RayaTask.make({ storage: yield* Storage.Service })
           const agent = yield* tasks.create({ name: "Original", objective: "Work", schedule: { kind: "manual" } })
@@ -342,7 +349,7 @@ describe("routine persistence", () => {
           yield* tasks.remember(agent.id, "Original memory")
           return { agent, run: stored }
         }).pipe(Effect.provide(layer))
-        const faulty = Storage.layerFromDir(directory).pipe(
+        const faulty = bound(directory).pipe(
           Layer.provide(
             Layer.succeed(FSUtil.Service, {
               ...fs,
@@ -367,7 +374,7 @@ describe("routine persistence", () => {
           expect(yield* tasks.get(original.agent.id)).toEqual(original.agent)
           expect(yield* tasks.runsFor(original.agent.id)).toEqual([original.run])
           expect(yield* tasks.recall(original.agent.id)).toBe("Original memory")
-        }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+        }).pipe(Effect.provide(bound(directory)))
       }),
     30_000,
   )

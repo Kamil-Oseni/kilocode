@@ -15,7 +15,7 @@ for (const disabled of [false, true]) {
         rows.push(await req.json())
         return Response.json({
           model: "fixture",
-          message: { role: "assistant", content: text },
+          message: { role: "assistant", content: JSON.stringify({ kind: "text", content: text }) },
           done: true,
           done_reason: "stop",
         })
@@ -51,10 +51,10 @@ for (const disabled of [false, true]) {
       const body = await response.json()
       expect(body.choices[0].message.content).toBe(text)
       expect(rows).toHaveLength(1)
-      expect(rows[0].format).toBeUndefined()
-      expect(rows[0].tools).toEqual(disabled ? undefined : [])
+      expect(rows[0].format).toEqual(ToolEnvelope.schema([], "none"))
+      expect(rows[0].tools).toBeUndefined()
       expect(rows[0].messages).toEqual([
-        { role: "system", content: "Existing agent instructions\n\n" + ToolEnvelope.reply() },
+        { role: "system", content: "Existing agent instructions\n\n" + ToolEnvelope.final() },
         { role: "user", content: `Reply exactly ${JSON.stringify(text)}` },
         {
           role: "assistant",

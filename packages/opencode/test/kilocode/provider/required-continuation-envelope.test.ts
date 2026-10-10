@@ -39,6 +39,7 @@ test("required and automatic continuation tools retain the configured envelope a
     method: "POST",
     body: JSON.stringify({
       model: "fixture",
+      max_tokens: 1024,
       messages: [{ role: "user", content: "Continue the delegated task" }],
       tools: Object.keys(tools).map((name) => ({ type: "function", function: { name, parameters: {} } })),
       tool_choice: choice,

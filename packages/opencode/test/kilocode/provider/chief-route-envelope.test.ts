@@ -23,6 +23,7 @@ const args = {
 const envelope = JSON.stringify({ kind: "tool", name: "chief_route", arguments: args })
 const request = (choice = "required", stream = false) => ({
   model: "fixture",
+  max_tokens: 1024,
   messages: [{ role: "user", content: "Route this synthetic request" }],
   tools,
   tool_choice: choice,
@@ -132,7 +133,7 @@ test("required sole Chief routing sends its actual immutable schema and preserve
   }
 })
 
-test("absent opt-in, absent tools and disabled tools keep native protocol", async () => {
+test("absent opt-in keeps native protocol and inactive tools use final envelopes", async () => {
   const captured: { format?: unknown; tools?: unknown }[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -144,7 +145,7 @@ test("absent opt-in, absent tools and disabled tools keep native protocol", asyn
         ...row("native"),
         message: {
           role: "assistant",
-          content: "native",
+          content: body.format ? JSON.stringify({ kind: "text", content: "native" }) : "native",
           tool_calls: body.tools?.length
             ? [{ function: { name: body.tools[0].function.name, arguments: {} } }]
             : undefined,
@@ -165,7 +166,9 @@ test("absent opt-in, absent tools and disabled tools keep native protocol", asyn
         body: JSON.stringify(item.value),
       })
       expect((await response.json()).choices[0].message.content).toBe("native")
-      expect(captured.at(-1)?.format).toBeUndefined()
+      expect(captured.at(-1)?.format).toEqual(
+        item.cfg.localInferenceToolFormat ? ToolEnvelope.schema([], "none") : undefined,
+      )
     }
     expect(captured).toHaveLength(cases.length)
   } finally {

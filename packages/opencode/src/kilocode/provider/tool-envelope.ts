@@ -11,14 +11,31 @@ const wire = z.discriminatedUnion("kind", [
 
 /** Outer protocol validation only. Tool execution retains semantic/evidence authority. */
 export namespace ToolEnvelope {
+  export function mode(enabled: boolean, count: number, choice?: "auto" | "required" | "none", structured = false) {
+    if (!enabled) return undefined
+    if (choice === "required") return "required"
+    if (count > 0 && choice !== "none") return choice ?? "auto"
+    return structured ? undefined : "none"
+  }
+
+  export function final() {
+    return (
+      "Return exactly one JSON envelope with kind text and content containing the final reply. No tool calls are allowed. " +
+      reply()
+    )
+  }
+
   export function reply() {
     return "After successful work, obey the user's final-response format. If an exact reply is requested, copy it verbatim, preserving capitalization and whitespace, with no status announcement, summary, or explanation. A Goal complete tool result does not change that reply requirement."
   }
 
-  export function schema(tools: readonly Tool[], choice: "auto" | "required") {
-    if (!tools.length || tools.length > 128 || new Set(tools.map((tool) => tool.function.name)).size !== tools.length)
+  export function schema(tools: readonly Tool[], choice: "auto" | "required" | "none") {
+    if (
+      choice !== "none" &&
+      (!tools.length || tools.length > 128 || new Set(tools.map((tool) => tool.function.name)).size !== tools.length)
+    )
       throw new Error("Invalid envelope tool definitions")
-    const calls = tools.map((tool) => {
+    const calls = (choice === "none" ? [] : tools).map((tool) => {
       if (!tool.function.name.trim()) throw new Error("Invalid envelope tool name")
       return {
         type: "object",
@@ -50,7 +67,7 @@ export namespace ToolEnvelope {
             },
           ]
         }),
-        ...(choice === "auto"
+        ...(choice !== "required"
           ? [
               {
                 type: "object",
@@ -83,12 +100,13 @@ export namespace ToolEnvelope {
     return value
   }
 
-  export function decode(text: string, names: ReadonlySet<string>, choice: "auto" | "required") {
+  export function decode(text: string, names: ReadonlySet<string>, choice: "auto" | "required" | "none") {
     const value = wire.parse(JSON.parse(text))
     if (value.kind === "text") {
-      if (choice !== "auto") throw new Error("Required envelope omitted tools")
+      if (choice === "required") throw new Error("Required envelope omitted tools")
       return { content: value.content }
     }
+    if (choice === "none") throw new Error("Final envelope contains tools")
     const calls = value.kind === "tool" ? [{ name: value.name, arguments: value.arguments }] : value.calls
     if (calls.some((call) => !names.has(call.name))) throw new Error("Unadvertised envelope tool")
     if (calls.length > 1 && calls.some((call) => call.name === "chief_route"))

@@ -19,6 +19,7 @@ const options = {
 }
 const request = (choice = "auto", stream = false) => ({
   model: "fixture",
+  max_tokens: 1024,
   messages: [{ role: "user", content: "Verify" }],
   tools,
   tool_choice: choice,
@@ -264,7 +265,7 @@ test("terminal auto envelope retains original EOF and cancellation join", async 
   expect(state.cancelled).toBe(true)
 })
 
-test("none and inactive capability retain native protocol; invalid envelopes never lower", async () => {
+test("none uses final envelopes and inactive capability retains native protocol; invalid envelopes never lower", async () => {
   const rows: Record<string, unknown>[] = []
   const state = { content: '{"kind":"tool","name":"foreign","arguments":{}}' }
   const server = Bun.serve({
@@ -273,7 +274,15 @@ test("none and inactive capability retain native protocol; invalid envelopes nev
     async fetch(req) {
       const body = await req.json()
       rows.push(body)
-      return Response.json(row(body.format ? state.content : "native"))
+      return Response.json(
+        row(
+          body.format
+            ? body.format.anyOf.length === 1 && body.format.anyOf[0].properties.kind.const === "text"
+              ? JSON.stringify({ kind: "text", content: "native" })
+              : state.content
+            : "native",
+        ),
+      )
     },
   })
   try {
@@ -284,7 +293,7 @@ test("none and inactive capability retain native protocol; invalid envelopes nev
         body: JSON.stringify(request("none")),
       })
       expect((await value.json()).choices[0].message.content).toBe("native")
-      expect(rows.at(-1)?.format).toBeUndefined()
+      expect(rows.at(-1)?.format).toEqual(cfg.localInferenceToolFormat ? ToolEnvelope.schema([], "none") : undefined)
       expect(rows.at(-1)?.tools).toBeUndefined()
     }
     const send = ollama(options, fetch)

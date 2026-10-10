@@ -238,7 +238,7 @@ async function required(
   names: ReadonlySet<string>,
   stream: boolean,
   signal?: AbortSignal | null,
-  envelope?: "auto" | "required",
+  envelope?: "auto" | "required" | "none",
 ) {
   const rows: z.infer<typeof response>[] = []
   const decoder = new TextDecoder("utf-8", { fatal: true })
@@ -593,10 +593,10 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
     )
       throw new OllamaBridgeError()
     const protocol = options.localInferenceToolFormat === "completion-envelope-v1"
-    const envelope =
-      protocol && advertised.size > 0 && data.tool_choice !== "none" ? (data.tool_choice ?? "auto") : undefined
+    const output = data.response_format !== undefined && data.response_format.type !== "text"
+    const envelope = ToolEnvelope.mode(protocol, advertised.size, data.tool_choice, output)
     if (envelope && data.response_format && data.response_format.type !== "text") throw new OllamaBridgeError()
-    const originals = envelope ? schemas(options) : undefined
+    const originals = envelope && envelope !== "none" ? schemas(options) : undefined
     if (originals) {
       if (
         originals.length !== advertised.size ||
@@ -610,9 +610,9 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
         return { ...tool, function: { ...tool.function, parameters: original.parameters } }
       })
     }
-    const format = envelope ? OllamaPrompt.format(data.tools!, envelope) : undefined
+    const format = envelope ? OllamaPrompt.format(data.tools ?? [], envelope) : undefined
     const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined)
-    const messages = OllamaPrompt.project(data.messages, data.tools ?? [], protocol, data.tool_choice)
+    const messages = OllamaPrompt.project(data.messages, data.tools ?? [], protocol, data.tool_choice, output)
     const size =
       typeof options.ollamaContext === "number"
         ? options.ollamaContext

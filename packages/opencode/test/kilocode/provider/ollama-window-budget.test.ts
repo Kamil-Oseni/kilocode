@@ -389,76 +389,105 @@ test("native envelope count capacity discovers 129 valid tools even without a kn
 
 test("canonical native preparation matches real SDK Mistral and interleaved history transformation", async () => {
   for (const fixture of ["mistral-fixture", "interleaved-fixture"]) {
-    const model = {
-      id: fixture,
-      providerID: "gemma-fixture",
-      api: { id: fixture, npm: "@ai-sdk/openai-compatible" },
-      capabilities: {
-        input: { text: true },
-        interleaved: fixture === "interleaved-fixture" ? { field: "reasoning_content" } : false,
-      },
-      limit: { context: 32768, output: 1024 },
-    } as Provider.Model
-    const messages: ModelMessage[] = [
-      { role: "system", content: "Retain exact fixed instructions" },
-      { role: "user", content: "Read the actual fixture" },
-      {
-        role: "assistant",
-        content: [
-          { type: "reasoning", text: "Retained synthetic reasoning" },
-          { type: "tool-call", toolCallId: "fixture_original_123", toolName: "question", input: { text: "literal" } },
-        ],
-      },
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: "fixture_original_123",
-            toolName: "question",
-            output: { type: "text", value: "Actual fixture output" },
-          },
-        ],
-      },
-      { role: "user", content: "Continue from the tool result" },
-    ]
-    const original = structuredClone(messages)
-    const selected = { question: tools.question }
-    const transform = { store: false }
-    const prepared = await Prompt.prepare(options, model, messages, selected, "auto", transform)
-    if (!prepared) throw new Error("Actual native prompt projection required")
-    expect(messages).toEqual(original)
-    const provider = createOpenAICompatible({
-      name: "fixture",
-      baseURL: `${server.url}v1`,
-      fetch: Object.assign(ollama({ ...options, ollamaModel: fixture, ollamaContext: 32768 }, fetch), {
-        preconnect: fetch.preconnect,
-      }),
-    })
-    const before = rows.length
-    const stream = streamText({
-      model: wrapLanguageModel({
-        model: provider.chatModel(fixture),
-        middleware: {
-          specificationVersion: "v3",
-          transformParams: async (args) => {
-            const adapted = ProviderTransform.message(args.params.prompt as unknown as ModelMessage[], model, transform)
-            return { ...args.params, prompt: adapted as unknown as typeof args.params.prompt }
-          },
+    for (const mode of ["auto", "none", "empty"] as const) {
+      const model = {
+        id: fixture,
+        providerID: "gemma-fixture",
+        api: { id: fixture, npm: "@ai-sdk/openai-compatible" },
+        capabilities: {
+          input: { text: true },
+          interleaved: fixture === "interleaved-fixture" ? { field: "reasoning_content" } : false,
         },
-      }),
-      messages,
-      tools: selected,
-      toolChoice: "auto",
-      maxOutputTokens: 1024,
-      maxRetries: 0,
-    })
-    expect(await stream.text).toBe("Synthetic bounded reply")
-    expect(rows).toHaveLength(before + 1)
-    expect(rows.at(-1)?.messages).toEqual(prepared.messages)
-    expect(Prompt.measure(rows.at(-1)!.messages, []).normalized).toBe(prepared.usage.normalized)
-    if (fixture === "mistral-fixture")
-      expect(rows.at(-1)?.messages.some((row) => row.role === "assistant" && row.content === "Done.")).toBe(true)
+        limit: { context: 32768, output: 1024 },
+      } as Provider.Model
+      const messages: ModelMessage[] = [
+        { role: "system", content: "Retain exact fixed instructions" },
+        { role: "user", content: "Read the actual fixture" },
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "Retained synthetic reasoning" },
+            { type: "tool-call", toolCallId: "fixture_original_123", toolName: "question", input: { text: "literal" } },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "fixture_original_123",
+              toolName: "question",
+              output: { type: "text", value: "Actual fixture output" },
+            },
+          ],
+        },
+        { role: "user", content: "Continue from the tool result" },
+      ]
+      const original = structuredClone(messages)
+      const selected: Record<string, typeof tools.question> = mode === "empty" ? {} : { question: tools.question }
+      const choice = mode === "none" ? "none" : "auto"
+      const transform = { store: false }
+      const prepared = await Prompt.prepare(options, model, messages, selected, choice, transform)
+      if (!prepared) throw new Error("Actual native prompt projection required")
+      expect(messages).toEqual(original)
+      const provider = createOpenAICompatible({
+        name: "fixture",
+        baseURL: `${server.url}v1`,
+        fetch: Object.assign(ollama({ ...options, ollamaModel: fixture, ollamaContext: 32768 }, fetch), {
+          preconnect: fetch.preconnect,
+        }),
+      })
+      const before = rows.length
+      const stream = streamText({
+        model: wrapLanguageModel({
+          model: provider.chatModel(fixture),
+          middleware: {
+            specificationVersion: "v3",
+            transformParams: async (args) => {
+              const adapted = ProviderTransform.message(
+                args.params.prompt as unknown as ModelMessage[],
+                model,
+                transform,
+              )
+              return { ...args.params, prompt: adapted as unknown as typeof args.params.prompt }
+            },
+          },
+        }),
+        messages,
+        tools: selected,
+        toolChoice: choice,
+        maxOutputTokens: 1024,
+        maxRetries: 0,
+      })
+      expect(await stream.text).toBe("Synthetic bounded reply")
+      expect(rows).toHaveLength(before + 1)
+      expect(rows.at(-1)?.messages).toEqual(prepared.messages)
+      expect(Prompt.measure(rows.at(-1)!.messages, []).normalized).toBe(prepared.usage.normalized)
+      if (fixture === "mistral-fixture")
+        expect(rows.at(-1)?.messages.some((row) => row.role === "assistant" && row.content === "Done.")).toBe(true)
+      if (mode !== "auto") {
+        const count = rows.length
+        const fixed: ModelMessage[] = [{ role: "system", content: "Irreducible fixed instructions ".repeat(50000) }]
+        const overflow = await Prompt.prepare(options, model, fixed, selected, choice, transform)
+        if (!overflow) throw new Error("Actual native overflow projection required")
+        expect(() => Prompt.check(overflow.messages, [], 32768, 1024)).toThrow(Prompt.OllamaWindowError)
+        const err = await ollama({ ...options, ollamaModel: fixture, ollamaContext: 32768 }, fetch)(
+          `${server.url}v1/chat/completions`,
+          {
+            method: "POST",
+            body: JSON.stringify({ model: fixture, messages: fixed, tool_choice: "none", tools: [], max_tokens: 1024 }),
+          },
+        ).then(
+          () => undefined,
+          (err: unknown) => err,
+        )
+        expect(err).toBeInstanceOf(Prompt.OllamaWindowError)
+        expect(rows).toHaveLength(count)
+        const output = await Prompt.prepare(options, model, messages, selected, choice, transform, true)
+        if (!output) throw new Error("Explicit structured projection required")
+        expect(JSON.stringify(output.messages)).not.toContain("Return exactly one JSON envelope with kind text")
+      }
+    }
   }
 })
 

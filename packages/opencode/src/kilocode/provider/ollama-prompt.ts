@@ -61,8 +61,9 @@ function capacity<T>(read: () => T) {
   }
 }
 
-export function format(tools: Parameters<typeof ToolEnvelope.schema>[0], choice: "auto" | "required") {
+export function format(tools: Parameters<typeof ToolEnvelope.schema>[0], choice: "auto" | "required" | "none") {
   if (
+    choice !== "none" &&
     tools.length > 128 &&
     new Set(tools.map((tool) => tool.function.name)).size === tools.length &&
     tools.every((tool) => tool.function.name.trim())
@@ -77,6 +78,7 @@ export function project(
   tools: Parameters<typeof ToolEnvelope.guide>[0],
   protocol: boolean,
   choice?: "auto" | "required" | "none",
+  output = false,
 ) {
   const names = new Map(
     rows.flatMap(
@@ -113,8 +115,12 @@ export function project(
   }
   if (choice === "required")
     append("For this response, call at least one tool from the supplied tools list. Do not return a text-only answer.")
-  if (protocol)
-    append(tools.length && choice !== "none" ? capacity(() => ToolEnvelope.guide(tools)) : ToolEnvelope.reply())
+  if (protocol) {
+    const mode = ToolEnvelope.mode(protocol, tools.length, choice, output)
+    append(
+      mode === "none" ? ToolEnvelope.final() : mode ? capacity(() => ToolEnvelope.guide(tools)) : ToolEnvelope.reply(),
+    )
+  }
   return messages
 }
 
@@ -138,6 +144,7 @@ export async function prepare(
   tools: Record<string, Tool>,
   choice?: "auto" | "required" | "none",
   transform: Record<string, unknown> = options,
+  output = false,
 ) {
   if (!structured(options, model.api.npm)) return undefined
   const prompt = await standardizePrompt({ messages, allowSystemInMessages: true })
@@ -161,9 +168,10 @@ export async function prepare(
     },
   }))
   const protocol = options.localInferenceToolFormat === "completion-envelope-v1"
-  if (protocol && definitions.length && choice !== "none") format(definitions, choice ?? "auto")
-  const frame = project(rows, definitions, protocol, choice)
-  const selected = protocol && definitions.length && choice !== "none" ? [] : choice === "none" ? [] : definitions
+  const mode = ToolEnvelope.mode(protocol, definitions.length, choice, output)
+  if (mode) format(definitions, mode)
+  const frame = project(rows, definitions, protocol, choice, output)
+  const selected = mode || choice === "none" ? [] : definitions
   const budget = Object.fromEntries(
     selected.map((row) => [
       row.function.name,

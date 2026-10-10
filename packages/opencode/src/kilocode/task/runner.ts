@@ -230,7 +230,7 @@ export namespace RayaTaskRunner {
     revive: () => Effect.Effect<void, unknown>
     announce: (source: string, filter?: string) => Effect.Effect<RayaTask.Run[]>
     tasks: Tasks
-    preview: (from: number) => Effect.Effect<RayaTask.Agent[]>
+    preview: (from: number) => Effect.Effect<RayaTask.Agent[], RayaTask.HistoryError>
   }
 
   function build(input: {
@@ -1639,7 +1639,27 @@ export namespace RayaTaskRunner {
       const items = yield* tasks.list()
       for (const item of items) {
         if (exact && item.id !== exact.agentID) continue
-        const history = yield* tasks.runsFor(item.id)
+        const history = yield* tasks.runsFor(item.id).pipe(
+          Effect.catchIf(
+            (err): err is RayaTask.HistoryError => err instanceof RayaTask.HistoryError,
+            (err) =>
+              Effect.gen(function* () {
+                if (exact) return yield* Effect.fail(err)
+                const session = yield* input.sessions
+                  .get(sessionID)
+                  .pipe(Effect.catchTag("NotFoundError", () => Effect.fail(err)))
+                const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(
+                  session.metadata?.rayaRoutine,
+                ).pipe(Effect.orElseSucceed(() => undefined))
+                if (session.id !== sessionID || !identity || identity.agentID === item.id)
+                  return yield* Effect.fail(err)
+                yield* Effect.sync(() =>
+                  log.error("unrelated routine history unavailable", { id: err.agentID, reason: err.reason }),
+                )
+                return []
+              }),
+          ),
+        )
         const matches = (entry: RayaTask.Run) =>
           entry.sessionID === sessionID &&
           (!exact ||
@@ -2161,97 +2181,113 @@ export namespace RayaTaskRunner {
       }
     })
 
+    const reboot = Effect.fn("RayaTaskRunner.reboot")(function* (item: RayaTask.Agent) {
+      if (organizations && (yield* organizations.stopped(item.id))) return
+      const prior = yield* tasks.runsFor(item.id)
+      const resumed = new Set<string>()
+      // Saved history retains at most 50 terminal runs plus its schedule anchor; replay each retained candidate.
+      for (const run of prior) {
+        const goal = yield* goals.get(run.sessionID)
+        if (
+          (run.status === "blocked" || run.status === "running") &&
+          goal?.status === "active" &&
+          goal.replyRecovery?.reviewedAt !== undefined &&
+          goal.replyRecovery.reviewIntent === goal.intent &&
+          (goal.dispatch?.id === goal.replyRecovery.dispatchID || goal.dispatch?.intent === goal.intent)
+        ) {
+          yield* resume(run.sessionID)
+          resumed.add(run.id)
+        }
+      }
+      const current = yield* tasks.runsFor(item.id)
+      const done: RayaTask.Run[] = []
+      for (const run of current) {
+        if (!run.outcome || (run.status !== "complete" && run.status !== "blocked") || RayaTask.pending(run)) continue
+        const goal = yield* goals.get(run.sessionID)
+        if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
+        done.push(run)
+      }
+      const restored = yield* Effect.gen(function* () {
+        const admitted = yield* Effect.forEach(
+          done,
+          (run) =>
+            Effect.acquireRelease(terminal(run), (entry) =>
+              entry.state === "ready" ? execution.defer(entry.permit) : Effect.void,
+            ),
+          { concurrency: 1 },
+        )
+        if (admitted.some((entry) => entry.state === "blocked")) return false
+        const ready = admitted.filter((entry) => entry.state === "ready")
+        yield* Effect.forEach(
+          ready,
+          (entry) => execution.recover(entry.permit, settle(entry.run.sessionID, entry.run)),
+          {
+            concurrency: 1,
+            discard: true,
+          },
+        )
+        return true
+      }).pipe(Effect.scoped)
+      if (!restored) return
+      yield* reconcile(item.id)
+      const recovering = yield* Effect.forEach(yield* tasks.runsFor(item.id), (run) => goals.get(run.sessionID))
+      if (recovering.some((goal) => goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined)) return
+      const stranded = inbox ? yield* inbox.stranded(item.id) : undefined
+      if (stranded?.sessionID && inbox) {
+        const history = yield* tasks.runsFor(item.id)
+        const prior = history.find((run) => run.sessionID === stranded.sessionID)
+        if (prior && !RayaTask.pending(prior) && !history.some(RayaTask.pending))
+          yield* ask(item.id, stranded.body, {
+            defer: true,
+            bind: { source: stranded.source, sessionID: stranded.sessionID },
+          })
+      }
+      const waiting = inbox ? yield* inbox.pending(item.id) : undefined
+      if (waiting && inbox) {
+        const resumed = yield* ask(item.id, waiting.body, { defer: true })
+        yield* inbox.attach(item.id, waiting.source, resumed.sessionID)
+      }
+      const history = yield* tasks.runsFor(item.id)
+      const run = history.findLast((entry) => entry.status === "running")
+      if (run && resumed.has(run.id)) return
+      const assigned = run && errands ? yield* errands.bySession(run.sessionID) : undefined
+      if (assigned && retained.has(assigned.id)) return
+      const held = errands ? yield* errands.accepted(item.id) : undefined
+      if (held && retained.has(held.id)) return
+      if (run && held?.childRunID === run.id) {
+        yield* start(held).pipe(
+          Effect.catch((err) => Effect.sync(() => log.error("delegated attachment recovery failed", { err }))),
+        )
+      }
+      if (!run) {
+        if (!errands || history.some(RayaTask.pending)) return
+        const taken = yield* errands.take(item.id, retained)
+        if (!taken) return
+        yield* start(taken).pipe(
+          Effect.catch((err) => Effect.sync(() => log.error("delegated restart failed", { err }))),
+        )
+        return
+      }
+      yield* settle(run.sessionID, run)
+      const again = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
+      if (again?.status !== "running") return
+      if (schedule && !(yield* schedule.owned(again))) return
+      yield* launch(again)
+    })
+
     const revive: Runner["revive"] = Effect.fn("RayaTaskRunner.revive")(function* () {
       if (yield* transfer.held().pipe(Effect.orDie)) return
       const items = yield* tasks.list()
       for (const item of items) {
-        if (organizations && (yield* organizations.stopped(item.id))) continue
-        const prior = yield* tasks.runsFor(item.id)
-        const resumed = new Set<string>()
-        // Saved history retains at most 50 terminal runs plus its schedule anchor; replay each retained candidate.
-        for (const run of prior) {
-          const goal = yield* goals.get(run.sessionID)
-          if (
-            (run.status === "blocked" || run.status === "running") &&
-            goal?.status === "active" &&
-            goal.replyRecovery?.reviewedAt !== undefined &&
-            goal.replyRecovery.reviewIntent === goal.intent &&
-            (goal.dispatch?.id === goal.replyRecovery.dispatchID || goal.dispatch?.intent === goal.intent)
-          ) {
-            yield* resume(run.sessionID)
-            resumed.add(run.id)
-          }
-        }
-        const current = yield* tasks.runsFor(item.id)
-        const done: RayaTask.Run[] = []
-        for (const run of current) {
-          if (!run.outcome || (run.status !== "complete" && run.status !== "blocked") || RayaTask.pending(run)) continue
-          const goal = yield* goals.get(run.sessionID)
-          if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
-          done.push(run)
-        }
-        const restored = yield* Effect.gen(function* () {
-          const admitted = yield* Effect.forEach(
-            done,
-            (run) =>
-              Effect.acquireRelease(terminal(run), (entry) =>
-                entry.state === "ready" ? execution.defer(entry.permit) : Effect.void,
+        yield* reboot(item).pipe(
+          Effect.catchIf(
+            (err): err is RayaTask.HistoryError => err instanceof RayaTask.HistoryError,
+            (err) =>
+              Effect.sync(() =>
+                log.error("routine history recovery unavailable", { id: err.agentID, reason: err.reason }),
               ),
-            { concurrency: 1 },
-          )
-          if (admitted.some((entry) => entry.state === "blocked")) return false
-          const ready = admitted.filter((entry) => entry.state === "ready")
-          yield* Effect.forEach(ready, (entry) => execution.recover(entry.permit, settle(entry.run.sessionID)), {
-            concurrency: 1,
-            discard: true,
-          })
-          return true
-        }).pipe(Effect.scoped)
-        if (!restored) continue
-        yield* reconcile(item.id)
-        const recovering = yield* Effect.forEach(yield* tasks.runsFor(item.id), (run) => goals.get(run.sessionID))
-        if (recovering.some((goal) => goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined)) continue
-        const stranded = inbox ? yield* inbox.stranded(item.id) : undefined
-        if (stranded?.sessionID && inbox) {
-          const history = yield* tasks.runsFor(item.id)
-          const prior = history.find((run) => run.sessionID === stranded.sessionID)
-          if (prior && !RayaTask.pending(prior) && !history.some(RayaTask.pending))
-            yield* ask(item.id, stranded.body, {
-              defer: true,
-              bind: { source: stranded.source, sessionID: stranded.sessionID },
-            })
-        }
-        const waiting = inbox ? yield* inbox.pending(item.id) : undefined
-        if (waiting && inbox) {
-          const resumed = yield* ask(item.id, waiting.body, { defer: true })
-          yield* inbox.attach(item.id, waiting.source, resumed.sessionID)
-        }
-        const history = yield* tasks.runsFor(item.id)
-        const run = history.findLast((entry) => entry.status === "running")
-        if (run && resumed.has(run.id)) continue
-        const assigned = run && errands ? yield* errands.bySession(run.sessionID) : undefined
-        if (assigned && retained.has(assigned.id)) continue
-        const held = errands ? yield* errands.accepted(item.id) : undefined
-        if (held && retained.has(held.id)) continue
-        if (run && held?.childRunID === run.id) {
-          yield* start(held).pipe(
-            Effect.catch((err) => Effect.sync(() => log.error("delegated attachment recovery failed", { err }))),
-          )
-        }
-        if (!run) {
-          if (!errands || history.some(RayaTask.pending)) continue
-          const taken = yield* errands.take(item.id, retained)
-          if (!taken) continue
-          yield* start(taken).pipe(
-            Effect.catch((err) => Effect.sync(() => log.error("delegated restart failed", { err }))),
-          )
-          continue
-        }
-        yield* settle(run.sessionID)
-        const again = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
-        if (again?.status !== "running") continue
-        if (schedule && !(yield* schedule.owned(again))) continue
-        yield* launch(again)
+          ),
+        )
       }
     })
 
@@ -2302,7 +2338,9 @@ export namespace RayaTaskRunner {
       })
 
     const preview = Effect.fn("RayaTaskRunner.preview")(function* (from: number) {
-      const items = (yield* tasks.preview(from)).map((item) => ({ ...item, execution: undefined }))
+      const rows = yield* tasks.preview(from)
+      const unavailable = new Set(rows.filter((item) => tasks.unavailable(item) !== undefined).map((item) => item.id))
+      const items = rows.map((item) => ({ ...item, execution: undefined }))
       return yield* Effect.forEach(
         items,
         (item) =>
@@ -2366,7 +2404,7 @@ export namespace RayaTaskRunner {
                   .filter(Boolean)
                   .join("\n"),
               }
-            if (!schedule) return item
+            if (!schedule || unavailable.has(item.id)) return item
             const history = yield* tasks.runsFor(item.id)
             if (!item.enabled || RayaTask.unzoned(item.schedule) || history.some(RayaTask.pending)) return item
             const pending = yield* schedule.queued(item.id, item.scheduleVersion ?? 1)

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import path from "node:path"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { sql } from "drizzle-orm"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Database } from "@opencode-ai/core/database/database"
@@ -70,7 +70,7 @@ const client = (
 })
 
 it.live(
-  "restart replays exact terminal settlement without repeating continuing work",
+  "restart isolates damaged history and replays exact terminal settlement without repeating continuing work",
   () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped()
@@ -82,6 +82,22 @@ it.live(
         const database = yield* Database.Service
         const runner = RayaTaskRunner.make({ database, storage, sessions })
         const now = Date.now()
+        const bad = yield* runner.tasks.create({
+          name: "Damaged earlier history",
+          objective: "Preserve retained data",
+          access: "brief",
+          schedule: { kind: "manual" },
+        })
+        yield* runner.tasks.record({
+          id: "run_damaged_history",
+          agentID: bad.id,
+          sessionID: SessionID.make("ses_damaged_history"),
+          at: now,
+          status: "complete",
+          trigger: { kind: "manual" },
+        })
+        const file = path.join(root, "storage", "raya", "agent-runs", `${bad.id}.json`)
+        const bytes = '{"version":1}'
         const agent = yield* runner.tasks.create({
           name: "Terminal restart",
           objective: "Finish once",
@@ -137,7 +153,9 @@ it.live(
             SELECT RAISE(ABORT, 'injected terminal settlement failure');
           END
         `)
-        expect(Exit.isFailure(yield* runner.settle(sid).pipe(Effect.exit))).toBe(true)
+        const failed = yield* runner.settle(sid).pipe(Effect.exit)
+        expect(Exit.isFailure(failed)).toBe(true)
+        if (Exit.isFailure(failed)) expect(Cause.pretty(failed.cause)).toContain("injected terminal settlement failure")
         expect((yield* runner.tasks.runsFor(agent.id)).find((item) => item.id === run)?.status).toBe("complete")
         expect((yield* queue.get(trigger.id))?.state).toBe("linked")
         expect((yield* RayaTaskInbox.make(database).page(agent.id)).messages).toHaveLength(0)
@@ -153,7 +171,19 @@ it.live(
           status: "complete",
           outcome: { kind: "code", summary: "Newer retained history.", cost: 0 },
         })
-        return { agent: agent.id, occurrence: trigger.id, run, newer, trigger, version: agent.scheduleVersion ?? 1 }
+        expect((yield* runner.tasks.list()).map((item) => item.id)).toEqual([bad.id, agent.id])
+        yield* (yield* FSUtil.Service).writeFileString(file, bytes)
+        return {
+          agent: agent.id,
+          occurrence: trigger.id,
+          run,
+          newer,
+          trigger,
+          version: agent.scheduleVersion ?? 1,
+          bad: bad.id,
+          file,
+          bytes,
+        }
       }).pipe(Effect.provide(layers(root)), Effect.scoped)
 
       yield* Effect.gen(function* () {
@@ -176,6 +206,8 @@ it.live(
           continuation: () => Effect.sync(() => turns.push("unexpected")),
         })
         yield* runner.revive()
+        expect(yield* (yield* FSUtil.Service).readFileString(saved.file)).toBe(saved.bytes)
+        expect((yield* runner.tasks.get(saved.bad)).enabled).toBe(true)
         expect(turns).toEqual([])
         expect((yield* RayaTaskQueue.make(database).get(saved.occurrence))?.state).toBe("linked")
         expect((yield* RayaTaskInbox.make(database).page(saved.agent)).messages).toHaveLength(0)
@@ -233,6 +265,9 @@ it.live(
         expect(Exit.isSuccess(joined)).toBe(true)
         if (Exit.isSuccess(concurrent)) expect(concurrent.value).toHaveLength(0)
         yield* runner.revive()
+        expect(yield* (yield* FSUtil.Service).readFileString(saved.file)).toBe(saved.bytes)
+        expect((yield* runner.tasks.get(saved.bad)).enabled).toBe(true)
+        expect(yield* runner.tasks.runsFor(saved.bad).pipe(Effect.flip)).toBeInstanceOf(RayaTask.HistoryError)
         expect(turns).toEqual([])
         expect((yield* RayaTaskQueue.make(database).get(saved.occurrence))?.state).toBe("complete")
         expect((yield* runner.tasks.runsFor(saved.agent)).find((item) => item.id === saved.run)?.status).toBe(
@@ -244,6 +279,30 @@ it.live(
             (item) => item.source === `report:${saved.run}`,
           ),
         ).toHaveLength(1)
+        expect(yield* storage.list(["raya", "agent-executions"])).toHaveLength(0)
+      }).pipe(Effect.provide(layers(root)), Effect.scoped)
+
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const runner = RayaTaskRunner.make({
+          database,
+          storage,
+          sessions: client([
+            { sid, agent: saved.agent, run: saved.run, version: saved.version, trigger: saved.trigger },
+          ]),
+          continuation: () => Effect.die("Unexpected continuing work after cold terminal settlement"),
+        })
+        const file = path.join(root, "storage", "raya", "agent-runs", `${saved.agent}.json`)
+        const fs = yield* FSUtil.Service
+        const bytes = yield* fs.readFileString(file)
+        const messages = (yield* RayaTaskInbox.make(database).page(saved.agent)).messages
+        const occurrence = yield* RayaTaskQueue.make(database).get(saved.occurrence)
+        yield* runner.revive()
+        expect(yield* fs.readFileString(saved.file)).toBe(saved.bytes)
+        expect(yield* fs.readFileString(file)).toBe(bytes)
+        expect((yield* RayaTaskInbox.make(database).page(saved.agent)).messages).toEqual(messages)
+        expect(yield* RayaTaskQueue.make(database).get(saved.occurrence)).toEqual(occurrence)
         expect(yield* storage.list(["raya", "agent-executions"])).toHaveLength(0)
       }).pipe(Effect.provide(layers(root)), Effect.scoped)
     }),

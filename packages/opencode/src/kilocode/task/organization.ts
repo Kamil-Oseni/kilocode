@@ -230,7 +230,7 @@ function decoded(
 
 type Workers = {
   get(id: string): Effect.Effect<Pick<RayaTask.Agent, "enabled">, { readonly _tag: "RayaTask.NotFoundError" }>
-  runsFor?(id: string): Effect.Effect<readonly RayaTask.Run[]>
+  runsFor?(id: string): Effect.Effect<readonly RayaTask.Run[], RayaTask.HistoryError>
   stop?(id: string, members: readonly string[]): Effect.Effect<void, unknown>
 }
 type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">

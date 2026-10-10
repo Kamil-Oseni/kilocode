@@ -741,7 +741,11 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const profileRestoreApprove = (ctx: { payload: typeof RestoreApproval.Type }) =>
       restore.approve(ctx.payload).pipe(Effect.mapError(reviewError))
     const agentList = Effect.fn("KilocodeHttpApi.agentList")(function* () {
-      return yield* roster(runner.preview(Date.now()))
+      return yield* roster(runner.preview(Date.now())).pipe(
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
+      )
     })
     const agentAuthorityServices = Effect.fn("KilocodeHttpApi.agentAuthorityServices")(function* () {
       return RayaTaskAuthority.catalog(yield* mcp.tools())
@@ -799,7 +803,13 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       )
     })
     const agentRuns = Effect.fn("KilocodeHttpApi.agentRuns")(function* (ctx: { params: { agentID: string } }) {
-      return yield* runner.tasks.runsFor(ctx.params.agentID)
+      return yield* runner.tasks
+        .runsFor(ctx.params.agentID)
+        .pipe(
+          Effect.catchTag("RayaTask.GuardError", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+          ),
+        )
     })
     const agentEvents = Effect.fn("KilocodeHttpApi.agentEvents")(function* (ctx: {
       params: { agentID: string }
@@ -945,6 +955,9 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       payload: OrganizationArchive
     }) {
       return yield* organizations.archive(ctx.params.organizationID, ctx.payload).pipe(
+        Effect.catchTag("RayaTask.GuardError", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+        ),
         Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
           Effect.fail(new InvalidRequestError({ message: err.message })),
         ),
@@ -975,15 +988,20 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         )
       if (!archived.items.some((item) => item.definition.id === id)) return yield* new HttpApiError.NotFound({})
     })
-    const agentInbox = Effect.fn("KilocodeHttpApi.agentInbox")(function* () {
-      const agents = yield* runner.preview(Date.now())
-      const runs = new Map<string, RayaTask.Run | undefined>()
-      for (const agent of agents) {
-        const history = yield* runner.tasks.runsFor(agent.id)
-        runs.set(agent.id, history.at(-1))
-      }
-      return yield* inbox.summaries(agents, runs)
-    })
+    const agentInbox = Effect.fn("KilocodeHttpApi.agentInbox")(
+      function* () {
+        const agents = yield* runner.preview(Date.now())
+        const runs = new Map<string, RayaTask.Run | undefined>()
+        for (const agent of agents) {
+          const history = yield* runner.tasks.runsFor(agent.id)
+          runs.set(agent.id, history.at(-1))
+        }
+        return yield* inbox.summaries(agents, runs)
+      },
+      Effect.catchTag("RayaTask.GuardError", (err) =>
+        Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+      ),
+    )
     const agentInboxPage = Effect.fn("KilocodeHttpApi.agentInboxPage")(function* (ctx: {
       params: { agentID: string }
       query: { cursor?: string; limit?: number; search?: string }

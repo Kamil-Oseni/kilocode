@@ -22,6 +22,7 @@ import { hold } from "./hold"
 import { RayaTaskQueue } from "./queue"
 import { Create as OrganizationCreate, matchesDefinition } from "./organization"
 import type { Database } from "@opencode-ai/core/database/database"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Log from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "raya-task-schedule" })
@@ -170,6 +171,21 @@ export namespace RayaTask {
   export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("RayaTask.NotFoundError", {
     message: Schema.String,
   }) {}
+
+  export class HistoryError extends GuardError {
+    readonly agentID: string
+    readonly reason: "json" | "schema" | "inconsistent"
+
+    constructor(input: { agentID: string; reason: "json" | "schema" | "inconsistent" }) {
+      super({
+        kind: "unavailable",
+        field: "history",
+        message: "Routine history needs attention. Its retained data has not been changed.",
+      })
+      this.agentID = input.agentID
+      this.reason = input.reason
+    }
+  }
 
   type Store = Pick<Storage.Interface, "read" | "readBounded" | "replace" | "create" | "remove" | "list">
   const roster = ["raya", "agent"]
@@ -500,6 +516,7 @@ export namespace RayaTask {
   }
 
   export function make(deps: { storage: Store; database?: Database.Interface }) {
+    const unavailable = new WeakMap<Agent, HistoryError["reason"]>()
     const transfer = hold(deps.storage)
     const store = deps.database ? indexed(deps.database) : undefined
     const archives = () =>
@@ -610,9 +627,15 @@ export namespace RayaTask {
     const saved = Effect.fn("RayaTask.saved")(function* (id: string) {
       const raw = yield* deps.storage.read<unknown>(history(id)).pipe(
         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed([])),
-        Effect.orDie,
+        Effect.catch((err) =>
+          err instanceof FSUtil.FileSystemError && err.method === "readJson" && err.cause instanceof SyntaxError
+            ? Effect.fail(new HistoryError({ agentID: id, reason: "json" }))
+            : Effect.die(err),
+        ),
       )
-      const value = yield* historyData(raw).pipe(Effect.orDie)
+      const value = yield* historyData(raw).pipe(
+        Effect.mapError(() => new HistoryError({ agentID: id, reason: "schema" })),
+      )
       if ("runs" in value) {
         const events = value.events
         const runs = new Map(value.runs.map((run) => [run.id, run]))
@@ -665,7 +688,7 @@ export namespace RayaTask {
               (index > 0 && event.sequence !== events[index - 1]!.sequence + 1),
           )
         )
-          return yield* Effect.die(new Error("Routine event journal is inconsistent."))
+          return yield* new HistoryError({ agentID: id, reason: "inconsistent" })
         return value
       }
       return { version: 1 as const, cursor: 0, runs: [...value], events: [] as Event[] }
@@ -1568,7 +1591,14 @@ export namespace RayaTask {
       const result = yield* evaluate(agent, from, consumed(history, agent.scheduleVersion ?? 1))
       return result.nextRun !== undefined && result.nextRun <= from ? result.nextRun : undefined
     })
-    const eligible = (agent: Agent, from: number) => occurrence(agent, from).pipe(Effect.map((at) => at !== undefined))
+    const eligible = (agent: Agent, from: number) =>
+      occurrence(agent, from).pipe(
+        Effect.map((at) => at !== undefined),
+        Effect.catchIf(
+          (err) => err instanceof HistoryError,
+          () => Effect.succeed(false),
+        ),
+      )
 
     const ready = Effect.fn("RayaTask.ready")(function* (from: number) {
       const items = yield* list()
@@ -1598,7 +1628,13 @@ export namespace RayaTask {
       const match: Agent[] = []
       for (const agent of items) {
         if (!listen(agent, source, filter)) continue
-        const history = yield* runsFor(agent.id)
+        const history = yield* runsFor(agent.id).pipe(
+          Effect.catchIf(
+            (err) => err instanceof HistoryError,
+            () => Effect.succeed(undefined),
+          ),
+        )
+        if (!history) continue
         if (agent.access === undefined || history.some(pending) || blocked(agent, history)) continue
         match.push(agent)
       }
@@ -1609,7 +1645,28 @@ export namespace RayaTask {
       const items = yield* list()
       const listed: Agent[] = []
       for (const agent of items) {
-        const history = yield* runsFor(agent.id)
+        const history = yield* runsFor(agent.id).pipe(
+          Effect.catchIf(
+            (err) => err instanceof HistoryError,
+            (err) => Effect.succeed(err),
+          ),
+        )
+        if (history instanceof HistoryError) {
+          const item = {
+            ...agent,
+            enabled: false,
+            nextRun: undefined,
+            note: [
+              "Routine history needs attention. Retained data is unchanged; automatic runs are paused.",
+              agent.note,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          }
+          unavailable.set(item, history.reason)
+          listed.push(item)
+          continue
+        }
         if (agent.access === undefined) {
           listed.push({
             ...agent,
@@ -1723,6 +1780,7 @@ export namespace RayaTask {
       dispatch,
       listenFor,
       preview,
+      unavailable: (item: Agent) => unavailable.get(item),
       launchable,
       enforce: (id: string) => mutate(deps.storage, enforce(id)),
       check: (input: Create) => draft(input, crypto.randomUUID()).pipe(Effect.asVoid),

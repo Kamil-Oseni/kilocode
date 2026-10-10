@@ -105,7 +105,12 @@ export function continuation(input: {
     if (!run || !RayaTask.pending(run)) return false
     if (!(yield* scheduler({ storage: input.storage, database: input.database }).owned(run))) return false
     return yield* admit(run)
-  })
+  }).pipe(
+    Effect.catchIf(
+      (err): err is RayaTask.HistoryError => err instanceof RayaTask.HistoryError,
+      () => Effect.succeed(false),
+    ),
+  )
 }
 
 /** Hold exact routine execution authority for the whole continuing body. Ordinary chats pass through unchanged. */

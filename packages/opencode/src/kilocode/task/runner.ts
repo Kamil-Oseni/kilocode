@@ -2538,9 +2538,9 @@ export namespace RayaTaskRunner {
       const reviews = new Map<string, Review>()
       const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
       const receipt = Effect.fn("RayaTaskRunner.permissionReceipt")(function* (review: Review, reply: string) {
-        if (!inbox) return
+        if (!inbox) return undefined
         const session = yield* input.sessions.get(review.sessionID)
-        if (session.metadata?.rayaRoutine === undefined) return
+        if (session.metadata?.rayaRoutine === undefined) return undefined
         const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata.rayaRoutine).pipe(
           Effect.mapError(
             () => new RayaTask.GuardError({ message: "This permission reply's routine identity changed." }),
@@ -2549,7 +2549,7 @@ export namespace RayaTaskRunner {
         const items = yield* runner.tasks.list()
         const item = items.find((item) => item.id === identity.agentID)
         if (!item || session.id !== review.sessionID)
-          yield* new RayaTask.GuardError({ message: "This permission reply's routine is unavailable." })
+          return yield* new RayaTask.GuardError({ message: "This permission reply's routine is unavailable." })
         const runs = yield* runner.tasks.runsFor(item.id)
         const run = runs.find((entry) => entry.id === identity.runID)
         if (
@@ -2559,7 +2559,7 @@ export namespace RayaTaskRunner {
           (run.scheduleVersion ?? 1) !== identity.scheduleVersion ||
           !isDeepStrictEqual(run.trigger, identity.trigger)
         )
-          yield* new RayaTask.GuardError({ message: "This permission reply's original run changed." })
+          return yield* new RayaTask.GuardError({ message: "This permission reply's original run changed." })
         const decision =
           reply === "once"
             ? "Approved for this call"
@@ -2587,6 +2587,7 @@ export namespace RayaTaskRunner {
           body,
           sessionID: review.sessionID,
         })
+        return undefined
       })
       yield* Effect.acquireRelease(
         input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {

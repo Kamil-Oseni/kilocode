@@ -49,7 +49,7 @@ const mint = (state: State): Frame => {
   return token
 }
 
-export function own<A, E, R>(permit: unknown, body: Effect.Effect<A, E, R>) {
+export function own<A, E, R>(permit: unknown, body: Effect.Effect<A, E, R>): Effect.Effect<A, unknown, R> {
   return Effect.withFiber((fiber) => {
     const original = RayaTaskExecution.original(permit, fiber)
     if (!original) return Effect.die(refuse())

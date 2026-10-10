@@ -17,6 +17,7 @@ import { SessionContextEpoch } from "./context-epoch"
 import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 import * as PromptCompat from "../kilocode/session/prompt-promoted" // kilocode_change - released replay key
+import * as ResultNotice from "../kilocode/result-notice" // kilocode_change
 
 type DatabaseService = Database.Interface["db"]
 
@@ -478,4 +479,4 @@ const layer = Layer.effectDiscard(
   }),
 )
 
-export const node = makeGlobalNode({ name: "session-projector", layer, deps: [EventV2.node, Database.node] })
+export const node = makeGlobalNode({ name: "session-projector", layer: Layer.merge(layer, ResultNotice.layer), deps: [EventV2.node, Database.node] }) // kilocode_change

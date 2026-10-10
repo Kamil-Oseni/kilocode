@@ -3,6 +3,8 @@ import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer } from "effect"
 import * as Lineage from "@opencode-ai/core/kilocode/background-lineage" // kilocode_change
+import * as Outcome from "@/kilocode/background/outcome" // kilocode_change
+import { Service as OutcomeService } from "@opencode-ai/core/kilocode/background-outcome" // kilocode_change
 
 export {
   Service,
@@ -21,8 +23,12 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     // kilocode_change start - keep local observations while sharing one service-owned execution tree
     const lineage = yield* Lineage.make
+    const outcome = yield* OutcomeService
     const state = yield* InstanceState.make(() =>
-      CoreBackgroundJob.make.pipe(Effect.provideService(Lineage.Service, lineage)),
+      CoreBackgroundJob.make.pipe(
+        Effect.provideService(Lineage.Service, lineage),
+        Effect.provideService(OutcomeService, outcome),
+      ),
     )
     // kilocode_change end
     return CoreBackgroundJob.Service.of({
@@ -44,6 +50,6 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({ service: CoreBackgroundJob.Service, layer, deps: [] })
+export const node = LayerNode.make({ service: CoreBackgroundJob.Service, layer, deps: [Outcome.node] }) // kilocode_change
 
 export * as BackgroundJob from "./job"

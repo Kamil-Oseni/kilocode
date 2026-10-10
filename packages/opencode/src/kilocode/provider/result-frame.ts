@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks"
-import { Effect } from "effect"
+import { Effect, type Context } from "effect"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import type { Session } from "@/session/session"
 import { ResultContract } from "@/kilocode/chief/result-contract"
@@ -11,7 +11,13 @@ type Sessions = Pick<Session.Interface, "get" | "messages">
 export type Frame = Readonly<{ kind: "directory_entries" }>
 const held = new WeakMap<
   Frame,
-  { sessions: Sessions; review: ResultContract.Review; refs: readonly string[]; sha: string }
+  {
+    sessions: Sessions
+    review: ResultContract.Review
+    refs: readonly string[]
+    sha: string
+    context: Context.Context<never>
+  }
 >()
 const scope = new AsyncLocalStorage<{ frame: Frame; active: boolean }>()
 
@@ -27,10 +33,11 @@ export const create = Effect.fn("ResultFrame.create")(function* (
   review: ResultContract.Review | undefined,
 ) {
   if (!review || review.kind !== "directory_entries") return undefined
+  const context = yield* Effect.context<never>()
   yield* ResultContract.check(sessions, review)
   const refs = yield* references(sessions, review)
   const frame: Frame = Object.freeze({ kind: "directory_entries" })
-  held.set(frame, { sessions, review, refs, sha: hash(refs) })
+  held.set(frame, { sessions, review, refs, sha: hash(refs), context })
   return frame
 })
 
@@ -59,7 +66,7 @@ export async function run<A>(frame: Frame | undefined, body: () => PromiseLike<A
   const value = held.get(frame)
   if (!value) throw new FrameError()
   selected(frame)
-  const refs = await Effect.runPromise(references(value.sessions, value.review))
+  const refs = await Effect.runPromiseWith(value.context)(references(value.sessions, value.review))
   if (hash(refs) !== value.sha) throw new FrameError()
   signal?.throwIfAborted()
   const state = { frame, active: true }

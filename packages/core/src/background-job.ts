@@ -6,6 +6,8 @@ import { makeGlobalNode } from "./effect/app-node"
 import { copy, type Origin } from "./kilocode/background-origin" // kilocode_change
 import * as Invocation from "./kilocode/background-invocation" // kilocode_change
 import * as Lineage from "./kilocode/background-lineage" // kilocode_change
+import * as Observer from "./kilocode/background-observer" // kilocode_change
+import { Service as OutcomeService } from "./kilocode/background-outcome" // kilocode_change
 
 export type Status = "running" | "completed" | "error" | "cancelled"
 
@@ -25,6 +27,8 @@ export type Info = {
 
 type Active = {
   invocations: readonly Invocation.Control[] // kilocode_change
+  originals: readonly Observer.Producer[] // kilocode_change
+  generation?: Observer.Generation // kilocode_change
   outcome?: { sequence: number; cancelled: boolean } // kilocode_change - terminal outcome follows admission order
   info: Info
   revision: string // kilocode_change - changes when another invocation is admitted
@@ -63,6 +67,7 @@ type FinishResult = {
   info?: Info
   done?: Deferred.Deferred<Info>
   retirement?: Active["retirement"] // kilocode_change - original scope-close completion
+  generation?: Observer.Generation // kilocode_change
 }
 
 type PromoteResult = {
@@ -71,7 +76,13 @@ type PromoteResult = {
   onPromote?: Effect.Effect<void>
 }
 
-type StartResult = { error: string } | { info: Info } | { info: Info; scope: Scope.Closeable; token: object } // kilocode_change
+// kilocode_change start - rejected admission closes its unpublished scope outside the registry gate
+type StartResult =
+  | { error: string }
+  | { cause: Cause.Cause<unknown>; scope: Scope.Closeable }
+  | { info: Info }
+  | { info: Info; scope: Scope.Closeable; token: object }
+// kilocode_change end
 
 type ExtendResult =
   | { error: string } // kilocode_change
@@ -152,6 +163,8 @@ export const make = Effect.gen(function* () {
   // kilocode_change start - one adapter owner shares authenticated ancestry across isolated directory registries
   const provided = yield* Effect.serviceOption(Lineage.Service)
   const lineage = provided._tag === "Some" ? provided.value : yield* Lineage.make
+  const journal = yield* Effect.serviceOption(OutcomeService)
+  const sink = journal._tag === "Some" ? journal.value : undefined
   // kilocode_change end
   const state: State = {
     jobs: yield* SynchronizedRef.make(new Map()),
@@ -198,7 +211,7 @@ export const make = Effect.gen(function* () {
       const job = jobs.get(id)
       if (!job) return [{}, jobs]
       if (job.token !== token) return [{}, jobs]
-      if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
+      if (job.info.status !== "running") return [{ info: snapshot(job), generation: job.generation }, jobs] // kilocode_change
       const pending = job.pending - 1
       const output =
         Exit.isSuccess(exit) && (!job.output || sequence > job.output.sequence)
@@ -248,15 +261,22 @@ export const make = Effect.gen(function* () {
       // kilocode_change start - joined pruned originals are retired; the coordinator closes fenced scopes after joins
       const fenced = job.invocations.every((item) => state.lineage.get(item.token)?.closed ?? true)
       return [
-        { info: snapshot(next), done: job.done, retirement: fenced ? undefined : job.retirement },
+        {
+          info: snapshot(next),
+          done: job.done,
+          retirement: fenced ? undefined : job.retirement,
+          generation: job.generation,
+        },
         new Map(jobs).set(id, next),
       ]
       // kilocode_change end
     })
+    if (result.info) yield* Observer.observe(result.generation, result.info, state.scope) // kilocode_change
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
     if (result.retirement && state.scope.state._tag !== "Closed") {
       // kilocode_change - registry disposal owns closing scopes
-      yield* Lineage.close(lineage, result.retirement).pipe(
+      yield* Observer.retire(result.generation, Lineage.close(lineage, result.retirement)).pipe(
+        // kilocode_change
         // kilocode_change
         Effect.forkIn(state.scope, { startImmediately: true }),
       )
@@ -271,8 +291,10 @@ export const make = Effect.gen(function* () {
     sequence: number,
     run: Effect.Effect<string, unknown>,
     control: Invocation.Control, // kilocode_change
+    original: Observer.Producer, // kilocode_change
   ) {
-    return yield* run.pipe(
+    const fiber = yield* run.pipe(
+      // kilocode_change
       // kilocode_change start - expire only this original invocation's admission authority
       Effect.onExit(() =>
         Effect.sync(() => {
@@ -289,6 +311,8 @@ export const make = Effect.gen(function* () {
       Effect.ensuring(Deferred.succeed(control.joined, undefined).pipe(Effect.andThen(Lineage.prune(lineage)))), // kilocode_change - join settlement, then release completed lineage leaves
       Effect.forkIn(scope, { startImmediately: true }),
     )
+    yield* Observer.attach(original, fiber) // kilocode_change
+    return fiber // kilocode_change
   })
 
   const list: Interface["list"] = Effect.fn("BackgroundJob.list")(function* () {
@@ -312,6 +336,7 @@ export const make = Effect.gen(function* () {
         const promoted = yield* Deferred.make<Info>()
         const tail = yield* Deferred.make<void>()
         const invocation = yield* Invocation.make(input.origin) // kilocode_change
+        const original = yield* Observer.slot(invocation.join, invocation.request) // kilocode_change
         const owner = yield* Effect.serviceOption(Invocation.Owner) // kilocode_change
         const result = yield* SynchronizedRef.modifyEffect(
           state.jobs,
@@ -336,19 +361,10 @@ export const make = Effect.gen(function* () {
             retirement.release = Effect.sync(() => {
               state.retirements.delete(retirement)
             }) // kilocode_change
-            state.retirements.add(retirement) // kilocode_change
             const token = {}
-            state.lineage.set(invocation.token, {
-              control: invocation,
-              origin: copy(input.origin),
-              parent: owner._tag === "Some" ? owner.value.token : undefined,
-              closed: false,
-              finished: false,
-              scope,
-              retirement,
-            }) // kilocode_change
             const job = {
               invocations: [invocation], // kilocode_change
+              originals: [original], // kilocode_change
               revision: crypto.randomUUID(), // kilocode_change - never reuse a prior execution's cancellation identity
               info: {
                 id,
@@ -369,12 +385,37 @@ export const make = Effect.gen(function* () {
               promoted,
               onPromote: input.onPromote,
             }
-            return [{ info: snapshot(job), scope, token }, new Map(jobs).set(id, job)] as readonly [
+            // kilocode_change start - retain genuine admission before publishing or forking the generation
+            const enrolled = yield* Observer.enroll(sink, snapshot(job), job.originals, retirement.done).pipe(
+              Effect.exit,
+            )
+            if (Exit.isFailure(enrolled)) return [{ cause: enrolled.cause, scope }, jobs] as const
+            state.retirements.add(retirement)
+            state.lineage.set(invocation.token, {
+              control: invocation,
+              origin: copy(input.origin),
+              parent: owner._tag === "Some" ? owner.value.token : undefined,
+              closed: false,
+              finished: false,
+              scope,
+              retirement,
+            })
+            const admitted = { ...job, generation: enrolled.value }
+            // kilocode_change end
+            return [{ info: snapshot(admitted), scope, token }, new Map(jobs).set(id, admitted)] as readonly [
+              // kilocode_change
               StartResult,
               Map<string, Active>,
             ]
           }),
         ).pipe((effect) => Semaphore.withPermit(state.gate, effect)) // kilocode_change
+        // kilocode_change start - keep original admission failure and any cleanup failure; no worker was forked
+        if ("cause" in result)
+          return yield* Effect.failCause(result.cause).pipe(
+            Effect.ensuring(Scope.close(result.scope, Exit.failCause(result.cause))),
+            Effect.orDie,
+          )
+        // kilocode_change end
         if ("error" in result) return yield* Effect.die(new Error(result.error)) // kilocode_change - fail after releasing the admission lock
         if ("scope" in result)
           yield* fork(
@@ -384,6 +425,7 @@ export const make = Effect.gen(function* () {
             0,
             invocation.run(restore(input.run)).pipe(Effect.ensuring(Deferred.succeed(tail, undefined))), // kilocode_change
             invocation, // kilocode_change
+            original, // kilocode_change
           )
         return result.info
       }),
@@ -395,6 +437,7 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const tail = yield* Deferred.make<void>()
         const invocation = yield* Invocation.make(input.origin) // kilocode_change
+        const original = yield* Observer.slot(invocation.join, invocation.request) // kilocode_change
         const owner = yield* Effect.serviceOption(Invocation.Owner) // kilocode_change
         const result = yield* SynchronizedRef.modifyEffect(
           state.jobs,
@@ -413,6 +456,20 @@ export const make = Effect.gen(function* () {
             // kilocode_change end
             if (!job || job.info.status !== "running")
               return [{ extended: false }, jobs] as readonly [ExtendResult, Map<string, Active>]
+            // kilocode_change start - extensions retain every original producer under their fresh generation
+            const next = {
+              ...job,
+              invocations: [...job.invocations, invocation],
+              originals: [...job.originals, original],
+              revision: crypto.randomUUID(),
+              info: { ...job.info, origins: [...(job.info.origins ?? []), copy(input.origin)] },
+              pending: job.pending + 1,
+              next: job.next + 1,
+              tail,
+            }
+            const generation = yield* Observer.enroll(sink, snapshot(next), next.originals, job.retirement.done).pipe(
+              Effect.orDie,
+            )
             state.lineage.set(invocation.token, {
               control: invocation,
               origin: copy(input.origin),
@@ -421,18 +478,11 @@ export const make = Effect.gen(function* () {
               finished: false,
               scope: job.scope,
               retirement: job.retirement,
-            }) // kilocode_change
+            })
+            // kilocode_change end
             return [
               { extended: true, previous: job.tail, scope: job.scope, tail, token: job.token, sequence: job.next },
-              new Map(jobs).set(input.id, {
-                ...job,
-                invocations: [...job.invocations, invocation], // kilocode_change
-                revision: crypto.randomUUID(), // kilocode_change - stale observations cannot cancel newly admitted work
-                info: { ...job.info, origins: [...(job.info.origins ?? []), copy(input.origin)] }, // kilocode_change
-                pending: job.pending + 1,
-                next: job.next + 1,
-                tail,
-              }),
+              new Map(jobs).set(input.id, { ...next, generation }), // kilocode_change
             ] as readonly [ExtendResult, Map<string, Active>]
           }),
         ).pipe((effect) => Semaphore.withPermit(state.gate, effect)) // kilocode_change
@@ -452,6 +502,7 @@ export const make = Effect.gen(function* () {
           result.sequence,
           invocation.run(Deferred.await(result.previous).pipe(Effect.andThen(restore(input.run)))), // kilocode_change - cancellation joins even a queued original fiber
           invocation, // kilocode_change
+          original, // kilocode_change
         )
         return true
       }),

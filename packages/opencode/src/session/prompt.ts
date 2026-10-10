@@ -3,6 +3,8 @@ import * as GoalTurn from "@/kilocode/goal/turn" // kilocode_change
 import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - final synthesis for the original dispatch
 import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
 import { BackgroundJob } from "@/background/job" // kilocode_change
+import * as Outcome from "@/kilocode/background/outcome" // kilocode_change - original background completion journal
+import { Service as OutcomeService } from "@opencode-ai/core/kilocode/background-outcome" // kilocode_change
 import * as TaskProgress from "@/kilocode/session/task-progress" // kilocode_change - keep provisional worker announcements in the original input
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
@@ -192,6 +194,7 @@ export const layer = Layer.effect(
     const state = yield* SessionRunState.Service
     const workers = yield* TaskWorker.Service // kilocode_change
     const jobs = yield* BackgroundJob.Service // kilocode_change
+    const outcome = yield* OutcomeService // kilocode_change - retain the selected database-scoped completion sink
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
@@ -1474,6 +1477,8 @@ export const layer = Layer.effect(
 
       // kilocode_change start - conditionally insert a reserved goal prompt
       if (input.resultNotice) yield* ResultContract.validateNotice(sessions, input.resultNotice, { info, parts }) // kilocode_change - validate plugin output before persistence
+      if (input.resultNotice)
+        yield* ResultContract.commitNotice(sessions, input.resultNotice, { info, parts }, { database, events })
       yield* input.goalQueuedAt === undefined
         ? sessions.updateMessage(info)
         : GoalMessage.publish({
@@ -1486,8 +1491,6 @@ export const layer = Layer.effect(
           })
       // kilocode_change end
       for (const part of parts) yield* sessions.updatePart(part)
-
-      if (input.resultNotice) yield* ResultContract.publishNotice(sessions, input.resultNotice, { info, parts }) // kilocode_change
 
       return { info, parts }
     }, Effect.scoped)
@@ -2752,10 +2755,27 @@ export const layer = Layer.effect(
 
     return Service.of({
       cancel,
-      prompt,
-      loop: (input) => loop(input).pipe(Effect.orDie),
+      // kilocode_change start - callers retain the original journal and selected database for cold proof reads
+      prompt: (input) =>
+        prompt(input).pipe(
+          Effect.provideService(OutcomeService, outcome),
+          Effect.provideService(Database.Service, database),
+        ),
+      loop: (input) =>
+        loop(input).pipe(
+          Effect.provideService(OutcomeService, outcome),
+          Effect.provideService(Database.Service, database),
+          Effect.orDie,
+        ),
+      // kilocode_change end
       shell,
-      command,
+      // kilocode_change start
+      command: (input) =>
+        command(input).pipe(
+          Effect.provideService(OutcomeService, outcome),
+          Effect.provideService(Database.Service, database),
+        ),
+      // kilocode_change end
       resolvePromptParts,
     })
   }),
@@ -2929,6 +2949,7 @@ export const node = LayerNode.make({
     SessionRunState.node,
     TaskWorker.node, // kilocode_change
     BackgroundJob.node, // kilocode_change
+    Outcome.node, // kilocode_change - same original completion sink for publication and cold verification
     SessionRevert.node,
     SessionSummary.node,
     SystemPrompt.node,

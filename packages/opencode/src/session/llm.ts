@@ -39,6 +39,8 @@ import { TurnTools } from "@/kilocode/capability/turn-tools"
 import { refuse, LocalNativeError } from "@/kilocode/provider/native-policy"
 import { lane, headers } from "@/kilocode/provider/inference-lane"
 import { Database } from "@opencode-ai/core/database/database"
+import * as Outcome from "@opencode-ai/core/kilocode/background-outcome"
+import * as OutcomeSQL from "@/kilocode/background/outcome"
 import { effective as ollamaWindow, structured as ollamaNative } from "@/kilocode/provider/ollama-context" // kilocode_change
 import * as OllamaPrompt from "@/kilocode/provider/ollama-prompt"
 import { Session } from "./session" // kilocode_change - observed-result contracts read original persisted invocation authority
@@ -100,6 +102,7 @@ const live: Layer.Layer<
   | RuntimeFlags.Service
   | Database.Service // kilocode_change - per-request local inference classification
   | Session.Service // kilocode_change - original observed-result contract and completed acquisition
+  | Outcome.Service // kilocode_change - original joined background outcome, including cold notice reads
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -113,6 +116,7 @@ const live: Layer.Layer<
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service // kilocode_change - immutable owning database for lane lookup
     const sessions = yield* Session.Service // kilocode_change - source-reference publication uses actual saved tool parts
+    const outcome = yield* Outcome.Service // kilocode_change - retain the selected database's original outcome journal
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log.clone().tag("providerID", input.model.providerID).tag("modelID", input.model.id) // kilocode_change
@@ -562,9 +566,8 @@ const live: Layer.Layer<
             // already returns one; AI SDK streams are converted here.
             const state = LLMAISDK.adapterState()
             // kilocode_change start - retain the normalized SDK stream for the publication gate
-            const stream = Stream.fromAsyncIterable(
-              result.result.fullStream,
-              (e) => (e instanceof Error ? e : new Error(String(e))),
+            const stream = Stream.fromAsyncIterable(result.result.fullStream, (e) =>
+              e instanceof Error ? e : new Error(String(e)),
             ).pipe(
               Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
               Stream.flatMap((events) => Stream.fromIterable(events)),
@@ -576,8 +579,10 @@ const live: Layer.Layer<
               : stream
             // kilocode_change end
           }),
+          // kilocode_change start - caller streams retain the owning journal and database for private cold proof reads
         ),
-      )
+      ).pipe(Stream.provideService(Outcome.Service, outcome), Stream.provideService(Database.Service, database))
+    // kilocode_change end
 
     return Service.of({ stream })
   }),
@@ -602,6 +607,7 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
     Database.node, // kilocode_change - classify actual persisted Routine ancestry per stream
     Session.node, // kilocode_change - validate original observed-result publication
+    OutcomeSQL.node, // kilocode_change - same selected original-producer outcome journal
   ],
 })
 

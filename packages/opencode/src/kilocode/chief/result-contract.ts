@@ -1,4 +1,10 @@
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Exit, Option, Schema } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
+import * as Outcome from "@opencode-ai/core/kilocode/background-outcome"
+import { Committed } from "@opencode-ai/schema/kilocode/result-notice"
+import type { EventV2 } from "@opencode-ai/core/event"
+import * as Receipts from "./notice-receipt"
+import { format } from "../tool/read-directory"
 import { z } from "zod"
 import { digest as evidence } from "@opencode-ai/core/kilocode/evidence-digest"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -60,6 +66,33 @@ const digest = (value: unknown) => {
   return evidence({ tool: "chief-result-contract", state: value })
 }
 const snapshot = digest
+const reasons = new Map([
+  ["Result contract original background join timed out; completion remains unconfirmed", "join-timeout"],
+  ["Result contract joined background completion is unavailable", "join-unavailable"],
+  ["Result contract original background join changed", "join-changed"],
+  ["Result contract original background Task completion timed out", "task-timeout"],
+  ["Result contract notice terminal differs", "child-terminal"],
+  ["Result contract notice child differs", "child-binding"],
+  ["Result contract notice Task differs", "task-binding"],
+  ["Result contract durable Chief evidence changed", "chief-binding"],
+  ["Result contract durable previous input differs", "previous-input"],
+  ["Result contract durable source evidence changed", "source-changed"],
+  ["Result notice original completion was already committed", "already-committed"],
+])
+const diagnostic = (stage: "notice" | "join" | "source" | "publication") =>
+  <A, E, R>(body: Effect.Effect<A, E, R>) =>
+    body.pipe(
+      Effect.onExit((exit) => {
+        if (Exit.isSuccess(exit)) return Effect.void
+        const err = Cause.squash(exit.cause)
+        const name = err instanceof Error ? err.constructor.name : "Unknown"
+        return Effect.logError("Result contract completion refused", {
+          stage,
+          exception: /^[A-Za-z0-9_]{1,64}$/.test(name) ? name : "Unknown",
+          reason: err instanceof Error ? (reasons.get(err.message) ?? "proof-refused") : "proof-refused",
+        })
+      }),
+    )
 const window = (rows: readonly SessionV1.WithParts[], anchor: string) => {
   const current = rows.filter((row) => row.info.id >= anchor)
   if (
@@ -93,6 +126,7 @@ type Notice = {
   current: string
   prepared?: string
   row?: string
+  receipt?: Receipts.Receipt
 }
 const grants = new WeakMap<object, Notice>()
 const notices = new WeakMap<Sessions, Map<string, Notice>>()
@@ -100,12 +134,324 @@ const freshNotice = Effect.fn("ResultContract.freshNotice")(function* (notice: N
   const job = yield* notice.background.get(notice.jobID)
   if (!job || snapshot(job) !== notice.jobSHA) throw new Error("Result contract background completion changed")
 })
-const continuation = Effect.fn("ResultContract.continuation")(function* (sessions: Sessions, row: SessionV1.WithParts) {
+const continuation = Effect.fn("ResultContract.continuation")(function* (
+  sessions: Sessions,
+  row: SessionV1.WithParts,
+): Effect.fn.Return<string, Session.NotFound> {
   const notice = notices.get(sessions)?.get(row.info.id)
-  if (!notice || notice.row !== snapshot(row) || row.info.sessionID !== notice.review.sessionID)
+  if (notice) {
+    if (notice.row !== snapshot(row) || row.info.sessionID !== notice.review.sessionID)
+      throw new Error("Result contract synthetic continuation is unauthenticated")
+    yield* freshNotice(notice)
+    if (notice.receipt) {
+      const database = yield* Effect.serviceOption(Database.Service)
+      if (Option.isNone(database)) throw new Error("Result contract durable notice service is unavailable")
+      const receipt = yield* Receipts.make(database.value).get({
+        sessionID: row.info.sessionID,
+        messageID: row.info.id,
+      })
+      if (!receipt || snapshot(receipt) !== snapshot(notice.receipt))
+        throw new Error("Result contract durable notice receipt changed")
+      yield* durable(sessions, receipt, row)
+    }
+    return digest(notice.review)
+  }
+  const database = yield* Effect.serviceOption(Database.Service)
+  if (Option.isNone(database)) throw new Error("Result contract synthetic continuation is unauthenticated")
+  const receipt = yield* Receipts.make(database.value).get({ sessionID: row.info.sessionID, messageID: row.info.id })
+  if (!receipt || receipt.row.sha !== snapshot(row))
     throw new Error("Result contract synthetic continuation is unauthenticated")
-  yield* freshNotice(notice)
+  yield* durable(sessions, receipt, row)
+  const retained = yield* Receipts.make(database.value).get({ sessionID: row.info.sessionID, messageID: row.info.id })
+  if (!retained || snapshot(retained) !== snapshot(receipt))
+    throw new Error("Result contract synthetic continuation receipt changed")
+  return receipt.root.sha
 })
+
+const outcome = Effect.fn("ResultContract.outcome")(function* (input: Receipts.Receipt["job"]) {
+  const service = yield* Effect.serviceOption(Outcome.Service)
+  if (Option.isNone(service)) throw new Error("Result contract joined background completion is unavailable")
+  const value = yield* service.value.get(input).pipe(Effect.orDie)
+  if (
+    !value ||
+    value.phase !== "joined" ||
+    !value.terminal ||
+    value.identitySHA !== input.identitySHA ||
+    value.terminalSHA !== input.terminalSHA ||
+    value.identity.origins.length !== 1 ||
+    value.identity.origins[0]?.callID !== input.callID ||
+    value.identity.origins[0]?.childMessageID !== input.inputID
+  )
+    throw new Error("Result contract joined background completion changed")
+  return value.terminal
+})
+
+const sources = Effect.fn("ResultContract.noticeSources")(function* (
+  sessions: Sessions,
+  root: Receipts.Receipt["root"],
+  job: NonNullable<Outcome.Receipt["terminal"]>,
+): Effect.fn.Return<Receipts.Receipt["source"], Session.NotFound> {
+  const origin = job.origins?.[0]
+  if (
+    job.origins?.length !== 1 ||
+    !origin ||
+    origin.sessionID !== root.sessionID ||
+    origin.childSessionID !== job.id ||
+    !origin.childMessageID
+  )
+    throw new Error("Result contract notice producer differs")
+  const rows = window(yield* sessions.messages({ sessionID: SessionID.make(root.sessionID), limit: 129 }), root.userID)
+  const parent = rows.find((row) => row.info.id === origin.messageID)
+  const calls =
+    parent?.parts.filter((part) => part.type === "tool" && part.tool === "task" && part.callID === origin.callID) ?? []
+  const call = calls[0]
+  if (
+    parent?.info.role !== "assistant" ||
+    parent.info.error ||
+    calls.length !== 1 ||
+    call?.type !== "tool" ||
+    call.sessionID !== root.sessionID ||
+    call.messageID !== parent.info.id ||
+    call.state.status !== "completed" ||
+    call.state.metadata.jobId !== job.id ||
+    call.state.metadata.background !== true ||
+    call.state.metadata.sessionId !== job.id ||
+    call.state.metadata.childMessageID !== origin.childMessageID
+  )
+    throw new Error("Result contract notice Task differs")
+  const info = parent.info
+  const previous = rows.find((row) => row.info.id === info.parentID)
+  if (
+    previous?.info.role !== "user" ||
+    previous.info.sessionID !== root.sessionID ||
+    previous.info.id < root.userID ||
+    previous.info.id >= parent.info.id
+  )
+    throw new Error("Result contract notice Task input differs")
+  if (previous.info.id !== root.userID && (yield* continuation(sessions, previous)) !== root.sha)
+    throw new Error("Result contract notice Task continuation differs")
+  const child = yield* sessions.get(SessionID.make(job.id))
+  const saved = inherited.parse(child.metadata?.[ResultContract.key])
+  const owner = TaskName.read(child.metadata?.[TaskName.key])
+  if (
+    child.parentID !== root.sessionID ||
+    digest(core(saved)) !== root.sha ||
+    saved.task.sessionID !== job.id ||
+    saved.task.inputID !== origin.childMessageID ||
+    saved.task.parentMessageID !== origin.messageID ||
+    saved.task.callID !== origin.callID ||
+    !owner ||
+    owner.provenance.parentSessionID !== root.sessionID ||
+    owner.provenance.parentMessageID !== saved.origin.parentMessageID ||
+    owner.provenance.callID !== saved.origin.callID
+  )
+    throw new Error("Result contract notice child differs")
+  const children = window(yield* sessions.messages({ sessionID: child.id, limit: 129 }), origin.childMessageID)
+  const input = children.find((row) => row.info.id === origin.childMessageID)
+  const terminal = children.findLast((row) => row.info.role === "assistant")
+  if (
+    input?.info.role !== "user" ||
+    input.info.sessionID !== child.id ||
+    children.findLast((row) => row.info.role === "user")?.info.id !== input.info.id ||
+    terminal?.info.role !== "assistant" ||
+    terminal.info.parentID !== input.info.id ||
+    terminal.info.sessionID !== child.id ||
+    !Number.isSafeInteger(terminal.info.time.completed) ||
+    terminal.info.time.completed! < input.info.time.created ||
+    (job.status === "completed" && (terminal.info.error || terminal.info.finish !== "stop"))
+  )
+    throw new Error("Result contract notice terminal differs")
+  const reads: Receipts.Receipt["source"]["reads"] = []
+  const ids = new Set<string>()
+  for (const row of children) {
+    if (row.info.role !== "assistant" || row.info.parentID !== input.info.id || row.info.error) continue
+    for (const part of row.parts) {
+      if (part.type !== "tool" || part.tool !== "read" || part.state.status !== "completed") continue
+      if (
+        reads.length >= 16 ||
+        ids.has(part.id) ||
+        ids.has(part.callID) ||
+        part.sessionID !== child.id ||
+        part.messageID !== row.info.id ||
+        !part.callID ||
+        !Number.isSafeInteger(part.state.time.start) ||
+        !Number.isSafeInteger(part.state.time.end) ||
+        part.state.time.start < input.info.time.created ||
+        part.state.time.end < part.state.time.start ||
+        part.state.time.end > terminal.info.time.completed!
+      )
+        throw new Error("Result contract notice Read differs")
+      ids.add(part.id)
+      ids.add(part.callID)
+      const display = part.state.metadata.display
+      if (display && typeof display === "object" && "type" in display && display.type === "directory") {
+        const value = z
+          .object({
+            type: z.literal("directory"),
+            path: z.string().min(1),
+            entries: z.array(z.string().min(1)).max(256),
+            offset: z.literal(1),
+            totalEntries: z.number().int().nonnegative(),
+            truncated: z.literal(false),
+          })
+          .strict()
+          .parse(display)
+        if (
+          part.state.metadata.truncated !== false ||
+          value.totalEntries !== value.entries.length ||
+          new Set(value.entries).size !== value.entries.length ||
+          Buffer.byteLength(value.path) > 4096 ||
+          value.entries.some((name) => Buffer.byteLength(name) > 4096) ||
+          part.state.output !== format(value)
+        )
+          throw new Error("Result contract notice directory evidence differs")
+      }
+      reads.push({ id: part.id, sha: snapshot({ row: row.info, part }) })
+    }
+  }
+  return {
+    task: snapshot({
+      row: {
+        id: parent.info.id,
+        sessionID: parent.info.sessionID,
+        parentID: parent.info.parentID,
+        agent: parent.info.agent,
+      },
+      call,
+    }),
+    child: snapshot({ id: child.id, parentID: child.parentID, saved, owner }),
+    input: snapshot(input),
+    terminal: snapshot(terminal),
+    reads,
+  }
+}, diagnostic("source"))
+
+const durable = Effect.fn("ResultContract.durableNotice")(function* (
+  sessions: Sessions,
+  receipt: Receipts.Receipt,
+  row: SessionV1.WithParts,
+): Effect.fn.Return<void, Session.NotFound> {
+  if (
+    row.info.role !== "user" ||
+    row.info.sessionID !== receipt.root.sessionID ||
+    row.info.id !== receipt.row.messageID ||
+    row.parts.length !== 1 ||
+    row.parts[0]?.type !== "text" ||
+    row.parts[0].synthetic !== true ||
+    snapshot(row) !== receipt.row.sha
+  )
+    throw new Error("Result contract durable notice differs")
+  const root = yield* sessions.get(SessionID.make(receipt.root.sessionID))
+  const decision = RayaChief.history(root.metadata).at(-1)
+  const rows = window(yield* sessions.messages({ sessionID: root.id, limit: 129 }), receipt.root.userID)
+  const previous = rows.find((value) => value.info.id === receipt.root.current)
+  if (
+    previous?.info.role !== "user" ||
+    previous.info.sessionID !== root.id ||
+    previous.info.id < receipt.root.userID ||
+    previous.info.id >= row.info.id
+  )
+    throw new Error("Result contract durable previous input differs")
+  if (previous.info.id !== receipt.root.userID && (yield* continuation(sessions, previous)) !== receipt.root.sha)
+    throw new Error("Result contract durable previous continuation differs")
+  const user = rows.find((row) => row.info.id === receipt.root.userID)
+  const parent = rows.find((row) => row.info.id === receipt.root.route.messageID)
+  const call = parent?.parts.find((part) => part.id === receipt.root.route.partID)
+  if (
+    root.parentID ||
+    !decision ||
+    user?.info.role !== "user" ||
+    user.info.agent !== "auto" ||
+    decision.userID !== user.info.id ||
+    RayaChief.request(root.metadata) !== decision.request ||
+    RayaChief.requestText(user.parts) !== decision.request ||
+    parent?.info.role !== "assistant" ||
+    parent.info.error ||
+    parent.info.sessionID !== root.id ||
+    user.info.sessionID !== root.id ||
+    parent.info.parentID !== user.info.id ||
+    call?.type !== "tool" ||
+    call.tool !== "chief_route" ||
+    call.state.status !== "completed" ||
+    call.callID !== receipt.root.route.callID ||
+    call.sessionID !== root.id ||
+    call.messageID !== parent.info.id ||
+    call.state.input.result !== decision.result ||
+    call.state.input.access !== decision.access ||
+    !Number.isSafeInteger(call.state.time.start) ||
+    !Number.isSafeInteger(call.state.time.end) ||
+    call.state.time.start < user.info.time.created ||
+    call.state.time.end < call.state.time.start ||
+    call.state.output !== JSON.stringify(decision)
+  )
+    throw new Error("Result contract durable root differs")
+  const value = proof.parse({
+    version: 1,
+    kind: decision.result,
+    sessionID: root.id,
+    userID: user.info.id,
+    request: decision.request,
+    decisionSHA: digest(decision),
+    route: receipt.root.route,
+  })
+  if (
+    digest(value) !== receipt.root.sha ||
+    snapshot({
+      user,
+      call: {
+        messageID: parent.info.id,
+        partID: call.id,
+        callID: call.callID,
+        input: call.state.input,
+        output: call.state.output,
+      },
+    }) !== receipt.root.authority
+  )
+    throw new Error("Result contract durable Chief evidence changed")
+  const job = yield* outcome(receipt.job)
+  if (snapshot(yield* sources(sessions, receipt.root, job)) !== snapshot(receipt.source))
+    throw new Error("Result contract durable source evidence changed")
+})
+
+const joined = Effect.fn("ResultContract.joinedNotice")(function* (
+  sessions: Sessions,
+  background: Pick<BackgroundJob.Interface, "get">,
+  value: ResultContract.Review,
+  job: NonNullable<Outcome.Receipt["terminal"]>,
+) {
+  const service = yield* Effect.serviceOption(Outcome.Service)
+  if (Option.isNone(service)) return
+  if (!job.revision) throw new Error("Result contract original background revision is unavailable")
+  const identity = {
+    id: job.id,
+    revision: job.revision,
+    type: job.type,
+    started_at: job.started_at,
+    origins: job.origins,
+  }
+  for (let attempt = 0; attempt <= 100; attempt++) {
+    yield* ResultContract.check(sessions, value)
+    const original = yield* background.get(job.id)
+    if (!original || snapshot(original) !== snapshot(job))
+      throw new Error("Result contract background completion changed before join")
+    const current = yield* service.value.get({ id: job.id, revision: job.revision }).pipe(Effect.orDie)
+    if (current) {
+      if (
+        snapshot(current.identity) !== snapshot(identity) ||
+        (current.phase !== "admitted" && (!current.terminal || snapshot(current.terminal) !== snapshot(job)))
+      )
+        throw new Error("Result contract original background join changed")
+      if (current.phase === "joined") {
+        if (!current.terminalSHA) throw new Error("Result contract original background join is incomplete")
+        yield* ResultContract.check(sessions, value)
+        return
+      }
+    }
+    if (attempt === 100) break
+    yield* Effect.sleep("50 millis")
+  }
+  throw new Error("Result contract original background join timed out; completion remains unconfirmed")
+}, diagnostic("join"))
 
 /** A request result contract selects rendering only; it never grants tool or native authority. */
 export namespace ResultContract {
@@ -277,9 +623,8 @@ export namespace ResultContract {
           const id = row.info.parentID
           const parent = rows.find((item) => item.info.id === id)
           if (parent?.info.role !== "user") throw new Error("Result contract parent continuation differs")
-          yield* continuation(sessions, parent)
-          if (digest(notices.get(sessions)?.get(parent.info.id)?.review) !== digest(core(saved)))
-            throw new Error("Result contract parent continuation differs")
+          const authority = yield* continuation(sessions, parent)
+          if (authority !== digest(core(saved))) throw new Error("Result contract parent continuation differs")
         }
         const user = children.find((row) => row.info.id === task.inputID)
         const terminal = children.findLast((row) => row.info.role === "assistant" && row.info.parentID === task.inputID)
@@ -623,6 +968,7 @@ export namespace ResultContract {
     }
     if (!terminal.length) throw new Error("Result contract original background Task completion timed out")
     yield* check(sessions, value)
+    yield* joined(sessions, background, value, job)
     const token = Object.freeze({})
     grants.set(token, {
       sessions,
@@ -635,7 +981,7 @@ export namespace ResultContract {
       current: context(root).current,
     })
     return token
-  })
+  }, diagnostic("notice"))
 
   /** Validate plugin-resolved notice rows before any persistence changes the current input. */
   export const validateNotice = Effect.fn("ResultContract.validateNotice")(function* (
@@ -711,6 +1057,108 @@ export namespace ResultContract {
     records.set(row.info.id, notice)
     notices.set(sessions, records)
   })
+
+  /** Original local publication commits data and its non-replayable receipt together. */
+  export const commitNotice = Effect.fn("ResultContract.commitNotice")(
+    function* (
+      sessions: Sessions,
+      token: object,
+      row: SessionV1.WithParts,
+      input: { database: Database.Interface; events: Pick<EventV2.Interface, "publish"> },
+    ) {
+      const notice = grants.get(token)
+      if (!notice || notice.sessions !== sessions || notice.row)
+        throw new Error("Result contract original notice is unavailable")
+      if (!notice.prepared) yield* validateNotice(sessions, token, row)
+      if (
+        notice.prepared !== snapshot(row) ||
+        row.info.role !== "user" ||
+        row.parts.length !== 1 ||
+        row.parts[0]?.type !== "text" ||
+        row.parts[0].synthetic !== true ||
+        row.parts[0].ignored === true
+      )
+        throw new Error("Result contract original notice differs")
+      const service = yield* Effect.serviceOption(Outcome.Service)
+      if (Option.isNone(service)) throw new Error("Result contract joined background completion is unavailable")
+      const job = yield* notice.background.get(notice.jobID)
+      if (!job?.revision || snapshot(job) !== notice.jobSHA)
+        throw new Error("Result contract original background completion changed")
+      const joined = yield* service.value.get({ id: job.id, revision: job.revision }).pipe(Effect.orDie)
+      if (
+        !joined ||
+        joined.phase !== "joined" ||
+        !joined.terminal ||
+        !joined.terminalSHA ||
+        snapshot(joined.terminal) !== snapshot(job)
+      )
+        throw new Error("Result contract joined background completion is unavailable")
+      const root = {
+        sessionID: notice.review.sessionID,
+        userID: notice.review.userID,
+        sha: digest(notice.review),
+        authority: notice.authority,
+        current: notice.current,
+        route: notice.review.route,
+      }
+      const origin = joined.identity.origins[0]
+      if (joined.identity.origins.length !== 1 || !origin?.childMessageID)
+        throw new Error("Result contract original producer differs")
+      const receipt = Receipts.schema.parse({
+        version: 1,
+        root,
+        row: { messageID: row.info.id, sha: snapshot(row) },
+        job: {
+          id: job.id,
+          revision: job.revision,
+          callID: origin.callID,
+          inputID: origin.childMessageID,
+          identitySHA: joined.identitySHA,
+          terminalSHA: joined.terminalSHA,
+        },
+        source: yield* sources(sessions, root, joined.terminal),
+      })
+      const records = Receipts.make(input.database)
+      yield* input.events.publish(
+        Committed,
+        { sessionID: row.info.sessionID, info: row.info, part: row.parts[0], time: row.info.time.created },
+        {
+          prepare: () =>
+            Effect.gen(function* () {
+              if (grants.get(token) !== notice || notice.row || notice.prepared !== snapshot(row))
+                throw new Error("Result contract original notice changed")
+              yield* freshNotice(notice)
+              const current = yield* original(sessions, SessionID.make(root.sessionID))
+              if (
+                !current ||
+                digest(current) !== root.sha ||
+                held.get(current)?.authority !== root.authority ||
+                !context(current).inputs.includes(MessageID.make(root.current))
+              )
+                throw new Error("Result contract original notice request changed")
+              if (yield* records.get({ sessionID: row.info.sessionID, messageID: row.info.id }))
+                throw new Error("Result contract notice was already committed")
+              const existing = yield* sessions.messages({ sessionID: row.info.sessionID, limit: 129 })
+              if (existing.some((value) => value.info.id === row.info.id))
+                throw new Error("Result contract notice message already exists")
+              yield* durable(sessions, receipt, row)
+            }).pipe(Effect.orDie),
+          commit: () =>
+            Effect.gen(function* () {
+              yield* durable(sessions, receipt, row)
+              yield* records.insert(receipt)
+            }).pipe(Effect.orDie),
+        },
+      )
+      const stored = yield* records.get({ sessionID: row.info.sessionID, messageID: row.info.id })
+      if (!stored || snapshot(stored) !== snapshot(receipt)) throw new Error("Result contract committed notice changed")
+      yield* durable(sessions, stored, row)
+      yield* publishNotice(sessions, token, row)
+      notice.receipt = structuredClone(stored)
+    },
+    Effect.orDie,
+    diagnostic("publication"),
+  )
 
   export const resume = Effect.fn("ResultContract.resume")(function* (
     sessions: Sessions,

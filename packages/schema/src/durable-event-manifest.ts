@@ -5,9 +5,10 @@ import { Schema } from "effect" // kilocode_change
 import { SessionEvent } from "./session-event"
 import { SessionV1 } from "./session-v1"
 import { PromptPromoted } from "./kilocode/durable-event" // kilocode_change - released storage key
+import { Committed as ResultNotice } from "./kilocode/result-notice" // kilocode_change
 
 // kilocode_change start - retain the released prompt promotion event for history and replay
-const definitions = Event.inventory(...SessionEvent.DurableDefinitions, PromptPromoted)
+const definitions = Event.inventory(...SessionEvent.DurableDefinitions, PromptPromoted, ResultNotice)
 const schema = Schema.Union(definitions, { mode: "oneOf" })
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "SessionDurableEvent" })

@@ -1,5 +1,5 @@
 export function statement(sql: string, rendered: string) {
-  const owned = /^CREATE\s+(?:TABLE\s+[`"]?raya_\w+|(?:UNIQUE\s+)?INDEX\s+\S+\s+ON\s+[`"]?raya_\w+)/i.test(sql)
+  const owned = /^CREATE\s+(?:TABLE\s+[`"]?raya_\w+|(?:UNIQUE\s+)?INDEX\s+\S+\s+ON\s+[`"]?raya_\w+)/i.test(sql.trimStart())
   return owned ? `      // kilocode_change start\n${rendered}\n      // kilocode_change end` : rendered
 }
 

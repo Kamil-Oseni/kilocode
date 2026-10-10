@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "3843e7d1-9b60-499a-a3d4-636d27437ff3",
+  "id": "5e2b61f5-5c6e-4d8b-b678-5255211a6200",
   "prevIds": [
-    "26d23574-02b1-474e-bff6-777c302b105b"
+    "3843e7d1-9b60-499a-a3d4-636d27437ff3"
   ],
   "ddl": [
     {
@@ -20,6 +20,10 @@
     },
     {
       "name": "raya_routine_archive",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_background_outcome",
       "entityType": "tables"
     },
     {
@@ -40,6 +44,10 @@
     },
     {
       "name": "raya_contact_receipt",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_result_notice",
       "entityType": "tables"
     },
     {
@@ -335,6 +343,76 @@
       "name": "definition",
       "entityType": "columns",
       "table": "raya_routine_archive"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_background_outcome"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "raya_background_outcome"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "identity",
+      "entityType": "columns",
+      "table": "raya_background_outcome"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "identity_sha",
+      "entityType": "columns",
+      "table": "raya_background_outcome"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "phase",
+      "entityType": "columns",
+      "table": "raya_background_outcome"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "terminal",
+      "entityType": "columns",
+      "table": "raya_background_outcome"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "terminal_sha",
+      "entityType": "columns",
+      "table": "raya_background_outcome"
     },
     {
       "type": "text",
@@ -905,6 +983,96 @@
       "name": "time_created",
       "entityType": "columns",
       "table": "raya_contact_receipt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "raya_result_notice"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message_id",
+      "entityType": "columns",
+      "table": "raya_result_notice"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "raya_result_notice"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "table": "raya_result_notice"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revision",
+      "entityType": "columns",
+      "table": "raya_result_notice"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "call_id",
+      "entityType": "columns",
+      "table": "raya_result_notice"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "input_id",
+      "entityType": "columns",
+      "table": "raya_result_notice"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "body",
+      "entityType": "columns",
+      "table": "raya_result_notice"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha",
+      "entityType": "columns",
+      "table": "raya_result_notice"
     },
     {
       "type": "text",
@@ -3853,6 +4021,21 @@
     },
     {
       "columns": [
+        "session_id"
+      ],
+      "tableTo": "session",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_raya_result_notice_session_id_session_id_fk",
+      "entityType": "fks",
+      "table": "raya_result_notice"
+    },
+    {
+      "columns": [
         "capsule"
       ],
       "tableTo": "raya_routine_effect_capsule",
@@ -4240,6 +4423,26 @@
       "name": "fk_session_share_session_id_session_id_fk",
       "entityType": "fks",
       "table": "session_share"
+    },
+    {
+      "columns": [
+        "id",
+        "revision"
+      ],
+      "nameExplicit": false,
+      "name": "raya_background_outcome_pk",
+      "entityType": "pks",
+      "table": "raya_background_outcome"
+    },
+    {
+      "columns": [
+        "session_id",
+        "message_id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_result_notice_pk",
+      "entityType": "pks",
+      "table": "raya_result_notice"
     },
     {
       "columns": [
@@ -4832,6 +5035,50 @@
       "name": "raya_contact_message_destination",
       "entityType": "indexes",
       "table": "raya_contact_message"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_result_notice_root_idx",
+      "entityType": "indexes",
+      "table": "raya_result_notice"
+    },
+    {
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false
+        },
+        {
+          "value": "revision",
+          "isExpression": false
+        },
+        {
+          "value": "call_id",
+          "isExpression": false
+        },
+        {
+          "value": "input_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_result_notice_original_idx",
+      "entityType": "indexes",
+      "table": "raya_result_notice"
     },
     {
       "columns": [
@@ -5762,6 +6009,18 @@
       "name": "todo_session_idx",
       "entityType": "indexes",
       "table": "todo"
+    },
+    {
+      "value": "length(CAST(\"id\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"revision\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"identity\" AS BLOB)) BETWEEN 1 AND 262144 AND length(\"identity_sha\") = 64 AND \"phase\" IN ('admitted','terminal','joined') AND ((\"phase\" = 'admitted' AND \"terminal\" IS NULL AND \"terminal_sha\" IS NULL) OR (\"phase\" IN ('terminal','joined') AND \"terminal\" IS NOT NULL AND \"terminal_sha\" IS NOT NULL AND length(CAST(\"terminal\" AS BLOB)) BETWEEN 1 AND 262144 AND length(\"terminal_sha\") = 64))",
+      "name": "raya_background_outcome_bounds",
+      "entityType": "checks",
+      "table": "raya_background_outcome"
+    },
+    {
+      "value": "length(CAST(\"body\" AS BLOB)) BETWEEN 1 AND 262144 AND length(\"sha\") = 64 AND length(CAST(\"session_id\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"message_id\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"user_id\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"job_id\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"revision\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"call_id\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"input_id\" AS BLOB)) BETWEEN 1 AND 256",
+      "name": "raya_result_notice_bounds",
+      "entityType": "checks",
+      "table": "raya_result_notice"
     },
     {
       "value": "length(\"id\") = 32 AND length(\"capsule\") = 32 AND length(\"generation\") = 32 AND length(\"digest\") = 64 AND length(\"owner\") = 64 AND \"kind\" IN ('model', 'tool', 'mcp', 'browser', 'native') AND length(CAST(\"purpose\" AS BLOB)) BETWEEN 1 AND 256 AND \"state\" IN ('reserved', 'started', 'settled', 'refused', 'uncertain') AND ((\"state\" = 'settled' AND \"receipt\" IS NOT NULL AND length(\"receipt\") = 64) OR (\"state\" <> 'settled' AND \"receipt\" IS NULL))",

@@ -23,7 +23,7 @@ mock.module("@kilocode/kilo-ui/toast", () => ({
 
 const { useSpeechToText } = await import("../../webview-ui/src/components/speech-to-text/useSpeechToText")
 
-it("End and STT failure close the real hook's retained hands-free microphone after transcription", async () => {
+it("sealing closes the real hook's hands-free microphone before transcription without losing original audio", async () => {
   const names = ["MediaRecorder", "AudioContext", "window"] as const
   const original = names.map((name) => Object.getOwnPropertyDescriptor(globalThis, name))
   const media = Object.getOwnPropertyDescriptor(navigator, "mediaDevices")
@@ -86,11 +86,11 @@ it("End and STT failure close the real hook's retained hands-free microphone aft
         await Bun.sleep(0)
         const submit = ctx.sent.find((message) => message.type === "speechToTextSubmit")
         if (submit?.type !== "speechToTextSubmit") throw new Error("Real capture submit missing")
-        expect(stopped).toBe(0)
+        expect(stopped).toBe(1)
         if (outcome === "result") {
           ctx.fire({ type: "speechToTextResult", requestId: submit.requestId, text: "Synthetic conversation" })
           expect(ctx.speech.state()).toBe("idle")
-          expect(stopped).toBe(0)
+          expect(stopped).toBe(1)
           ctx.speech.cancel()
         } else {
           ctx.fire({
@@ -526,18 +526,45 @@ describe("useSpeechToText", () => {
     ctx.dispose()
   })
 
-  // raya_change - hands-free capture stays active during playback and cancels only after real speech begins.
-  it("cancels streaming playback when extension-host VAD hears a barge-in", () => {
+  it("hands-free VAD never cancels playback and retired VAD cannot interrupt the original sealed result", async () => {
     const ctx = setup()
     let heard = 0
-    ctx.speech.start({ model: "scribe", insert: () => {}, handsFree: true, onSpeech: () => heard++ })
+    const inserted: string[] = []
+    let finished = 0
+    let released = 0
+    ctx.speech.start({
+      model: "scribe",
+      insert: (text) => {
+        inserted.push(text)
+      },
+      handsFree: true,
+      onSpeech: () => heard++,
+    })
     const start = ctx.sent[0]
     if (start?.type !== "speechToTextStart") throw new Error("speech start message missing")
     ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
     ctx.fire({ type: "speechToTextSpeech", requestId: start.requestId })
 
     expect(heard).toBe(1)
-    expect(ctx.sent[1]).toEqual({ type: "speechPlaybackCancel" })
+    expect(ctx.sent.some((message) => message.type === "speechPlaybackCancel")).toBe(false)
+    ctx.speech.stop({
+      done: async () => {
+        finished++
+      },
+      settled: () => released++,
+    })
+    ctx.speech.suspend()
+    ctx.fire({ type: "speechToTextSpeech", requestId: start.requestId })
+    ctx.fire({ type: "speechToTextSilence", requestId: start.requestId })
+    expect(heard).toBe(1)
+    expect(ctx.speech.state()).toBe("transcribing")
+    ctx.fire({ type: "speechToTextResult", requestId: start.requestId, text: "Original recognized turn" })
+    ctx.fire({ type: "speechToTextResult", requestId: start.requestId, text: "Late echoed playback" })
+    await Bun.sleep(0)
+    expect(inserted).toEqual(["Original recognized turn"])
+    expect(finished).toBe(1)
+    expect(released).toBe(1)
+    expect(ctx.sent.some((message) => message.type === "speechPlaybackCancel")).toBe(false)
     ctx.dispose()
   })
 

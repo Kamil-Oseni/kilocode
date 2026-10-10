@@ -64,6 +64,8 @@ type VoiceContextValue = {
   setMode: (mode: VoiceMode) => void
   start: (sessionID: string) => void
   prepare: () => (() => void) | undefined
+  captureAllowed: () => boolean
+  seal: (id: string) => (() => void) | undefined
   listen: () => void
   hear: () => void
   pause: (message: string) => void
@@ -149,23 +151,86 @@ export const VoiceProvider: ParentComponent = (props) => {
   const legacy = () =>
     loaded() && !["openai-realtime", "openai-live"].includes(settings().voiceEngine) && !call && !recovery.blocked()
   const owned = () => state.owner !== undefined && state.owner === session.currentSessionID()
+  const [turn, setTurn] = createSignal<{
+    id: string
+    generation: number
+    owner?: string
+    request?: string
+    timer?: ReturnType<typeof setTimeout>
+    drained?: boolean
+  }>()
+  const sealed = () => legacy() && settings().mode === "hands-free" && cascade()
+  const captureAllowed = () => !sealed() || (!turn() && !playing() && !["thinking", "speaking"].includes(status()))
+  const retire = () => {
+    const value = turn()
+    if (value?.timer !== undefined) clearTimeout(value.timer)
+    setTurn(undefined)
+  }
+  const current = (value: NonNullable<ReturnType<typeof turn>>) => {
+    if (turn() !== value || value.generation !== state.generation || !sealed() || loop.paused()) return false
+    if (value.owner) return session.currentSessionID() === value.owner
+    return !session.currentSessionID() && session.draftSessionID() === value.id
+  }
+  const drained = (request?: string) => {
+    const value = turn()
+    if (!value || !request || value.request !== request || state.request !== request || value.drained) return
+    if (!current(value)) return
+    value.drained = true
+    value.timer = setTimeout(() => {
+      if (!current(value) || value.request !== state.request) return
+      retire()
+      state.request = ""
+      delete choice.expected
+      echo.clear()
+      loop.done()
+      setStatus("listening")
+    }, 500)
+  }
+  const seal = (id: string) => {
+    if (!sealed() || !captureAllowed() || !id) return
+    const owner = session.currentSessionID()
+    if (owner !== id && (owner || session.draftSessionID() !== id)) return
+    const value = { id, owner, generation: state.generation }
+    setTurn(value)
+    loop.wait()
+    setStatus("thinking")
+    queueMicrotask(() => {
+      if (turn() === value) window.dispatchEvent(new CustomEvent("rayaVoiceSuspend"))
+    })
+    return () => {
+      if (!current(value) || turn()?.request || playing()) return
+      retire()
+      loop.done()
+      setStatus("listening")
+    }
+  }
   const echo = new VoiceEcho()
   const player = new StreamPlayer(
-    () => {
+    (request) => {
       if (!legacy()) return
+      if (request !== state.request) return
       setPlaying(false)
+      if (turn()) {
+        drained(request)
+        return
+      }
       loop.done()
       if (settings().mode === "hands-free" && cascade() && !loop.paused()) setStatus("listening")
     },
     (message) => {
-      if (legacy()) setError(message)
+      if (!legacy()) return
+      retire()
+      loop.pause()
+      window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
+      setError(message)
+      setStatus("degraded")
     },
     (row) => console.info("[Raya Voice playback]", row),
   )
   const loop = new VoiceLoop({
     listen: () =>
       queueMicrotask(() => {
-        if (!loop.paused()) window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+        if (!loop.paused() && captureAllowed()) window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
       }),
     stop: () => {
       delete choice.expected
@@ -477,28 +542,25 @@ export const VoiceProvider: ParentComponent = (props) => {
         trace("chunk-stale", message.requestId)
         return true
       }
+      if (turn()?.drained) return true
       trace("chunk-received", message.requestId)
       if (message.text) echo.set(message.text)
-      const starting = !playing()
       setPlaying(true)
       setError(undefined)
       loop.speak()
       if (settings().mode === "hands-free" && status() !== "off") setStatus("speaking")
       player.push(message.data, message.mime, message.requestId)
-      if (starting && settings().mode === "hands-free" && cascade()) {
-        queueMicrotask(() => {
-          if (!loop.paused()) window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
-        })
-      }
       return true
     }
     if (message.type === "speechPlaybackDone") {
       if (message.requestId !== state.request) return true
-      player.finish()
+      if (turn()?.drained) return true
+      player.finish(message.requestId)
       return true
     }
     if (message.type === "speechPlaybackError") {
       if (message.requestId !== state.request) return true
+      retire()
       console.error("[Raya] Speech playback failed:", message.error)
       setError(message.error)
       loop.pause()
@@ -647,6 +709,7 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
   request()
   onCleanup(() => {
+    retire()
     delete state.owner
     window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
     loop.pause()
@@ -702,6 +765,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     })
   }
   const stop = () => {
+    retire()
     delete state.pending
     delete state.owner
     delete state.media
@@ -797,6 +861,8 @@ export const VoiceProvider: ParentComponent = (props) => {
       const current = session.currentSessionID()
       if (current && current === pending.session) {
         state.owner = current
+        const value = turn()
+        if (value && value.request === pending.request && value.id === pending.draft) value.owner = current
         delete state.pending
         return
       }
@@ -806,8 +872,21 @@ export const VoiceProvider: ParentComponent = (props) => {
     })
   }
   createEffect(() => {
-    session.currentSessionID()
-    session.draftSessionID()
+    const id = session.currentSessionID()
+    const draft = session.draftSessionID()
+    const value = turn()
+    if (value && !sealed()) {
+      stop()
+      return
+    }
+    if (value?.owner && value.owner !== id) {
+      stop()
+      return
+    }
+    if (value && !value.owner && !state.pending && (id || draft !== value.id)) {
+      stop()
+      return
+    }
     adopt()
   })
 
@@ -892,8 +971,10 @@ export const VoiceProvider: ParentComponent = (props) => {
             setStatus("degraded")
           }
         },
+        captureAllowed,
+        seal,
         listen: () => {
-          if (!available()) return
+          if (!available() || !captureAllowed()) return
           player.unlock()
           if (settings().voiceEngine === "cascade-v1" && settings().mode === "hands-free") setCascade(true)
           loop.listen()
@@ -903,10 +984,12 @@ export const VoiceProvider: ParentComponent = (props) => {
           }
         },
         hear: () => {
+          if (!captureAllowed()) return
           loop.hear()
           if (settings().mode === "hands-free" && cascade() && !loop.paused()) setStatus("listening")
         },
         pause: (message) => {
+          retire()
           loop.pause()
           window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
           setError(message)
@@ -916,10 +999,14 @@ export const VoiceProvider: ParentComponent = (props) => {
           const sessionID = session.currentSessionID()
           const draftID = !sessionID && session.draftSessionID() === id ? id : undefined
           if (!available() || !id || (sessionID !== id && !draftID) || loop.paused()) return
+          if (sealed() && !turn()) seal(id)
+          const value = turn()
+          if (value && (!current(value) || value.id !== id || value.request)) return
           if (state.request) vscode.postMessage({ type: "speechPlaybackCancel", requestId: state.request })
           player.reset()
           setPlaying(false)
           state.request = crypto.randomUUID()
+          if (value) value.request = state.request
           state.pending = draftID ? { draft: draftID, request: state.request } : undefined
           if (!draftID) state.owner = id
           choice.expected = state.request

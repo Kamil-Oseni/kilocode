@@ -1426,6 +1426,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const startSpeech = () => {
+    if (!voice.captureAllowed()) return
     if (recovery.blocked()) {
       return
     }
@@ -1458,7 +1459,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       session: id ?? null,
       route: context ?? null,
     }
-    if (!voice.playing()) voice.listen() // raya_change - background barge-in capture must preserve the speaking phase
+    voice.listen()
     speech.start({
       model: speechModel(),
       insert: insertSpeechText,
@@ -1492,15 +1493,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       handsFree: fallback,
       threshold: voice.settings().vadThreshold,
       silenceMs: voice.settings().vadSilenceMs,
-      echoSuppression: voice.playing(), // raya_change - learn residual speaker energy once, then retain fast human barge-in
       onError: voice.pause,
       onEmpty: fallback ? () => window.dispatchEvent(new CustomEvent("rayaVoiceListen")) : undefined,
-      onSpeech: voice.hear, // raya_change - Milestone H barge-in transition
+      onSpeech: () => {
+        if (voice.captureAllowed()) voice.hear()
+      },
       onSilence: fallback ? () => transcribeAndSend() : undefined,
     })
   }
 
   const transcribeAndSend = () => {
+    if (speech.state() !== "starting" && speech.state() !== "recording") return
     const id = sid()
     const key = draftKey()
     const context = ctx()
@@ -1509,8 +1512,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const auth = provider.authStates()
     const selected = session.selected(id)
     const agent = session.selectedAgent(id)
+    const half = voice.cascade() && voice.settings().mode === "hands-free"
+    const release = half ? voice.seal(id ?? vacant) : undefined
+    if (half && !release) return
     speech.stop({
-      done: () => void handleSend(),
+      done: () => handleSend(() => sid() === id && ctx() === context && session.selectedAgent(id) === agent),
+      settled: release,
       ready: () =>
         !isDisabled() &&
         !props.blocked?.() &&
@@ -1572,6 +1579,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       voice.status() === "off" ||
       voice.status() === "degraded" ||
       !voice.cascade() ||
+      !voice.captureAllowed() ||
       speech.active() ||
       isDisabled()
     )
@@ -1591,9 +1599,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     startSpeech()
   }
   window.addEventListener("rayaVoiceListen", voiceListen)
+  const suspend = () => speech.suspend()
+  window.addEventListener("rayaVoiceSuspend", suspend)
   onCleanup(() => {
     clear()
     window.removeEventListener("rayaVoiceListen", voiceListen)
+    window.removeEventListener("rayaVoiceSuspend", suspend)
   })
   const voiceCancel = () => {
     clear()
@@ -1784,7 +1795,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       voice.wait(origin ?? id)
   }
 
-  const sendDraft = async (draft: string) => {
+  const sendable = (current?: () => boolean) => !isDisabled() && current?.() !== false
+
+  const sendDraft = async (draft: string, current?: () => boolean) => {
     if (consumeMemory(draft)) return
 
     const command = matching(draft)
@@ -1858,7 +1871,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       finishPending(pendingId)
       return
     }
-    if (isDisabled()) {
+    if (!sendable(current)) {
       if (capture) durable.release(capture)
       finishPending(pendingId)
       return
@@ -1918,10 +1931,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   // raya_change start - Milestone A keeps /goal parsing outside the already-complex send pipeline
-  const handleSend = async () => {
+  const handleSend = async (current?: () => boolean) => {
     const draft = text().trim()
     if (runGoalCommand(draft)) return
-    await sendDraft(draft)
+    await sendDraft(draft, current)
   }
   // raya_change end
 

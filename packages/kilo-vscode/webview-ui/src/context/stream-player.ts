@@ -44,7 +44,7 @@ export class StreamPlayer {
   private clock: number | undefined
 
   constructor(
-    private readonly done: () => void,
+    private readonly done: (request?: string) => void,
     private readonly fail: (error: string) => void,
     private readonly diagnostic?: (row: Diagnostic) => void,
   ) {}
@@ -105,10 +105,12 @@ export class StreamPlayer {
     this.flush()
   }
 
-  finish() {
+  finish(request?: string) {
+    if (request && this.request && request !== this.request) return
+    this.request ??= request
     this.ending = true
     this.drain()
-    if (this.context && this.nodes.size === 0) {
+    if (!this.source && this.nodes.size === 0 && this.pending.length === 0) {
       this.settle()
       return
     }
@@ -121,6 +123,7 @@ export class StreamPlayer {
   }
 
   stop(notify = true) {
+    const request = this.request
     this.reset()
     this.closeBridge()
     this.output = undefined
@@ -133,7 +136,7 @@ export class StreamPlayer {
         this.fail(err instanceof Error ? err.message : String(err))
       }
     }
-    if (notify) this.done()
+    if (notify) this.done(request)
   }
 
   // raya_change - preserve the user-gesture-unlocked AudioContext between streamed voice turns
@@ -306,19 +309,26 @@ export class StreamPlayer {
   private open(mime: string) {
     if (!MediaSource.isTypeSupported(mime)) {
       this.fail(`Streaming speech MIME type is unsupported: ${mime}`)
-      return this.stop()
+      return this.stop(false)
     }
     const source = new MediaSource()
     const audio = new Audio(URL.createObjectURL(source))
+    const request = this.request
     this.source = source
     this.audio = audio
     source.addEventListener(
       "sourceopen",
       () => {
+        if (this.source !== source || this.audio !== audio) return
         const buffer = source.addSourceBuffer(mime)
         this.buffer = buffer
-        buffer.addEventListener("updateend", () => this.flush())
-        void audio.play().catch((err: unknown) => this.fail(err instanceof Error ? err.message : String(err)))
+        buffer.addEventListener("updateend", () => {
+          if (this.source === source && this.buffer === buffer) this.flush()
+        })
+        void audio.play().catch((err: unknown) => {
+          if (this.audio === audio && this.request === request)
+            this.fail(err instanceof Error ? err.message : String(err))
+        })
         this.flush()
       },
       { once: true },
@@ -338,13 +348,22 @@ export class StreamPlayer {
     }
     if (!this.ending || source.readyState !== "open") return
     source.endOfStream()
-    this.audio?.addEventListener("ended", () => this.settle(), { once: true })
+    const audio = this.audio
+    const request = this.request
+    audio?.addEventListener(
+      "ended",
+      () => {
+        if (this.audio === audio && this.source === source && this.request === request) this.settle()
+      },
+      { once: true },
+    )
   }
 
   // raya_change - completed turns keep the gesture-authorized sink alive for the next reply
   private settle() {
+    const request = this.request
     this.reset()
-    this.done()
+    this.done(request)
   }
 }
 

@@ -7,8 +7,8 @@ test("actual muted AudioContext buffers measured late PCM and retires queued aud
   const bundle = await build({
     stdin: {
       contents: `import { StreamPlayer } from ${JSON.stringify(resolve(import.meta.dir, "../../webview-ui/src/context/stream-player.ts"))};
-        window.rows=[]; window.errors=[]; window.completed=0;
-        window.player=new StreamPlayer(()=>window.completed++,err=>window.errors.push(err),row=>window.rows.push(row));
+        window.rows=[]; window.errors=[]; window.completed=0; window.requests=[];
+        window.player=new StreamPlayer(request=>{window.completed++;window.requests.push(request)},err=>window.errors.push(err),row=>window.rows.push(row));
         window.pcm=(count,rate=24000)=>{const bytes=new Uint8Array(count*2);const view=new DataView(bytes.buffer);for(let i=0;i<count;i++)view.setInt16(i*2,i%2?-8192:8192,true);let raw='';for(let i=0;i<bytes.length;i+=8192)raw+=String.fromCharCode(...bytes.subarray(i,i+8192));window.player.push(btoa(raw),'audio/pcm;rate='+rate,'2373db48-53d6-4557-8651-f9a5beeded90')};`,
       resolveDir: import.meta.dir,
       loader: "ts",
@@ -90,6 +90,7 @@ test("actual muted AudioContext buffers measured late PCM and retires queued aud
     })
     expect(await page.evaluate(() => window.rows.filter((row) => row.event === "scheduled").length)).toBe(1)
     await expect.poll(() => page.evaluate(() => window.completed)).toBe(1)
+    expect(await page.evaluate(() => window.requests)).toEqual(["2373db48-53d6-4557-8651-f9a5beeded90"])
     expect(await page.evaluate(() => window.player.context === window.sink && window.sink.state === "running")).toBe(
       true,
     )

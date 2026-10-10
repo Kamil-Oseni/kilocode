@@ -11,11 +11,28 @@ const require = createRequire(import.meta.url)
 const gates: PluginObj = {
   visitor: {
     ObjectProperty(path) {
-      if (!types.isIdentifier(path.node.key, { name: "ready" })) return
       const parent = path.findParent(
         (value) => value.isVariableDeclarator() && types.isIdentifier(value.node.id, { name: "transcribeAndSend" }),
       )
       if (!parent || !types.isArrowFunctionExpression(path.node.value)) return
+      if (types.isIdentifier(path.node.key, { name: "done" })) {
+        if (!types.isExpression(path.node.value.body)) throw new Error("Original speech send callback changed")
+        // Observe original Promise completion; preserve its value, rejection and all production send logic.
+        path.node.value.body = types.callExpression(
+          types.memberExpression(path.node.value.body, types.identifier("finally")),
+          [
+            types.arrowFunctionExpression(
+              [],
+              types.callExpression(
+                types.memberExpression(types.identifier("window"), types.identifier("__speechGate")),
+                [types.numericLiteral(14), types.booleanLiteral(true)],
+              ),
+            ),
+          ],
+        )
+        return
+      }
+      if (!types.isIdentifier(path.node.key, { name: "ready" })) return
       let index = 0
       const wrap = (value: import("@babel/types").Expression): import("@babel/types").Expression => {
         if (types.isLogicalExpression(value, { operator: "&&" }))
@@ -41,6 +58,7 @@ async function mounted(
   ordinary = false,
   action = "",
 ) {
+  const orb = action === "orb" || action === "halfduplex"
   const root = resolve(import.meta.dir, "../..")
   const dir = resolve(root, "node_modules/.cache/voice-insertion-ownership-mounted")
   const solid = dirname(require.resolve("solid-js/package.json"))
@@ -102,6 +120,7 @@ async function mounted(
   let admitted = false
   let loaded = 0
   let promoted = 0
+  let changed = 0
   let primary: unknown
   let stage = "first-owner"
   const errors: string[] = []
@@ -139,6 +158,23 @@ async function mounted(
         ].includes(message.type)
       ) {
         const reply = await storage.handle(message)
+        if (
+          action === "agent" &&
+          !changed &&
+          message.type === "composerDraftSave" &&
+          message.content.text === "Speech after genuine first owner claim" &&
+          !reply.error
+        ) {
+          // The original physical save has completed; hold its acknowledgement across a real selection change.
+          expect(message.content.agent).toBe("voice")
+          expect(
+            await page.evaluate(() => {
+              window.__session.setSessionAgent("ses_voice", "code")
+              return window.__session.selectedAgent("ses_voice")
+            }),
+          ).toBe("code")
+          changed++
+        }
         await page.evaluate(
           (value) => {
             if (window.__speechGuards.length < 128) window.__speechGuards.push(value)
@@ -212,16 +248,36 @@ async function mounted(
       expect(await page.evaluate(() => window.__session.currentSessionID())).toBeUndefined()
       expect(await page.evaluate(() => window.__messages.some((entry) => entry.type === "createSession"))).toBe(false)
     } else {
+      if (orb) expect(await page.evaluate(() => window.__session.currentSessionID())).toBeUndefined()
       await page.getByRole("button", { name: "Start hands-free voice", exact: true }).click()
       const draft = await page.evaluate(
         () => window.__messages.findLast((entry) => entry.type === "createSession").draftID,
       )
       await page.evaluate(
-        (draftID) =>
-          window.__deliver({ type: "sessionCreated", draftID, session: { id: "ses_voice", title: "Voice" } }),
-        draft,
+        ({ draftID, orb }) =>
+          window.__deliver({
+            type: "sessionCreated",
+            draftID,
+            session: { id: "ses_voice", title: "Voice", ...(orb ? { agent: "auto" } : {}) },
+          }),
+        { draftID: draft, orb },
       )
       await expect.poll(() => page.evaluate(() => window.__session.currentSessionID())).toBe("ses_voice")
+      if (orb) {
+        await expect
+          .poll(() =>
+            page.evaluate(() => window.__messages.filter((entry) => entry.type === "speechRealtimeStart").length),
+          )
+          .toBe(1)
+        await page.evaluate(async () => {
+          await window.__deliver({ type: "messagesLoaded", sessionID: "ses_voice", messages: [], mode: "focus" })
+          await window.__deliver({
+            type: "sessionUpdated",
+            session: { id: "ses_voice", title: "New Session", agent: "auto" },
+          })
+        })
+        expect(await page.evaluate(() => window.__session.selectedAgent("ses_voice"))).toBe("voice")
+      }
       await expect(input).toHaveValue("")
       await page.evaluate(async () => {
         window.__voice.setMode("hands-free")
@@ -336,6 +392,22 @@ async function mounted(
       return
     }
     if (sending) {
+      if (action === "agent") {
+        await expect.poll(() => changed).toBe(1)
+        await expect
+          .poll(() =>
+            page.evaluate(() => window.__speechGates.filter((entry) => entry.index === 14 && entry.accepted).length),
+          )
+          .toBe(1)
+        expect(dispatched).toHaveLength(0)
+        expect(await page.evaluate(() => window.__messages.some((entry) => entry.type === "speechVoiceTurn"))).toBe(
+          false,
+        )
+        await expect(input).toHaveValue("Speech after genuine first owner claim")
+        await page.evaluate(() => window.__voice.stop())
+        expect(errors).toEqual([])
+        return
+      }
       await expect.poll(() => dispatched.length).toBe(1)
       expect(dispatched[0]).toMatchObject({
         text: "Speech after genuine first owner claim",
@@ -343,6 +415,109 @@ async function mounted(
         agent: "voice",
         modelID: "synthetic-pinned-4b",
       })
+      if (orb) {
+        const marker = await page.evaluate(() =>
+          window.__messages.findLast((entry) => entry.type === "speechVoiceTurn"),
+        )
+        expect(marker).toMatchObject({ sessionID: "ses_voice" })
+        expect(marker.draftID).toBeUndefined()
+        expect(marker.requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+        expect(dispatched[0].capture).toMatchObject({ identity: { sessionID: "ses_voice" } })
+        const order = await page.evaluate(() => window.__messages.map((entry) => entry.type))
+        expect(order.indexOf("speechVoiceTurn")).toBeLessThan(order.indexOf("sendMessage"))
+      }
+      if (action === "halfduplex") {
+        const marker = await page.evaluate(() =>
+          window.__messages.findLast((entry) => entry.type === "speechVoiceTurn"),
+        )
+        const cancels = await page.evaluate(
+          () => window.__messages.filter((entry) => entry.type === "speechPlaybackCancel").length,
+        )
+        await page.evaluate(async (requestId) => {
+          window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+          await window.__deliver({ type: "speechToTextSpeech", requestId })
+          await window.__deliver({ type: "speechToTextResult", requestId, text: "Late microphone echo" })
+        }, initial)
+        expect(dispatched).toHaveLength(1)
+        expect(
+          await page.evaluate(() => window.__messages.filter((entry) => entry.type === "speechToTextStart").length),
+        ).toBe(1)
+        await page.evaluate(async (requestId) => {
+          await window.__deliver({
+            type: "messageCreated",
+            message: {
+              id: "halfduplex_reply",
+              sessionID: "ses_voice",
+              parentID: window.__messages.findLast((entry) => entry.type === "sendMessage").messageID,
+              role: "assistant",
+              agent: "voice",
+              finish: "stop",
+              time: { created: 1, completed: 2 },
+            },
+          })
+          await window.__deliver({ type: "sessionStatus", sessionID: "ses_voice", status: "idle" })
+          await window.__deliver({
+            type: "speechPlaybackChunk",
+            requestId,
+            data: btoa(String.fromCharCode(...new Uint8Array(16_000))),
+            mime: "audio/pcm;rate=16000",
+          })
+        }, marker.requestId)
+        await expect.poll(() => page.evaluate(() => window.__voice.playing())).toBe(true)
+        await page.evaluate(async (requestId) => {
+          window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+          await window.__deliver({ type: "speechToTextSpeech", requestId })
+          await window.__deliver({
+            type: "speechToTextResult",
+            requestId,
+            text: "Speaker audio cannot become a user turn",
+          })
+        }, initial)
+        expect(dispatched).toHaveLength(1)
+        expect(
+          await page.evaluate(() => window.__messages.filter((entry) => entry.type === "speechPlaybackCancel").length),
+        ).toBe(cancels)
+        expect(
+          await page.evaluate(() => window.__messages.filter((entry) => entry.type === "speechToTextStart").length),
+        ).toBe(1)
+        await page.evaluate(
+          (requestId) => window.__deliver({ type: "speechPlaybackDone", requestId }),
+          marker.requestId,
+        )
+        await expect
+          .poll(() =>
+            page.evaluate(() => window.__messages.filter((entry) => entry.type === "speechToTextStart").length),
+          )
+          .toBe(2)
+        const next = await page.evaluate(
+          () => window.__messages.findLast((entry) => entry.type === "speechToTextStart").requestId,
+        )
+        expect(next).not.toBe(initial)
+        await page.evaluate(async (requestId) => {
+          await window.__deliver({ type: "speechToTextStarted", requestId })
+          await window.__deliver({ type: "speechToTextSilence", requestId })
+          await window.__deliver({
+            type: "speechToTextResult",
+            requestId,
+            text: "Next genuine user turn after audio drain",
+          })
+        }, next)
+        await expect.poll(() => dispatched.length).toBe(2)
+        expect(dispatched[1]).toMatchObject({
+          agent: "voice",
+          sessionID: "ses_voice",
+          text: "Next genuine user turn after audio drain",
+        })
+        await page.evaluate(() => window.__voice.stop())
+        await page.evaluate(async (requestId) => {
+          window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+          await window.__deliver({ type: "speechToTextResult", requestId, text: "Stopped late result" })
+        }, next)
+        expect(dispatched).toHaveLength(2)
+        expect(await page.evaluate(() => window.__voice.status())).toBe("off")
+        expect(errors).toEqual([])
+        return
+      }
       if (fresh) {
         expect(dispatched[0].sessionID).toBeUndefined()
         expect(dispatched[0].capture).toMatchObject({ identity: { pendingID: dispatched[0].draftID } })
@@ -714,6 +889,18 @@ for (const reverse of [false, true])
   )
 
 test(
+  "actual mounted speech refuses a changed agent while its original durable capture acknowledgement is delayed",
+  () => mounted(true, false, false, false, false, "agent"),
+  120_000,
+)
+
+test(
+  "actual mounted local voice seals thinking and PCM playback until drain before accepting the next user turn",
+  () => mounted(true, false, false, false, false, "halfduplex"),
+  120_000,
+)
+
+test(
   "actual mounted fresh ordinary dictation retains its selected agent without arming Voice output",
   () => mounted(false, false, false, true, true),
   120_000,
@@ -724,3 +911,10 @@ test.each(["replace", "foreign", "stop"])(
   (action) => mounted(true, false, false, true, false, action),
   120_000,
 )
+
+for (const reverse of [false, true])
+  test(
+    `actual mounted empty orb startup retains Voice across default Auto hydration (${reverse ? "reverse" : "normal"})`,
+    () => mounted(true, reverse, false, false, false, "orb"),
+    120_000,
+  )

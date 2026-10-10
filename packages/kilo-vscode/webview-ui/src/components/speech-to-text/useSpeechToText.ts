@@ -39,8 +39,9 @@ type StartOptions = {
 }
 
 type StopOptions = {
-  done?: () => void
+  done?: () => void | Promise<void>
   ready?: () => boolean
+  settled?: () => void
 }
 
 export type SpeechToText = {
@@ -51,6 +52,7 @@ export type SpeechToText = {
   stop: (opts?: StopOptions) => void
   rejectEcho: () => void
   cancel: () => void
+  suspend: () => void
   clear: () => void
 }
 
@@ -69,7 +71,8 @@ export function useSpeechToText(
   let sessionID: string | undefined
   let counter = 0
   let insert: InsertTranscript | undefined
-  let done: (() => void) | undefined
+  let done: StopOptions["done"]
+  let settled: StopOptions["settled"]
   let ready: (() => boolean) | undefined
   let ownership: (() => () => boolean) | undefined
   let owned: (() => boolean) | undefined
@@ -96,6 +99,7 @@ export function useSpeechToText(
   let failed: ((message: string) => void) | undefined
   let empty: (() => void) | undefined
   let silence: (() => void) | undefined // raya_change - Milestone H extension-host VAD
+  let handsfree = false
 
   const unsub = vscode.onMessage((msg) => {
     if (!isSpeechMessage(msg)) return
@@ -114,7 +118,7 @@ export function useSpeechToText(
     // raya_change start - Milestone H extension-host VAD fallback
     if (msg.type === "speechToTextSpeech") {
       if (state() !== "recording") return
-      vscode.postMessage({ type: "speechPlaybackCancel" })
+      if (!handsfree) vscode.postMessage({ type: "speechPlaybackCancel" })
       speech?.()
       return
     }
@@ -138,6 +142,7 @@ export function useSpeechToText(
     }
 
     if (check?.(msg.text, request) === false) {
+      finalize(settled)
       cleanup()
       setState("idle")
       setError(undefined)
@@ -174,6 +179,7 @@ export function useSpeechToText(
     model = opts.model
     speech = opts.onSpeech
     silence = opts.onSilence
+    handsfree = opts.handsFree === true
     failed = opts.onError
     empty = opts.handsFree ? opts.onEmpty : undefined
     setError(undefined)
@@ -195,7 +201,7 @@ export function useSpeechToText(
           echoSuppression: opts.echoSuppression,
           onSpeech: () => {
             if (request !== id || state() !== "recording") return
-            vscode.postMessage({ type: "speechPlaybackCancel" })
+            if (!opts.handsFree) vscode.postMessage({ type: "speechPlaybackCancel" })
             opts.onSpeech?.()
           },
           onSilence: () => {
@@ -237,6 +243,7 @@ export function useSpeechToText(
   function stop(opts?: StopOptions) {
     if (state() !== "starting" && state() !== "recording") return
     done = opts?.done
+    settled = opts?.settled
     ready = opts?.ready
     if (state() === "starting") {
       pending = true
@@ -365,6 +372,8 @@ export function useSpeechToText(
   }
 
   async function complete(token: NonNullable<typeof result>) {
+    const release = settled
+    let fault = false
     try {
       if (result !== token || token.abort.signal.aborted) return
       const wait = settle
@@ -394,8 +403,9 @@ export function useSpeechToText(
       cleanup(false)
       setState("idle")
       setError(undefined)
-      if (inserted !== false) next?.() // Do not send a voice-mode command as a chat turn.
+      if (inserted !== false) await next?.() // Do not send a voice-mode command as a chat turn.
     } catch {
+      fault = true
       // A callback can fail after a partial insertion. Preserve speech, never retry or send it here.
       if (result === token) {
         cleanup()
@@ -406,6 +416,16 @@ export function useSpeechToText(
       }
       detach(token)
       console.warn("[Raya] Speech result consumption failed after retirement.")
+    } finally {
+      if (!fault) finalize(release)
+    }
+  }
+
+  function finalize(release: StopOptions["settled"]) {
+    try {
+      release?.()
+    } catch {
+      console.warn("[Raya] Original speech turn release failed.")
     }
   }
 
@@ -422,7 +442,9 @@ export function useSpeechToText(
   function resume() {
     if (!empty) return false
     const next = empty
+    const release = settled
     cleanup()
+    finalize(release)
     setState("idle")
     setError(undefined)
     next()
@@ -448,6 +470,7 @@ export function useSpeechToText(
     sessionID = undefined
     insert = undefined
     done = undefined
+    settled = undefined
     ready = undefined
     ownership = undefined
     owned = undefined
@@ -464,7 +487,17 @@ export function useSpeechToText(
     empty = undefined
   }
 
-  return { state, error, active, start, stop, rejectEcho: () => capture.rejectEcho(), cancel, clear }
+  return {
+    state,
+    error,
+    active,
+    start,
+    stop,
+    rejectEcho: () => capture.rejectEcho(),
+    suspend: () => capture.suspend(),
+    cancel,
+    clear,
+  }
 }
 
 function isSpeechMessage(msg: ExtensionMessage): msg is Extract<

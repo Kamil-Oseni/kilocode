@@ -22,7 +22,6 @@ export class SpeechCapture {
   private timer: number | undefined
   private chunks: Blob[] = []
   private reject: ((error: Error) => void) | undefined
-  private keep = false
   private generation = 0
   private readonly gate = new EchoGate()
 
@@ -56,7 +55,6 @@ export class SpeechCapture {
     }
     const mime = format()
     const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
-    this.keep = opts.handsFree
     this.stream = stream
     this.recorder = recorder
     this.chunks = []
@@ -74,7 +72,6 @@ export class SpeechCapture {
     const recorder = this.recorder
     if (!recorder) return Promise.reject(new Error("No active microphone recording."))
     this.stopMonitor()
-    const preserve = this.keep
     const chunks = this.chunks
     return new Promise<CapturedAudio>((resolve, reject) => {
       this.reject = reject
@@ -84,11 +81,11 @@ export class SpeechCapture {
           const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" })
           void encode(blob).then(
             (data) => {
-              if (this.recorder === recorder) this.cleanup(preserve)
+              if (this.recorder === recorder) this.cleanup()
               resolve({ data, format: blob.type || "audio/webm" })
             },
             (err: unknown) => {
-              if (this.recorder === recorder) this.cleanup(preserve)
+              if (this.recorder === recorder) this.cleanup()
               reject(err instanceof Error ? err : new Error(String(err)))
             },
           )
@@ -96,12 +93,18 @@ export class SpeechCapture {
         { once: true },
       )
       recorder.stop()
+      this.suspend()
     })
+  }
+
+  suspend(): void {
+    this.stopMonitor()
+    for (const track of this.stream?.getTracks() ?? []) track.stop()
+    this.stream = undefined
   }
 
   cancel(): void {
     this.generation++
-    this.keep = false
     this.gate.reset()
     this.stopMonitor()
     if (this.recorder?.state !== "inactive") this.recorder?.stop()

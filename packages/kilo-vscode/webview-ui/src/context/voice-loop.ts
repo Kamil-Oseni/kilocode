@@ -1,4 +1,4 @@
-// raya_change - Milestone H executable push-to-talk, hands-free, and barge-in controller
+// raya_change - Push-to-talk and half-duplex hands-free turn controller
 import type { VoiceMode } from "../../../src/shared/speech"
 
 export type VoicePhase = "idle" | "listening" | "thinking" | "speaking"
@@ -47,6 +47,7 @@ export class VoiceLoop {
   }
 
   listen() {
+    if (this.mode === "hands-free" && (this.phase === "thinking" || this.phase === "speaking")) return
     this.suspended = false
     if (this.mode === "off") return
     this.phase = "listening"
@@ -64,6 +65,7 @@ export class VoiceLoop {
 
   hear() {
     if (this.suspended) return
+    if (this.mode === "hands-free" && (this.phase === "thinking" || this.phase === "speaking")) return
     if (this.phase === "speaking") this.sink.stop()
     if (this.mode !== "off") this.phase = "listening"
   }

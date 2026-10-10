@@ -5747,6 +5747,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
                       this.contextSessionID === sid &&
                       this.trackedSessionIds.has(sid))),
               )
+            if (voice)
+              console.debug("[Raya Voice] submission", {
+                request: voice.requestId,
+                session: sid,
+                pending: !!voice.draftID,
+                agent: agent === "voice" ? "voice" : agent === "auto" ? "auto" : agent ? "other" : "default",
+              })
             return this.client!.session.promptAsync({
               sessionID: sid,
               directory: dir,

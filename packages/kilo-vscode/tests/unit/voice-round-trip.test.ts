@@ -128,13 +128,16 @@ describe("voice round trip", () => {
     expect(events.stops).toBe(1)
   })
 
-  it("restarts listening after every hands-free reply and supports barge-in", () => {
+  it("restarts listening after a hands-free reply without barge-in during thinking or speaking", () => {
     const events = { listens: 0, stops: 0 }
     const loop = create(events)
     loop.set("hands-free")
     expect(events.listens).toBe(1)
     loop.listen()
     loop.wait()
+    loop.hear()
+    loop.listen()
+    expect(loop.state().phase).toBe("thinking")
     loop.speak()
     loop.done()
     expect(events.listens).toBe(2)
@@ -142,7 +145,9 @@ describe("voice round trip", () => {
     loop.listen()
     loop.speak()
     loop.hear()
-    expect(loop.state()).toEqual({ mode: "hands-free", phase: "listening" })
+    expect(loop.state()).toEqual({ mode: "hands-free", phase: "speaking" })
+    expect(events.stops).toBe(0)
+    loop.stop()
     expect(events.stops).toBe(1)
   })
 })

@@ -35,6 +35,7 @@ const routes = {
   outputs: "restore-outputs.json",
   selfHeal: "restore-self-heal.json",
   sqlMetadata: "restore-sql-metadata.json",
+  routineEffects: "restore-routine-effects.json",
   review: "restore-review.json",
   stores: "restore-stores.json",
   exports: "restore-exports.json",

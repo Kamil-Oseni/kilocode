@@ -24,6 +24,7 @@ import { restoredComponents } from "./profile-restored-components-schema"
 import { validateRestoredComponents } from "./profile-restored-components-correspondence"
 import { restoredSources } from "./profile-restored-source-schema"
 import { validateRestoredSources } from "./profile-restored-source-correspondence"
+import { routineEffects } from "./profile-routine-effects"
 
 // This is a data allowlist, not a claim that the source writers have retired.
 // Credentials, account state, permissions and public-share tokens are deliberately absent.
@@ -137,6 +138,7 @@ export const snapshot = z
     id: uuid,
     createdAt: z.number().int().nonnegative(),
     schema: z.string().regex(/^[a-f0-9]{64}$/),
+    routineEffects: routineEffects.optional(),
     workspaces: z.array(z.string().min(1).max(4096)).max(10_000),
     sql: z
       .array(

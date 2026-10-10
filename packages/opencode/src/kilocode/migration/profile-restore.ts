@@ -16,6 +16,7 @@ import { restoreOutputs } from "./profile-outputs"
 import { restoreSelfHeal } from "./profile-self-heal"
 import { allocatorLedger } from "./profile-sql-metadata"
 import { renderReview } from "./profile-restore-review-schema"
+import { names } from "./profile-routine-effects"
 
 export type Column = { name: string; type: string; notnull: number; pk: number }
 
@@ -116,6 +117,7 @@ export async function restore(
     renderReview({ bundle: value.id, hold: hold.id, mapping, storesAt, primaries: options.primaries ?? [] }),
   )
   await durable(path.join(stage, "restore-source.json"), original)
+  if (original.routineEffects) await durable(path.join(stage, "restore-routine-effects.json"), original.routineEffects)
   await durable(path.join(stage, "restore-preferences.json"), value.preferences)
   if (original.config) await durable(path.join(stage, "restore-config.json"), original.config)
   if (original.disposition) await durable(path.join(stage, "restore-disposition.json"), original.disposition)
@@ -150,6 +152,10 @@ export async function restore(
       return yield* db.transaction((tx) =>
         Effect.gen(function* () {
           yield* tx.run("PRAGMA defer_foreign_keys = ON")
+          for (const name of names) {
+            const rows = yield* tx.all<{ count: number }>(`SELECT count(*) AS count FROM "${name}"`)
+            if (rows[0]?.count !== 0) throw new Error("Restored Routine effect authority tables must remain empty")
+          }
           for (const table of value.sql) {
             // Source control, cursors and root proofs remain in restore-source.json only.
             // Genuine v1 content below lets normal startup create fresh destination ownership.
@@ -193,6 +199,10 @@ export async function restore(
             }
           }
           const failures = yield* tx.all<Record<string, unknown>>("PRAGMA foreign_key_check")
+          for (const name of names) {
+            const rows = yield* tx.all<{ count: number }>(`SELECT count(*) AS count FROM "${name}"`)
+            if (rows[0]?.count !== 0) throw new Error("Restored Routine effect authority tables must remain empty")
+          }
           if (failures.length) throw new Error("Portable SQL relationships failed validation")
         }),
       )

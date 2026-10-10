@@ -50,6 +50,7 @@ import { bindTui } from "./profile-tui-correspondence"
 import { bindRestoredSources, restoredSourceValues } from "./profile-restored-source-correspondence"
 import { bindHold } from "./profile-restore-hold-correspondence"
 import { assertCoverage } from "./source-image-coverage"
+import { captureRoutineEffects } from "./profile-routine-effects"
 
 type Root = Readonly<{ kind: "sqlite" | "json"; path: string }>
 const key = (root: Root) => `${root.kind}:${process.platform === "win32" ? root.path.toLowerCase() : root.path}`
@@ -133,7 +134,10 @@ export async function exportProfile(
         }
       })
       const checked = payload.shape.sql.parse(sql)
-      return { schema, sql: checked, workspaces: references(checked).sort() }
+      const routineEffects = captureRoutineEffects(db)
+      if (bytes + Buffer.byteLength(JSON.stringify(routineEffects) ?? "") > 128 * 1024 * 1024)
+        throw new Error("Portable SQL and Routine effect evidence exceed the supported bundle size")
+      return { schema, sql: checked, workspaces: references(checked).sort(), routineEffects }
     } finally {
       db.close()
     }
@@ -226,7 +230,14 @@ export async function exportProfile(
               : []),
           ])
       : []
-  const sql = artifacts ? await bindSQL(artifacts.working, { sql: collected.sql, exports, stores }) : undefined
+  const sql = artifacts
+    ? await bindSQL(artifacts.working, {
+        sql: collected.sql,
+        routineEffects: collected.routineEffects,
+        exports,
+        stores,
+      })
+    : undefined
   const config = artifacts?.config ? await bindConfig(artifacts.working, artifacts.config, "selected") : undefined
   const markdown = artifacts?.config ? bindMarkdown(artifacts.working, artifacts.config) : undefined
   const correspondence = artifacts

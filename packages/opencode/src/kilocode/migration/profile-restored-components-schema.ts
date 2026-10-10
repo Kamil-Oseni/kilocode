@@ -16,6 +16,7 @@ const selector = z.enum([
   "outputs",
   "selfHeal",
   "sqlMetadata",
+  "routineEffects",
   "review",
   "stores",
   "exports",

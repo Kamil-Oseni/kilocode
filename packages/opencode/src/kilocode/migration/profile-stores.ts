@@ -12,6 +12,7 @@ import { restoreOutputs } from "./profile-outputs"
 import { restoreNotes } from "./profile-notes"
 import { projectStores } from "./profile-store-projection"
 import path from "node:path"
+import { captureRoutineEffects, measureRoutineEffects } from "./profile-routine-effects"
 
 import { schema } from "./profile-store-schema"
 const { stores, sql } = schema(tables)
@@ -75,6 +76,7 @@ export async function collectStores(token: Working, primary: string, auxiliary?:
   const inventory = image.stores
   const plans = []
   let bytes = 0
+  let effects = 0
   for (const item of inventory) {
     assertWorking(token)
     if (!item.present) {
@@ -90,6 +92,9 @@ export async function collectStores(token: Working, primary: string, auxiliary?:
     if (category.kind === "raya") {
       const db = new Database(item.staged, { readonly: true, strict: true })
       try {
+        effects += measureRoutineEffects(db)
+        if (effects > 16 * 1024 * 1024)
+          throw new Error("Combined Routine effect quarantine native bytes exceed supported capacity")
         for (const table of tables) {
           const columns = db
             .query<{ name: string }, []>(`PRAGMA table_info('${table}')`)
@@ -153,7 +158,15 @@ export async function collectStores(token: Working, primary: string, auxiliary?:
           rows: db.query(`SELECT * FROM "${table}"`).values(),
         })),
       )
-      result.push({ kind: plan.kind, id, source, schema: plan.schema, sql: rows, workspaces: references(rows).sort() })
+      result.push({
+        kind: plan.kind,
+        id,
+        source,
+        schema: plan.schema,
+        sql: rows,
+        routineEffects: captureRoutineEffects(db),
+        workspaces: references(rows).sort(),
+      })
     } finally {
       db.close()
     }

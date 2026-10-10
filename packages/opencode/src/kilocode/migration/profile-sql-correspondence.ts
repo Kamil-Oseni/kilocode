@@ -11,6 +11,7 @@ import { measure } from "./profile-sql"
 import { captureJournal, journal } from "./profile-migration-journal"
 import { allocator } from "./profile-sql-allocator-schema"
 import { captureAllocator } from "./profile-sql-allocator"
+import { captureRoutineEffects, routineEffects, names } from "./profile-routine-effects"
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex")
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
@@ -32,6 +33,7 @@ const entry = z
       "credential-or-authority-omission",
       "inactive-migration-journal",
       "inactive-allocator-counters",
+      "inactive-routine-effect",
       "empty",
       "unclassified",
     ]),
@@ -52,9 +54,27 @@ export const semantic = z
     rawBytesPreserved: z.literal(false),
     journal: journal.optional(),
     allocator: allocator.optional(),
+    routineEffects: digest.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
+    const effects = value.tables.filter((item) => item.disposition === "inactive-routine-effect")
+    if (
+      (effects.length !== 0) !== (value.routineEffects !== undefined) ||
+      (effects.length !== 0 &&
+        (effects.length !== names.length ||
+          effects.some((item) => !names.some((name) => name === item.table) || item.excluded.length !== 0)))
+    )
+      ctx.addIssue({ code: "custom", message: "Inactive Routine effect table binding differs" })
+    if (
+      value.tables.some(
+        (item) =>
+          names.some((name) => name === item.table) &&
+          item.disposition !== "inactive-routine-effect" &&
+          (item.rows !== 0 || item.disposition !== "empty"),
+      )
+    )
+      ctx.addIssue({ code: "custom", message: "Routine effect rows lack exact inert evidence" })
     if ((value.component === "store") !== (value.id !== undefined))
       ctx.addIssue({ code: "custom", message: "SQL component selector differs" })
     if (
@@ -95,8 +115,17 @@ export const semantic = z
   })
 export type SQLComponents = Readonly<{
   sql: unknown
+  routineEffects?: unknown
   exports?: unknown
-  stores?: readonly { id: string; source: string; kind: string; sql?: unknown; evidence?: unknown; schema?: string }[]
+  stores?: readonly {
+    id: string
+    source: string
+    kind: string
+    sql?: unknown
+    evidence?: unknown
+    schema?: string
+    routineEffects?: unknown
+  }[]
 }>
 const select = (value: z.output<typeof semantic>, content: SQLComponents) => {
   if (value.component === "sql") return content.sql
@@ -116,6 +145,28 @@ export function validateSQL(value: z.input<typeof semantic>, content: SQLCompone
   const selected = select(parsed, content)
   if (selected === undefined || hash(selected) !== parsed.digest)
     throw new Error("SQLite correspondence component differs")
+  const effects =
+    parsed.component === "sql"
+      ? content.routineEffects
+      : parsed.component === "store"
+        ? content.stores?.find((item) => item.id === parsed.id)?.routineEffects
+        : undefined
+  if ((effects !== undefined) !== (parsed.routineEffects !== undefined))
+    throw new Error("SQLite Routine effect component binding differs")
+  if (effects !== undefined) {
+    const checked = routineEffects.parse(effects)
+    if (hash(checked) !== parsed.routineEffects) throw new Error("SQLite Routine effect component differs")
+    for (const table of checked.tables) {
+      const row = parsed.tables.find((item) => item.table === table.table)
+      if (
+        !row ||
+        row.disposition !== "inactive-routine-effect" ||
+        row.rows !== table.rows.length ||
+        JSON.stringify(row.columns) !== JSON.stringify(table.columns)
+      )
+        throw new Error("SQLite Routine effect correspondence differs")
+    }
+  }
   if (
     parsed.component === "sql" ||
     (parsed.component === "store" && content.stores?.find((item) => item.id === parsed.id)?.kind === "raya")
@@ -209,6 +260,12 @@ export async function bindSQL(token: Working, content: SQLComponents): Promise<S
         category.kind === "raya" ? captureJournal(db.query("SELECT id,time_completed FROM migration").all()) : undefined
       const portable = category.kind === "raya" ? payload.shape.sql.parse(selected) : undefined
       const counters = category.kind === "raya" ? captureAllocator(db, category.schema) : undefined
+      const actual = category.kind === "raya" ? captureRoutineEffects(db) : undefined
+      const supplied = primary ? content.routineEffects : extra?.routineEffects
+      if (supplied === undefined && actual?.tables.some((item) => item.rows.length !== 0))
+        throw new Error("SQLite populated Routine effect evidence missing")
+      if (supplied !== undefined && (!actual || hash(routineEffects.parse(supplied)) !== hash(actual)))
+        throw new Error("SQLite original Routine effect rows differ")
       for (const table of tables) {
         const columns = db
           .query<{ name: string }, []>(`PRAGMA table_info(${quote(table.name)})`)
@@ -241,15 +298,17 @@ export async function bindSQL(token: Working, content: SQLComponents): Promise<S
           rows: count,
           disposition: match
             ? ("selected" as const)
-            : omitted.has(table.name)
-              ? ("credential-or-authority-omission" as const)
-              : table.name === "migration" && migration
-                ? ("inactive-migration-journal" as const)
-                : table.name === "sqlite_sequence" && counters
-                  ? ("inactive-allocator-counters" as const)
-                  : count === 0
-                    ? ("empty" as const)
-                    : ("unclassified" as const),
+            : supplied !== undefined && names.some((name) => name === table.name)
+              ? ("inactive-routine-effect" as const)
+              : omitted.has(table.name)
+                ? ("credential-or-authority-omission" as const)
+                : table.name === "migration" && migration
+                  ? ("inactive-migration-journal" as const)
+                  : table.name === "sqlite_sequence" && counters
+                    ? ("inactive-allocator-counters" as const)
+                    : count === 0
+                      ? ("empty" as const)
+                      : ("unclassified" as const),
           excluded,
         })
       }
@@ -271,6 +330,7 @@ export async function bindSQL(token: Working, content: SQLComponents): Promise<S
           rawBytesPreserved: false,
           journal: migration,
           allocator: counters,
+          routineEffects: supplied === undefined ? undefined : hash(actual),
         }),
       )
     } finally {

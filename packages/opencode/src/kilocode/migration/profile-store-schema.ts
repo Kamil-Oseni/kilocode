@@ -5,6 +5,7 @@ import { identity, references } from "./profile-workspaces"
 import { storeContent } from "./profile-store-content"
 import { contents } from "./profile-composers"
 import { references as outputReferences } from "./profile-outputs"
+import { routineEffects } from "./profile-routine-effects"
 export function schema<T extends readonly string[]>(tables: T) {
   const scalar = z.union([z.string().max(16_777_216), z.number().finite(), z.null()])
   const sql = z
@@ -60,6 +61,7 @@ export function schema<T extends readonly string[]>(tables: T) {
             id,
             source,
             schema: id,
+            routineEffects: routineEffects.optional(),
             sql,
             workspaces: z.array(source).max(10_000),
             content: storeContent.optional(),
@@ -70,6 +72,16 @@ export function schema<T extends readonly string[]>(tables: T) {
     )
     .max(64)
     .superRefine((items, ctx) => {
+      if (
+        items.reduce(
+          (sum, item) =>
+            sum +
+            (item.kind === "raya" && item.routineEffects ? Buffer.byteLength(JSON.stringify(item.routineEffects)) : 0),
+          0,
+        ) >
+        16 * 1024 * 1024
+      )
+        ctx.addIssue({ code: "custom", message: "Combined inert Routine effect evidence exceeds supported bytes" })
       if (new Set(items.map((item) => item.id)).size !== items.length)
         ctx.addIssue({ code: "custom", message: "Duplicate store identity" })
       for (const item of items)

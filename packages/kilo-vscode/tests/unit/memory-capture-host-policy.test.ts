@@ -13,7 +13,7 @@ async function method() {
     (node) => ts.isMethodDeclaration(node) && node.name.getText(tree) === "confirmCapture",
   )
   if (!value || !ts.isMethodDeclaration(value) || !value.body) throw new Error("Actual capture confirmation required")
-  const compiled = ts.transpileModule(`async function run(result, turn) ${value.body.getText(tree)}`, {
+  const compiled = ts.transpileModule(`async function run(result, turn, scope) ${value.body.getText(tree)}`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText
   return new Function(
@@ -95,7 +95,7 @@ async function fixture(stage?: "sync" | "selection" | "confirmation" | "start") 
       },
     },
   }
-  return { run: () => run.call(host, original, {}), calls }
+  return { run: (scope?: unknown) => run.call(host, original, {}, scope), calls }
 }
 
 test("actual recovered-capture host indexes current private policy and preserves original historical policy", async () => {
@@ -127,4 +127,24 @@ test("actual recovered-capture host replaces its stale review only after qualifi
     "selection",
     "confirmation",
   ])
+})
+
+test("actual recovered-capture host cancellation after the original sync blocks confirmation", async () => {
+  const value = await fixture()
+  const controller = new AbortController()
+  const scope = {
+    signal: controller.signal,
+    check: () => controller.signal.throwIfAborted(),
+    wait: async <T>(body: () => PromiseLike<T>) => body(),
+    stage: (message: string) => {
+      if (message === "Verify original indexing completion and source history")
+        controller.abort(new Error("Original acceptance cancelled"))
+      controller.signal.throwIfAborted()
+    },
+  }
+  await expect(value.run(scope)).rejects.toThrow("Original acceptance cancelled")
+  expect(value.calls).toContain("sync")
+  expect(value.calls).not.toContain("selection")
+  expect(value.calls).not.toContain("confirmation")
+  expect(value.calls.at(-1)).toBe("dispose")
 })

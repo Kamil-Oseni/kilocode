@@ -21,6 +21,7 @@ import { current as supervisor } from "./managed/catalog"
 import { review as indexReview } from "./capture-index"
 import { disposeHistory } from "./capture-revisions"
 import { locate } from "./capture-operations"
+import { acceptance } from "./control/acceptance"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
@@ -28,7 +29,16 @@ const debt = "raya.secondBrain.control.uncertainty"
 const quarantine = "raya.secondBrain.quarantinedSetups"
 const recovering = "raya.secondBrain.committedCaptureRecovery.pending"
 
-async function capture(storage: Pick<Memento, "get" | "update">, ...args: Parameters<typeof correlate>) {
+async function capture(
+  storage: Pick<Memento, "get" | "update">,
+  extension: Parameters<typeof correlate>[0],
+  entry: Parameters<typeof correlate>[1],
+  pending: Parameters<typeof correlate>[2],
+  input: Parameters<typeof correlate>[3],
+  caller: () => void = () => {},
+) {
+  caller()
+  const args: Parameters<typeof correlate> = [extension, entry, pending, input]
   const turn = records([args[3]])[0]
   const key = `raya.secondBrain.committedCaptureRecovery.${turn.id}`
   const audit = structuredClone(
@@ -42,6 +52,7 @@ async function capture(storage: Pick<Memento, "get" | "update">, ...args: Parame
   )
   if (audit?.phase !== "applied") {
     const value = await correlate(...args)
+    caller()
     return rebind(value, storage.get(key))
   }
   const ledger = "raya.secondBrain.personalCapture.turns"
@@ -67,6 +78,7 @@ async function capture(storage: Pick<Memento, "get" | "update">, ...args: Parame
   const keys = [state, debt, recovering]
   const snapshots = keys.map((name) => structuredClone(storage.get(name)))
   const guard = () => {
+    caller()
     const actual = storage.get(ledger)
     if (
       !isDeepStrictEqual(storage.get(key), audit) ||
@@ -538,11 +550,25 @@ export class BrainSettings {
   }
 
   /** Reviewed committed effects may recover intake; this never settles the original request. */
-  reviewCapture(extension: string, input: unknown) {
-    return this.serial(() => this.reviewed(extension, input))
+  reviewCapture(extension: string, input: unknown, caller: () => void = () => {}) {
+    caller()
+    return this.serial(async () => {
+      const retained: object[] = []
+      try {
+        return await acceptance(caller, async () => {
+          const value = await this.reviewed(extension, input, caller)
+          retained.push(value)
+          return value
+        })
+      } catch (err) {
+        for (const value of retained) disposeHistory(value)
+        throw err
+      }
+    })
   }
 
-  private async reviewed(extension: string, input: unknown) {
+  private async reviewed(extension: string, input: unknown, caller: () => void) {
+    caller()
     this.available()
     if (this.pending()) throw new Error("Original Memory uncertainty must be recovered first")
     const turn = records(this.storage.get("raya.secondBrain.personalCapture.turns")).find((row) =>
@@ -580,9 +606,11 @@ export class BrainSettings {
       descriptor(current.managed).root !== descriptor(previous.managed).root
     )
       throw new Error("Recovered capture belongs to a different Memory setup")
-    const reviewed = await capture(this.storage, extension, previous, audit.debt, original)
+    const reviewed = await capture(this.storage, extension, previous, audit.debt, original, caller)
     try {
+      caller()
       await associate(this.storage, previous, current, reviewed)
+      caller()
       captureTurn(original, input, reviewed, this.storage.get(`${key}.confirmation`))
       const { producer, ...evidence } = reviewed
       if (
@@ -598,6 +626,7 @@ export class BrainSettings {
       )
         throw new Error("Recovered capture evidence changed")
       this.available()
+      caller()
       return reviewed
     } catch (err) {
       disposeHistory(reviewed)
@@ -642,7 +671,7 @@ export class BrainSettings {
   /** A fresh ownerless host publishes only a source-qualified successor to the original applied recovery. */
   upgradeCapture(extension: string, input: unknown) {
     return this.serial(async () => {
-      if (!this.upgrading()) return this.reviewed(extension, input)
+      if (!this.upgrading()) return this.reviewed(extension, input, () => {})
       const turns = records(this.storage.get("raya.secondBrain.personalCapture.turns"))
       const turn = turns.find((row) => isDeepStrictEqual(row, input))
       if (!turn) throw new Error("Original capture upgrade ledger row required")
@@ -726,7 +755,7 @@ export class BrainSettings {
       } finally {
         for (const value of caches) disposeHistory(value)
       }
-      return this.reviewed(extension, input)
+      return this.reviewed(extension, input, () => {})
     })
   }
 

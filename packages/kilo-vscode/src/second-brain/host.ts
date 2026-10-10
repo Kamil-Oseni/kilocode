@@ -38,6 +38,13 @@ import { currentPolicy, freshHistory, disposeHistory } from "./capture-revisions
 import { MediaCoordinator } from "./media/coordinator"
 import { register as mediaCommands } from "./media/native"
 
+type IndexScope = {
+  signal: AbortSignal
+  check: () => void
+  stage: (message: string) => void
+  wait: <T>(body: () => PromiseLike<T>) => Promise<T>
+}
+
 type CaptureControl = { capture(body: CapturePublication, authorize: () => void): Promise<unknown> }
 function capturing(value: object): value is object & CaptureControl {
   return "capture" in value && typeof value.capture === "function"
@@ -128,6 +135,7 @@ export class BrainHost {
   private view: { id: string; state: BrainResponse["state"]; post: (value: BrainResponse) => void } | undefined
   private current: { id: string; owner: object } | undefined
   private dream?: Promise<void>
+  private indexing?: { controller: AbortController; job: Promise<void> }
   private closing = false
   private controller?: AbortController
   private debt?: unknown
@@ -519,7 +527,8 @@ export class BrainHost {
       })
     this.control =
       existing?.control ??
-      new BrainControl(this.service, this.settings, async (setup) => {
+      new BrainControl(this.service, this.settings, async (setup, caller = () => {}) => {
+        caller()
         const saved = context.globalState.get<{ root: string; catalog: unknown }>(catalogKey)
         if (!saved || saved.root !== setup.root)
           throw new Failure("control_setup_required", "Select a reviewed Memory control catalog", 0)
@@ -529,7 +538,7 @@ export class BrainHost {
           Object.entries(setup.source_sha256).some(([name, hash]) => catalog.source_sha256[name] !== hash)
         )
           throw new Failure("identity_mismatch", "Control and search releases differ", 0)
-        return Control.open(setup.root, catalog, context.extensionPath)
+        return Control.open(setup.root, catalog, context.extensionPath, caller)
       })
     this.observer = this.intake.observe(() => {
       const view = this.view
@@ -600,7 +609,7 @@ export class BrainHost {
     )
     const close = (terminating = false) => {
       if (terminating) this.settings.retire()
-      return join([this.control.dispose(), this.service.dispose(), Control.drain()])
+      return join([this.retireIndex(), this.control.dispose(), this.service.dispose(), Control.drain()])
     }
     register(close)
     context.subscriptions.push({
@@ -1269,8 +1278,116 @@ export class BrainHost {
     )
   }
 
-  private async indexCapture() {
-    if (!vscode.workspace.isTrusted || this.closing) throw new Error("Trusted workspace required for Memory indexing")
+  private retireIndex() {
+    const held = this.indexing
+    if (!held) return Promise.resolve()
+    held.controller.abort(new Error("Memory indexing intake is retired"))
+    return held.job
+  }
+
+  private indexCapture(maximum = 600000) {
+    // Local helper (15s), selection (35s), and sync (185s) observation fences
+    // do not bound repeated ancestry work or original retirement. This separate
+    // ten-minute acceptance policy excludes native user decisions and never races
+    // a timeout return against the original pending work.
+    if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 600000)
+      return Promise.reject(new Error("Invalid recovered-index acceptance policy"))
+    if (!vscode.workspace.isTrusted || this.closing)
+      return Promise.reject(new Error("Trusted workspace required for Memory indexing"))
+    if (this.indexing) return this.indexing.job
+    const held = { controller: new AbortController(), job: Promise.resolve() }
+    this.indexing = held
+    const work = Promise.resolve()
+      .then(() =>
+        vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: "Index a recovered Memory save", cancellable: true },
+          async (progress, cancellation) => {
+            let clock = performance.now()
+            let spent = 0
+            let paused = false
+            let stage = "Choose the original recovered save"
+            const elapsed = () => spent + (paused ? 0 : performance.now() - clock)
+            const report = () =>
+              progress.report({
+                message: held.controller.signal.aborted
+                  ? `Acceptance cancelled; waiting for original work and readers to join · ${Math.floor(elapsed() / 1000)}s active work`
+                  : `${stage} · ${Math.floor(elapsed() / 1000)}s active work`,
+              })
+            const cancel = () => {
+              held.controller.abort(
+                new Error("Recovered-save indexing was cancelled; original retirement remains required"),
+              )
+              report()
+            }
+            const check = () => {
+              if (elapsed() >= maximum && !held.controller.signal.aborted) {
+                held.controller.abort(
+                  new Error("Recovered-save indexing exceeded its 10-minute active-work acceptance limit"),
+                )
+                report()
+              }
+              held.controller.signal.throwIfAborted()
+              if (this.indexing !== held || !vscode.workspace.isTrusted || this.closing)
+                throw new Error("Memory recovery selection changed")
+            }
+            const scope: IndexScope = {
+              signal: held.controller.signal,
+              check,
+              stage: (message) => {
+                stage = message
+                report()
+                check()
+              },
+              wait: async (body) => {
+                check()
+                spent = elapsed()
+                paused = true
+                report()
+                try {
+                  const result = await body()
+                  check()
+                  return result
+                } finally {
+                  clock = performance.now()
+                  paused = false
+                }
+              },
+            }
+            const off = cancellation.onCancellationRequested(cancel)
+            held.controller.signal.addEventListener("abort", report)
+            const timer = setInterval(
+              () => {
+                if (!paused && elapsed() >= maximum && !held.controller.signal.aborted)
+                  held.controller.abort(
+                    new Error("Recovered-save indexing exceeded its 10-minute active-work acceptance limit"),
+                  )
+                report()
+              },
+              Math.min(1000, maximum),
+            )
+            if (cancellation.isCancellationRequested) cancel()
+            try {
+              check()
+              await this.indexSave(scope)
+              check()
+            } finally {
+              clearInterval(timer)
+              off.dispose()
+              held.controller.signal.removeEventListener("abort", report)
+            }
+          },
+        ),
+      )
+      .finally(() => {
+        held.controller.abort()
+        if (this.indexing === held) this.indexing = undefined
+      })
+    held.job = work
+    return work
+  }
+
+  private async indexSave(scope: IndexScope) {
+    scope.check()
     const choices = this.intake.recoverable().filter((turn) => {
       const audit = this.context.globalState.get<{ format: string; version: number; phase: string }>(
         `raya.secondBrain.committedCaptureRecovery.${turn.id}`,
@@ -1280,21 +1397,33 @@ export class BrainHost {
       )
     })
     if (!choices.length) throw new Error("No applied Memory save recovery is available for indexing")
-    const selected = await vscode.window.showQuickPick(
-      choices.map((turn) => ({
-        label: turn.id,
-        description: turn.root,
-        detail: `Original message: ${turn.messageID}`,
-        turn,
-      })),
-      { title: "Index a recovered Memory save", ignoreFocusOut: true },
+    const selected = await scope.wait(() =>
+      vscode.window.showQuickPick(
+        choices.map((turn) => ({
+          label: turn.id,
+          description: turn.root,
+          detail: `Original message: ${turn.messageID}`,
+          turn,
+        })),
+        { title: "Index a recovered Memory save", ignoreFocusOut: true },
+      ),
     )
+    scope.check()
     if (!selected) return
-    const reviewed = await this.settings.reviewCapture(this.context.extensionPath, selected.turn)
-    if (!(await this.confirmCapture(reviewed, selected.turn))) return
-    await vscode.window.showInformationMessage(
-      "The recovered Memory save's verified current source policy is indexed. Its original recovery and request audits are retained.",
-    )
+    scope.stage("Verify original save and retained source history")
+    const reviewed = await this.settings.reviewCapture(this.context.extensionPath, selected.turn, scope.check)
+    try {
+      scope.check()
+      if (!(await this.confirmCapture(reviewed, selected.turn, scope))) return
+      scope.check()
+      await scope.wait(() =>
+        vscode.window.showInformationMessage(
+          "The recovered Memory save's verified current source policy is indexed. Its original recovery and request audits are retained.",
+        ),
+      )
+    } finally {
+      disposeHistory(reviewed)
+    }
   }
 
   private async reconcileRefusal() {
@@ -1364,22 +1493,25 @@ export class BrainHost {
   private async confirmCapture(
     result: Awaited<ReturnType<BrainSettings["reviewCapture"]>>,
     turn: Parameters<BrainSettings["reviewCapture"]>[1],
+    scope?: IndexScope,
   ) {
     const retained = [result]
     try {
       const check = () => {
+        scope?.check()
         if (!vscode.workspace.isTrusted || this.closing) throw new Error("Memory recovery selection changed")
       }
       check()
       const active = { value: result }
       const fresh = async (value = active.value) => {
         check()
-        await freshHistory(value)
+        await freshHistory(value, check)
         check()
       }
       await fresh()
       const policy = currentPolicy(result)
       const resources = async () => {
+        scope?.stage("Verify source history and indexing resources")
         await fresh()
         const current = await this.settings.load()
         await fresh()
@@ -1393,11 +1525,14 @@ export class BrainHost {
         async (review) => {
           await fresh()
           if (review.digest !== policy) throw new Error("Recovered capture source policy changed")
-          const answer = await vscode.window.showWarningMessage(
-            `Start a new indexing operation for recovered save ${result.capture}? The original save will not be repeated. This indexes only the verified enabled source policy below. Failed historical requests remain in their audits.\n\n${review.text}`,
-            { modal: true },
-            "Index recovered save",
-          )
+          scope?.stage("Review the verified indexing policy")
+          const modal = () =>
+            vscode.window.showWarningMessage(
+              `Start a new indexing operation for recovered save ${result.capture}? The original save will not be repeated. This indexes only the verified enabled source policy below. Failed historical requests remain in their audits.\n\n${review.text}`,
+              { modal: true },
+              "Index recovered save",
+            )
+          const answer = scope ? await scope.wait(modal) : await modal()
           await fresh()
           accepted = answer === "Index recovered save"
           return accepted
@@ -1407,9 +1542,14 @@ export class BrainHost {
           if (signal.aborted) throw new Error("Recovered-save indexing was cancelled before publication")
           if (expected !== policy) throw new Error("Recovered capture source policy changed")
           await fresh()
-          await this.service.sync(expected, signal, close)
+          scope?.stage("Index verified notes; original native joins remain required")
+          const parent = scope ? AbortSignal.any([signal, scope.signal]) : signal
+          check()
+          await this.service.sync(expected, parent, close)
+          check()
+          scope?.stage("Verify original indexing completion and source history")
           disposeHistory(active.value)
-          const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn)
+          const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn, check)
           retained.push(reviewed)
           check()
           if (
@@ -1421,17 +1561,24 @@ export class BrainHost {
           active.value = reviewed
           await fresh()
         },
+        check,
       )
       await fresh()
       if (!accepted) return false
       disposeHistory(active.value)
-      const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn)
+      scope?.stage("Verify current index selection before confirmation")
+      const reviewed = await this.settings.reviewCapture(this.context.extensionPath, turn, check)
       retained.push(reviewed)
       await fresh(reviewed)
       if (currentPolicy(reviewed) !== policy) throw new Error("Recovered capture source policy changed")
-      const binding = await this.service.captureSelection(AbortSignal.timeout(35000), policy)
+      check()
+      const binding = await this.service.captureSelection(
+        scope ? AbortSignal.any([AbortSignal.timeout(35000), scope.signal]) : AbortSignal.timeout(35000),
+        policy,
+      )
       await fresh(reviewed)
       await this.service.configure(async () => {
+        scope?.stage("Publish exact original recovery confirmation")
         await fresh(reviewed)
         await this.intake.confirmRecovery(reviewed, binding, () => {
           check()

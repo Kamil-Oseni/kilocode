@@ -7,6 +7,7 @@ import { directory, image, observe } from "./identity"
 import { protect } from "./protection"
 import { Transport, held, drain as close } from "./transport"
 import { parseCatalog, type Catalog } from "./catalog"
+import { acceptance } from "./acceptance"
 
 export { parseCatalog, type Catalog } from "./catalog"
 
@@ -53,10 +54,11 @@ export const Control = {
     if (!ending) ending = retire(accepted)
     return ending
   },
-  open(root: string, input: Catalog, extension: string) {
+  open(root: string, input: Catalog, extension: string, caller: () => void = () => {}) {
+    caller()
     check(!retired && !opening && held().length === 0, "Original control launch or child remains owned")
     opening = true
-    const pending = start(root, input, extension)
+    const pending = start(root, input, extension, caller)
     accepted = pending
     return pending.finally(() => {
       opening = false
@@ -72,27 +74,35 @@ async function retire(pending: Promise<Transport> | undefined) {
   if (failures.length) throw new AggregateError(failures, "Control launch and retirement failures retained")
 }
 
-async function start(root: string, input: Catalog, extension: string) {
+async function start(root: string, input: Catalog, extension: string, caller: () => void) {
+  caller()
   const catalog = parseCatalog(input)
   const selected = await directory(root)
+  caller()
   await directory(path.join(selected, "System"))
+  caller()
   for (const parent of [catalog.source, path.dirname(catalog.python), path.dirname(catalog.bridge)]) {
     await directory(parent)
+    caller()
   }
   const helper = await packaged(extension)
+  caller()
   const names = [
     catalog.python,
     catalog.bridge,
     ...Object.keys(catalog.source_sha256).map((name) => path.join(catalog.source, name)),
   ]
   const files = await Promise.all(names.map((name) => image(name)))
+  caller()
   const hashes = [catalog.python_sha256, catalog.bridge_sha256, ...Object.values(catalog.source_sha256)]
   check(
     files.every((row, index) => row.digest === hashes[index]),
     "Selected reviewed release differs",
   )
   const tmp = await mkdtemp(path.join(os.tmpdir(), "raya-memory-control-"))
-  await protect(tmp)
+  caller()
+  await acceptance(caller, () => protect(tmp))
+  caller()
   const bootstrap = path.join(tmp, "bootstrap.private.json")
   await writeFile(
     bootstrap,
@@ -105,7 +115,9 @@ async function start(root: string, input: Catalog, extension: string) {
     }),
     { flag: "wx", mode: 0o600 },
   )
+  caller()
   const before = await image(bootstrap, 65536)
+  caller()
   const env = {
     SystemRoot: process.env.SystemRoot!,
     WINDIR: process.env.WINDIR!,
@@ -114,6 +126,7 @@ async function start(root: string, input: Catalog, extension: string) {
     TMP: tmp,
   }
   check(env.SystemRoot && env.WINDIR, "Windows environment required")
+  caller()
   const child = spawn(
     catalog.python,
     ["-I", ...(catalog.version === 2 ? ["-S"] : []), "-u", catalog.bridge, "--config", bootstrap],
@@ -126,11 +139,18 @@ async function start(root: string, input: Catalog, extension: string) {
   )
   const owner = new Transport(child, selected)
   try {
-    const identity = await observe(child, catalog.python, helper.helper, catalog.python_sha256)
-    await retained(names, files, 1048576)
-    await retained(helper.names, helper.files, 16777216)
-    await retained([bootstrap], [before], 65536)
-    owner.bind(identity)
+    await acceptance(caller, async () => {
+      const identity = await observe(child, catalog.python, helper.helper, catalog.python_sha256)
+      caller()
+      await retained(names, files, 1048576)
+      caller()
+      await retained(helper.names, helper.files, 16777216)
+      caller()
+      await retained([bootstrap], [before], 65536)
+      caller()
+      owner.bind(identity)
+    })
+    caller()
     return owner
   } catch (err) {
     const cause = err instanceof Error ? err : new Error("Control identity failed")

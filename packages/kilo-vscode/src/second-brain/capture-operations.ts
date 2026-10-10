@@ -19,13 +19,16 @@ type Entry = Parameters<typeof successors>[0]
 type Space = { cfg: Descriptor; setup: ReturnType<typeof setup> }
 type Operation = NonNullable<NonNullable<Parameters<typeof review>[3]>["operations"]>[number]
 
-async function listing(root: string, maximum: number) {
+async function listing(root: string, maximum: number, guard: () => void) {
+  guard()
   const held = await opendir(root)
   const names = []
   for await (const item of held) {
+    guard()
     check(names.length < maximum, "Capture operation directory exceeds its allocation bound")
     names.push(item.name)
   }
+  guard()
   return names.sort()
 }
 
@@ -196,7 +199,7 @@ export async function locate(
       const root = path.join(space.cfg.namespaces.memory.root, "Requests")
       await directory(root)
       guard()
-      const epochs = await listing(root, 8192)
+      const epochs = await listing(root, 8192, guard)
       guard()
       check(
         epochs.length <= 8192 && epochs.every((name) => /^[a-f0-9]{32}$/.test(name)),
@@ -206,7 +209,7 @@ export async function locate(
         const folder = path.join(root, epoch)
         await directory(folder)
         guard()
-        const names = await listing(folder, 16384)
+        const names = await listing(folder, 16384, guard)
         guard()
         check(names.length <= 16384, "Bounded capture operation namespace required")
         for (const name of names.filter((name) => /^[a-f0-9]{32}-terminal\.json$/.test(name))) {

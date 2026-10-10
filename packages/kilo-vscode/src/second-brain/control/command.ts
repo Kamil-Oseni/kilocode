@@ -1,6 +1,7 @@
 import type { SpawnOptions } from "node:child_process"
 import { spawn } from "../../util/process"
 import { createHash } from "node:crypto"
+import { check } from "./acceptance"
 
 function classify(stderr: string) {
   const classes = [
@@ -41,6 +42,7 @@ export async function command(file: string, args: string[], opts: SpawnOptions, 
   if (!Number.isSafeInteger(bound) || bound < 1 || bound > 65536) throw new Error("Invalid Memory helper stream bound")
   const started = performance.now()
   const errors: Error[] = []
+  check()
   const child = spawn(file, args, { ...opts, stdio: ["ignore", "pipe", "pipe"], windowsHide: true })
   const counts = { stdout: 0, stderr: 0 }
   const eof = { stdout: false, stderr: false }
@@ -98,6 +100,11 @@ export async function command(file: string, args: string[], opts: SpawnOptions, 
     observationExpired: state.expired,
     forced: false,
   })
+  try {
+    check()
+  } catch (err) {
+    errors.push(new Error("Memory helper caller acceptance retired after original joins", { cause: err }))
+  }
   if (errors.length) {
     const output = Object.freeze({
       stdout: Buffer.concat(chunks.stdout).toString("utf8"),

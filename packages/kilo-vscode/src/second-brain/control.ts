@@ -106,6 +106,7 @@ export class BrainControl {
     private readonly settings: BrainSettings,
     private readonly open: (
       setup: NonNullable<Awaited<ReturnType<BrainSettings["load"]>>>["setup"],
+      caller?: () => void,
     ) => Promise<Session>,
   ) {}
 
@@ -145,21 +146,26 @@ export class BrainControl {
 
   private transaction(
     body: (session: Session, check: () => void, close: () => Promise<void>) => Promise<void>,
+    caller: () => void = () => {},
   ): Promise<void> {
     if (this.closed || this.pending || this.owner || this.settings.pending() || this.state.status === "uncertain")
       return Promise.reject(new Failure("control_busy", "Memory control is busy or uncertain", 0))
     const epoch = this.epoch
     this.signal = new AbortController()
-    const check = () => this.check(epoch)
+    const check = () => {
+      this.check(epoch)
+      caller()
+    }
     const cancellation: { error?: Cancelled } = {}
     const job = this.service
       .configure(
         () =>
           (async () => {
+            check()
             const cfg = await this.settings.load()
             check()
             if (!cfg) throw new Failure("setup_invalid", "Memory setup required", 0)
-            const session = await this.open(cfg.setup).catch((error: unknown) => {
+            const session = await this.open(cfg.setup, check).catch((error: unknown) => {
               this.state = Object.freeze({ status: "uncertain" })
               throw error
             })
@@ -248,6 +254,7 @@ export class BrainControl {
   sync(
     confirm: (review: Review) => Promise<boolean>,
     body: (expected: string, signal: AbortSignal, close: () => Promise<void>) => Promise<void>,
+    caller: () => void = () => {},
   ) {
     return this.transaction(async (session, check, close) => {
       const value = await session.state()
@@ -265,7 +272,7 @@ export class BrainControl {
       await body(expected, this.signal!.signal, close)
       check()
       this.state = Object.freeze({ status: "synced", digest: expected })
-    })
+    }, caller)
   }
 
   capture(body: Publication, authorize: () => void | Promise<void>) {

@@ -5,6 +5,7 @@ import { fingerprint } from "./failed-repair"
 import { directory, environment, image } from "./control/identity"
 import { check } from "./control/frames"
 import { command } from "./control/command"
+import { acceptance } from "./control/acceptance"
 
 const pin = "8ee7bc82dc5e1e2b15bbf51a48e678833fc6d3a8ea4116521dc89e36fc3e5259"
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
@@ -296,8 +297,20 @@ export function currentPolicy(value: object) {
   return selected(value)?.policy ?? hash.parse((value as { policySHA?: unknown }).policySHA)
 }
 
-export async function freshHistory(value: object) {
-  await selected(value)?.refresh()
+export async function freshHistory(value: object, caller: () => void = () => {}) {
+  caller()
+  const proof = selected(value)
+  await acceptance(
+    () => {
+      caller()
+      proof?.guard()
+    },
+    async () => {
+      await proof?.refresh()
+    },
+  )
+  caller()
+  selected(value)
 }
 
 /** Retire pure projection buffers; full freshness remains available uncached. */

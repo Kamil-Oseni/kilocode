@@ -32,6 +32,7 @@ import { KilocodeSystemPrompt } from "@/kilocode/system-prompt"
 import { TurnTools } from "@/kilocode/capability/turn-tools"
 import { LazyTools } from "@/kilocode/session/lazy-tools"
 import { CodePrompt } from "@/kilocode/agent/code-prompt"
+import { effective as ollamaWindow } from "@/kilocode/provider/ollama-context"
 // kilocode_change end
 
 type PrepareInput = {
@@ -71,6 +72,7 @@ const mergeOptions = (target: Record<string, any>, source: Record<string, any> |
   mergeDeep(target, source ?? {}) as Record<string, any>
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
+  input = { ...input, model: ollamaWindow(input.provider.options, input.model) } // kilocode_change - standalone preparation shares the native explicit window
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
   const available = resolveTools(input) // kilocode_change - resolve permissions before bounded advertisement
   const includePersona = KilocodeSystemPrompt.shouldIncludePersona(input.agent.name) // kilocode_change
@@ -106,6 +108,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       tools: available,
       system,
       model: input.model,
+      options: input.provider.options, // kilocode_change - budget the same native envelope projection used by transport
       discovery:
         input.user.tools?.discover_tools !== false &&
         !Permission.disabled(["discover_tools"], Permission.merge(input.agent.permission, input.permission ?? [])).has(

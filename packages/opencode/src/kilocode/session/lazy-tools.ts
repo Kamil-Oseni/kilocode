@@ -6,6 +6,7 @@ import { KiloToolSchema } from "./tool-schema"
 import { KiloSessionOverflow } from "./overflow"
 import { TurnTools } from "@/kilocode/capability/turn-tools"
 import { HomeAssistant } from "@/kilocode/home-assistant/tools"
+import * as OllamaPrompt from "@/kilocode/provider/ollama-prompt"
 
 const name = "discover_tools"
 const args = z
@@ -140,6 +141,7 @@ export namespace LazyTools {
     tools: Record<string, Tool>
     system: string[]
     model: Provider.Model
+    options?: Readonly<Record<string, unknown>>
     discovery?: boolean
   }): Promise<Record<string, Tool>> {
     if (!eligible({ name: input.agent, mode: input.mode })) return input.tools
@@ -150,23 +152,20 @@ export namespace LazyTools {
       .find((item) => item !== undefined)
     const hard = input.model.limit.input || input.model.limit.context
     const output = input.model.limit.input ? 0 : KiloSessionOverflow.OUTPUT_MIN
-    if (hard === 0) {
-      if (state) state.active = new Set(Object.keys(input.tools))
-      return input.tools
-    }
     const fits = async (tools: Record<string, Tool>) => {
       const schemas = await KiloToolSchema.sanitize(tools)
-      return (
-        KiloSessionOverflow.measure({
-          messages: [...input.system, TurnTools.prompt(Object.keys(tools))].map((content) => ({
-            role: "system",
-            content,
-          })),
-          tools: schemas,
-        }).normalized +
-          output <
-        hard
-      )
+      const messages = [...input.system, TurnTools.prompt(Object.keys(tools))].map((content) => ({
+        role: "system" as const,
+        content,
+      }))
+      const estimated = KiloSessionOverflow.measure({ messages, tools: schemas })
+      if (hard > 0 && estimated.normalized + output >= hard) return false
+      const frame = await OllamaPrompt.prepare(input.options ?? {}, input.model, messages, schemas).catch((err) => {
+        if (err instanceof OllamaPrompt.OllamaWindowError) return false as const
+        throw err
+      })
+      if (frame === false) return false
+      return hard === 0 || (frame?.usage ?? estimated).normalized + output < hard
     }
     if (await fits(input.tools)) {
       if (state) state.active = new Set(Object.keys(input.tools))

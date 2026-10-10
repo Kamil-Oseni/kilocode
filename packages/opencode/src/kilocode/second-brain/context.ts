@@ -100,6 +100,8 @@ export function prepare(input: {
   context: number
   output?: number
   reported?: number
+  usage?: ReturnType<typeof KiloSessionOverflow.measure>
+  native?: { context: number; output: number | undefined }
 }) {
   const selected = new Set<ReturnType<typeof create>>()
   for (const tool of Object.values(input.originals)) {
@@ -111,12 +113,17 @@ export function prepare(input: {
     for (const owner of selected) owner.frame(undefined)
     return
   }
-  const usage = KiloSessionOverflow.measure(input).raw
+  const usage = (input.usage ?? KiloSessionOverflow.measure(input)).raw
   const output = input.output
   const reported = input.reported ?? 0
+  const capacity = input.native
+    ? valid(input.native.context) && input.native.context > 0 && valid(input.native.output)
+      ? Math.min(input.context, Math.max(0, input.native.context - input.native.output))
+      : undefined
+    : input.context
   const remaining =
-    valid(input.context) && input.context > 0 && valid(output) && valid(reported)
-      ? Math.max(0, input.context - Math.max(usage, reported) - output - MARGIN)
+    valid(capacity) && capacity > 0 && valid(output) && valid(reported)
+      ? Math.max(0, capacity - Math.max(usage, reported) - (input.native ? 0 : output) - MARGIN)
       : undefined
   for (const owner of selected) owner.frame(remaining)
 }

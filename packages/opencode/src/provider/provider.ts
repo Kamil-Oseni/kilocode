@@ -49,7 +49,11 @@ import * as ModelsRefresh from "@/kilocode/provider/models-refresh"
 import * as Pricing from "@/kilocode/provider/pricing"
 import { bedrockAuth, providerKey, vertexAuth, vertexCredentials, vertexOptions } from "@/kilocode/provider/cloud-auth"
 import { localFetch } from "@/kilocode/provider/local-scheduler"
-import { context as ollamaContext, structured as ollamaStructured } from "@/kilocode/provider/ollama-context"
+import {
+  context as ollamaContext,
+  structured as ollamaStructured,
+  effective as ollamaWindow,
+} from "@/kilocode/provider/ollama-context"
 import { substitute } from "@/kilocode/provider/helper-policy"
 // kilocode_change end
 import { ProviderError } from "./error"
@@ -1966,7 +1970,7 @@ const layer = Layer.effect(
         const empty = Object.keys(provider.models).length === 0 // kilocode_change
         return yield* new ModelNotFoundError({ providerID, modelID, suggestions, modelsEmpty: empty }) // kilocode_change
       }
-      return info
+      return ollamaWindow(provider.options, info) // kilocode_change - native explicit context also governs request budgets
     })
 
     const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {

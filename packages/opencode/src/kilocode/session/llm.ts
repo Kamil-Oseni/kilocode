@@ -1,4 +1,3 @@
-import type { ModelMessage } from "ai"
 import * as Stream from "effect/Stream"
 import type { LLMEvent } from "@opencode-ai/llm"
 import type { Logger } from "@opencode-ai/core/util/log"
@@ -57,12 +56,20 @@ export namespace KiloLLM {
    */
   export function capOutputTokens(input: {
     model: Provider.Model
-    messages: ModelMessage[]
+    messages: readonly { role: string; content?: unknown }[]
     tools: Record<string, { description?: string; inputSchema?: unknown }>
     configured: number | undefined
     usage?: ReturnType<typeof KiloSessionOverflow.measure>
     reported?: number
+    native?: boolean
   }): number | undefined {
+    if (
+      input.native &&
+      (typeof input.configured !== "number" || !Number.isSafeInteger(input.configured) || input.configured <= 0)
+    )
+      throw Object.assign(new Error("Native output cap requires a positive finite output budget"), {
+        isRetryable: false,
+      })
     if (input.configured == null) return input.configured
     if (input.configured <= 0) return undefined
     const { context } = input.model.limit
@@ -73,6 +80,15 @@ export namespace KiloLLM {
       KiloSessionOverflow.measure({ messages: input.messages, tools: input.tools }).normalized
     const tokens = Math.max(input.reported ?? 0, estimated)
     const available = context - tokens - SAFETY
+    if (input.native && available <= 0) {
+      const fixed = KiloSessionOverflow.measure({
+        messages: input.messages.filter((message) => message.role === "system"),
+        tools: input.tools,
+      }).normalized
+      // Keep a positive reserve without treating removable history as fixed input.
+      // Tiny windows may fit the fixed prompt while being smaller than the usual floor.
+      return Math.min(input.configured, MIN_OUTPUT, Math.max(1, context - fixed - 1))
+    }
     // Exhausting the safety margin does not mean the input exhausted context.
     // Keep the preflight minimum reserve when it fits; otherwise preserve the
     // provider overflow/compaction path for genuinely exhausted input.

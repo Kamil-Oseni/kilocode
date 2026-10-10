@@ -1,5 +1,6 @@
 import { schemas } from "./ollama-context"
 import { ToolEnvelope } from "./tool-envelope"
+import * as OllamaPrompt from "./ollama-prompt"
 import z from "zod"
 
 type Fetch = (
@@ -159,31 +160,10 @@ async function read(reader: ReadableStreamDefaultReader<Uint8Array>, signal?: Ab
   signal?.throwIfAborted()
   return buffer.text
 }
-const call = z
-  .object({
-    id: z.string().optional(),
-    type: z.literal("function"),
-    function: z.object({ name: z.string(), arguments: z.string() }).strict(),
-  })
-  .strict()
 const request = z
   .object({
     model: z.string().min(1),
-    messages: z.array(
-      z
-        .object({
-          role: z.enum(["system", "user", "assistant", "tool"]),
-          content: z
-            .union([z.string(), z.null(), z.array(z.object({ type: z.literal("text"), text: z.string() }).strict())])
-            .optional(),
-          tool_calls: z.array(call).optional(),
-          tool_call_id: z.string().optional(),
-          name: z.string().optional(),
-          reasoning_content: z.string().optional(),
-        })
-        .strict()
-        .refine((message) => message.reasoning_content === undefined || message.role === "assistant"),
-    ),
+    messages: z.array(OllamaPrompt.message),
     stream: z.boolean().optional(),
     stream_options: z.object({ include_usage: z.boolean().optional() }).strict().optional(),
     store: z.literal(false).optional(),
@@ -630,54 +610,21 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
         return { ...tool, function: { ...tool.function, parameters: original.parameters } }
       })
     }
-    const format = envelope ? ToolEnvelope.schema(data.tools!, envelope) : undefined
+    const format = envelope ? OllamaPrompt.format(data.tools!, envelope) : undefined
     const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined)
-    const names = new Map(
-      data.messages.flatMap(
-        (message) =>
-          message.tool_calls?.flatMap((tool) => (tool.id ? [[tool.id, tool.function.name] as const] : [])) ?? [],
-      ),
-    )
-    const messages = data.messages.map((message) => {
-      const content = Array.isArray(message.content)
-        ? message.content.map((part) => part.text).join("")
-        : (message.content ?? "")
-      const calls = message.tool_calls?.map((tool) => {
-        const args = decode(tool.function.arguments)
-        if (!args || typeof args !== "object" || Array.isArray(args)) throw new OllamaBridgeError()
-        return { function: { name: tool.function.name, arguments: args } }
-      })
-      const name =
-        message.role === "tool"
-          ? (message.name ?? (message.tool_call_id ? names.get(message.tool_call_id) : undefined))
+    const messages = OllamaPrompt.project(data.messages, data.tools ?? [], protocol, data.tool_choice)
+    const size =
+      typeof options.ollamaContext === "number"
+        ? options.ollamaContext
+        : typeof context === "number"
+          ? context
           : undefined
-      if (message.role === "tool" && !name) throw new OllamaBridgeError()
-      return {
-        role: message.role,
-        content:
-          protocol && message.role === "assistant" && calls?.length
-            ? JSON.stringify({ kind: "tools", calls: calls.map((call) => call.function), content })
-            : protocol && message.role === "tool" && message.tool_call_id
-              ? JSON.stringify({ toolCallId: message.tool_call_id, output: content })
-              : content,
-        ...(message.reasoning_content !== undefined ? { thinking: message.reasoning_content } : {}),
-        ...(calls && !(protocol && message.role === "assistant") ? { tool_calls: calls } : {}),
-        ...(name ? { tool_name: name } : {}),
-      }
-    })
-    if (data.tool_choice === "required") {
-      const guide =
-        "For this response, call at least one tool from the supplied tools list. Do not return a text-only answer."
-      const system = messages.find((message) => message.role === "system")
-      if (system) system.content += "\n\n" + guide
-      if (!system) messages.unshift({ role: "system", content: guide })
-    }
-    if (envelope || options.localInferenceToolFormat === "completion-envelope-v1") {
-      const guide = envelope ? ToolEnvelope.guide(data.tools!) : ToolEnvelope.reply()
-      const system = messages.find((message) => message.role === "system")
-      if (system) system.content += "\n\n" + guide
-      if (!system) messages.unshift({ role: "system", content: guide })
-    }
+    OllamaPrompt.check(
+      messages,
+      !envelope && data.tool_choice !== "none" ? (data.tools ?? []) : [],
+      size,
+      data.max_tokens,
+    )
     url.pathname = "/api/chat"
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
     headers.delete("content-length")

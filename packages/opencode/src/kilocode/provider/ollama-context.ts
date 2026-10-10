@@ -1,5 +1,6 @@
 import { isRecord } from "@/util/record"
 import { asSchema, type Tool } from "ai"
+import type { Provider } from "@/provider/provider"
 
 const originals = new WeakMap<object, readonly { name: string; parameters: Record<string, unknown> }[]>()
 
@@ -12,6 +13,17 @@ export function structured(options: Readonly<Record<string, unknown>>, npm: stri
 
 export function schemas(options: Readonly<Record<string, unknown>>) {
   return originals.get(options)
+}
+
+/** The native transport and every request budget share the explicitly selected window. */
+export function effective(options: Readonly<Record<string, unknown>>, model: Provider.Model) {
+  if (!structured(options, model.api.npm)) return model
+  const selected = context(options, model).ollamaContext
+  if (typeof selected !== "number" || selected <= 0) return model
+  if (model.limit.input && model.limit.input > selected)
+    throw new Error("Configured local input limit exceeds the explicit native context")
+  if (model.limit.context > 0) return model
+  return { ...model, limit: { ...model.limit, context: selected, output: Math.min(model.limit.output, selected) } }
 }
 
 /** Bind the same configured model window used by request preflight to local transport. */

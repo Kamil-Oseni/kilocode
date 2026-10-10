@@ -40,10 +40,10 @@ test("real HTTP forwards explicit context/residency and preserves refusal flags"
       )
       const response = await fetcher(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
         method: "POST",
-        body: JSON.stringify({ model: "fixture", messages: [{ role: "user", content: "Hello" }] }),
+        body: JSON.stringify({ model: "fixture", max_tokens: 64, messages: [{ role: "user", content: "Hello" }] }),
       })
       expect(response.ok).toBe(true)
-      expect(rows.at(-1)?.options).toEqual({ num_ctx: context })
+      expect(rows.at(-1)?.options).toEqual({ num_ctx: context, num_predict: 64 })
       expect(rows.at(-1)?.keep_alive).toBe(120)
       expect(rows.at(-1)?.truncate).toBe(false)
       expect(rows.at(-1)?.shift).toBe(false)

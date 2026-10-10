@@ -39,6 +39,8 @@ import { TurnTools } from "@/kilocode/capability/turn-tools"
 import { refuse, LocalNativeError } from "@/kilocode/provider/native-policy"
 import { lane, headers } from "@/kilocode/provider/inference-lane"
 import { Database } from "@opencode-ai/core/database/database"
+import { effective as ollamaWindow, structured as ollamaNative } from "@/kilocode/provider/ollama-context" // kilocode_change
+import * as OllamaPrompt from "@/kilocode/provider/ollama-prompt"
 // kilocode_change end
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -125,6 +127,7 @@ const live: Layer.Layer<
         { concurrency: "unbounded" },
       )
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
+      input = { ...input, model: ollamaWindow(item.options, input.model) } // kilocode_change - explicit native windows govern preflight and output
       const base = yield* LLMRequestPrep.prepare({
         ...input,
         provider: item,
@@ -148,27 +151,41 @@ const live: Layer.Layer<
             ]
           : base.messages
       const preflight = input.preflight === true && input.model.limit.context !== 0
+      const frame = yield* Effect.promise(() =>
+        OllamaPrompt.prepare(
+          item.options,
+          input.model,
+          estimated,
+          tools,
+          input.toolChoice,
+          base.messageTransformOptions,
+        ),
+      )
       const cap = KiloLLM.needsEstimate({ model: input.model, configured: base.params.maxOutputTokens })
+      const measured = frame?.usage ?? (cap ? KiloSessionOverflow.measure({ messages: estimated, tools }) : undefined)
+      const native = ollamaNative(item.options, input.model.api.npm)
+      const maxOutputTokens = KiloLLM.capOutputTokens({
+        model: input.model,
+        messages: frame?.messages ?? estimated,
+        tools: frame?.budget ?? tools,
+        configured: base.params.maxOutputTokens,
+        usage: measured,
+        reported: input.reportedContextTokens,
+        native,
+      })
       const checked = preflight
         ? KiloSessionOverflow.preflight({
             cfg,
             model: input.model,
             usable: usable({ cfg, model: input.model, outputTokenMax: flags.outputTokenMax }),
-            messages: estimated,
-            tools,
+            messages: frame?.messages ?? estimated,
+            tools: frame?.budget ?? tools,
             reported: input.reportedContextTokens,
-            output: base.params.maxOutputTokens,
+            output: native ? maxOutputTokens : base.params.maxOutputTokens,
+            native,
           })
         : undefined
-      const usage = checked?.usage ?? (cap ? KiloSessionOverflow.measure({ messages: estimated, tools }) : undefined)
-      const maxOutputTokens = KiloLLM.capOutputTokens({
-        model: input.model,
-        messages: estimated,
-        tools,
-        configured: base.params.maxOutputTokens,
-        usage,
-        reported: input.reportedContextTokens,
-      })
+      const usage = checked?.usage ?? measured
       if (checked?.compact) {
         return yield* Effect.fail(KiloSessionOverflow.error(checked, input.model))
       }
@@ -179,6 +196,8 @@ const live: Layer.Layer<
         context: input.model.limit.input || input.model.limit.context,
         output: input.model.limit.input ? 0 : maxOutputTokens,
         reported: input.reportedContextTokens,
+        usage,
+        native: native ? { context: input.model.limit.context, output: maxOutputTokens } : undefined,
       })
       const prepared = { ...base, tools, params: { ...base.params, maxOutputTokens } }
       const selected = item.options.localInference === true ? yield* lane(input, database) : "interactive"

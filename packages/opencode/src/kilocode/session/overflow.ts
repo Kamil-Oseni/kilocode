@@ -2,7 +2,6 @@ import type { Config } from "@/config/config"
 import type { Provider } from "@/provider/provider"
 import type { MessageV2 } from "@/session/message-v2"
 import { Token } from "@/util/token"
-import type { ModelMessage } from "ai"
 
 // Token.estimate undercounts provider tokenizers, especially for code and JSON payloads.
 const FACTOR = 1.3
@@ -12,11 +11,11 @@ const OPAQUE = "[opaque reasoning state]"
 const OPAQUE_TOKENS = Token.estimate(OPAQUE)
 
 type Payload = {
-  messages: ModelMessage[]
+  messages: readonly { role: string; content?: unknown }[]
   tools: Record<string, { description?: string; inputSchema?: unknown }>
 }
 
-function continued(messages: ModelMessage[]) {
+function continued(messages: readonly { role: string }[]) {
   const idx = messages.findLastIndex((message) => message.role === "user")
   return messages.slice(idx + 1).some((message) => message.role === "tool")
 }
@@ -105,17 +104,30 @@ export namespace KiloSessionOverflow {
     cfg: Config.Info
     model: Provider.Model
     usable: number
-    messages: ModelMessage[]
+    messages: Payload["messages"]
     tools: Payload["tools"]
     reported?: number
     output?: number
+    native?: boolean
   }) {
     const usage = measure(input)
     const tokens = Math.max(usage.normalized, input.reported ?? 0)
-    const hard = input.model.limit.input || input.model.limit.context
-    const output = input.model.limit.input ? 0 : Math.min(input.output ?? 0, OUTPUT_MIN)
+    const reserve = !input.native
+      ? 0
+      : typeof input.output === "number" && Number.isSafeInteger(input.output) && input.output > 0
+        ? input.output
+        : undefined
+    if (reserve === undefined)
+      throw Object.assign(new Error("Native context preflight requires a positive finite output reserve"), {
+        isRetryable: false,
+      })
+    const hard = input.native
+      ? Math.min(input.model.limit.input || input.model.limit.context, input.model.limit.context - reserve)
+      : input.model.limit.input || input.model.limit.context
+    const output = input.native ? 0 : input.model.limit.input ? 0 : Math.min(input.output ?? 0, OUTPUT_MIN)
+    const exhausted = input.native === true && hard <= 0
     const fixed =
-      hard > 0 && tokens + output >= hard
+      exhausted || (hard > 0 && tokens + output >= hard)
         ? measure({ messages: input.messages.filter((message) => message.role === "system"), tools: input.tools })
             .normalized
         : 0
@@ -123,9 +135,10 @@ export namespace KiloSessionOverflow {
       usage,
       tokens,
       fixed,
-      output,
-      irreducible: hard > 0 && fixed + output >= hard,
+      output: input.native ? reserve : output,
+      irreducible: exhausted || (hard > 0 && fixed + output >= hard),
       compact:
+        exhausted ||
         (hard > 0 && tokens + output >= hard) ||
         shouldCompact({
           cfg: input.cfg,

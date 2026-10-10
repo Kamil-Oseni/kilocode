@@ -197,6 +197,7 @@ async function mounted(sending = false, reverse = false, command = false) {
       window.__voice.setMode("hands-free")
       await window.__deliver({
         type: "speechRealtimeError",
+        requestId: window.__messages.findLast((entry) => entry.type === "speechRealtimeStart")?.requestId,
         code: "configuration",
         error: "Synthetic cascade admission",
         fallback: "cascade-v1",
@@ -376,7 +377,23 @@ async function mounted(sending = false, reverse = false, command = false) {
     const kinds = ["newer", "aba", "cursor", "caret-aba", "context", "context-aba", "session-aba", "session"]
     for (const kind of kinds) {
       stage = kind
-      await page.evaluate(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))
+      await page.evaluate(async () => {
+        if (window.__voice.status() !== "off") {
+          window.dispatchEvent(new CustomEvent("rayaVoiceListen"))
+          return
+        }
+        // Session excursions now end voice; recording again needs a new explicit owner.
+        const id = window.__session.currentSessionID()
+        if (!id) throw new Error("Fixture cannot restart voice without an actual selected session")
+        window.__voice.start(id)
+        await window.__deliver({
+          type: "speechRealtimeError",
+          requestId: window.__messages.findLast((entry) => entry.type === "speechRealtimeStart")?.requestId,
+          code: "configuration",
+          error: "Synthetic restarted cascade admission",
+          fallback: "cascade-v1",
+        })
+      })
       await expect
         .poll(() => page.evaluate(() => window.__messages.filter((entry) => entry.type === "speechToTextStart").length))
         .toBe(kinds.indexOf(kind) + 5)
@@ -529,7 +546,9 @@ async function mounted(sending = false, reverse = false, command = false) {
   } finally {
     const failures: unknown[] = []
     await page
-      .evaluate(() => window.__unmount())
+      .evaluate(() => {
+        if (typeof window.__unmount === "function") window.__unmount()
+      })
       .catch((err) => {
         failures.push(err)
       })

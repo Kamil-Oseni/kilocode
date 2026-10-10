@@ -265,6 +265,7 @@ test("actual Voice composer arms replies only at dispatch and ignores retired VA
       window.__voice.setMode("hands-free")
       await window.__deliver({
         type: "speechRealtimeError",
+        requestId: window.__messages.findLast((entry) => entry.type === "speechRealtimeStart")?.requestId,
         code: "configuration",
         error: "Synthetic cascade admission",
         fallback: "cascade-v1",

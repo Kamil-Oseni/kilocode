@@ -17,6 +17,6 @@ test("actual VoiceProvider fences sequential handoff failures, Stop and reload",
     child.on("close", resolve)
   }).finally(() => clearTimeout(timer))
   const output = Buffer.concat(chunks).toString()
-  expect(output).toContain("20 actual VoiceProvider implementation assertions passed")
+  expect(output).toContain("23 actual VoiceProvider implementation assertions passed")
   expect(code).toBe(0)
 }, 50_000)

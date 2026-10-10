@@ -118,7 +118,7 @@ async function routeSpeechMessage(message: Msg, ctx: Ctx): Promise<boolean> {
   if (await routeKey(message, ctx)) return true
   if (await realtime(message, ctx)) return true
   if (message.type === "speechRealtimeStop") {
-    await ctx.speech?.realtimeStop(ctx.post)
+    await ctx.speech?.realtimeStop(message.requestId, ctx.post)
     return true
   }
   if (message.type === "speechToTextSubmit") {
@@ -188,10 +188,11 @@ async function live(message: Msg, ctx: Ctx) {
 async function realtime(message: Msg, ctx: Ctx) {
   if (message.type !== "speechRealtimeStart") return false
   const scope = token(message.sessionID) ? ctx.voiceScope?.(message.sessionID) : undefined
-  if (message.sessionID)
+  if (message.sessionID && token(message.requestId))
     await ctx.speech?.realtimeStart(
       {
         sessionID: message.sessionID,
+        requestId: message.requestId,
         directory: scope?.directory ?? ctx.dir,
         connection: ctx.connection,
         current: scope?.current,

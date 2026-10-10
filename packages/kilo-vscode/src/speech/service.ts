@@ -41,6 +41,10 @@ export class SpeechService implements vscode.Disposable {
   private readonly live: LiveBroker
   private readonly store: vscode.Memento
   private closed = false
+  private request: string | undefined
+  private waiting: string | undefined
+  private closing: Promise<boolean> | undefined
+  private retiring: string | undefined
   private health: Health
   private healthTail: Promise<void> = Promise.resolve()
   private tail: Promise<void> = Promise.resolve()
@@ -77,8 +81,11 @@ export class SpeechService implements vscode.Disposable {
   }
 
   private async release() {
+    const request = this.request
+    this.retiring = request
     await cancelLiveCapture()
     const failures = await Promise.all([this.live.stop(), this.openai.stop(), this.realtime.stop()])
+    if (!failures.some(Boolean) && this.request === request) this.request = undefined
     if (failures.some(Boolean)) this.incomplete()
     return !failures.some(Boolean)
   }
@@ -187,22 +194,68 @@ export class SpeechService implements vscode.Disposable {
     })
   }
 
+  private async resume(request: string, post: Post) {
+    if (!this.request) {
+      this.request = request
+      return true
+    }
+    if (!this.closing || this.waiting) {
+      post({
+        type: "speechRealtimeError",
+        requestId: request,
+        code: "busy",
+        error: "End the previous local voice session and wait for cleanup before restarting.",
+      })
+      return false
+    }
+    this.waiting = request
+    const joined = await this.closing
+    if (this.waiting !== request) return false
+    this.waiting = undefined
+    if (!joined || this.closed) {
+      post({
+        type: "speechRealtimeError",
+        requestId: request,
+        code: "cleanup_failed",
+        error: "Previous local voice cleanup is unconfirmed. Restart Raya before reconnecting.",
+      })
+      return false
+    }
+    this.request = request
+    return true
+  }
+
   // raya_change start - extension-host broker keeps Qwen and LiveKit service credentials out of the webview
   async realtimeStart(
-    input: { sessionID: string; directory: string; connection: KiloConnectionService; current?: () => boolean },
+    input: {
+      requestId: string
+      sessionID: string
+      directory: string
+      connection: KiloConnectionService
+      current?: () => boolean
+    },
     post: Post,
   ): Promise<void> {
+    if (!(await this.resume(input.requestId, post)) || this.request !== input.requestId) return
+    const current = () => this.request === input.requestId && this.retiring !== input.requestId && !this.closed
     const failed = (error: string) => {
+      if (!current()) return
       this.failed()
-      post({ type: "speechRealtimeError", code: "busy", error })
+      post({ type: "speechRealtimeError", requestId: input.requestId, code: "busy", error })
     }
-    if (!(await this.admit(failed))) return
+    if (!(await this.admit(failed))) {
+      if (current()) this.request = undefined
+      return
+    }
+    if (!current()) return
     if (this.openai.active || this.live.active || this.realtime.active) {
       post({
         type: "speechRealtimeError",
+        requestId: input.requestId,
         code: "busy",
         error: "End the existing OpenAI voice call before switching engines.",
       })
+      if (current()) this.request = undefined
       return
     }
     const result = await this.realtime.start(
@@ -241,14 +294,13 @@ export class SpeechService implements vscode.Disposable {
         const client = await input.connection.getClientAsync(input.directory)
         const server = input.connection.getServerConfig()
         if (!server) throw new Error("Raya backend is not connected")
-        const current = () =>
-          !this.closed && (input.current?.() ?? true) && input.connection.getServerConfig() === server
-        if (!current()) throw new Error("The voice connection or workspace changed.")
+        const selected = () => current() && (input.current?.() ?? true) && input.connection.getServerConfig() === server
+        if (!selected()) throw new Error("The voice connection or workspace changed.")
         const context =
           settings.voiceEngine === "openai-live"
-            ? await loadVoiceContext(client, input.sessionID, input.directory, AbortSignal.timeout(15_000), current)
+            ? await loadVoiceContext(client, input.sessionID, input.directory, AbortSignal.timeout(15_000), selected)
             : undefined
-        if (!current()) throw new Error("The voice connection or workspace changed.")
+        if (!selected()) throw new Error("The voice connection or workspace changed.")
         return {
           sessionID: input.sessionID,
           directory: input.directory,
@@ -257,14 +309,16 @@ export class SpeechService implements vscode.Disposable {
           key,
           mediaKey,
           settings,
-          current,
+          current: selected,
           context: context?.text,
         }
       },
       (info) => {
+        if (!current()) return
         this.healthy()
         post({
           type: "speechRealtimeReady",
+          requestId: input.requestId,
           connection: {
             id: info.id,
             livekitURL: info.livekitURL,
@@ -275,21 +329,48 @@ export class SpeechService implements vscode.Disposable {
         })
       },
     )
-    if (!result.ok && result.code !== "cancelled") {
+    if (current() && !result.ok && result.code !== "cancelled") {
       this.degrade(result.code)
-      post({ type: "speechRealtimeError", error: result.error, code: result.code, fallback: result.fallback })
+      post({
+        type: "speechRealtimeError",
+        requestId: input.requestId,
+        error: result.error,
+        code: result.code,
+        fallback: result.fallback,
+      })
     }
+    if (current() && !this.realtime.active) this.request = undefined
   }
 
-  async realtimeStop(post: Post): Promise<void> {
-    this.cancel()
-    const failure = await this.realtime.stop()
-    if (failure) {
-      this.degrade(failure.code)
-      post({ type: "speechRealtimeError", error: failure.error, code: failure.code })
+  async realtimeStop(request: string | undefined, post: Post): Promise<void> {
+    if (request && request === this.waiting) {
+      this.waiting = undefined
+      post({ type: "speechRealtimeStopped", requestId: request })
       return
     }
-    post({ type: "speechRealtimeStopped" })
+    if (!request || request !== this.request) return
+    if (this.closing) {
+      await this.closing
+      return
+    }
+    this.retiring = request
+    this.cancel()
+    const closing = this.realtime.stop().then((failure) => {
+      if (!failure && this.request === request) this.request = undefined
+      if (failure) {
+        this.degrade(failure.code)
+        post({ type: "speechRealtimeError", requestId: request, error: failure.error, code: failure.code })
+        return false
+      }
+      post({ type: "speechRealtimeStopped", requestId: request })
+      return true
+    })
+    this.closing = closing
+    try {
+      await closing
+    } finally {
+      if (this.closing === closing) this.closing = undefined
+    }
   }
 
   async openaiStart(

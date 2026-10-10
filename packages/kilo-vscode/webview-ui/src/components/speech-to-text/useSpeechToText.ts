@@ -87,6 +87,8 @@ export function useSpeechToText(
       }
     | undefined
   let pending = false
+  let submitted = false
+  const retired = new Map<string, { save: NonNullable<StartOptions["retain"]>; check: StartOptions["check"] }>()
   const capture = new SpeechCapture() // raya_change - Milestone H
   let local = false // raya_change - Milestone H
   let model = "" // raya_change - Milestone H
@@ -97,7 +99,10 @@ export function useSpeechToText(
 
   const unsub = vscode.onMessage((msg) => {
     if (!isSpeechMessage(msg)) return
-    if (!request || msg.requestId !== request) return
+    if (!request || msg.requestId !== request) {
+      recover(msg)
+      return
+    }
 
     if (msg.type === "speechToTextStarted") {
       if (state() !== "starting") return
@@ -151,10 +156,16 @@ export function useSpeechToText(
   onCleanup(() => {
     unsub()
     cancel()
+    retired.clear()
   })
 
   function start(opts: StartOptions) {
     if (active()) return
+    if (retired.size >= 16) {
+      setState("error")
+      setError("Earlier cancelled transcriptions remain unresolved. Reopen this view before recording again.")
+      return
+    }
     insert = opts.insert
     ownership = opts.ownership
     retain = opts.retain
@@ -246,6 +257,7 @@ export function useSpeechToText(
       void capture.stop().then(
         (audio) => {
           if (request !== id || state() !== "transcribing") return
+          submitted = true
           vscode.postMessage({
             type: "speechToTextSubmit",
             requestId: id,
@@ -263,10 +275,47 @@ export function useSpeechToText(
       return
     }
     // raya_change end
+    submitted = true
     vscode.postMessage({ type: "speechToTextStop", requestId: request, ...(sessionID ? { sessionID } : {}) })
   }
 
+  function recover(
+    msg: Extract<
+      ExtensionMessage,
+      {
+        type:
+          | "speechToTextResult"
+          | "speechToTextStarted"
+          | "speechToTextSpeech"
+          | "speechToTextSilence"
+          | "speechToTextCancelled"
+          | "speechToTextError"
+      }
+    >,
+  ) {
+    const token = retired.get(msg.requestId)
+    if (!token) return
+    if (msg.type === "speechToTextCancelled" || msg.type === "speechToTextError") {
+      retired.delete(msg.requestId)
+      return
+    }
+    if (msg.type !== "speechToTextResult") return
+    retired.delete(msg.requestId)
+    try {
+      if (token.check?.(msg.text, msg.requestId) === false) return
+      if (msg.text.length > 262_144 || new TextEncoder().encode(msg.text).byteLength > 262_144) {
+        console.warn("[Raya] Retired speech exceeded the detached recovery limit.")
+        return
+      }
+      const text = msg.text.trim()
+      if (text) token.save(text, msg.requestId)
+    } catch {
+      console.warn("[Raya] Retired recognized speech could not be retained.")
+    }
+  }
+
   function cancel() {
+    if (submitted && request && !result && retain) retired.set(request, { save: retain, check })
     capture.cancel() // Retire retained hands-free streams even after transcription cleared local state.
     if (!local && request && active())
       vscode.postMessage({ type: "speechToTextCancel", requestId: request, ...(sessionID ? { sessionID } : {}) })
@@ -406,6 +455,7 @@ export function useSpeechToText(
     check = undefined
     settle = undefined
     pending = false
+    submitted = false
     local = false // raya_change - Milestone H
     model = "" // raya_change - Milestone H
     speech = undefined // raya_change - Milestone H

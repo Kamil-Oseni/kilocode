@@ -1058,6 +1058,7 @@ export interface SpeechPlaybackErrorMessage {
 // raya_change start - architecture-faithful hands-free session lifecycle
 export interface SpeechRealtimeReadyMessage {
   type: "speechRealtimeReady"
+  requestId: string
   connection: {
     id: string
     livekitURL: string
@@ -1069,6 +1070,7 @@ export interface SpeechRealtimeReadyMessage {
 
 export interface SpeechRealtimeErrorMessage {
   type: "speechRealtimeError"
+  requestId: string
   error: string
   fallback?: "cascade-v1" | "text"
   code?: "configuration" | "busy" | "setup_failed" | "cleanup_failed" | "admission_unknown" | "cancelled"
@@ -1076,6 +1078,7 @@ export interface SpeechRealtimeErrorMessage {
 
 export interface SpeechRealtimeStoppedMessage {
   type: "speechRealtimeStopped"
+  requestId: string
 }
 
 export interface SpeechOpenAIImageResultMessage {

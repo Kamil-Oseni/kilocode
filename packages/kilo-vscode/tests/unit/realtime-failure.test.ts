@@ -33,13 +33,14 @@ function fixture(connect?: (index: number) => Promise<void>) {
   const statuses: string[] = []
   const errors: string[] = []
   const fallback: string[] = []
+  const transcripts: { text: string; stable: boolean }[] = []
   const calls = { disconnected: 0, disabled: 0 }
   const voice = new RealtimeVoice(
     {
       status: (value) => statuses.push(value),
       error: (value) => errors.push(value),
       fallback: (value) => fallback.push(value),
-      transcript: () => {},
+      transcript: (value) => transcripts.push(value),
       aec: () => {},
     },
     (options) => {
@@ -66,8 +67,43 @@ function fixture(connect?: (index: number) => Promise<void>) {
     },
   )
   active.push(voice)
-  return { voice, rooms, statuses, errors, fallback, calls }
+  return { voice, rooms, statuses, errors, fallback, calls, transcripts }
 }
+
+test("partial and final transcript events retain their original room across Stop and restart", async () => {
+  const run = fixture()
+  await run.voice.start(connection("first"))
+  const old = run.rooms[0]!
+  const emit = (room: Room, text: string, stable: boolean) =>
+    room.emit(
+      RoomEvent.DataReceived,
+      new TextEncoder().encode(JSON.stringify({ type: "input.transcript", text, stable })),
+      undefined,
+      undefined,
+      "raya.transcript",
+    )
+  emit(old, "original partial", false)
+  emit(old, "original final", true)
+  expect(run.transcripts.map((value) => [value.text, value.stable])).toEqual([
+    ["original partial", false],
+    ["original final", true],
+  ])
+  await run.voice.stop()
+  emit(old, "stopped partial", false)
+  emit(old, "stopped final", true)
+  await run.voice.start(connection("second"))
+  emit(old, "old partial after restart", false)
+  emit(old, "old final after restart", true)
+  expect(run.transcripts).toHaveLength(2)
+  emit(run.rooms[1]!, "new partial", false)
+  emit(run.rooms[1]!, "new final", true)
+  expect(run.transcripts.map((value) => value.text)).toEqual([
+    "original partial",
+    "original final",
+    "new partial",
+    "new final",
+  ])
+})
 
 function failure(room: Room, id: string) {
   room.emit(

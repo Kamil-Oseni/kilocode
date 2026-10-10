@@ -147,6 +147,79 @@ function setup(session: () => string | undefined = () => undefined) {
   return { ...root, fire, sent, logins: () => logins }
 }
 
+it("cancelled submitted speech retains one late result without inserting into its successor", async () => {
+  const ctx = setup(() => "original-session")
+  const saved: string[] = []
+  const inserted: string[] = []
+  try {
+    ctx.speech.start({
+      model: "synthetic-stt",
+      insert: (text) => inserted.push(text),
+      retain: (text) => saved.push(text),
+    })
+    const original = ctx.sent.findLast((message) => message.type === "speechToTextStart")
+    if (original?.type !== "speechToTextStart") throw new Error("Actual speech start missing")
+    ctx.fire({ type: "speechToTextStarted", requestId: original.requestId })
+    ctx.speech.stop()
+    ctx.speech.cancel()
+    ctx.speech.start({ model: "synthetic-stt", insert: (text) => inserted.push(text) })
+    const next = ctx.sent.findLast((message) => message.type === "speechToTextStart")
+    if (next?.type !== "speechToTextStart") throw new Error("Actual successor start missing")
+    expect(next.requestId).not.toBe(original.requestId)
+    ctx.fire({ type: "speechToTextResult", requestId: original.requestId, text: "Detached original speech" })
+    ctx.fire({ type: "speechToTextResult", requestId: original.requestId, text: "Duplicate" })
+    expect(saved).toEqual(["Detached original speech"])
+    expect(inserted).toEqual([])
+    expect(ctx.speech.state()).toBe("starting")
+    ctx.fire({ type: "speechToTextStarted", requestId: next.requestId })
+    ctx.speech.stop()
+    ctx.fire({ type: "speechToTextResult", requestId: next.requestId, text: "Current speech" })
+    await Bun.sleep(0)
+    expect(inserted).toEqual(["Current speech"])
+    expect(saved).toHaveLength(1)
+  } finally {
+    ctx.dispose()
+  }
+})
+
+it("retired result capacity, cancelled/error acknowledgments and disposal remain fenced", () => {
+  const ctx = setup()
+  const saved: string[] = []
+  const ids: string[] = []
+  try {
+    for (let count = 0; count < 16; count++) {
+      ctx.speech.start({
+        model: "synthetic-stt",
+        insert: () => {
+          throw new Error("Retired speech cannot insert")
+        },
+        retain: (text) => saved.push(text),
+      })
+      const original = ctx.sent.findLast((message) => message.type === "speechToTextStart")
+      if (original?.type !== "speechToTextStart") throw new Error("Actual speech start missing")
+      ids.push(original.requestId)
+      ctx.fire({ type: "speechToTextStarted", requestId: original.requestId })
+      ctx.speech.stop()
+      ctx.speech.cancel()
+    }
+    ctx.speech.start({ model: "synthetic-stt", insert: () => undefined })
+    expect(ctx.sent.filter((message) => message.type === "speechToTextStart")).toHaveLength(16)
+    expect(ctx.speech.error()).toContain("unresolved")
+    ctx.fire({ type: "speechToTextCancelled", requestId: ids[0]! })
+    ctx.fire({ type: "speechToTextError", requestId: ids[1]!, error: "Original refusal" })
+    ctx.fire({ type: "speechToTextResult", requestId: ids[0]!, text: "After original cancellation" })
+    ctx.fire({ type: "speechToTextResult", requestId: ids[1]!, text: "After original failure" })
+    expect(saved).toEqual([])
+    ctx.speech.start({ model: "synthetic-stt", insert: () => undefined })
+    expect(ctx.sent.filter((message) => message.type === "speechToTextStart")).toHaveLength(17)
+    ctx.dispose()
+    ctx.fire({ type: "speechToTextResult", requestId: ids[2]!, text: "After disposal" })
+    expect(saved).toEqual([])
+  } finally {
+    ctx.dispose()
+  }
+})
+
 it("actual recognized-result consumption retains speech on throwing settlement, ownership, readiness or partial insertion", async () => {
   for (const fault of ["settlement", "ownership", "readiness", "insertion"]) {
     const ctx = setup()

@@ -109,7 +109,14 @@ export const VoiceProvider: ParentComponent = (props) => {
     return false
   }
   const [cascade, setCascade] = createSignal(false)
-  const state: { request: string; generation: number; terminal: boolean; owner?: string } = {
+  const state: {
+    request: string
+    generation: number
+    terminal: boolean
+    owner?: string
+    local?: string
+    media?: string
+  } = {
     request: "",
     generation: 0,
     terminal: false,
@@ -169,7 +176,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     },
   })
   function degrade(message: string) {
-    if (!legacy() || loop.paused()) return
+    if (!legacy() || !owned() || state.media !== state.local || loop.paused()) return
     setCascade(true)
     setError(message)
     setStatus("degraded")
@@ -181,20 +188,20 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
   const realtime = new RealtimeVoice({
     status: (value) => {
-      if (legacy() && !loop.paused()) setStatus(value)
+      if (legacy() && owned() && state.media === state.local && !loop.paused()) setStatus(value)
     },
     transcript: (value) => {
-      if (legacy() && !loop.paused()) setTranscript(value)
+      if (legacy() && owned() && state.media === state.local && !loop.paused()) setTranscript(value)
     },
     error: (message) => {
-      if (!legacy() || loop.paused()) return
+      if (!legacy() || !owned() || state.media !== state.local || loop.paused()) return
       setError(message)
-      if (!state.terminal) vscode.postMessage({ type: "speechRealtimeStop" })
+      if (!state.terminal) vscode.postMessage({ type: "speechRealtimeStop", requestId: state.local })
       state.terminal = true
     },
     fallback: degrade,
     aec: (value) => {
-      if (legacy()) setAec(value)
+      if (legacy() && owned() && state.media === state.local) setAec(value)
     },
   })
   const native = new OpenAIVoice({
@@ -504,8 +511,15 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
 
   function foreign(message: ExtensionMessage) {
-    if (!message.type.startsWith("speechRealtime") || owned()) return false
-    if (message.type === "speechRealtimeReady") vscode.postMessage({ type: "speechRealtimeStop" })
+    if (
+      message.type !== "speechRealtimeReady" &&
+      message.type !== "speechRealtimeError" &&
+      message.type !== "speechRealtimeStopped"
+    )
+      return false
+    if (owned() && state.local && message.requestId === state.local) return false
+    if (message.type === "speechRealtimeReady")
+      vscode.postMessage({ type: "speechRealtimeStop", requestId: message.requestId })
     return true
   }
 
@@ -546,7 +560,8 @@ export const VoiceProvider: ParentComponent = (props) => {
       return
     }
     if (!legacy() && (message.type.startsWith("speechRealtime") || message.type.startsWith("speechPlayback"))) {
-      if (message.type === "speechRealtimeReady") vscode.postMessage({ type: "speechRealtimeStop" })
+      if (message.type === "speechRealtimeReady")
+        vscode.postMessage({ type: "speechRealtimeStop", requestId: message.requestId })
       return
     }
     if (selection(message)) return
@@ -554,20 +569,21 @@ export const VoiceProvider: ParentComponent = (props) => {
     if (foreign(message)) return
     if (message.type === "speechRealtimeReady") {
       if (loop.paused()) {
-        vscode.postMessage({ type: "speechRealtimeStop" })
+        vscode.postMessage({ type: "speechRealtimeStop", requestId: state.local })
         return
       }
       if (call) {
-        vscode.postMessage({ type: "speechRealtimeStop" })
+        vscode.postMessage({ type: "speechRealtimeStop", requestId: state.local })
         return
       }
       setCascade(false)
       setError(undefined)
+      state.media = state.local
       const generation = ++state.generation
       void realtime.start(message.connection).catch(async (err: unknown) => {
         if (generation !== state.generation) return
         state.terminal = true
-        vscode.postMessage({ type: "speechRealtimeStop" })
+        vscode.postMessage({ type: "speechRealtimeStop", requestId: state.local })
         const failure = await realtime.stop().then(
           () => undefined,
           () => "Voice cleanup failed. Restart Raya before reconnecting.",
@@ -625,7 +641,8 @@ export const VoiceProvider: ParentComponent = (props) => {
     stopOpenAI()
     state.generation++
     void realtime.stop().catch(() => console.error("[Raya] Voice cleanup failed during webview disposal."))
-    vscode.postMessage({ type: "speechRealtimeStop" })
+    vscode.postMessage({ type: "speechRealtimeStop", requestId: state.local })
+    delete state.local
     player.stop(false)
     vscode.postMessage({ type: "speechPlaybackCancel", requestId: state.request || undefined })
   })
@@ -671,17 +688,21 @@ export const VoiceProvider: ParentComponent = (props) => {
   }
   const stop = () => {
     delete state.owner
+    delete state.media
     window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
     state.terminal = false
     setCascade(false)
     echo.clear()
     state.generation++
+    const generation = state.generation
     stopOpenAI()
     void realtime.stop().catch(() => {
+      if (generation !== state.generation || state.owner !== undefined) return
       setError("Voice cleanup failed. Restart Raya before reconnecting.")
       setStatus("degraded")
     })
-    vscode.postMessage({ type: "speechRealtimeStop" })
+    vscode.postMessage({ type: "speechRealtimeStop", requestId: state.local })
+    delete state.local
     loop.stop()
     player.stop(false) // raya_change - only full orb deactivation closes the webview audio sink
     setStatus("off")
@@ -719,8 +740,9 @@ export const VoiceProvider: ParentComponent = (props) => {
       return
     }
     state.owner = sessionID
+    state.local = crypto.randomUUID()
     loop.set("hands-free")
-    vscode.postMessage({ type: "speechRealtimeStart", sessionID })
+    vscode.postMessage({ type: "speechRealtimeStart", sessionID, requestId: state.local })
   }
 
   createEffect((previous: string | undefined) => {

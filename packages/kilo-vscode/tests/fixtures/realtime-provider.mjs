@@ -43,6 +43,15 @@ for (const name of [
 globalThis.window = window
 globalThis.requestAnimationFrame = window.requestAnimationFrame.bind(window)
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame.bind(window)
+// Surrounding audio platform only; setup failures still use the real provider.
+globalThis.AudioContext = class {
+  destination = {}
+  state = "running"
+  async resume() {}
+  async close() {
+    this.state = "closed"
+  }
+}
 const sent = []
 globalThis.acquireVsCodeApi = () => ({
   postMessage: (msg) => sent.push(msg),
@@ -90,9 +99,11 @@ const dispose = render(
   root,
 )
 const send = (data) => window.dispatchEvent(new window.MessageEvent("message", { data }))
+const request = () => sent.findLast((message) => message.type === "speechRealtimeStart")?.requestId
 const ready = (id) =>
   send({
     type: "speechRealtimeReady",
+    requestId: request(),
     connection: {
       id,
       livekitURL: "ws://unused",
@@ -118,6 +129,7 @@ try {
   voice.setMode("hands-free")
   cleanup = 0
   sent.length = 0
+  voice.start("session-a")
   ready("old")
   ready("new")
   failures[0](new Error("old secret transport error"))
@@ -125,7 +137,7 @@ try {
   assert.equal(voice.status(), "listening")
   assert.equal(cleanup, 0)
   assert.equal(sent.filter((item) => item.type === "speechRealtimeStop").length, 0)
-  send({ type: "speechRealtimeError", code: "busy", error: "Already owned" })
+  send({ type: "speechRealtimeError", requestId: request(), code: "busy", error: "Already owned" })
   assert.equal(voice.status(), "listening")
   failures[1](new Error("new secret transport error"))
   await tick()
@@ -134,10 +146,10 @@ try {
   assert.equal(voice.cascade(), false)
   assert.equal(sent.filter((item) => item.type === "speechRealtimeStop").length, 1)
   assert.ok(!voice.error().includes("secret"))
-  send({ type: "speechRealtimeStopped" })
+  send({ type: "speechRealtimeStopped", requestId: request() })
   assert.equal(voice.status(), "degraded")
   voice.stop()
-  send({ type: "speechRealtimeStopped" })
+  send({ type: "speechRealtimeStopped", requestId: request() })
   assert.equal(voice.status(), "off")
   console.log("Voice provider lifecycle assertions passed")
 } finally {

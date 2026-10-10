@@ -969,11 +969,13 @@ export interface SpeechPlaybackCancelMessage {
 // raya_change start - architecture-faithful hands-free session lifecycle
 export interface SpeechRealtimeStartMessage {
   type: "speechRealtimeStart"
+  requestId: string
   sessionID: string
 }
 
 export interface SpeechRealtimeStopMessage {
   type: "speechRealtimeStop"
+  requestId?: string
 }
 
 export interface SpeechOpenAIStartMessage {

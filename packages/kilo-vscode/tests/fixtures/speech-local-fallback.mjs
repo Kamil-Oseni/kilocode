@@ -169,11 +169,15 @@ try {
   check(settings.hasLocalKey === true && settings.hasTtsKey === false, "only the actual local key is present")
   check(voiceFallback(settings) === "cascade-v1", "actual local settings permit cascade")
   voice.setMode("hands-free")
+  check(media === 0 && audio === 0, "policy transition neither captures nor plays audio")
+  voice.start("settings-fixture")
+  const authorized = audio
   check(voice.cascade() === false, "explicit activation precedes the fallback result")
   window.dispatchEvent(
     new window.MessageEvent("message", {
       data: {
         type: "speechRealtimeError",
+        requestId: sent.findLast((row) => row.type === "speechRealtimeStart")?.requestId,
         code: "configuration",
         error: "Native realtime disabled",
         fallback: voiceFallback(settings),
@@ -186,7 +190,7 @@ try {
     sent.some((row) => row.type === "speechSettingsUpdate" && row.settings.mode === "hands-free"),
     "cascade uses the real settings update route",
   )
-  check(media === 0 && audio === 0, "policy transition neither captures nor plays audio")
+  check(media === 0 && audio === authorized, "owned fallback adds no microphone or audio sink acquisition")
   const count = listens
   voice.stop()
   await store.setKey("local", "")
@@ -199,6 +203,7 @@ try {
     new window.MessageEvent("message", {
       data: {
         type: "speechRealtimeError",
+        requestId: sent.findLast((row) => row.type === "speechRealtimeStart")?.requestId,
         code: "configuration",
         error: "Local key unavailable",
         fallback: voiceFallback(missing),

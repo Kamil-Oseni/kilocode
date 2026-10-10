@@ -283,10 +283,12 @@ try {
         "foreign local session cannot start audio or host transport",
       )
       window.fixture.voice.start("local-A")
+      const former = starts().at(-1).requestId
       check(starts().at(-1)?.sessionID === "local-A", "local voice start retains the selected session")
       const wakes = activity.listen
       send({
         type: "speechRealtimeError",
+        requestId: former,
         code: "unavailable",
         error: "Synthetic cascade fallback",
         fallback: "cascade-v1",
@@ -303,7 +305,13 @@ try {
       )
       const listened = activity.listen
       setCurrent("local-A")
-      send({ type: "speechRealtimeError", code: "unavailable", error: "Late old fallback", fallback: "cascade-v1" })
+      send({
+        type: "speechRealtimeError",
+        requestId: former,
+        code: "unavailable",
+        error: "Late old fallback",
+        fallback: "cascade-v1",
+      })
       await Promise.resolve()
       check(
         window.fixture.voice.status() === "off" && activity.listen === listened,
@@ -313,6 +321,7 @@ try {
       const readyEnds = ends().length
       send({
         type: "speechRealtimeReady",
+        requestId: former,
         connection: {
           id: "old-local",
           livekitURL: "ws://127.0.0.1:1",
@@ -329,9 +338,60 @@ try {
       setCurrent("local-B")
       window.fixture.voice.start("local-B")
       check(starts().at(-1)?.sessionID === "local-B", "explicit local restart binds the new selected session")
+      await Promise.resolve()
+      const latest = starts().at(-1).requestId
+      const microphone = captures.length
+      const listens = activity.listen
+      const beforeReplies = {
+        status: window.fixture.voice.status(),
+        cascade: window.fixture.voice.cascade(),
+        listens,
+        microphone,
+      }
+      for (const message of [
+        { type: "speechRealtimeStopped", requestId: former },
+        { type: "speechRealtimeError", requestId: former, error: "Old failure", fallback: "cascade-v1" },
+        { type: "speechRealtimeError", error: "Missing correlation", fallback: "cascade-v1" },
+        {
+          type: "speechRealtimeReady",
+          requestId: former,
+          connection: {
+            id: "old-local",
+            livekitURL: "ws://127.0.0.1:1",
+            clientToken: "unused",
+            engine: "qwen-realtime",
+            acceptsTruncation: true,
+          },
+        },
+      ])
+        send(message)
+      await Promise.resolve()
+      console.log(
+        `Local reply fence: ${JSON.stringify({ before: beforeReplies, after: { status: window.fixture.voice.status(), cascade: window.fixture.voice.cascade(), listens: activity.listen, microphone: captures.length } })}`,
+      )
+      check(
+        window.fixture.voice.status() === "connecting" &&
+          !window.fixture.voice.cascade() &&
+          activity.listen === listens &&
+          captures.length === microphone,
+        "old and missing local reply identities cannot change a restarted owner",
+      )
+      check(
+        ends().at(-1).requestId === former && latest !== former,
+        "stale Ready cleanup targets only its original request",
+      )
+      send({ type: "speechRealtimeError", requestId: latest, error: "Current fallback", fallback: "cascade-v1" })
+      await until(() => activity.listen > listens)
+      check(window.fixture.voice.cascade(), "matching restarted request can enter cascade")
       window.fixture.voice.stop()
       setCurrent("local-A")
-      send({ type: "speechRealtimeError", code: "unavailable", error: "Late stopped fallback", fallback: "cascade-v1" })
+      send({
+        type: "speechRealtimeError",
+        requestId: latest,
+        code: "unavailable",
+        error: "Late stopped fallback",
+        fallback: "cascade-v1",
+      })
       await Promise.resolve()
       check(
         window.fixture.voice.status() === "off" && !window.fixture.voice.cascade(),
@@ -348,7 +408,7 @@ try {
     }
     return checks
   })
-  assert.equal(result.length, 20)
+  assert.equal(result.length, 23)
   console.log(`${result.length} actual VoiceProvider implementation assertions passed`)
 } finally {
   await browser.close()

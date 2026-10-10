@@ -132,6 +132,9 @@ it.live(
             expect(base.tools.task).toBeUndefined()
             expect(base.tools.chief_route).toBeUndefined()
             const messages = base.messages.filter((message) => message.role === "system")
+            const persona = messages.map((message) => message.content).join("\n")
+            expect(persona).not.toContain("You should NOT be conversational")
+            expect(persona).toContain("hands-free voice agent")
             const system = KiloSessionOverflow.measure({ messages, tools: {} }).normalized
             const catalog = KiloSessionOverflow.measure({ messages: [], tools: schemas }).normalized
             const checked = KiloSessionOverflow.preflight({

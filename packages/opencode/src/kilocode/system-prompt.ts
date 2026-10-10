@@ -15,7 +15,7 @@ const log = Log.create({ service: "kilocode.system-prompt" })
 
 export namespace KilocodeSystemPrompt {
   export function shouldIncludePersona(agent: string) {
-    return agent !== "title" && agent !== "branch-name"
+    return agent !== "title" && agent !== "branch-name" && agent !== "voice"
   }
 
   export function environment(input: { ctx: InstanceContext; model: Provider.Model; editor?: EditorContext }) {

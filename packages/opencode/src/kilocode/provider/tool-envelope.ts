@@ -80,7 +80,10 @@ export namespace ToolEnvelope {
                 type: "object",
                 properties: {
                   kind: { const: "text" },
-                  content: refs === undefined ? { type: "string" } : { type: "string", enum: [...refs] },
+                  content:
+                    refs === undefined
+                      ? { type: "string", minLength: 1, pattern: "\\S" }
+                      : { type: "string", enum: [...refs] },
                 },
                 required: ["kind", "content"],
                 additionalProperties: false,
@@ -121,6 +124,7 @@ export namespace ToolEnvelope {
     const value = wire.parse(JSON.parse(text))
     if (value.kind === "text") {
       if (choice === "required") throw new Error("Required envelope omitted tools")
+      if (!value.content.trim()) throw new Error("Text envelope omitted a reply")
       if (refs !== undefined && !refs.includes(value.content))
         throw new Error("Result envelope omitted an eligible source reference")
       return { content: value.content }

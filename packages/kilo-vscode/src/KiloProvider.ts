@@ -643,7 +643,18 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.projectDirectory = opts.projectDirectory
     this.slimEditMetadata = opts.slimEditMetadata ?? true
     this.providerSecrets = extensionContext ? new ProviderSecretStore(extensionContext.secrets) : undefined // raya_change
-    this.speech = extensionContext ? new SpeechService(extensionContext) : undefined // raya_change - Milestone H
+    let channel: vscode.LogOutputChannel | undefined
+    this.speech = extensionContext
+      ? new SpeechService(extensionContext, {
+          diagnostic: (row) => {
+            if (!channel) {
+              channel = vscode.window.createOutputChannel("Raya Voice", { log: true })
+              extensionContext.subscriptions.push(channel)
+            }
+            channel.info(JSON.stringify(row))
+          },
+        })
+      : undefined
     this.brain = extensionContext ? new BrainHost(extensionContext) : undefined
     this.cloudJournal = extensionContext
       ? new CloudContinuationJournal(path.join(extensionContext.globalStorageUri.fsPath, "cloud-continuations"))

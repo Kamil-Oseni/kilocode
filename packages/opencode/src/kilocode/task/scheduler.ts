@@ -53,7 +53,7 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
         const saved = yield* position()
         const receipts = removals(input.storage)
         const pending = yield* receipts.pending()
-        const items = yield* tasks.list(true)
+        const items = yield* tasks.list(pending.length > 0)
         const roster = new Set(items.map((item) => item.id))
         const eligible = pending.filter((item) => !roster.has(item.agentID)).map((item) => item.agentID)
         const index = Math.max(0, eligible.findIndex((id) => hash(id) === saved.removal) + 1) % eligible.length
@@ -89,9 +89,12 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
         }
         if (!isDeepStrictEqual(yield* position(), saved))
           return yield* new RayaTask.GuardError({ message: "Routine queue cleanup cursor changed during polling." })
-        yield* input.storage.replace(key, cursor).pipe(Effect.orDie)
-        if (!isDeepStrictEqual(yield* position(), cursor))
-          return yield* new RayaTask.GuardError({ message: "Routine queue cleanup cursor publication changed." })
+        if (!isDeepStrictEqual(cursor, saved)) {
+          yield* input.storage.replace(key, cursor).pipe(Effect.orDie)
+          if (!isDeepStrictEqual(yield* position(), cursor))
+            return yield* new RayaTask.GuardError({ message: "Routine queue cleanup cursor publication changed." })
+        }
+        return undefined
       }).pipe(
         Effect.catchTag("RayaTask.RemovalError", (err) =>
           Effect.fail(new RayaTask.GuardError({ message: err.message })),

@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { createHash } from "node:crypto"
 import { and, eq, sql } from "drizzle-orm"
 import path from "node:path"
@@ -43,6 +43,49 @@ const count = (database: Database.Interface, id?: string) =>
     .where(and(eq(Occurrence.state, "queued"), id ? eq(Occurrence.agent_id, id) : undefined))
     .get()
     .pipe(Effect.map((row) => row!.count))
+
+it.live("first-use cleanup leaves an absent roster and housekeeping cursor absent across cold reopening", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    for (let attempt = 0; attempt < 2; attempt++)
+      yield* Effect.gen(function* () {
+        const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+        expect(yield* RayaTask.make(input).list()).toEqual([])
+        yield* scheduler(input).clean()
+        expect(yield* RayaTask.make(input).list()).toEqual([])
+        expect(Exit.isFailure(yield* input.storage.readBounded(key, 1024).pipe(Effect.exit))).toBe(true)
+        expect(Exit.isFailure(yield* input.storage.readBounded(["raya", "agent"], 1024).pipe(Effect.exit))).toBe(true)
+        expect(
+          Exit.isFailure(yield* input.storage.readBounded(["raya", "agent-initialized"], 1024).pipe(Effect.exit)),
+        ).toBe(true)
+        expect(yield* count(input.database)).toBe(0)
+      }).pipe(Effect.provide(state(dir)))
+  }),
+)
+
+it.live("cleanup refuses a missing roster with initialization, original queue, or removal evidence", () =>
+  Effect.gen(function* () {
+    for (const kind of ["initialized", "queued", "removal"]) {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.gen(function* () {
+        const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+        if (kind === "initialized") {
+          yield* RayaTask.make(input).create({ name: "Original", objective: "Work", schedule: { kind: "manual" } })
+          yield* input.storage.remove(["raya", "agent"])
+        }
+        if (kind === "queued") yield* publish(RayaTaskQueue.make(input.database), "original", 1)
+        if (kind === "removal") yield* removals(input.storage).stage("original")
+        const result = yield* scheduler(input).clean().pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) expect(Cause.pretty(result.cause)).toContain("saved worker list is missing")
+        expect(Exit.isFailure(yield* input.storage.readBounded(key, 1024).pipe(Effect.exit))).toBe(true)
+        expect(Exit.isFailure(yield* input.storage.readBounded(["raya", "agent"], 1024).pipe(Effect.exit))).toBe(true)
+        expect(yield* count(input.database)).toBe(kind === "queued" ? 1 : 0)
+        if (kind === "removal") expect(yield* removals(input.storage).pending()).toHaveLength(1)
+      }).pipe(Effect.provide(state(dir)))
+    }
+  }),
+)
 
 it.live(
   "bounded old-version retirement preserves active rows and exact cursor across reopening",

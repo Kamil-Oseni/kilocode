@@ -22,6 +22,7 @@ import {
   isPendingTab,
   openSessionTab,
   reconcileTabs,
+  replacePendingTab,
   restoreTabs,
   tabsForCreatedSession,
   type LocalTabState,
@@ -46,6 +47,7 @@ interface LocalTabsValue {
   pending: Accessor<string | undefined>
   add: (id?: string) => string
   open: (id: string) => void
+  promote: (draft: string, id: string) => boolean
   openAfter: (source: string, id: string) => void
   select: (id: string) => void
   close: (id: string) => void
@@ -129,6 +131,12 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   const open = (id: string) => {
     apply(openSessionTab(current(), id))
     focus(id)
+  }
+
+  const promote = (draft: string, id: string) => {
+    if (active() !== draft || !isPendingTab(draft) || session.currentSessionID() !== id) return false
+    apply(replacePendingTab(current(), draft, id))
+    return true
   }
 
   const openAfter = (source: string, id: string) => {
@@ -257,6 +265,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
         pending: activePending,
         add,
         open,
+        promote,
         openAfter,
         select,
         close,

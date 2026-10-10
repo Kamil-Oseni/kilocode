@@ -280,6 +280,15 @@ async function mounted(
           })
         })
         expect(await page.evaluate(() => window.__session.selectedAgent("ses_voice"))).toBe("voice")
+        if (action === "tabs") {
+          await page.evaluate(() =>
+            window.__deliver({
+              type: "sessionUpdated",
+              session: { id: "ses_voice", title: "Intro to Raya's capabilities" },
+            }),
+          )
+          await expect(page.locator("#title")).toHaveText("Intro to Raya's capabilities")
+        }
       }
       await expect(input).toHaveValue("")
       await page.evaluate(async () => {

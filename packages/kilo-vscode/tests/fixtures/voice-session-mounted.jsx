@@ -6,6 +6,7 @@ import { SessionProvider, useSession } from "../../webview-ui/src/context/sessio
 import { VoiceProvider, useVoice } from "../../webview-ui/src/context/voice"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
 import { LocalTabsProvider, useLocalTabs } from "../../webview-ui/src/context/local-tabs"
+import { tabTitle } from "../../webview-ui/src/utils/session-title"
 import { DEFAULT_SPEECH_SETTINGS } from "../../src/shared/speech"
 import { useVSCode } from "../../webview-ui/src/context/vscode"
 import { dispatch } from "../../webview-ui/src/utils/message-dispatch"
@@ -175,6 +176,7 @@ function Probe() {
     <>
       {composer() && <PromptInput boxId={box()} pendingSessionID={tabs?.pending()} />}
       <output id="sid">{session.currentSessionID()}</output>
+      <output id="title">{tabTitle(tabs?.active(), session.currentSession(), "Untitled chat")}</output>
     </>
   )
 }

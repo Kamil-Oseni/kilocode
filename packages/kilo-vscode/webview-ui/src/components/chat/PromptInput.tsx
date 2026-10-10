@@ -1627,7 +1627,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const voiceSession = createVoiceSession({
     id: session.currentSessionID,
     connected: server.isConnected,
-    create: session.createSession,
+    create: async (signal) => {
+      const draft = props.pendingSessionID
+      const id = await session.createSession(signal)
+      if (!id || signal.aborted || session.currentSessionID() !== id) return
+      if (draft && tabs && !tabs.promote(draft, id)) return
+      return id
+    },
     prepare: voice.prepare,
     start: (id) => {
       voice.start(id)

@@ -23,6 +23,7 @@ import type { OllamaBridgeError } from "@/kilocode/provider/ollama-bridge" // ki
 import { keyless } from "@/kilocode/provider/native-policy" // kilocode_change
 import { terminal } from "@/kilocode/provider/native-admission" // kilocode_change - local refusal must survive native HTTP error translation
 import { context as ollamaContext } from "@/kilocode/provider/ollama-context" // kilocode_change
+import * as ResultFrame from "@/kilocode/provider/result-frame" // kilocode_change - private original-request result grammar
 
 export type RuntimeStatus =
   | { readonly type: "supported"; readonly apiKey?: string; readonly baseURL?: string } // kilocode_change - explicitly local compatible servers may omit authentication
@@ -46,6 +47,7 @@ type StreamInput = {
   readonly providerOptions?: Record<string, any>
   readonly headers: Record<string, string>
   readonly abort: AbortSignal
+  readonly frame?: ResultFrame.Frame // kilocode_change - never read from serialized provider options
 }
 
 // kilocode_change start - raya_change: DeepSeek gateways can emit DSML in text;
@@ -109,6 +111,8 @@ export function stream(input: StreamInput): StreamResult {
         refusal = err
       })
     : transport
+  const scoped = (request: Parameters<typeof selected>[0], opts?: Parameters<typeof selected>[1]) => // kilocode_change
+    ResultFrame.run(input.frame, () => selected(request, opts), opts?.signal ?? input.abort) // kilocode_change
   // kilocode_change end
 
   // Integration point with @opencode-ai/llm: native-request lowers session data
@@ -186,7 +190,7 @@ export function stream(input: StreamInput): StreamResult {
               FetchHttpClient.Fetch,
               Object.assign(
                 (request: Parameters<typeof globalThis.fetch>[0], opts?: Parameters<typeof globalThis.fetch>[1]) =>
-                  selected(request, opts),
+                  scoped(request, opts), // kilocode_change - wrap the actual fetch Promise
                 { preconnect: globalThis.fetch.preconnect },
               ),
             ),

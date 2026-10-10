@@ -28,6 +28,7 @@ import { KiloReadObject } from "@/kilocode/tool/read-object" // kilocode_change
 import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_change - Milestone D child step ceiling
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
+import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - private background result publication
 import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/conversation" // kilocode_change - original greeting needs no workflow tools
 import { settled as recalled, acknowledged, acknowledgement } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
 import { settled as mediaRecalled } from "@/kilocode/second-brain/media-turn" // kilocode_change - qualified original media-read synthesis only
@@ -1472,6 +1473,7 @@ export const layer = Layer.effect(
       }
 
       // kilocode_change start - conditionally insert a reserved goal prompt
+      if (input.resultNotice) yield* ResultContract.validateNotice(sessions, input.resultNotice, { info, parts }) // kilocode_change - validate plugin output before persistence
       yield* input.goalQueuedAt === undefined
         ? sessions.updateMessage(info)
         : GoalMessage.publish({
@@ -1484,6 +1486,8 @@ export const layer = Layer.effect(
           })
       // kilocode_change end
       for (const part of parts) yield* sessions.updatePart(part)
+
+      if (input.resultNotice) yield* ResultContract.publishNotice(sessions, input.resultNotice, { info, parts }) // kilocode_change
 
       return { info, parts }
     }, Effect.scoped)
@@ -1884,11 +1888,15 @@ export const layer = Layer.effect(
             msg.id,
             conversation,
           ) // kilocode_change - durable original message-bound capture route
+          const recovery = agent.name === "auto" && (yield* ResultContract.recovery(sessions, sessionID))
           const tools =
             complete || conversation || chat
               ? {}
               : agent.name === "auto"
-                ? RayaChief.tools(resolved, current.metadata, { session: sessionID, user: lastUser.id })
+                ? {
+                    ...RayaChief.tools(resolved, current.metadata, { session: sessionID, user: lastUser.id }),
+                    ...(recovery && resolved.task ? { task: resolved.task } : {}),
+                  }
                 : resolved
           const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
           const direct =
@@ -2013,6 +2021,7 @@ export const layer = Layer.effect(
             ],
             tools,
             model,
+            final: isLastStep, // kilocode_change - final-only observed-result admission enforces the genuine worker budget
             // kilocode_change start
             // raya_change - require orchestration until goal handling deterministically releases synthesis
             toolChoice:
@@ -2127,6 +2136,9 @@ export const layer = Layer.effect(
           // not a premature stop, so clients must not flash an interruption warning.
           if (KiloSessionPromptQueue.hasFollowup(sessionID)) {
             closeReasons.set(sessionID, "superseded")
+            return "break" as const
+          }
+          if (yield* ResultContract.park(sessions, jobs, sessionID, handle.message.id)) {
             return "break" as const
           }
           // kilocode_change end
@@ -2803,6 +2815,7 @@ export type PromptInput = Omit<Schema.Schema.Type<typeof PromptInput>, "parts" |
   goalQueuedAt?: number // kilocode_change - internal dispatch precondition, never accepted from HTTP clients
   goalObjective?: string // kilocode_change - raya_change: internal continuation routing, never accepted from HTTP clients
   backgroundResult?: true // kilocode_change - internal worker notice must not dismiss pending user questions
+  resultNotice?: object // kilocode_change - internal branded completion authority, never accepted from HTTP clients
 }
 // kilocode_change end
 

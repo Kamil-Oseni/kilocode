@@ -288,6 +288,7 @@ function resolve(
     session: session(ctx.directory, routine, rules, computer, bad),
     processor: {
       message: message(ctx),
+      begin: () => Effect.void,
       // capture metadata writes so tests can assert on recorded approval provenance
       metadata: (toolCallID, value) => Effect.sync(() => void metadataCalls.push({ toolCallID, value })),
       completeToolCall: () => Effect.void,

@@ -41,6 +41,10 @@ import { lane, headers } from "@/kilocode/provider/inference-lane"
 import { Database } from "@opencode-ai/core/database/database"
 import { effective as ollamaWindow, structured as ollamaNative } from "@/kilocode/provider/ollama-context" // kilocode_change
 import * as OllamaPrompt from "@/kilocode/provider/ollama-prompt"
+import { Session } from "./session" // kilocode_change - observed-result contracts read original persisted invocation authority
+import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - result selection is bound to the actual saved Chief dispatch
+import * as ObservedResult from "@/kilocode/provider/result-contract" // kilocode_change - final entries are rendered from verified completed Read parts
+import * as ResultFrame from "@/kilocode/provider/result-frame" // kilocode_change - native result grammar remains private to the original request
 // kilocode_change end
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -65,8 +69,10 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  final?: boolean // kilocode_change - internal step budget applies only to an authenticated observed-result frame
   preflight?: boolean // kilocode_change - enable proactive threshold compaction for normal session turns
   reportedContextTokens?: number // kilocode_change - provider-reported context size from the last finished turn, source of truth for the output cap
+  messageID?: string // kilocode_change - exact assistant publication for observed-result contracts
 }
 
 export type StreamRequest = StreamInput & {
@@ -93,6 +99,7 @@ const live: Layer.Layer<
   | LLMClientService
   | RuntimeFlags.Service
   | Database.Service // kilocode_change - per-request local inference classification
+  | Session.Service // kilocode_change - original observed-result contract and completed acquisition
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -105,6 +112,7 @@ const live: Layer.Layer<
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service // kilocode_change - immutable owning database for lane lookup
+    const sessions = yield* Session.Service // kilocode_change - source-reference publication uses actual saved tool parts
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log.clone().tag("providerID", input.model.providerID).tag("modelID", input.model.id) // kilocode_change
@@ -128,8 +136,26 @@ const live: Layer.Layer<
       )
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
       input = { ...input, model: ollamaWindow(item.options, input.model) } // kilocode_change - explicit native windows govern preflight and output
+      // kilocode_change start - private authority precedes plugin preparation; its actual guide participates in preflight
+      const owned = input.messageID
+        ? yield* ResultContract.load(sessions, {
+            sessionID: SessionID.make(input.sessionID),
+            userID: input.user.id,
+            messageID: input.messageID,
+          })
+        : undefined
+      const guide = owned?.kind === "directory_entries" ? yield* ObservedResult.guide(sessions, owned) : undefined
+      const grammar = yield* ResultFrame.create(sessions, owned)
+      const choice =
+        grammar && input.final
+          ? "none"
+          : input.toolChoice === "required" && ResultFrame.selected(grammar)?.length
+            ? "auto"
+            : input.toolChoice
+      // kilocode_change end
       const base = yield* LLMRequestPrep.prepare({
         ...input,
+        system: guide ? [...input.system, guide] : input.system, // kilocode_change - bound result grammar is counted against the real context
         provider: item,
         auth: info,
         plugin,
@@ -157,8 +183,10 @@ const live: Layer.Layer<
           input.model,
           estimated,
           tools,
-          input.toolChoice,
+          choice,
           base.messageTransformOptions,
+          false, // kilocode_change
+          grammar, // kilocode_change - measured schema matches the original native POST
         ),
       )
       const cap = KiloLLM.needsEstimate({ model: input.model, configured: base.params.maxOutputTokens })
@@ -330,7 +358,7 @@ const live: Layer.Layer<
             messages: prepared.messages,
             tools: prepared.tools,
             permissions: input.permission ?? [],
-            toolChoice: input.toolChoice,
+            toolChoice: choice, // kilocode_change
             params: prepared.params,
           },
         })
@@ -349,7 +377,7 @@ const live: Layer.Layer<
           llmClient,
           messages: prepared.messages,
           tools: prepared.tools,
-          toolChoice: input.toolChoice,
+          toolChoice: choice, // kilocode_change
           temperature: prepared.params.temperature,
           topP: prepared.params.topP,
           topK: prepared.params.topK,
@@ -363,6 +391,7 @@ const live: Layer.Layer<
           providerOptions: prepared.params.options,
           headers: prepared.headers,
           abort: input.abort,
+          frame: grammar, // kilocode_change - separate private authority, never provider configuration
         })
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected", {
@@ -373,6 +402,7 @@ const live: Layer.Layer<
           return {
             type: "native" as const,
             stream: native.stream,
+            owned, // kilocode_change - neither plugins nor provider options can mint final publication authority
           }
         }
         if (refuse(item.options, LLMNativeRuntime.requiresNative(input.model)))
@@ -449,7 +479,7 @@ const live: Layer.Layer<
         activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
         // kilocode_change start
         tools: prepared.tools,
-        toolChoice: input.toolChoice,
+        toolChoice: choice, // kilocode_change
         maxOutputTokens: ProviderTransform.maxOutputTokensForRequest({
           model: input.model,
           options: prepared.params.options,
@@ -467,6 +497,11 @@ const live: Layer.Layer<
           middleware: [
             {
               specificationVersion: "v3" as const,
+              // kilocode_change start - scope the actual cached model invocation, not a deferred Effect
+              async wrapStream({ doStream }) {
+                return ResultFrame.run(grammar, () => doStream(), input.abort)
+              },
+              // kilocode_change end
               async transformParams(args) {
                 if (args.type === "stream") {
                   // @ts-expect-error
@@ -486,9 +521,10 @@ const live: Layer.Layer<
       })
       // kilocode_change end
       // kilocode_change start - capture eligible session export request completion off the stream path
-      if (!exportable) return { type: "ai-sdk" as const, result }
+      if (!exportable) return { type: "ai-sdk" as const, result, owned } // kilocode_change - carry the privately checked result requirement
       return {
         type: "ai-sdk" as const,
+        owned, // kilocode_change
         result: {
           fullStream: observeFullStreamForExport(result.fullStream, {
             sessionId: input.sessionID,
@@ -515,17 +551,30 @@ const live: Layer.Layer<
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
-            if (result.type === "native") return result.stream
+            // kilocode_change start - both runtimes share the same observed-result publication gate
+            if (result.type === "native")
+              return result.owned?.kind === "directory_entries"
+                ? ObservedResult.guard(result.stream, result.owned, sessions, ctrl.signal)
+                : result.stream
+            // kilocode_change end
 
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
             const state = LLMAISDK.adapterState()
-            return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
-              e instanceof Error ? e : new Error(String(e)),
+            // kilocode_change start - retain the normalized SDK stream for the publication gate
+            const stream = Stream.fromAsyncIterable(
+              result.result.fullStream,
+              (e) => (e instanceof Error ? e : new Error(String(e))),
             ).pipe(
               Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
               Stream.flatMap((events) => Stream.fromIterable(events)),
             )
+            // kilocode_change end
+            // kilocode_change start - keep unverified final text out of the processor and persisted visible parts
+            return result.owned?.kind === "directory_entries"
+              ? ObservedResult.guard(stream, result.owned, sessions, ctrl.signal)
+              : stream
+            // kilocode_change end
           }),
         ),
       )
@@ -552,6 +601,7 @@ export const node = LayerNode.make({
     llmClient,
     RuntimeFlags.node,
     Database.node, // kilocode_change - classify actual persisted Routine ancestry per stream
+    Session.node, // kilocode_change - validate original observed-result publication
   ],
 })
 

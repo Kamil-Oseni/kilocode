@@ -214,6 +214,56 @@ const setup = Effect.fn("SessionProcessorTest.setup")(function* (dir: string) {
   return { test, session, chat, handle, input }
 })
 
+it.effect("late producer observations cannot recreate an already completed actual invocation", () =>
+  provideTmpdirProject((dir) =>
+    Effect.gen(function* () {
+      const item = yield* setup(dir)
+      const call = "completed-before-streamed-call"
+      const input = { filePath: path.join(dir, "owned.txt") }
+      yield* item.handle.begin({ id: call, name: "read", input })
+      yield* item.handle.metadata(call, { title: "Original Read", metadata: { owned: true } })
+      yield* item.handle.completeToolCall(call, {
+        title: "Original completion",
+        metadata: { owned: true },
+        output: "Original immutable result",
+      })
+      const before = (yield* MessageV2.parts(item.handle.message.id)).filter(
+        (part) => part.type === "tool" && part.callID === call,
+      )
+      expect(before).toHaveLength(1)
+      expect(before[0]?.type === "tool" && before[0].state.status).toBe("completed")
+      const saved = structuredClone(before)
+      yield* item.handle.metadata(call, { title: "Late metadata", metadata: { substituted: true } })
+      yield* item.test.reply(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: call, name: "write" }),
+        LLMEvent.toolInputDelta({ id: call, name: "write", text: '{"substituted":true}' }),
+        LLMEvent.toolInputEnd({ id: call, name: "write" }),
+        LLMEvent.toolCall({ id: call, name: "write", input: { substituted: true } }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop", usage: usage() }),
+        LLMEvent.finish({ reason: "stop", usage: usage() }),
+      )
+      yield* item.handle.process(item.input)
+      yield* item.handle.metadata(call, { metadata: { after: true } })
+      yield* item.handle.completeToolCall(call, { title: "Late completion", metadata: {}, output: "Substituted" })
+      const repeated = yield* item.handle
+        .begin({ id: call, name: "write", input: { substituted: true } })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(repeated)).toBe(true)
+      const after = (yield* MessageV2.parts(item.handle.message.id)).filter(
+        (part) => part.type === "tool" && part.callID === call,
+      )
+      expect(after).toEqual(saved)
+      expect(after).toHaveLength(1)
+      expect(
+        after.some(
+          (part) => part.type === "tool" && (part.state.status === "pending" || part.state.status === "running"),
+        ),
+      ).toBe(false)
+    }),
+  ),
+)
+
 it.effect(
   "durable processor handling settles actual permission and schema refusals through native SDK",
   () =>
@@ -401,7 +451,7 @@ it.effect(
             {
               call: "chief-unavailable",
               spec: chief,
-              args: { objective: "Inspect the desktop", access: "computer" },
+              args: { result: "narrative", objective: "Inspect the desktop", access: "computer" },
               reason: "chief-no-eligible",
             },
             { call: "chief-lookalike", spec: lookalike, args: {}, sticky: true },
@@ -409,7 +459,8 @@ it.effect(
             { call: "write-finalizer", spec: mixedWrite, args: {}, sticky: true },
             { call: "generic", spec: generic, args: { value: "valid" }, sticky: true },
           ]
-          let sticky = 0
+          // Genuine failures from earlier cases remain retained; this case owns only its exact subsequent increments.
+          let sticky = SessionRetirement.snapshot().failures ?? 0
           for (const row of cases) {
             const call = row.call
             if (call === "chief-unavailable") {

@@ -15,13 +15,16 @@ import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider" // kilocode_change
 import { KiloTask } from "../kilocode/tool/task" // kilocode_change
 import { handoff as evidence } from "@/kilocode/tool/task-evidence" // kilocode_change - preserve invocation-bound observed identifiers
+import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - observed results retain the original request contract
+import { SessionRetirement } from "@/kilocode/session/retirement" // kilocode_change - reserve real background producer ownership before the launching call retires
 import { KiloTaskBackgroundProcess } from "../kilocode/tool/task-background-process" // kilocode_change
 import { KiloCostPropagation } from "../kilocode/session/cost-propagation" // kilocode_change
 import { KiloSessionProcessor } from "../kilocode/session/processor" // kilocode_change
 import { KiloSession } from "../kilocode/session" // kilocode_change
 import { resumeHint } from "../kilocode/task-resume" // kilocode_change
 import { errorMessage } from "@/util/error" // kilocode_change
-import { Effect, Exit, Option, Schema, Scope } from "effect"
+import { Cause, Effect, Exit, Option, Schema, Scope } from "effect" // kilocode_change
+import * as Log from "@opencode-ai/core/util/log" // kilocode_change
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
@@ -61,6 +64,7 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
+const log = Log.create({ service: "tool.task" }) // kilocode_change
 const BACKGROUND_DESCRIPTION = [
   "Background mode: background=true launches the subagent asynchronously and returns immediately.",
   "Use foreground when you need the result before proceeding; otherwise use background for non-overlapping work, but do not give the final answer until all required background results have arrived.", // kilocode_change
@@ -238,21 +242,27 @@ export const TaskTool = Tool.define(
         )
       }
       // kilocode_change end
+      // kilocode_change start - classify exact failed-child recovery before selecting the retained Chief contract
+      const resumed = params.task_id
+        ? yield* sessions
+            .get(SessionID.make(params.task_id))
+            .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
+        : undefined
+      const outcome = ctx.agent === "auto" ? yield* ResultContract.load(sessions, ctx.sessionID) : undefined
+      const receipt = outcome && resumed ? yield* ResultContract.resume(sessions, outcome, resumed.id) : outcome
+      const retained = !!(receipt && resumed && (yield* ResultContract.recovery(sessions, ctx.sessionID, resumed.id)))
+      // kilocode_change end
       // kilocode_change start - exact-child recovery retains the authenticated logged contract
       const follow =
         ctx.agent === "auto"
-          ? RayaChief.follow(recovery ? { ...parent.metadata, [RayaChief.phaseKey]: "goal" } : parent.metadata)
+          ? RayaChief.follow(recovery || retained ? { ...parent.metadata, [RayaChief.phaseKey]: "goal" } : parent.metadata)
           : undefined // kilocode_change - only authenticated exact-child recovery retains the logged work contract
       // kilocode_change end
       const continued = ctx.agent === "auto" && !follow ? RayaChief.continuation(parent.metadata) : undefined
       if (ctx.agent === "auto" && !branch && !follow && !continued) {
         return yield* Effect.fail(new Error("Auto must call chief_route on a new request before delegating with task"))
       }
-      const resumed = params.task_id
-        ? yield* sessions
-            .get(SessionID.make(params.task_id))
-            .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
-        : undefined
+      if (receipt && !ctx.callID) throw new Error("Observed Task result requires an original tool invocation") // kilocode_change
       // kilocode_change start - reuse an equivalent failed child instead of spawning replacements
       const repeat = TaskRepeat.guard(ctx.messages, params)
       if (repeat) return yield* Effect.fail(new Error(repeat))
@@ -632,6 +642,7 @@ export const TaskTool = Tool.define(
         ctx.agent === "auto" &&
         !branch &&
         (recovery ||
+          retained ||
           RayaChief.phase(parent.metadata) === "task" ||
           (ctx.callID !== undefined && RayaChief.phase(parent.metadata) === "goal"))
       ) {
@@ -669,6 +680,7 @@ export const TaskTool = Tool.define(
         .withLock(ctx.sessionID)(
           Effect.gen(function* () {
             // kilocode_change start - recheck current request and retained child under the input publication gate
+            if (receipt) yield* ResultContract.check(sessions, receipt)
             yield* ChiefVerification.reuse({
               storage,
               sessions,
@@ -762,6 +774,18 @@ export const TaskTool = Tool.define(
         {
           ...nextSession.metadata,
           ...scoped, // kilocode_change - preserve historical/resume ceilings before child execution
+          // kilocode_change start - carry the checked original contract and exact current child invocation
+          ...(receipt
+            ? {
+                [ResultContract.key]: ResultContract.child(receipt, {
+                  sessionID: nextSession.id,
+                  inputID: message,
+                  parentMessageID: ctx.messageID,
+                  callID: ctx.callID!,
+                }),
+              }
+            : {}),
+          // kilocode_change end
           ...(parent.metadata?.["raya.goal.open"] === true ? { "raya.goal.open": true } : {}),
         },
         access,
@@ -895,46 +919,82 @@ export const TaskTool = Tool.define(
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",
         text: string,
+        jobID: string,
       ) {
         const currentParent = yield* sessions.get(ctx.sessionID)
-        yield* ops
-          .prompt({
-            sessionID: ctx.sessionID,
-            backgroundResult: true, // kilocode_change - queue behind pending user questions
-            agent: currentParent.agent ?? ctx.agent,
-            variant,
-            ...(branch && ctx.agent === "auto" && RayaChief.request(currentParent.metadata)
-              ? { goalObjective: RayaChief.request(currentParent.metadata) }
-              : {}), // kilocode_change - Chief background notices continue the saved task phase
-            parts: [
-              {
-                type: "text",
-                synthetic: true,
-                text: renderOutput({
-                  sessionID: nextSession.id,
-                  state,
-                  summary:
-                    state === "completed"
-                      ? `Background task completed: ${displayName}`
-                      : `Background task failed: ${displayName}`,
-                  text,
+        const rendered = renderOutput({
+          sessionID: nextSession.id,
+          state,
+          summary: state === "completed" ? `Background task completed: ${displayName}` : `Background task failed: ${displayName}`,
+          text,
+        })
+        const notice = outcome
+          ? yield* ResultContract.notice(sessions, background, outcome, jobID, rendered).pipe(
+              Effect.onExit((exit) =>
+                Effect.sync(() => {
+                  if (Exit.isSuccess(exit)) return
+                  const err = Cause.squash(exit.cause)
+                  log.error("background notice refused", {
+                    reason:
+                      err instanceof Error && /^Result contract [a-z ]{1,96}$/.test(err.message)
+                        ? err.message
+                        : "other",
+                  })
                 }),
-              },
-            ],
-          })
-          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
+              ),
+            )
+          : undefined
+        yield* SessionRetirement.scoped(
+          ops
+            .prompt({
+              sessionID: ctx.sessionID,
+              backgroundResult: true, // kilocode_change - queue behind pending user questions
+              ...(notice ? { resultNotice: notice } : {}), // kilocode_change - private completion authority never comes from notice text
+              agent: currentParent.agent ?? ctx.agent,
+              variant,
+              ...(branch && ctx.agent === "auto" && RayaChief.request(currentParent.metadata)
+                ? { goalObjective: RayaChief.request(currentParent.metadata) }
+                : {}), // kilocode_change - Chief background notices continue the saved task phase
+              parts: [
+                {
+                  type: "text",
+                  synthetic: true,
+                  text: rendered,
+                },
+              ],
+            })
+            .pipe(
+              Effect.onExit((exit) =>
+                Effect.sync(() => {
+                  if (Exit.isSuccess(exit)) return
+                  const err = Cause.squash(exit.cause)
+                  log.error("background prompt refused", {
+                    reason:
+                      err instanceof Error && /^Result contract [a-z ]{1,96}$/.test(err.message)
+                        ? err.message
+                        : "other",
+                  })
+                }),
+              ),
+            ),
+          scope,
+          () => Effect.void,
+        )
       })
       // kilocode_change end
 
       // kilocode_change start - background tasks propagate only cost accrued by this invocation
       const notify = Effect.fn("TaskTool.notifyBackgroundResult")(function* (jobID: string) {
-        yield* background.wait({ id: jobID }).pipe(
-          Effect.flatMap((result) => {
-            if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
-            if (result.info?.status === "error") return inject("error", result.info.error ?? "")
-            return Effect.void
-          }),
-          Effect.forkIn(scope, { startImmediately: true }),
+        yield* SessionRetirement.scoped(
+          background.wait({ id: jobID }).pipe(
+            Effect.flatMap((result) => {
+              if (result.info?.status === "completed") return inject("completed", result.info.output ?? "", jobID)
+              if (result.info?.status === "error") return inject("error", result.info.error ?? "", jobID)
+              return Effect.void
+            }),
+          ),
+          scope,
+          () => Effect.void,
         )
       })
 

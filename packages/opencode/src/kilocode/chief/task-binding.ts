@@ -4,6 +4,7 @@ import { ChiefBranches } from "@/kilocode/chief/branches"
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
 import { SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
+import { ResultContract } from "./result-contract"
 import { Storage } from "@/storage/storage"
 
 /** Resolve a planned child from durable authority, never from the task caller's substitutions. */
@@ -100,7 +101,11 @@ export namespace ChiefTaskBinding {
             JSON.stringify(input.params.brief.constraints) !== JSON.stringify(branch.brief.constraints)))
       )
         throw new Error("Auto Chief branch brief cannot be changed")
-      return { plan, request, branch }
+      const result =
+        input.agent === "auto" && input.sessions
+          ? yield* ResultContract.load(input.sessions, input.sessionID)
+          : undefined
+      return { plan, request, branch, result }
     })
   }
 }

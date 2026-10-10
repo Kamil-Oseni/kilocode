@@ -707,7 +707,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         if (mode === "refinement-call") ctx.callID = "foreign-route"
         const definition = yield* (yield* ChiefRouteTool).init()
         if (!["refinement", "refinement-resume", "refinement-resume-legacy"].includes(mode)) {
-          const refused = yield* Effect.exit(definition.execute({ access: "edit", objective: request }, ctx))
+          const refused = yield* Effect.exit(definition.execute({ result: "narrative",  access: "edit", objective: request }, ctx))
           expect(Exit.isFailure(refused)).toBe(true)
           expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toHaveLength(1)
           expect(started).toBe(0)
@@ -717,14 +717,20 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         const captured = ChiefRefinement.fingerprint((yield* sessions.get(chat.id)).metadata)
         const routes = yield* Effect.all(
           [
-            definition.execute({ access: "edit", objective: "ignored rewrite" }, ctx),
-            definition.execute({ access: "edit", objective: "another ignored rewrite" }, ctx),
+            definition.execute({ result: "narrative",  access: "edit", objective: "ignored rewrite" }, ctx),
+            definition.execute({ result: "narrative",  access: "edit", objective: "another ignored rewrite" }, ctx),
           ],
           { concurrency: "unbounded" },
         )
         expect(routes.filter((value) => value.title === "Auto already routed")).toHaveLength(1)
         const routed = routes.find((value) => value.title !== "Auto already routed")
         if (!routed) throw new Error("Expected one refined routing decision")
+        yield* sessions.updatePart({ ...route, state: {
+          status: "completed", input: { result: "narrative", access: "edit",
+            objective: routes.indexOf(routed) === 0 ? "ignored rewrite" : "another ignored rewrite" },
+          title: routed.title, output: routed.output, metadata: routed.metadata,
+          time: { start: route.state.time.start, end: Date.now() },
+        } })
         const updated = yield* sessions.get(chat.id)
         expect(routed.metadata.decision?.access).toBe("edit")
         expect(routed.metadata.decision?.request).toBe(request)
@@ -1085,15 +1091,45 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         yield* sessions.setMetadata({sessionID:chat.id,metadata:{...(yield* sessions.get(chat.id)).metadata,
           [RayaChief.phaseKey]:"route",
         }})
-        const route = {...part,messageID:fresh.id,id:PartID.ascending(),callID:"fresh-recovery-route",tool:"chief_route",
-          state:{status:"running" as const,input:{access:"read"},time:{start:Date.now()}},
+        const parameters = {
+          result: "narrative" as const,
+          access: "read" as const,
+          objective: "Inspect a distinct new request",
         }
-        yield* sessions.updatePart(route)
-        const router = yield* (yield* ChiefRouteTool).init()
-        yield* router.execute({access:"read",objective:"Inspect a distinct new request"},{
-          sessionID:chat.id,messageID:fresh.id,callID:route.callID,agent:"auto",abort:new AbortController().signal,
-          messages:[],metadata:()=>Effect.void,ask:()=>Effect.void,
-        })
+        const route = {
+          ...part,
+          messageID: fresh.id,
+          id: PartID.ascending(),
+          callID: "fresh-recovery-route",
+          tool: "chief_route",
+          state: { status: "running" as const, input: parameters, time: { start: Date.now() } },
+        }
+        yield * sessions.updatePart(route)
+        const router = yield * (yield * ChiefRouteTool).init()
+        const routed =
+          yield *
+          router.execute(parameters, {
+            sessionID: chat.id,
+            messageID: fresh.id,
+            callID: route.callID,
+            agent: "auto",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          })
+        yield *
+          sessions.updatePart({
+            ...route,
+            state: {
+              status: "completed",
+              input: parameters,
+              title: routed.title,
+              output: routed.output,
+              metadata: routed.metadata,
+              time: { start: route.state.time.start, end: Date.now() },
+            },
+          })
         const publication = Effect.gen(function* () {
           const latest = yield* sessions.updateMessage({id:MessageID.ascending(),role:"user",sessionID:chat.id,
             agent:"auto",model:ref,time:{created:Date.now()},

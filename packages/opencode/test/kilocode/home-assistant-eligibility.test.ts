@@ -405,6 +405,7 @@ for (const mode of ["auto", "voice"] as const)
                 })
                 if (mode === "auto")
                   yield* llm.tool("chief_route", {
+                    result: "narrative",
                     objective: "Turn on the allowed Home Assistant PC light, then report its state.",
                     workflow: "home_assistant",
                     access: "read",
@@ -622,7 +623,9 @@ it.live(
           for (const access of ["edit", "computer"] as const) {
             expect(
               Exit.isFailure(
-                yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant", access }, ctx)),
+                yield* Effect.exit(
+                  tool.execute({ result: "narrative", objective: request, workflow: "home_assistant", access }, ctx),
+                ),
               ),
             ).toBe(true)
             expect((yield* sessions.get(session.id)).metadata?.[HomeAssistant.key]).toBeUndefined()
@@ -630,7 +633,10 @@ it.live(
           expect(RayaChief.tools(catalog, session.metadata, { session: session.id, user: user.id })).toEqual({
             chief_route: "route",
           })
-          const general = yield* tool.execute({ objective: "Turn on a light", access: "read" }, ctx)
+          const general = yield* tool.execute(
+            { result: "narrative", objective: "Turn on a light", access: "read" },
+            ctx,
+          )
           expect(general.metadata.decision?.request).toBe(request)
           expect(general.metadata.decision?.agent).toBe("generalist")
           const routed = yield* sessions.get(session.id)
@@ -648,7 +654,7 @@ it.live(
             Exit.isFailure(
               yield* Effect.exit(
                 tool.execute(
-                  { objective: request, workflow: "home_assistant", access: "read" },
+                  { result: "narrative", objective: request, workflow: "home_assistant", access: "read" },
                   { ...ctx, sessionID: foreign.id },
                 ),
               ),
@@ -660,16 +666,29 @@ it.live(
           })
           expect(
             Exit.isFailure(
-              yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant", access: "read" }, ctx)),
+              yield* Effect.exit(
+                tool.execute(
+                  { result: "narrative", objective: request, workflow: "home_assistant", access: "read" },
+                  ctx,
+                ),
+              ),
             ),
           ).toBe(true)
           yield* sessions.setMetadata({ sessionID: session.id, metadata: { [RayaChief.requestKey]: request } })
-          yield* tool.execute({ objective: request, workflow: "home_assistant", access: "read" }, ctx)
+          yield* tool.execute(
+            { result: "narrative", objective: request, workflow: "home_assistant", access: "read" },
+            ctx,
+          )
           const selected = yield* sessions.get(session.id)
           expect(HomeAssistant.selected(selected.metadata, { session: session.id, user: user.id })).toBe(true)
           expect(
             Exit.isFailure(
-              yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant", access: "read" }, ctx)),
+              yield* Effect.exit(
+                tool.execute(
+                  { result: "narrative", objective: request, workflow: "home_assistant", access: "read" },
+                  ctx,
+                ),
+              ),
             ),
           ).toBe(true)
           const latest = yield* sessions.updateMessage({
@@ -689,7 +708,12 @@ it.live(
           })
           expect(
             Exit.isFailure(
-              yield* Effect.exit(tool.execute({ objective: request, workflow: "home_assistant", access: "read" }, ctx)),
+              yield* Effect.exit(
+                tool.execute(
+                  { result: "narrative", objective: request, workflow: "home_assistant", access: "read" },
+                  ctx,
+                ),
+              ),
             ),
           ).toBe(true)
           const agents = yield* Agent.Service

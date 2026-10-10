@@ -61,7 +61,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
   session: Session.Info
-  processor: Pick<SessionProcessor.Handle, "message" | "metadata" | "completeToolCall"> // kilocode_change
+  processor: Pick<SessionProcessor.Handle, "message" | "metadata" | "completeToolCall" | "begin"> // kilocode_change
   bypassAgentCheck: boolean
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
@@ -226,6 +226,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
+            yield* input.processor.begin({ id: options.toolCallId, name: item.id, input: args }) // kilocode_change - persist only the actual validated invocation before permission/Chief guards
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },

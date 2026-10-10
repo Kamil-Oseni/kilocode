@@ -130,7 +130,10 @@ it.live("a real direct greeting decision releases text continuation without rele
           "Reply with one short greeting. This is a temporary conversation check; do not save it as a preference or perform any actions."
         const input = yield* dispatch(dir, request)
         const tool = yield* (yield* ChiefRouteTool).init()
-        const result = yield* tool.execute({ objective: "model rewrite", access: "read" }, input.ctx)
+        const result = yield* tool.execute(
+          { result: "narrative", objective: "model rewrite", access: "read" },
+          input.ctx,
+        )
         expect(result.metadata.decision?.direct).toBe(true)
         expect(result.metadata.decision?.request).toBe(request)
         const saved = yield* sessions.get(input.chat.id)
@@ -207,7 +210,7 @@ for (const mode of ["request", "goal", "edit"] as const)
             },
           })
           const result = yield* tool.execute(
-            { objective: "Hello.", access: mode === "edit" ? "edit" : "read" },
+            { result: "narrative", objective: "Hello.", access: mode === "edit" ? "edit" : "read" },
             input.ctx,
           )
           expect(result.metadata.decision?.direct).not.toBe(true)
@@ -252,7 +255,9 @@ for (const mode of ["text", "goal"] as const)
           }
           const definition = yield* ChiefRouteTool.pipe(Effect.provideService(Session.Service, routed))
           const tool = yield* definition.init()
-          const result = yield* tool.execute({ objective: "Hello.", access: "read" }, input.ctx).pipe(Effect.exit)
+          const result = yield* tool
+            .execute({ result: "narrative", objective: "Hello.", access: "read" }, input.ctx)
+            .pipe(Effect.exit)
           expect(reads).toBe(2)
           const saved = yield* sessions.get(input.chat.id)
           if (mode === "goal") expect(saved.metadata?.["raya.goal.open"]).toBe(true)
@@ -282,9 +287,11 @@ it.live("missing work class refuses before routing while explicit read preserves
         const input = yield* dispatch(dir, request)
         const tool = yield* (yield* ChiefRouteTool).init()
         const boundary: DefWithoutID = tool
-        expect(Exit.isFailure(yield* Effect.exit(boundary.execute({ objective: request }, input.ctx)))).toBe(true)
+        expect(
+          Exit.isFailure(yield* Effect.exit(boundary.execute({ result: "narrative", objective: request }, input.ctx))),
+        ).toBe(true)
         expect(RayaChief.history((yield* sessions.get(input.chat.id)).metadata)).toHaveLength(0)
-        const result = yield* tool.execute({ objective: request, access: "read" }, input.ctx)
+        const result = yield* tool.execute({ result: "narrative", objective: request, access: "read" }, input.ctx)
         expect(result.metadata.decision?.direct).toBe(true)
         expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
       }),
@@ -305,8 +312,8 @@ it.live(
           const second = yield* definition.init()
           const outputs = yield* Effect.all(
             [
-              first.execute({ objective: "ignored rewrite", access: "read" }, input.ctx),
-              second.execute({ objective: "other rewrite", access: "read" }, input.ctx),
+              first.execute({ result: "narrative", objective: "ignored rewrite", access: "read" }, input.ctx),
+              second.execute({ result: "narrative", objective: "other rewrite", access: "read" }, input.ctx),
             ],
             { concurrency: "unbounded" },
           )
@@ -333,9 +340,13 @@ it.live(
           const tool = yield* definition.init()
           const one = yield* dispatch(dir, ambiguous)
           const two = yield* dispatch(dir, ambiguous)
-          const first = yield* tool.execute({ objective: ambiguous, access: "read" }, one.ctx).pipe(Effect.forkChild)
+          const first = yield* tool
+            .execute({ result: "narrative", objective: ambiguous, access: "read" }, one.ctx)
+            .pipe(Effect.forkChild)
           const event = yield* Queue.take(queue).pipe(Effect.timeout("3 seconds"))
-          const second = yield* tool.execute({ objective: ambiguous, access: "read" }, two.ctx).pipe(Effect.forkChild)
+          const second = yield* tool
+            .execute({ result: "narrative", objective: ambiguous, access: "read" }, two.ctx)
+            .pipe(Effect.forkChild)
           const other = yield* Queue.take(queue).pipe(Effect.timeout("3 seconds"))
           expect(event.sessionID).not.toBe(other.sessionID)
           yield* questions.reply({ requestID: event.id, answers: [["designer"]] })
@@ -359,18 +370,24 @@ it.live(
           const queue = yield* asked()
           const tool = yield* (yield* ChiefRouteTool).init()
           const input = yield* dispatch(dir, ambiguous)
-          const first = yield* tool.execute({ objective: ambiguous, access: "read" }, input.ctx).pipe(Effect.forkChild)
+          const first = yield* tool
+            .execute({ result: "narrative", objective: ambiguous, access: "read" }, input.ctx)
+            .pipe(Effect.forkChild)
           yield* Queue.take(queue).pipe(Effect.timeout("3 seconds"))
           input.abort.abort()
           expect(Exit.isFailure(yield* Fiber.await(first))).toBe(true)
           expect(RayaChief.history((yield* sessions.get(input.chat.id)).metadata)).toHaveLength(0)
           const ctx = { ...input.ctx, abort: new AbortController().signal }
-          const second = yield* tool.execute({ objective: ambiguous, access: "read" }, ctx).pipe(Effect.forkChild)
+          const second = yield* tool
+            .execute({ result: "narrative", objective: ambiguous, access: "read" }, ctx)
+            .pipe(Effect.forkChild)
           const next = yield* Queue.take(queue).pipe(Effect.timeout("3 seconds"))
           yield* questions.reject(next.id)
           expect(Exit.isFailure(yield* Fiber.await(second))).toBe(true)
           expect(RayaChief.phase((yield* sessions.get(input.chat.id)).metadata)).toBe("route")
-          const third = yield* tool.execute({ objective: ambiguous, access: "read" }, ctx).pipe(Effect.forkChild)
+          const third = yield* tool
+            .execute({ result: "narrative", objective: ambiguous, access: "read" }, ctx)
+            .pipe(Effect.forkChild)
           const final = yield* Queue.take(queue).pipe(Effect.timeout("3 seconds"))
           yield* questions.reply({ requestID: final.id, answers: [["designer"]] })
           expect((yield* Fiber.join(third)).metadata.decision?.agent).toBe("designer")
@@ -392,10 +409,12 @@ it.live(
           const queue = yield* asked()
           const tool = yield* (yield* ChiefRouteTool).init()
           const old = yield* dispatch(dir, ambiguous)
-          const first = yield* tool.execute({ objective: ambiguous, access: "read" }, old.ctx).pipe(Effect.forkChild)
+          const first = yield* tool
+            .execute({ result: "narrative", objective: ambiguous, access: "read" }, old.ctx)
+            .pipe(Effect.forkChild)
           const event = yield* Queue.take(queue).pipe(Effect.timeout("3 seconds"))
           const fresh = yield* dispatch(dir, "Read the fixture contents and report exact bytes.", old.chat)
-          const result = yield* tool.execute({ objective: "ignored", access: "read" }, fresh.ctx)
+          const result = yield* tool.execute({ result: "narrative", objective: "ignored", access: "read" }, fresh.ctx)
           expect(result.metadata.decision?.request).toBe("Read the fixture contents and report exact bytes.")
           yield* questions.reply({ requestID: event.id, answers: [["designer"]] })
           expect(Exit.isFailure(yield* Fiber.await(first))).toBe(true)
@@ -421,7 +440,7 @@ for (const denied of ["question", "ask_options"]) {
           const tool = yield* (yield* ChiefRouteTool).init()
           const result = yield* tool
             .execute(
-              { objective: ambiguous, access: "read" },
+              { result: "narrative", objective: ambiguous, access: "read" },
               {
                 ...input.ctx,
                 ask: (request) =>

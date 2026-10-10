@@ -3,7 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect" // kilocode_change - Cause for resume-hint coverage
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option } from "effect" // kilocode_change - Cause for resume-hint coverage
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -1991,7 +1991,7 @@ describe("tool.task", () => {
         // kilocode_change end
       })
       const result = yield* def.execute(
-        { objective: "Implement a typed API endpoint and add unit tests", access: "edit" }, // kilocode_change
+        { result: "narrative", objective: "Implement a typed API endpoint and add unit tests", access: "edit" }, // kilocode_change
         {
           sessionID: chat.id,
           messageID: chief.id,
@@ -2027,13 +2027,24 @@ describe("tool.task", () => {
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
+      yield* sessions.updateMessage({ ...assistant, agent: "auto", mode: "auto" }) // kilocode_change - genuine Auto dispatch
+      const authored = yield* sessions.findMessage(chat.id, (row) => row.info.id === assistant.parentID) // kilocode_change
+      if (Option.isNone(authored) || authored.value.info.role !== "user") throw new Error("Missing authored input") // kilocode_change
+      yield* sessions.updateMessage({ ...authored.value.info, agent: "auto" }) // kilocode_change
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: chat.id,
+        messageID: assistant.parentID,
+        type: "text",
+        text: "What does idempotency mean?",
+      }) // kilocode_change - direct policy requires the actual authored question
       yield* sessions.setMetadata({
         sessionID: chat.id,
         metadata: { [RayaChief.modelKey]: ref, [RayaChief.requestKey]: "What does idempotency mean?" },
       })
       const route = yield* ChiefRouteTool
       const routed = yield* (yield* route.init()).execute(
-        { objective: "What does idempotency mean?", access: "read" }, // kilocode_change
+        { result: "narrative", objective: "What does idempotency mean?", access: "read" }, // kilocode_change
         {
           sessionID: chat.id,
           messageID: assistant.id,
@@ -2050,6 +2061,22 @@ describe("tool.task", () => {
       expect(routed.metadata.decision?.direct).toBe(true) // kilocode_change - device workflow has no specialist decision
       expect(RayaChief.phase(saved.metadata)).toBe("done")
       expect(RayaChief.history(saved.metadata)[0]?.direct).toBe(true)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: chat.id,
+        messageID: assistant.id,
+        type: "tool",
+        tool: "chief_route",
+        callID: "direct-route",
+        state: {
+          status: "completed",
+          input: { result: "narrative", objective: "What does idempotency mean?", access: "read" },
+          title: routed.title,
+          output: routed.output,
+          metadata: routed.metadata,
+          time: { start: authored.value.info.time.created, end: Date.now() },
+        },
+      }) // kilocode_change - retain the actual completed Chief producer
       let called = false
       const task = yield* TaskTool
       const refused = yield* (yield* task.init())
@@ -2077,26 +2104,90 @@ describe("tool.task", () => {
         metadata: {
           ...saved.metadata,
           [RayaChief.requestKey]: "Implement a typed API endpoint",
-          [RayaChief.phaseKey]: "task",
+          [RayaChief.phaseKey]: "route",
           "raya.goal.open": true,
         },
       })
       const resumed = yield* sessions.get(chat.id)
       expect(RayaChief.pending(resumed.metadata)).toBeUndefined()
       expect(RayaChief.follow(resumed.metadata)).toBeUndefined()
-      const result = yield* (yield* task.init()).execute(
-        { description: "Implement API endpoint" },
-        {
-          sessionID: chat.id,
-          messageID: assistant.id,
-          agent: "auto",
-          abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ onPrompt: () => (called = true) }) },
-          messages: [],
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
+      // kilocode_change start - the distinct request needs its genuine new Chief receipt
+      const user = yield* sessions.updateMessage({
+        ...authored.value.info,
+        id: MessageID.ascending(),
+        agent: "auto",
+        time: { created: Date.now() },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: chat.id,
+        messageID: user.id,
+        type: "text",
+        text: "Implement a typed API endpoint",
+      })
+      const next = {
+        ...assistant,
+        id: MessageID.ascending(),
+        parentID: user.id,
+        agent: "auto",
+        mode: "auto",
+        time: { created: Date.now() },
+      }
+      yield* sessions.updateMessage(next)
+      const parameters = {
+        result: "narrative" as const,
+        objective: "Implement a typed API endpoint",
+        access: "edit" as const,
+      }
+      const executed = yield* (yield* route.init()).execute(parameters, {
+        sessionID: chat.id,
+        messageID: next.id,
+        callID: "new-endpoint-route",
+        agent: "auto",
+        abort: new AbortController().signal,
+        extra: {},
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: chat.id,
+        messageID: next.id,
+        type: "tool",
+        tool: "chief_route",
+        callID: "new-endpoint-route",
+        state: {
+          status: "completed",
+          input: parameters,
+          title: executed.title,
+          output: executed.output,
+          metadata: executed.metadata,
+          time: { start: user.time.created, end: Date.now() },
         },
-      )
+      })
+      // kilocode_change end
+      const invocation = { description: "Implement API endpoint" } // kilocode_change
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: chat.id,
+        messageID: next.id,
+        type: "tool",
+        tool: "task",
+        callID: "endpoint-task",
+        state: { status: "running", input: invocation, time: { start: Date.now() } },
+      }) // kilocode_change - genuine original Task invocation
+      const result = yield* (yield* task.init()).execute(invocation, {
+        sessionID: chat.id,
+        messageID: next.id,
+        callID: "endpoint-task", // kilocode_change
+        agent: "auto",
+        abort: new AbortController().signal,
+        extra: { promptOps: stubOps({ onPrompt: () => (called = true) }) },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      })
       expect(result.metadata.selectedAgent).toBe("coder")
       expect(called).toBe(true)
     }),
@@ -2124,8 +2215,8 @@ describe("tool.task", () => {
         metadata: { [RayaChief.modelKey]: ref, [RayaChief.requestKey]: "Write a greeting in a file" },
       })
       expect(
-        (yield* def.execute({ objective: "Write a greeting in a file", access: "edit" }, ctx)).metadata.decision
-          ?.direct, // kilocode_change
+        (yield* def.execute({ result: "narrative", objective: "Write a greeting in a file", access: "edit" }, ctx))
+          .metadata.decision?.direct, // kilocode_change
       ).toBeUndefined()
       expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
 
@@ -2139,8 +2230,8 @@ describe("tool.task", () => {
         },
       })
       expect(
-        (yield* def.execute({ objective: "What does idempotency mean?", access: "read" }, ctx)).metadata.decision
-          ?.direct, // kilocode_change
+        (yield* def.execute({ result: "narrative", objective: "What does idempotency mean?", access: "read" }, ctx))
+          .metadata.decision?.direct, // kilocode_change
       ).toBeUndefined()
       expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
     }),
@@ -2164,7 +2255,7 @@ describe("tool.task", () => {
       const def = yield* tool.init()
       const fiber = yield* def
         .execute(
-          { objective: "Implement code by inspecting this repository", access: "read" }, // kilocode_change - simulated Chief rewrite
+          { result: "narrative", objective: "Implement code by inspecting this repository", access: "read" }, // kilocode_change - simulated Chief rewrite
           {
             sessionID: chat.id,
             messageID: assistant.id,
@@ -3324,7 +3415,9 @@ describe("tool.task", () => {
       expect(runs).toBe(1)
 
       yield* Deferred.succeed(done, undefined)
-      expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.output).toBe("background done")
+      expect((yield* jobs.wait({ id: result.metadata.sessionId })).info?.output).toBe(
+        "background done\n\nDirectory evidence unavailable: this handoff cannot establish a complete invocation-bound directory observation.",
+      ) // kilocode_change - the prompt stub records no complete Read provenance
       expect((yield* Deferred.await(injected)).parts[0]?.type).toBe("text")
       expect(runs).toBe(1)
     }),
@@ -3481,7 +3574,9 @@ describe("tool.task", () => {
         second.resolve()
         const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
         expect(waited.info?.status).toBe("completed")
-        expect(waited.info?.output).toBe("second done")
+        expect(waited.info?.output).toBe(
+          "second done\n\nDirectory evidence unavailable: this handoff cannot establish a complete invocation-bound directory observation.",
+        ) // kilocode_change - no fabricated Read evidence for the controlled worker summary
         const notification = yield* Effect.promise(() => injected.promise)
         expect(notification.variant).toBe("xhigh")
         expect(notification.parts[0]?.type).toBe("text")
@@ -3623,7 +3718,9 @@ describe("tool.task", () => {
       const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
       expect(waited.timedOut).toBe(false)
       expect(waited.info?.status).toBe("completed")
-      expect(waited.info?.output).toBe("background done")
+      expect(waited.info?.output).toBe(
+        "background done\n\nDirectory evidence unavailable: this handoff cannot establish a complete invocation-bound directory observation.",
+      ) // kilocode_change - completed summary alone is not a bound directory observation
     }),
   )
 

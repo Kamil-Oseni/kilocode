@@ -44,6 +44,7 @@ export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
   readonly message: SessionV1.Assistant
+  readonly begin: (input: { id: string; name: string; input: unknown }) => Effect.Effect<void> // kilocode_change - acknowledge actual validated execution before tool guards
   readonly updateToolCall: (
     toolCallID: string,
     update: (part: SessionV1.ToolPart) => SessionV1.ToolPart,
@@ -128,6 +129,7 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service // kilocode_change
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
+      const retired = new Set<string>() // kilocode_change - late observations cannot reopen an actually settled invocation
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
       // may execute tools internally before emitting start-step events,
       // so capturing inside the event handler can be too late.
@@ -178,6 +180,7 @@ const layer = Layer.effect(
 
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
+        if (done) retired.add(toolCallID) // kilocode_change
         delete ctx.toolcalls[toolCallID]
         delete ctx.toolmeta[toolCallID] // kilocode_change
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
@@ -235,6 +238,7 @@ const layer = Layer.effect(
         toolCallID: string,
         input: { title?: string; metadata?: Record<string, any> },
       ) {
+        if (retired.has(toolCallID)) return // kilocode_change - retired calls retain their original completion metadata
         const match = yield* readToolCall(toolCallID)
         // approval provenance is written once during ask() and must survive later tool metadata writes
         if (!match || match.part.state.status !== "running") {
@@ -387,6 +391,36 @@ const layer = Layer.effect(
 
       const isFilePart = (value: unknown): value is SessionV1.FilePart => Schema.is(SessionV1.FilePart)(value)
 
+      // kilocode_change start - actual tool execution can precede streamed observation in either runtime
+      const begin = Effect.fn("SessionProcessor.begin")(function* (input: {
+        id: string
+        name: string
+        input: unknown
+      }) {
+        if (!input.id || !input.name || ctx.assistantMessage.summary) throw new Error("Invalid tool invocation")
+        if (retired.has(input.id)) throw new Error("Tool invocation already settled")
+        const current = yield* ensureToolCall(input)
+        if (current.part.tool !== input.name || !["pending", "running"].includes(current.part.state.status))
+          throw new Error("Tool invocation identity changed")
+        ctx.step.tool = true
+        const meta = ctx.toolmeta[input.id]
+        yield* updateToolCall(input.id, (part) => ({
+          ...part,
+          state:
+            part.state.status === "running"
+              ? { ...part.state, input: isRecord(input.input) ? input.input : { value: input.input } }
+              : {
+                  status: "running",
+                  input: isRecord(input.input) ? input.input : { value: input.input },
+                  title: meta?.title,
+                  metadata: meta?.metadata,
+                  time: { start: Date.now() },
+                },
+        }))
+        delete ctx.toolmeta[input.id]
+      })
+      // kilocode_change end
+
       const toolResultOutput = (
         value: Extract<StreamEvent, { type: "tool-result" }>,
       ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionV1.FilePart[] } => {
@@ -448,6 +482,7 @@ const layer = Layer.effect(
             return
 
           case "tool-input-start":
+            if (retired.has(value.id)) return // kilocode_change
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -466,6 +501,7 @@ const layer = Layer.effect(
           // kilocode_change end
 
           case "tool-call": {
+            if (retired.has(value.id)) return // kilocode_change - actual abort completion may precede its streamed observation
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -958,6 +994,7 @@ const layer = Layer.effect(
               ctx.step = { reasoning: false, text: false, tool: false }
               const stream = llm.stream({
                 ...streamInput,
+                messageID: ctx.assistantMessage.id, // kilocode_change - retain the actual final publication identity
                 preflight: !ctx.assistantMessage.summary,
               })
 
@@ -1059,6 +1096,7 @@ const layer = Layer.effect(
           return ctx.assistantMessage
         },
         updateToolCall,
+        begin, // kilocode_change
         metadata, // kilocode_change
         completeToolCall,
         ...output, // kilocode_change

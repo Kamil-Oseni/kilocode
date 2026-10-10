@@ -19,6 +19,10 @@ import { gate } from "@/kilocode/session/input-gate"
 import * as Tool from "@/tool/tool"
 
 export const Parameters = Schema.Struct({
+  result: RayaChief.Result.annotate({
+    description:
+      "Required output contract: directory_entries for exact complete names from one directory listing; narrative for other deliverables. This does not grant permission.",
+  }),
   access: RayaChief.Access.annotate({
     description:
       "Required work class: read for inspection or conversation, edit for requested file changes, computer for desktop actions. Carry this class into Task. This requests capability and does not grant permissions.",
@@ -98,6 +102,8 @@ export const ChiefRouteTool = Tool.define<
               if (dispatch.findLast((item) => item.info.role === "user")?.info.id !== user)
                 throw new Error("Auto routing requires the current original user dispatch")
               if (params.workflow === "home_assistant") {
+                if (params.result !== "narrative")
+                  throw new Error("Home Assistant requires a narrative result contract")
                 if (params.access !== "read")
                   throw new Error(
                     "Home Assistant cannot perform file edits or desktop actions. Route this work through specialist.",
@@ -172,6 +178,8 @@ export const ChiefRouteTool = Tool.define<
               )
               // raya_change start - route the persisted user text, never a model-rewritten objective
               const request = RayaChief.request(session.metadata) ?? params.objective
+              if (params.result === "directory_entries" && params.access !== "read")
+                throw new Error("Directory result contract requires read access")
               const initial = RayaChief.route({ request, agents: available, access: params.access })
               // raya_change end
               // raya_change start - Milestone C low-confidence routing reuses ask_options
@@ -193,6 +201,7 @@ export const ChiefRouteTool = Tool.define<
               if (!selected || (params.access && !RayaChief.capable(selected, params.access)))
                 throw new Error("The selected Auto specialist is unavailable")
               const direct =
+                params.result !== "directory_entries" &&
                 selected.name === "generalist" &&
                 params.access === "read" &&
                 !answer &&
@@ -232,6 +241,7 @@ export const ChiefRouteTool = Tool.define<
               const candidate = initial.candidates.find((item) => item.agent === selected.name)
               const pending: RayaChief.Pending = {
                 ...(params.access ? { access: params.access, userID: user } : {}),
+                result: params.result,
                 request,
                 agent: selected.name,
                 role: candidate?.role ?? initial.role,

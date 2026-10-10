@@ -203,6 +203,7 @@ function fake(
     get message() {
       return msg
     },
+    begin: Effect.fn("TestSessionProcessor.begin")(() => Effect.void), // kilocode_change - this compaction fixture never dispatches tools
     updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(() => Effect.succeed(undefined)),
     metadata: Effect.fn("TestSessionProcessor.metadata")(() => Effect.void), // kilocode_change
     completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(() => Effect.void),

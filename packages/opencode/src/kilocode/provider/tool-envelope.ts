@@ -29,7 +29,14 @@ export namespace ToolEnvelope {
     return "After successful work, obey the user's final-response format. If an exact reply is requested, copy it verbatim, preserving capitalization and whitespace, with no status announcement, summary, or explanation. A Goal complete tool result does not change that reply requirement."
   }
 
-  export function schema(tools: readonly Tool[], choice: "auto" | "required" | "none") {
+  export function schema(tools: readonly Tool[], choice: "auto" | "required" | "none", refs?: readonly string[]) {
+    if (
+      refs &&
+      (refs.length > 16 ||
+        new Set(refs).size !== refs.length ||
+        refs.some((value) => !value || Buffer.byteLength(value, "utf8") > 8192))
+    )
+      throw new Error("Invalid result envelope references")
     if (
       choice !== "none" &&
       (!tools.length || tools.length > 128 || new Set(tools.map((tool) => tool.function.name)).size !== tools.length)
@@ -67,11 +74,14 @@ export namespace ToolEnvelope {
             },
           ]
         }),
-        ...(choice !== "required"
+        ...(choice !== "required" && (refs === undefined || refs.length > 0)
           ? [
               {
                 type: "object",
-                properties: { kind: { const: "text" }, content: { type: "string" } },
+                properties: {
+                  kind: { const: "text" },
+                  content: refs === undefined ? { type: "string" } : { type: "string", enum: [...refs] },
+                },
                 required: ["kind", "content"],
                 additionalProperties: false,
               },
@@ -79,6 +89,8 @@ export namespace ToolEnvelope {
           : []),
       ],
     }
+    if (!value.anyOf.length)
+      throw new Error("Result envelope requires completed evidence or eligible acquisition tools")
     if (Buffer.byteLength(JSON.stringify(value)) > 128 * 1024) throw new Error("Envelope schema exceeds bound")
     return value
   }
@@ -100,10 +112,17 @@ export namespace ToolEnvelope {
     return value
   }
 
-  export function decode(text: string, names: ReadonlySet<string>, choice: "auto" | "required" | "none") {
+  export function decode(
+    text: string,
+    names: ReadonlySet<string>,
+    choice: "auto" | "required" | "none",
+    refs?: readonly string[],
+  ) {
     const value = wire.parse(JSON.parse(text))
     if (value.kind === "text") {
       if (choice === "required") throw new Error("Required envelope omitted tools")
+      if (refs !== undefined && !refs.includes(value.content))
+        throw new Error("Result envelope omitted an eligible source reference")
       return { content: value.content }
     }
     if (choice === "none") throw new Error("Final envelope contains tools")

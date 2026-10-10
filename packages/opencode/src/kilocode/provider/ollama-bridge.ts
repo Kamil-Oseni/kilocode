@@ -1,6 +1,7 @@
 import { schemas } from "./ollama-context"
 import { ToolEnvelope } from "./tool-envelope"
 import * as OllamaPrompt from "./ollama-prompt"
+import * as ResultFrame from "./result-frame"
 import z from "zod"
 
 type Fetch = (
@@ -239,6 +240,7 @@ async function required(
   stream: boolean,
   signal?: AbortSignal | null,
   envelope?: "auto" | "required" | "none",
+  refs?: readonly string[],
 ) {
   const rows: z.infer<typeof response>[] = []
   const decoder = new TextDecoder("utf-8", { fatal: true })
@@ -415,7 +417,7 @@ async function required(
   const content = rows.map((row) => row.message?.content ?? "").join("")
   const message = (() => {
     try {
-      return ToolEnvelope.decode(content, names, envelope)
+      return ToolEnvelope.decode(content, names, envelope, refs)
     } catch (err) {
       const terminal = rows.at(-1)!
       throw new OllamaBridgeError({
@@ -593,7 +595,9 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
     )
       throw new OllamaBridgeError()
     const protocol = options.localInferenceToolFormat === "completion-envelope-v1"
+    const frame = ResultFrame.current()
     const output = data.response_format !== undefined && data.response_format.type !== "text"
+    if (frame && (!protocol || output)) throw new OllamaBridgeError()
     const envelope = ToolEnvelope.mode(protocol, advertised.size, data.tool_choice, output)
     if (envelope && data.response_format && data.response_format.type !== "text") throw new OllamaBridgeError()
     const originals = envelope && envelope !== "none" ? schemas(options) : undefined
@@ -610,9 +614,9 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
         return { ...tool, function: { ...tool.function, parameters: original.parameters } }
       })
     }
-    const format = envelope ? OllamaPrompt.format(data.tools ?? [], envelope) : undefined
+    const format = envelope ? OllamaPrompt.format(data.tools ?? [], envelope, frame) : undefined
     const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined)
-    const messages = OllamaPrompt.project(data.messages, data.tools ?? [], protocol, data.tool_choice, output)
+    const messages = OllamaPrompt.project(data.messages, data.tools ?? [], protocol, data.tool_choice, output, frame)
     const size =
       typeof options.ollamaContext === "number"
         ? options.ollamaContext
@@ -733,7 +737,15 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       if (!native.body) throw new OllamaBridgeError()
       const reader = native.body.getReader()
       if (data.tool_choice === "required" || envelope) {
-        const rows = await required(reader, data.model, advertised, data.stream === true, signal, envelope)
+        const rows = await required(
+          reader,
+          data.model,
+          advertised,
+          data.stream === true,
+          signal,
+          envelope,
+          ResultFrame.selected(frame),
+        )
         signal?.throwIfAborted()
         const values = rows.map(convert)
         if (!data.stream) return Response.json(values[0])

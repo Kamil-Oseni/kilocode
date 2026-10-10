@@ -7,6 +7,8 @@ import { ProviderTransform } from "@/provider/transform"
 import { KiloSessionOverflow } from "@/kilocode/session/overflow"
 import { structured } from "./ollama-context"
 import { ToolEnvelope } from "./tool-envelope"
+import * as ResultFrame from "./result-frame"
+import { unavailable } from "./result-contract"
 
 const call = z
   .object({
@@ -48,6 +50,14 @@ class OllamaPromptError extends Error {
   }
 }
 
+class OllamaEvidenceError extends Error {
+  readonly isRetryable = false
+  constructor() {
+    super(unavailable)
+    this.name = "OllamaEvidenceError"
+  }
+}
+
 function capacity<T>(read: () => T) {
   try {
     return read()
@@ -61,7 +71,13 @@ function capacity<T>(read: () => T) {
   }
 }
 
-export function format(tools: Parameters<typeof ToolEnvelope.schema>[0], choice: "auto" | "required" | "none") {
+export function format(
+  tools: Parameters<typeof ToolEnvelope.schema>[0],
+  choice: "auto" | "required" | "none",
+  frame?: ResultFrame.Frame,
+) {
+  const refs = ResultFrame.selected(frame)
+  if (refs?.length === 0 && (choice === "none" || tools.length === 0)) throw new OllamaEvidenceError()
   if (
     choice !== "none" &&
     tools.length > 128 &&
@@ -69,7 +85,7 @@ export function format(tools: Parameters<typeof ToolEnvelope.schema>[0], choice:
     tools.every((tool) => tool.function.name.trim())
   )
     throw new OllamaWindowError()
-  return capacity(() => ToolEnvelope.schema(tools, choice))
+  return capacity(() => ToolEnvelope.schema(tools, choice, refs))
 }
 
 /** One projection owns native history escaping and all envelope instructions. */
@@ -79,6 +95,7 @@ export function project(
   protocol: boolean,
   choice?: "auto" | "required" | "none",
   output = false,
+  frame?: ResultFrame.Frame,
 ) {
   const names = new Map(
     rows.flatMap(
@@ -120,6 +137,13 @@ export function project(
     append(
       mode === "none" ? ToolEnvelope.final() : mode ? capacity(() => ToolEnvelope.guide(tools)) : ToolEnvelope.reply(),
     )
+    const refs = ResultFrame.selected(frame)
+    if (refs !== undefined)
+      append(
+        refs.length === 0
+          ? "For this original request no final source reference is available. Acquire actual evidence with an eligible tool; do not return a text-only final."
+          : "For this original request a tool-free final content must equal one complete source-reference JSON string from the supplied response schema. Never replace that reference with guessed or rewritten directory entries.",
+      )
   }
   return messages
 }
@@ -145,6 +169,7 @@ export async function prepare(
   choice?: "auto" | "required" | "none",
   transform: Record<string, unknown> = options,
   output = false,
+  frame?: ResultFrame.Frame,
 ) {
   if (!structured(options, model.api.npm)) return undefined
   const prompt = await standardizePrompt({ messages, allowSystemInMessages: true })
@@ -168,9 +193,10 @@ export async function prepare(
     },
   }))
   const protocol = options.localInferenceToolFormat === "completion-envelope-v1"
+  if (frame && (!protocol || output)) throw new OllamaPromptError()
   const mode = ToolEnvelope.mode(protocol, definitions.length, choice, output)
-  if (mode) format(definitions, mode)
-  const frame = project(rows, definitions, protocol, choice, output)
+  if (mode) format(definitions, mode, frame)
+  const projection = project(rows, definitions, protocol, choice, output, frame)
   const selected = mode || choice === "none" ? [] : definitions
   const budget = Object.fromEntries(
     selected.map((row) => [
@@ -178,7 +204,7 @@ export async function prepare(
       { description: row.function.description, inputSchema: row.function.parameters },
     ]),
   )
-  return { messages: frame, tools: selected, budget, usage: measure(frame, selected) }
+  return { messages: projection, tools: selected, budget, usage: measure(projection, selected) }
 }
 
 export function check(

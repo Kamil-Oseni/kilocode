@@ -346,7 +346,29 @@ ${example(worker.taskID)}`,
             part.tool !== "task" ||
             part.state.status !== "running"))
       )
-        throw new Error("Chief verification reservation changed")
+        throw new Error(
+          `Chief verification reservation changed (${
+            !["task", "goal", "verify"].includes(RayaChief.phase(parent.metadata))
+              ? "phase"
+              : RayaChief.request(parent.metadata) !== input.request
+                ? "request"
+                : input.contract !== undefined && ChiefRefinement.fingerprint(parent.metadata) !== input.contract
+                  ? "contract"
+                  : user?.info.id !== input.userID
+                    ? "user"
+                    : user && RayaChief.requestText(user.parts) !== input.request
+                      ? "user-text"
+                      : !input.callID || !input.userID
+                        ? "invocation"
+                        : message?.info.role !== "assistant" || message.info.agent !== "auto"
+                          ? "message"
+                          : !dispatch(rows, user, message, goal)
+                            ? "dispatch"
+                            : part?.type !== "tool" || part.tool !== "task"
+                              ? "tool"
+                              : `tool-state:${part.state.status}`
+          })`,
+        )
       const clean = Object.fromEntries(
         Object.entries(parent.metadata ?? {}).filter(([key]) => key !== RayaChief.pendingKey),
       )

@@ -19,6 +19,7 @@ const args = {
   objective: "Delegate the requested fixture file work",
   workflow: "specialist" as const,
   access: "edit" as const,
+  result: "narrative" as const,
 }
 const envelope = JSON.stringify({ kind: "tool", name: "chief_route", arguments: args })
 const request = (choice = "required", stream = false) => ({

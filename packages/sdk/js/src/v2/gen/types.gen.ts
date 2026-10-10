@@ -48,6 +48,7 @@ export type Event =
   | EventSessionNextRevertStaged1
   | EventSessionNextRevertCleared1
   | EventSessionNextRevertCommitted1
+  | EventRayaResultNoticeCommitted1
   | EventMessagePartDelta1
   | EventSessionDiff1
   | EventSessionError1
@@ -178,6 +179,7 @@ export type Event =
   | EventSessionNextRevertStaged
   | EventSessionNextRevertCleared
   | EventSessionNextRevertCommitted
+  | EventRayaResultNoticeCommitted
   | EventMessagePartDelta
   | EventSessionDiff
   | EventSessionError
@@ -2826,6 +2828,7 @@ export type GlobalEvent = {
     | EventSessionNextRevertStaged
     | EventSessionNextRevertCleared
     | EventSessionNextRevertCommitted
+    | EventRayaResultNoticeCommitted
     | EventMessagePartDelta
     | EventSessionDiff
     | EventSessionError
@@ -3334,6 +3337,16 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "raya.result.notice.committed"
+        properties: {
+          sessionID: string
+          info: UserMessage
+          part: TextPart
+          time: number
+        }
+      }
+    | {
+        id: string
         type: "message.part.delta"
         properties: {
           sessionID: string
@@ -3794,6 +3807,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextRevertStaged
     | SyncEventSessionNextRevertCleared
     | SyncEventSessionNextRevertCommitted
+    | SyncEventRayaResultNoticeCommitted
 }
 
 /**
@@ -7712,11 +7726,22 @@ export type SessionDurableEvent =
   | SessionNextRevertCleared
   | SessionNextRevertCommitted
   | SessionNextPromptPromoted
+  | RayaResultNoticeCommitted
 
 export type SessionHistory = {
   data: Array<SessionDurableEvent>
   hasMore: boolean
 }
+
+export type OutputFormat1 =
+  | {
+      type: "text"
+    }
+  | {
+      type: "json_schema"
+      schema: JsonSchema
+      retryCount?: number
+    }
 
 export type SessionDurableEventStream = string
 
@@ -7733,16 +7758,6 @@ export type ProviderNotFoundError = {
   providerID: string
   message: string
 }
-
-export type OutputFormat1 =
-  | {
-      type: "text"
-    }
-  | {
-      type: "json_schema"
-      schema: JsonSchema
-      retryCount?: number
-    }
 
 export type SessionStatus2 = {
   id: string
@@ -7843,6 +7858,7 @@ export type V2Event =
   | SessionNextRevertStaged
   | SessionNextRevertCleared
   | SessionNextRevertCommitted
+  | RayaResultNoticeCommitted
   | MessagePartDelta
   | SessionDiff
   | SessionError
@@ -9709,6 +9725,17 @@ export type EventSessionNextRevertCommitted = {
   }
 }
 
+export type EventRayaResultNoticeCommitted = {
+  id: string
+  type: "raya.result.notice.committed"
+  properties: {
+    sessionID: string
+    info: UserMessage
+    part: TextPart
+    time: number
+  }
+}
+
 export type EventMessagePartDelta = {
   id: string
   type: "message.part.delta"
@@ -10825,6 +10852,23 @@ export type SyncEventSessionNextRevertCommitted = {
   }
 }
 
+export type SyncEventRayaResultNoticeCommitted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "raya.result.notice.committed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      info: UserMessage
+      part: TextPart
+      time: number
+    }
+  }
+}
+
 export type ConfigV2ReferenceGit = {
   repository: string
   branch?: string
@@ -11935,6 +11979,26 @@ export type SessionNextPromptPromoted = {
     messageID: string
     prompt: Prompt
     timeCreated: number
+  }
+}
+
+export type RayaResultNoticeCommitted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "raya.result.notice.committed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    info: UserMessage
+    part: TextPart
+    time: number
   }
 }
 
@@ -13855,6 +13919,17 @@ export type EventSessionNextRevertCommitted1 = {
     timestamp: number
     sessionID: string
     messageID: string
+  }
+}
+
+export type EventRayaResultNoticeCommitted1 = {
+  id: string
+  type: "raya.result.notice.committed"
+  properties: {
+    sessionID: string
+    info: UserMessage
+    part: TextPart
+    time: number
   }
 }
 

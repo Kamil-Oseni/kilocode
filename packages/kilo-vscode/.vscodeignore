@@ -16,6 +16,7 @@ webview-ui/**
 script/**
 # Keep reviewed Memory runtimes and their read-only interrupted-save reviewer available in installed builds.
 !script/memory/capture_recovery.py
+!script/memory/capture_revision.py
 !script/memory/control.py
 !script/memory/supervise.py
 !script/memory/service/*.py

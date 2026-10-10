@@ -11,6 +11,7 @@ test("the real package allowlist includes exact reviewed Memory runtimes and exc
   const files = await listFiles({ cwd: root, packageManager: PackageManager.None })
   const required = [
     "script/memory/capture_recovery.py",
+    "script/memory/capture_revision.py",
     "script/memory/control.py",
     "script/memory/supervise.py",
     ...Object.keys(release).map((name) => "script/memory/service/" + name),

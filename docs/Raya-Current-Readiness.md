@@ -1,5 +1,17 @@
 # Raya current readiness
 
+## Delivery checkpoint — October 10
+
+The current private test installation is `7.4.23-snapshot+d48e6c6654.local.1791612913655`, source `d48e6c6654fa2431b74509df914f9204d2ac6190`. Its actual installation receipt verifies 303 payloads and 16 runtime pins, preserves all 1,054 baseline saved files and leaves everyday registration unchanged. Runtime acceptance is explicitly false. The everyday installation below has not been promoted to this candidate.
+
+This candidate already contains the voice Stop/draft-ownership and context fixes. The next delivery check is a fresh ordinary installed chat/voice flow and a small permitted tool turn, followed by normal close/reopen preservation. These checks do not require another package or completion of archive recovery. The native test owner is carrying them out on display 2; the main display and Sovereign Blueprint remain untouched.
+
+The fresh installed Auto greeting check failed after routing: the Ollama bridge reported `required-acquisition` / `tool-missing` with zero calls. This is a current everyday-chat blocker, not a RAM admission failure. A narrow repair uses the existing direct conversational route while preserving acquisition for real work. Source inspection also found local voice missing session retirement and an unowned delayed microphone retry; actual mounted source regressions now pass six retry cases and 20 VoiceProvider checks. These repairs are not installed yet.
+
+The uncommitted default-registry selection candidate is incomplete and excluded from delivery. Missing compatibility roots still expose a startup-initialization gap; its new tests have not run. Archive capture and restore remain unfinished requirements, with the original refusal evidence retained. They do not block independent chat, voice, Memory or routine improvements. Newer committed archive-inspection and native-discovery source checks alone do not justify reinstalling for everyday runtime.
+
+Recorded full-scope readiness remains **48/100**, with **38 unfinished requirements**. No requirement is promoted by package preservation or source-only checks. The dated sections below retain their historical qualifications.
+
 Updated October 9, 2026. Recorded readiness remains **48/100**, with **38 unfinished requirements**. No requirement is promoted by the narrow Memory observations below.
 
 ## Current installation

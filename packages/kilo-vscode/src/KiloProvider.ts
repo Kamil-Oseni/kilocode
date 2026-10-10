@@ -5748,7 +5748,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
                       this.trackedSessionIds.has(sid))),
               )
             if (voice)
-              console.debug("[Raya Voice] submission", {
+              console.info("[Raya Voice] submission", {
+                at: Date.now(),
                 request: voice.requestId,
                 session: sid,
                 pending: !!voice.draftID,

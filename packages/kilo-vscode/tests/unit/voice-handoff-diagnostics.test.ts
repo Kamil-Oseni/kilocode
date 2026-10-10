@@ -93,5 +93,5 @@ test("handoff diagnostic boundary keeps the original finite whitelist and refuse
   for (let index = 0; index < 200; index++) trace("handoff", fields)
   expect(rows).toHaveLength(128)
   expect(JSON.stringify(rows)).not.toContain("private")
-  expect(rows.every((row) => Object.keys(row).sort().join() === "elapsed,phase,request")).toBe(true)
+  expect(rows.every((row) => Object.keys(row).sort().join() === "at,elapsed,phase,request")).toBe(true)
 })

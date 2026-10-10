@@ -14,8 +14,19 @@ test("diagnostics keep finite whitelisted metadata and reject arbitrary content"
   }
   for (let index = 0; index < 200; index++) trace("chunk", fields)
   expect(rows).toHaveLength(128)
-  expect(rows.every((row) => Object.keys(row).sort().join() === "elapsed,phase,request")).toBe(true)
+  expect(rows.every((row) => Object.keys(row).sort().join() === "at,elapsed,phase,request")).toBe(true)
   expect(rows.every((row) => row.request === "unavailable")).toBe(true)
+  expect(JSON.stringify(rows)).not.toContain("private")
+})
+
+test("diagnostics correlate independent observers without accepting a caller timestamp", () => {
+  const rows: PlaybackDiagnostic[] = []
+  const before = Date.now()
+  const fields = { at: 0, text: "private prompt", bytes: 1 }
+  diagnostics("9a1d6a7d-8387-4381-b9bf-e7bfda2d66c3", (row) => rows.push(row))("start", fields)
+  diagnostics("9a1d6a7d-8387-4381-b9bf-e7bfda2d66c3", (row) => rows.push(row))("chunk", fields)
+  const after = Date.now()
+  expect(rows.every((row) => row.at >= before && row.at <= after && Number.isSafeInteger(row.at))).toBe(true)
   expect(JSON.stringify(rows)).not.toContain("private")
 })
 

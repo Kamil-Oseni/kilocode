@@ -25,7 +25,18 @@ it.instance("keeps the bundled design doctrine available to actual native agents
     expect(skill.content).toContain("Design from first principles, not vibes")
     const rows: Array<{ name: string; characters: number; estimated_tokens: number }> = []
     const prompts: Record<string, string> = {}
-    for (const name of ["ask", "code", "plan", "debug", "generalist", "coder", "accountant", "reasoner", "designer"]) {
+    for (const name of [
+      "ask",
+      "code",
+      "voice",
+      "plan",
+      "debug",
+      "generalist",
+      "coder",
+      "accountant",
+      "reasoner",
+      "designer",
+    ]) {
       const agent = yield* svc.get(name)
       expect(agent).toBeDefined()
       if (!agent) throw new Error("Native agent missing")
@@ -40,6 +51,11 @@ it.instance("keeps the bundled design doctrine available to actual native agents
       if (name !== "designer") {
         expect(prompt).not.toContain("You are a senior product designer")
         expect(prompt).toContain("bundled designer skill")
+      }
+      if (name === "voice") {
+        expect(agent.mode).toBe("primary")
+        expect(prompt).toContain("Use your direct tools")
+        expect(prompt).toContain("without Chief, delegation, or agent selection")
       }
       rows.push({ name, characters: agent.prompt?.length ?? 0, estimated_tokens: Token.estimate(agent.prompt ?? "") })
     }

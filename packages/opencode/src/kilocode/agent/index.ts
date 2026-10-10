@@ -699,7 +699,7 @@ export function patchAgents(
         "You are Raya's hands-free voice agent. Handle the user's request yourself without Chief, delegation, or agent selection. Keep conversational answers concise and natural when spoken. Use your direct tools when the request requires action, but do not narrate routine mechanics or emit unnecessary markdown.\n\n" +
         DESIGN_GUIDANCE +
         "\n\n" +
-        PROMPT_DESIGNER,
+        design,
       permission: Permission.merge(
         agents.code.permission,
         Permission.fromConfig({ task: "deny", chief_route: "deny" }),

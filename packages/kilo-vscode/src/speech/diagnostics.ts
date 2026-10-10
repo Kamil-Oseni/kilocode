@@ -36,7 +36,7 @@ type Fields = {
   mime?: "audio/wav" | "audio/pcm"
 }
 
-export type PlaybackDiagnostic = Fields & { request: string; phase: Phase; elapsed: number }
+export type PlaybackDiagnostic = Fields & { request: string; phase: Phase; elapsed: number; at: number }
 
 /** Finite, content-free observations; never include text, audio, endpoints or credentials. */
 export function diagnostics(
@@ -48,12 +48,14 @@ export function diagnostics(
   return (phase: Phase, fields: Fields = {}) => {
     if (!["start", "health", "job", "chunk", "cleanup", "error", "callback", "idle", "handoff"].includes(phase)) return
     if (count++ >= 128) return
+    const at = Date.now()
     const row: PlaybackDiagnostic = {
       request: /^(?:req_)?[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request)
         ? request
         : "unavailable",
       phase,
-      elapsed: Math.max(0, Math.min(180_000, Date.now() - start)),
+      elapsed: Math.max(0, Math.min(180_000, at - start)),
+      at,
     }
     if (fields.job && /^[0-9a-f]{32}$/.test(fields.job)) row.job = fields.job
     if (fields.status && ["queued", "running", "completed", "failed", "cancelled"].includes(fields.status))

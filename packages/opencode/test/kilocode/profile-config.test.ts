@@ -135,6 +135,56 @@ test.skipIf(process.platform !== "win32")(
         const claim = await bindConfig(token, evidence)
         saved.claim = claim
         const groups = configGroups(token, claim)
+        // The same physical configuration may be loaded globally and explicitly in one graph.
+        const repeated = MarkdownIntent.parse({
+          ...graph,
+          documents: [graph.documents[0], graph.documents[0]],
+        })
+        const review = await capture(token, [repeated])
+        const held = await bindConfig(token, review)
+        const copies = configGroups(token, held)
+        expect(review.graphs[0].documents).toHaveLength(2)
+        expect(copies).toHaveLength(1)
+        expect(copies[0].graphs).toEqual([graph.graph])
+        expect(copies[0].projection).not.toBe(groups[0].projection)
+        validateConfig(copies[0], review)
+        assert.throws(
+          () => validateConfig({ ...copies[0], graphs: [graph.graph, graph.graph] }, review),
+          /Configuration correspondence graphs differ/,
+        )
+        assert.throws(() => validateConfig({ ...copies[0], graphs: [randomUUID()] }, review), /component differs/)
+        assert.throws(
+          () => validateConfig({ ...copies[0], projection: groups[0].projection }, review),
+          /safe projection differs/,
+        )
+        const dropped = structuredClone(review)
+        dropped.graphs[0].documents.pop()
+        assert.throws(() => validateConfig(copies[0], dropped), /component differs/)
+        const revised = structuredClone(repeated)
+        revised.documents[1].safe.model = "provider/second-occurrence-tampered"
+        await assert.rejects(capture(token, [revised]), /projection differs/)
+        const rebound = structuredClone(repeated)
+        rebound.documents[1].identity.ino = `${BigInt(rebound.documents[1].identity.ino) + 1n}`
+        await assert.rejects(capture(token, [rebound]), /source object differs/)
+        const archive = payload.parse({
+          format: "raya.profile-data",
+          version: 1,
+          id: randomUUID(),
+          createdAt: Date.now(),
+          schema: "a".repeat(64),
+          workspaces: [],
+          sql: [],
+          json: [],
+          config: review,
+          disposition: collectDisposition(token, [], "selected", undefined, held),
+          review: { reconnectCredentials: true, uncertainWork: "held-no-replay" },
+        })
+        const readback = await unseal(
+          await seal(archive, "repeated config private fixture key"),
+          "repeated config private fixture key",
+        )
+        expect(readback.config).toEqual(review)
+        expect(readback.disposition).toEqual(archive.disposition)
         const incomplete = MarkdownIntent.parse({
           ...graph,
           graph: randomUUID(),

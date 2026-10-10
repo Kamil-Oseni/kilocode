@@ -8,7 +8,7 @@ import { Database } from "bun:sqlite"
 import { Schema } from "effect"
 import { withImage } from "@opencode-ai/core/kilocode/source-offline"
 import { select } from "../../src/kilocode/migration/profile-selection"
-import { withWorking, type Working } from "../../src/kilocode/migration/profile-image"
+import { assertWorking, withWorking, type Working } from "../../src/kilocode/migration/profile-image"
 import { Reconciliation } from "../../src/kilocode/voice/reconciliation-schema"
 import { reconciliation, voice } from "../../src/kilocode/migration/profile-voice-reconciliation-schema"
 import {
@@ -20,6 +20,7 @@ import {
   type VoiceClaim,
 } from "../../src/kilocode/migration/profile-voice-reconciliation"
 import { payload, seal, unseal } from "../../src/kilocode/migration/profile-bundle"
+import { failure } from "../../src/kilocode/migration/source-failure"
 
 const state = {
   version: 1 as const,
@@ -112,7 +113,8 @@ test.skipIf(process.platform !== "win32")(
     const selection = {
       ...selected,
       roots: [...selected.roots, ...[extra, unknown].map((dir) => ({ kind: "json" as const, path: dir }))],
-      globals,
+      // Distinct authenticated Global roles can share the same exact data/storage source.
+      globals: [...globals, { ...globals[0], config: extra, cache: unknown }],
     }
     const digest = createHash("sha256")
       .update(await readFile(helper))
@@ -129,6 +131,12 @@ test.skipIf(process.platform !== "win32")(
         (image) => withWorking(image, selection, body),
       )
     await capture(async (token) => {
+      const namespaces = assertWorking(token).namespaces
+      expect(namespaces).toHaveLength(4)
+      const shared = namespaces.filter((item) => item.original.data === data)
+      expect(shared).toHaveLength(2)
+      expect(shared[0].original.config).not.toBe(shared[1].original.config)
+      expect(shared[0].staged.data).toBe(shared[1].staged.data)
       const reader = await readVoice(token)
       const value = voiceValues(token, reader)
       assert(value)
@@ -162,6 +170,12 @@ test.skipIf(process.platform !== "win32")(
         /physical selector/,
       )
       assert.throws(() => validateVoice({ ...groups[0], digest: "0".repeat(64) }, { voice: value }), /bytes differ/)
+      const primary = groups.find((item) => item.namespace === "primary")
+      assert(primary)
+      assert.throws(
+        () => validateVoice({ ...primary, storage: path.join(extra, "storage") }, { voice: value }),
+        /component namespace differs/,
+      )
       await assert.rejects(writeFile(path.join(storage, selector), "{}"))
       const input = payload.parse({
         format: "raya.profile-data",
@@ -188,6 +202,20 @@ test.skipIf(process.platform !== "win32")(
       await writeFile(path.join(root, "voice-input.json"), JSON.stringify(input))
     })
     assert(saved.token && saved.claim)
+    // Invalid caller selections cannot invent or substitute a held data mapping.
+    for (const missing of [path.join(root, "undeclared-data"), path.join(data, "undeclared-descendant")])
+      await assert.rejects(
+        withImage(
+          {
+            roots: selection.roots,
+            policy,
+            helper: { executable: helper, digest },
+            registry: path.join(root, "registry"),
+          },
+          (image) => withWorking(image, { ...selection, globals: [{ ...globals[0], data: missing }] }, readVoice),
+        ),
+        (error: unknown) => failure(error).errors.some((entry) => entry.code === "RAYA_SOURCE_PROFILE_MAPPING_MISSING"),
+      )
     assert.throws(() => voiceGroups(saved.token!, saved.claim!), /expired|closed|unavailable/)
     await capture(async (token) => assert.throws(() => voiceGroups(token, saved.claim!), /another image/))
     expect(await readFile(path.join(storage, selector), "utf8")).toBe(raw)

@@ -51,6 +51,7 @@ import { bindRestoredSources, restoredSourceValues } from "./profile-restored-so
 import { bindHold } from "./profile-restore-hold-correspondence"
 import { assertCoverage } from "./source-image-coverage"
 import { captureRoutineEffects } from "./profile-routine-effects"
+import { check, checked } from "./source-stage"
 
 type Root = Readonly<{ kind: "sqlite" | "json"; path: string }>
 const key = (root: Root) => `${root.kind}:${process.platform === "win32" ? root.path.toLowerCase() : root.path}`
@@ -238,50 +239,108 @@ export async function exportProfile(
         stores,
       })
     : undefined
-  const config = artifacts?.config ? await bindConfig(artifacts.working, artifacts.config, "selected") : undefined
-  const markdown = artifacts?.config ? bindMarkdown(artifacts.working, artifacts.config) : undefined
-  const correspondence = artifacts
-    ? await bindGit(artifacts.working, { artifacts: git, secondary: additional.secondary })
+  const config = artifacts?.config
+    ? await checked("correspondence-config", () => bindConfig(artifacts.working, artifacts.config, "selected"))
     : undefined
-  const host = await held(located.data, artifacts?.host)
-  const capsule = artifacts?.hostProof ? bindHost(artifacts.working, artifacts.hostProof, host) : undefined
-  const models = artifacts?.hostProof ? await bindHostModel(artifacts.working, artifacts.hostProof, host) : undefined
-  const speech = artifacts ? await readVoice(artifacts.working) : undefined
-  const voice = artifacts && speech ? voiceValues(artifacts.working, speech) : undefined
-  const spoken = artifacts && speech ? bindVoice(artifacts.working, speech, { voice }) : undefined
-  const policy = artifacts ? await readOperational(artifacts.working) : undefined
-  const operational = artifacts && policy ? operationalValues(artifacts.working, policy) : undefined
-  const omitted = artifacts && policy ? bindOperational(artifacts.working, policy, { operational }) : undefined
-  const archive = artifacts ? await readHistorical(artifacts.working) : undefined
+  const markdown = artifacts?.config
+    ? check("correspondence-markdown", () => bindMarkdown(artifacts.working, artifacts.config))
+    : undefined
+  const correspondence = artifacts
+    ? await checked("correspondence-git", () =>
+        bindGit(artifacts.working, { artifacts: git, secondary: additional.secondary }),
+      )
+    : undefined
+  const host = await checked("correspondence-host", () => held(located.data, artifacts?.host))
+  const owner = artifacts?.hostProof
+  const capsule =
+    artifacts && owner ? check("correspondence-host", () => bindHost(artifacts.working, owner, host)) : undefined
+  const models =
+    artifacts && owner
+      ? await checked("correspondence-host", () => bindHostModel(artifacts.working, owner, host))
+      : undefined
+  const speech = artifacts ? await checked("correspondence-voice", () => readVoice(artifacts.working)) : undefined
+  const voice =
+    artifacts && speech ? check("correspondence-voice", () => voiceValues(artifacts.working, speech)) : undefined
+  const spoken =
+    artifacts && speech
+      ? check("correspondence-voice", () => bindVoice(artifacts.working, speech, { voice }))
+      : undefined
+  const policy = artifacts
+    ? await checked("correspondence-operational", () => readOperational(artifacts.working))
+    : undefined
+  const operational =
+    artifacts && policy
+      ? check("correspondence-operational", () => operationalValues(artifacts.working, policy))
+      : undefined
+  const omitted =
+    artifacts && policy
+      ? check("correspondence-operational", () => bindOperational(artifacts.working, policy, { operational }))
+      : undefined
+  const archive = artifacts
+    ? await checked("correspondence-historical", () => readHistorical(artifacts.working))
+    : undefined
   const restored =
     artifacts && archive
-      ? await bindRestoredGit(artifacts.working, archive, { archives: additional.archives })
+      ? await checked("correspondence-historical", () =>
+          bindRestoredGit(artifacts.working, archive, { archives: additional.archives }),
+        )
       : undefined
-  const restoredArtifacts = artifacts && restored ? restoredGitValues(artifacts.working, restored) : undefined
+  const restoredArtifacts =
+    artifacts && restored
+      ? check("correspondence-historical", () => restoredGitValues(artifacts.working, restored))
+      : undefined
   const prior =
     artifacts && archive
-      ? await bindRestoredComponents(artifacts.working, archive, { archives: additional.archives })
+      ? await checked("correspondence-historical", () =>
+          bindRestoredComponents(artifacts.working, archive, { archives: additional.archives }),
+        )
       : undefined
-  const restoredComponents = artifacts && prior ? restoredComponentValues(artifacts.working, prior) : undefined
+  const restoredComponents =
+    artifacts && prior
+      ? check("correspondence-historical", () => restoredComponentValues(artifacts.working, prior))
+      : undefined
   const tui = artifacts ? await collectTui(artifacts.working, artifacts.states ?? []) : undefined
-  const display = artifacts ? await bindTui(artifacts.working, { tui }) : undefined
+  const display = artifacts
+    ? await checked("correspondence-storage", () => bindTui(artifacts.working, { tui }))
+    : undefined
   const original =
     artifacts && archive
-      ? await bindRestoredSources(artifacts.working, archive, { archives: additional.archives })
+      ? await checked("correspondence-historical", () =>
+          bindRestoredSources(artifacts.working, archive, { archives: additional.archives }),
+        )
       : undefined
-  const restoredSources = artifacts && original ? restoredSourceValues(artifacts.working, original) : undefined
-  const hold = artifacts ? await bindHold(artifacts.working, { memory, secondary: additional.secondary }) : undefined
+  const restoredSources =
+    artifacts && original
+      ? check("correspondence-historical", () => restoredSourceValues(artifacts.working, original))
+      : undefined
+  const hold = artifacts
+    ? await checked("correspondence-storage", () =>
+        bindHold(artifacts.working, { memory, secondary: additional.secondary }),
+      )
+    : undefined
   const remembered =
     artifacts && reader
-      ? bindMemory(artifacts.working, [reader, ...additional.readers], { memory, secondary: additional.secondary })
+      ? check("correspondence-storage", () =>
+          bindMemory(artifacts.working, [reader, ...additional.readers], { memory, secondary: additional.secondary }),
+        )
       : undefined
-  const stored = artifacts ? await bindStorage(artifacts.working, { json, sql: collected.sql }) : undefined
-  const drafts = artifacts ? await bindComposer(artifacts.working, { json, composers, sql: collected.sql }) : undefined
+  const stored = artifacts
+    ? await checked("correspondence-storage", () => bindStorage(artifacts.working, { json, sql: collected.sql }))
+    : undefined
+  const drafts = artifacts
+    ? await checked("correspondence-composer", () =>
+        bindComposer(artifacts.working, { json, composers, sql: collected.sql }),
+      )
+    : undefined
   const derived = artifacts
-    ? await bindMemoryDerived(artifacts.working, { memory, secondary: additional.secondary })
+    ? await checked("correspondence-storage", () =>
+        bindMemoryDerived(artifacts.working, { memory, secondary: additional.secondary }),
+      )
     : undefined
   const metadata = artifacts
-    ? await bindGitMetadata(artifacts.working, { artifacts: git, secondary: additional.secondary })
+    ? await checked("correspondence-git", () =>
+        bindGitMetadata(artifacts.working, { artifacts: git, secondary: additional.secondary }),
+      )
     : undefined
   assertCapture(proof, roots)
   const bundle = payload.parse({
@@ -292,28 +351,30 @@ export async function exportProfile(
     ...collected,
     config: artifacts?.config,
     disposition: artifacts
-      ? collectDisposition(
-          artifacts.working,
-          claims,
-          "selected",
-          sql,
-          config,
-          correspondence,
-          capsule,
-          remembered,
-          stored,
-          metadata,
-          spoken,
-          models,
-          drafts,
-          derived,
-          omitted,
-          restored,
-          prior,
-          display,
-          original,
-          hold,
-          markdown,
+      ? check("correspondence-disposition", () =>
+          collectDisposition(
+            artifacts.working,
+            claims,
+            "selected",
+            sql,
+            config,
+            correspondence,
+            capsule,
+            remembered,
+            stored,
+            metadata,
+            spoken,
+            models,
+            drafts,
+            derived,
+            omitted,
+            restored,
+            prior,
+            display,
+            original,
+            hold,
+            markdown,
+          ),
         )
       : undefined,
     composers,

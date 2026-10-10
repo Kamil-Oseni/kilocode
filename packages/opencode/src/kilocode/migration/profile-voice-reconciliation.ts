@@ -42,10 +42,9 @@ export async function readVoice(token: Working): Promise<VoiceReader> {
     const file = files[0]
     if (file.bytes > 16_384) continue
     const mapped = lookup(token, data)
-    const scopes = image.namespaces.filter(
-      (item) => key(item.original.data) === key(data) && key(item.staged.data) === key(mapped),
-    )
-    if (scopes.length !== 1) throw new Error("Voice reconciliation lacks exact Global mapping")
+    const scopes = image.namespaces.filter((item) => key(item.original.data) === key(data))
+    if (!scopes.length || scopes.some((item) => key(item.staged.data) !== key(mapped)))
+      throw new Error("Voice reconciliation lacks exact Global mapping")
     const raw = await read(path.join(mapped, "storage", selector), budget, 16_384)
     inventory(token)
     if (Buffer.byteLength(raw.value) !== file.bytes || sum(raw.value) !== file.digest)

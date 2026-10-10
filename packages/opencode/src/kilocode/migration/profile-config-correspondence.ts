@@ -62,7 +62,7 @@ export function validateConfig(raw: z.input<typeof transformed>, input: unknown)
   if (
     !documents.length ||
     hash(evidence) !== value.digest ||
-    JSON.stringify(documents.map((entry) => entry.graph)) !== JSON.stringify(value.graphs)
+    JSON.stringify([...new Set(documents.map((entry) => entry.graph))].sort()) !== JSON.stringify(value.graphs)
   )
     throw new Error("Configuration correspondence component differs")
   for (const { document } of documents)
@@ -114,7 +114,7 @@ export async function bindConfig(
         bytes: source.bytes,
         sourceDigest: source.digest,
         digest: hash(evidence),
-        graphs: documents.map((entry) => entry.graph),
+        graphs: [...new Set(documents.map((entry) => entry.graph))].sort(),
         projection: hash(
           documents.map(({ graph, document }) => ({ graph, safe: document.safe, excluded: document.excluded })),
         ),

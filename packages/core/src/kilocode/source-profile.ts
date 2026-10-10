@@ -1,4 +1,5 @@
 import path from "node:path"
+import os from "node:os"
 import { realpath, stat } from "node:fs/promises"
 import { validatePolicy } from "./source-policy"
 import { discoverGit } from "./git-roots"
@@ -18,11 +19,16 @@ const inside = (parent: string, file: string) => {
 }
 
 /** Read-only producer plan. It imports no Global service and creates no profile paths. */
-export async function prepare(input: { home: string; cwd: string; env: NodeJS.ProcessEnv }) {
+export async function prepare(input: { home: string; cwd: string; env: NodeJS.ProcessEnv; account?: string }) {
   if (!path.isAbsolute(input.home) || !path.isAbsolute(input.cwd))
     throw new Error("Source profile producer paths must be absolute")
   const clean = (value: string) => value.replace(/[\r\n]+/g, "")
   const home = clean(input.home)
+  // ConfigPublication uses the native account home, independently of HOME/XDG
+  // and the compatibility home. A producer may explicitly supply that account.
+  const account = input.account ?? os.userInfo().homedir
+  if (!path.isAbsolute(account) || /[\0\r\n]/.test(account))
+    throw new Error("Source config publication account must be absolute")
   const legacy = (input.env.KILO_TEST_HOME ?? home).trim()
   if (!path.isAbsolute(legacy)) throw new Error("Source profile compatibility home must be absolute")
   const base = (name: string, fallback: string) => {
@@ -54,6 +60,11 @@ export async function prepare(input: { home: string; cwd: string; env: NodeJS.Pr
   for (const file of [data, cache, config]) await directory(file)
   await directory(state, !input.env.XDG_STATE_HOME)
   for (const file of [path.join(legacy, ".kilocode"), path.join(legacy, ".config/kilo")]) await directory(file, true)
+  const locks = path.join(account, ".raya-config-rmw-locks")
+  const selected = path.join(await canonical(account), ".raya-config-rmw-locks")
+  if (key(await canonical(locks)) !== key(selected))
+    throw new Error("Source config publication lock directory changed its exact boundary")
+  await directory(locks)
   const alias = (name: string) => input.env[`RAYA_${name}`] ?? input.env[`KILO_${name}`]
   for (const name of ["CONFIG_DIR", "LANCEDB_PATH"]) {
     const value = alias(name)

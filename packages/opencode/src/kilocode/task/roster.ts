@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import * as capacity from "./capacity"
 import type { Database } from "@opencode-ai/core/database/database"
 import { RayaRoutineArchiveTable as Archive } from "@opencode-ai/core/kilocode/archive.sql"
 import {
@@ -25,10 +26,10 @@ export class MissingRoster extends Error {
 
 export const mark = (storage: Pick<Storage.Interface, "create">) => storage.create(marker, { version: 1 })
 
-export const initialized = (storage: Pick<Storage.Interface, "read" | "list">, database?: Database.Interface) =>
+export const initialized = (storage: Pick<Storage.Interface, "readBounded" | "list">, database?: Database.Interface) =>
   Effect.gen(function* () {
-    const saved = yield* storage
-      .read<unknown>(marker)
+    const saved = yield* capacity
+      .read(storage, marker, 64 * 1024)
       .pipe(Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)))
     if (saved !== undefined) return true
     // Legacy profiles did not have a marker. Retained worker evidence is also
@@ -36,8 +37,8 @@ export const initialized = (storage: Pick<Storage.Interface, "read" | "list">, d
     for (const prefix of ["agent-runs", "agent-memory", "agent-archive"]) {
       if ((yield* storage.list(["raya", prefix])).length) return true
     }
-    const legacy = yield* storage
-      .read<unknown>(["raya", "agent-archive"])
+    const legacy = yield* capacity
+      .read(storage, ["raya", "agent-archive"], capacity.legacy)
       .pipe(Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)))
     if (legacy !== undefined && (!Array.isArray(legacy) || legacy.length)) return true
     if (!database) return false

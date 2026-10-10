@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util"
+import { createHash } from "node:crypto"
 import { Effect, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import type { Storage } from "@/storage/storage"
@@ -12,6 +13,10 @@ type Timer = Extract<RayaTask.Trigger, { kind: "timer" }>
 type Row = NonNullable<Effect.Success<ReturnType<ReturnType<typeof RayaTaskQueue.make>["get"]>>>
 const owner = crypto.randomUUID()
 const ttl = 180_000
+const key = ["raya", "queue-cleanup-cursor"]
+const hash = (id: string) => createHash("sha256").update(id).digest("hex")
+const token = Schema.NullOr(Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)))
+const scan = Schema.Struct({ version: Schema.Literal(1), roster: token, removal: token })
 const timer = (row: Row): Timer => ({
   kind: "timer",
   id: row.id,
@@ -24,40 +29,74 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
   const queue = RayaTaskQueue.make(input.database)
   const tasks = RayaTask.make(input)
   const reviews = schedulerReview(input.storage)
-  let next: string | undefined
+  const position = () =>
+    input.storage.readBounded(key, 1024).pipe(
+      Effect.catchTag("NotFoundError", () => Effect.succeed({ version: 1, roster: null, removal: null })),
+      Effect.flatMap((value) =>
+        Schema.decodeUnknownEffect(scan)(value).pipe(
+          Effect.flatMap((parsed) =>
+            isDeepStrictEqual(parsed, value)
+              ? Effect.succeed(parsed)
+              : Effect.fail(new Error("Unexpected housekeeping cursor fields")),
+          ),
+        ),
+      ),
+      Effect.mapError(
+        () =>
+          new RayaTask.GuardError({ message: "Routine queue cleanup cursor is invalid. Review it before polling." }),
+      ),
+    )
   const clean = () =>
     mutate(
       input.storage,
       Effect.gen(function* () {
+        const saved = yield* position()
         const receipts = removals(input.storage)
         const pending = yield* receipts.pending()
-        if (!pending.length) return
-        const roster = new Set((yield* tasks.list(true)).map((item) => item.id))
+        const items = yield* tasks.list(true)
+        const roster = new Set(items.map((item) => item.id))
         const eligible = pending.filter((item) => !roster.has(item.agentID)).map((item) => item.agentID)
-        const index = Math.max(0, eligible.indexOf(next ?? ""))
-        const ids = [...eligible.slice(index), ...eligible.slice(0, index)].slice(0, 256)
-        if (!ids.length) return
-        const limit = Math.floor(1024 / ids.length)
+        const index = Math.max(0, eligible.findIndex((id) => hash(id) === saved.removal) + 1) % eligible.length
+        const removed = [...eligible.slice(index), ...eligible.slice(0, index)].slice(0, items.length ? 128 : 256)
+        const offset = Math.max(0, items.findIndex((item) => hash(item.id) === saved.roster) + 1) % items.length
+        const visited = [...items.slice(offset), ...items.slice(0, offset)].slice(0, eligible.length ? 128 : 256)
+        const obsolete: { id: string; version: number }[] = []
+        for (const item of visited) {
+          const version = item.scheduleVersion ?? 1
+          if (yield* queue.obsolete(item.id, version).pipe(Effect.orDie)) obsolete.push({ id: item.id, version })
+        }
+        const retired = obsolete
+        const ids: { id: string; version?: number }[] = []
+        for (let row = 0; ids.length < 256 && row < Math.max(removed.length, retired.length); row++) {
+          if (removed[row]) ids.push({ id: removed[row] })
+          if (retired[row] && ids.length < 256) ids.push(retired[row])
+        }
+        const limit = ids.length ? Math.floor(1024 / ids.length) : 1024
         const complete: string[] = []
-        for (const id of ids) {
-          const result = yield* queue.discard(id, undefined, limit).pipe(Effect.orDie)
-          if (result.complete) complete.push(id)
+        for (const item of ids) {
+          const result = yield* (
+            item.version === undefined
+              ? queue.discard(item.id, undefined, limit)
+              : queue.retire(item.id, item.version, limit)
+          ).pipe(Effect.orDie)
+          if (item.version === undefined && result.complete) complete.push(item.id)
         }
         if (complete.length) yield* receipts.finish(complete)
-        next = eligible[(index + ids.length) % eligible.length]
+        const cursor = {
+          version: 1 as const,
+          roster: visited.length ? hash(visited[visited.length - 1].id) : null,
+          removal: removed.length ? hash(removed[removed.length - 1]) : null,
+        }
+        if (!isDeepStrictEqual(yield* position(), saved))
+          return yield* new RayaTask.GuardError({ message: "Routine queue cleanup cursor changed during polling." })
+        yield* input.storage.replace(key, cursor).pipe(Effect.orDie)
+        if (!isDeepStrictEqual(yield* position(), cursor))
+          return yield* new RayaTask.GuardError({ message: "Routine queue cleanup cursor publication changed." })
       }).pipe(
         Effect.catchTag("RayaTask.RemovalError", (err) =>
           Effect.fail(new RayaTask.GuardError({ message: err.message })),
         ),
       ),
-    )
-  const retire = (id: string) =>
-    mutate(
-      input.storage,
-      Effect.gen(function* () {
-        const item = yield* tasks.get(id)
-        yield* queue.retire(id, item.scheduleVersion ?? 1).pipe(Effect.orDie)
-      }),
     )
   const prepare = Effect.fn("RayaTaskScheduler.prepare")(function* (id: string, from: number) {
     const item = yield* tasks.get(id)
@@ -71,6 +110,7 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
         const fresh = yield* tasks.get(id)
         if (RayaTask.unzoned(fresh.schedule)) return undefined
         if (!fresh.enabled || (fresh.scheduleVersion ?? 1) !== (item.scheduleVersion ?? 1)) return undefined
+        if (yield* queue.obsolete(id, fresh.scheduleVersion ?? 1).pipe(Effect.orDie)) return undefined
         const history = yield* tasks.runsFor(id)
         if (history.some(RayaTask.pending) || (yield* queue.active(id).pipe(Effect.orDie)).length) return undefined
         const rows = yield* queue.pending(id, fresh.scheduleVersion ?? 1).pipe(Effect.orDie)
@@ -120,7 +160,8 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
       (item.schedule.kind !== "once" && item.schedule.kind !== "cron") ||
       history.some(RayaTask.pending) ||
       RayaTask.recorded(item, history, row.scheduled_at) ||
-      (yield* queue.active(item.id).pipe(Effect.orDie)).length
+      (yield* queue.active(item.id).pipe(Effect.orDie)).length ||
+      (yield* queue.obsolete(item.id, item.scheduleVersion ?? 1).pipe(Effect.orDie))
     )
       return yield* new RayaTask.GuardError({ message: "This queued occurrence is no longer available for startup." })
     return timer(row)
@@ -390,7 +431,6 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
     active,
     queued,
     status,
-    retire,
     clean,
   }
 }

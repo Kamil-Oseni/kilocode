@@ -275,10 +275,10 @@ export namespace RayaTaskQueue {
         .returning()
         .all()
         .pipe(Effect.map((rows) => rows.length === 1))
-    const retire = (agentID: string, version: number) =>
+    const obsolete = (agentID: string, version: number) =>
       db
-        .update(Occurrence)
-        .set({ state: "skipped", reason: "Replaced by a newer schedule version.", time_updated: Date.now() })
+        .select({ id: Occurrence.id })
+        .from(Occurrence)
         .where(
           and(
             eq(Occurrence.agent_id, agentID),
@@ -286,17 +286,24 @@ export namespace RayaTaskQueue {
             eq(Occurrence.state, "queued"),
           ),
         )
-        .run()
-    const discard = Effect.fn("RayaTaskQueue.discard")(function* (
+        .limit(1)
+        .get()
+    const prune = Effect.fn("RayaTaskQueue.prune")(function* (
       agentID: string,
-      reason = "Routine removed from the roster.",
-      limit = 1024,
+      reason: string,
+      limit: number,
+      threshold?: number,
     ) {
       yield* Schema.decodeUnknownEffect(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1024 })))(limit)
+      if (threshold !== undefined) yield* Schema.decodeUnknownEffect(version)(threshold)
       return yield* db.transaction(
         (tx) =>
           Effect.gen(function* () {
-            const queued = and(eq(Occurrence.agent_id, agentID), eq(Occurrence.state, "queued"))
+            const queued = and(
+              eq(Occurrence.agent_id, agentID),
+              eq(Occurrence.state, "queued"),
+              threshold === undefined ? undefined : lt(Occurrence.schedule_version, threshold),
+            )
             const rows = yield* tx
               .select({ id: Occurrence.id })
               .from(Occurrence)
@@ -326,6 +333,10 @@ export namespace RayaTaskQueue {
         { behavior: "immediate" },
       )
     })
+    const retire = (agentID: string, version: number, limit = 1024) =>
+      prune(agentID, "Replaced by a newer schedule version.", limit, version)
+    const discard = (agentID: string, reason = "Routine removed from the roster.", limit = 1024) =>
+      prune(agentID, reason, limit)
     return {
       cursor,
       publish,
@@ -342,6 +353,7 @@ export namespace RayaTaskQueue {
       used,
       skip,
       retire,
+      obsolete,
       discard,
     }
   }

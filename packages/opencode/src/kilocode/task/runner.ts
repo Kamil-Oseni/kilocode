@@ -2282,7 +2282,6 @@ export namespace RayaTaskRunner {
                 yield* tasks.enforce(item.id)
                 yield* reconcile(item.id)
                 if (schedule) {
-                  yield* schedule.retire(item.id)
                   yield* schedule.pulse(item.id)
                 }
                 if (!item.enabled || (item.schedule.kind !== "once" && item.schedule.kind !== "cron")) return undefined

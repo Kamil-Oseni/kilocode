@@ -1,4 +1,5 @@
 import { Codec } from "./schema"
+import * as capacity from "./capacity"
 import { Effect, Exit, Schema } from "effect"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
@@ -502,7 +503,7 @@ export namespace RayaTask {
     const transfer = hold(deps.storage)
     const store = deps.database ? indexed(deps.database) : undefined
     const archives = () =>
-      deps.storage.read(["raya", "agent-archive"]).pipe(
+      capacity.read(deps.storage, ["raya", "agent-archive"], capacity.legacy).pipe(
         Effect.catchTag("NotFoundError", () => Effect.succeed([])),
         Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Archived))),
         Effect.orDie,
@@ -521,7 +522,7 @@ export namespace RayaTask {
           .pipe(Effect.orDie)
       })
     const list = Effect.fn("RayaTask.list")(function* (required = false) {
-      const raw = yield* deps.storage.read<unknown>([...roster]).pipe(
+      const raw = yield* capacity.read(deps.storage, [...roster], capacity.roster).pipe(
         Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
         Effect.orDie,
       )
@@ -534,6 +535,10 @@ export namespace RayaTask {
     })
 
     const save = Effect.fn("RayaTask.save")(function* (items: Agent[]) {
+      yield* Effect.try({
+        try: () => capacity.check(items, capacity.roster, "Routine roster"),
+        catch: (err) => err,
+      }).pipe(Effect.orDie)
       yield* mark(deps.storage).pipe(Effect.orDie)
       yield* deps.storage.replace([...roster], items).pipe(Effect.orDie)
     })

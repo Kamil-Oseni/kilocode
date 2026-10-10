@@ -4,7 +4,7 @@ import path from "node:path"
 import { receive } from "@opencode-ai/core/kilocode/source-pipe"
 import { decode } from "@opencode-ai/core/kilocode/source-transfer"
 import { isRetired } from "@opencode-ai/core/kilocode/source-launch"
-import { registry, withImage } from "@opencode-ai/core/kilocode/source-offline"
+import { select as offline } from "@opencode-ai/core/kilocode/source-offline-selection"
 import { covers } from "@opencode-ai/core/kilocode/source-policy"
 import { capsule, verify, verifyCapsule as verifyHost } from "@opencode-ai/core/kilocode/source-capsule"
 import { assertRetirement, verifyCapsule } from "./source-host"
@@ -93,8 +93,9 @@ export async function capture(token: object) {
     roots.push(root)
   }
   const selected = Object.freeze({ ...profile, roots: Object.freeze([...roots]), globals: namespaces.globals })
+  const image = await stage("capture-planning", () => offline({ helper: pipe.server }))
   const planned = await stage("capture-planning", () =>
-    withImage({ roots: selected.roots, policy: closure.policy, helper: pipe.server, registry: registry() }, (image) =>
+    image.withImage({ roots: selected.roots, policy: closure.policy }, (image) =>
       withWorking(image, selected, async (working) => {
         const [workspaces, selfHeal] = await Promise.all([workspaceScopes(working), planSelfHeal(working, scopes)])
         return { workspaces, selfHeal }
@@ -146,7 +147,7 @@ export async function capture(token: object) {
   // This authorizes the typed selected payload only. Full migration acceptance and
   // host/workspace artifact coverage remain separate mandatory checks.
   const bundle = await stage("capture-payload", () =>
-    withImage({ roots: complete.roots, policy: closure.policy, helper: pipe.server, registry: registry() }, (image) =>
+    image.withImage({ roots: complete.roots, policy: closure.policy }, (image) =>
       withWorking(image, complete, async (working) => {
         const staged = assertWorking(working)
         assertCoverage(working, closure.roots)

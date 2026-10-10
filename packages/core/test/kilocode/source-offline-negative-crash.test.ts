@@ -41,7 +41,9 @@ for (const mode of ["guardian", "parent"])
             stdout: "pipe",
             stderr: "pipe",
             env: {
-              ...process.env,
+              ...Object.fromEntries(
+                Object.entries(process.env).filter(([key]) => key.toLowerCase() !== "psmodulepath"),
+              ),
               PSModulePath: path.join(process.env.SystemRoot!, "System32", "WindowsPowerShell", "v1.0", "Modules"),
             },
           },

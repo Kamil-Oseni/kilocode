@@ -10,9 +10,11 @@ const [root, helper, layout] = process.argv.slice(2)
 if (!root || !helper) throw new Error("Negative crash fixture arguments missing")
 const home = path.join(root, "home")
 const control =
-  layout === "normal"
-    ? path.join(home, "AppData", "Local", "Raya", "offline-recovery", "capture")
-    : path.join(root, "control")
+  layout === "legacy-selection"
+    ? path.join(home, "AppData", "Local", "Raya", "offline-recovery", `capture-${randomUUID().replaceAll("-", "")}`)
+    : layout === "normal"
+      ? path.join(home, "AppData", "Local", "Raya", "offline-recovery", "capture")
+      : path.join(root, "control")
 await mkdir(home)
 await mkdir(control, { recursive: true })
 const bytes = Buffer.from("SYNTHETIC_EXCLUDED_SIBLING_" + randomUUID())
@@ -53,6 +55,8 @@ function frame(...values: (number | string)[]) {
 const child = spawn(helper, ["profile-offline"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] })
 const ready = Promise.withResolvers<unknown>()
 const ended = Promise.withResolvers<number | null>()
+const joined = Promise.withResolvers<void>()
+child.once("close", () => joined.resolve())
 let buffered = ""
 child.stdout.on("data", (data: Buffer) => {
   buffered += data.toString()
@@ -139,5 +143,6 @@ while (!existsSync(path.join(root, "permit"))) {
   await Bun.sleep(20)
 }
 const code = await ended.promise
-await writeFile(path.join(root, "relay-result.json"), JSON.stringify({ code }))
+if (layout === "legacy-selection") await joined.promise
+await writeFile(path.join(root, "relay-result.json"), JSON.stringify({ code, joined: layout === "legacy-selection" }))
 if (code !== 77) throw new Error("Controlled guardian fault status differs")

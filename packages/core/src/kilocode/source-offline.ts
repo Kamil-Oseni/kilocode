@@ -545,10 +545,16 @@ export async function recoverPending(directory: string, pin: Pin) {
   }
   return Object.freeze(receipts)
 }
-/** Must precede SourceProfile.prepare/Global. Missing registry realizes no helper. */
+/** Must precede SourceProfile.prepare/Global. Default selection requires native physical discovery, even if absent. */
 export async function startup(input: { registry?: string; helper?: Pin; env?: NodeJS.ProcessEnv } = {}) {
   if (process.platform !== "win32") return Object.freeze([])
-  const directory = input.registry ?? registry(input.env)
+  if (input.registry === undefined) {
+    const { select } = await import("./source-offline-selection")
+    const selected = await select({ helper: input.helper, env: input.env })
+    return Object.freeze([...selected.receipts, ...(await recoverPending(selected.directory, selected.helper))])
+  }
+  // An explicitly selected missing registry still realizes no helper; aliases never select a default fallback.
+  const directory = input.registry
   const info = await lstat(directory).catch((err: unknown) => {
     if (err instanceof Error && "code" in err && err.code === "ENOENT") return undefined
     throw err

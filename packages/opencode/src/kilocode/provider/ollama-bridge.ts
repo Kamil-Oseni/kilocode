@@ -7,6 +7,9 @@ type Fetch = (
   init?: Parameters<typeof globalThis.fetch>[1],
 ) => Promise<Response>
 const bound = 2 * 1024 * 1024
+// Ordinary streams previously had no aggregate quota. These are response capacities, not token limits.
+const total = 64 * 1024 * 1024
+const frames = 1_048_576
 type Diagnostic = {
   reason:
     | "envelope-json"
@@ -41,6 +44,7 @@ type Diagnostic = {
   error?: "Error" | "TypeError" | "RangeError" | "SyntaxError" | "AbortError" | "TimeoutError" | "other"
   cleanup?: "none" | "cancel" | "release" | "both"
   cancellation?: "same-primary" | "different"
+  capacity?: "frame" | "response" | "frames"
   finish?: string
   prompt?: number
   eval?: number
@@ -106,21 +110,54 @@ function failure(text: string, status: number) {
       "the prompt is longer than the context length currently available to the model; shorten the prompt, adjust the context length in settings, or use a model with a longer context length"
   return { message, type: "invalid_request_error", code: status === 400 && known ? "context_length_exceeded" : null }
 }
-async function read(reader: ReadableStreamDefaultReader<Uint8Array>) {
-  const decoder = new TextDecoder()
+async function read(reader: ReadableStreamDefaultReader<Uint8Array>, signal?: AbortSignal | null) {
+  const decoder = new TextDecoder("utf-8", { fatal: true })
   const buffer = { text: "", bytes: 0 }
+  const errors: unknown[] = []
+  let cancellation: Promise<void> | undefined
+  const cancel = (reason: unknown) => {
+    cancellation ??= reader.cancel(reason).catch((err: unknown) => {
+      errors.push(err)
+    })
+    return cancellation
+  }
+  const abort = () => {
+    void cancel(signal?.reason)
+  }
+  signal?.addEventListener("abort", abort, { once: true })
   try {
     while (true) {
+      signal?.throwIfAborted()
       const chunk = await reader.read()
+      signal?.throwIfAborted()
       buffer.bytes += chunk.value?.byteLength ?? 0
       if (buffer.bytes > bound) throw new OllamaBridgeError()
-      buffer.text += decoder.decode(chunk.value, { stream: !chunk.done })
-      if (chunk.done) return buffer.text
+      try {
+        buffer.text += decoder.decode(chunk.value, { stream: !chunk.done })
+      } catch (err) {
+        throw new OllamaBridgeError({ cause: err })
+      }
+      if (chunk.done) break
     }
   } catch (err) {
-    await reader.cancel(err)
-    throw err
+    errors.unshift(err)
+    await cancel(err)
+  } finally {
+    signal?.removeEventListener("abort", abort)
+    await cancellation
+    try {
+      reader.releaseLock()
+    } catch (err) {
+      errors.push(err)
+    }
   }
+  if (errors.length === 1) throw errors[0]
+  if (errors.length)
+    throw new OllamaBridgeError({
+      cause: new AggregateError(errors, "Ollama response cleanup failed", { cause: errors[0] }),
+    })
+  signal?.throwIfAborted()
+  return buffer.text
 }
 const call = z
   .object({
@@ -501,10 +538,11 @@ export class OllamaBridgeError extends Error {
             ? { cancellation: ["same-primary", "different"].includes(row.cancellation) ? row.cancellation : undefined }
             : {}),
           finish: row.finish === undefined ? "missing" : ["stop", "length"].includes(row.finish) ? row.finish : "other",
+          ...(row.capacity && ["frame", "response", "frames"].includes(row.capacity) ? { capacity: row.capacity } : {}),
           prompt: metric(row.prompt, 2_147_483_647),
           eval: metric(row.eval, 2_147_483_647),
-          bytes: metric(row.bytes, bound),
-          frames: metric(row.frames, 4096),
+          bytes: metric(row.bytes, row.reason === "ordinary-stream" ? total : bound),
+          frames: metric(row.frames, row.reason === "ordinary-stream" ? frames : 4096),
           content: metric(row.content, bound),
         }
       : undefined
@@ -680,6 +718,7 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
         },
       })
       if (envelope && Buffer.byteLength(payload) > bound) throw new OllamaBridgeError()
+      signal?.throwIfAborted()
       const native = await fetcher(url, {
         ...init,
         ...(controller && signal ? { signal } : {}),
@@ -688,7 +727,9 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       })
       if (!native.ok) {
         if (!native.body) throw new OllamaBridgeError()
-        const parsed = z.object({ error: z.string().max(bound) }).safeParse(decode(await read(native.body.getReader())))
+        const parsed = z
+          .object({ error: z.string().max(bound) })
+          .safeParse(decode(await read(native.body.getReader(), signal)))
         if (!parsed.success) throw new OllamaBridgeError()
         return Response.json({ error: failure(parsed.data.error, native.status) }, { status: native.status })
       }
@@ -775,85 +816,173 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
         })
         return new Response(stream, { headers: { "content-type": "text/event-stream" } })
       }
-      const decoder = new TextDecoder()
       if (!data.stream) {
-        const value = convert(decode(await read(reader)))
+        const value = convert(decode(await read(reader, signal)))
         if (!state.done) throw new OllamaBridgeError()
         return Response.json(value)
       }
+      const decoder = new TextDecoder("utf-8", { fatal: true })
       const encoder = new TextEncoder()
-      const pending = { text: "", bytes: 0, frames: 0 }
+      const pending = {
+        text: "",
+        bytes: 0,
+        frames: 0,
+        size: 0,
+        lines: 0,
+        offset: 0,
+        chunk: new Uint8Array(0),
+        eof: false,
+      }
       let stage: Diagnostic["stage"] = "read"
-      const stream = new ReadableStream<Uint8Array>({
-        async pull(controller) {
-          try {
-            while (true) {
-              const line = pending.text.indexOf("\n")
-              if (line >= 0) {
-                const text = pending.text.slice(0, line)
-                pending.text = pending.text.slice(line + 1)
-                if (!text.trim()) continue
-                stage = "frame"
-                pending.frames++
-                if (state.done) throw new OllamaBridgeError()
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(convert(decode(text)))}\n\n`))
-                return
+      let capacity: Diagnostic["capacity"]
+      let cancellation: Promise<void> | undefined
+      let released = false
+      let retired = false
+      let rejection: unknown
+      let removal: unknown
+      const cleanup = { cancel: false, release: false }
+      const errors: unknown[] = []
+      const cancel = (reason: unknown) => {
+        if (released) return cancellation ?? Promise.resolve()
+        cancellation ??= reader.cancel(reason).catch((err: unknown) => {
+          cleanup.cancel = true
+          rejection = err
+          errors.push(err)
+        })
+        return cancellation
+      }
+      const release = () => {
+        if (retired) return
+        retired = true
+        signal?.removeEventListener("abort", abort)
+        pending.chunk = new Uint8Array(0)
+        pending.text = ""
+        try {
+          reader.releaseLock()
+          released = true
+        } catch (err) {
+          cleanup.release = true
+          removal = err
+          errors.push(err)
+        }
+      }
+      const abort = () => {
+        void cancel(signal?.reason).then(release)
+      }
+      signal?.addEventListener("abort", abort, { once: true })
+      const refuse = (value: NonNullable<Diagnostic["capacity"]>): never => {
+        capacity = value
+        throw new OllamaBridgeError()
+      }
+      const accept = (text: string) => {
+        if (++pending.lines > frames) refuse("frames")
+        if (!text.trim()) return undefined
+        pending.frames++
+        if (state.done) throw new OllamaBridgeError()
+        return encoder.encode(`data: ${JSON.stringify(convert(decode(text)))}\n\n`)
+      }
+      const stream = new ReadableStream<Uint8Array>(
+        {
+          async pull(controller) {
+            try {
+              while (true) {
+                signal?.throwIfAborted()
+                if (pending.offset < pending.chunk.byteLength) {
+                  const line = pending.chunk.indexOf(10, pending.offset)
+                  const end = line < 0 ? pending.chunk.byteLength : line
+                  const size = end - pending.offset
+                  if (size > bound - pending.size) refuse("frame")
+                  pending.size += size
+                  stage = "utf8"
+                  pending.text += decoder.decode(pending.chunk.subarray(pending.offset, end), { stream: line < 0 })
+                  pending.offset = line < 0 ? end : end + 1
+                  if (line < 0) continue
+                  stage = "frame"
+                  const value = accept(pending.text)
+                  pending.text = ""
+                  pending.size = 0
+                  if (value) {
+                    controller.enqueue(value)
+                    return
+                  }
+                  continue
+                }
+                if (pending.eof) {
+                  stage = "utf8"
+                  pending.text += decoder.decode()
+                  stage = "eof"
+                  if (pending.text.trim()) {
+                    const value = accept(pending.text)
+                    pending.text = ""
+                    if (value) controller.enqueue(value)
+                  }
+                  if (!state.done) throw new OllamaBridgeError()
+                  signal?.throwIfAborted()
+                  stage = "release"
+                  release()
+                  if (errors.length) throw errors[0]
+                  controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+                  controller.close()
+                  return
+                }
+                stage = "read"
+                const chunk = await reader.read()
+                signal?.throwIfAborted()
+                const size = chunk.value?.byteLength ?? 0
+                if (size > total - pending.bytes) refuse("response")
+                pending.bytes += size
+                pending.chunk = chunk.value ?? new Uint8Array(0)
+                pending.offset = 0
+                pending.eof = chunk.done
               }
-              stage = "read"
-              const chunk = await reader.read()
-              pending.bytes += chunk.value?.byteLength ?? 0
-              pending.text += decoder.decode(chunk.value, { stream: !chunk.done })
-              if (Buffer.byteLength(pending.text) > bound) throw new OllamaBridgeError()
-              if (!chunk.done) continue
-              stage = "eof"
-              if (pending.text.trim()) {
-                pending.frames++
-                if (state.done) throw new OllamaBridgeError()
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(convert(decode(pending.text)))}\n\n`))
-              }
-              if (!state.done) throw new OllamaBridgeError()
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-              controller.close()
-              return
+            } catch (err) {
+              await cancel(err)
+              release()
+              const causes = errors.filter((value) => value !== err || value !== removal)
+              const name = err instanceof Error ? err.name : undefined
+              controller.error(
+                new OllamaBridgeError({
+                  cause: causes.length
+                    ? new AggregateError([err, ...causes], "Ollama stream cleanup failed", { cause: err })
+                    : err,
+                  diagnostic: {
+                    reason: "ordinary-stream",
+                    stage,
+                    ...(capacity ? { capacity } : {}),
+                    error:
+                      name === "Error" ||
+                      name === "TypeError" ||
+                      name === "RangeError" ||
+                      name === "SyntaxError" ||
+                      name === "AbortError" ||
+                      name === "TimeoutError"
+                        ? name
+                        : "other",
+                    cleanup: cleanup.cancel
+                      ? cleanup.release
+                        ? "both"
+                        : "cancel"
+                      : cleanup.release
+                        ? "release"
+                        : "none",
+                    ...(cleanup.cancel
+                      ? { cancellation: rejection === err ? ("same-primary" as const) : ("different" as const) }
+                      : {}),
+                    bytes: pending.bytes,
+                    frames: pending.frames,
+                  },
+                }),
+              )
             }
-          } catch (err) {
-            const closed = await reader.cancel(err).then(
-              () => ({ ok: true as const }),
-              (failure: unknown) => ({ ok: false as const, failure }),
-            )
-            const name = err instanceof Error ? err.name : undefined
-            controller.error(
-              new OllamaBridgeError({
-                cause: closed.ok
-                  ? err
-                  : new AggregateError([err, closed.failure], "Ollama stream cleanup failed", { cause: err }),
-                diagnostic: {
-                  reason: "ordinary-stream",
-                  stage,
-                  error:
-                    name === "Error" ||
-                    name === "TypeError" ||
-                    name === "RangeError" ||
-                    name === "SyntaxError" ||
-                    name === "AbortError" ||
-                    name === "TimeoutError"
-                      ? name
-                      : "other",
-                  cleanup: closed.ok ? "none" : "cancel",
-                  ...(!closed.ok
-                    ? { cancellation: closed.failure === err ? ("same-primary" as const) : ("different" as const) }
-                    : {}),
-                  bytes: pending.bytes,
-                  frames: pending.frames,
-                },
-              }),
-            )
-          }
+          },
+          async cancel(reason) {
+            await cancel(reason)
+            release()
+            if (errors.length) throw new AggregateError(errors, "Ollama stream cleanup failed")
+          },
         },
-        cancel(reason) {
-          return reader.cancel(reason)
-        },
-      })
+        { highWaterMark: 0 },
+      )
       return new Response(stream, { headers: { "content-type": "text/event-stream" } })
     } catch (err) {
       if (controller?.signal.aborted && !caller?.aborted && !(err instanceof OllamaBridgeError))

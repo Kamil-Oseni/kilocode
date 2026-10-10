@@ -8,6 +8,14 @@ import { descriptor, receipt, selection, type Descriptor } from "./descriptor"
 import { launch, admission, history } from "./restart"
 import { review } from "./generation"
 
+function freeze<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) freeze(item)
+    Object.freeze(value)
+  }
+  return value
+}
+
 type Phase = {
   phase: "selected" | "running" | "closed"
   receipt: ReturnType<typeof receipt>
@@ -67,7 +75,13 @@ async function reservation(cfg: Descriptor, input: unknown, phase: Phase["phase"
 export async function lineage(base: Descriptor, setup: Setup, current: Descriptor, input: unknown) {
   if (input === undefined) {
     check(isDeepStrictEqual(current, base), "Unstarted runtime upgrade descriptor differs")
-    return Object.freeze({ generations: 0, requestSettlement: false, replay: false })
+    await selection(base, setup)
+    return Object.freeze({
+      descriptors: freeze([structuredClone(base)]),
+      generations: 0,
+      requestSettlement: false,
+      replay: false,
+    })
   }
   const value = object(input)
   check(
@@ -78,6 +92,7 @@ export async function lineage(base: Descriptor, setup: Setup, current: Descripto
   const phase = value.phase as Phase["phase"]
   const refs = [...(history(value.history) ?? []), receipt(value.receipt)]
   let previous = base
+  const descriptors = [base]
   let context = await launch(previous, setup)
   for (const [index, ref] of refs.entries()) {
     const state = index === refs.length - 1 ? phase : "closed"
@@ -104,7 +119,13 @@ export async function lineage(base: Descriptor, setup: Setup, current: Descripto
     )
     if (state === "closed") context = await launch(selected.managed, setup, ref)
     previous = selected.managed
+    descriptors.push(selected.managed)
   }
   check(isDeepStrictEqual(previous, current), "Current runtime differs from reviewed successor lineage")
-  return Object.freeze({ generations: refs.length, requestSettlement: false, replay: false })
+  return Object.freeze({
+    descriptors: freeze(structuredClone(descriptors)),
+    generations: refs.length,
+    requestSettlement: false,
+    replay: false,
+  })
 }

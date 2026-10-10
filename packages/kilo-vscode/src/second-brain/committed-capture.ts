@@ -12,6 +12,7 @@ import { check, document, object } from "./control/frames"
 import { directory, image, normalize, environment } from "./control/identity"
 import { command } from "./control/command"
 import { review as refusedIndex } from "./capture-sync"
+import * as revisions from "./capture-revisions"
 
 const helper = "7f41ea4776d51da5c6f294fa0ddcfb78136d9a775462ec5fdb6bdc7f85c43a91"
 const qualified = new WeakSet<object>()
@@ -103,7 +104,13 @@ function selection(entry: Parameters<typeof closed>[0], pending: unknown, input:
 }
 
 /** Correlate committed effects only. This review never settles, replays or indexes a request. */
-async function correlate(extension: string, entry: Parameters<typeof closed>[0], pending: unknown, input: unknown) {
+async function correlate(
+  extension: string,
+  entry: Parameters<typeof closed>[0],
+  pending: unknown,
+  input: unknown,
+  history?: Parameters<typeof revisions.review>[3],
+) {
   const choice = selection(entry, pending, input)
   const setup = choice.setup
   const cfg = choice.cfg
@@ -179,10 +186,13 @@ async function correlate(extension: string, entry: Parameters<typeof closed>[0],
     resultSHA: terminal.result_sha256,
   })
   check(Buffer.byteLength(body) <= 8192, "Committed capture review metadata exceeds its bound")
-  const result = await command(cfg.python.path, ["-I", "-S", "-B", script, body], {
-    cwd: cfg.root,
-    env: environment(),
-  })
+  const historical = await revisions.review(extension, cfg, body, history)
+  const result = historical
+    ? { stdout: JSON.stringify(historical.effect), stderr: "", receipt: historical.producer }
+    : await command(cfg.python.path, ["-I", "-S", "-B", script, body], {
+        cwd: cfg.root,
+        env: environment(),
+      })
   check(result.stderr === "", "Committed capture review emitted diagnostics")
   const value = effect.parse(JSON.parse(result.stdout))
   check(
@@ -218,14 +228,21 @@ async function correlate(extension: string, entry: Parameters<typeof closed>[0],
       "Read-only committed-effect correlation; administrative review required, no original settlement authority",
   })
   qualified.add(reviewed)
+  if (historical) revisions.attach(reviewed, historical.proof)
   return reviewed
 }
 
-export async function review(extension: string, entry: Parameters<typeof closed>[0], pending: unknown, input: unknown) {
+export async function review(
+  extension: string,
+  entry: Parameters<typeof closed>[0],
+  pending: unknown,
+  input: unknown,
+  history?: Parameters<typeof revisions.review>[3],
+) {
   const debt = journal(pending)
   if (object(debt.request as Parameters<typeof object>[0]).op !== "sync")
-    return correlate(extension, entry, pending, input)
-  const reviewed = await refusedIndex(extension, entry, pending, input, correlate)
+    return correlate(extension, entry, pending, input, history)
+  const reviewed = await refusedIndex(extension, entry, pending, input, (...args) => correlate(...args, history))
   qualified.add(reviewed)
   return reviewed
 }
@@ -250,5 +267,6 @@ export function rebind(value: Awaited<ReturnType<typeof review>>, audit: unknown
     "Original capture effect changed across helper installation",
   )
   qualified.add(canonical)
+  revisions.transfer(value, canonical)
   return canonical
 }

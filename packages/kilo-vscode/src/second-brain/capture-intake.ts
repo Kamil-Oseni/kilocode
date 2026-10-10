@@ -9,6 +9,7 @@ import type { review } from "./committed-capture"
 import { fingerprint } from "./failed-repair"
 import type { Setup } from "./settings"
 import { fresh, historical, linked } from "./managed/capture-upgrade"
+import { currentPolicy } from "./capture-revisions"
 import { review as refused } from "./capture-refusal"
 import { review as reserved } from "./capture-reserved"
 
@@ -724,7 +725,7 @@ export class CaptureIntake {
             upgrade.release !== binding.release
           : prior.release !== binding.release) ||
         binding.index !== "synced" ||
-        binding.digest !== value.policySHA
+        binding.digest !== currentPolicy(value)
       )
         throw new Error("Original capture and current derived index must agree")
       const key = `raya.secondBrain.committedCaptureRecovery.${prior.id}`

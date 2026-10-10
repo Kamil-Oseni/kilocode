@@ -308,7 +308,10 @@ test("successor review reconstructs actual native plans and refuses unrelated by
   const after = await selection(selected, prepared.next.setup)
   expect(after.files.map((item) => item.digest)).toEqual(before.files.map((item) => item.digest))
   expect(after.files.map((item) => item.tuple)).toEqual(before.files.map((item) => item.tuple))
-  expect((await lineage(selected, prepared.next.setup, selected, undefined)).generations).toBe(0)
+  const initial = await lineage(selected, prepared.next.setup, selected, undefined)
+  expect(initial.generations).toBe(0)
+  expect(initial.descriptors).toEqual([selected])
+  expect(Object.isFrozen(initial.descriptors[0].namespaces)).toBe(true)
   const inputs = await selection(current, prepared.next.setup)
   const root = await stat(cfg.root, { bigint: true })
   // This inert selected-phase receipt describes real files/namespaces; it asserts no live producer or closure.
@@ -331,7 +334,11 @@ test("successor review reconstructs actual native plans and refuses unrelated by
     phase: "selected",
     receipt: { path: file, bytes: receipt.raw.length, sha256: receipt.digest, tuple: receipt.tuple },
   }
-  expect((await lineage(selected, prepared.next.setup, current, state)).generations).toBe(1)
+  const linked = await lineage(selected, prepared.next.setup, current, state)
+  expect(linked.generations).toBe(1)
+  expect(linked.descriptors).toEqual([selected, current])
+  expect(Object.isFrozen(linked.descriptors)).toBe(true)
+  expect(Object.isFrozen(linked.descriptors[1].namespaces)).toBe(true)
   await expect(lineage(selected, prepared.next.setup, current, { ...state, phase: "running" })).rejects.toThrow(
     "Exact runtime lineage phase receipt required",
   )

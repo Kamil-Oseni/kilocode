@@ -10,6 +10,14 @@ import { review } from "./generation"
 
 type Entry = { setup: unknown; credential: string; managed?: Descriptor; launch?: unknown }
 
+function freeze<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) freeze(item)
+    Object.freeze(value)
+  }
+  return value
+}
+
 function object(value: unknown) {
   check(value && typeof value === "object" && !Array.isArray(value), "Capture lineage object required")
   return value as Record<string, unknown>
@@ -197,6 +205,7 @@ export async function successors(previous: Entry, current: Entry, input: unknown
   for (const stored of observations) await verify(stored)
   for (const ref of retained) await read(base, ref, path.basename(ref.path))
   return Object.freeze({
+    descriptors: freeze(structuredClone(observations.map((stored) => stored.managed))),
     generations: refs.length - prefix.length,
     anchor: anchor.ref,
     requestSettlement: false,

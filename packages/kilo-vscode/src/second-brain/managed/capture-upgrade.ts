@@ -8,6 +8,7 @@ import { descriptor, type Descriptor } from "./descriptor"
 import { anchor, guard, inspect, inspectAncestor } from "./upgrade-publish"
 import { lineage } from "./upgrade-lineage"
 import { successors } from "./capture-lineage"
+import { freshHistory } from "../capture-revisions"
 
 type Review = Awaited<ReturnType<typeof review>>
 type Storage = { get<T>(key: string): T | undefined; update(key: string, value: unknown): PromiseLike<void> }
@@ -253,8 +254,12 @@ export function linked(value: Review, storage?: Storage) {
 /** Recheck native anchored receipt/image evidence around capture confirmation effects. */
 export async function fresh(value: Review, storage: Storage) {
   linked(value, storage)
+  await freshHistory(value)
+  linked(value, storage)
   const selected = selections.get(value)
   if (!selected) return
   await selected.refresh()
+  linked(value, storage)
+  await freshHistory(value)
   linked(value, storage)
 }

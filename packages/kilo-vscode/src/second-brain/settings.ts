@@ -19,6 +19,7 @@ import { publish as upgrade, anchor, guard } from "./managed/upgrade-publish"
 import { randomUUID } from "node:crypto"
 import { current as supervisor } from "./managed/catalog"
 import { review as indexReview } from "./capture-index"
+import { locate } from "./capture-operations"
 
 export const files = ["server.py", "index.py", "notes.py", "policy.py", "admission.py"] as const
 const state = "raya.secondBrain.setup"
@@ -26,9 +27,73 @@ const debt = "raya.secondBrain.control.uncertainty"
 const quarantine = "raya.secondBrain.quarantinedSetups"
 const recovering = "raya.secondBrain.committedCaptureRecovery.pending"
 
-async function capture(storage: Pick<Memento, "get">, ...args: Parameters<typeof correlate>) {
-  const value = await correlate(...args)
-  return rebind(value, storage.get(`raya.secondBrain.committedCaptureRecovery.${value.capture}`))
+async function capture(storage: Pick<Memento, "get" | "update">, ...args: Parameters<typeof correlate>) {
+  const turn = records([args[3]])[0]
+  const key = `raya.secondBrain.committedCaptureRecovery.${turn.id}`
+  const audit = structuredClone(
+    storage.get<{
+      phase?: unknown
+      turn?: unknown
+      reviewSHA?: unknown
+      previous?: unknown
+      review?: { inputSHA?: unknown; policySHA?: unknown; closure?: { closed?: unknown } }
+    }>(key),
+  )
+  if (audit?.phase !== "applied") {
+    const value = await correlate(...args)
+    return rebind(value, storage.get(key))
+  }
+  const ledger = "raya.secondBrain.personalCapture.turns"
+  const saved = structuredClone(storage.get(ledger))
+  const rows = records(saved)
+  const original = records([audit.turn])[0]
+  if (
+    !["saving", "uncertain"].includes(original.phase) ||
+    typeof audit.review?.inputSHA !== "string" ||
+    !/^[a-f0-9]{64}$/.test(audit.review.inputSHA)
+  )
+    throw new Error("Original historical capture receipt required")
+  const completed = records([{ ...original, phase: "published", receipt: audit.review?.inputSHA }])[0]
+  const selected = rows.filter((row) => row.id === original.id)
+  if (
+    original.id !== turn.id ||
+    selected.length !== 1 ||
+    (!isDeepStrictEqual(selected[0], original) && !isDeepStrictEqual(selected[0], completed)) ||
+    audit.reviewSHA !== fingerprint(audit.review)
+  )
+    throw new Error("Original historical capture ledger and audit required")
+  const next = rows.map((row) => (row.id === original.id ? completed : row))
+  const keys = [state, debt, recovering]
+  const snapshots = keys.map((name) => structuredClone(storage.get(name)))
+  const guard = () => {
+    const actual = storage.get(ledger)
+    if (
+      !isDeepStrictEqual(storage.get(key), audit) ||
+      !keys.every((name, index) => isDeepStrictEqual(storage.get(name), snapshots[index])) ||
+      (!isDeepStrictEqual(actual, saved) && !isDeepStrictEqual(actual, next))
+    )
+      throw new Error("Original historical capture selection changed")
+  }
+  guard()
+  const history = await locate(
+    storage,
+    audit.previous,
+    audit.review?.closure?.closed,
+    rows.filter((row) => row.root === original.root && row.id !== original.id && row.phase === "published"),
+    guard,
+  )
+  guard()
+  const value = await correlate(args[0], args[1], args[2], args[3], {
+    audit,
+    ledger: saved,
+    guard,
+    operations: history.operations,
+    refresh: history.fresh,
+  })
+  guard()
+  const bound = rebind(value, audit)
+  guard()
+  return bound
 }
 
 function administration(outcome: string) {

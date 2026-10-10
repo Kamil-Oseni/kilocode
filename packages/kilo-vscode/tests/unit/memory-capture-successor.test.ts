@@ -71,6 +71,9 @@ native(
           ...(prior.history ? { history: prior.history } : {}),
         },
       }
+      await storage.update("raya.secondBrain.setup", closed)
+      const initial = await settings.reviewCapture(process.cwd(), fixture.turn)
+      await fresh(initial, storage)
       expect((await successors(previous, closed, reviewed.closure.closed)).generations).toBe(0)
       const context = await launch(cfg, setup, reviewed.closure.closed)
       const before = await selection(cfg, setup)
@@ -141,6 +144,24 @@ native(
               selected,
               originals,
             })
+            const running = {
+              ...previous,
+              managed: current,
+              launch: {
+                phase: "running",
+                receipt: original,
+                history: [...(prior.history ?? []), reviewed.closure.closed],
+              },
+            }
+            await storage.update("raya.secondBrain.setup", running)
+            await expect(fresh(initial, storage)).rejects.toThrow()
+            const rebound = await settings.reviewCapture(process.cwd(), fixture.turn)
+            expect({ ...rebound, producer: undefined }).toEqual({ ...initial, producer: undefined })
+            await fresh(rebound, storage)
+            const proof = await successors(previous, running, reviewed.closure.closed)
+            expect(proof.descriptors).toEqual([cfg, current])
+            expect(Object.isFrozen(proof.descriptors)).toBe(true)
+            expect(Object.isFrozen(proof.descriptors[1].namespaces)).toBe(true)
             expect(
               (
                 await successors(
@@ -224,19 +245,22 @@ native(
           "successor projection",
         )
         await expect(successors(previous, cold, ended)).rejects.toThrow("another original launch")
-        await associate(storage, previous, cold, reviewed)
-        expect(linked(reviewed, storage)).toBeUndefined()
-        await fresh(reviewed, storage)
+        const final = await settings.reviewCapture(process.cwd(), fixture.turn)
+        expect({ ...final, producer: undefined }).toEqual({ ...initial, producer: undefined })
+        await associate(storage, previous, cold, final)
+        expect(linked(final, storage)).toBeUndefined()
+        await fresh(final, storage)
+        await expect(fresh({ ...final }, storage)).rejects.toThrow("qualification was not retained")
         const raw = await readFile(current.plan.path)
         await writeFile(current.plan.path, Buffer.concat([raw, Buffer.from(" ")]))
         await expect(successors(previous, cold, reviewed.closure.closed)).rejects.toThrow()
         await writeFile(current.plan.path, raw)
-        await expect(fresh(reviewed, storage)).rejects.toThrow("selected images changed")
+        await expect(fresh(final, storage)).rejects.toThrow("selected images changed")
         // Restored bytes do not restore the original selected native tuple.
         await expect(successors(previous, cold, reviewed.closure.closed)).rejects.toThrow("selected images changed")
         const retained = await readFile(reviewed.closure.closed.path)
         await writeFile(reviewed.closure.closed.path, Buffer.concat([retained, Buffer.from(" ")]))
-        await expect(fresh(reviewed, storage)).rejects.toThrow("Original capture lineage receipt changed")
+        await expect(fresh(final, storage)).rejects.toThrow("Original capture lineage receipt changed")
       }
     } finally {
       expect(path.dirname(fixture.root)).toBe(path.resolve(tmpdir()))

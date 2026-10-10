@@ -10,6 +10,7 @@ import { fingerprint } from "./failed-repair"
 import { retained } from "./failed-downstream"
 import { records } from "./capture-intake"
 import { parse as operation } from "./operation"
+import { transfer } from "./capture-revisions"
 
 type Entry = { setup: unknown; managed?: unknown; launch?: unknown }
 type Capture = { policySHA: string; request: string; debtSHA: string }
@@ -207,7 +208,7 @@ export async function review<A extends Capture>(
       )
     }),
   )
-  return {
+  const reviewed = {
     ...capture,
     debtSHA: fingerprint(debt),
     indexFailure: {
@@ -222,4 +223,6 @@ export async function review<A extends Capture>(
       replay: false,
     },
   }
+  transfer(capture, reviewed)
+  return reviewed
 }

@@ -9,6 +9,9 @@ import { NativeProcess } from "../../src/kilocode/process-host"
 import { assertImage, withImage } from "../../src/kilocode/source-offline"
 
 function acl(file: string) {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter((entry) => entry[0].toLowerCase() !== "psmodulepath"),
+  )
   const child = spawnSync(
     "powershell.exe",
     ["-NoProfile", "-Command", `(Get-Acl -LiteralPath '${file.replaceAll("'", "''")}').Sddl`],
@@ -16,12 +19,23 @@ function acl(file: string) {
       windowsHide: true,
       encoding: "utf8",
       env: {
-        ...process.env,
+        ...env,
         PSModulePath: path.join(process.env.SystemRoot!, "System32", "WindowsPowerShell", "v1.0", "Modules"),
       },
     },
   )
-  if (child.status !== 0) throw new Error("Synthetic control branch ACL observation failed")
+  if (child.status !== 0)
+    throw new Error(
+      `Synthetic control branch ACL observation failed: ${JSON.stringify({
+        path: file,
+        status: child.status,
+        signal: child.signal,
+        error: child.error
+          ? { name: child.error.name, code: "code" in child.error ? String(child.error.code) : undefined }
+          : undefined,
+        stderr: child.stderr?.slice(-4096),
+      })}`,
+    )
   return child.stdout.trim()
 }
 

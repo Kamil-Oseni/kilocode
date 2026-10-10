@@ -186,6 +186,70 @@ export function registry(env: NodeJS.ProcessEnv = process.env) {
     throw new Error("Offline stable registry requires Windows LOCALAPPDATA")
   return path.join(env.LOCALAPPDATA, "Raya", "offline-recovery")
 }
+/** Read-only discovery observations cannot authorize protection, rollback or capture. */
+export async function discover(directories: readonly string[], pin: Pin) {
+  if (process.platform !== "win32") throw new Error("Offline native platform unsupported")
+  const absolute = file.refine(
+    (value) => path.isAbsolute(value) && path.normalize(value) === value && !/[\0\r\n]/.test(value),
+  )
+  const inputs = z
+    .array(absolute)
+    .min(1)
+    .max(2)
+    .refine((values) => new Set(values.map(normalize)).size === values.length)
+    .parse(directories)
+  const helper = await parent(pin)
+  const owner = channel(helper.executable)
+  const generation = randomUUID()
+  owner.child.stdin.end(frame(1, 3, ...helper.owner, generation, inputs.length, ...inputs))
+  const schema = z
+    .object({
+      generation: z.literal(generation),
+      registries: z
+        .array(
+          z
+            .object({
+              input: absolute,
+              path: absolute,
+              exists: z.boolean(),
+              entries: z.number().int().min(0).max(1024).optional(),
+              ancestor: z
+                .object({
+                  path: absolute,
+                  volume: z.number().int().min(0).max(4294967295),
+                  index: z
+                    .string()
+                    .regex(/^\d{1,20}$/)
+                    .refine((value) => BigInt(value) <= 18446744073709551615n),
+                })
+                .strict(),
+            })
+            .strict()
+            .refine(
+              (value) =>
+                value.exists === (value.entries !== undefined) &&
+                inside(value.ancestor.path, value.path) &&
+                (value.exists ? same(value.ancestor.path, value.path) : !same(value.ancestor.path, value.path)),
+            ),
+        )
+        .length(inputs.length),
+    })
+    .strict()
+  const outcome = await owner
+    .next()
+    .then((value) => schema.parse(value))
+    .then(
+      (value) => ({ value }),
+      (err: unknown) => ({ err }),
+    )
+  if ((await owner.exit) !== 0) throw new Error("Offline discovery native refusal")
+  if ("err" in outcome) throw outcome.err
+  if (outcome.value.registries.some((value, index) => value.input !== inputs[index]))
+    throw new Error("Offline discovery inputs differ")
+  return Object.freeze(
+    outcome.value.registries.map((value) => Object.freeze({ ...value, ancestor: Object.freeze(value.ancestor) })),
+  )
+}
 async function protect(directory: string, pin: Pin) {
   const helper = await parent(pin)
   const owner = channel(helper.executable)

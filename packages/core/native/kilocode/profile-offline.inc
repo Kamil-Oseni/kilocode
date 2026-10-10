@@ -2,6 +2,7 @@
 #include <sddl.h>
 #include <filesystem>
 #include <set>
+#include <cwchar>
 
 // Ordinary data writers are fenced; permission-changing
 // principals are detected/refused, not treated as a hostile security boundary.
@@ -524,6 +525,91 @@ int launch() {
   if (!GetExitCodeProcess(process.value, &code) || code == STILL_ACTIVE) throw std::runtime_error("Offline guardian exact native exit unavailable");
   return static_cast<int>(code);
 }
+// Discovery observes only caller-selected directories. Its output never grants
+// acquisition or recovery authority; those operations retain their own checks.
+struct Discovery {
+  struct Pin { std::wstring input; std::wstring path; BY_HANDLE_FILE_INFORMATION info; std::unique_ptr<Handle> handle; };
+  std::wstring input;
+  std::wstring path;
+  std::vector<Pin> pins;
+  std::vector<std::pair<std::wstring, std::wstring>> missing;
+  bool present = true;
+  DWORD entries = 0;
+  explicit Discovery(const std::wstring& value) : input(value) {
+    native(value);
+    if (value.find_first_of(L"\r\n") != std::wstring::npos || value.find(L'\0') != std::wstring::npos ||
+        (value.size() > 3 && value.back() == L'\\') ||
+        value.find(L':', 2) != std::wstring::npos || fs::path(value).lexically_normal().wstring() != value)
+      throw std::runtime_error("Offline discovery path invalid");
+    const fs::path target(value);
+    auto current = target.root_path();
+    std::vector<fs::path> components{current};
+    for (const auto& component : target.relative_path()) {
+      current /= component;
+      components.push_back(current);
+    }
+    if (components.size() > 128) throw std::runtime_error("Offline discovery ancestor bound exceeded");
+    for (const auto& component : components) {
+      const auto file = component.wstring();
+      if (!present) {
+        path = (fs::path(path) / component.filename()).wstring();
+        missing.emplace_back(file, path);
+        continue;
+      }
+      auto handle = std::make_unique<Handle>(CreateFileW(native(file).c_str(), FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+      if (handle->value == INVALID_HANDLE_VALUE) {
+        const DWORD error = GetLastError();
+        if ((error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) || pins.empty())
+          throw std::runtime_error("Offline discovery ancestor unavailable");
+        present = false;
+        path = (fs::path(path) / component.filename()).wstring();
+        missing.emplace_back(file, path);
+        continue;
+      }
+      BY_HANDLE_FILE_INFORMATION info{};
+      if (!GetFileInformationByHandle(handle->value, &info) || !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+          (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+        throw std::runtime_error("Offline discovery directory or reparse refused");
+      path = canonical(file);
+      pins.push_back(Pin{file, path, info, std::move(handle)});
+    }
+    if (path.size() > 4096) throw std::runtime_error("Offline discovery physical path exceeded bound");
+    native(path);
+    if (present) {
+      WIN32_FIND_DATAW entry{};
+      const auto pattern = native((fs::path(path) / L"*").wstring());
+      const HANDLE found = FindFirstFileW(pattern.c_str(), &entry);
+      if (found == INVALID_HANDLE_VALUE) {
+        if (GetLastError() != ERROR_FILE_NOT_FOUND) throw std::runtime_error("Offline discovery enumeration unavailable");
+      } else {
+        struct Find { HANDLE value; ~Find() { FindClose(value); } } guard{found};
+        do {
+          if (!std::wcscmp(entry.cFileName, L".") || !std::wcscmp(entry.cFileName, L"..")) continue;
+          if (++entries > 1024) throw std::runtime_error("Offline discovery entry bound exceeded");
+        } while (FindNextFileW(found, &entry));
+        if (GetLastError() != ERROR_NO_MORE_FILES) throw std::runtime_error("Offline discovery enumeration incomplete");
+      }
+    }
+    check();
+  }
+  void check() const {
+    for (const auto& pin : pins) {
+      BY_HANDLE_FILE_INFORMATION info{};
+      if (!GetFileInformationByHandle(pin.handle->value, &info) ||
+          info.dwVolumeSerialNumber != pin.info.dwVolumeSerialNumber || info.nFileIndexHigh != pin.info.nFileIndexHigh ||
+          info.nFileIndexLow != pin.info.nFileIndexLow || !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+          (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+          (present && &pin == &pins.back() && CompareFileTime(&info.ftLastWriteTime, &pin.info.ftLastWriteTime)) ||
+          _wcsicmp(canonical(pin.input).c_str(), pin.path.c_str()) || _wcsicmp(canonical(pin.path).c_str(), pin.path.c_str()))
+        throw std::runtime_error("Offline discovery directory changed");
+    }
+    for (const auto& item : missing) {
+      if (exists(item.first) || exists(item.second)) throw std::runtime_error("Offline discovery missing path appeared");
+    }
+  }
+};
 int run(bool guarded = false) {
   auto frame = SourcePipe::input();
   Handle relay(nullptr);
@@ -540,6 +626,38 @@ int run(bool guarded = false) {
   const auto parent = SourcePipe::identity(frame);
   Handle owner(SourcePipe::owned(parent));
   if (!guarded && SourcePipe::parent(GetCurrentProcess()) != parent.pid) throw std::runtime_error("Offline exact caller parent differs");
+  if (operation == 3) {
+    if (version != 1) throw std::runtime_error("Offline discovery version invalid");
+    const auto generation = frame.text();
+    if (generation.size() != 36 || generation[8] != L'-' || generation[13] != L'-' || generation[18] != L'-' || generation[23] != L'-')
+      throw std::runtime_error("Offline discovery generation invalid");
+    for (size_t at = 0; at < generation.size(); ++at)
+      if (at != 8 && at != 13 && at != 18 && at != 23 && std::wstring(L"0123456789abcdefABCDEF").find(generation[at]) == std::wstring::npos)
+        throw std::runtime_error("Offline discovery generation invalid");
+    const DWORD total = frame.integer();
+    if (!total || total > 2) throw std::runtime_error("Offline discovery target bound exceeded");
+    std::vector<std::wstring> inputs;
+    for (DWORD at = 0; at < total; ++at) inputs.push_back(frame.text());
+    if (frame.offset != frame.data.size()) throw std::runtime_error("Offline discovery input trailing data");
+    std::vector<std::unique_ptr<Discovery>> registries;
+    for (const auto& input : inputs) registries.push_back(std::make_unique<Discovery>(input));
+    for (const auto& entry : registries) entry->check();
+    if (WaitForSingleObject(owner.value, 0) != WAIT_TIMEOUT) throw std::runtime_error("Offline discovery caller retired");
+    std::printf("{\"generation\":%s,\"registries\":[", Source::json(generation).c_str());
+    for (size_t at = 0; at < registries.size(); ++at) {
+      const auto& entry = registries[at];
+      std::printf("%s{\"input\":%s,\"path\":%s,\"exists\":%s", at ? "," : "", Source::json(entry->input).c_str(),
+        Source::json(entry->path).c_str(), entry->present ? "true" : "false");
+      const auto& ancestor = entry->pins.back();
+      const uint64_t index = (static_cast<uint64_t>(ancestor.info.nFileIndexHigh) << 32) | ancestor.info.nFileIndexLow;
+      std::printf(",\"ancestor\":{\"path\":%s,\"volume\":%lu,\"index\":\"%llu\"}", Source::json(ancestor.path).c_str(),
+        ancestor.info.dwVolumeSerialNumber, static_cast<unsigned long long>(index));
+      if (entry->present) std::printf(",\"entries\":%lu", entry->entries);
+      std::printf("}");
+    }
+    std::printf("]}\n");
+    return 0;
+  }
   State state; state.version = version; state.control = frame.text(); state.generation = frame.text();
   if (_wcsicmp(canonical(state.control).c_str(), state.control.c_str())) throw std::runtime_error("Offline control canonical path differs");
   if (operation == 2) {

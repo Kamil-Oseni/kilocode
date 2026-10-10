@@ -61,7 +61,7 @@ export function current() {
 
 /** Scope the actual fetch/doStream Promise, rather than a deferred Effect or cached provider configuration. */
 export async function run<A>(frame: Frame | undefined, body: () => PromiseLike<A>, signal?: AbortSignal): Promise<A> {
-  if (!frame) return body()
+  if (!frame) return scope.exit(body)
   signal?.throwIfAborted()
   const value = held.get(frame)
   if (!value) throw new FrameError()

@@ -28,6 +28,7 @@ import { ChiefNoteEvent } from "@/kilocode/chief/event"
 import { scheduler } from "@/kilocode/task/admission"
 import { RayaTask } from "@/kilocode/task"
 import { isDeepStrictEqual } from "node:util"
+import * as lineage from "@/kilocode/task/effect-lineage"
 
 const log = Log.create({ service: "raya-goal-continuation" })
 const recovery = Semaphore.makeUnsafe(2)
@@ -263,6 +264,7 @@ async function continueGoal(
   files?: readonly SessionV1.FilePartInput[],
   completion?: "reply",
   note?: string,
+  handoff?: lineage.Handoff,
 ): Promise<unknown> {
   const [{ AppRuntime }, { SessionPrompt }, { InstanceStore }] = await Promise.all([
     import("@/effect/app-runtime"),
@@ -270,30 +272,34 @@ async function continueGoal(
     import("@/project/instance-store"),
   ])
   return AppRuntime.runPromise(
-    InstanceStore.Service.use((instances) =>
-      instances.provide(
-        { directory },
-        SessionPrompt.Service.use((service) =>
-          service
-            .prompt({
-              sessionID,
-              messageID,
-              goalQueuedAt: queuedAt,
-              parts: [
-                ...(files ?? []),
-                {
-                  type: "text",
-                  text: [prompt(objective, completion), note].filter(Boolean).join("\n\n"),
-                  synthetic: true,
-                },
-              ],
-              goalObjective: objective, // raya_change - route the latest steered objective, not the original turn
-            })
-            .pipe(
-              Effect.catchCause((cause) =>
-                Cause.squash(cause) instanceof GoalMessage.Conflict ? Effect.void : Effect.failCause(cause),
+    lineage.transfer(
+      handoff,
+      sessionID,
+      InstanceStore.Service.use((instances) =>
+        instances.provide(
+          { directory },
+          SessionPrompt.Service.use((service) =>
+            service
+              .prompt({
+                sessionID,
+                messageID,
+                goalQueuedAt: queuedAt,
+                parts: [
+                  ...(files ?? []),
+                  {
+                    type: "text",
+                    text: [prompt(objective, completion), note].filter(Boolean).join("\n\n"),
+                    synthetic: true,
+                  },
+                ],
+                goalObjective: objective, // raya_change - route the latest steered objective, not the original turn
+              })
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Cause.squash(cause) instanceof GoalMessage.Conflict ? Effect.void : Effect.failCause(cause),
+                ),
               ),
-            ),
+          ),
         ),
       ),
     ),
@@ -301,17 +307,26 @@ async function continueGoal(
   )
 }
 
-async function continueTurn(sessionID: SessionID, directory: string, signal: AbortSignal): Promise<unknown> {
+async function continueTurn(
+  sessionID: SessionID,
+  directory: string,
+  signal: AbortSignal,
+  handoff?: lineage.Handoff,
+): Promise<unknown> {
   const [{ AppRuntime }, { SessionPrompt }, { InstanceStore }] = await Promise.all([
     import("@/effect/app-runtime"),
     import("@/session/prompt"),
     import("@/project/instance-store"),
   ])
   return AppRuntime.runPromise(
-    InstanceStore.Service.use((instances) =>
-      instances.provide(
-        { directory },
-        SessionPrompt.Service.use((service) => service.loop({ sessionID })),
+    lineage.transfer(
+      handoff,
+      sessionID,
+      InstanceStore.Service.use((instances) =>
+        instances.provide(
+          { directory },
+          SessionPrompt.Service.use((service) => service.loop({ sessionID })),
+        ),
       ),
     ),
     { signal },
@@ -329,8 +344,14 @@ type Run = (
   files?: readonly SessionV1.FilePartInput[],
   completion?: "reply",
   note?: string,
+  handoff?: lineage.Handoff,
 ) => Promise<unknown>
-type Loop = (sessionID: SessionID, directory: string, signal: AbortSignal) => Promise<unknown>
+type Loop = (
+  sessionID: SessionID,
+  directory: string,
+  signal: AbortSignal,
+  handoff?: lineage.Handoff,
+) => Promise<unknown>
 
 function response(messages: readonly SessionV1.WithParts[], messageID: MessageID) {
   return messages
@@ -354,48 +375,56 @@ function invoke(input: {
   note?: string
   complete?: () => Effect.Effect<void>
 }) {
-  return Effect.tryPromise({
-    try: (signal) =>
-      (input.run ?? continueGoal)(
-        input.sessionID,
-        input.objective,
-        input.directory,
-        input.messageID,
-        input.queuedAt,
-        signal,
-        input.files,
-        input.completion,
-        input.note,
+  return lineage
+    .capture()
+    .pipe(
+      Effect.flatMap((handoff) =>
+        Effect.tryPromise({
+          try: (signal) =>
+            (input.run ?? continueGoal)(
+              input.sessionID,
+              input.objective,
+              input.directory,
+              input.messageID,
+              input.queuedAt,
+              signal,
+              input.files,
+              input.completion,
+              input.note,
+              handoff,
+            ),
+          catch: (err) => err,
+        }),
       ),
-    catch: (err) => err,
-  }).pipe(
-    (body) => scheduler.observe(body, known),
-    Effect.tap(() => input.complete?.() ?? Effect.void),
-    Effect.catch((err) =>
-      input.goals
-        .update(
-          input.sessionID,
-          {
-            status: "blocked",
-            reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
-          },
-          input.revision,
-        )
-        .pipe(
-          input.quiet
-            ? Effect.asVoid
-            : Effect.catchCause((cause) =>
-                Effect.sync(() =>
-                  log.error("failed to continue or block goal", {
-                    sessionID: input.sessionID,
-                    err: Cause.squash(cause),
-                  }),
+    )
+    .pipe(
+      (body) => scheduler.observe(body, known),
+      Effect.tap(() => input.complete?.() ?? Effect.void),
+      Effect.catch((err) =>
+        input.goals
+          .update(
+            input.sessionID,
+            {
+              status: "blocked",
+              reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+            input.revision,
+          )
+          .pipe(
+            input.quiet
+              ? Effect.asVoid
+              : Effect.catchCause((cause) =>
+                  Effect.sync(() =>
+                    log.error("failed to continue or block goal", {
+                      sessionID: input.sessionID,
+                      err: Cause.squash(cause),
+                    }),
+                  ),
                 ),
-              ),
-          Effect.asVoid,
-        ),
-    ),
-  )
+            Effect.asVoid,
+          ),
+      ),
+    )
 }
 
 function recover<A, E, R>(effect: Effect.Effect<A, E, R>, identity?: string) {
@@ -879,25 +908,33 @@ export namespace RayaGoalContinuation {
                 )
                   return
                 if (input.permitted && !(yield* input.permitted())) return
-                const completed = yield* Effect.tryPromise({
-                  try: (signal) => (input.loop ?? continueTurn)(input.sessionID, session.directory, signal),
-                  catch: (err) => err,
-                }).pipe(
-                  (body) => scheduler.observe(body, known),
-                  Effect.as(true),
-                  Effect.catch((err) =>
-                    goals
-                      .update(
-                        input.sessionID,
-                        {
-                          status: "blocked",
-                          reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
-                        },
-                        current.revision,
-                      )
-                      .pipe(Effect.as(false)),
-                  ),
-                )
+                const completed = yield* lineage
+                  .capture()
+                  .pipe(
+                    Effect.flatMap((handoff) =>
+                      Effect.tryPromise({
+                        try: (signal) =>
+                          (input.loop ?? continueTurn)(input.sessionID, session.directory, signal, handoff),
+                        catch: (err) => err,
+                      }),
+                    ),
+                  )
+                  .pipe(
+                    (body) => scheduler.observe(body, known),
+                    Effect.as(true),
+                    Effect.catch((err) =>
+                      goals
+                        .update(
+                          input.sessionID,
+                          {
+                            status: "blocked",
+                            reason: `Automatic continuation failed: ${err instanceof Error ? err.message : String(err)}`,
+                          },
+                          current.revision,
+                        )
+                        .pipe(Effect.as(false)),
+                    ),
+                  )
                 if (!completed) return
                 const refreshed = yield* input.sessions.messages({ sessionID: input.sessionID })
                 return response(refreshed, goal.dispatch!.messageID!)

@@ -1,4 +1,6 @@
-import { Effect, Exit } from "effect"
+import path from "node:path"
+import { Database } from "@opencode-ai/core/database/database"
+import { Effect, Exit, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -23,7 +25,13 @@ const result = await Effect.runPromise(
     if (mode === "active") return true
     return (yield* execution.enter(owner, Effect.succeed(true))) === true
   }).pipe(
-    Effect.provide(Storage.layerFromDir(dir)),
+    Effect.provide(
+      Layer.fresh(
+        Storage.layerWithDatabase(dir).pipe(
+          Layer.provide(Database.layerFromPath(path.join(path.dirname(dir), "queue.sqlite"))),
+        ),
+      ),
+    ),
     Effect.provide(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node]))),
     Effect.exit,
   ),

@@ -465,17 +465,22 @@ describe("local inference scheduler with real HTTP streams", () => {
     }
   })
 
-  test("wrappers share a group regardless of directory, while cloud fetch is unchanged", async () => {
+  test("wrappers share a group regardless of directory, while cloud HTTP requests bypass the local queue", async () => {
     const host = fixture()
     const main = localFetch({ localInference: true, directory: "/main" })
     const worker = localFetch({ localInference: true, directory: "/worker" })
     try {
-      expect(localFetch({})).toBe(fetch)
       expect(localConfig({ localInference: "true" })).toEqual({ enabled: false })
       const first = await main(host.url("/main"))
       const second = worker(host.url("/worker"))
-      const cloud = await localFetch({})(host.url("/cloud"))
+      const cloud = await localFetch({})(host.url("/cloud"), {
+        method: "POST",
+        headers: { "x-value": "cloud-header" },
+        body: "cloud-body",
+      })
       expect(host.starts).toEqual(["/main", "/cloud"])
+      expect(host.requests[1]).toEqual({ path: "/cloud", body: "cloud-body", header: "cloud-header" })
+      expect(cloud.headers.get("x-fixture")).toBe("/cloud")
       host.end("/cloud")
       await cloud.text()
       host.end("/main")
@@ -616,23 +621,38 @@ describe("local inference scheduler with real HTTP streams", () => {
     }
   })
 
-  test("immediate requests retain unknown transport objects and cloud bypass keeps identity", async () => {
+  test("immediate and cloud HTTP requests preserve custom transport inputs while bypassing queue ownership", async () => {
     const host = fixture()
     const queue = createLocalScheduler()
     const marker = { retained: "caller-owned" }
-    const opts = { method: "GET", fixture: marker }
+    const headers = new Headers({ "x-value": "custom-header" })
+    const opts = { method: "GET", headers, fixture: marker }
     const seen: Parameters<typeof fetch>[1][] = []
+    const inputs: Parameters<typeof fetch>[0][] = []
     const transport = (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      inputs.push(input)
       seen.push(init)
       return fetch(input, init)
     }
     try {
-      expect(localFetch({}, transport)).toBe(transport)
       const response = await queue.fetch(transport, host.url("/immediate"), opts)
       expect(seen[0]).toMatchObject({ fixture: marker })
       expect(Reflect.get(seen[0]!, "fixture")).toBe(marker)
       host.end("/immediate")
       await response.text()
+      const url = new URL(host.url("/cloud"))
+      const cloud = await localFetch({}, transport)(url, opts)
+      expect(inputs[1]).toBe(url)
+      expect(seen[1]).toBe(opts)
+      expect(seen[1]!.headers).toBe(headers)
+      expect(Reflect.get(seen[1]!, "fixture")).toBe(marker)
+      expect(host.requests).toEqual([
+        { path: "/immediate", body: "", header: "custom-header" },
+        { path: "/cloud", body: "", header: "custom-header" },
+      ])
+      expect(cloud.headers.get("x-fixture")).toBe("/cloud")
+      host.end("/cloud")
+      expect(await cloud.text()).toBe("data: ready\n\n")
       expect(queue.snapshot()).toEqual({ active: 0, queued: 0, bytes: 0 })
     } finally {
       await host.close()

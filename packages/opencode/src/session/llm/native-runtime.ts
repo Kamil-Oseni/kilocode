@@ -24,6 +24,7 @@ import { keyless } from "@/kilocode/provider/native-policy" // kilocode_change
 import { terminal } from "@/kilocode/provider/native-admission" // kilocode_change - local refusal must survive native HTTP error translation
 import { context as ollamaContext } from "@/kilocode/provider/ollama-context" // kilocode_change
 import * as ResultFrame from "@/kilocode/provider/result-frame" // kilocode_change - private original-request result grammar
+import * as Lineage from "@/kilocode/task/effect-lineage" // kilocode_change - original execution transfer only
 
 export type RuntimeStatus =
   | { readonly type: "supported"; readonly apiKey?: string; readonly baseURL?: string } // kilocode_change - explicitly local compatible servers may omit authentication
@@ -48,6 +49,8 @@ type StreamInput = {
   readonly headers: Record<string, string>
   readonly abort: AbortSignal
   readonly frame?: ResultFrame.Frame // kilocode_change - never read from serialized provider options
+  readonly runner?: Lineage.Runner // kilocode_change - captured from the original execution Effect
+  readonly sessionID?: string // kilocode_change - exact session binding for native tool fiber transfer
 }
 
 // kilocode_change start - raya_change: DeepSeek gateways can emit DSML in text;
@@ -111,8 +114,15 @@ export function stream(input: StreamInput): StreamResult {
         refusal = err
       })
     : transport
-  const scoped = (request: Parameters<typeof selected>[0], opts?: Parameters<typeof selected>[1]) => // kilocode_change
-    ResultFrame.run(input.frame, () => selected(request, opts), opts?.signal ?? input.abort) // kilocode_change
+  const scoped = (
+    request: Parameters<typeof selected>[0],
+    opts?: Parameters<typeof selected>[1], // kilocode_change
+  ) =>
+    ResultFrame.run(
+      input.frame,
+      () => Lineage.run(input.runner, () => selected(request, opts)),
+      opts?.signal ?? input.abort,
+    ) // kilocode_change
   // kilocode_change end
 
   // Integration point with @opencode-ai/llm: native-request lowers session data
@@ -158,12 +168,21 @@ export function stream(input: StreamInput): StreamResult {
                 : Stream.make(event).pipe(
                     Stream.concat(
                       Stream.fromEffectDrain(
-                        ToolRuntime.dispatch(tools, event).pipe(
-                          Effect.flatMap((dispatched) => Queue.offerAll(results, dispatched.events)),
-                          Effect.catchCause((cause) => Queue.failCause(results, cause)),
-                          Effect.asVoid,
-                          FiberSet.run(settlements, { startImmediately: true }),
-                        ),
+                        // kilocode_change start - transfer the actual original caller before the native tool fork
+                        Effect.gen(function* () {
+                          const token = yield* Lineage.capture()
+                          yield* Lineage.transfer(
+                            token,
+                            input.sessionID ?? "",
+                            ToolRuntime.dispatch(tools, event),
+                          ).pipe(
+                            Effect.flatMap((dispatched) => Queue.offerAll(results, dispatched.events)),
+                            Effect.catchCause((cause) => Queue.failCause(results, cause)),
+                            Effect.asVoid,
+                            FiberSet.run(settlements, { startImmediately: true }),
+                          )
+                        }),
+                        // kilocode_change end
                       ),
                     ),
                   ),
@@ -183,7 +202,7 @@ export function stream(input: StreamInput): StreamResult {
     ...current,
     // kilocode_change start - native inference shares the same local transport admission as the AI SDK
     stream:
-      fetch || localConfig(input.provider.options).enabled
+      fetch || localConfig(input.provider.options).enabled || input.runner // kilocode_change - scoped native requests must use the checked fetch leaf
         ? stream.pipe(
             Stream.mapError((err) => refusal ?? err),
             Stream.provideService(
@@ -231,17 +250,16 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
         description: item.description ?? "",
         jsonSchema: nativeSchema(item.inputSchema),
         execute: (args: unknown, ctx) =>
-          Effect.tryPromise({
-            try: () => {
-              if (!item.execute) throw new Error(`Tool has no execute handler: ${name}`)
-              return item.execute(args, {
-                toolCallId: ctx?.id ?? name,
-                messages: input.messages,
-                abortSignal: input.abort,
-              })
-            },
-            catch: (error) => new ToolFailure({ message: errorMessage(error), error }),
-          }),
+          // kilocode_change start - actual tool execution retains the original execution Promise scope
+          Lineage.promise((signal) => {
+            if (!item.execute) throw new Error(`Tool has no execute handler: ${name}`)
+            return item.execute(args, {
+              toolCallId: ctx?.id ?? name,
+              messages: input.messages,
+              abortSignal: AbortSignal.any([input.abort, signal]),
+            })
+          }).pipe(Effect.mapError((error) => new ToolFailure({ message: errorMessage(error), error }))),
+        // kilocode_change end
       }),
     ]),
   )

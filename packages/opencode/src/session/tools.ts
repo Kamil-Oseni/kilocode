@@ -42,6 +42,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - hide tools outside durable child authority
 import { LazyTools } from "@/kilocode/session/lazy-tools" // kilocode_change
 import { InstanceState } from "@/effect/instance-state" // kilocode_change
+import * as ToolLineage from "@/kilocode/task/effect-tools" // kilocode_change - retain the original tool catalog execution
+import * as ExecutionLineage from "@/kilocode/task/effect-lineage" // kilocode_change - check original MCP callback lineage
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -68,7 +70,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   memoryCache: MemoryMarker.Cache // kilocode_change
 }) {
   const tools: Record<string, AITool> = {}
-  const run = yield* EffectBridge.make()
+  // kilocode_change start - transfer the original catalog owner into callback fibers
+  const run = yield* EffectBridge.make().pipe(
+    Effect.flatMap((base) =>
+      ToolLineage.bridge(base, input.session.id, input.session.metadata?.rayaRoutine !== undefined),
+    ),
+  )
+  // kilocode_change end
   const plugin = yield* Plugin.Service
   const permission = yield* Permission.Service
   // kilocode_change start
@@ -588,7 +596,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             entry, // kilocode_change - retain the native entry's local/remote network authority marker
             Effect.gen(function* () {
               yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-              return yield* Effect.promise(() => execute(args, opts))
+              return yield* ExecutionLineage.promise(() => execute(args, opts)).pipe(Effect.orDie) // kilocode_change - retain the original frame through MCP preparation
             }),
           ).pipe(
             // kilocode_change end

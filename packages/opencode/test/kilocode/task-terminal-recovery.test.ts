@@ -24,9 +24,10 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const layers = (root: string) =>
-  Layer.mergeAll(
-    Storage.layerFromDir(path.join(root, "storage")),
-    Database.layerFromPath(path.join(root, "queue.sqlite")),
+  Layer.fresh(
+    Storage.layerWithDatabase(path.join(root, "storage")).pipe(
+      Layer.provideMerge(Database.layerFromPath(path.join(root, "queue.sqlite"))),
+    ),
   )
 const sessions = {
   create: () => Effect.die("unexpected session creation"),
@@ -530,7 +531,7 @@ it.live(
         expect(yield* execution.terminal(live)).toBeUndefined()
         yield* execution.finish(live)
         expect(yield* storage.list(["raya", "agent-executions"])).toHaveLength(1)
-      }).pipe(Effect.provide(Storage.layerFromDir(dir)))
+      }).pipe(Effect.provide(layers(root)))
     }),
   60_000,
 )

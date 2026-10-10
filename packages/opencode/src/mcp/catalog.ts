@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { dynamicTool, jsonSchema, type JSONSchema7, type Tool } from "ai"
 import { Effect } from "effect"
+import * as ExecutionLineage from "@/kilocode/task/effect-lineage" // kilocode_change - fence retired original MCP calls
 
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
@@ -51,6 +52,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
     execute: async (args: unknown, options) => {
+      ExecutionLineage.checkPromise() // kilocode_change - verify immediately before the actual client call
       const result = await client.callTool(
         {
           name: mcpTool.name,

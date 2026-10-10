@@ -36,6 +36,7 @@ import { RayaChief } from "@/kilocode/chief"
 import { resumeHint } from "@/kilocode/task-resume"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { database, storage } from "./fixtures/effect-profile"
 
 function engine(native: boolean) {
   const flags = LayerNode.make({
@@ -71,7 +72,11 @@ function engine(native: boolean) {
         EventV2Bridge.node,
         BackgroundJob.node,
       ]),
-      [[RuntimeFlags.node, flags]],
+      [
+        [RuntimeFlags.node, flags],
+        [Database.node, database],
+        [Storage.node, storage],
+      ],
     ),
   )
 }
@@ -525,8 +530,11 @@ for (const run of [
             yield* diagnose()
           expect(children).toHaveLength(1)
           const child = children[0]!
+          // Physical SQLite settlement and parent continuation share this bounded budget, not a five-second latency guarantee.
+          const deadline = Date.now() + 30_000
           if (mode === "background") {
-            const completed = yield* jobs.wait({ id: child.id, timeout: 5000 })
+            const completed = yield* jobs.wait({ id: child.id, timeout: Math.max(0, deadline - Date.now()) })
+            if (completed.timedOut) yield* diagnose()
             expect(completed.timedOut).toBe(false)
             state.waited = true
           }
@@ -536,7 +544,6 @@ for (const run of [
           expect(job?.status === "completed" || job?.status === "error").toBe(true)
           const deliveries: typeof rows = []
           if (mode === "background") {
-            const deadline = Date.now() + 5000
             while (true) {
               const parent = yield* sessions.messages({ sessionID: chat.id })
               const notice = parent.find(

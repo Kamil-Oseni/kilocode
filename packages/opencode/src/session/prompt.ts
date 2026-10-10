@@ -35,6 +35,7 @@ import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/
 import { settled as recalled, acknowledged, acknowledgement } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
 import { settled as mediaRecalled } from "@/kilocode/second-brain/media-turn" // kilocode_change - qualified original media-read synthesis only
 import { remember as captureRouting } from "@/kilocode/second-brain/capture-routing" // kilocode_change - retain original extraction route before successor metadata
+import * as ExecutionLineage from "@/kilocode/task/effect-lineage" // kilocode_change - explicit original queue runner handoff
 import { RayaToolModel } from "@/kilocode/chief/tool-model" // kilocode_change
 import { isInterrupted } from "@/kilocode/effect/cause" // kilocode_change
 import * as SandboxPolicy from "@/kilocode/sandbox/policy" // kilocode_change
@@ -1545,15 +1546,23 @@ export const layer = Layer.effect(
         // Queue tails and runner fibers can resume outside the HTTP request's
         // ambient instance context; bridge both Effect refs and legacy ALS.
         const bridge = yield* EffectBridge.make()
+        const handoff = yield* ExecutionLineage.capture() // kilocode_change - actual original work handoff
+        const stopped = yield* ExecutionLineage.capture() // kilocode_change - separate original cancellation handoff
         return yield* KiloSessionPromptQueue.enqueue(
           input.sessionID,
           message.info.id,
+          // kilocode_change start - bind the actual queue runner after its service context is restored
           bridge.run(
-            loop({ sessionID: input.sessionID, snapshotInitialization: input.snapshotInitialization }).pipe(
-              Effect.orDie,
+            ExecutionLineage.transfer(
+              handoff,
+              input.sessionID,
+              loop({ sessionID: input.sessionID, snapshotInitialization: input.snapshotInitialization }).pipe(
+                Effect.orDie,
+              ),
             ),
           ), // kilocode_change
-          bridge.run(lastAssistant(input.sessionID)),
+          bridge.run(ExecutionLineage.transfer(stopped, input.sessionID, lastAssistant(input.sessionID))),
+          // kilocode_change end
           dismiss,
         )
         // kilocode_change end
@@ -2185,11 +2194,15 @@ export const layer = Layer.effect(
       yield* KiloSessionPrompt.recoverProviderFinishError({ sessionID: input.sessionID, status, sessions })
       const goalIntent = yield* goals(input.sessionID)
       yield* KiloSession.publishTurnOpen({ sessionID: input.sessionID })
+      const handoff = yield* ExecutionLineage.capture()
       return yield* Effect.onExit(
         state.ensureRunning(
           input.sessionID,
           lastAssistant(input.sessionID).pipe(Effect.orDie),
-          runLoop(input).pipe(Effect.orDie, Effect.ensuring(workers.release)), // kilocode_change - release only this execution's binding
+          ExecutionLineage.transfer(handoff, input.sessionID, runLoop(input)).pipe(
+            Effect.orDie,
+            Effect.ensuring(workers.release),
+          ), // kilocode_change - explicit original Runner child; release only this execution's binding
         ), // kilocode_change
         Effect.fnUntraced(function* (exit) {
           yield* KiloSession.publishTurnClose({

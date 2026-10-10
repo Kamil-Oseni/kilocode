@@ -1,5 +1,7 @@
 import { header, type Lane } from "./inference-lane"
 import { ollama } from "./ollama-bridge"
+import * as Lineage from "../task/effect-lineage"
+import * as ResultFrame from "./result-frame"
 
 type Fetch = (
   input: Parameters<typeof globalThis.fetch>[0],
@@ -22,6 +24,8 @@ type Job = {
   resolve: (response: Response) => void
   reject: (error: unknown) => void
   lane: Lane
+  runner: Lineage.Runner | undefined
+  frame: ResultFrame.Frame | undefined
 }
 
 export class LocalInferenceError extends Error {
@@ -211,7 +215,15 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     job.phase = "fetching"
     active++
     try {
-      const response = await job.fetcher(job.input, { ...job.init, signal: job.controller.signal })
+      const response = await ResultFrame.run(
+        job.frame,
+        () =>
+          Lineage.run(job.runner, () => {
+            job.controller.signal.throwIfAborted()
+            return job.fetcher(job.input, { ...job.init, signal: job.controller.signal })
+          }),
+        job.controller.signal,
+      )
       if (job.controller.signal.aborted) {
         await response.body?.cancel(job.controller.signal.reason)
         throw job.controller.signal.reason
@@ -319,6 +331,8 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
         resolve,
         reject,
         lane,
+        runner: Lineage.runner(),
+        frame: ResultFrame.current(),
       }
       job.abort = () => {
         job.output?.error(signal?.reason)
@@ -356,8 +370,16 @@ export function status() {
 
 /** Both native and AI SDK integrations reuse this one backend-local scheduler. */
 export function localFetch(options: Readonly<Record<string, unknown>>, fetcher: Fetch = globalThis.fetch): Fetch {
-  const bridge = ollama(options, fetcher)
-  if (!localConfig(options).enabled) return fetcher
+  // This is a stale original-run fence, not native participant/effect admission.
+  // Deeper asynchronous custom transports require their own final-leaf checks.
+  const original: Fetch = (input, init) =>
+    Lineage.run(Lineage.runner(), () => {
+      const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+      signal?.throwIfAborted()
+      return fetcher(input, init)
+    })
+  const bridge = ollama(options, original)
+  if (!localConfig(options).enabled) return original
   const fetch: Fetch = (input, init) => {
     const source = init?.headers ?? (input instanceof Request ? input.headers : undefined)
     const selected =

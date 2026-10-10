@@ -2,6 +2,7 @@ import { schemas } from "./ollama-context"
 import { ToolEnvelope } from "./tool-envelope"
 import * as OllamaPrompt from "./ollama-prompt"
 import * as ResultFrame from "./result-frame"
+import * as Lineage from "../task/effect-lineage"
 import z from "zod"
 
 type Fetch = (
@@ -670,11 +671,14 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       })
       if (envelope && Buffer.byteLength(payload) > bound) throw new OllamaBridgeError()
       signal?.throwIfAborted()
-      const native = await fetcher(url, {
-        ...init,
-        ...(controller && signal ? { signal } : {}),
-        headers,
-        body: payload,
+      const native = await Lineage.run(Lineage.runner(), () => {
+        signal?.throwIfAborted()
+        return fetcher(url, {
+          ...init,
+          ...(controller && signal ? { signal } : {}),
+          headers,
+          body: payload,
+        })
       })
       if (!native.ok) {
         if (!native.body) throw new OllamaBridgeError()

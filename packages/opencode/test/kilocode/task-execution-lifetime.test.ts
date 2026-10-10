@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import path from "node:path"
 import { createHash } from "node:crypto"
 import { hostname } from "node:os"
-import { Cause, Deferred, Effect, Exit, Fiber, Queue, Scheduler } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Queue, Scheduler } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -18,6 +18,13 @@ import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+
+const layer = (dir: string) =>
+  Layer.fresh(
+    Storage.layerWithDatabase(dir).pipe(
+      Layer.provideMerge(Database.layerFromPath(path.join(path.dirname(dir), "authority.sqlite"))),
+    ),
+  )
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const identity = () => ({
@@ -84,7 +91,7 @@ it.live(
           expect(yield* execution.enter(owner, Effect.succeed("fresh"))).toBe("fresh")
           yield* execution.finish(owner)
         }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -118,10 +125,7 @@ it.live(
           yield* execution.finish(owner)
           expect(yield* execution.receipt(owner)).toBeUndefined()
         }
-      }).pipe(
-        Effect.provide(Storage.layerFromDir(path.join(root, "storage"))),
-        Effect.provideService(Scheduler.MaxOpsBeforeYield, 16),
-      )
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))), Effect.provideService(Scheduler.MaxOpsBeforeYield, 16))
     }),
   30_000,
 )
@@ -163,7 +167,7 @@ it.live(
         )
         expect(result).toBe("joined")
         expect(yield* execution.authorized(owner)).toBeUndefined()
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -198,7 +202,7 @@ it.live(
         expect(yield* Fiber.join(child)).toBe("finished")
         expect(yield* execution.authorized(owner)).toBeUndefined()
         expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(0)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -251,7 +255,7 @@ it.live(
         }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
         expect(yield* execution.authorized(owner)).toBe(true)
         yield* execution.finish(owner)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -279,7 +283,7 @@ it.live(
         expect(yield* execution.authorized(owner)).toBe(false)
         expect(yield* execution.enter(owner, Effect.die("Uncertain successful work was replayed"))).toBeUndefined()
         expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(1)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -299,7 +303,7 @@ it.live(
         expect(yield* execution.enter(owner, Effect.die("Uncertain work was replayed"))).toBeUndefined()
         yield* execution.finish(owner)
         expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(1)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -324,7 +328,7 @@ it.live(
         expect(yield* execution.authorized(owner)).toBe(true)
         yield* execution.finish(owner)
         expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(0)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -345,7 +349,7 @@ it.live(
         expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(1)
         yield* execution.finish(owner)
         expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(0)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -365,7 +369,7 @@ it.live(
         yield* execution.finish(owner)
         expect(yield* execution.authorized(owner)).toBeUndefined()
         expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(0)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -457,11 +461,7 @@ it.live(
         yield* runner.stop(second.id)
         expect(yield* execution.authorized(failed)).toBeUndefined()
         expect((yield* storage.list(["raya", "agent-executions"])).length).toBe(0)
-      }).pipe(
-        Effect.provide(Database.layerFromPath(":memory:")),
-        Effect.provide(Storage.layerFromDir(path.join(root, "storage"))),
-        Effect.scoped,
-      )
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))), Effect.scoped)
     }),
   30_000,
 )
@@ -514,7 +514,7 @@ if (process.platform === "win32")
           }
           expect(yield* execution.finish(owner).pipe(Effect.exit)).toMatchObject({ _tag: "Success" })
           expect(yield* execution.receipt(owner)).toBeUndefined()
-        }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+        }).pipe(Effect.provide(layer(path.join(root, "storage"))))
       }),
     30000,
   )
@@ -541,7 +541,7 @@ it.live(
         expect((yield* execution.receipt(owner))?.token).toBe(next.token)
         expect(yield* execution.authorized(owner)).toBe(false)
         yield* storage.remove(["raya", "agent-executions", createHash("sha256").update(owner.id).digest("hex")])
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -614,7 +614,7 @@ if (process.platform === "win32")
           }
           yield* execution.review(run, prior.token)
           expect(yield* execution.receipt(run)).toBeUndefined()
-        }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+        }).pipe(Effect.provide(layer(path.join(root, "storage"))))
       }),
     30000,
   )

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto"
 import { expect } from "bun:test"
 import path from "node:path"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -13,6 +14,13 @@ import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { ExecutionIdle } from "@/kilocode/task/execution-event"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+
+const layer = (dir: string) =>
+  Layer.fresh(
+    Storage.layerWithDatabase(dir).pipe(
+      Layer.provideMerge(Database.layerFromPath(path.join(path.dirname(dir), "authority.sqlite"))),
+    ),
+  )
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const hash = (token: string) => createHash("sha256").update(token).digest("hex")
@@ -72,7 +80,7 @@ it.live(
           yield* execution.finish(owner)
           expect(yield* execution.idle(owner, hash(receipt!.token))).toBe(false)
         }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -123,7 +131,7 @@ for (const mode of ["failure", "idle failure", "closed"] as const)
             expect(yield* execution.idle(owner, hash(receipt!.token))).toBe(false)
             expect(yield* execution.enter(owner, Effect.die("Uncertain prior action was replayed"))).toBeUndefined()
           }
-        }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+        }).pipe(Effect.provide(layer(path.join(root, "storage"))))
       }),
     30_000,
   )
@@ -149,7 +157,7 @@ it.live(
         GlobalBus.off("event", listener)
         expect(yield* execution.enter(owner, Effect.succeed("fresh"))).toBe("fresh")
         yield* execution.finish(owner)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )

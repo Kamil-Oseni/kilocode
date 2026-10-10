@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { Context, Deferred, Effect, Exit, Schema } from "effect"
+import { Deferred, Effect, Exit, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { GlobalBus } from "@/bus/global"
@@ -8,6 +8,8 @@ import { RayaTask } from "."
 import { durable, stopped } from "./owner"
 import { read } from "./storage-read"
 import { mutate } from "./mutation"
+import * as lineage from "./effect-lineage"
+import { isDeepStrictEqual } from "node:util"
 
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))
 const Owner = Schema.Struct({
@@ -35,8 +37,6 @@ const Review = Schema.Struct({
 })
 type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
 type Permit = { record: typeof Record.Type }
-type Capability = { token: string; agentID: string; runID: string; sessionID: string; fiber: unknown }
-const Current = Context.Reference<Capability | undefined>("@raya/RoutineExecution", { defaultValue: () => undefined })
 const active = new Set<string>()
 const busy = new Set<string>()
 const closing = new Set<string>()
@@ -44,12 +44,27 @@ const joining = new Map<string, Deferred.Deferred<void>>()
 const recovering = new Set<string>()
 const hash = (id: string) => createHash("sha256").update(id).digest("hex")
 const key = (id: string) => ["raya", "agent-executions", hash(id)]
+const originals = new WeakMap<object, { record: typeof Record.Type; fiber?: unknown }>()
 const same = (left: typeof Owner.Type, right: typeof Owner.Type) =>
   left.host === right.host && left.pid === right.pid && left.birth === right.birth
 
 export namespace RayaTaskExecution {
+  /** Verify a genuine acquired owner on its exact original work fiber. No saved row can mint this proof. */
+  export function original(permit: unknown, fiber: unknown) {
+    if (!permit || typeof permit !== "object") return undefined
+    const saved = originals.get(permit)
+    if (!saved || saved.fiber !== fiber || !("record" in permit)) return undefined
+    const alive = () =>
+      saved.fiber === fiber &&
+      isDeepStrictEqual(permit.record, saved.record) &&
+      active.has(saved.record.token) &&
+      busy.has(saved.record.token)
+    if (!alive()) return undefined
+    return Object.freeze({ ...saved.record, owner: Object.freeze({ ...saved.record.owner }), fiber, alive })
+  }
   /** Own one exact continuing run. Foreign or uncertain live work always fails closed. */
   export function make(storage: Store) {
+    const permits = new WeakSet<object>()
     const load = (id: string) =>
       read(storage, key(id)).pipe(
         Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
@@ -119,7 +134,12 @@ export namespace RayaTaskExecution {
         }),
         "Routine execution",
       )
-      if (result) active.add(result.record.token)
+      if (result) {
+        active.add(result.record.token)
+        permits.add(result)
+        const snapshot = structuredClone(result.record)
+        originals.set(result, { record: Object.freeze({ ...snapshot, owner: Object.freeze(snapshot.owner) }) })
+      }
       return result
     })
 
@@ -215,20 +235,22 @@ export namespace RayaTaskExecution {
 
     const run = <A, E, R>(permit: Permit, body: Effect.Effect<A, E, R>) =>
       Effect.gen(function* () {
-        if (!active.has(permit.record.token) || busy.has(permit.record.token))
+        const saved = originals.get(permit)
+        if (
+          !permits.has(permit) ||
+          !saved ||
+          !isDeepStrictEqual(saved.record, permit.record) ||
+          !active.has(permit.record.token) ||
+          busy.has(permit.record.token)
+        )
           return yield* new RayaTask.GuardError({ message: "This routine's continuing execution is already active." })
         const joined = Deferred.makeUnsafe<void>()
         joining.set(permit.record.token, joined)
         busy.add(permit.record.token)
-        const work = Effect.withFiber((fiber) =>
-          Effect.provideService(body, Current, {
-            token: permit.record.token,
-            agentID: permit.record.agentID,
-            runID: permit.record.runID,
-            sessionID: permit.record.sessionID,
-            fiber,
-          }),
-        )
+        const work = Effect.withFiber((fiber) => {
+          saved.fiber = fiber
+          return lineage.own(permit, body)
+        })
         return yield* mark(permit, "active").pipe(
           Effect.andThen(heartbeat(permit)),
           Effect.andThen(
@@ -307,19 +329,7 @@ export namespace RayaTaskExecution {
         )
       })
 
-    const reentrant = (run: { id: string; agentID: string; sessionID: string }) =>
-      Effect.withFiber((fiber) => {
-        const current = Context.getReferenceUnsafe(fiber.context, Current)
-        return Effect.succeed(
-          !!current &&
-            current.fiber === fiber &&
-            current.agentID === run.agentID &&
-            current.runID === run.id &&
-            current.sessionID === run.sessionID &&
-            active.has(current.token) &&
-            busy.has(current.token),
-        )
-      })
+    const reentrant = lineage.matches
 
     const enter = <A, E, R>(
       owner: { id: string; agentID: string; sessionID: SessionID },

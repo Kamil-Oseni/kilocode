@@ -1,8 +1,9 @@
 import { expect } from "bun:test"
 import path from "node:path"
 import { createHash } from "node:crypto"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Git } from "@/git"
@@ -11,6 +12,13 @@ import { SessionID } from "@/session/schema"
 import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+
+const layer = (dir: string) =>
+  Layer.fresh(
+    Storage.layerWithDatabase(dir).pipe(
+      Layer.provideMerge(Database.layerFromPath(path.join(path.dirname(dir), "authority.sqlite"))),
+    ),
+  )
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
@@ -61,7 +69,7 @@ it.live(
           expect(yield* execution.reviewed(owner, hash(receipt.token))).toEqual(receipt)
           expect(count.value).toBe(1)
         }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -99,7 +107,7 @@ it.live(
         expect(Exit.isFailure(yield* execution.reviewed(owner, hash(receipt.token)).pipe(Effect.exit))).toBe(true)
         yield* storage.replace(key, { version: 1, actor: "user" })
         expect(Exit.isFailure(yield* execution.review(owner, receipt.token).pipe(Effect.exit))).toBe(true)
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )
@@ -144,7 +152,7 @@ it.live(
         yield* execution.review(owner, receipt.token)
         expect(yield* storage.read(key)).toEqual(saved)
         expect(yield* execution.receipt(owner)).toBeUndefined()
-      }).pipe(Effect.provide(Storage.layerFromDir(path.join(root, "storage"))))
+      }).pipe(Effect.provide(layer(path.join(root, "storage"))))
     }),
   30_000,
 )

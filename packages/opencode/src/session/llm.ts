@@ -47,6 +47,7 @@ import { Session } from "./session" // kilocode_change - observed-result contrac
 import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - result selection is bound to the actual saved Chief dispatch
 import * as ObservedResult from "@/kilocode/provider/result-contract" // kilocode_change - final entries are rendered from verified completed Read parts
 import * as ResultFrame from "@/kilocode/provider/result-frame" // kilocode_change - native result grammar remains private to the original request
+import * as Lineage from "@/kilocode/task/effect-lineage" // kilocode_change - original execution liveness, not native effect authorization
 // kilocode_change end
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -119,6 +120,7 @@ const live: Layer.Layer<
     const outcome = yield* Outcome.Service // kilocode_change - retain the selected database's original outcome journal
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      const runner = yield* Lineage.bind() // kilocode_change - capture before asynchronous request preparation
       const l = log.clone().tag("providerID", input.model.providerID).tag("modelID", input.model.id) // kilocode_change
       yield* Effect.logInfo("stream", {
         providerID: input.model.providerID,
@@ -166,6 +168,7 @@ const live: Layer.Layer<
         flags,
         isWorkflow,
       })
+      yield* Lineage.check() // kilocode_change - preparation cannot revive an original retired execution
 
       // kilocode_change start - compact at the configured threshold before contacting the provider
       const tools = yield* Effect.promise(() => KiloToolSchema.sanitize(base.tools))
@@ -232,6 +235,7 @@ const live: Layer.Layer<
         native: native ? { context: input.model.limit.context, output: maxOutputTokens } : undefined,
       })
       const prepared = { ...base, tools, params: { ...base.params, maxOutputTokens } }
+      yield* Lineage.check() // kilocode_change - preserve the original binding after remaining preparation waits
       const selected = item.options.localInference === true ? yield* lane(input, database) : "interactive"
       prepared.headers = headers(prepared.headers, selected, item.options.localInference === true)
       // kilocode_change end
@@ -396,6 +400,8 @@ const live: Layer.Layer<
           headers: prepared.headers,
           abort: input.abort,
           frame: grammar, // kilocode_change - separate private authority, never provider configuration
+          runner, // kilocode_change - private original caller, including provider retries
+          sessionID: input.sessionID, // kilocode_change - exact native tool fiber transfer
         })
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected", {
@@ -503,7 +509,7 @@ const live: Layer.Layer<
               specificationVersion: "v3" as const,
               // kilocode_change start - scope the actual cached model invocation, not a deferred Effect
               async wrapStream({ doStream }) {
-                return ResultFrame.run(grammar, () => doStream(), input.abort)
+                return ResultFrame.run(grammar, () => Lineage.run(runner, () => doStream()), input.abort)
               },
               // kilocode_change end
               async transformParams(args) {

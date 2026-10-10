@@ -384,6 +384,43 @@ function pane(
   }
 }
 
+test("capture drains its original sealed speech edit after the older real SQL load joins", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage)
+  await until(() => view.controller.ready())
+  const completed = Promise.withResolvers<Awaited<ReturnType<DurableDrafts["capture"]>>>()
+  let started = false
+  const unsubscribe = view.controller.subscribe(() => {
+    if (started || !view.controller.view(identity).loaded) return
+    started = true
+    queueMicrotask(() => {
+      view.controller.edit(identity, { ...rich, agent: "voice" })
+      void view.controller.capture(identity).then(completed.resolve, completed.reject)
+    })
+  })
+  try {
+    await view.controller.hydrate(identity)
+    const capture = await completed.promise
+    expect(capture).toBeDefined()
+    expect(view.requests.map((request) => request.type)).toEqual(["composerDraftLoad", "composerDraftSave"])
+    const saved = await storage.handle({
+      type: "composerDraftLoad",
+      owner: capture!.owner,
+      epoch: capture!.epoch,
+      generation: capture!.generation,
+      identity,
+      requestID: crypto.randomUUID(),
+    })
+    expect(saved.error).toBeUndefined()
+    expect(saved.entry?.content).toEqual({ ...rich, agent: "voice" })
+    expect(saved.entry?.token).toEqual(capture!.token)
+    expect(saved.entry?.digest).toBe(capture!.digest)
+    view.controller.release(capture!)
+  } finally {
+    unsubscribe()
+  }
+})
+
 test("capture distinguishes an untouched unscoped rendered composer from an unowned edit", async () => {
   await using storage = await draftStorage()
   using state = pane(storage)

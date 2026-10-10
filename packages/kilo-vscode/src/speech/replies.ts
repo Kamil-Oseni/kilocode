@@ -11,7 +11,9 @@ export class VoiceReplies {
   private turn:
     | {
         requestId: string
-        sessionID: string
+        sessionID?: string
+        draftID?: string
+        directory?: string
         pending: boolean
         userID?: string
         messageID?: string
@@ -24,7 +26,14 @@ export class VoiceReplies {
       }
     | undefined
 
-  mark(input: { requestId: string; sessionID: string; current?: () => boolean }) {
+  mark(input: {
+    requestId: string
+    sessionID?: string
+    draftID?: string
+    directory?: string
+    current?: () => boolean
+  }) {
+    if (!!input.sessionID === !!input.draftID) return false
     if (this.seen.has(input.requestId)) {
       if (this.turn?.requestId === input.requestId)
         this.turn.trace?.("handoff", { boundary: "refused", reason: "duplicate" })
@@ -36,7 +45,15 @@ export class VoiceReplies {
     const trace = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)
       ? diagnostics(input.requestId, this.observer)
       : undefined
-    this.turn = { requestId: input.requestId, sessionID: input.sessionID, current: input.current, pending: true, trace }
+    this.turn = {
+      requestId: input.requestId,
+      sessionID: input.sessionID,
+      draftID: input.draftID,
+      directory: input.directory,
+      current: input.current,
+      pending: true,
+      trace,
+    }
     trace?.("handoff", { boundary: "marker" })
     this.wake()
     return true
@@ -82,15 +99,37 @@ export class VoiceReplies {
     this.wake()
   }
 
+  snapshot() {
+    const turn = this.turn
+    if (!turn?.pending || !(turn.current?.() ?? true)) return
+    return Object.freeze({
+      sessionID: turn.sessionID,
+      draftID: turn.draftID,
+      directory: turn.directory,
+      requestId: turn.requestId,
+    })
+  }
+
   capture(sessionID: string) {
     const turn = this.turn
     if (turn?.sessionID !== sessionID || !turn.pending || !(turn.current?.() ?? true)) return
     return turn.requestId
   }
 
-  bind(sessionID: string, messageID: string, requestId: string) {
+  private matches(sessionID: string, draftID?: string) {
     const turn = this.turn
-    if (!turn?.pending || turn.sessionID !== sessionID || turn.requestId !== requestId || !(turn.current?.() ?? true)) {
+    return turn?.sessionID ? turn.sessionID === sessionID : !!turn?.draftID && turn.draftID === draftID
+  }
+
+  bind(sessionID: string, messageID: string, requestId: string, draftID?: string, current?: () => boolean) {
+    const turn = this.turn
+    if (
+      !turn?.pending ||
+      !this.matches(sessionID, draftID) ||
+      turn.requestId !== requestId ||
+      !(turn.current?.() ?? true) ||
+      !(current?.() ?? true)
+    ) {
       if (turn?.requestId === requestId) turn.trace?.("handoff", { boundary: "refused", reason: "stale" })
       return false
     }
@@ -98,6 +137,9 @@ export class VoiceReplies {
       turn.trace?.("handoff", { boundary: "refused", reason: "foreign" })
       return false
     }
+    const prior = turn.current
+    if (current) turn.current = () => (prior?.() ?? true) && current()
+    turn.sessionID = sessionID
     turn.userID = messageID
     turn.trace?.("handoff", { boundary: "bind" })
     return true

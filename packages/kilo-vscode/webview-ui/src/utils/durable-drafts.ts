@@ -735,6 +735,16 @@ export class DurableDrafts {
     const seal = { revision: record.revision, content: snapshot(record.content), owner: record.owner }
     record.seal = seal
     await this.sync(record)
+    // An older load job may finish without observing the newly sealed edit.
+    // Join it, then save only this still-owned original seal before checking its receipt.
+    if (
+      record.seal === seal &&
+      record.saved < seal.revision &&
+      !record.error &&
+      record.owner === seal.owner &&
+      record.owner === this.owners.get(identity.box)
+    )
+      await this.sync(record)
     if (!committed(record, seal, identity, this.owners.get(identity.box))) {
       if (record.seal === seal) record.seal = undefined
       if (!record.error) void this.sync(record)

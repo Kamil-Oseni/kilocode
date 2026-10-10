@@ -31,6 +31,7 @@ type Ctx = {
   childSteer: (message: ChildSteerMessage) => Promise<void>
   speech?: SpeechService // raya_change - Milestone H configured speech bridge
   voiceScope?: (sessionID: string) => { directory: string; current: () => boolean } | undefined
+  voiceDraftScope?: (draftID: string) => { directory: string; current: () => boolean } | undefined
 }
 
 async function routeBackgroundMessage(
@@ -190,6 +191,7 @@ export async function routeEarlyMessage(
       post: ctx.post,
       speech: ctx.speech, // raya_change - Milestone H
       voiceScope: ctx.voiceScope,
+      voiceDraftScope: ctx.voiceDraftScope,
     }))
   )
 }

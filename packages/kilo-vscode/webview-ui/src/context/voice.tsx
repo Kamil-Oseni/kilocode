@@ -116,6 +116,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     owner?: string
     local?: string
     media?: string
+    pending?: { draft: string; request: string; session?: string }
   } = {
     request: "",
     generation: 0,
@@ -543,7 +544,16 @@ export const VoiceProvider: ParentComponent = (props) => {
     }
   }
 
-  const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
+  const lifecycle = (message: ExtensionMessage) => {
+    if (message.type === "sessionCreated" && state.pending && state.pending.draft === message.draftID) {
+      const pending = state.pending
+      if (pending.session && pending.session !== message.session.id) {
+        stop()
+        return true
+      }
+      pending.session = message.session.id
+      adopt()
+    }
     if (message.type === "connectionState") {
       if (message.state !== "connected") {
         stop()
@@ -552,8 +562,13 @@ export const VoiceProvider: ParentComponent = (props) => {
         setDuration(undefined)
         setSilenced(false)
       }
-      return
+      return true
     }
+    return false
+  }
+
+  const unsubscribe = vscode.onMessage((message: ExtensionMessage) => {
+    if (lifecycle(message)) return
     if (openaiMessage(message)) return
     if (message.type === "speechSettingsLoaded") {
       receive(message.settings)
@@ -687,6 +702,7 @@ export const VoiceProvider: ParentComponent = (props) => {
     })
   }
   const stop = () => {
+    delete state.pending
     delete state.owner
     delete state.media
     window.dispatchEvent(new CustomEvent("rayaVoiceCancel"))
@@ -769,6 +785,30 @@ export const VoiceProvider: ParentComponent = (props) => {
       setError(undefined)
     }
     return id
+  })
+
+  // Session and composer subscribers can run in either order; only the exact
+  // original pending receipt may adopt its resolved session after both finish.
+  const adopt = () => {
+    const pending = state.pending
+    if (!pending) return
+    queueMicrotask(() => {
+      if (state.pending !== pending || state.request !== pending.request) return
+      const current = session.currentSessionID()
+      if (current && current === pending.session) {
+        state.owner = current
+        delete state.pending
+        return
+      }
+      if (!current && session.draftSessionID() === pending.draft) return
+      stop()
+      setError("Voice ended because you changed tasks. Work already started remains in its original conversation.")
+    })
+  }
+  createEffect(() => {
+    session.currentSessionID()
+    session.draftSessionID()
+    adopt()
   })
 
   return (
@@ -855,6 +895,7 @@ export const VoiceProvider: ParentComponent = (props) => {
         listen: () => {
           if (!available()) return
           player.unlock()
+          if (settings().voiceEngine === "cascade-v1" && settings().mode === "hands-free") setCascade(true)
           loop.listen()
           if (settings().mode === "hands-free" && cascade()) {
             setError(undefined)
@@ -871,15 +912,24 @@ export const VoiceProvider: ParentComponent = (props) => {
           setError(message)
           setStatus("degraded")
         },
-        wait: (sessionID) => {
-          if (!available() || !sessionID || session.currentSessionID() !== sessionID || loop.paused()) return
+        wait: (id) => {
+          const sessionID = session.currentSessionID()
+          const draftID = !sessionID && session.draftSessionID() === id ? id : undefined
+          if (!available() || !id || (sessionID !== id && !draftID) || loop.paused()) return
           if (state.request) vscode.postMessage({ type: "speechPlaybackCancel", requestId: state.request })
           player.reset()
           setPlaying(false)
           state.request = crypto.randomUUID()
+          state.pending = draftID ? { draft: draftID, request: state.request } : undefined
+          if (!draftID) state.owner = id
           choice.expected = state.request
-          vscode.postMessage({ type: "speechVoiceTurn", sessionID, requestId: state.request }) // raya_change - exact turn owns automatic output before the first chunk
+          vscode.postMessage({
+            type: "speechVoiceTurn",
+            ...(draftID ? { draftID } : { sessionID: id }),
+            requestId: state.request,
+          }) // raya_change - exact pending or session turn owns output before dispatch
           loop.wait()
+          adopt()
           if (settings().mode === "hands-free") setStatus("thinking")
         },
         clean: (text) => echo.clean(text),

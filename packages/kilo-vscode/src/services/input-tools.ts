@@ -27,6 +27,7 @@ type Msg = {
   handsFree?: boolean // raya_change - Milestone H extension-host VAD fallback
   threshold?: number // raya_change - Milestone H extension-host VAD fallback
   silenceMs?: number // raya_change - Milestone H extension-host VAD fallback
+  draftID?: string
   sessionID?: string // raya_change - realtime voice parent session
 }
 
@@ -36,6 +37,7 @@ type Ctx = {
   post: (msg: unknown) => void
   speech?: SpeechService // raya_change - Milestone H
   voiceScope?: (sessionID: string) => { directory: string; current: () => boolean } | undefined
+  voiceDraftScope?: (draftID: string) => { directory: string; current: () => boolean } | undefined
 }
 
 export async function routeInputToolMessage(message: Msg, ctx: Ctx): Promise<boolean> {
@@ -253,26 +255,42 @@ function offer(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 262_144
 }
 
-function routeSpeechPlayback(message: Msg, ctx: Ctx) {
-  if (message.type === "speechVoiceTurn") {
-    if (
-      !message.requestId ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(message.requestId)
-    )
-      return true
-    const sessionID = message.sessionID
-    const scope = token(sessionID) ? ctx.voiceScope?.(sessionID) : undefined
-    if (!token(sessionID) || !scope?.current()) {
-      ctx.post({
-        type: "speechPlaybackError",
-        requestId: message.requestId,
-        error: "The voice task changed before submission.",
-      })
-      return true
-    }
-    ctx.speech?.markVoiceTurn({ requestId: message.requestId, sessionID, current: scope.current })
+function mark(message: Msg, ctx: Ctx) {
+  if (
+    !message.requestId ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(message.requestId)
+  )
+    return true
+  const sessionID = message.sessionID
+  const draftID = message.draftID
+  const valid = (token(sessionID) && draftID === undefined) || (token(draftID) && sessionID === undefined)
+  const scope = valid
+    ? token(sessionID)
+      ? ctx.voiceScope?.(sessionID)
+      : token(draftID)
+        ? ctx.voiceDraftScope?.(draftID)
+        : undefined
+    : undefined
+  if (!scope?.current()) {
+    ctx.post({
+      type: "speechPlaybackError",
+      requestId: message.requestId,
+      error: "The voice task changed before submission.",
+    })
     return true
   }
+  ctx.speech?.markVoiceTurn({
+    requestId: message.requestId,
+    sessionID,
+    draftID,
+    directory: scope.directory,
+    current: scope.current,
+  })
+  return true
+}
+
+function routeSpeechPlayback(message: Msg, ctx: Ctx) {
+  if (message.type === "speechVoiceTurn") return mark(message, ctx)
   if (message.type === "speechPlaybackStart") {
     if (ctx.speech && message.requestId && message.text)
       void ctx.speech.speak({ requestId: message.requestId, text: message.text }, ctx.post)

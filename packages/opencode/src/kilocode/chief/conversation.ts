@@ -2,7 +2,7 @@ import type { MessageV2 } from "@/session/message-v2"
 import { RayaChief } from "."
 
 export const instruction =
-  "This original user turn requests only a greeting. Reply directly with a brief greeting, honoring their restrictions. Do not route or use tools, perform actions, start a goal, or claim that a preference was saved."
+  "This original user turn requests only a greeting or a general introduction to your assistance capabilities. Reply directly and briefly, honoring their restrictions. Describe general capabilities without claiming current access, setup, account, project or device facts. Do not route or use tools, perform actions, start a goal, or claim that a preference was saved."
 
 /** Only the current root Auto request can omit initial workflow acquisition. */
 export function supplied(
@@ -33,6 +33,12 @@ export function supplied(
 /** Supplied conversational intent grants no acquisition, preference-save or goal authority. */
 export function greeting(request: string) {
   if (Buffer.byteLength(request, "utf8") > 512) return false
+  if (
+    /^(?:(?:hi|hello|hey)(?: raya)?[,!. ]+)?(?:what can you help me with|how can you help me|what can you do)[?.!]?$/i.test(
+      request.trim(),
+    )
+  )
+    return true
   const rows = request
     .trim()
     .replace(/[.!]$/, "")

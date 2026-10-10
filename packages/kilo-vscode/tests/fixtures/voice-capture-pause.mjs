@@ -73,7 +73,7 @@ const dispose = render(
     createComponent(VSCodeProvider, {
       get children() {
         return createComponent(SessionContext.Provider, {
-          value: { currentSessionID: () => "synthetic-voice" },
+          value: { currentSessionID: () => "synthetic-voice", draftSessionID: () => undefined },
           get children() {
             return createComponent(VoiceProvider, {
               get children() {

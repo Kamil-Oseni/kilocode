@@ -14,6 +14,7 @@ import { ChiefVerification } from "@/kilocode/chief/verification"
 import { example } from "@/kilocode/task-resume"
 import { RayaChief } from "@/kilocode/chief"
 import { associate } from "@/kilocode/goal/turn"
+import { gate } from "@/kilocode/session/input-gate"
 import { repair as intake } from "@/kilocode/goal/task-input"
 import type { SessionRunState } from "@/session/run-state"
 
@@ -38,7 +39,7 @@ const uncited = (reason: string | undefined, id: string) =>
 
 export function goalTools(
   goals: Goals,
-  sessions?: Pick<Session.Interface, "get" | "setMetadata">,
+  sessions?: Pick<Session.Interface, "get" | "setMetadata"> & Partial<Pick<Session.Interface, "messages">>,
   runs?: Pick<SessionRunState.Interface, "inspect">,
 ) {
   const recovery = Effect.fn("RayaGoalTool.recovery")(function* (ctx: Tool.Context, rejected = false) {
@@ -86,10 +87,25 @@ export function goalTools(
       .pipe(Effect.orDie)
   }) // raya_change - goal tool outcomes deterministically release Auto's final synthesis step
 
+  const pending = Effect.fn("RayaGoalTool.pending")(function* (sessionID: Parameters<Goals["get"]>[0]) {
+    if (!sessions?.messages) return false
+    const rows = yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
+    const user = rows.findLastIndex((row) => row.info.role === "user" && !!RayaChief.requestText(row.parts))
+    return rows
+      .slice(user + 1)
+      .some((row) =>
+        row.parts.some(
+          (part) => part.type === "tool" && part.tool === "task" && ["pending", "running"].includes(part.state.status),
+        ),
+      )
+  })
+
   const finish = Effect.fn("RayaGoalTool.finish")(function* (sessionID: Parameters<Goals["get"]>[0]) {
     if (!sessions) return
     const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
     if (RayaChief.phase(session.metadata) !== "goal" && RayaChief.phase(session.metadata) !== "verify") return
+    if (!sessions.messages && RayaChief.phase(session.metadata) === "verify") return
+    if (yield* pending(sessionID)) return
     yield* phase(sessionID, "done")
   })
 
@@ -128,13 +144,16 @@ export function goalTools(
           if (current) yield* intake(goals, current, ctx.sessionID).pipe(Effect.orDie)
           const goal = yield* goals.get(ctx.sessionID)
           if (!goal) {
-            yield* phase(ctx.sessionID, "done")
+            yield* finish(ctx.sessionID).pipe(gate.withLock(ctx.sessionID))
             return result("No goal", "No goal is armed for this session.")
           }
-          if (goal.status === "complete") yield* finish(ctx.sessionID)
+          if (goal.status === "complete") yield* finish(ctx.sessionID).pipe(gate.withLock(ctx.sessionID))
           if (goal.status !== "complete" && sessions) {
-            const session = yield* sessions.get(ctx.sessionID).pipe(Effect.orDie)
-            if (RayaChief.phase(session.metadata) === "verify") yield* phase(ctx.sessionID, "goal")
+            yield* Effect.gen(function* () {
+              const session = yield* sessions.get(ctx.sessionID).pipe(Effect.orDie)
+              if (RayaChief.phase(session.metadata) === "verify" && !(yield* pending(ctx.sessionID)))
+                yield* phase(ctx.sessionID, "goal")
+            }).pipe(gate.withLock(ctx.sessionID))
           }
           const evidence = yield* goals.evidence(ctx.sessionID).pipe(
             Effect.match({
@@ -208,7 +227,7 @@ export function goalTools(
               current.status,
             )
           if (current?.status === "complete") {
-            yield* finish(ctx.sessionID)
+            yield* finish(ctx.sessionID).pipe(gate.withLock(ctx.sessionID))
             return result(
               "Goal already complete",
               "The prior goal is complete. Handle the current user request directly without updating or reopening that goal. Do not ask about the completed goal unless the user explicitly requests a change to it.",

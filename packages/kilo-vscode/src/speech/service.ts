@@ -837,18 +837,28 @@ export class SpeechService implements vscode.Disposable {
   }
 
   // raya_change start - authoritative backend-event handoff from Voice response to MiniMax
-  markVoiceTurn(input: { requestId: string; sessionID: string; current?: () => boolean }): void {
+  markVoiceTurn(input: {
+    requestId: string
+    sessionID?: string
+    draftID?: string
+    directory?: string
+    current?: () => boolean
+  }): void {
     const prior = this.replies.request()
     if (!this.replies.mark(input)) return
     if (prior) this.cancel(prior)
+  }
+
+  captureVoiceSubmission() {
+    return this.replies.snapshot()
   }
 
   captureVoiceTurn(sessionID: string) {
     return this.replies.capture(sessionID)
   }
 
-  bindVoiceTurn(sessionID: string, messageID: string, requestId: string) {
-    return this.replies.bind(sessionID, messageID, requestId)
+  bindVoiceTurn(sessionID: string, messageID: string, requestId: string, draftID?: string, current?: () => boolean) {
+    return this.replies.bind(sessionID, messageID, requestId, draftID, current)
   }
 
   trackMessage(

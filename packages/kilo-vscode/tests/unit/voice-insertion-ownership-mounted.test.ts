@@ -33,7 +33,14 @@ const gates: PluginObj = {
   },
 }
 
-async function mounted(sending = false, reverse = false, command = false) {
+async function mounted(
+  sending = false,
+  reverse = false,
+  command = false,
+  fresh = false,
+  ordinary = false,
+  action = "",
+) {
   const root = resolve(import.meta.dir, "../..")
   const dir = resolve(root, "node_modules/.cache/voice-insertion-ownership-mounted")
   const solid = dirname(require.resolve("solid-js/package.json"))
@@ -132,6 +139,12 @@ async function mounted(sending = false, reverse = false, command = false) {
         ].includes(message.type)
       ) {
         const reply = await storage.handle(message)
+        await page.evaluate(
+          (value) => {
+            if (window.__speechGuards.length < 128) window.__speechGuards.push(value)
+          },
+          { phase: "draft-reply", operation: message.type, error: reply.error, entry: !!reply.entry },
+        )
         await page.evaluate((reply) => window.__deliver(reply), reply)
         if (message.type === "composerDraftLoad") loaded++
         if (message.type === "composerDraftPromote" && !reply.error) promoted++
@@ -149,6 +162,15 @@ async function mounted(sending = false, reverse = false, command = false) {
         )
       if (message.type === "sendMessage") {
         dispatched.push(message)
+        if (fresh) {
+          if (action) return
+          await page.evaluate(
+            (draftID) =>
+              window.__deliver({ type: "sessionCreated", draftID, session: { id: "ses_voice", title: "New Session" } }),
+            message.draftID,
+          )
+          return
+        }
         const receipt = await storage.handle({
           type: "composerDraftClear",
           owner: message.capture.owner,
@@ -183,26 +205,35 @@ async function mounted(sending = false, reverse = false, command = false) {
       window.__session.selectAgent("code")
       window.__session.selectModel("kilo", "synthetic-pinned-4b")
     })
-    await page.getByRole("button", { name: "Start hands-free voice", exact: true }).click()
-    const draft = await page.evaluate(
-      () => window.__messages.findLast((entry) => entry.type === "createSession").draftID,
-    )
-    await page.evaluate(
-      (draftID) => window.__deliver({ type: "sessionCreated", draftID, session: { id: "ses_voice", title: "Voice" } }),
-      draft,
-    )
-    await expect.poll(() => page.evaluate(() => window.__session.currentSessionID())).toBe("ses_voice")
-    await expect(input).toHaveValue("")
-    await page.evaluate(async () => {
-      window.__voice.setMode("hands-free")
-      await window.__deliver({
-        type: "speechRealtimeError",
-        requestId: window.__messages.findLast((entry) => entry.type === "speechRealtimeStart")?.requestId,
-        code: "configuration",
-        error: "Synthetic cascade admission",
-        fallback: "cascade-v1",
+    if (fresh) {
+      expect(await page.evaluate(() => window.__session.currentSessionID())).toBeUndefined()
+      await page.evaluate((ordinary) => window.__voice.setMode(ordinary ? "off" : "hands-free"), ordinary)
+      await page.locator(".prompt-speech-button").click()
+      expect(await page.evaluate(() => window.__session.currentSessionID())).toBeUndefined()
+      expect(await page.evaluate(() => window.__messages.some((entry) => entry.type === "createSession"))).toBe(false)
+    } else {
+      await page.getByRole("button", { name: "Start hands-free voice", exact: true }).click()
+      const draft = await page.evaluate(
+        () => window.__messages.findLast((entry) => entry.type === "createSession").draftID,
+      )
+      await page.evaluate(
+        (draftID) =>
+          window.__deliver({ type: "sessionCreated", draftID, session: { id: "ses_voice", title: "Voice" } }),
+        draft,
+      )
+      await expect.poll(() => page.evaluate(() => window.__session.currentSessionID())).toBe("ses_voice")
+      await expect(input).toHaveValue("")
+      await page.evaluate(async () => {
+        window.__voice.setMode("hands-free")
+        await window.__deliver({
+          type: "speechRealtimeError",
+          requestId: window.__messages.findLast((entry) => entry.type === "speechRealtimeStart")?.requestId,
+          code: "configuration",
+          error: "Synthetic cascade admission",
+          fallback: "cascade-v1",
+        })
       })
-    })
+    }
     await expect
       .poll(() => page.evaluate(() => window.__messages.filter((entry) => entry.type === "speechToTextStart").length))
       .toBe(1)
@@ -240,7 +271,25 @@ async function mounted(sending = false, reverse = false, command = false) {
       epoch,
     )
     await expect.poll(() => loaded).toBeGreaterThan(0)
-    await expect.poll(() => promoted).toBe(1)
+    if (!fresh) await expect.poll(() => promoted).toBe(1)
+    if (ordinary) {
+      await page.locator(".prompt-speech-button").click()
+      await page.evaluate(
+        (requestId) => window.__deliver({ type: "speechToTextResult", requestId, text: "Ordinary dictated draft" }),
+        initial,
+      )
+      await expect(input).toHaveValue("Ordinary dictated draft")
+      expect(await page.evaluate(() => window.__session.selectedAgent())).toBe("code")
+      expect(dispatched).toHaveLength(0)
+      expect(await page.evaluate(() => window.__messages.some((entry) => entry.type === "speechVoiceTurn"))).toBe(false)
+      await page.evaluate(() =>
+        window.__deliver({ type: "sessionCreated", session: { id: "ses_ordinary", title: "Ordinary session" } }),
+      )
+      expect(errors).toEqual([])
+      expect(await page.evaluate(() => window.__voice.playing())).toBe(false)
+      expect(await page.evaluate(() => window.__messages.some((entry) => entry.type === "speechVoiceTurn"))).toBe(false)
+      return
+    }
     if (!sending && !command)
       await page.evaluate(
         async ({ requestId, sending }) => {
@@ -290,11 +339,85 @@ async function mounted(sending = false, reverse = false, command = false) {
       await expect.poll(() => dispatched.length).toBe(1)
       expect(dispatched[0]).toMatchObject({
         text: "Speech after genuine first owner claim",
-        sessionID: "ses_voice",
+        ...(fresh ? {} : { sessionID: "ses_voice" }),
         agent: "voice",
         modelID: "synthetic-pinned-4b",
       })
-      await expect(input).toHaveValue("")
+      if (fresh) {
+        expect(dispatched[0].sessionID).toBeUndefined()
+        expect(dispatched[0].capture).toMatchObject({ identity: { pendingID: dispatched[0].draftID } })
+        const marker = await page.evaluate(() =>
+          window.__messages.findLast((entry) => entry.type === "speechVoiceTurn"),
+        )
+        expect(marker).toMatchObject({ draftID: dispatched[0].draftID })
+        expect(marker.sessionID).toBeUndefined()
+        const order = await page.evaluate(() => window.__messages.map((entry) => entry.type))
+        expect(order.indexOf("speechVoiceTurn")).toBeLessThan(order.indexOf("sendMessage"))
+        if (action) {
+          await page.evaluate((action) => {
+            if (action === "stop") window.__voice.stop()
+            if (action === "replace") window.__session.setDraftSessionID("pending:replacement")
+            if (action === "foreign") window.__session.setCurrentSessionID("ses_foreign")
+          }, action)
+          await expect.poll(() => page.evaluate(() => window.__voice.status())).toBe("off")
+          await page.evaluate(async (requestId) => {
+            await window.__deliver({
+              type: "speechPlaybackChunk",
+              requestId,
+              data: "AAA=",
+              mime: "audio/pcm;rate=16000",
+            })
+            await window.__deliver({ type: "speechPlaybackDone", requestId })
+          }, marker.requestId)
+          expect(await page.evaluate(() => window.__voice.playing())).toBe(false)
+          expect(await page.evaluate(() => window.__voice.status())).toBe("off")
+          expect(dispatched).toHaveLength(1)
+          return
+        }
+        await page.evaluate(async () => {
+          await window.__deliver({ type: "sessionStatus", sessionID: "ses_voice", status: "busy" })
+          await window.__deliver({
+            type: "sessionUpdated",
+            session: { id: "ses_voice", title: "Initial capabilities check", updatedAt: "2026-10-10T15:40:46.708Z" },
+          })
+          await window.__deliver({ type: "sessionStatus", sessionID: "ses_voice", status: "idle" })
+          await window.__deliver({
+            type: "messageCreated",
+            message: {
+              id: "voice_reply",
+              sessionID: "ses_voice",
+              parentID: window.__messages.findLast((entry) => entry.type === "sendMessage").messageID,
+              role: "assistant",
+              agent: "voice",
+              finish: "stop",
+              time: { created: 1, completed: 2 },
+            },
+          })
+          await window.__deliver({
+            type: "partUpdated",
+            sessionID: "ses_voice",
+            messageID: "voice_reply",
+            part: { id: "voice_text", type: "text", messageID: "voice_reply", text: "Owned completed answer" },
+          })
+        })
+        await expect
+          .poll(() => page.evaluate(() => window.__session.currentSession().title))
+          .toBe("Initial capabilities check")
+        expect(await page.evaluate(() => window.__session.status())).toBe("idle")
+        expect(await page.evaluate(() => window.__session.submitting())).toBe(false)
+        expect(await page.evaluate(() => window.__session.getParts("voice_reply"))).toEqual([
+          { id: "voice_text", type: "text", messageID: "voice_reply", text: "Owned completed answer" },
+        ])
+        await page.evaluate(() => window.__session.setCurrentSessionID("ses_foreign"))
+        await expect.poll(() => page.evaluate(() => window.__voice.status())).toBe("off")
+        await page.evaluate(async (requestId) => {
+          await window.__deliver({ type: "speechPlaybackChunk", requestId, data: "AAA=", mime: "audio/pcm;rate=16000" })
+          await window.__deliver({ type: "speechPlaybackDone", requestId })
+        }, marker.requestId)
+        expect(await page.evaluate(() => window.__voice.playing())).toBe(false)
+        expect(await page.evaluate(() => window.__voice.status())).toBe("off")
+      }
+      if (!fresh) await expect(input).toHaveValue("")
       expect(
         await page.evaluate(() => window.__messages.filter((entry) => entry.type === "speechVoiceTurn").length),
       ).toBe(1)
@@ -580,5 +703,24 @@ test(
 test(
   "actual mounted owned spoken stop cancels hands-free without retaining a consumed command",
   () => mounted(false, false, true),
+  120_000,
+)
+
+for (const reverse of [false, true])
+  test(
+    `actual mounted fresh hands-free mic binds pending Voice submission and projects completed title/idle (${reverse ? "reverse" : "normal"})`,
+    () => mounted(true, reverse, false, true),
+    120_000,
+  )
+
+test(
+  "actual mounted fresh ordinary dictation retains its selected agent without arming Voice output",
+  () => mounted(false, false, false, true, true),
+  120_000,
+)
+
+test.each(["replace", "foreign", "stop"])(
+  "actual mounted pending Voice %s retires original playback before session adoption",
+  (action) => mounted(true, false, false, true, false, action),
   120_000,
 )

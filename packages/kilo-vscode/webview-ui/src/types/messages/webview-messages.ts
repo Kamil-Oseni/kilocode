@@ -914,11 +914,10 @@ export interface SpeechToTextStopMessage {
 }
 
 // raya_change - Milestone H marks the next backend turn for extension-host TTS
-export interface SpeechVoiceTurnMessage {
+export type SpeechVoiceTurnMessage = {
   type: "speechVoiceTurn"
   requestId: string
-  sessionID: string
-}
+} & ({ sessionID: string; draftID?: never } | { draftID: string; sessionID?: never })
 
 export interface SpeechToTextCancelMessage {
   type: "speechToTextCancel"

@@ -1429,6 +1429,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (recovery.blocked()) {
       return
     }
+    const fallback =
+      (voice.cascade() || voice.settings().voiceEngine === "cascade-v1") && voice.settings().mode === "hands-free"
+    if (fallback) {
+      const model = session.selected(sid())
+      const variant = session.draftVariant(sid())
+      const id = sid() ?? vacant
+      if (!session.currentSessionID() && !session.draftSessionID() && !props.pendingSessionID)
+        session.setDraftSessionID(id)
+      session.setSessionAgent(id, "voice")
+      if (model) {
+        session.setSessionModel(id, model.providerID, model.modelID)
+        session.setSessionVariant(id, model.providerID, model.modelID, variant ?? "", "voice")
+      }
+    }
     const origin = scope()
     const destination = speechScope()
     const target = identity()
@@ -1444,7 +1458,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       session: id ?? null,
       route: context ?? null,
     }
-    const fallback = voice.cascade() && voice.settings().mode === "hands-free"
     if (!voice.playing()) voice.listen() // raya_change - background barge-in capture must preserve the speaking phase
     speech.start({
       model: speechModel(),
@@ -1762,13 +1775,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const arm = (origin: string | undefined, id: string | undefined) => {
     if (
-      origin &&
-      !origin.startsWith("cloud:") &&
+      id &&
+      !origin?.startsWith("cloud:") &&
       session.selectedAgent(id) === "voice" &&
       voice.cascade() &&
       voice.settings().mode === "hands-free"
     )
-      voice.wait(origin)
+      voice.wait(origin ?? id)
   }
 
   const sendDraft = async (draft: string) => {

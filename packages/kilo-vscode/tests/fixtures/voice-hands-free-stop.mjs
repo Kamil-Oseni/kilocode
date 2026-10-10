@@ -77,6 +77,7 @@ const dispose = render(
         return createComponent(SessionContext.Provider, {
           value: {
             currentSessionID: () => "synthetic-voice",
+            draftSessionID: () => undefined,
             status: () => "idle",
             visibleMessages: () => [],
             getSessionToolParts: () => [],

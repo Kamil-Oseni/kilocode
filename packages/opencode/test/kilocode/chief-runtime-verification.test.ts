@@ -14,11 +14,28 @@ import { SessionRetirement } from "@/kilocode/session/retirement"
 import { Session } from "@/session/session"
 import { MessageID, PartID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
+import { goalTools } from "@/kilocode/tool/goal"
+import * as Truncate from "@/tool/truncate"
 import { testEffect } from "../lib/effect"
+import { database, storage } from "./fixtures/effect-profile"
+import { Database } from "@opencode-ai/core/database/database"
+import { Agent } from "@/agent/agent"
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([Session.node, SessionProjector.node, EventV2Bridge.node, Storage.node, BackgroundJob.node]),
+    LayerNode.group([
+      Session.node,
+      SessionProjector.node,
+      EventV2Bridge.node,
+      Storage.node,
+      BackgroundJob.node,
+      Truncate.node,
+      Agent.node,
+    ]),
+    [
+      [Database.node, database],
+      [Storage.node, storage],
+    ],
   ),
 )
 const model = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") }
@@ -406,3 +423,60 @@ it.instance(
     }),
   { config: { formatter: false, lsp: false, enabled_providers: [] } },
 )
+
+for (const active of [false, true])
+  it.instance(
+    `${active ? "Active" : "Absent"} goal observation cannot retire an overlapping original Task reservation`,
+    () =>
+      Effect.gen(function* () {
+        const state = yield* setup()
+        if (active) yield* state.goals.create(state.parent.id, state.request)
+        yield* state.sessions.setMetadata({
+          sessionID: state.parent.id,
+          metadata: { ...state.parent.metadata, [RayaChief.phaseKey]: "task" },
+        })
+        const def = yield* (yield* goalTools(state.goals, state.sessions).get).init()
+        const ctx = {
+          sessionID: state.parent.id,
+          messageID: state.assistant.id,
+          agent: "auto",
+          abort: new AbortController().signal,
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        const reserve = ChiefVerification.reserve({
+          sessions: state.sessions,
+          storage: state.storage,
+          sessionID: state.parent.id,
+          messageID: state.assistant.id,
+          callID: state.callID,
+          userID: state.user.id,
+          request: state.request,
+        })
+        expect((yield* def.execute({}, ctx)).title).toBe(active ? "Current goal" : "No goal")
+        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("task")
+        yield* Effect.all([reserve, def.execute({}, ctx)], { concurrency: "unbounded" })
+        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("verify")
+        yield* def.execute({}, ctx)
+        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("verify")
+        const before = (yield* state.sessions.get(state.parent.id)).metadata
+        const refused = yield* Effect.exit(
+          ChiefVerification.reserve({
+            sessions: state.sessions,
+            sessionID: state.parent.id,
+            messageID: state.assistant.id,
+            callID: state.callID,
+            userID: state.user.id,
+            request: "A replacement request",
+          }),
+        )
+        expect(Exit.isFailure(refused)).toBe(true)
+        expect((yield* state.sessions.get(state.parent.id)).metadata).toEqual(before)
+        yield* verify(state)
+        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe(active ? "goal" : "done")
+        yield* def.execute({}, ctx)
+        expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe(active ? "goal" : "done")
+      }),
+    { config: { formatter: false, lsp: false, enabled_providers: [] } },
+  )

@@ -18,6 +18,7 @@ test("a rejected Chief completion keeps Auto in the task phase", async () => {
   } as unknown as Pick<Session.Interface, "get" | "setMetadata">
   const goals = {
     get: () => Effect.succeed({ status: "active" }),
+    evidence: () => Effect.succeed([]),
     update: () => Effect.fail(new RayaGoal.AuditError({ message: "Branch evidence is incomplete" })),
   } as unknown as ReturnType<typeof RayaGoal.make>
   const tool = goalTools(goals, sessions).update

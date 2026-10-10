@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto"
 import { expect, test } from "bun:test"
 import { mkdtemp } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type * as vscode from "vscode"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
-import { KiloProvider } from "../../src/KiloProvider"
+import { KiloProvider, unwrapSyncEvent } from "../../src/KiloProvider"
 import type { KiloConnectionService } from "../../src/services/cli-backend/connection-service"
 import { routeInputToolMessage } from "../../src/services/input-tools"
 import { VoiceReplies } from "../../src/speech/replies"
@@ -63,7 +64,7 @@ async function harness(endpoint?: string) {
     localTtsEndpoint: endpoint,
   })
   const posts: Record<string, unknown>[] = []
-  const state = { current: true }
+  const state = { current: true, directory: import.meta.dir }
   const post = (message: unknown) => posts.push(message as Record<string, unknown>)
   const send = (message: Record<string, unknown>) =>
     routeInputToolMessage(message, {
@@ -71,8 +72,10 @@ async function harness(endpoint?: string) {
       dir: import.meta.dir,
       speech,
       post,
+      voiceDraftScope: (draftID) =>
+        draftID === "voice-draft" ? { directory: state.directory, current: () => state.current } : undefined,
       voiceScope: (sessionID) =>
-        sessionID === "session-1" ? { directory: import.meta.dir, current: () => state.current } : undefined,
+        sessionID === "session-1" ? { directory: state.directory, current: () => state.current } : undefined,
     })
   const marker = { user: "" }
   const mark = async (requestId: string) => {
@@ -215,14 +218,31 @@ test("old idle waiters cannot consume replacement text or rebind prior assistant
   expect(replies.mark({ requestId: second, sessionID: "session-1" })).toBe(false)
 })
 
-test("actual provider binds only the marker captured before admission and forwards exact assistant parent IDs", async () => {
+test("actual provider binds the original fresh Voice marker independent of mode labels and refuses replacements", async () => {
   const ctx = await harness()
   const root = await mkdtemp(join(tmpdir(), "raya-voice-parent-"))
+  ctx.state.directory = root
   const submitted: Record<string, unknown>[] = []
+  const titles: string[] = []
+  const posted: Record<string, unknown>[] = []
+  const created = {
+    id: "session-1",
+    projectID: "voice-project",
+    slug: "voice-session",
+    directory: root,
+    title: "Voice session",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    version: "test",
+    time: { created: 1, updated: 1 },
+  }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
+      if (new URL(request.url).pathname === "/session") {
+        return Response.json(created)
+      }
       expect(new URL(request.url).pathname).toBe("/session/session-1/prompt_async")
       submitted.push((await request.json()) as Record<string, unknown>)
       return new Response(null, { status: 204 })
@@ -238,7 +258,9 @@ test("actual provider binds only the marker captured before admission and forwar
   }
   const provider = new KiloProvider({ fsPath: root } as never, connection as never, undefined, {
     projectDirectory: root,
+    rootDirectory: () => root,
     disableViewedRegistration: true,
+    tabTitle: (title) => titles.push(title),
   })
   const internal = provider as unknown as {
     speech: SpeechService
@@ -247,8 +269,8 @@ test("actual provider binds only the marker captured before admission and forwar
     handleSendMessage: (
       text: string,
       messageID: string,
-      sessionID: string,
-      draftID: undefined,
+      sessionID: string | undefined,
+      draftID: string | undefined,
       providerID: string,
       modelID: string,
       agent: string,
@@ -256,27 +278,67 @@ test("actual provider binds only the marker captured before admission and forwar
     handleEvent: (event: unknown) => void
   }
   internal.speech = ctx.speech
-  internal.webview = { postMessage: async () => true }
+  internal.webview = {
+    postMessage: async (message) => {
+      posted.push(message as Record<string, unknown>)
+      return true
+    },
+  }
   try {
     // The marker is intentionally unbound until the original provider's dispatch.
-    await ctx.send({ type: "speechVoiceTurn", requestId: first, sessionID: "session-1" })
+    await ctx.send({ type: "speechVoiceTurn", requestId: first, draftID: "voice-draft" })
+    expect(ctx.speech.captureVoiceSubmission()).toEqual({
+      requestId: first,
+      draftID: "voice-draft",
+      directory: root,
+      sessionID: undefined,
+    })
     const held = gate()
     internal.checkpoints.set("session-1", held.promise)
     const old = internal.handleSendMessage(
       "Synthetic old prompt.",
       "user-old",
-      "session-1",
       undefined,
+      "voice-draft",
       "ollama",
       "pinned",
-      "voice",
+      "auto",
     )
     // resolveSession yields before admission; the request token was already captured.
     await Promise.resolve()
-    await ctx.send({ type: "speechVoiceTurn", requestId: second, sessionID: "session-1" })
+    await ctx.send({ type: "speechVoiceTurn", requestId: second, draftID: "voice-draft" })
     held.resolve()
     await old
     expect(submitted).toHaveLength(1)
+    const event = unwrapSyncEvent({
+      type: "sync",
+      id: "voice-title-new",
+      syncEvent: {
+        type: "session.updated.1",
+        id: "voice-title-new",
+        seq: 2,
+        aggregateID: "session-1",
+        data: { sessionID: "session-1", info: { ...created, title: "Voice reply" } },
+      },
+    })
+    internal.handleEvent(event)
+    const stale = unwrapSyncEvent({
+      type: "sync",
+      id: "voice-title-old",
+      syncEvent: {
+        type: "session.updated.1",
+        id: "voice-title-old",
+        seq: 1,
+        aggregateID: "session-1",
+        data: { sessionID: "session-1", info: { ...created, title: "Old title" } },
+      },
+    })
+    internal.handleEvent(stale)
+    expect(titles.at(-1)).toBe("Voice reply")
+    expect(titles).not.toContain("Old title")
+    expect(posted).toContainEqual(
+      expect.objectContaining({ type: "sessionUpdated", session: expect.objectContaining({ title: "Voice reply" }) }),
+    )
     internal.handleEvent({
       type: "message.updated",
       properties: {
@@ -308,15 +370,15 @@ test("actual provider binds only the marker captured before admission and forwar
     await internal.handleSendMessage(
       "Synthetic current prompt.",
       "user-new",
-      "session-1",
       undefined,
+      "voice-draft",
       "ollama",
       "pinned",
-      "voice",
+      "auto",
     )
     expect(submitted[1]).toMatchObject({
       messageID: "user-new",
-      agent: "voice",
+      agent: "auto",
       model: { providerID: "ollama", modelID: "pinned" },
     })
     expect(ctx.speech.bindVoiceTurn("session-1", "probe", second)).toBe(false)
@@ -411,6 +473,36 @@ test("actual provider binds only the marker captured before admission and forwar
     expect(ctx.posts).toEqual([
       { type: "speechPlaybackError", requestId: second, error: "Configure local speech in Speech settings." },
     ])
+    internal.handleEvent({ type: "session.status", properties: { sessionID: "session-1", status: { type: "idle" } } })
+    expect(posted).toContainEqual(
+      expect.objectContaining({ type: "sessionStatus", sessionID: "session-1", status: "idle" }),
+    )
+    const foreign = crypto.randomUUID()
+    ctx.speech.markVoiceTurn({ requestId: foreign, sessionID: "foreign-session", current: () => true })
+    await internal.handleSendMessage(
+      "Foreign marker cannot bind this request.",
+      "user-foreign",
+      "session-1",
+      undefined,
+      "ollama",
+      "pinned",
+      "voice",
+    )
+    expect(ctx.speech.bindVoiceTurn("foreign-session", "probe", foreign)).toBe(true)
+    ctx.speech.cancel(foreign)
+    const draft = crypto.randomUUID()
+    ctx.speech.markVoiceTurn({ requestId: draft, draftID: "foreign-draft", directory: root, current: () => true })
+    await internal.handleSendMessage(
+      "A foreign draft cannot acquire playback.",
+      "user-draft",
+      undefined,
+      "voice-draft",
+      "ollama",
+      "pinned",
+      "voice",
+    )
+    expect(ctx.speech.bindVoiceTurn("session-1", "probe", draft, "foreign-draft")).toBe(true)
+    ctx.speech.cancel(draft)
     for (const failure of ["error", "length", "info"] as const) {
       const requestId = crypto.randomUUID()
       await ctx.send({ type: "speechVoiceTurn", requestId, sessionID: "session-1" })
@@ -670,5 +762,232 @@ test("a known ended empty final text retires without audio", async () => {
   } finally {
     ctx.speech.dispose()
     await ctx.speech.ended()
+  }
+})
+
+test("fresh pending Voice completion publishes actual local-job audio once and Stop fences the next reply", async () => {
+  // The HTTP service supplies synthetic PCM; production provider/service/job transport perform the handoff.
+  const root = await mkdtemp(join(tmpdir(), "raya-voice-audio-"))
+  const bytes = Buffer.alloc(48)
+  bytes.write("RIFF")
+  bytes.writeUInt32LE(40, 4)
+  bytes.write("WAVEfmt ", 8)
+  bytes.writeUInt32LE(16, 16)
+  bytes.writeUInt16LE(1, 20)
+  bytes.writeUInt16LE(1, 22)
+  bytes.writeUInt32LE(24_000, 24)
+  bytes.writeUInt32LE(48_000, 28)
+  bytes.writeUInt16LE(2, 32)
+  bytes.writeUInt16LE(16, 34)
+  bytes.write("data", 36)
+  bytes.writeUInt32LE(4, 40)
+  bytes.writeInt16LE(1000, 44)
+  bytes.writeInt16LE(-1000, 46)
+  const synthesis: Array<{ id: string; body: unknown }> = []
+  const deleted: string[] = []
+  const prompts: Record<string, unknown>[] = []
+  const sessions: string[] = []
+  const ready = gate()
+  const posted: Record<string, unknown>[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname
+      if (path === "/session") {
+        const id = "session-" + (sessions.length + 1)
+        sessions.push(id)
+        return Response.json({
+          id,
+          slug: "audio",
+          projectID: "audio-project",
+          directory: root,
+          title: "Voice",
+          version: "test",
+          time: { created: 1, updated: 1 },
+        })
+      }
+      if (path === "/session/session-1/prompt_async") {
+        prompts.push((await request.json()) as Record<string, unknown>)
+        return new Response(null, { status: 204 })
+      }
+      if (path === "/health") return Response.json({ version: 2, ready: true })
+      if (path.startsWith("/v1/jobs")) {
+        expect(request.headers.get("authorization")).toBe("Bearer synthetic-audio-key")
+        if (request.method === "DELETE") {
+          deleted.push(path)
+          return Response.json({ cancelled: true })
+        }
+        if (path.endsWith("/audio/0")) return new Response(bytes, { headers: { "content-type": "audio/wav" } })
+        const id = request.headers.get("x-raya-job-id") ?? ""
+        expect(id).toMatch(/^[0-9a-f]{32}$/)
+        synthesis.push({ id, body: await request.json() })
+        return Response.json({
+          id,
+          status: "completed",
+          model: "chatterbox-nano",
+          voice: "freeman-reference-c-AI",
+          fallback: null,
+          chunks: [
+            {
+              index: 0,
+              url: "/v1/jobs/" + id + "/audio/0",
+              seconds: 2 / 24_000,
+              mime: "audio/wav",
+              bytes: bytes.length,
+              sha256: createHash("sha256").update(bytes).digest("hex"),
+            },
+          ],
+        })
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+  const ctx = await harness(`http://127.0.0.1:${server.port}`)
+  ctx.state.directory = root
+  await ctx.speech.settings.setKey("local", "synthetic-audio-key")
+  const client = createKiloClient({ baseUrl: server.url.toString() })
+  const provider = new KiloProvider(
+    { fsPath: root } as never,
+    {
+      getClient: () => client,
+      recordMessageSessionId: () => {},
+      sandboxPreference: { explicit: () => false, wait: async () => {}, onChange: () => () => {} },
+      unregisterVisible: () => {},
+      unregisterAttached: () => {},
+    } as never,
+    undefined,
+    { projectDirectory: root, rootDirectory: () => root, disableViewedRegistration: true },
+  )
+  const internal = provider as unknown as {
+    speech: SpeechService
+    webview: { postMessage: (message: unknown) => Promise<boolean> }
+    handleSendMessage: (
+      text: string,
+      messageID: string,
+      sessionID: undefined,
+      draftID: string,
+      providerID: string,
+      modelID: string,
+      agent: string,
+    ) => Promise<void>
+    resolveSession: (sessionID?: string, draftID?: string) => Promise<{ sid: string; dir: string } | undefined>
+    handleEvent: (event: unknown) => void
+  }
+  internal.speech = ctx.speech
+  internal.webview = {
+    postMessage: async (value) => {
+      const message = value as Record<string, unknown>
+      posted.push(message)
+      if (message.type === "speechPlaybackDone" || message.type === "speechPlaybackError") ready.resolve()
+      return true
+    },
+  }
+  const finish = (user: string, id: string, text: string) => {
+    internal.handleEvent({
+      type: "message.updated",
+      properties: {
+        sessionID: "session-1",
+        info: {
+          id,
+          sessionID: "session-1",
+          role: "assistant",
+          parentID: user,
+          time: { created: 1, completed: 2 },
+          finish: "stop",
+        },
+      },
+    })
+    internal.handleEvent({
+      type: "message.part.updated",
+      properties: {
+        sessionID: "session-1",
+        part: {
+          id: id + "-text",
+          messageID: id,
+          sessionID: "session-1",
+          type: "text",
+          text,
+          time: { start: 1, end: 2 },
+        },
+      },
+    })
+    internal.handleEvent({ type: "session.status", properties: { sessionID: "session-1", status: { type: "idle" } } })
+  }
+  try {
+    await ctx.send({ type: "speechVoiceTurn", requestId: first, draftID: "voice-draft" })
+    await internal.handleSendMessage(
+      "Synthetic first request.",
+      "user-audio",
+      undefined,
+      "voice-draft",
+      "local",
+      "synthetic",
+      "auto",
+    )
+    expect(prompts).toHaveLength(1)
+    finish("user-audio", "assistant-audio", "Exact spoken reply.")
+    await ready.promise
+    expect(posted.filter((row) => row.type === "speechPlaybackError")).toEqual([])
+    expect(synthesis).toHaveLength(1)
+    expect(synthesis[0].body).toEqual({
+      kind: "speech",
+      model: "chatterbox-nano",
+      input: "Exact spoken reply.",
+      allow_fallback: false,
+    })
+    expect(deleted).toEqual(["/v1/jobs/" + synthesis[0].id])
+    expect(posted.filter((row) => row.type === "speechPlaybackChunk")).toEqual([
+      expect.objectContaining({
+        requestId: first,
+        text: "Exact spoken reply.",
+        data: bytes.subarray(44).toString("base64"),
+        mime: "audio/pcm;rate=24000",
+      }),
+    ])
+    expect(posted.filter((row) => row.type === "speechPlaybackDone")).toHaveLength(1)
+    expect(posted.find((row) => row.type === "speechPlaybackDone")?.requestId).toBe(first)
+    internal.handleEvent({ type: "session.status", properties: { sessionID: "session-1", status: { type: "idle" } } })
+    await ctx.speech.speakOnIdle("session-1", ctx.post)
+    expect(synthesis).toHaveLength(1)
+    await ctx.send({ type: "speechVoiceTurn", requestId: second, draftID: "voice-draft" })
+    await internal.handleSendMessage(
+      "Synthetic stopped request.",
+      "user-stopped",
+      undefined,
+      "voice-draft",
+      "local",
+      "synthetic",
+      "voice",
+    )
+    await ctx.send({ type: "speechPlaybackCancel", requestId: second })
+    finish("user-stopped", "assistant-stopped", "This stopped reply must not speak.")
+    await ctx.speech.speakOnIdle("session-1", ctx.post)
+    expect(prompts).toHaveLength(2)
+    expect(synthesis).toHaveLength(1)
+    expect(posted.filter((row) => row.requestId === second && row.type === "speechPlaybackChunk")).toEqual([])
+    const third = crypto.randomUUID()
+    await ctx.send({ type: "speechVoiceTurn", requestId: third, draftID: "voice-draft" })
+    await internal.handleSendMessage(
+      "Synthetic switch request.",
+      "user-switch",
+      undefined,
+      "voice-draft",
+      "local",
+      "synthetic",
+      "voice",
+    )
+    expect(await internal.resolveSession(undefined, "other-draft")).toEqual({ sid: "session-2", dir: root })
+    expect(sessions).toEqual(["session-1", "session-2"])
+    expect(ctx.speech.captureVoiceSubmission()).toBeUndefined()
+    finish("user-switch", "assistant-switch", "An older chat must not speak after switching.")
+    await ctx.speech.speakOnIdle("session-1", ctx.post)
+    expect(prompts).toHaveLength(3)
+    expect(synthesis).toHaveLength(1)
+    expect(posted.filter((row) => row.requestId === third && row.type === "speechPlaybackChunk")).toEqual([])
+  } finally {
+    provider.dispose()
+    await ctx.speech.ended()
+    await server.stop(true)
   }
 })

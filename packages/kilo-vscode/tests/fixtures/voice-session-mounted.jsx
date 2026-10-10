@@ -12,7 +12,28 @@ import { ProviderContext, ProviderProvider, useProvider } from "../../webview-ui
 import { DurableDrafts } from "../../webview-ui/src/utils/durable-drafts"
 
 const acquire = DurableDrafts.prototype.insertion
+const capture = DurableDrafts.prototype.capture
 window.__speechGuards = []
+DurableDrafts.prototype.capture = async function (identity) {
+  const observe = (phase, accepted) => {
+    const view = this.view(identity)
+    if (window.__speechGuards.length < 128)
+      window.__speechGuards.push({
+        phase,
+        accepted,
+        owner: !!view.owner,
+        loaded: view.loaded,
+        stored: view.stored,
+        error: view.error,
+        revision: view.revision,
+        text: view.content.text.length,
+      })
+  }
+  observe("capture-start")
+  const result = await capture.call(this, identity)
+  observe("capture-end", !!result)
+  return result
+}
 window.__speechGates = []
 window.__speechGate = (index, value) => {
   if (window.__speechGates.length < 128) window.__speechGates.push({ index, accepted: !!value })

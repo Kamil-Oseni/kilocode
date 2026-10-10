@@ -134,7 +134,7 @@ try {
     window.addEventListener("rayaVoiceListen", listening)
     window.addEventListener("rayaVoiceCancel", cancelling)
     window.fixture = {
-      session: { currentSessionID: current },
+      session: { currentSessionID: current, draftSessionID: () => undefined },
       host: {
         postMessage(message) {
           posts.push(message)

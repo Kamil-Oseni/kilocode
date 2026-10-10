@@ -39,7 +39,9 @@ describe("realtime voice thin client", () => {
     expect(input).toContain("voice.start(id)")
     expect(input).toContain('session.setSessionAgent(id, "voice")')
     expect(input).toContain('session.selectAgent("auto", sid())')
-    expect(input).toContain('setTimeout(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")), 100)')
+    expect(input).toContain(
+      'if (!voice.recover()) queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))',
+    )
     expect(input).toContain("if (!voice.playing()) voice.listen()")
     expect(input).toContain("echoSuppression: voice.playing()")
     expect(input).toContain("speech.cancel()")

@@ -1304,6 +1304,22 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           chiefNotes: (input) => this.readChiefNotes(input),
           childSteer: (message) => this.steerChild(message),
           speech: this.speech, // raya_change - Milestone H
+          voiceDraftScope: (id) => {
+            if (!current() || !voice() || !this.client || this.closedDrafts.has(id)) return
+            const directory = this.getRootDirectory()
+            const generation = this.connectionGeneration
+            const client = this.client
+            return {
+              directory,
+              current: () =>
+                current() &&
+                voice() &&
+                this.client === client &&
+                this.connectionGeneration === generation &&
+                !this.closedDrafts.has(id) &&
+                sameDirectory(directory, this.getRootDirectory()),
+            }
+          },
           voiceScope: (sid) => {
             if (
               !current() ||
@@ -5604,7 +5620,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     contextDirectory?: string,
     capture?: DraftCapture,
   ): Promise<void> {
-    const voice = agent === "voice" && sessionID ? this.speech?.captureVoiceTurn(sessionID) : undefined
+    // Capture the original private marker before admission waits; mode labels cannot mint or replace it.
+    const marker = this.speech?.captureVoiceSubmission()
+    const voice = marker?.draftID && marker.draftID !== draftID ? undefined : marker
     if (!this.client) {
       this.postMessage({
         type: "sendMessageFailed",
@@ -5709,7 +5727,26 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
               throw new Error(
                 "The goal's connection or workspace changed. Your task was not sent. Review the saved goal before retrying.",
               )
-            if (voice && messageID && current()) this.speech?.bindVoiceTurn(sid, messageID, voice)
+            if (
+              voice &&
+              (voice.sessionID === sid || (!!voice.draftID && voice.draftID === draftID)) &&
+              !!voice.directory &&
+              sameDirectory(voice.directory, dir) &&
+              messageID &&
+              current()
+            )
+              this.speech?.bindVoiceTurn(
+                sid,
+                messageID,
+                voice.requestId,
+                draftID,
+                () =>
+                  current() &&
+                  (!voice.draftID ||
+                    (this.currentSession?.id === sid &&
+                      this.contextSessionID === sid &&
+                      this.trackedSessionIds.has(sid))),
+              )
             return this.client!.session.promptAsync({
               sessionID: sid,
               directory: dir,

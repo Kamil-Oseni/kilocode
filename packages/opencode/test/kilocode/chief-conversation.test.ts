@@ -25,6 +25,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { RayaChief } from "@/kilocode/chief"
 import { supplied, instruction } from "@/kilocode/chief/conversation"
 import { testEffect } from "../lib/effect"
+import { database, storage } from "./fixtures/effect-profile"
 
 const request =
   "Reply with one short greeting. This is a temporary conversation check; do not save it as a preference or perform any actions."
@@ -131,7 +132,11 @@ const endpoint = Bun.serve({
     requests.push(body)
     return new Response(
       [
-        { model: "fixture", message: { role: "assistant", content: "Hello there." }, done: false },
+        {
+          model: "fixture",
+          message: { role: "assistant", content: JSON.stringify({ kind: "text", content: "Hello there." }) },
+          done: false,
+        },
         { model: "fixture", done: true, done_reason: "stop", prompt_eval_count: 8, eval_count: 3 },
       ]
         .map((row) => JSON.stringify(row))
@@ -168,7 +173,11 @@ const it = testEffect(
       Database.node,
       EventV2Bridge.node,
     ]),
-    [[RuntimeFlags.node, flags]],
+    [
+      [RuntimeFlags.node, flags],
+      [Database.node, database],
+      [Storage.node, storage],
+    ],
   ),
 )
 
@@ -197,7 +206,7 @@ const cfg = {
   agent: { auto: { model: "local/fixture", steps: 1 }, generalist: { model: "local/fixture" } },
 } satisfies Partial<Config.Info>
 
-for (const text of [request, "Hello! Don't save this or take any actions."])
+for (const text of [request, "Hello! Don't save this or take any actions.", "Hello Raya, what can you help me with?"])
   it.instance(
     `first actual Auto greeting omits acquisition: ${text}`,
     () =>
@@ -217,7 +226,16 @@ for (const text of [request, "Hello! Don't save this or take any actions."])
         const hits = requests.slice(before)
         expect(hits).toHaveLength(1)
         expect(hits[0].tools).toBeUndefined()
-        expect(hits[0].format).toBeUndefined()
+        expect(hits[0].format).toEqual({
+          anyOf: [
+            {
+              type: "object",
+              properties: { kind: { const: "text" }, content: { type: "string" } },
+              required: ["kind", "content"],
+              additionalProperties: false,
+            },
+          ],
+        })
         expect(JSON.stringify(hits[0].messages)).toContain(instruction)
         expect(JSON.stringify(hits[0].messages)).not.toContain("call at least one tool")
         expect(
@@ -317,3 +335,22 @@ for (const mode of ["text", "goal", "original"] as const)
     { config: cfg },
     30000,
   )
+
+test("general capability introductions are self-contained but appended work remains routed", () => {
+  for (const text of ["Hello Raya, what can you help me with?", "How can you help me?", "What can you do?"]) {
+    const value = fixture(text)
+    expect(RayaChief.direct(text)).toBe(true)
+    expect(supplied([value.user], value.session, value.user.info.id)).toBe(true)
+  }
+  for (const text of [
+    "Hello Raya, what can you help me with? Read my project.",
+    "What can you do with my account?",
+    "What can you do? Turn on the lights.",
+    "How can you help me debug this error?",
+    "What can you do on my computer now?",
+  ]) {
+    const value = fixture(text)
+    expect(RayaChief.direct(text)).toBe(false)
+    expect(supplied([value.user], value.session, value.user.info.id)).toBe(false)
+  }
+})

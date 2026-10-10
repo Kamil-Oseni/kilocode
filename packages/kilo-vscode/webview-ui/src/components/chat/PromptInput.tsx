@@ -1831,7 +1831,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const mentionFiles = mention.parseFileAttachments(draft)
     const imgFiles = imgs.map((img) => ({ mime: img.mime, url: img.dataUrl, filename: img.filename }))
     const origin = session.currentSessionID()
-    const pendingId = props.pendingSessionID ?? (!origin ? (session.draftSessionID() ?? vacant) : undefined)
+    const pendingId = !origin ? (props.pendingSessionID ?? session.draftSessionID() ?? vacant) : undefined
     const id = origin ?? pendingId
     beginPending(pendingId)
     const sel = session.selected(id)

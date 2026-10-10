@@ -58,7 +58,7 @@ async function mounted(
   ordinary = false,
   action = "",
 ) {
-  const orb = action === "orb" || action === "halfduplex"
+  const orb = action === "orb" || action === "halfduplex" || action === "tabs"
   const root = resolve(import.meta.dir, "../..")
   const dir = resolve(root, "node_modules/.cache/voice-insertion-ownership-mounted")
   const solid = dirname(require.resolve("solid-js/package.json"))
@@ -116,6 +116,9 @@ async function mounted(
   })
   const browser = await chromium.launch({ headless: true, args: ["--mute-audio"] })
   const page = await browser.newPage()
+  await page.addInitScript((value) => {
+    window.__tabs = value
+  }, action === "tabs")
   let epoch: string | undefined
   let admitted = false
   let loaded = 0
@@ -237,10 +240,10 @@ async function mounted(
     }, reverse)
     const input = page.locator("textarea.prompt-input")
     await page.getByRole("button", { name: "Start hands-free voice", exact: true }).waitFor()
-    await page.evaluate(() => {
-      window.__session.selectAgent("code")
+    await page.evaluate((tabs) => {
+      window.__session.selectAgent(tabs ? "auto" : "code")
       window.__session.selectModel("kilo", "synthetic-pinned-4b")
-    })
+    }, action === "tabs")
     if (fresh) {
       expect(await page.evaluate(() => window.__session.currentSessionID())).toBeUndefined()
       await page.evaluate((ordinary) => window.__voice.setMode(ordinary ? "off" : "hands-free"), ordinary)
@@ -327,7 +330,7 @@ async function mounted(
       epoch,
     )
     await expect.poll(() => loaded).toBeGreaterThan(0)
-    if (!fresh) await expect.poll(() => promoted).toBe(1)
+    if (!fresh && action !== "tabs") await expect.poll(() => promoted).toBe(1)
     if (ordinary) {
       await page.locator(".prompt-speech-button").click()
       await page.evaluate(
@@ -415,6 +418,7 @@ async function mounted(
         agent: "voice",
         modelID: "synthetic-pinned-4b",
       })
+      if (action === "tabs") expect(dispatched[0].draftID).toBeUndefined()
       if (orb) {
         const marker = await page.evaluate(() =>
           window.__messages.findLast((entry) => entry.type === "speechVoiceTurn"),
@@ -916,5 +920,12 @@ for (const reverse of [false, true])
   test(
     `actual mounted empty orb startup retains Voice across default Auto hydration (${reverse ? "reverse" : "normal"})`,
     () => mounted(true, reverse, false, false, false, "orb"),
+    120_000,
+  )
+
+for (const reverse of [false, true])
+  test(
+    `actual mounted sidebar orb submits through the created Voice session (${reverse ? "reverse" : "normal"})`,
+    () => mounted(true, reverse, false, false, false, "tabs"),
     120_000,
   )

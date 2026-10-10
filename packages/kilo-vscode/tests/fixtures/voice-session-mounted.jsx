@@ -5,6 +5,7 @@ import { StoryProviders } from "../../webview-ui/src/stories/StoryProviders"
 import { SessionProvider, useSession } from "../../webview-ui/src/context/session"
 import { VoiceProvider, useVoice } from "../../webview-ui/src/context/voice"
 import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
+import { LocalTabsProvider, useLocalTabs } from "../../webview-ui/src/context/local-tabs"
 import { DEFAULT_SPEECH_SETTINGS } from "../../src/shared/speech"
 import { useVSCode } from "../../webview-ui/src/context/vscode"
 import { dispatch } from "../../webview-ui/src/utils/message-dispatch"
@@ -132,6 +133,7 @@ Object.defineProperty(navigator, "mediaDevices", {
 })
 
 function Probe() {
+  const tabs = useLocalTabs()
   const [box, setBox] = createSignal("voice-mounted")
   const [composer, setComposer] = createSignal(true)
   window.__composer = setComposer
@@ -162,6 +164,7 @@ function Probe() {
         defaultAgent: "code",
         agents: [
           { name: "voice", mode: "primary" },
+          { name: "auto", mode: "primary" },
           { name: "code", mode: "primary" },
         ],
       },
@@ -170,7 +173,7 @@ function Probe() {
   })
   return (
     <>
-      {composer() && <PromptInput boxId={box()} />}
+      {composer() && <PromptInput boxId={box()} pendingSessionID={tabs?.pending()} />}
       <output id="sid">{session.currentSessionID()}</output>
     </>
   )
@@ -238,6 +241,9 @@ function Catalog(props) {
     </ProviderContext.Provider>
   )
 }
+function Sidebar(props) {
+  return window.__tabs ? <LocalTabsProvider>{props.children}</LocalTabsProvider> : props.children
+}
 const [mounted, setMounted] = createSignal(true)
 window.__unmount = () => setMounted(false)
 window.__mount = () => setMounted(true)
@@ -248,9 +254,11 @@ render(
         <Routing>
           <Registry>
             <SessionProvider>
-              <VoiceProvider>
-                <Probe />
-              </VoiceProvider>
+              <Sidebar>
+                <VoiceProvider>
+                  <Probe />
+                </VoiceProvider>
+              </Sidebar>
             </SessionProvider>
           </Registry>
         </Routing>

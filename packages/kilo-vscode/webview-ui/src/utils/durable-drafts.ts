@@ -17,6 +17,8 @@ type Transport = {
 }
 type Seal = { revision: number; content: DraftContent; owner: string }
 type Record = {
+  fence?: number
+  promotion?: DraftTarget
   owner?: string
   context?: string
   identity: DraftTarget
@@ -177,6 +179,59 @@ export class DurableDrafts {
   ready() {
     return this.connected && !this.closed
   }
+  insertion(identity: DraftTarget) {
+    const original = { ...identity }
+    const record = this.record(original)
+    const context = this.contexts.get(original.box)
+    const fence = record.fence ?? 0
+    const valid = (current: DraftTarget) =>
+      !this.closed &&
+      current.box === original.box &&
+      current.key === original.key &&
+      this.contexts.get(current.box) === context &&
+      (record.fence ?? 0) === fence &&
+      this.records.get(id(current, record.owner, context)) === record
+    const owned = (current: DraftTarget) =>
+      valid(current) &&
+      this.ready() &&
+      !!record.owner &&
+      record.owner === this.owners.get(current.box) &&
+      record.loaded &&
+      !record.moving &&
+      !record.promotion &&
+      !record.error
+    return Object.assign(owned, {
+      settle: (current: DraftTarget, signal: AbortSignal, stable: () => boolean) =>
+        new Promise<boolean>((resolve) => {
+          let finished = false
+          const finish = (accepted: boolean) => {
+            if (finished) return
+            finished = true
+            clearTimeout(timeout)
+            clearInterval(timer)
+            this.listeners.delete(check)
+            signal.removeEventListener("abort", abort)
+            resolve(accepted)
+          }
+          const check = () => {
+            try {
+              if (signal.aborted || !valid(current) || !stable() || record.error) return finish(false)
+              if (owned(current)) finish(true)
+            } catch {
+              finish(false)
+              console.warn("[Raya] Speech draft ownership check failed.")
+            }
+          }
+          const abort = () => finish(false)
+          // New bounded first-owner/promotion wait; expiration never retires or replays a native mutation.
+          const timeout = setTimeout(() => finish(false), 10_000)
+          const timer = setInterval(check, 100)
+          this.listeners.add(check)
+          signal.addEventListener("abort", abort, { once: true })
+          check()
+        }),
+    })
+  }
   owner(box: string) {
     return this.owners.get(box)
   }
@@ -186,6 +241,10 @@ export class DurableDrafts {
   context(box: string, value: string) {
     if (this.contexts.get(box) === value) return
     const known = this.contexts.has(box)
+    if (known)
+      for (const record of this.records.values()) {
+        if (record.identity.box === box) record.fence = (record.fence ?? 0) + 1
+      }
     this.contexts.set(box, value)
     if (known) this.owners.delete(box)
     this.notify()
@@ -301,33 +360,108 @@ export class DurableDrafts {
       sessionID,
       projectID: record.identity.projectID,
     }
+    const collision = this.records.get(id(next, record.owner, record.context))
+    if (
+      (collision && collision !== record) ||
+      (record.promotion &&
+        id(record.promotion, record.owner, record.context) !== id(next, record.owner, record.context))
+    ) {
+      record.fence = (record.fence ?? 0) + 1
+      record.error = "promotion"
+      this.notify()
+      return
+    }
+    if (record.promotion) return
     this.records.set(id(next, record.owner, record.context), record)
     if (record.held) return
+    record.promotion = next
+    void this.promote(record)
+  }
+
+  private async seed(record: Record, owner: string, content: DraftContent, revision: number) {
+    if (record.saved !== revision || !same(content, empty())) return false
+    const mutation = crypto.randomUUID()
+    const reply = await this.request(
+      { type: "composerDraftSave", identity: record.identity, expected: record.entry?.token, content, mutation },
+      owner,
+    )
+    const entry = reply.entry
+    if (reply.error || !entry || !(await this.exact(entry, mutation, content))) return false
+    record.entry = entry
+    record.saved = revision
+    return true
+  }
+
+  private promote(record: Record) {
+    const next = record.promotion
+    if (
+      !next ||
+      record.held ||
+      record.moving ||
+      record.error ||
+      !this.ready() ||
+      !record.owner ||
+      record.owner !== this.owners.get(record.identity.box)
+    )
+      return
+    const owner = record.owner
+    const context = this.contexts.get(record.identity.box)
+    const fence = record.fence ?? 0
+    const valid = () =>
+      this.ready() &&
+      !record.error &&
+      record.owner === owner &&
+      this.owners.get(next.box) === owner &&
+      this.contexts.get(next.box) === context &&
+      (record.fence ?? 0) === fence &&
+      record.promotion === next &&
+      this.records.get(id(next, owner, context)) === record
     const prior = this.sync(record)
     record.moving = true
     const job = prior
       .then(async () => {
-        if (record.error || !record.entry?.content) {
+        if (record.error || !record.loaded || !valid()) {
           record.error = "promotion"
           return
         }
+        const revision = record.revision
+        const content = snapshot(record.content)
+        if (!record.entry?.content && !(await this.seed(record, owner, content, revision))) {
+          record.error = "promotion"
+          return
+        }
+        if (!valid() || record.revision !== revision || !record.entry?.content) {
+          record.error = "promotion"
+          return
+        }
+        const retained = snapshot(record.entry.content)
+        const mutation = crypto.randomUUID()
         const reply = await this.request(
           {
             type: "composerDraftPromote",
             from: record.identity,
             to: next,
             source: record.entry.token,
-            mutation: crypto.randomUUID(),
+            mutation,
           },
-          record.owner,
+          owner,
         )
-        if (reply.error || !reply.target) {
+        if (
+          reply.error ||
+          !(await this.exact(reply.target, mutation, retained)) ||
+          reply.source?.content !== null ||
+          reply.source.mutation !== mutation ||
+          reply.source.digest !== (await digest(null)) ||
+          !valid() ||
+          record.revision !== revision
+        ) {
           record.error = "promotion"
           return
         }
         this.records.delete(id(record.identity, record.owner, record.context))
         record.identity = next
         record.entry = reply.target
+        record.promotion = undefined
       })
       .finally(() => {
         record.moving = false
@@ -336,6 +470,7 @@ export class DurableDrafts {
         if (!record.error) void this.sync(record)
       })
     record.job = job
+    return job
   }
 
   edit(identity: DraftTarget, content: DraftContent) {
@@ -401,6 +536,7 @@ export class DurableDrafts {
       this.closed ||
       record.held ||
       record.moving ||
+      record.error === "promotion" ||
       !record.owner ||
       record.owner !== this.owners.get(record.identity.box)
     )
@@ -655,6 +791,8 @@ export class DurableDrafts {
   }
 
   private state(message: Extract<ComposerDraftExtensionMessage, { type: "composerDraftState" }>) {
+    const owners = new Map(message.owners.map((scope) => [scope.box, scope.owner]))
+    this.fences(message, owners)
     if (this.generation !== message.generation || !message.connected) {
       for (const [requestID, request] of this.requests) {
         clearTimeout(request.timer)
@@ -672,17 +810,44 @@ export class DurableDrafts {
     }
     this.generation = message.generation
     this.connected = message.connected
-    this.owners = new Map(message.owners.map((scope) => [scope.box, scope.owner]))
-    for (const [key, record] of this.records) {
+    this.owners = owners
+    this.claim()
+    this.notify()
+    if (this.connected)
+      for (const record of new Set(this.records.values())) {
+        if (record.promotion) void this.promote(record)
+        if (!record.promotion) void this.sync(record)
+      }
+    return
+  }
+
+  private fences(
+    message: Extract<ComposerDraftExtensionMessage, { type: "composerDraftState" }>,
+    owners: Map<string, string>,
+  ) {
+    for (const record of this.records.values()) {
+      if (
+        (!message.connected && (this.connected || record.owner)) ||
+        (record.owner && (message.generation !== this.generation || owners.get(record.identity.box) !== record.owner))
+      )
+        record.fence = (record.fence ?? 0) + 1
+    }
+  }
+
+  private claim() {
+    for (const record of new Set(this.records.values())) {
       const owner = this.owners.get(record.identity.box)
       if (record.owner || !owner || record.context !== this.contexts.get(record.identity.box)) continue
-      this.records.delete(key)
+      for (const [key, value] of this.records) if (value === record) this.records.delete(key)
       record.owner = owner
       this.records.set(id(record.identity, owner), record)
+      if (record.promotion) {
+        const key = id(record.promotion, owner)
+        const collision = this.records.get(key)
+        if (collision && collision !== record) record.error = "promotion"
+        if (!collision || collision === record) this.records.set(key, record)
+      }
     }
-    this.notify()
-    if (this.connected) for (const record of this.records.values()) void this.sync(record)
-    return
   }
 
   private prepared(message: Extract<ComposerDraftExtensionMessage, { type: "composerDraftPrepared" }>) {

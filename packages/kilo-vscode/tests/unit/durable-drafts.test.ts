@@ -45,6 +45,175 @@ test("pending creation preserves the exact unowned context cache during session 
   expect(view.requests).toHaveLength(0)
 })
 
+test("empty first session defers promotion until verified owner and uses actual SQL save and promotion receipts", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage, 1000, undefined, false)
+  view.controller.context(identity.box, "workspace-A")
+  view.controller.view(identity)
+  const next = { box: identity.box, key: `${identity.box}:session:empty-first`, sessionID: "empty-first" }
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  const owned = view.controller.insertion(next)
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  expect(view.requests).toHaveLength(0)
+  expect(view.controller.view(next).error).toBeUndefined()
+  view.emit({
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 1,
+    connected: true,
+    owners: [{ box: identity.box, owner: storage.root }],
+  })
+  const result = await view.controller.hydrate(next)
+  expect(result.loaded).toBe(true)
+  expect(result.error).toBeUndefined()
+  expect(result.content).toEqual({ text: "", comments: [], images: [], scroll: 0 })
+  expect(owned(next)).toBe(true)
+  expect(view.requests.map((request) => request.type)).toEqual([
+    "composerDraftLoad",
+    "composerDraftSave",
+    "composerDraftPromote",
+  ])
+  const base = {
+    owner: storage.root,
+    epoch: view.controller.epoch,
+    generation: 1,
+    requestID: crypto.randomUUID(),
+    type: "composerDraftLoad",
+  } as const
+  const source = await storage.handle({ ...base, identity })
+  const target = await storage.handle({ ...base, identity: next })
+  expect(source.entry?.content).toBeNull()
+  expect(target.entry?.content).toEqual(result.content)
+  const request = view.requests.find((request) => request.type === "composerDraftPromote")
+  if (request?.type !== "composerDraftPromote") throw new Error("Actual promotion request missing")
+  expect(source.entry?.mutation).toBe(request.mutation)
+  expect(target.entry?.mutation).toBe(request.mutation)
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  expect(view.requests).toHaveLength(3)
+})
+
+test("deferred creation refuses a conflicting destination and preserves source and foreign target content", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage, 1000, undefined, false)
+  view.controller.context(identity.box, "workspace-A")
+  view.controller.edit(identity, rich)
+  const next = { box: identity.box, key: `${identity.box}:session:deferred`, sessionID: "deferred" }
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  view.controller.created(identity.pendingID!, "conflicting", identity.box)
+  view.emit({
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 1,
+    connected: true,
+    owners: [{ box: identity.box, owner: storage.root }],
+  })
+  expect((await view.controller.hydrate(next)).error).toBe("promotion")
+  expect(view.controller.view(next).content).toEqual(rich)
+  expect(view.requests).toHaveLength(0)
+  const target = { box: identity.box, key: `${identity.box}:session:foreign`, sessionID: "foreign" }
+  view.controller.edit(target, { ...rich, text: "Foreign destination" })
+  await view.controller.hydrate(target)
+  view.controller.created(identity.pendingID!, target.sessionID, identity.box)
+  expect(view.controller.view(target).content.text).toBe("Foreign destination")
+  expect(view.controller.view(next).content).toEqual(rich)
+})
+
+test("actual promotion acknowledgement loss keeps uncertainty and never automatically replays creation", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage, 100, undefined, false)
+  view.controller.context(identity.box, "workspace-A")
+  view.controller.view(identity)
+  const next = { box: identity.box, key: `${identity.box}:session:lost-created`, sessionID: "lost-created" }
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  const base = {
+    owner: storage.root,
+    epoch: view.controller.epoch,
+    generation: 1,
+    requestID: crypto.randomUUID(),
+    type: "composerDraftLoad",
+  } as const
+  // Finish actual cold migration before timing the deliberately dropped promotion ACK.
+  expect((await storage.handle({ ...base, identity })).error).toBeUndefined()
+  view.controls.lost = true
+  view.emit({
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 1,
+    connected: true,
+    owners: [{ box: identity.box, owner: storage.root }],
+  })
+  expect((await view.controller.hydrate(next)).error).toBe("promotion")
+  const count = view.requests.filter((request) => request.type === "composerDraftPromote").length
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  expect(await view.controller.retry(next)).toBe(false)
+  expect(view.requests.filter((request) => request.type === "composerDraftPromote")).toHaveLength(count)
+  expect((await storage.handle({ ...base, identity })).entry?.content).toBeNull()
+  expect((await storage.handle({ ...base, identity: next })).entry?.content?.text).toBe("")
+})
+
+test("owner drift during an actual promotion refuses its acknowledgement without overwriting local edits", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage, 1000, undefined, false)
+  view.controller.context(identity.box, "workspace-A")
+  view.controller.edit(identity, rich)
+  const next = { box: identity.box, key: `${identity.box}:session:changed-owner`, sessionID: "changed-owner" }
+  const held = gate()
+  view.controls.move = held
+  view.controller.created(identity.pendingID!, next.sessionID, identity.box)
+  const state = { type: "composerDraftState", epoch: view.controller.epoch, generation: 1, connected: true } as const
+  view.emit({ ...state, owners: [{ box: identity.box, owner: storage.root }] })
+  await until(() => view.requests.some((request) => request.type === "composerDraftPromote"))
+  view.emit({ ...state, owners: [{ box: identity.box, owner: "foreign" }] })
+  view.emit({ ...state, owners: [{ box: identity.box, owner: storage.root }] })
+  view.controller.edit(next, { ...rich, text: "Newer local text" })
+  held.open()
+  expect((await view.controller.hydrate(next)).error).toBe("promotion")
+  expect(view.controller.view(next).content.text).toBe("Newer local text")
+  expect(view.requests.filter((request) => request.type === "composerDraftPromote")).toHaveLength(1)
+})
+
+test("speech insertion capability permits only authenticated same-record first claim and refuses owner ABA", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage, 1000, undefined, false)
+  view.controller.context(identity.box, "workspace-A")
+  const owned = view.controller.insertion(identity)
+  expect(owned(identity)).toBe(false)
+  const state = { type: "composerDraftState", epoch: view.controller.epoch, generation: 1, connected: true } as const
+  view.emit({ ...state, owners: [{ box: identity.box, owner: storage.root }] })
+  await view.controller.hydrate(identity)
+  expect(owned(identity)).toBe(true)
+  view.emit({ ...state, owners: [{ box: identity.box, owner: "foreign" }] })
+  expect(owned(identity)).toBe(false)
+  view.emit({ ...state, owners: [{ box: identity.box, owner: storage.root }] })
+  expect(owned(identity)).toBe(false)
+  expect(view.controller.insertion(identity)(identity)).toBe(true)
+})
+
+test("speech insertion capability cannot revive after context ABA or a verified server generation change", async () => {
+  await using storage = await draftStorage()
+  using view = pane(storage, 1000, undefined, false)
+  view.controller.context(identity.box, "workspace-A")
+  const state = {
+    type: "composerDraftState",
+    epoch: view.controller.epoch,
+    generation: 1,
+    connected: true,
+    owners: [{ box: identity.box, owner: storage.root }],
+  } as const
+  view.emit(state)
+  await view.controller.hydrate(identity)
+  const original = view.controller.insertion(identity)
+  view.controller.context(identity.box, "workspace-B")
+  view.controller.context(identity.box, "workspace-A")
+  view.emit(state)
+  await view.controller.hydrate(identity)
+  expect(original(identity)).toBe(false)
+  const restarted = view.controller.insertion(identity)
+  expect(restarted(identity)).toBe(true)
+  view.emit({ ...state, generation: 2 })
+  expect(restarted(identity)).toBe(false)
+})
+
 test("pending creation cannot adopt an unowned draft from a previous workspace context", async () => {
   await using storage = await draftStorage()
   using view = pane(storage, 1000, undefined, false)
@@ -112,6 +281,8 @@ function pane(
     pause?: ReturnType<typeof gate>
     load?: ReturnType<typeof gate>
     clear?: ReturnType<typeof gate>
+    move?: ReturnType<typeof gate>
+    lost?: boolean
     drop?: boolean
     unavailable?: "before" | "after"
     clearing?: boolean
@@ -154,7 +325,9 @@ function pane(
               ? controls.load
               : message.type === "composerDraftClear"
                 ? controls.clear
-                : undefined
+                : message.type === "composerDraftPromote"
+                  ? controls.move
+                  : undefined
         void (async () => {
           if (pause) await pause.wait
           if (message.type === "composerDraftLoad" && controls.unavailableLoad) {
@@ -172,6 +345,10 @@ function pane(
             return
           }
           const result = await (owners?.get(message.owner) ?? storage).handle(message)
+          if (message.type === "composerDraftPromote" && controls.lost) {
+            controls.lost = false
+            return
+          }
           if (unavailable === "after") {
             emit({ ...message, type: "composerDraftResult", operation: message.type, error: "unavailable" })
             return

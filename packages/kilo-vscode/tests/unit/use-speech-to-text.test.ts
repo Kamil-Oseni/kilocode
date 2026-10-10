@@ -1,6 +1,8 @@
 import { describe, expect, it, mock } from "bun:test"
 import { createRoot } from "solid-js"
 import type { ExtensionMessage, WebviewMessage } from "../../webview-ui/src/types/messages"
+import { DurableDrafts } from "../../webview-ui/src/utils/durable-drafts"
+import type { ComposerDraftExtensionMessage, ComposerDraftRequest } from "../../src/shared/composer-drafts-messages"
 import {
   createSpeechShortcut,
   isSpeechShortcut,
@@ -144,6 +146,278 @@ function setup(session: () => string | undefined = () => undefined) {
   const fire = (message: ExtensionMessage) => handler?.(message)
   return { ...root, fire, sent, logins: () => logins }
 }
+
+it("actual recognized-result consumption retains speech on throwing settlement, ownership, readiness or partial insertion", async () => {
+  for (const fault of ["settlement", "ownership", "readiness", "insertion"]) {
+    const ctx = setup()
+    const retained: Array<{ text: string; request: string }> = []
+    const inserted: string[] = []
+    let sent = 0
+    try {
+      ctx.speech.start({
+        model: "synthetic-stt",
+        ownership: () => () => {
+          if (fault === "ownership") throw new Error("Private fault detail must not appear in the diagnostic")
+          return true
+        },
+        settle: () => {
+          if (fault === "settlement") throw new Error("Private synchronous settlement fault")
+          return Promise.resolve(true)
+        },
+        insert: (text) => {
+          inserted.push(text)
+          if (fault === "insertion") throw new Error("Unknown partial insertion")
+        },
+        retain: (text, request) => {
+          retained.push({ text, request })
+        },
+      })
+      const start = ctx.sent[0]
+      if (start?.type !== "speechToTextStart") throw new Error("Actual speech start missing")
+      ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
+      ctx.speech.stop({
+        ready: () => {
+          if (fault === "readiness") throw new Error("Private readiness fault")
+          return true
+        },
+        done: () => sent++,
+      })
+      const result = {
+        type: "speechToTextResult",
+        requestId: start.requestId,
+        text: "Original recognized speech",
+      } as const
+      ctx.fire(result)
+      ctx.fire({ ...result, text: "Duplicate" })
+      await Bun.sleep(0)
+      expect(retained).toEqual([{ text: result.text, request: start.requestId }])
+      expect(inserted).toEqual(fault === "insertion" ? [result.text] : [])
+      expect(sent).toBe(0)
+      expect(ctx.speech.state()).toBe("idle")
+      expect(ctx.speech.error()).toBe("Speech could not be applied safely. Review the retained transcript.")
+      ctx.speech.cancel()
+      expect(retained).toHaveLength(1)
+    } finally {
+      ctx.dispose()
+    }
+  }
+})
+
+it("cancellation during settlement admission retains once and late completion cannot inspect or reset a newer request", async () => {
+  const ctx = setup()
+  const gate = Promise.withResolvers<boolean>()
+  const retained: string[] = []
+  let checks = 0
+  let sent = 0
+  try {
+    ctx.speech.start({
+      model: "old-stt",
+      ownership: () => () => {
+        checks++
+        return true
+      },
+      settle: () => {
+        ctx.speech.cancel()
+        ctx.speech.start({
+          model: "new-stt",
+          insert: () => {
+            throw new Error("Old result reached new insertion")
+          },
+        })
+        return gate.promise
+      },
+      insert: () => {
+        throw new Error("Cancelled result reached old insertion")
+      },
+      retain: (text) => {
+        retained.push(text)
+      },
+    })
+    const start = ctx.sent[0]
+    if (start?.type !== "speechToTextStart") throw new Error("Actual speech start missing")
+    ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
+    ctx.speech.stop({
+      ready: () => {
+        checks++
+        return true
+      },
+      done: () => sent++,
+    })
+    ctx.fire({ type: "speechToTextResult", requestId: start.requestId, text: "Retained original" })
+    expect(ctx.speech.state()).toBe("starting")
+    expect(retained).toEqual(["Retained original"])
+    gate.resolve(true)
+    await Bun.sleep(0)
+    expect(ctx.speech.state()).toBe("starting")
+    expect(checks).toBe(0)
+    expect(sent).toBe(0)
+    expect(retained).toEqual(["Retained original"])
+  } finally {
+    gate.resolve(false)
+    ctx.dispose()
+  }
+})
+
+it("explicitly consumed local control can cancel synchronously without retaining it, while a thrown action retains once", async () => {
+  for (const outcome of ["success", "throw", "newer"]) {
+    const ctx = setup()
+    const retained: Array<{ text: string; request: string }> = []
+    let done = 0
+    try {
+      ctx.speech.start({
+        model: "synthetic-stt",
+        settle: () => Promise.resolve(true),
+        ownership: () => () => true,
+        insert: (_text, consume) => {
+          consume?.()
+          ctx.speech.cancel()
+          if (outcome === "newer") ctx.speech.start({ model: "new-stt", insert: () => false })
+          if (outcome !== "success") throw new Error("Unknown partial local control action")
+          return false
+        },
+        retain: (text, request) => {
+          retained.push({ text, request })
+        },
+      })
+      const start = ctx.sent[0]
+      if (start?.type !== "speechToTextStart") throw new Error("Actual speech start missing")
+      ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
+      ctx.speech.stop({ done: () => done++ })
+      const result = {
+        type: "speechToTextResult",
+        requestId: start.requestId,
+        text: "Stop hands-free voice mode",
+      } as const
+      ctx.fire(result)
+      ctx.fire(result)
+      await Bun.sleep(0)
+      expect(done).toBe(0)
+      expect(retained).toEqual(outcome === "success" ? [] : [{ text: result.text, request: start.requestId }])
+      expect(ctx.speech.state()).toBe(outcome === "newer" ? "starting" : "idle")
+      ctx.speech.cancel()
+      expect(retained).toHaveLength(outcome === "success" ? 0 : 1)
+    } finally {
+      ctx.dispose()
+    }
+  }
+})
+
+it("recognized speech waits for actual first-owner SQL promotion and preserves cancellation, timeout and drift once", async () => {
+  const { draftStorage } = await import("../fixtures/durable-draft-storage")
+  for (const outcome of ["success", "cancel", "dispose", "drift", "timeout"]) {
+    await using storage = await draftStorage()
+    const handlers = new Set<(message: ComposerDraftExtensionMessage) => void>()
+    const requests: ComposerDraftRequest[] = []
+    const emit = (message: ComposerDraftExtensionMessage) => handlers.forEach((handler) => handler(message))
+    const durable = new DurableDrafts({
+      onMessage: (handler) => {
+        handlers.add(handler)
+        return () => {
+          handlers.delete(handler)
+        }
+      },
+      postMessage: (message) => {
+        if (message.type === "composerDraftPane" || message.type === "composerDraftFlushed") return
+        requests.push(message)
+        void storage.handle(message).then(emit)
+      },
+    })
+    const origin = { box: "sidebar:new-task", key: "pending:first", pendingID: "first" }
+    const target = { box: origin.box, key: `${origin.box}:session:first`, sessionID: "first" }
+    durable.context(origin.box, "same-context")
+    durable.view(origin)
+    durable.created(origin.pendingID, target.sessionID, origin.box)
+    const owned = durable.insertion(target)
+    const ctx = setup(() => target.sessionID)
+    const inserted: string[] = []
+    const retained: Array<{ text: string; request: string }> = []
+    let stable = true
+    let checks = 0
+    let done = 0
+    try {
+      ctx.speech.start({
+        model: "synthetic-stt",
+        ownership: () => () => stable && owned(target),
+        settle: (signal) =>
+          owned.settle(target, signal, () => {
+            checks++
+            return stable
+          }),
+        insert: (text) => {
+          inserted.push(text)
+        },
+        retain: (text, request) => {
+          retained.push({ text, request })
+        },
+      })
+      const start = ctx.sent[0]
+      if (start?.type !== "speechToTextStart") throw new Error("Actual speech start missing")
+      ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
+      ctx.speech.stop({ done: () => done++ })
+      const result = {
+        type: "speechToTextResult",
+        requestId: start.requestId,
+        text: "Original bounded transcript",
+      } as const
+      ctx.fire(result)
+      ctx.fire({ ...result, text: "Duplicate recognized result" })
+      expect(ctx.speech.state()).toBe("transcribing")
+      expect(inserted).toEqual([])
+      expect(requests).toEqual([])
+      if (outcome === "cancel") {
+        ctx.speech.cancel()
+        ctx.speech.start({
+          model: "new-stt",
+          insert: (text) => {
+            inserted.push(text)
+          },
+        })
+      }
+      if (outcome === "dispose") ctx.dispose()
+      if (outcome === "drift") stable = false
+      if (outcome === "timeout") {
+        const deadline = Date.now() + 12_000
+        while (!retained.length && Date.now() < deadline) await Bun.sleep(25)
+        expect(retained).toEqual([{ text: result.text, request: start.requestId }])
+        expect(requests).toEqual([])
+      }
+      emit({
+        type: "composerDraftState",
+        epoch: durable.epoch,
+        generation: 1,
+        connected: true,
+        owners: [{ box: origin.box, owner: storage.root }],
+      })
+      await durable.hydrate(target)
+      await Bun.sleep(0)
+      expect(requests.map((request) => request.type)).toEqual([
+        "composerDraftLoad",
+        "composerDraftSave",
+        "composerDraftPromote",
+      ])
+      if (outcome === "success") {
+        expect(inserted).toEqual([result.text])
+        expect(retained).toEqual([])
+        expect(done).toBe(1)
+        expect(ctx.speech.state()).toBe("idle")
+      } else {
+        expect(inserted).toEqual([])
+        expect(retained).toEqual([{ text: result.text, request: start.requestId }])
+        expect(done).toBe(0)
+        expect(ctx.speech.state()).toBe(outcome === "cancel" ? "starting" : "idle")
+      }
+      const settled = checks
+      await Bun.sleep(150)
+      expect(checks).toBe(settled)
+      ctx.fire(result)
+      expect(inserted).toEqual(outcome === "success" ? [result.text] : [])
+      expect(retained).toHaveLength(outcome === "success" ? 0 : 1)
+    } finally {
+      ctx.dispose()
+      durable.dispose()
+    }
+  }
+}, 30_000)
 
 describe("useSpeechToText", () => {
   it("pins the session selected when recording starts", () => {
@@ -323,6 +597,46 @@ describe("useSpeechToText", () => {
     expect(text).toEqual(["Keep as draft"])
     expect(done).toBe(0)
     expect(ctx.speech.state()).toBe("idle")
+    ctx.dispose()
+  })
+
+  it("captures insertion ownership once at transcription and retains rejected results once", () => {
+    const ctx = setup()
+    const inserted: string[] = []
+    const retained: string[] = []
+    let epoch = 0
+    let captured = 0
+    let done = 0
+    ctx.speech.start({
+      model: "scribe",
+      insert: (text) => {
+        inserted.push(text)
+      },
+      retain: (text) => {
+        retained.push(text)
+      },
+      ownership: () => {
+        captured++
+        const original = epoch
+        return () => epoch === original
+      },
+    })
+    const start = ctx.sent[0]
+    if (start?.type !== "speechToTextStart") throw new Error("speech start missing")
+    expect(captured).toBe(0)
+    ctx.fire({ type: "speechToTextStarted", requestId: start.requestId })
+    ctx.speech.stop({ done: () => done++ })
+    ctx.speech.stop()
+    expect(captured).toBe(1)
+    epoch++
+    const result = { type: "speechToTextResult", requestId: start.requestId, text: "Stop hands-free voice" } as const
+    ctx.fire(result)
+    ctx.fire(result)
+    expect(inserted).toEqual([])
+    expect(retained).toEqual([result.text])
+    expect(done).toBe(0)
+    ctx.speech.cancel()
+    expect(retained).toEqual([result.text])
     ctx.dispose()
   })
 })

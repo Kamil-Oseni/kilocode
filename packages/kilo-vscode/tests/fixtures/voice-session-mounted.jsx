@@ -8,7 +8,40 @@ import { PromptInput } from "../../webview-ui/src/components/chat/PromptInput"
 import { DEFAULT_SPEECH_SETTINGS } from "../../src/shared/speech"
 import { useVSCode } from "../../webview-ui/src/context/vscode"
 import { dispatch } from "../../webview-ui/src/utils/message-dispatch"
-import { ProviderContext, useProvider } from "../../webview-ui/src/context/provider"
+import { ProviderContext, ProviderProvider, useProvider } from "../../webview-ui/src/context/provider"
+import { DurableDrafts } from "../../webview-ui/src/utils/durable-drafts"
+
+const acquire = DurableDrafts.prototype.insertion
+window.__speechGuards = []
+window.__speechGates = []
+window.__speechGate = (index, value) => {
+  if (window.__speechGates.length < 128) window.__speechGates.push({ index, accepted: !!value })
+  return value
+}
+DurableDrafts.prototype.insertion = function (identity) {
+  const original = acquire.call(this, identity)
+  const record = (value) => {
+    if (window.__speechGuards.length < 128) window.__speechGuards.push(value)
+  }
+  return Object.assign(
+    (current) => {
+      const owned = original(current)
+      record({ phase: "owned", owned })
+      return owned
+    },
+    {
+      settle: async (current, signal, stable) => {
+        const accepted = await original.settle(current, signal, () => {
+          const same = stable()
+          record({ phase: "stable", same })
+          return same
+        })
+        record({ phase: "settled", accepted })
+        return accepted
+      },
+    },
+  )
+}
 
 const messages = []
 window.__messages = messages
@@ -58,8 +91,10 @@ window.__deliver = (message) =>
     window.postMessage({ ...message, __barrier: marker }, "*")
   })
 window.acquireVsCodeApi = () => ({
-  getState: () => undefined,
-  setState: () => {},
+  getState: () => window.__saved,
+  setState: (value) => {
+    window.__saved = value
+  },
   postMessage: (message) => {
     messages.push(message)
     if (window.__host) void window.__host(message)
@@ -76,6 +111,8 @@ Object.defineProperty(navigator, "mediaDevices", {
 })
 
 function Probe() {
+  const [box, setBox] = createSignal("voice-mounted")
+  window.__box = setBox
   const session = useSession()
   window.__session = session
   window.__voice = useVoice()
@@ -110,7 +147,7 @@ function Probe() {
   })
   return (
     <>
-      <PromptInput boxId="voice-mounted" />
+      <PromptInput boxId={box()} />
       <output id="sid">{session.currentSessionID()}</output>
     </>
   )
@@ -134,6 +171,27 @@ function Routing(props) {
 }
 function Registry(props) {
   const provider = useProvider()
+  return (
+    <ProviderProvider>
+      <Catalog provider={provider}>{props.children}</Catalog>
+    </ProviderProvider>
+  )
+}
+function Catalog(props) {
+  const actual = useProvider()
+  const provider = props.provider
+  // Accepted catalog updates use the actual provider's signal and generation guard.
+  window.__auth = (authStates) =>
+    window.__deliver({
+      type: "providersLoaded",
+      providers: provider.providers(),
+      connected: provider.connected(),
+      defaults: provider.defaults(),
+      defaultSelection: provider.defaultSelection(),
+      authMethods: provider.authMethods(),
+      authStates,
+      generation: 0,
+    })
   const current = provider.providers()
   const model = {
     ...current.kilo.models["anthropic/claude-sonnet-4-6"],
@@ -146,6 +204,7 @@ function Registry(props) {
     <ProviderContext.Provider
       value={{
         ...provider,
+        authStates: actual.authStates,
         providers: () => providers,
         models: () => models,
         findModel: (selection) =>
@@ -158,6 +217,7 @@ function Registry(props) {
 }
 const [mounted, setMounted] = createSignal(true)
 window.__unmount = () => setMounted(false)
+window.__mount = () => setMounted(true)
 render(
   () => (
     <StoryProviders noPadding config={{ model: "kilo/anthropic/claude-sonnet-4-6" }}>

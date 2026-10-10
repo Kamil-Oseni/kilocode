@@ -19,11 +19,15 @@ type Lang = {
 
 export type SpeechState = "idle" | "starting" | "recording" | "transcribing" | "error"
 
-export type InsertTranscript = (text: string) => boolean | void // raya_change - false means the transcript was a local voice command
+export type InsertTranscript = (text: string, consume?: () => void) => boolean | void // raya_change - false means the transcript was a local voice command
 
 type StartOptions = {
   model: string
   insert: InsertTranscript
+  ownership?: () => () => boolean
+  settle?: (signal: AbortSignal) => Promise<boolean>
+  retain?: (text: string, request: string) => void
+  check?: (text: string, request: string) => boolean
   handsFree?: boolean // raya_change - Milestone H
   threshold?: number // raya_change - Milestone H
   silenceMs?: number // raya_change - Milestone H
@@ -67,6 +71,21 @@ export function useSpeechToText(
   let insert: InsertTranscript | undefined
   let done: (() => void) | undefined
   let ready: (() => boolean) | undefined
+  let ownership: (() => () => boolean) | undefined
+  let owned: (() => boolean) | undefined
+  let retain: StartOptions["retain"]
+  let check: StartOptions["check"]
+  let settle: StartOptions["settle"]
+  let result:
+    | {
+        text: string
+        request: string
+        save: StartOptions["retain"]
+        abort: AbortController
+        detached: boolean
+        acknowledged: boolean
+      }
+    | undefined
   let pending = false
   const capture = new SpeechCapture() // raya_change - Milestone H
   let local = false // raya_change - Milestone H
@@ -78,7 +97,7 @@ export function useSpeechToText(
 
   const unsub = vscode.onMessage((msg) => {
     if (!isSpeechMessage(msg)) return
-    if (msg.requestId !== request) return
+    if (!request || msg.requestId !== request) return
 
     if (msg.type === "speechToTextStarted") {
       if (state() !== "starting") return
@@ -113,6 +132,12 @@ export function useSpeechToText(
       return
     }
 
+    if (check?.(msg.text, request) === false) {
+      cleanup()
+      setState("idle")
+      setError(undefined)
+      return
+    }
     const text = msg.text.trim()
     if (!text) {
       if (resume()) return
@@ -131,6 +156,10 @@ export function useSpeechToText(
   function start(opts: StartOptions) {
     if (active()) return
     insert = opts.insert
+    ownership = opts.ownership
+    retain = opts.retain
+    check = opts.check
+    settle = opts.settle
     model = opts.model
     speech = opts.onSpeech
     silence = opts.onSilence
@@ -207,6 +236,7 @@ export function useSpeechToText(
 
   function transcribe() {
     pending = false
+    owned = ownership?.()
     setState("transcribing")
     // raya_change start - send the actual webview recording to the configured STT endpoint
     if (local) {
@@ -275,12 +305,59 @@ export function useSpeechToText(
   }
 
   function finish(text: string) {
-    const next = ready?.() === false ? undefined : done
-    const accepted = insert?.(text)
-    cleanup()
-    setState("idle")
-    setError(undefined)
-    if (accepted !== false) next?.() // raya_change - do not send a voice-mode command as a chat turn
+    const token = { text, request, save: retain, abort: new AbortController(), detached: false, acknowledged: false }
+    result = token
+    request = ""
+    void complete(token)
+  }
+
+  function authorized() {
+    return (!ownership || !!owned) && owned?.() !== false
+  }
+
+  async function complete(token: NonNullable<typeof result>) {
+    try {
+      if (result !== token || token.abort.signal.aborted) return
+      const wait = settle
+      const accepted = wait ? await wait(token.abort.signal) : true
+      if (result !== token) return
+      if (!accepted) {
+        cleanup()
+        setState("idle")
+        setError(undefined)
+        return
+      }
+      const valid = authorized()
+      if (result !== token) return
+      if (!valid) {
+        cleanup()
+        setState("idle")
+        setError(undefined)
+        return
+      }
+      if (result !== token) return
+      const next = ready?.() === false ? undefined : done
+      if (result !== token) return
+      const inserted = insert?.(token.text, () => {
+        if (result === token) token.acknowledged = true
+      })
+      if (result !== token) return
+      cleanup(false)
+      setState("idle")
+      setError(undefined)
+      if (inserted !== false) next?.() // Do not send a voice-mode command as a chat turn.
+    } catch {
+      // A callback can fail after a partial insertion. Preserve speech, never retry or send it here.
+      if (result === token) {
+        cleanup()
+        detach(token)
+        setState("idle")
+        setError("Speech could not be applied safely. Review the retained transcript.")
+        return
+      }
+      detach(token)
+      console.warn("[Raya] Speech result consumption failed after retirement.")
+    }
   }
 
   function fail(message: string, toast = true) {
@@ -303,12 +380,31 @@ export function useSpeechToText(
     return true
   }
 
-  function cleanup() {
+  function detach(token: NonNullable<typeof result>) {
+    if (token.detached) return
+    token.detached = true
+    try {
+      token.save?.(token.text, token.request)
+    } catch {
+      console.warn("[Raya] Recognized speech could not be retained.")
+    }
+  }
+
+  function cleanup(preserve = true) {
+    const token = result
+    result = undefined
+    token?.abort.abort()
+    if (token && preserve && !token.acknowledged) detach(token)
     request = ""
     sessionID = undefined
     insert = undefined
     done = undefined
     ready = undefined
+    ownership = undefined
+    owned = undefined
+    retain = undefined
+    check = undefined
+    settle = undefined
     pending = false
     local = false // raya_change - Milestone H
     model = "" // raya_change - Milestone H

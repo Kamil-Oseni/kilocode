@@ -23,6 +23,7 @@ import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { FileIcon } from "@kilocode/kilo-ui/file-icon"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { showToast } from "@kilocode/kilo-ui/toast"
+import { useClipboard } from "@kilocode/kilo-ui/context/clipboard"
 import { isTextControl } from "../../utils/focus"
 import { useSession } from "../../context/session"
 import { useLocalTabs } from "../../context/local-tabs"
@@ -53,6 +54,7 @@ import { hasGitChangesMention } from "../../hooks/git-changes-context-utils"
 import { useSlashCommand } from "../../hooks/useSlashCommand"
 import { useGhostText } from "../../hooks/useGhostText"
 import { useSpeechToText } from "../speech-to-text/useSpeechToText"
+import { speechRecovery } from "../speech-to-text/recovery"
 import { useSpeechToTextModels } from "../../context/speech-to-text-models"
 import { createSpeechShortcut } from "../speech-to-text/shortcut"
 import { voiceIntent } from "../speech-to-text/voice-intent" // raya_change - Milestone H
@@ -207,6 +209,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const voice = useVoice() // raya_change - Milestone H
   const language = useLanguage()
   const vscode = useVSCode()
+  const clipboard = useClipboard()
+  const recovery = speechRecovery(vscode)
+  const [copying, setCopying] = createSignal(false)
+  const [copyError, setCopyError] = createSignal<string>()
+  const copySpeech = async () => {
+    const saved = recovery.value()
+    if (!saved?.text || copying()) return
+    setCopying(true)
+    setCopyError(undefined)
+    try {
+      await clipboard.write(saved.text)
+    } catch {
+      setCopyError("Could not copy the transcript. It is still retained here.")
+    } finally {
+      setCopying(false)
+    }
+  }
   const durable = durableDrafts(vscode)
   const [draftStatus, setDraftStatus] = createSignal(0)
   const restored = new Set<string>()
@@ -316,6 +335,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         left?.key === right?.key && left?.owner === right?.owner && left?.context === right?.context,
     },
   )
+  const speechScope = createMemo(
+    () => {
+      draftStatus()
+      return { key: draftKey(), session: sid(), route: ctx(), context: durable.partition(boxKey()) }
+    },
+    undefined,
+    {
+      equals: (left, right) =>
+        left?.key === right?.key &&
+        left?.session === right?.session &&
+        left?.route === right?.route &&
+        left?.context === right?.context,
+    },
+  )
   let projected: ReturnType<typeof scope> | undefined
   const recoverDraft = async () => {
     const source = identity()
@@ -346,8 +379,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     scroll: textareaRef?.scrollTop ?? scrollDrafts.get(draftKey()) ?? 0,
   })
 
-  const [text, setText] = createSignal("")
+  const [text, write] = createSignal("")
+  let revision = 0
+  let caret = 0
+  let selection: { start: number | undefined; end: number | undefined } | undefined
+  const observe = () => {
+    const start = textareaRef?.selectionStart
+    const end = textareaRef?.selectionEnd
+    if (selection && (selection.start !== start || selection.end !== end)) caret++
+    selection = { start, end }
+  }
+  const setText = (value: string) => {
+    if (value !== text()) revision++
+    return write(value)
+  }
   const [reviewComments, setReviewComments] = createSignal<ReviewCommentEntry[]>([])
+  // Equal hydration keeps readiness; an observed content excursion gets a new identity even after reverting.
+  const attachments = createMemo(
+    () => ({ comments: JSON.stringify(reviewComments()), images: JSON.stringify(imageAttach.images()) }),
+    undefined,
+    {
+      equals: (left, right) => left?.comments === right?.comments && left?.images === right?.images,
+    },
+  )
   // A model chosen while this draft is loading belongs to its current partition,
   // even if the host assigns the first owner before hydration finishes.
   type Choice = ReturnType<typeof session.selected>
@@ -1335,9 +1389,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const insertSpeechText = (value: string) => {
+  const insertSpeechText = (value: string, consume?: () => void) => {
     const cleaned = voice.clean(value)
     if (!cleaned) {
+      consume?.()
       speech.rejectEcho() // raya_change - proven false interruption tightens the gate and resumes remaining speech
       if (!voice.recover()) queueMicrotask(() => window.dispatchEvent(new CustomEvent("rayaVoiceListen")))
       return false
@@ -1345,7 +1400,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // raya_change start - ordinary spoken language can switch voice behavior without a command
     const mode = voiceIntent(cleaned)
     if (mode) {
-      if (!choicesReady()) return false
+      if (!choicesReady()) throw new Error("Voice command choices are unavailable")
+      consume?.()
       intent()
       if (mode === "hands-free") startVoice()
       if (mode !== "hands-free") voice.stop()
@@ -1370,11 +1426,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const startSpeech = () => {
+    if (recovery.blocked()) {
+      return
+    }
+    const origin = scope()
+    const destination = speechScope()
+    const target = identity()
+    const owned = durable.insertion(target)
+    let stable = () => false
+    const id = sid()
+    const context = ctx()
+    const saved = {
+      box: boxKey(),
+      key: origin.key,
+      owner: origin.owner ?? null,
+      context: origin.context ?? null,
+      session: id ?? null,
+      route: context ?? null,
+    }
     const fallback = voice.cascade() && voice.settings().mode === "hands-free"
     if (!voice.playing()) voice.listen() // raya_change - background barge-in capture must preserve the speaking phase
     speech.start({
       model: speechModel(),
       insert: insertSpeechText,
+      check: (value, request) => recovery.check(saved, request, value),
+      retain: (value, request) => {
+        recovery.retain(saved, request, value)
+      },
+      settle: (signal) => owned.settle(target, signal, () => stable()),
+      ownership: () => {
+        observe()
+        const value = text()
+        const epoch = revision
+        const position = caret
+        const start = textareaRef?.selectionStart
+        const end = textareaRef?.selectionEnd
+        stable = () => {
+          observe()
+          return (
+            speechScope() === destination &&
+            sid() === id &&
+            ctx() === context &&
+            text() === value &&
+            revision === epoch &&
+            caret === position &&
+            textareaRef?.selectionStart === start &&
+            textareaRef?.selectionEnd === end
+          )
+        }
+        return () => stable() && owned(identity())
+      },
       handsFree: fallback,
       threshold: voice.settings().vadThreshold,
       silenceMs: voice.settings().vadSilenceMs,
@@ -1391,17 +1492,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const key = draftKey()
     const context = ctx()
     const value = text()
-    const comments = reviewComments()
-    const images = imageAttach.images()
+    const attached = attachments()
+    const auth = provider.authStates()
+    const selected = session.selected(id)
+    const agent = session.selectedAgent(id)
     speech.stop({
       done: () => void handleSend(),
       ready: () =>
+        !isDisabled() &&
+        !props.blocked?.() &&
+        !terminal.pending() &&
+        !git.pending() &&
+        choicesReady() &&
+        provider.authStates() === auth &&
+        session.selected(id)?.providerID === selected?.providerID &&
+        session.selected(id)?.modelID === selected?.modelID &&
+        session.selectedAgent(id) === agent &&
         draftKey() === key &&
         sid() === id &&
         ctx() === context &&
         text() === value &&
-        reviewComments() === comments &&
-        imageAttach.images() === images,
+        attachments() === attached,
     })
   }
 
@@ -1788,6 +1899,42 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     >
       <NativeVoiceControls end={toggleVoice} />
       <NativeVoiceRecovery />
+      <Show when={recovery.blocked()}>
+        <Card variant="info" role="status" data-slot="speech-recovery">
+          <p>
+            {recovery.value()?.status === "capacity"
+              ? "Recognized speech exceeded the 256 KiB recovery limit. It was not inserted or sent, and its text could not be retained."
+              : recovery.value()?.text
+                ? "Your draft changed while speech was transcribing. This transcript is kept separately; copy it or discard it before recording again."
+                : "Saved speech recovery is invalid. It cannot be inserted into a draft. Discard it before recording again."}
+          </p>
+          <Show when={recovery.value()}>
+            {(saved) => (
+              <p>
+                Saved separately for {saved().box ?? "another composer"}, original draft {saved().key ?? "unknown"}.
+                Restored speech can only be copied or discarded.
+              </p>
+            )}
+          </Show>
+          <Show when={recovery.stale()}>
+            <p>
+              This mounted transcript differs from the saved recovery. Copy this version before closing, and reopen the
+              view to review the saved version.
+            </p>
+          </Show>
+          <Show when={recovery.value()?.text}>{(text) => <pre>{text()}</pre>}</Show>
+          <Show when={recovery.error()}>{(error) => <p>{error()}</p>}</Show>
+          <Show when={copyError()}>{(error) => <p>{error()}</p>}</Show>
+          <Show when={recovery.value()?.text}>
+            <Button size="small" variant="secondary" disabled={copying()} onClick={() => void copySpeech()}>
+              Copy transcript
+            </Button>
+          </Show>
+          <Button size="small" variant="secondary" disabled={copying()} onClick={() => recovery.discard()}>
+            Discard transcript
+          </Button>
+        </Card>
+      </Show>
       <Show when={draftError()}>
         <Card variant="info" role="status">
           <Show
@@ -2106,8 +2253,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               props.onFocusChange?.(false)
             }}
             onSelect={() => {
+              observe()
               syncGhost()
               if (textareaRef) mention.snapSelection(textareaRef)
+              observe()
               persistDraft()
             }}
             onScroll={syncHighlightScroll}
@@ -2208,7 +2357,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </div>
         <div class="prompt-input-hint-actions">
           <Show when={canUseSpeech()}>
-            <SpeechToTextButton speech={speech} disabled={isDisabled()} start={startSpeech} label={language.t} />
+            <SpeechToTextButton
+              speech={speech}
+              disabled={isDisabled() || recovery.blocked()}
+              start={startSpeech}
+              label={language.t}
+            />
           </Show>
           <Show
             when={!voiceSession.pending() && showStop()}

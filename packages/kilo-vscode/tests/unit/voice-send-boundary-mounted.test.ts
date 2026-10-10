@@ -70,6 +70,10 @@ test("actual Voice composer arms replies only at dispatch and ignores retired VA
 
   const replies = new VoiceReplies()
   const captured: Array<{ request?: string; message: Record<string, unknown> }> = []
+  const pending = new Set<string>()
+  const receipts: Record<string, unknown>[] = []
+  let promoted = false
+  let settled = false
   try {
     await using storage = await (await import("../fixtures/durable-draft-storage")).draftStorage()
     await page.exposeFunction("__host", async (message) => {
@@ -97,8 +101,63 @@ test("actual Voice composer arms replies only at dispatch and ignores retired VA
           "composerDraftList",
         ].includes(message.type)
       ) {
-        const reply = await storage.handle(message)
-        await page.evaluate((reply) => window.__deliver(reply), reply)
+        pending.add(message.requestID)
+        try {
+          const reply = await storage.handle(message)
+          await page.evaluate((reply) => window.__deliver(reply), reply)
+          receipts.push({
+            operation: message.type,
+            session: message.identity?.sessionID === "ses_voice",
+            pending: !!message.identity?.pendingID,
+            empty: message.content?.text === "",
+            voice: message.content?.agent === "voice",
+            pinned: message.content?.model?.modelID === "synthetic-pinned-4b",
+            request: reply.requestID === message.requestID,
+            owner: reply.owner === message.owner,
+            epoch: reply.epoch === message.epoch,
+            generation: reply.generation === message.generation,
+            error: !!reply.error,
+            entry: !!reply.entry,
+            entrySession: reply.entry?.identity.sessionID === "ses_voice",
+            entryContent: !!reply.entry?.content,
+            entryEmpty: reply.entry?.content?.text === "",
+            entryVoice: reply.entry?.content?.agent === "voice",
+            entryPinned: reply.entry?.content?.model?.modelID === "synthetic-pinned-4b",
+            targetSession: reply.target?.identity.sessionID === "ses_voice",
+            targetEmpty: reply.target?.content?.text === "",
+            targetVoice: reply.target?.content?.agent === "voice",
+            targetPinned: reply.target?.content?.model?.modelID === "synthetic-pinned-4b",
+          })
+          if (receipts.length > 16) receipts.shift()
+          if (
+            message.type === "composerDraftPromote" &&
+            message.to.sessionID === "ses_voice" &&
+            !reply.error &&
+            reply.requestID === message.requestID &&
+            reply.owner === message.owner &&
+            reply.epoch === message.epoch &&
+            reply.generation === message.generation &&
+            reply.target?.identity.sessionID === "ses_voice" &&
+            reply.target.content?.agent === "voice" &&
+            reply.target.content.model?.modelID === "synthetic-pinned-4b"
+          )
+            promoted = true
+          if (
+            message.type === "composerDraftSave" &&
+            message.identity.sessionID === "ses_voice" &&
+            message.content.text === "" &&
+            !reply.error &&
+            reply.requestID === message.requestID &&
+            reply.owner === message.owner &&
+            reply.entry?.identity.sessionID === "ses_voice" &&
+            reply.entry.content?.text === "" &&
+            reply.entry.content.agent === "voice" &&
+            reply.entry.content.model?.modelID === "synthetic-pinned-4b"
+          )
+            settled = true
+        } finally {
+          pending.delete(message.requestID)
+        }
         return
       }
       if (message.type === "speechVoiceTurn") replies.mark(message)
@@ -165,10 +224,43 @@ test("actual Voice composer arms replies only at dispatch and ignores retired VA
     )
     await expect.poll(() => page.evaluate(() => window.__session.currentSessionID())).toBe("ses_voice")
     await expect(input).toHaveValue("Synthetic pending draft")
-    await input.fill("")
+    // Session creation precedes durable promotion; editing during promotion legitimately refuses its revision guard.
+    await expect.poll(() => ({ promoted, pending: pending.size })).toEqual({ promoted: true, pending: 0 })
     await expect
-      .poll(() => page.evaluate(() => window.__messages.filter((entry) => entry.type === "composerDraftSave").length))
-      .toBeGreaterThan(0)
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.__messages.filter((entry) => entry.type === "speechRealtimeStart" && entry.sessionID === "ses_voice")
+              .length,
+        ),
+      )
+      .toBe(1)
+    expect(await page.evaluate(() => window.__session.selected("ses_voice"))).toEqual({
+      providerID: "kilo",
+      modelID: "synthetic-pinned-4b",
+    })
+    expect(await page.evaluate(() => window.__session.selectedAgent("ses_voice"))).toBe("voice")
+    await input.fill("")
+    // Earlier pending-draft saves do not acknowledge the current empty session draft.
+    // Begin recording only after the actual SQL receipt was delivered and prior ownership work joined.
+    await expect
+      .poll(() => ({ settled, pending: pending.size }))
+      .toEqual({ settled: true, pending: 0 })
+      .catch(async (err) => {
+        console.log("Synthetic empty draft acknowledgement", {
+          settled,
+          pending: pending.size,
+          receipts,
+          composer: await page.evaluate(() => ({
+            session: window.__session.currentSessionID() === "ses_voice",
+            voice: window.__session.selectedAgent("ses_voice") === "voice",
+            empty: document.querySelector<HTMLTextAreaElement>("textarea.prompt-input")?.value === "",
+          })),
+        })
+        throw err
+      })
+    await expect(input).toHaveValue("")
+    expect(await page.evaluate(() => window.__session.selectedAgent("ses_voice"))).toBe("voice")
     await page.evaluate(async () => {
       window.__voice.setMode("hands-free")
       await window.__deliver({

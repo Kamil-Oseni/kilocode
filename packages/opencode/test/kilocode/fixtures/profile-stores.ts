@@ -5,6 +5,7 @@ import { mkdir, copyFile, readFile, writeFile, stat, unlink } from "node:fs/prom
 import { Effect, ManagedRuntime } from "effect"
 import { Database as Core } from "@opencode-ai/core/database/database"
 import { Database } from "bun:sqlite"
+import { statements } from "@opencode-ai/core/kilocode/routine-revocation"
 import { withImage } from "@opencode-ai/core/kilocode/source-offline"
 import { withWorking, assertWorking } from "../../../src/kilocode/migration/profile-image"
 import { classify, collectStores, stores } from "../../../src/kilocode/migration/profile-stores"
@@ -159,11 +160,30 @@ assert.equal(
 )
 const active = new Database(path.join(restored.path, "raya.db"), { readonly: true })
 assert.deepEqual(active.query("SELECT id FROM session").all(), [{ id: "ses_graph_0" }])
+const triggers = active
+  .query<
+    { name: string; sql: string },
+    []
+  >("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name GLOB 'raya_routine_authority_*' ORDER BY name")
+  .all()
+assert.equal(triggers.length, statements.length)
+assert(triggers.length > 0)
 active.close()
+assert.equal((await classify(path.join(restored.path, "raya.db"))).kind, "raya")
 const historical = { ...opened }
 Reflect.deleteProperty(historical, "archives")
 const secondtext = await seal({ ...opened, id: crypto.randomUUID(), archives: [historical] }, password)
 const second = await restore(secondtext, password, path.join(root, "second-destination"), mappings)
+const reopened = new Database(path.join(second.path, "raya.db"), { readonly: true })
+assert.deepEqual(
+  reopened
+    .query(
+      "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name GLOB 'raya_routine_authority_*' ORDER BY name",
+    )
+    .all(),
+  triggers,
+)
+reopened.close()
 assert.deepEqual(
   (await Bun.file(path.join(second.path, "restore-source.json")).json()).archives[0].stores,
   opened.stores,
@@ -179,6 +199,19 @@ const altered = new Database(extra)
 altered.exec("CREATE TRIGGER unsupported AFTER INSERT ON session BEGIN SELECT 1; END")
 altered.close()
 await assert.rejects(classify(extra), /unsupported full schema/)
+const missing = path.join(root, "missing-authority-trigger.db")
+await copyFile(path.join(restored.path, "raya.db"), missing)
+const stripped = new Database(missing)
+stripped.exec(`DROP TRIGGER "${triggers[0].name}"`)
+stripped.close()
+await assert.rejects(classify(missing), /unsupported full schema/)
+const substituted = path.join(root, "substituted-authority-trigger.db")
+await copyFile(path.join(restored.path, "raya.db"), substituted)
+const replaced = new Database(substituted)
+replaced.exec(`DROP TRIGGER "${triggers[0].name}"`)
+replaced.exec(`CREATE TRIGGER "${triggers[0].name}" AFTER INSERT ON session BEGIN SELECT 1; END`)
+replaced.close()
+await assert.rejects(classify(substituted), /unsupported full schema/)
 const index = path.join(root, "index.db")
 await copyFile(path.join(restored.path, "raya.db"), index)
 const indexed = new Database(index)
@@ -201,6 +234,9 @@ await writeFile(
     twoHop: true,
     unknownSchemaRefused: true,
     triggerRefused: true,
+    authorityTriggersPreserved: true,
+    missingAuthorityTriggerRefused: true,
+    substitutedAuthorityTriggerRefused: true,
     indexRefused: true,
     sourceCaptureAuthority: false,
     qualification:

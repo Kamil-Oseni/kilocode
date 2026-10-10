@@ -51,6 +51,9 @@ test("distinct actual Core graphs preserve staged WAL rows independently through
     twoHop: true,
     unknownSchemaRefused: true,
     triggerRefused: true,
+    authorityTriggersPreserved: true,
+    missingAuthorityTriggerRefused: true,
+    substitutedAuthorityTriggerRefused: true,
     indexRefused: true,
     portableCaptureAuthorized: false,
   })

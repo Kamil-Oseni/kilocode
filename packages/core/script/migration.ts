@@ -55,7 +55,8 @@ async function generate() {
 
     await fs.mkdir(full)
     await drizzle(temporary, full, "schema")
-    await Bun.write(schema, await formatTypescript(renderSchema(await generatedSql(full))))
+    await kilo.migrations(tsDir, (id, sql) => formatTypescript(renderMigration(id, sql))) // kilocode_change
+    await Bun.write(schema, await formatTypescript(renderSchema(kilo.schema(await generatedSql(full))))) // kilocode_change
     await Bun.write(registry, await formatTypescript(renderRegistry(await typescriptMigrations())))
   } finally {
     await fs.rm(temporary, { recursive: true, force: true })
@@ -79,9 +80,14 @@ async function check() {
 
     await fs.mkdir(full)
     await drizzle(temporary, full, "schema")
-    if ((await Bun.file(schema).text()) !== (await formatTypescript(renderSchema(await generatedSql(full))))) {
+    // kilocode_change start
+    await kilo.migrations(tsDir, (id, sql) => formatTypescript(renderMigration(id, sql)), true)
+    if (
+      (await Bun.file(schema).text()) !== (await formatTypescript(renderSchema(kilo.schema(await generatedSql(full)))))
+    ) {
       throw new Error("Current database schema is stale. Run `bun script/migration.ts` from packages/core.")
     }
+    // kilocode_change end
 
     const migrations = await typescriptMigrations()
     if ((await Bun.file(registry).text()) !== (await formatTypescript(renderRegistry(migrations)))) {
@@ -154,12 +160,13 @@ ${renderStatements(sql, true) /* kilocode_change */}
 `
 }
 
-function renderStatements(sql: string, annotated = false) { // kilocode_change
+function renderStatements(sql: string, annotated = false) {
+  // kilocode_change
   return sql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter((statement) => statement.length > 0)
-    .map((statement) => annotated ? kilo.statement(statement, renderRun(statement)) : renderRun(statement)) // kilocode_change
+    .map((statement) => (annotated ? kilo.statement(statement, renderRun(statement)) : renderRun(statement))) // kilocode_change
     .join("\n")
 }
 

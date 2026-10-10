@@ -6,7 +6,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { RayaRoutineDelegationTable as Delegation } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Deferred, Effect, Layer } from "effect"
+import { Deferred, Effect, Layer, Schedule } from "effect"
 import { eq } from "drizzle-orm"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
@@ -20,6 +20,7 @@ import { InstanceStore } from "@/project/instance-store"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { testEffect } from "../lib/effect"
+import { database as physical, storage as files } from "./fixtures/effect-profile"
 
 const root = LayerNode.group([
   Bus.node,
@@ -31,6 +32,8 @@ const root = LayerNode.group([
   InstanceStore.node,
 ])
 const env = AppNodeBuilder.build(root, [
+  [Database.node, physical],
+  [Storage.node, files],
   [
     InstanceStore.bootstrapNode,
     Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
@@ -138,6 +141,7 @@ it.instance(
         const inbox = RayaTaskInbox.make(database)
         const page = yield* inbox.page(recipient.id).pipe(
           Effect.repeat({
+            schedule: Schedule.spaced(10),
             until: (value) =>
               value.messages.some(
                 (message) => message.kind === "system" && message.body.includes("per_stale_delegated_reply"),

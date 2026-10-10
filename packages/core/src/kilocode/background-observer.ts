@@ -94,17 +94,32 @@ export const enroll = Effect.fn("BackgroundObserver.enroll")(function* (
 
 /** Original fiber failures remain observed by observe(); they must not prevent
  * closing their containing scope. Run this in the external root scope only. */
-export const retire = (value: Generation | undefined, close: Effect.Effect<void, unknown>) =>
+export const retire = (
+  value: Generation | undefined,
+  close: Effect.Effect<void, unknown>,
+  values?: readonly Producer[],
+) =>
   Effect.withFiber((caller) =>
     Effect.gen(function* () {
-      if (value === undefined) return yield* close
-      const retained = generations.get(value)
-      if (!retained) throw new Error("Background original generation is foreign")
-      if (retained.originals.some((original) => original.fiber === caller))
+      if (value === undefined && values === undefined) return yield* close
+      const retained = value === undefined ? undefined : generations.get(value)
+      if (value !== undefined && !retained) throw new Error("Background original generation is foreign")
+      const originals =
+        retained?.originals ??
+        (() => {
+          if (!values?.length || values.length > 1024 || new Set(values).size !== values.length)
+            throw new Error("Background original producer roster is invalid")
+          return values.map((value) => {
+            const original = producers.get(value)
+            if (!original) throw new Error("Background original producer is foreign")
+            return original
+          })
+        })()
+      if (originals.some((original) => original.fiber === caller))
         throw new Error("Background producer cannot retire its own scope")
       // Select all cooperative stops before awaiting any producer. Never interrupt
       // the outer fiber whose actual exit the journal must independently observe.
-      const requests = yield* Effect.forEach(retained.originals, (original) => Effect.exit(original.request), {
+      const requests = yield* Effect.forEach(originals, (original) => Effect.exit(original.request), {
         concurrency: "unbounded",
       })
       const waits = yield* Effect.forEach(
@@ -112,12 +127,13 @@ export const retire = (value: Generation | undefined, close: Effect.Effect<void,
         (exit) => Effect.exit(Exit.isSuccess(exit) ? exit.value : Effect.failCause(exit.cause)),
         { concurrency: "unbounded" },
       )
-      if (waits.some(Exit.isFailure)) retained.failed = true
+      if (retained && waits.some(Exit.isFailure)) retained.failed = true
       yield* Effect.forEach(
-        retained.originals,
+        originals,
         (original) =>
           Effect.gen(function* () {
             const fiber = yield* Deferred.await(original.filled)
+            if (original.fiber === caller) throw new Error("Background producer cannot retire its own scope")
             return yield* Effect.exit(fiber)
           }),
         { concurrency: "unbounded" },

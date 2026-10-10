@@ -800,11 +800,39 @@ export namespace RayaTaskRunner {
     )
 
     const park = Effect.fn("RayaTaskRunner.park")(function* (sessionID: SessionID, waiting: boolean) {
+      const session = yield* input.sessions.get(sessionID)
+      if (session.id !== sessionID)
+        return yield* new RayaTask.GuardError({ message: "This waiting worker's session changed." })
+      const raw = session.metadata?.rayaRoutine
+      const identity =
+        raw === undefined
+          ? undefined
+          : yield* Schema.decodeUnknownEffect(ContinuationRecord)(raw).pipe(
+              Effect.mapError(
+                () => new RayaTask.GuardError({ message: "This waiting worker's routine identity changed." }),
+              ),
+            )
       const items = yield* tasks.list()
+      if (identity && !items.some((item) => item.id === identity.agentID))
+        return yield* new RayaTask.GuardError({ message: "This waiting worker's routine is unavailable." })
       for (const item of items) {
+        if (identity && item.id !== identity.agentID) continue
         const history = yield* tasks.runsFor(item.id)
-        const run = history.findLast((entry) => entry.sessionID === sessionID)
-        if (!run) continue
+        const run = identity
+          ? history.find((entry) => entry.id === identity.runID && entry.sessionID === sessionID)
+          : history.findLast((entry) => entry.sessionID === sessionID)
+        if (!run) {
+          if (identity)
+            return yield* new RayaTask.GuardError({ message: "This waiting worker's original run is unavailable." })
+          continue
+        }
+        if (
+          identity &&
+          (run.agentID !== identity.agentID ||
+            (run.scheduleVersion ?? 1) !== identity.scheduleVersion ||
+            !isDeepStrictEqual(run.trigger, identity.trigger))
+        )
+          return yield* new RayaTask.GuardError({ message: "This waiting worker's original run changed." })
         if (!waiting) {
           const row = errands ? yield* errands.bySession(sessionID) : undefined
           const session = yield* input.sessions.get(sessionID)
@@ -2511,40 +2539,54 @@ export namespace RayaTaskRunner {
       const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
       const receipt = Effect.fn("RayaTaskRunner.permissionReceipt")(function* (review: Review, reply: string) {
         if (!inbox) return
+        const session = yield* input.sessions.get(review.sessionID)
+        if (session.metadata?.rayaRoutine === undefined) return
+        const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata.rayaRoutine).pipe(
+          Effect.mapError(
+            () => new RayaTask.GuardError({ message: "This permission reply's routine identity changed." }),
+          ),
+        )
         const items = yield* runner.tasks.list()
-        for (const item of items) {
-          const runs = yield* runner.tasks.runsFor(item.id)
-          const run = runs.findLast((entry) => entry.sessionID === review.sessionID)
-          if (!run) continue
-          const decision =
-            reply === "once"
-              ? "Approved for this call"
-              : reply === "always"
-                ? "Approved with 'always allow' selected"
-                : "Rejected"
-          const patterns = review.patterns.slice(0, 8).map((pattern) => `- ${plain(pattern)}`)
-          const body = [
-            "Authority receipt",
-            `Worker: ${plain(item.name, 256)}`,
-            `Run: ${plain(run.id, 256)}`,
-            `Permission: ${plain(review.permission, 256)}`,
-            `Decision: ${decision}`,
-            ...(patterns.length ? ["Requested scope:", ...patterns] : []),
-            `Request: ${plain(review.requestID, 256)}`,
-            ...(review.callID ? [`Tool call: ${plain(review.callID, 256)}`] : []),
-            "This receipt records the decision. It does not change the worker's saved access.",
-          ]
-            .join("\n")
-            .slice(0, 8000)
-          yield* inbox.publish({
-            agentID: item.id,
-            source: `authority:${createHash("sha256").update(review.requestID).digest("hex").slice(0, 40)}`,
-            kind: "system",
-            body,
-            sessionID: review.sessionID,
-          })
-          return
-        }
+        const item = items.find((item) => item.id === identity.agentID)
+        if (!item || session.id !== review.sessionID)
+          yield* new RayaTask.GuardError({ message: "This permission reply's routine is unavailable." })
+        const runs = yield* runner.tasks.runsFor(item.id)
+        const run = runs.find((entry) => entry.id === identity.runID)
+        if (
+          !run ||
+          run.agentID !== identity.agentID ||
+          run.sessionID !== review.sessionID ||
+          (run.scheduleVersion ?? 1) !== identity.scheduleVersion ||
+          !isDeepStrictEqual(run.trigger, identity.trigger)
+        )
+          yield* new RayaTask.GuardError({ message: "This permission reply's original run changed." })
+        const decision =
+          reply === "once"
+            ? "Approved for this call"
+            : reply === "always"
+              ? "Approved with 'always allow' selected"
+              : "Rejected"
+        const patterns = review.patterns.slice(0, 8).map((pattern) => `- ${plain(pattern)}`)
+        const body = [
+          "Authority receipt",
+          `Worker: ${plain(item.name, 256)}`,
+          `Run: ${plain(run.id, 256)}`,
+          `Permission: ${plain(review.permission, 256)}`,
+          `Decision: ${decision}`,
+          ...(patterns.length ? ["Requested scope:", ...patterns] : []),
+          `Request: ${plain(review.requestID, 256)}`,
+          ...(review.callID ? [`Tool call: ${plain(review.callID, 256)}`] : []),
+          "This receipt records the decision. It does not change the worker's saved access.",
+        ]
+          .join("\n")
+          .slice(0, 8000)
+        yield* inbox.publish({
+          agentID: item.id,
+          source: `authority:${createHash("sha256").update(review.requestID).digest("hex").slice(0, 40)}`,
+          kind: "system",
+          body,
+          sessionID: review.sessionID,
+        })
       })
       yield* Effect.acquireRelease(
         input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {

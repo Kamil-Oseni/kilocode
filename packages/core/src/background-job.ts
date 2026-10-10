@@ -68,6 +68,7 @@ type FinishResult = {
   done?: Deferred.Deferred<Info>
   retirement?: Active["retirement"] // kilocode_change - original scope-close completion
   generation?: Observer.Generation // kilocode_change
+  originals?: readonly Observer.Producer[] // kilocode_change - exact unjournaled originals still join before scope close
 }
 
 type PromoteResult = {
@@ -98,6 +99,8 @@ type ExtendResult =
 
 export type StartInput = {
   origin?: Origin // kilocode_change
+  onFork?: (fiber: Fiber.Fiber<void, unknown>) => Effect.Effect<void> // kilocode_change - expose only the actual original producer to its launching owner
+  onWork?: Parameters<Invocation.Control["run"]>[1] // kilocode_change - actual inner work is distinct from outer settlement
   id?: string
   type: string
   title?: string
@@ -108,6 +111,8 @@ export type StartInput = {
 
 export type ExtendInput = {
   origin?: Origin // kilocode_change
+  onFork?: StartInput["onFork"] // kilocode_change
+  onWork?: StartInput["onWork"] // kilocode_change
   id: string
   run: Effect.Effect<string, unknown>
 }
@@ -266,6 +271,7 @@ export const make = Effect.gen(function* () {
           done: job.done,
           retirement: fenced ? undefined : job.retirement,
           generation: job.generation,
+          originals: job.originals, // kilocode_change - captured with this exact settlement, never a later same-ID generation
         },
         new Map(jobs).set(id, next),
       ]
@@ -275,7 +281,7 @@ export const make = Effect.gen(function* () {
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
     if (result.retirement && state.scope.state._tag !== "Closed") {
       // kilocode_change - registry disposal owns closing scopes
-      yield* Observer.retire(result.generation, Lineage.close(lineage, result.retirement)).pipe(
+      yield* Observer.retire(result.generation, Lineage.close(lineage, result.retirement), result.originals).pipe(
         // kilocode_change
         // kilocode_change
         Effect.forkIn(state.scope, { startImmediately: true }),
@@ -285,13 +291,14 @@ export const make = Effect.gen(function* () {
   })
 
   const fork = Effect.fn("BackgroundJob.fork")(function* (
-    scope: Scope.Scope,
+    scope: Scope.Closeable, // kilocode_change - attachment failure closes the actual owned job scope after joining
     id: string,
     token: object,
     sequence: number,
     run: Effect.Effect<string, unknown>,
     control: Invocation.Control, // kilocode_change
     original: Observer.Producer, // kilocode_change
+    attached?: StartInput["onFork"], // kilocode_change
   ) {
     const fiber = yield* run.pipe(
       // kilocode_change
@@ -312,6 +319,20 @@ export const make = Effect.gen(function* () {
       Effect.forkIn(scope, { startImmediately: true }),
     )
     yield* Observer.attach(original, fiber) // kilocode_change
+    // kilocode_change start - failed original attachment still joins the actual child
+    if (attached) {
+      const exit = yield* Effect.exit(attached(fiber))
+      if (Exit.isFailure(exit)) {
+        yield* Fiber.interrupt(fiber)
+        const stopped = yield* Fiber.await(fiber)
+        const cause =
+          Exit.isFailure(stopped) && !Cause.hasInterruptsOnly(stopped.cause)
+            ? Cause.combine(exit.cause, stopped.cause)
+            : exit.cause
+        return yield* Effect.failCause(cause).pipe(Effect.ensuring(Scope.close(scope, Exit.failCause(cause))))
+      }
+    }
+    // kilocode_change end
     return fiber // kilocode_change
   })
 
@@ -423,9 +444,10 @@ export const make = Effect.gen(function* () {
             id,
             result.token,
             0,
-            invocation.run(restore(input.run)).pipe(Effect.ensuring(Deferred.succeed(tail, undefined))), // kilocode_change
+            invocation.run(restore(input.run), input.onWork).pipe(Effect.ensuring(Deferred.succeed(tail, undefined))), // kilocode_change
             invocation, // kilocode_change
             original, // kilocode_change
+            input.onFork, // kilocode_change
           )
         return result.info
       }),
@@ -500,9 +522,10 @@ export const make = Effect.gen(function* () {
           input.id,
           result.token,
           result.sequence,
-          invocation.run(Deferred.await(result.previous).pipe(Effect.andThen(restore(input.run)))), // kilocode_change - cancellation joins even a queued original fiber
+          invocation.run(Deferred.await(result.previous).pipe(Effect.andThen(restore(input.run))), input.onWork), // kilocode_change - cancellation joins even a queued original fiber
           invocation, // kilocode_change
           original, // kilocode_change
+          input.onFork, // kilocode_change
         )
         return true
       }),

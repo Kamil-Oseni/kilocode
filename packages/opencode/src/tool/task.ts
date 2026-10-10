@@ -16,7 +16,7 @@ import { Provider } from "@/provider/provider" // kilocode_change
 import { KiloTask } from "../kilocode/tool/task" // kilocode_change
 import { handoff as evidence } from "@/kilocode/tool/task-evidence" // kilocode_change - preserve invocation-bound observed identifiers
 import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - observed results retain the original request contract
-import { SessionRetirement } from "@/kilocode/session/retirement" // kilocode_change - reserve real background producer ownership before the launching call retires
+import * as Lineage from "@/kilocode/task/effect-lineage" // kilocode_change - admit original Routine child producers before their actual forks
 import { KiloTaskBackgroundProcess } from "../kilocode/tool/task-background-process" // kilocode_change
 import { KiloCostPropagation } from "../kilocode/session/cost-propagation" // kilocode_change
 import { KiloSessionProcessor } from "../kilocode/session/processor" // kilocode_change
@@ -255,7 +255,9 @@ export const TaskTool = Tool.define(
       // kilocode_change start - exact-child recovery retains the authenticated logged contract
       const follow =
         ctx.agent === "auto"
-          ? RayaChief.follow(recovery || retained ? { ...parent.metadata, [RayaChief.phaseKey]: "goal" } : parent.metadata)
+          ? RayaChief.follow(
+              recovery || retained ? { ...parent.metadata, [RayaChief.phaseKey]: "goal" } : parent.metadata,
+            )
           : undefined // kilocode_change - only authenticated exact-child recovery retains the logged work contract
       // kilocode_change end
       const continued = ctx.agent === "auto" && !follow ? RayaChief.continuation(parent.metadata) : undefined
@@ -915,6 +917,15 @@ export const TaskTool = Tool.define(
         Effect.ensuring(KiloTaskBackgroundProcess.finish(nextSession.id)),
       ) // kilocode_change - transfer inherited processes when the child run ends
 
+      // kilocode_change start - actual persisted Task association, never saved metadata alone, binds the child
+      const delegation = yield* Lineage.admit({
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID ?? "",
+        childSessionID: nextSession.id,
+        childMessageID: message,
+      }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? lease.release : Effect.void)))
+      // kilocode_change end
       // kilocode_change start - inject completed background task results into the parent session
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",
@@ -925,7 +936,10 @@ export const TaskTool = Tool.define(
         const rendered = renderOutput({
           sessionID: nextSession.id,
           state,
-          summary: state === "completed" ? `Background task completed: ${displayName}` : `Background task failed: ${displayName}`,
+          summary:
+            state === "completed"
+              ? `Background task completed: ${displayName}`
+              : `Background task failed: ${displayName}`,
           text,
         })
         const notice = outcome
@@ -944,58 +958,51 @@ export const TaskTool = Tool.define(
               ),
             )
           : undefined
-        yield* SessionRetirement.scoped(
-          ops
-            .prompt({
-              sessionID: ctx.sessionID,
-              backgroundResult: true, // kilocode_change - queue behind pending user questions
-              ...(notice ? { resultNotice: notice } : {}), // kilocode_change - private completion authority never comes from notice text
-              agent: currentParent.agent ?? ctx.agent,
-              variant,
-              ...(branch && ctx.agent === "auto" && RayaChief.request(currentParent.metadata)
-                ? { goalObjective: RayaChief.request(currentParent.metadata) }
-                : {}), // kilocode_change - Chief background notices continue the saved task phase
-              parts: [
-                {
-                  type: "text",
-                  synthetic: true,
-                  text: rendered,
-                },
-              ],
-            })
-            .pipe(
-              Effect.onExit((exit) =>
-                Effect.sync(() => {
-                  if (Exit.isSuccess(exit)) return
-                  const err = Cause.squash(exit.cause)
-                  log.error("background prompt refused", {
-                    reason:
-                      err instanceof Error && /^Result contract [a-z ]{1,96}$/.test(err.message)
-                        ? err.message
-                        : "other",
-                  })
-                }),
-              ),
+        const delivery = ops
+          .prompt({
+            sessionID: ctx.sessionID,
+            backgroundResult: true, // kilocode_change - queue behind pending user questions
+            ...(notice ? { resultNotice: notice } : {}), // kilocode_change - private completion authority never comes from notice text
+            agent: currentParent.agent ?? ctx.agent,
+            variant,
+            ...(branch && ctx.agent === "auto" && RayaChief.request(currentParent.metadata)
+              ? { goalObjective: RayaChief.request(currentParent.metadata) }
+              : {}), // kilocode_change - Chief background notices continue the saved task phase
+            parts: [
+              {
+                type: "text",
+                synthetic: true,
+                text: rendered,
+              },
+            ],
+          })
+          .pipe(
+            Effect.onExit((exit) =>
+              Effect.sync(() => {
+                if (Exit.isSuccess(exit)) return
+                const err = Cause.squash(exit.cause)
+                log.error("background prompt refused", {
+                  reason:
+                    err instanceof Error && /^Result contract [a-z ]{1,96}$/.test(err.message) ? err.message : "other",
+                })
+              }),
             ),
-          scope,
-          () => Effect.void,
-        )
+          )
+          .pipe(Effect.asVoid)
+        yield* Lineage.scoped(delegation, ctx.sessionID, delivery, scope, () => Effect.void)
       })
       // kilocode_change end
 
       // kilocode_change start - background tasks propagate only cost accrued by this invocation
       const notify = Effect.fn("TaskTool.notifyBackgroundResult")(function* (jobID: string) {
-        yield* SessionRetirement.scoped(
-          background.wait({ id: jobID }).pipe(
-            Effect.flatMap((result) => {
-              if (result.info?.status === "completed") return inject("completed", result.info.output ?? "", jobID)
-              if (result.info?.status === "error") return inject("error", result.info.error ?? "", jobID)
-              return Effect.void
-            }),
-          ),
-          scope,
-          () => Effect.void,
+        const delivery = background.wait({ id: jobID }).pipe(
+          Effect.flatMap((result) => {
+            if (result.info?.status === "completed") return inject("completed", result.info.output ?? "", jobID)
+            if (result.info?.status === "error") return inject("error", result.info.error ?? "", jobID)
+            return Effect.void
+          }),
         )
+        yield* Lineage.scoped(delegation, ctx.sessionID, delivery, scope, () => Effect.void)
       })
 
       const withCostPropagation = <A, E, R>(task: Effect.Effect<A, E, R>) =>
@@ -1065,14 +1072,20 @@ export const TaskTool = Tool.define(
       // kilocode_change end
 
       if (
-        yield* background
-          .extend({
-            origin, // kilocode_change
-            id: nextSession.id,
-            // kilocode_change - extended background work also propagates its cost
-            run: withCostPropagation(work().pipe(Effect.onInterrupt(() => cancel))), // kilocode_change
-          })
-          .pipe(Effect.tapError(() => lease.release))
+        yield* Lineage.launch(delegation, nextSession.id, (original) =>
+          background
+            .extend({
+              origin, // kilocode_change
+              onFork: original?.attach, // kilocode_change - exact queued original fiber, including cancellation before work
+              onWork: original?.worker, // kilocode_change - exact private invocation work and cooperative stop
+              id: nextSession.id,
+              // kilocode_change - extended background work also propagates its cost
+              run: original
+                ? original.run(withCostPropagation(work().pipe(Effect.onInterrupt(() => cancel))))
+                : withCostPropagation(work().pipe(Effect.onInterrupt(() => cancel))), // kilocode_change
+            })
+            .pipe(Effect.tapError(() => lease.release)),
+        ) // kilocode_change
       ) {
         return {
           title: displayName,
@@ -1093,25 +1106,33 @@ export const TaskTool = Tool.define(
       const foregroundCost = runInBackground
         ? undefined
         : yield* KiloCostPropagation.childCost(sessions, nextSession.id) // kilocode_change - snapshot before the foreground job starts
-      const info = yield* background
-        .start({
-          origin, // kilocode_change
-          id: nextSession.id,
-          type: id,
-          title: displayName,
-          metadata,
-          onPromote: Effect.all([
-            ctx.metadata({
-              title: displayName,
-              metadata: { ...metadata, background: true, jobId: nextSession.id },
-            }),
-            notify(nextSession.id),
-          ]),
-          // kilocode_change - only the initial-background start needs its own cost bracket; the
-          // foreground/promoted path below is already wrapped by the acquireUseRelease at the bottom of run()
-          run: runInBackground ? backgroundRun : work().pipe(Effect.onInterrupt(() => cancel)), // kilocode_change
-        })
-        .pipe(Effect.tapError(() => lease.release))
+      const info = yield* Lineage.launch(delegation, nextSession.id, (original) =>
+        background
+          .start({
+            origin, // kilocode_change
+            onFork: original?.attach, // kilocode_change
+            onWork: original?.worker, // kilocode_change
+            id: nextSession.id,
+            type: id,
+            title: displayName,
+            metadata,
+            onPromote: Effect.all([
+              ctx.metadata({
+                title: displayName,
+                metadata: { ...metadata, background: true, jobId: nextSession.id },
+              }),
+              notify(nextSession.id),
+            ]),
+            // kilocode_change - only the initial-background start needs its own cost bracket; the
+            // foreground/promoted path below is already wrapped by the acquireUseRelease at the bottom of run()
+            run: original
+              ? original.run(runInBackground ? backgroundRun : work().pipe(Effect.onInterrupt(() => cancel)))
+              : runInBackground
+                ? backgroundRun
+                : work().pipe(Effect.onInterrupt(() => cancel)), // kilocode_change
+          })
+          .pipe(Effect.tapError(() => lease.release)),
+      ) // kilocode_change
 
       function backgroundResult() {
         return {

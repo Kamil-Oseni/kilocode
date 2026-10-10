@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Deferred, Effect, Exit } from "effect"
 import z from "zod"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -34,6 +34,8 @@ import { Truncate } from "@/tool/truncate"
 import { ResultContract } from "@/kilocode/chief/result-contract"
 import { RayaChief } from "@/kilocode/chief"
 import { resumeHint } from "@/kilocode/task-resume"
+import { RayaTaskExecution } from "@/kilocode/task/execution"
+import * as Lineage from "@/kilocode/task/effect-lineage"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
@@ -96,8 +98,10 @@ const modes = [
 ] as const
 
 for (const run of [
-  { name: "native", it: engine(true), modes },
-  { name: "sdk", it: engine(false), modes: ["exact", "resume", "narrative"] as const },
+  { name: "native", native: true, routine: false, it: engine(true), modes },
+  { name: "sdk", native: false, routine: false, it: engine(false), modes: ["exact", "resume", "narrative"] as const },
+  { name: "Routine native", native: true, routine: true, it: engine(true), modes: ["exact", "background"] as const },
+  { name: "Routine sdk", native: false, routine: true, it: engine(false), modes: ["exact", "background"] as const },
 ])
   for (const mode of run.modes)
     run.it.instance(
@@ -120,6 +124,7 @@ for (const run of [
               ? "Use a read-only specialist to explain how directory inspection works. Return a short narrative."
               : `Use a read-only specialist to list the exact filenames in ${directory}. Return the names verbatim.`
           const state = { phase: 0, parent: 0, child: 0, waited: false, read: false, altered: false }
+          const released = yield* Deferred.make<void>()
           const requests: unknown[] = []
           const trace: {
             phase: number
@@ -179,6 +184,9 @@ for (const run of [
                   trace.push(entry)
                   const content = await Effect.runPromiseWith(context)(
                     Effect.gen(function* () {
+                      // Actual background transport is held until the ORIGINAL
+                      // parent prompt has returned and released its queue slot.
+                      if (run.routine && mode === "background" && !owner) yield* Deferred.await(released)
                       if (phase === 0)
                         return {
                           kind: "tool",
@@ -401,16 +409,45 @@ for (const run of [
               researcher: { model: "openai/fixture", steps: 4 },
             },
           })
-          if (run.name === "native") {
+          if (run.native) {
             const provider = yield* Provider.Service
             const selected = yield* provider.getModel(model.providerID, model.modelID)
             const owner = yield* provider.getProvider(model.providerID)
             expect(NativeRuntime.status({ model: selected, provider: owner, auth: undefined }).type).toBe("supported")
             expect((yield* RuntimeFlags.Service).experimentalNativeLlm).toBe(true)
           }
-          const outcome = yield* prompt
-            .prompt({ sessionID: chat.id, agent: "auto", model, parts: [{ type: "text", text: request }] })
-            .pipe(Effect.exit)
+          const dispatch = prompt.prompt({
+            sessionID: chat.id,
+            agent: "auto",
+            model,
+            parts: [{ type: "text", text: request }],
+          })
+          const outcome = yield* Effect.gen(function* () {
+            if (!run.routine) return yield* dispatch
+            // Genuine acquired owner on the selected physical DB/Storage; this
+            // fixture seeds no positive SQL capability or Routine metadata.
+            const storage = yield* Storage.Service
+            const database = yield* Database.Service
+            const selected = yield* database.db.all<{ name: string; file: string }>("PRAGMA database_list")
+            expect(selected.find((row) => row.name === "main")?.file).toEndWith("authority.sqlite")
+            const owner = { id: crypto.randomUUID(), agentID: crypto.randomUUID(), sessionID: chat.id }
+            const execution = RayaTaskExecution.make(storage)
+            const acquired = yield* execution.acquire(owner)
+            expect(acquired).toBeDefined()
+            const result = yield* execution.enter(
+              owner,
+              Effect.gen(function* () {
+                expect(yield* Lineage.bind()).toBeDefined()
+                const result = yield* dispatch
+                yield* Deferred.succeed(released, undefined)
+                return result
+              }),
+            )
+            if (!result) throw new Error("Original Routine Task prompt did not execute")
+            yield* execution.finish(owner)
+            expect(yield* execution.receipt(owner)).toBeUndefined()
+            return result
+          }).pipe(Effect.exit)
           const children = yield* sessions.children(chat.id)
           const diagnose = () =>
             Effect.gen(function* () {

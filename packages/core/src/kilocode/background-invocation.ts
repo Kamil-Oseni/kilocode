@@ -35,6 +35,14 @@ export const make = (origin: Origin | undefined) =>
     const signal = yield* Deferred.make<void>()
     const done = yield* Deferred.make<void>()
     const state = yield* SynchronizedRef.make({ started: false, finished: false, cancelled: false })
+    const request = SynchronizedRef.modifyEffect(state, (current) =>
+      Effect.gen(function* () {
+        if (current.finished) return [Effect.succeed(false), current] as const
+        yield* Deferred.succeed(signal, undefined)
+        const wait = current.started ? Deferred.await(done).pipe(Effect.as(true)) : Effect.succeed(true)
+        return [wait, { ...current, cancelled: true }] as const
+      }),
+    )
     return {
       token,
       joined,
@@ -46,7 +54,13 @@ export const make = (origin: Origin | undefined) =>
             : Effect.void,
         ),
       ),
-      run: (work: Effect.Effect<string, unknown>) =>
+      run: (
+        work: Effect.Effect<string, unknown>,
+        attached?: (
+          fiber: Fiber.Fiber<string, unknown>,
+          request: Effect.Effect<Effect.Effect<boolean>>,
+        ) => Effect.Effect<void>,
+      ) =>
         Effect.gen(function* () {
           const admitted = yield* SynchronizedRef.modify(state, (current) =>
             current.cancelled ? [false, current] : [true, { ...current, started: true }],
@@ -56,6 +70,18 @@ export const make = (origin: Origin | undefined) =>
             Effect.provideService(Owner, { token, origin: copy(origin) }),
             Effect.forkChild({ startImmediately: true }),
           )
+          if (attached) {
+            const observed = yield* Effect.exit(attached(fiber, request))
+            if (Exit.isFailure(observed)) {
+              yield* Fiber.interrupt(fiber)
+              const stopped = yield* Fiber.await(fiber)
+              return yield* Effect.failCause(
+                Exit.isFailure(stopped) && !Cause.hasInterruptsOnly(stopped.cause)
+                  ? Cause.combine(observed.cause, stopped.cause)
+                  : observed.cause,
+              )
+            }
+          }
           const exit = yield* Effect.raceFirst(Fiber.await(fiber), Deferred.await(signal).pipe(Effect.as(undefined)))
           if (exit) return yield* Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause)
           yield* Fiber.interrupt(fiber)
@@ -72,14 +98,7 @@ export const make = (origin: Origin | undefined) =>
           ),
         ),
       // Selection never waits for cleanup. Its caller releases the registry lock before waiting.
-      request: SynchronizedRef.modifyEffect(state, (current) =>
-        Effect.gen(function* () {
-          if (current.finished) return [Effect.succeed(false), current] as const
-          yield* Deferred.succeed(signal, undefined)
-          const wait = current.started ? Deferred.await(done).pipe(Effect.as(true)) : Effect.succeed(true)
-          return [wait, { ...current, cancelled: true }] as const
-        }),
-      ),
+      request,
     }
   })
 

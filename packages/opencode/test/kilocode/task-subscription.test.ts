@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import path from "node:path"
-import { Deferred, Effect, Layer } from "effect"
+import { Deferred, Effect, Layer, Schedule } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -24,6 +24,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { disposeInstance } from "@/effect/instance-registry"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { database as physical, storage as files } from "./fixtures/effect-profile"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Bus.node, FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 
@@ -173,100 +174,127 @@ testEffect(
       InstanceStore.node,
     ]),
     [
+      [Database.node, physical],
+      [Storage.node, files],
       [
         InstanceStore.bootstrapNode,
         Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
       ],
     ],
   ),
-).instance("a Routine permission decision leaves one attributable inbox receipt", () =>
-  Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    yield* Effect.gen(function* () {
-      const storage = yield* Storage.Service
-      const database = yield* Database.Service
-      const tasks = RayaTask.make({ storage, database })
-      const inbox = RayaTaskInbox.make(database)
-      const agent = yield* tasks.create({
-        name: "Verifier",
-        objective: "Verify one approved command",
-        schedule: { kind: "manual" },
-        access: "full",
-      })
-      const sessions = yield* Session.Service
-      const session = yield* sessions.create({
-        title: "Authority receipt",
-        metadata: {
-          rayaRoutine: { version: 1, agentID: agent.id, runID: "run_authority_receipt", scheduleVersion: 1 },
-        },
-      })
-      const sid = session.id
-      yield* tasks.record({
-        id: "run_authority_receipt",
-        agentID: agent.id,
-        sessionID: sid,
-        at: Date.now(),
-        status: "running",
-      })
+).instance(
+  "a Routine permission decision leaves one attributable inbox receipt",
+  () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const tasks = RayaTask.make({ storage, database })
+        const inbox = RayaTaskInbox.make(database)
+        const agent = yield* tasks.create({
+          name: "Verifier",
+          objective: "Verify one approved command",
+          schedule: { kind: "manual" },
+          access: "full",
+        })
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          title: "Authority receipt",
+          metadata: {
+            rayaRoutine: {
+              version: 2,
+              agentID: agent.id,
+              runID: "run_authority_receipt",
+              scheduleVersion: 1,
+              trigger: { kind: "manual" },
+            },
+          },
+        })
+        const sid = session.id
+        yield* tasks.record({
+          id: "run_authority_receipt",
+          agentID: agent.id,
+          sessionID: sid,
+          at: Date.now(),
+          status: "blocked",
+          blockedReason: "Waiting for an approval",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        })
 
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* RayaTaskRunner.subscribe({
-            bus,
-            database,
-            storage,
-            sessions,
-          })
-          GlobalBus.emit("event", {
-            payload: {
-              type: "permission.asked",
-              properties: {
-                id: "per_authority_receipt",
-                sessionID: sid,
-                permission: "bash",
-                patterns: ["bun test ./test/kilocode/task-subscription.test.ts"],
-                tool: { messageID: "msg_authority_receipt", callID: "call_authority_receipt" },
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* RayaTaskRunner.subscribe({
+              bus,
+              database,
+              storage,
+              sessions,
+            })
+            GlobalBus.emit("event", {
+              payload: {
+                type: "permission.asked",
+                properties: {
+                  id: "per_authority_receipt",
+                  sessionID: sid,
+                  permission: "bash",
+                  patterns: ["bun test ./test/kilocode/task-subscription.test.ts"],
+                  tool: { messageID: "msg_authority_receipt", callID: "call_authority_receipt" },
+                },
               },
-            },
-          })
-          yield* Effect.sleep("100 millis")
-          GlobalBus.emit("event", {
-            payload: {
-              type: "permission.replied",
-              properties: { sessionID: sid, requestID: "per_authority_receipt", reply: "once" },
-            },
-          })
-          const page = yield* inbox
-            .page(agent.id)
-            .pipe(
-              Effect.repeat({ until: (value) => value.messages.some((message) => message.kind === "system") }),
-              Effect.timeout("5 seconds"),
-            )
-          const receipt = page.messages.find((message) => message.kind === "system")
-          if (!receipt) throw new Error("Expected an authority receipt")
-          const body = receipt.body
-          expect(body.includes("Decision: Approved for this call")).toBe(true)
-          expect(body.includes("Worker: Verifier")).toBe(true)
-          expect(body.includes("Run: run_authority_receipt")).toBe(true)
-          expect(body.includes("Permission: bash")).toBe(true)
-          expect(body.includes("Tool call: call_authority_receipt")).toBe(true)
-          expect(receipt).toMatchObject({
-            kind: "system",
-            sessionID: sid,
-          })
+            })
+            yield* tasks
+              .runsFor(agent.id)
+              .pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced(10),
+                  until: (rows) => rows.some((row) => row.blockedReason === "waiting on you"),
+                }),
+                Effect.timeout("5 seconds"),
+              )
+            GlobalBus.emit("event", {
+              payload: {
+                type: "permission.replied",
+                properties: { sessionID: sid, requestID: "per_authority_receipt", reply: "once" },
+              },
+            })
+            const page = yield* inbox
+              .page(agent.id)
+              .pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced(10),
+                  until: (value) => value.messages.some((message) => message.kind === "system"),
+                }),
+                Effect.timeout("5 seconds"),
+              )
+            const receipt = page.messages.find((message) => message.kind === "system")
+            if (!receipt) throw new Error("Expected an authority receipt")
+            const body = receipt.body
+            expect(body.includes("Decision: Approved for this call")).toBe(true)
+            expect(body.includes("Worker: Verifier")).toBe(true)
+            expect(body.includes("Run: run_authority_receipt")).toBe(true)
+            expect(body.includes("Permission: bash")).toBe(true)
+            expect(body.includes("Tool call: call_authority_receipt")).toBe(true)
+            expect(receipt).toMatchObject({
+              kind: "system",
+              sessionID: sid,
+            })
 
-          GlobalBus.emit("event", {
-            payload: {
-              type: "permission.replied",
-              properties: { sessionID: sid, requestID: "per_authority_receipt", reply: "once" },
-            },
-          })
-          yield* Effect.sleep("100 millis")
-          expect((yield* inbox.page(agent.id)).messages.filter((message) => message.kind === "system")).toHaveLength(1)
-        }),
-      )
-    })
-  }),
+            GlobalBus.emit("event", {
+              payload: {
+                type: "permission.replied",
+                properties: { sessionID: sid, requestID: "per_authority_receipt", reply: "once" },
+              },
+            })
+            yield* Effect.sleep("100 millis")
+            expect((yield* inbox.page(agent.id)).messages.filter((message) => message.kind === "system")).toHaveLength(
+              1,
+            )
+          }),
+        )
+      })
+    }),
+  30_000,
 )
 
 it.instance(

@@ -100,9 +100,11 @@ export namespace SessionRetirement {
           // Ownership exists before the child can start, even when it runs immediately.
           const ticket = yield* Effect.sync(() => reserve(prior))
           const fiber = yield* Effect.forkDetach(
-            work(ticket, (token) => restore(body(token))),
+            work(ticket, (token) => Effect.interruptible(restore(body(token)))),
             {
               startImmediately: true,
+              // Install the ticket's Exit observer before restoring body interruption.
+              uninterruptible: true,
             },
           )
           fibers.set(fiber, ticket.token)
@@ -142,7 +144,12 @@ export namespace SessionRetirement {
         Effect.gen(function* () {
           const prior = yield* select()
           const ticket = yield* Effect.sync(() => reserve(prior))
-          const fiber = yield* Effect.forkChild(work(ticket, () => restore(body)))
+          const fiber = yield* Effect.forkChild(
+            work(ticket, () => Effect.interruptible(restore(body))),
+            {
+              uninterruptible: true,
+            },
+          )
           fibers.set(fiber, ticket.token)
           return fiber
         }),
@@ -162,6 +169,10 @@ export namespace SessionRetirement {
       Effect.withFiber((caller) =>
         Effect.uninterruptible(
           Effect.sync(() => {
+            // An owned lazy child may not have entered running yet.
+            const token = fibers.get(fiber)
+            const state = token && parents.get(token)
+            if (state?.open) state.cancellations.add(caller.id)
             // Only the selected native Effect fiber's live tickets are authorized.
             for (const state of running.get(fiber) ?? []) state.cancellations.add(caller.id)
           }).pipe(Effect.andThen(Fiber.interrupt(fiber))),
@@ -178,12 +189,15 @@ export namespace SessionRetirement {
           const ticket = yield* Effect.sync(() => reserve(prior))
           const fiber = yield* Effect.forkIn(
             work(ticket, () =>
-              restore(body).pipe(
+              Effect.interruptible(restore(body)).pipe(
                 Effect.onExit((exit) => Effect.sync(() => retain(ticket.state, exit))),
                 Effect.catchCause(fallback),
               ),
             ),
             scope,
+            // A lazy child can be cancelled before its first instruction. Protect
+            // ticket registration until work installs cleanup, then restore the body.
+            { uninterruptible: true },
           )
           fibers.set(fiber, ticket.token)
           return fiber

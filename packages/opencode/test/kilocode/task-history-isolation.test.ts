@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect, Exit, Layer, Schema, Cause } from "effect"
+import { Effect, Exit, Layer, Schema, Cause, Schedule } from "effect"
 import path from "node:path"
 import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -8,6 +8,8 @@ import { Git } from "@/git"
 import { Session } from "@/session/session"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
 import { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
@@ -19,6 +21,22 @@ import { RayaGoal } from "@/kilocode/goal"
 import { continuation, owned } from "@/kilocode/task/continuation"
 import { testEffect } from "../lib/effect"
 import { provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import { database as physical } from "./fixtures/effect-profile"
+
+const emit = (sessionID: SessionID, request: string, reply: boolean) =>
+  GlobalBus.emit("event", {
+    payload: reply
+      ? { type: "permission.replied", properties: { sessionID, requestID: request, reply: "once" } }
+      : {
+          type: "permission.asked",
+          properties: { sessionID, id: request, permission: "bash", patterns: ["bun test"] },
+        },
+  })
+
+const profile = (directory: string) =>
+  Storage.layerWithDatabase(path.join(directory, "storage")).pipe(
+    Layer.provideMerge(Database.layerFromPath(path.join(directory, "queue.sqlite"))),
+  )
 
 const it = testEffect(
   LayerNode.compile(
@@ -29,8 +47,145 @@ const it = testEffect(
       SessionProjector.node,
       CrossSpawnSpawner.node,
       Database.node,
+      Bus.node,
     ]),
+    [[Database.node, physical]],
   ),
+)
+
+it.live(
+  "unrelated damaged history preserves a real permission receipt and a cold duplicate stays inert",
+  () =>
+    provideTmpdirInstance((directory) => {
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const storage = yield* Storage.Service
+          const database = yield* Database.Service
+          const sessions = yield* Session.Service
+          const bus = yield* Bus.Service
+          const fs = yield* FSUtil.Service
+          const input = { storage, database, sessions, bus }
+          const runner = RayaTaskRunner.make(input)
+          const inbox = RayaTaskInbox.make(database)
+          const bad = yield* runner.tasks.create({
+            name: "Damaged earlier",
+            objective: "Wait",
+            schedule: { kind: "manual" },
+          })
+          const good = yield* runner.tasks.create({
+            name: "Healthy approval",
+            objective: "Wait",
+            schedule: { kind: "manual" },
+          })
+          const trigger = { kind: "manual" } as const
+          const session = yield* sessions.create({
+            title: "Recovered permission receipt",
+            metadata: {
+              rayaRoutine: { version: 2, agentID: good.id, runID: "run_receipt", scheduleVersion: 1, trigger },
+            },
+          })
+          yield* runner.tasks.record({
+            id: "run_receipt",
+            agentID: good.id,
+            sessionID: session.id,
+            at: Date.now(),
+            status: "blocked",
+            blockedReason: "Waiting for an approval",
+            scheduleVersion: 1,
+            trigger,
+          })
+          const file = path.join(directory, "storage", "raya", "agent-runs", `${bad.id}.json`)
+          yield* fs.writeFileString(file, "{")
+          const bytes = yield* fs.readFileString(file)
+          const waiting = runner.tasks.runsFor(good.id).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced(10),
+              until: (rows) => rows.some((row) => row.blockedReason === "waiting on you"),
+            }),
+            Effect.timeout("5 seconds"),
+          )
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              yield* RayaTaskRunner.subscribe(input)
+              emit(session.id, "per_recovered_receipt", false)
+              yield* waiting
+              emit(session.id, "per_recovered_receipt", true)
+              const page = yield* inbox.page(good.id).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced(10),
+                  until: (page) => page.messages.some((row) => row.source.startsWith("authority:")),
+                }),
+                Effect.timeout("5 seconds"),
+              )
+              const receipts = page.messages.filter((row) => row.source.startsWith("authority:"))
+              expect(receipts).toHaveLength(1)
+              expect(receipts[0].body).toContain("Decision: Approved for this call")
+              expect(receipts[0].body).toContain("Run: run_receipt")
+              expect(receipts[0].sessionID).toBe(session.id)
+            }),
+          )
+          expect(yield* fs.readFileString(file)).toBe(bytes)
+          // Park through the real public lifecycle before reopening its subscription;
+          // startup must not dispatch a model to manufacture this permission proof.
+          yield* runner.park(session.id, true)
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              yield* RayaTaskRunner.subscribe(input)
+              emit(session.id, "per_recovered_receipt", true)
+              yield* runner.tasks.runsFor(good.id).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced(10),
+                  until: (rows) => rows.some((row) => row.id === "run_receipt" && row.status === "running"),
+                }),
+                Effect.timeout("5 seconds"),
+              )
+            }),
+          )
+          expect(
+            (yield* inbox.page(good.id)).messages.filter((row) => row.source.startsWith("authority:")),
+          ).toHaveLength(1)
+          expect(yield* fs.readFileString(file)).toBe(bytes)
+          const rows = yield* runner.tasks.runsFor(good.id)
+          yield* sessions.setMetadata({
+            sessionID: session.id,
+            metadata: {
+              rayaRoutine: { version: 2, agentID: bad.id, runID: "run_receipt", scheduleVersion: 1, trigger },
+            },
+          })
+          const denied = yield* runner.park(session.id, true).pipe(Effect.exit)
+          expect(Exit.isFailure(denied)).toBe(true)
+          if (Exit.isFailure(denied)) expect(Cause.squash(denied.cause)).toBeInstanceOf(RayaTask.HistoryError)
+          expect(yield* runner.tasks.runsFor(good.id)).toEqual(rows)
+          expect(yield* fs.readFileString(file)).toBe(bytes)
+          for (const raw of [
+            { version: 2 },
+            { version: 2, agentID: good.id, runID: "foreign", scheduleVersion: 1, trigger },
+            { version: 2, agentID: good.id, runID: "run_receipt", scheduleVersion: 2, trigger },
+          ]) {
+            yield* sessions.setMetadata({ sessionID: session.id, metadata: { rayaRoutine: raw } })
+            const refused = yield* runner.park(session.id, true).pipe(Effect.exit)
+            expect(Exit.isFailure(refused)).toBe(true)
+            if (Exit.isFailure(refused)) expect(Cause.squash(refused.cause)).toBeInstanceOf(RayaTask.GuardError)
+            expect(yield* runner.tasks.runsFor(good.id)).toEqual(rows)
+          }
+          yield* fs.remove(file)
+          yield* fs.makeDirectory(file)
+          yield* sessions.setMetadata({
+            sessionID: session.id,
+            metadata: {
+              rayaRoutine: { version: 2, agentID: bad.id, runID: "run_receipt", scheduleVersion: 1, trigger },
+            },
+          })
+          const failure = yield* runner.park(session.id, true).pipe(Effect.exit)
+          expect(Exit.isFailure(failure)).toBe(true)
+          if (Exit.isFailure(failure)) expect(Cause.squash(failure.cause)).not.toBeInstanceOf(RayaTask.HistoryError)
+          expect(
+            (yield* inbox.page(good.id)).messages.filter((row) => row.source.startsWith("authority:")),
+          ).toHaveLength(1)
+        }).pipe(Effect.provide(Storage.layerWithDatabase(path.join(directory, "storage"))))
+      })
+    }),
+  30_000,
 )
 
 for (const reason of ["json", "schema", "inconsistent"] as const)
@@ -38,10 +193,7 @@ for (const reason of ["json", "schema", "inconsistent"] as const)
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()
       const root = path.join(directory, "storage")
-      const state = Layer.mergeAll(
-        Storage.layerFromDir(root),
-        Database.layerFromPath(path.join(directory, "queue.sqlite")),
-      )
+      const state = profile(directory)
       const saved = yield* Effect.gen(function* () {
         const input = { storage: yield* Storage.Service, database: yield* Database.Service }
         const tasks = RayaTask.make(input)
@@ -169,7 +321,6 @@ it.live(
   () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()
-      const root = path.join(directory, "storage")
       yield* Effect.gen(function* () {
         const input = { storage: yield* Storage.Service, database: yield* Database.Service }
         const sessions = yield* Session.Service
@@ -215,11 +366,7 @@ it.live(
         expect(preview.find((item) => item.id === disabled.id)?.enabled).toBe(false)
         expect(preview.find((item) => item.id === disabled.id)?.note ?? "").not.toContain("history needs attention")
         expect(yield* input.storage.read(["raya", "agent-runs", bad.id])).toEqual({ version: 1 })
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(Storage.layerFromDir(root), Database.layerFromPath(path.join(directory, "queue.sqlite"))),
-        ),
-      )
+      }).pipe(Effect.provide(profile(directory)))
     }),
 )
 
@@ -245,7 +392,7 @@ it.live("an actual filesystem read failure is not reclassified as damaged routin
         expect(Cause.hasDies(result.cause)).toBe(true)
       }
       expect((yield* tasks.get(agent.id)).enabled).toBe(true)
-    }).pipe(Effect.provide(Storage.layerFromDir(root)))
+    }).pipe(Effect.provide(profile(directory)))
   }),
 )
 
@@ -361,11 +508,7 @@ it.live("ordinary completion isolates only unrelated damaged history and preserv
         }
         expect(yield* runner.tasks.runsFor(good.id)).toEqual(history)
         expect((yield* inbox.page(good.id)).messages).toEqual(messages)
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(Storage.layerFromDir(root), Database.layerFromPath(path.join(directory, "queue.sqlite"))),
-        ),
-      )
+      }).pipe(Effect.provide(profile(directory)))
     }),
   ),
 )

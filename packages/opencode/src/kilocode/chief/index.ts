@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { Permission } from "@/permission"
 import { HomeAssistant } from "../home-assistant/tools"
 import { Refusal } from "../session/tool-refusal"
+import { greeting } from "./conversation"
 
 export namespace RayaChief {
   export const threshold = 0.7
@@ -420,6 +421,7 @@ export namespace RayaChief {
   /** Only self-contained conversational turns can finish in Chief without a child or tools. */
   export function direct(request: string) {
     const value = request.trim()
+    if (greeting(value)) return true
     if (/^(?:hi|hello|hey|thanks|thank you)[!. ]*$/i.test(value)) return true
     if (!/^(?:what does [a-z][a-z -]{2,60} mean\??|explain the term [a-z][a-z -]{2,60}[?.]?)$/i.test(value))
       return false
@@ -474,7 +476,7 @@ export namespace RayaChief {
       /\b(?:two|three|2|3)\b.{0,100}\b(?:independent|parallel|specialists|agents)\b|\b(?:independent|parallel)\b.{0,100}\b(?:two|three|2|3)\b/i.test(
         input.request,
       )
-    const direct = !parallel && trivial(input.request)
+    const direct = !parallel && (greeting(input.request) || trivial(input.request))
     const outline = listing(input.request)
     // raya_change - zero-signal conversational requests should proceed through a capable generalist instead of prompting
     const top = (outline || direct) && quick ? quick : first.score === 0 ? (quick ?? first) : first

@@ -197,6 +197,8 @@ export const ChiefRouteTool = Tool.define<
                 params.access === "read" &&
                 !answer &&
                 RayaChief.request(session.metadata) === request &&
+                RayaChief.requestText(dispatch.findLast((item) => item.info.role === "user")?.parts ?? []) ===
+                  request &&
                 session.metadata?.["raya.goal.open"] !== true &&
                 RayaChief.direct(request)
 
@@ -261,6 +263,11 @@ export const ChiefRouteTool = Tool.define<
                   HomeAssistant.selected(current.metadata, { session: ctx.sessionID, user })
                 )
                   throw new Error("Auto routing dispatch changed before its decision was committed")
+                if (
+                  direct &&
+                  (RayaChief.requestText(latest.parts) !== request || current.metadata?.["raya.goal.open"] === true)
+                )
+                  throw new Error("Auto direct request changed before its decision was committed")
                 if (refinement) {
                   const checked = yield* ChiefRefinement.check({
                     session: current,

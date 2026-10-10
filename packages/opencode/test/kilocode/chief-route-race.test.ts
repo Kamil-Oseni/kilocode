@@ -18,6 +18,7 @@ import { MessageID, PartID } from "@/session/schema"
 import { ChiefRouteTool } from "@/kilocode/tool/chief-route"
 import type { DefWithoutID } from "@/tool/tool"
 import { RayaChief } from "@/kilocode/chief"
+import { ollama, OllamaBridgeError } from "@/kilocode/provider/ollama-bridge"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -119,6 +120,158 @@ const asked = Effect.fn(function* () {
   return queue
 })
 const ambiguous = "Help me decide what to do with this project"
+
+it.live("a real direct greeting decision releases text continuation without releasing required acquisition", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const request =
+          "Reply with one short greeting. This is a temporary conversation check; do not save it as a preference or perform any actions."
+        const input = yield* dispatch(dir, request)
+        const tool = yield* (yield* ChiefRouteTool).init()
+        const result = yield* tool.execute({ objective: "model rewrite", access: "read" }, input.ctx)
+        expect(result.metadata.decision?.direct).toBe(true)
+        expect(result.metadata.decision?.request).toBe(request)
+        const saved = yield* sessions.get(input.chat.id)
+        expect(RayaChief.phase(saved.metadata)).toBe("done")
+        expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
+        yield* Effect.tryPromise(async () => {
+          const requests: Record<string, unknown>[] = []
+          const server = Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            fetch: async (incoming) => {
+              requests.push(await incoming.json())
+              return Response.json({
+                model: "fixture",
+                message: { role: "assistant", content: "Hello there." },
+                done: true,
+                done_reason: "stop",
+              })
+            },
+          })
+          try {
+            const send = ollama({ localInference: true, localInferenceAPI: "ollama" }, globalThis.fetch)
+            const body = {
+              model: "fixture",
+              messages: [{ role: "user", content: request }],
+              tools: [{ type: "function", function: { name: "read", parameters: { type: "object" } } }],
+            }
+            const refused = await send(`${server.url}v1/chat/completions`, {
+              method: "POST",
+              body: JSON.stringify({ ...body, tool_choice: "required" }),
+            }).then(
+              () => undefined,
+              (err: unknown) => err,
+            )
+            expect(refused).toBeInstanceOf(OllamaBridgeError)
+            expect(refused instanceof OllamaBridgeError && refused.diagnostic).toMatchObject({
+              reason: "required-acquisition",
+              refusal: "tool-missing",
+            })
+            const response = await send(`${server.url}v1/chat/completions`, {
+              method: "POST",
+              body: JSON.stringify({
+                ...body,
+                tool_choice: RayaChief.phase(saved.metadata) === "done" ? "none" : "required",
+              }),
+            })
+            expect(await response.text()).toContain("Hello there.")
+            expect(requests).toHaveLength(2)
+            expect(JSON.stringify(requests[0].messages)).toContain("call at least one tool")
+            expect(JSON.stringify(requests[1].messages)).not.toContain("call at least one tool")
+          } finally {
+            await server.stop()
+          }
+        })
+      }),
+    { config: cfg },
+  ),
+)
+
+for (const mode of ["request", "goal", "edit"] as const)
+  it.live(`direct greetings retain ${mode} binding`, () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const tool = yield* (yield* ChiefRouteTool).init()
+          const input = yield* dispatch(dir, mode === "request" ? "Hello. Read my file." : "Hello.")
+          yield* sessions.setMetadata({
+            sessionID: input.chat.id,
+            metadata: {
+              [RayaChief.requestKey]: "Hello.",
+              [RayaChief.phaseKey]: "route",
+              ...(mode === "goal" ? { "raya.goal.open": true } : {}),
+            },
+          })
+          const result = yield* tool.execute(
+            { objective: "Hello.", access: mode === "edit" ? "edit" : "read" },
+            input.ctx,
+          )
+          expect(result.metadata.decision?.direct).not.toBe(true)
+          expect(RayaChief.phase((yield* sessions.get(input.chat.id)).metadata)).toBe("task")
+        }),
+      { config: cfg },
+    ),
+  )
+
+for (const mode of ["text", "goal"] as const)
+  it.live(`a direct greeting refuses commit-time ${mode} drift`, () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const input = yield* dispatch(dir, "Hello.")
+          let reads = 0
+          // Delegate original storage reads; mutate actual persisted state at the
+          // second awaited lookup, after direct classification and before commit.
+          const routed = {
+            ...sessions,
+            findMessage: (...args: Parameters<typeof sessions.findMessage>) =>
+              Effect.gen(function* () {
+                const found = yield* sessions.findMessage(...args)
+                if (++reads !== 2) return found
+                if (mode === "goal") {
+                  const current = yield* sessions.get(input.chat.id)
+                  yield* sessions.setMetadata({
+                    sessionID: input.chat.id,
+                    metadata: { ...current.metadata, "raya.goal.open": true },
+                  })
+                  return found
+                }
+                const original = (yield* sessions.messages({ sessionID: input.chat.id })).find(
+                  (item) => item.info.id === input.user.id,
+                )
+                const part = original?.parts.find((item) => item.type === "text")
+                if (!part || part.type !== "text") throw new Error("Original user text required")
+                yield* sessions.updatePart({ ...part, text: "Hello. Read my file." })
+                return found
+              }),
+          }
+          const definition = yield* ChiefRouteTool.pipe(Effect.provideService(Session.Service, routed))
+          const tool = yield* definition.init()
+          const result = yield* tool.execute({ objective: "Hello.", access: "read" }, input.ctx).pipe(Effect.exit)
+          expect(reads).toBe(2)
+          const saved = yield* sessions.get(input.chat.id)
+          if (mode === "goal") expect(saved.metadata?.["raya.goal.open"]).toBe(true)
+          if (mode === "text") {
+            const original = (yield* sessions.messages({ sessionID: input.chat.id })).find(
+              (item) => item.info.id === input.user.id,
+            )
+            expect(RayaChief.requestText(original?.parts ?? [])).toBe("Hello. Read my file.")
+          }
+          expect(Exit.isFailure(result)).toBe(true)
+          if (Exit.isFailure(result))
+            expect(String(Cause.squash(result.cause))).toContain("Auto direct request changed")
+          expect(RayaChief.phase(saved.metadata)).toBe("route")
+          expect(RayaChief.history(saved.metadata)).toHaveLength(0)
+          expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
+        }),
+      { config: cfg },
+    ),
+  )
 
 it.live("missing work class refuses before routing while explicit read preserves direct conversation", () =>
   provideTmpdirInstance(

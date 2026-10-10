@@ -137,6 +137,33 @@ describe("Raya Chief routing", () => {
     expect(RayaChief.direct("Find the latest invoice")).toBe(false)
   })
 
+  it("keeps bounded greeting restrictions separate from acquisition and actions", () => {
+    for (const text of [
+      "Hello! Don't save this or take any actions.",
+      "Please say hello. Please do not change anything.",
+      "Good morning. No tools. No saving.",
+      "Respond with a brief greeting. This is only a chat test; do not call any tools.",
+      "Reply with one short greeting. This is a temporary conversation check; do not save it as a preference or perform any actions.",
+    ]) {
+      expect(RayaChief.direct(text)).toBe(true)
+      const decision = RayaChief.route({ request: text, agents })
+      expect(decision.agent).toBe("generalist")
+      expect(RayaChief.needsPrompt(decision, RayaChief.threshold, text)).toBe(false)
+    }
+    for (const text of [
+      "Hello. Read my file.",
+      "Hi, then edit the project.",
+      "Say hello and turn on the lights.",
+      "Reply with a greeting. What is the current weather?",
+      "Hello. Search my saved preferences.",
+      "Hello. Do not save this, then send an email.",
+      "Hello. No tools except search.",
+      "Hello. This is a chat test and place an order.",
+      `Hello. ${"x".repeat(512)}`,
+    ])
+      expect(RayaChief.direct(text)).toBe(false)
+  })
+
   // raya_change - regression for a trivial file task previously sent to Designer
   it("sends difficult implementation to Engineer and everyday coding to coder", () => {
     const agentsWithEngineer = agents

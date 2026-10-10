@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto"
-import { lstat, mkdtemp, realpath } from "node:fs/promises"
+import { lstat, realpath } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import yargs from "yargs"
 import z from "zod"
 import { read, secret, text as decode } from "./profile-import-input"
+import { isolate } from "./profile-import-isolation"
 
 const absolute = z
   .string()
@@ -107,26 +108,7 @@ export async function run(args: readonly string[]) {
     if (occupied) throw new Error("Import target must be new")
     await disjoint(target, paths.workspaces)
     const passphrase = await password()
-    state.runtime = await mkdtemp(path.join(os.tmpdir(), "raya-profile-import-"))
-    for (const name of Object.keys(process.env))
-      if (/^(?:OTEL_|RAYA_|KILO_|OPENCODE_)|(?:API_KEY|TOKEN|SECRET)$/.test(name)) delete process.env[name]
-    Object.assign(process.env, {
-      HOME: path.join(state.runtime, "home"),
-      USERPROFILE: path.join(state.runtime, "home"),
-      KILO_TEST_HOME: path.join(state.runtime, "home"),
-      LOCALAPPDATA: path.join(state.runtime, "local"),
-      XDG_DATA_HOME: path.join(state.runtime, "data"),
-      XDG_CONFIG_HOME: path.join(state.runtime, "config"),
-      XDG_CACHE_HOME: path.join(state.runtime, "cache"),
-      XDG_STATE_HOME: path.join(state.runtime, "state"),
-      RAYA_DB: path.join(state.runtime, "unused.db"),
-      KILO_DB: path.join(state.runtime, "unused.db"),
-      RAYA_AUTH_CONTENT: "{}",
-      KILO_AUTH_CONTENT: "{}",
-      KILO_DISABLE_MODELS_FETCH: "1",
-      KILO_DISABLE_AUTOUPDATE: "1",
-      KILO_PURE: "1",
-    })
+    state.runtime = await isolate()
     const { restore } = await import("./profile-restore")
     const result = await restore(source, passphrase, target, paths.workspaces, {
       primaries: paths.primaries,

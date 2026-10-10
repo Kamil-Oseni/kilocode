@@ -14,6 +14,11 @@ async function enter() {
     await run(args.slice(1))
     return
   }
+  if (args[0] === "profile-import-review") {
+    const { run } = await import("../migration/profile-import-review")
+    await run(args.slice(1))
+    return
+  }
   const controller = args.length === 1 && ["__profile-source-successor", "__profile-maintenance"].includes(args[0])
   if (
     process.platform !== "win32" ||

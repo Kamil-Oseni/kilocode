@@ -110,6 +110,11 @@ export namespace KiloCli {
       await run(process.argv.slice(3))
       return true
     }
+    if (process.argv[2] === "profile-import-review") {
+      const { run } = await import("../migration/profile-import-review")
+      await run(process.argv.slice(3))
+      return true
+    }
     if (process.argv[2] === "__profile-source-successor") {
       try {
         const { successor } = await import("@/kilocode/migration/source-host")

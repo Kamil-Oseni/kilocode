@@ -55,11 +55,19 @@ type Scope = {
   }[]
   dispose?: () => void
   refresh?: () => Promise<void>
+  projection?: () => object
 }
 type Config = { root: string; python: Ref; plan: Ref; retrieval?: Ref }
 const proofs = new WeakMap<
   object,
-  { policy: string; refresh: () => Promise<void>; guard: () => void; digest: string; dispose?: () => void }
+  {
+    policy: string
+    refresh: () => Promise<void>
+    guard: () => void
+    digest: string
+    dispose?: () => void
+    projection?: () => object
+  }
 >()
 const required = new Set<string>()
 const eligible = new WeakMap<object, ReadonlyMap<string, string>>()
@@ -74,6 +82,7 @@ export async function review(extension: string, runtime: Config, input: string, 
     guard: opts.guard,
     refresh: opts.refresh,
     dispose: opts.dispose,
+    projection: opts.projection,
   })
   scope.guard()
   const body = JSON.parse(input) as { root: string; turn: { id: string } }
@@ -221,6 +230,7 @@ export async function review(extension: string, runtime: Config, input: string, 
   const proof = Object.freeze({
     policy: observed.value.policySHA,
     dispose: scope.dispose,
+    projection: scope.projection,
     guard: scope.guard,
     refresh: async () => {
       scope.guard()
@@ -295,6 +305,11 @@ function selected(value: object) {
 
 export function currentPolicy(value: object) {
   return selected(value)?.policy ?? hash.parse((value as { policySHA?: unknown }).policySHA)
+}
+
+/** Reuse only private deterministic projection bytes; native evidence remains freshly reviewed. */
+export function projection(value: object) {
+  return selected(value)?.projection?.()
 }
 
 export async function freshHistory(value: object, caller: () => void = () => {}) {

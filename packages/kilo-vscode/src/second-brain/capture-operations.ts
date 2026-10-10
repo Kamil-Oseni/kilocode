@@ -304,7 +304,15 @@ export async function locate(
       guard()
     }
     await fresh()
-    return { operations: observed.operations, fresh, dispose: () => dispose(cache) }
+    return {
+      operations: observed.operations,
+      fresh,
+      projection: () => {
+        guard()
+        return cache
+      },
+      dispose: () => dispose(cache),
+    }
   } catch (err) {
     dispose(cache)
     throw err

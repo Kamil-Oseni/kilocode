@@ -7,7 +7,7 @@ import { release } from "../control/catalog-capture"
 import { parse, type Setup } from "../settings"
 import { fingerprint } from "../failed-repair"
 import { descriptor, selection, type Descriptor } from "./descriptor"
-import { protection } from "./protection"
+import { protection } from "./protection-native"
 import { observe } from "./upgrade-observe"
 import { project } from "./upgrade"
 import { project as namespace } from "./generation"
@@ -173,7 +173,7 @@ export async function review(input: Descriptor["plan"], expected: Entry, cache?:
   const next = metadata(value, prior, id)
   runtime(value, prior, next, folder)
   producer(value.producer)
-  const sid = await protection(prior.managed.root)
+  const sid = await protection(prior.managed.root, prior.managed.python)
   check(
     sid === prior.managed.namespaces.memory.sid && sid === prior.managed.namespaces.retrieval.sid,
     "Selected upgrade owner differs",

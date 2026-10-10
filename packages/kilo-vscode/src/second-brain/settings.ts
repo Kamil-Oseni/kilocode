@@ -104,6 +104,7 @@ async function capture(
       operations: history.operations,
       refresh: history.fresh,
       dispose: history.dispose,
+      projection: history.projection,
     })
     guard()
     const bound = rebind(value, audit)

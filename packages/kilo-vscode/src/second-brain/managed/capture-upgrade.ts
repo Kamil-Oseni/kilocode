@@ -8,7 +8,7 @@ import { descriptor, type Descriptor } from "./descriptor"
 import { anchor, guard, inspect, inspectAncestor } from "./upgrade-publish"
 import { lineage } from "./upgrade-lineage"
 import { successors } from "./capture-lineage"
-import { freshHistory } from "../capture-revisions"
+import { freshHistory, projection } from "../capture-revisions"
 
 type Review = Awaited<ReturnType<typeof review>>
 type Storage = { get<T>(key: string): T | undefined; update(key: string, value: unknown): PromiseLike<void> }
@@ -130,6 +130,7 @@ async function walk(storage: Storage, previous: Entry, current: Entry, value: Re
   const { key, audit, evidence } = origin(storage, previous, value)
   check(previous.launch && typeof previous.launch === "object", "Original capture launch required")
   const closure = structuredClone(value.closure.closed)
+  const cache = projection(value)
   const chain: Upgrade[] = []
   const held: { key: string; audit: unknown }[] = []
   const verify = () => {
@@ -159,8 +160,8 @@ async function walk(storage: Storage, previous: Entry, current: Entry, value: Re
     check(retained?.artifact, "Applied original capture runtime upgrade required")
     held.push({ key, audit: retained })
     const upgrade = grant
-      ? await inspectAncestor(storage, retained.artifact, grant)
-      : await inspect(storage, retained.artifact)
+      ? await inspectAncestor(storage, retained.artifact, grant, cache)
+      : await inspect(storage, retained.artifact, cache)
     verify()
     check(upgrade.id === id, "Original capture upgrade artifact identity differs")
     chain.push(upgrade)

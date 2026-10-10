@@ -12,6 +12,7 @@ import { Config } from "@/config/config" // kilocode_change - optional configure
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { format as directory } from "@/kilocode/tool/read-directory" // kilocode_change - share exact authorized listing formatting with task evidence
 // kilocode_change start
 import * as Encoding from "../kilocode/encoding"
 import { KiloReference } from "@/kilocode/reference/contains"
@@ -291,16 +292,7 @@ export const ReadTool = Tool.define<
 
         return {
           title,
-          output: [
-            `<path>${target}</path>`,
-            `<type>directory</type>`,
-            `<entries>`,
-            sliced.join("\n"),
-            truncated
-              ? `\n(Showing ${sliced.length} of ${items.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
-              : `\n(${items.length} entries)`,
-            `</entries>`,
-          ].join("\n"),
+          output: directory({ path: target, entries: sliced, totalEntries: items.length, offset, truncated }), // kilocode_change - preserve the canonical Read output
           metadata: {
             preview: sliced.slice(0, 20).join("\n"),
             truncated,

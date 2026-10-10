@@ -14,6 +14,7 @@ import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider" // kilocode_change
 import { KiloTask } from "../kilocode/tool/task" // kilocode_change
+import { handoff as evidence } from "@/kilocode/tool/task-evidence" // kilocode_change - preserve invocation-bound observed identifiers
 import { KiloTaskBackgroundProcess } from "../kilocode/tool/task-background-process" // kilocode_change
 import { KiloCostPropagation } from "../kilocode/session/cost-propagation" // kilocode_change
 import { KiloSessionProcessor } from "../kilocode/session/processor" // kilocode_change
@@ -877,7 +878,15 @@ export const TaskTool = Tool.define(
               ),
             )
           // kilocode_change end
-          return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+          // kilocode_change start - both foreground and background retain exact completed Read evidence
+          return yield* evidence(
+            sessions,
+            nextSession.id,
+            message,
+            result.info.id,
+            result.parts.findLast((item) => item.type === "text")?.text ?? "",
+          )
+          // kilocode_change end
         },
         Effect.ensuring(KiloTaskBackgroundProcess.finish(nextSession.id)),
       ) // kilocode_change - transfer inherited processes when the child run ends

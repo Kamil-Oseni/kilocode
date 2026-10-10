@@ -25,9 +25,32 @@ function detail(err: Record<string, unknown>) {
   return type
 }
 
+function bridge(value: string) {
+  const prefix = "Unsupported or invalid Ollama bridge request or response"
+  if (!value.startsWith(`${prefix} [`) || !value.endsWith("]")) return
+  const diagnostic = parse(value.slice(prefix.length + 2, -1))
+  if (!diagnostic || typeof diagnostic !== "object" || Array.isArray(diagnostic)) return
+  if (!("reason" in diagnostic) || typeof diagnostic.reason !== "string") return
+  if (
+    ![
+      "envelope-json",
+      "envelope-schema",
+      "envelope-validation",
+      "required-acquisition",
+      "ordinary-stream",
+      "required-frame-json",
+      "required-frame-refusal",
+    ].includes(diagnostic.reason)
+  )
+    return
+  return prefix
+}
+
 function format(value: unknown, depth: number): string | undefined {
   if (depth > 3) return
   if (typeof value === "string") {
+    const summary = bridge(value.trim())
+    if (summary) return summary
     const nested = read(value.trim())
     return nested === undefined ? value : format(nested, depth + 1)
   }
@@ -46,6 +69,8 @@ function format(value: unknown, depth: number): string | undefined {
 
 export function unwrapError(message: string): string {
   const text = message.replace(/^Error:\s*/, "").trim()
+  const summary = bridge(text)
+  if (summary) return summary
   const direct = read(text)
   if (direct !== undefined) return format(direct, 0) ?? message
 

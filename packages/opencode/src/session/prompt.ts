@@ -28,6 +28,7 @@ import { KiloReadObject } from "@/kilocode/tool/read-object" // kilocode_change
 import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_change - Milestone D child step ceiling
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
+import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/conversation" // kilocode_change - original greeting needs no workflow tools
 import { settled as recalled, acknowledged, acknowledgement } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
 import { settled as mediaRecalled } from "@/kilocode/second-brain/media-turn" // kilocode_change - qualified original media-read synthesis only
 import { remember as captureRouting } from "@/kilocode/second-brain/capture-routing" // kilocode_change - retain original extraction route before successor metadata
@@ -1875,6 +1876,8 @@ export const layer = Layer.effect(
           const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
           const complete = yield* GoalGate.closed(resolved) // kilocode_change - current original dispatch only
           const conversation = agent.name === "auto" && acknowledged(msgs, current, lastUser.id)
+          const chat = agent.name === "auto" && chatting(msgs, current, lastUser.id)
+          const original = chat ? RayaChief.request(current.metadata) : undefined
           yield* captureRouting(
             current,
             { info: lastUser, parts: msgs.find((row) => row.info.id === lastUser.id)?.parts ?? [] },
@@ -1882,7 +1885,7 @@ export const layer = Layer.effect(
             conversation,
           ) // kilocode_change - durable original message-bound capture route
           const tools =
-            complete || conversation
+            complete || conversation || chat
               ? {}
               : agent.name === "auto"
                 ? RayaChief.tools(resolved, current.metadata, { session: sessionID, user: lastUser.id })
@@ -1890,6 +1893,7 @@ export const layer = Layer.effect(
           const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
           const direct =
             conversation ||
+            chat ||
             (agent.name === "auto" &&
               phase === "route" &&
               ((HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
@@ -1970,9 +1974,22 @@ export const layer = Layer.effect(
             ...(mcpInstructions ? [mcpInstructions] : []),
             ...(skills ? [skills] : []),
             ...(conversation ? [acknowledgement] : []), // kilocode_change - preference replies acknowledge supplied facts without starting setup
+            ...(chat ? [greeting] : []), // kilocode_change - original greeting replies without acquisition or saving claims
           ]
           const format = lastUser.format ?? { type: "text" as const }
           if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+          // kilocode_change start - refuse an original greeting changed during awaited preparation
+          if (
+            chat &&
+            !chatting(
+              yield* sessions.messages({ sessionID }),
+              yield* sessions.get(sessionID).pipe(Effect.orDie),
+              lastUser.id,
+              original,
+            )
+          )
+            return yield* Effect.die(new Error("Original greeting changed before model dispatch"))
+          // kilocode_change end
           const result = yield* handle.process({
             // kilocode_change start - keep Ask/Plan tool filtering hardened against session allows
             user: lastUser,
@@ -1999,7 +2016,7 @@ export const layer = Layer.effect(
             // kilocode_change start
             // raya_change - require orchestration until goal handling deterministically releases synthesis
             toolChoice:
-              complete || conversation
+              complete || conversation || chat
                 ? "none"
                 : format.type === "json_schema"
                   ? "required"

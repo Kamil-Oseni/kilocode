@@ -48,6 +48,34 @@ describe("unwrapError", () => {
 
     expect(unwrapError(input)).toBe("tokens: Try again in 30 seconds.")
   })
+
+  it("keeps the bridge refusal summary instead of its nested diagnostic class", () => {
+    const prefix = "Unsupported or invalid Ollama bridge request or response"
+    for (const diagnostic of [
+      { reason: "ordinary-stream", error: "other", capacity: "response", bytes: 2048 },
+      { reason: "required-frame-refusal", refusal: "tool-name", error: "other" },
+    ]) {
+      const message = `${prefix} [${JSON.stringify(diagnostic)}]`
+      expect(unwrapError(message)).toBe(prefix)
+      expect(unwrapError(`Error: ${message}`)).toBe(prefix)
+      expect(unwrapError(JSON.stringify({ message }))).toBe(prefix)
+      const error: AssistantError = { name: "APIError", data: { message, isRetryable: false } }
+      expect(parseAssistantError(error)?.message).toBe(message)
+      expect(error.data.message).toBe(message)
+    }
+  })
+
+  it("does not treat arbitrary embedded objects as bridge diagnostics", () => {
+    const prefix = "Unsupported or invalid Ollama bridge request or response"
+    expect(unwrapError(`${prefix} [{"reason":"unrecognized","error":"provider detail"}]`)).toBe("provider detail")
+    expect(unwrapError(`Another provider [{"reason":"ordinary-stream","error":"provider detail"}]`)).toBe(
+      "provider detail",
+    )
+    expect(unwrapError(`${prefix} [not JSON]`)).toBe(`${prefix} [not JSON]`)
+    expect(unwrapError(JSON.stringify({ error: { message: "specific provider refusal" } }))).toBe(
+      "specific provider refusal",
+    )
+  })
 })
 
 describe("parseAssistantError", () => {

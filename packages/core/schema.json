@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "26d23574-02b1-474e-bff6-777c302b105b",
+  "id": "3843e7d1-9b60-499a-a3d4-636d27437ff3",
   "prevIds": [
-    "b1fdf8d4-e565-4378-805e-b1cac24b75d4"
+    "26d23574-02b1-474e-bff6-777c302b105b"
   ],
   "ddl": [
     {
@@ -40,6 +40,30 @@
     },
     {
       "name": "raya_contact_receipt",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_effect_attempt",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_effect_capsule",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_effect_membership",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_effect_participant",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_effect_revocation",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_effect_scope",
       "entityType": "tables"
     },
     {
@@ -881,6 +905,426 @@
       "name": "time_created",
       "entityType": "columns",
       "table": "raya_contact_receipt"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "capsule",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "generation",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "purpose",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "digest",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "receipt",
+      "entityType": "columns",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "participant",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "generation",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "run",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "step",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "projection",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'inactive'",
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "capsule",
+      "entityType": "columns",
+      "table": "raya_routine_effect_membership"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scope",
+      "entityType": "columns",
+      "table": "raya_routine_effect_membership"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "generation",
+      "entityType": "columns",
+      "table": "raya_routine_effect_membership"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "profile",
+      "entityType": "columns",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "protocol",
+      "entityType": "columns",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cohort",
+      "entityType": "columns",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "pid",
+      "entityType": "columns",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "birth",
+      "entityType": "columns",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'inactive'",
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scope",
+      "entityType": "columns",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "generation",
+      "entityType": "columns",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "projection",
+      "entityType": "columns",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "request",
+      "entityType": "columns",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reason",
+      "entityType": "columns",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'requested'",
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_routine_effect_scope"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "raya_routine_effect_scope"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "principal",
+      "entityType": "columns",
+      "table": "raya_routine_effect_scope"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "birth",
+      "entityType": "columns",
+      "table": "raya_routine_effect_scope"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "generation",
+      "entityType": "columns",
+      "table": "raya_routine_effect_scope"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "projection",
+      "entityType": "columns",
+      "table": "raya_routine_effect_scope"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'inactive'",
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "raya_routine_effect_scope"
     },
     {
       "type": "text",
@@ -3409,6 +3853,81 @@
     },
     {
       "columns": [
+        "capsule"
+      ],
+      "tableTo": "raya_routine_effect_capsule",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_effect_attempt_capsule_raya_routine_effect_capsule_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "columns": [
+        "participant"
+      ],
+      "tableTo": "raya_routine_effect_participant",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_effect_capsule_participant_raya_routine_effect_participant_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "columns": [
+        "capsule"
+      ],
+      "tableTo": "raya_routine_effect_capsule",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_effect_membership_capsule_raya_routine_effect_capsule_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_effect_membership"
+    },
+    {
+      "columns": [
+        "scope"
+      ],
+      "tableTo": "raya_routine_effect_scope",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_effect_membership_scope_raya_routine_effect_scope_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_effect_membership"
+    },
+    {
+      "columns": [
+        "scope"
+      ],
+      "tableTo": "raya_routine_effect_scope",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_raya_routine_effect_revocation_scope_raya_routine_effect_scope_id_fk",
+      "entityType": "fks",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "columns": [
         "agent_id"
       ],
       "tableTo": "raya_routine_conversation",
@@ -3724,6 +4243,16 @@
     },
     {
       "columns": [
+        "capsule",
+        "scope"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_effect_membership_pk",
+      "entityType": "pks",
+      "table": "raya_routine_effect_membership"
+    },
+    {
+      "columns": [
         "agent_id",
         "schedule_version"
       ],
@@ -3872,6 +4401,51 @@
       "nameExplicit": false,
       "name": "raya_contact_receipt_pk",
       "table": "raya_contact_receipt",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_effect_attempt_pk",
+      "table": "raya_routine_effect_attempt",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_effect_capsule_pk",
+      "table": "raya_routine_effect_capsule",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_effect_participant_pk",
+      "table": "raya_routine_effect_participant",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_effect_revocation_pk",
+      "table": "raya_routine_effect_revocation",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "raya_routine_effect_scope_pk",
+      "table": "raya_routine_effect_scope",
       "entityType": "pks"
     },
     {
@@ -4258,6 +4832,180 @@
       "name": "raya_contact_message_destination",
       "entityType": "indexes",
       "table": "raya_contact_message"
+    },
+    {
+      "columns": [
+        {
+          "value": "capsule",
+          "isExpression": false
+        },
+        {
+          "value": "purpose",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_attempt_identity",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "columns": [
+        {
+          "value": "capsule",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_attempt_debt",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "columns": [
+        {
+          "value": "run",
+          "isExpression": false
+        },
+        {
+          "value": "session",
+          "isExpression": false
+        },
+        {
+          "value": "step",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_capsule_step",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "columns": [
+        {
+          "value": "run",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_capsule_run",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "columns": [
+        {
+          "value": "scope",
+          "isExpression": false
+        },
+        {
+          "value": "generation",
+          "isExpression": false
+        },
+        {
+          "value": "capsule",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_membership_scope",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_membership"
+    },
+    {
+      "columns": [
+        {
+          "value": "profile",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_participant_profile",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "columns": [
+        {
+          "value": "scope",
+          "isExpression": false
+        },
+        {
+          "value": "generation",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_revocation_identity",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "columns": [
+        {
+          "value": "scope",
+          "isExpression": false
+        },
+        {
+          "value": "state",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_revocation_pending",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "columns": [
+        {
+          "value": "kind",
+          "isExpression": false
+        },
+        {
+          "value": "principal",
+          "isExpression": false
+        },
+        {
+          "value": "birth",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_effect_scope_identity",
+      "entityType": "indexes",
+      "table": "raya_routine_effect_scope"
     },
     {
       "columns": [
@@ -5014,6 +5762,42 @@
       "name": "todo_session_idx",
       "entityType": "indexes",
       "table": "todo"
+    },
+    {
+      "value": "length(\"id\") = 32 AND length(\"capsule\") = 32 AND length(\"generation\") = 32 AND length(\"digest\") = 64 AND length(\"owner\") = 64 AND \"kind\" IN ('model', 'tool', 'mcp', 'browser', 'native') AND length(CAST(\"purpose\" AS BLOB)) BETWEEN 1 AND 256 AND \"state\" IN ('reserved', 'started', 'settled', 'refused', 'uncertain') AND ((\"state\" = 'settled' AND \"receipt\" IS NOT NULL AND length(\"receipt\") = 64) OR (\"state\" <> 'settled' AND \"receipt\" IS NULL))",
+      "name": "raya_routine_effect_attempt_bounds",
+      "entityType": "checks",
+      "table": "raya_routine_effect_attempt"
+    },
+    {
+      "value": "length(\"id\") = 32 AND length(\"participant\") = 32 AND length(\"generation\") = 32 AND length(\"owner\") = 64 AND length(\"projection\") = 64 AND length(CAST(\"run\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"session\" AS BLOB)) BETWEEN 1 AND 256 AND length(CAST(\"step\" AS BLOB)) BETWEEN 1 AND 256 AND \"state\" IN ('inactive', 'active', 'revoked', 'retired')",
+      "name": "raya_routine_effect_capsule_bounds",
+      "entityType": "checks",
+      "table": "raya_routine_effect_capsule"
+    },
+    {
+      "value": "length(\"capsule\") = 32 AND length(\"scope\") = 64 AND length(\"generation\") = 32",
+      "name": "raya_routine_effect_membership_bounds",
+      "entityType": "checks",
+      "table": "raya_routine_effect_membership"
+    },
+    {
+      "value": "length(\"id\") = 32 AND length(\"profile\") = 64 AND length(\"cohort\") = 64 AND length(\"birth\") BETWEEN 1 AND 20 AND \"pid\" BETWEEN 1 AND 4294967295 AND \"protocol\" = 'raya.routine.effect.v1' AND \"state\" IN ('inactive', 'qualified', 'revoked', 'retired')",
+      "name": "raya_routine_effect_participant_bounds",
+      "entityType": "checks",
+      "table": "raya_routine_effect_participant"
+    },
+    {
+      "value": "length(\"id\") = 32 AND length(\"scope\") = 64 AND length(\"generation\") = 32 AND length(\"projection\") = 64 AND length(\"request\") = 64 AND length(CAST(\"reason\" AS BLOB)) BETWEEN 1 AND 256 AND \"state\" IN ('requested', 'published', 'uncertain')",
+      "name": "raya_routine_effect_revocation_bounds",
+      "entityType": "checks",
+      "table": "raya_routine_effect_revocation"
+    },
+    {
+      "value": "length(\"id\") = 64 AND length(\"generation\") = 32 AND length(\"projection\") = 64 AND length(CAST(\"principal\" AS BLOB)) BETWEEN 1 AND 256 AND length(\"birth\") BETWEEN 1 AND 20 AND \"state\" IN ('inactive', 'active', 'revoking', 'retired') AND \"kind\" IN ('principal', 'organization', 'goal', 'run', 'session', 'delegation', 'workspace', 'config')",
+      "name": "raya_routine_effect_scope_bounds",
+      "entityType": "checks",
+      "table": "raya_routine_effect_scope"
     }
   ],
   "renames": []

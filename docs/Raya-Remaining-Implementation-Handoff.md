@@ -1,3 +1,21 @@
+October 11, 2026 — two genuine scheduled Routine occurrences and immediate cold preservation qualify; Stop remains open.
+
+The audited 378 package passes genuine9B manual completion once and two real UTC cron occurrences, with immediate cold preservation of their original evidence. Each scheduled occurrence performs get_goal, the full permitted Read, accepted update_goal and exact final reply, with one report per original run. The worker is disabled after the second run is discovered; cold GET checks preserve both runs, goals, messages, snapshots and reports with no immediate extra run. This is not an extended cold timer watch. Stop remains unqualified: the real thinking-mode attempt blocks on three empty-content envelope errors, and buffered reasoning cannot prove live inference. Loaded VS Code, human Voice, Memory recall, reboot/reinstall and portability remain open. Readiness remains **48/100**, **38 unfinished requirements**.
+
+The two scheduledAt values are1791710280000 and1791710340000, exactly60seconds apart, with distinct run/session identities and unchanged saved criteria. No fake clock, direct scheduler tick or manual run was used. Original scheduled sources41376 and18936 retire naturally with authenticated daemon acknowledgments, family zero and all original readers joined; the outer scheduled controller also exits0 without force. The earlier Stop admission refusal starts no model. The subsequent failed Stop attempt retires naturally with outer exit1, source/helper0 and joined family/readers; neither supplies accepted Stop or cold Stop evidence. Required-envelope transport validates native EOF before publishing aggregated reasoning, so its deltas are not an active-inference oracle. Any future passive transport test is unqualified until actually run. All three original HA cycles retain their outcomes and verify restarted/running/HTTP200; earlier manual-cycle DNS failure and separate successful follow-up remain unchanged. Eden and the protected reader remain untouched.
+
+Exact tested candidate remains378: CLI SHA256 `c04b40a63c47c201230658ccd599df8ebe39353508bcf010acec8d7fa79827a7`, VSIX SHA256 `ce95709a7c56c66c0021d6aac917689db9be889e8e88c2831807c167b5320f7d`. No installed-host, extended cold inactivity, repeated schedule after enablement, Windows boot or reinstall acceptance is inferred.
+
+Ignored evidence pins:
+
+- `C:\Users\kamil\.codex\worktrees\raya-local-services\raya\.tmp\new-pc\recovery-378-scheduled-cold-independent.json` — SHA256 `a6704bfd747620221f6eadb335b53350fb97aa247226f44fe6670065ac2930ff`.
+- `C:\Users\kamil\.codex\worktrees\raya-local-services\raya\.tmp\new-pc\recovery-378-stop-failed-independent.json` — SHA256 `e30ac56588dafd36a40faa240bddb26c3d87c57a3a7ed8244b2ff5754e15e088`.
+- `C:\Users\kamil\.codex\worktrees\raya-local-services\raya\.tmp\new-pc\recovery-378-model-scheduled-c53b9ed59b8a4c738f49fc295b341f8e-ha-cycle.json` — SHA256 `202d65d6cfb52f02791ee3c40c11f2fe9e0aabbb4f85ea3272bfe3148e810233`.
+- `C:\Users\kamil\.codex\worktrees\raya-local-services\raya\.tmp\new-pc\recovery-378-model-stop-cb801bc5aa96491aa267f301201b0ae2-ha-cycle.json` — SHA256 `e8f8500b4fc99e81a67d3d18b795ff495d03b5c6fefbd5b6bcbcbbfe7107a47c`.
+- `C:\Users\kamil\.codex\worktrees\raya-local-services\raya\.tmp\new-pc\recovery-378-model-stop-0fbdd7bcc0b74a55b2500040633c3bc0-ha-cycle.json` — SHA256 `ce6b7d951f74f04241cf7ee57bf0952427a891cb40a74528e8a06c21da4dc1d9`.
+
+Full goal stays active; cloud workers remain released and second-PC migration canceled.
+
 October 11, 2026 — actual 378 manual Routine completion once and cold reopen qualify.
 
 The fresh audited 378 package now passes actual genuine9B manual Routine completion once and a real cold reopen. The original run completes get_goal, the full permitted Read, accepted update_goal audit and exact final reply; one original report and the same goal/messages/startup-snapshot evidence remain unchanged after restart, with no new model execution or replay. Both original compiled source epochs retire naturally with code0, authenticated daemon roots, family zero and original EOF/readers joined; the outer owned test also exits0 without force. Stop, two scheduled periods, loaded VS Code, human Voice, Memory recall, reboot/reinstall and portability remain unqualified. Readiness remains **48/100**, **38 unfinished requirements**.

@@ -1,11 +1,13 @@
 import { Cause, Effect, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import type { SessionID } from "@/session/schema"
-import type { Session } from "@/session/session"
+import { Session } from "@/session/session"
 import type { SessionRunState } from "@/session/run-state"
 import * as Log from "@opencode-ai/core/util/log"
 import { RayaGoal } from "."
 import { Execution } from "@/kilocode/effect/observation"
+import { ResultContract } from "@/kilocode/chief/result-contract"
+import { gate } from "@/kilocode/session/input-gate"
 
 const log = Log.create({ service: "raya-goal-turn" })
 
@@ -38,13 +40,51 @@ export const associate = Effect.fn("RayaGoal.associate")(
     goals: ReturnType<typeof RayaGoal.make>,
     runs: Pick<SessionRunState.Interface, "inspect">,
     sessionID: SessionID,
+    sessions?: Pick<Session.Interface, "get" | "messages">,
   ) {
     const execution = yield* Effect.serviceOption(Execution)
     if (execution._tag === "None") return
     const goal = yield* goals.get(sessionID)
-    if (!goal || (goal.dispatch && goal.dispatch.phase !== "started")) return
+    if (!goal) return
     const worker = yield* runs.inspect(sessionID)
     if (worker.phase !== "running" || !worker.id || worker.id !== execution.value.id) return
+    const service = yield* Effect.serviceOption(Session.Service)
+    const reader = sessions ?? (service._tag === "Some" ? service.value : undefined)
+    const intent = goal.intent
+    if (reader && goal.status === "active" && intent) {
+      const input = (yield* reader.messages({ sessionID, limit: 129 })).findLast((row) => row.info.role === "user")
+        ?.info.id
+      if (input && !goal.inputs?.includes(input)) {
+        const admitted = yield* gate.withLock(sessionID)(
+          Effect.gen(function* () {
+            const current = yield* goals.get(sessionID)
+            const owner = yield* runs.inspect(sessionID)
+            if (
+              !current ||
+              current.status !== "active" ||
+              current.intent !== intent ||
+              current.createdAt !== goal.createdAt ||
+              owner.phase !== "running" ||
+              owner.id !== worker.id
+            )
+              return undefined
+            const original = yield* ResultContract.follow(reader, sessionID, input, {
+              version: 1,
+              sessionID,
+              intent,
+              createdAt: current.createdAt,
+            })
+            if (!original) return undefined
+            if (original.input && current.inputs?.includes(original.input))
+              yield* goals.follow(sessionID, intent, input, worker.id)
+            return true
+          }),
+        )
+        // A committed notice from a different goal cannot become the new goal's initial turn.
+        if (admitted) return
+      }
+    }
+    if (goal.dispatch && goal.dispatch.phase !== "started") return
     if (goal.dispatch) return yield* goals.bound(sessionID, goal.dispatch.id, worker.id)
     return yield* goals.initial(sessionID, goal.intent ?? "unset", worker.id)
   },
@@ -63,7 +103,7 @@ export const binding = Effect.gen(function* () {
     sessions: Pick<Session.Interface, "get" | "messages" | "children">,
     runs: Pick<SessionRunState.Interface, "inspect">,
     sessionID: SessionID,
-  ) => associate(RayaGoal.make({ storage, sessions }), runs, sessionID)
+  ) => associate(RayaGoal.make({ storage, sessions }), runs, sessionID, sessions)
 })
 
 export function closing(sessions: Pick<Session.Interface, "messages">, sessionID: SessionID) {

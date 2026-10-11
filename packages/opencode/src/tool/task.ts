@@ -943,7 +943,7 @@ export const TaskTool = Tool.define(
           text,
         })
         const notice = outcome
-          ? yield* ResultContract.notice(sessions, background, outcome, jobID, rendered).pipe(
+          ? yield* ResultContract.notice(sessions, background, outcome, jobID, rendered, storage).pipe(
               Effect.onExit((exit) =>
                 Effect.sync(() => {
                   if (Exit.isSuccess(exit)) return

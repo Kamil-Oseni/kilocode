@@ -14,6 +14,8 @@ import { MessageID, SessionID } from "@/session/schema"
 import { RayaChief } from "."
 import { TaskName } from "../tool/task-name"
 import { resumeHint } from "../task-resume"
+import type { Storage } from "@/storage/storage"
+import * as GoalInput from "../goal/task-input"
 
 const proof = z
   .object({
@@ -128,12 +130,42 @@ type Notice = {
   prepared?: string
   row?: string
   receipt?: Receipts.Receipt
+  storage?: Pick<Storage.Interface, "read">
+  goal?: string
+  source?: string
 }
 const grants = new WeakMap<object, Notice>()
 const notices = new WeakMap<Sessions, Map<string, Notice>>()
 const freshNotice = Effect.fn("ResultContract.freshNotice")(function* (notice: Notice) {
-  const job = yield* notice.background.get(notice.jobID)
+  // Committed notices retain their original joined generation; a later child job is not that outcome.
+  const job =
+    notice.row && notice.receipt ? yield* outcome(notice.receipt.job) : yield* notice.background.get(notice.jobID)
   if (!job || snapshot(job) !== notice.jobSHA) throw new Error("Result contract background completion changed")
+  if (notice.goal !== undefined && !notice.row) {
+    const sessionID = SessionID.make(notice.review.sessionID)
+    const goal = notice.storage ? yield* GoalInput.stamp(notice.storage, sessionID).pipe(Effect.orDie) : {}
+    const parent = yield* notice.sessions.get(sessionID)
+    if (snapshot(goal) !== notice.goal || (parent.metadata?.["raya.goal.open"] === true && !goal[GoalInput.key]))
+      throw new Error("Result contract original goal changed")
+    if (
+      notice.source !== undefined &&
+      snapshot(
+        yield* sources(
+          notice.sessions,
+          {
+            sessionID: notice.review.sessionID,
+            userID: notice.review.userID,
+            sha: digest(notice.review),
+            authority: notice.authority,
+            current: notice.current,
+            route: notice.review.route,
+          },
+          job,
+        ),
+      ) !== notice.source
+    )
+      throw new Error("Result contract original notice source changed")
+  }
 })
 const continuation = Effect.fn("ResultContract.continuation")(function* (
   sessions: Sessions,
@@ -191,6 +223,7 @@ const sources = Effect.fn("ResultContract.noticeSources")(function* (
   sessions: Sessions,
   root: Receipts.Receipt["root"],
   job: NonNullable<Outcome.Receipt["terminal"]>,
+  historical = false,
 ): Effect.fn.Return<Receipts.Receipt["source"], Session.NotFound> {
   const origin = job.origins?.[0]
   if (
@@ -232,7 +265,33 @@ const sources = Effect.fn("ResultContract.noticeSources")(function* (
   if (previous.info.id !== root.userID && (yield* continuation(sessions, previous)) !== root.sha)
     throw new Error("Result contract notice Task continuation differs")
   const child = yield* sessions.get(SessionID.make(job.id))
-  const saved = inherited.parse(child.metadata?.[ResultContract.key])
+  const current = inherited.parse(child.metadata?.[ResultContract.key])
+  const chain = [...current.continuations, current.task]
+  if (
+    digest(chain[0]) !== digest(current.origin) ||
+    new Set(chain.map((item) => item.callID)).size !== chain.length ||
+    new Set(chain.map((item) => item.inputID)).size !== chain.length ||
+    chain.some(
+      (item, index) =>
+        item.sessionID !== job.id ||
+        (index > 0 &&
+          (item.inputID <= chain[index - 1].inputID || item.parentMessageID <= chain[index - 1].parentMessageID)),
+    )
+  )
+    throw new Error("Result contract notice resume chain differs")
+  const index = historical
+    ? chain.findIndex(
+        (item) =>
+          item.inputID === origin.childMessageID &&
+          item.parentMessageID === origin.messageID &&
+          item.callID === origin.callID,
+      )
+    : chain.length - 1
+  if (index < 0) throw new Error("Result contract notice original child invocation absent")
+  // Reconstruct only the immutable original prefix, whose complete bytes remain pinned by the receipt.
+  const saved = historical
+    ? inherited.parse({ ...current, task: chain[index], continuations: chain.slice(0, index) })
+    : current
   const owner = TaskName.read(child.metadata?.[TaskName.key])
   if (
     child.parentID !== root.sessionID ||
@@ -247,9 +306,13 @@ const sources = Effect.fn("ResultContract.noticeSources")(function* (
     owner.provenance.callID !== saved.origin.callID
   )
     throw new Error("Result contract notice child differs")
-  const children = window(yield* sessions.messages({ sessionID: child.id, limit: 129 }), origin.childMessageID)
+  const children = window(yield* sessions.messages({ sessionID: child.id, limit: 129 }), origin.childMessageID).filter(
+    (row) => !historical || !chain[index + 1] || row.info.id < chain[index + 1].inputID,
+  )
   const input = children.find((row) => row.info.id === origin.childMessageID)
-  const terminal = children.findLast((row) => row.info.role === "assistant")
+  const terminal = children.findLast(
+    (row) => row.info.role === "assistant" && row.info.parentID === origin.childMessageID,
+  )
   if (
     input?.info.role !== "user" ||
     input.info.sessionID !== child.id ||
@@ -410,7 +473,7 @@ const durable = Effect.fn("ResultContract.durableNotice")(function* (
   )
     throw new Error("Result contract durable Chief evidence changed")
   const job = yield* outcome(receipt.job)
-  if (snapshot(yield* sources(sessions, receipt.root, job)) !== snapshot(receipt.source))
+  if (snapshot(yield* sources(sessions, receipt.root, job, true)) !== snapshot(receipt.source))
     throw new Error("Result contract durable source evidence changed")
 })
 
@@ -698,6 +761,35 @@ export namespace ResultContract {
     })
   }
 
+  /** Bind only a committed original completion input to the goal scope captured by its actual Task. */
+  export const follow = Effect.fn("ResultContract.goalInput")(function* (
+    sessions: Sessions,
+    sessionID: SessionID,
+    inputID: MessageID,
+    scope: GoalInput.Scope,
+  ) {
+    const value = yield* load(sessions, sessionID)
+    if (!value) return undefined
+    const selected = context(value)
+    if (selected.current !== inputID || selected.input === inputID) return undefined
+    const database = yield* Effect.serviceOption(Database.Service)
+    if (Option.isNone(database)) return undefined
+    const receipt = yield* Receipts.make(database.value).get({ sessionID, messageID: inputID })
+    if (!receipt || receipt.root.sha !== digest(value)) return undefined
+    const rows = window(yield* sessions.messages({ sessionID, limit: 129 }), value.userID)
+    const row = rows.find((row) => row.info.id === inputID)
+    if (!row) throw new Error("Result contract original goal notice absent")
+    yield* durable(sessions, receipt, row)
+    const job = yield* outcome(receipt.job)
+    const origin = job.origins?.[0]
+    const parent = rows.find((row) => row.info.id === origin?.messageID)
+    const call = parent?.parts.find((part) => part.type === "tool" && part.callID === origin?.callID)
+    if (call?.type !== "tool" || call.tool !== "task" || call.state.status !== "completed")
+      throw new Error("Result contract original goal Task absent")
+    if (snapshot({ scope }) !== snapshot({ scope: call.state.metadata?.[GoalInput.key] })) return { input: undefined }
+    return { input: selected.input }
+  })
+
   /** Expose recovery only for an exact retained no-evidence failure; this never authorizes an effect. */
   export const recovery = Effect.fn("ResultContract.recovery")(function* (
     sessions: Sessions,
@@ -894,6 +986,7 @@ export namespace ResultContract {
     value: Review,
     jobID: string,
     text: string,
+    storage?: Pick<Storage.Interface, "read">,
   ) {
     yield* check(sessions, value)
     const state = held.get(value)
@@ -921,6 +1014,7 @@ export namespace ResultContract {
     )
       throw new Error("Result contract background owner differs")
     const identity: string[] = []
+    const goals: string[] = []
     const terminal: boolean[] = []
     for (let attempt = 0; attempt <= 100; attempt++) {
       yield* check(sessions, value)
@@ -960,6 +1054,13 @@ export namespace ResultContract {
         throw new Error("Result contract original background Task changed")
       if (!identity.length) identity.push(current)
       if (call.state.status === "completed") {
+        const goal = storage ? yield* GoalInput.stamp(storage, SessionID.make(value.sessionID)).pipe(Effect.orDie) : {}
+        const parent = yield* sessions.get(SessionID.make(value.sessionID))
+        if (parent.metadata?.["raya.goal.open"] === true && !goal[GoalInput.key])
+          throw new Error("Result contract original goal changed")
+        if (snapshot({ scope: goal[GoalInput.key] }) !== snapshot({ scope: call.state.metadata?.[GoalInput.key] }))
+          throw new Error("Result contract original goal changed")
+        goals.push(snapshot(goal))
         terminal.push(true)
         break
       }
@@ -979,9 +1080,61 @@ export namespace ResultContract {
       jobSHA: snapshot(job),
       text,
       current: context(root).current,
+      storage,
+      goal: goals[0],
+      source: storage
+        ? snapshot(
+            yield* sources(
+              sessions,
+              {
+                sessionID: value.sessionID,
+                userID: value.userID,
+                sha: digest(value),
+                authority: state.authority,
+                current: context(root).current,
+                route: value.route,
+              },
+              job,
+            ),
+          )
+        : undefined,
     })
     return token
   }, diagnostic("notice"))
+
+  /** Only the original private completion grant can retain Auto's current work phase. */
+  export const continuing = Effect.fn("ResultContract.continuing")(function* (
+    sessions: Sessions,
+    token: object,
+    sessionID: SessionID,
+    parts: readonly { type: string; text?: string; synthetic?: boolean; ignored?: boolean }[],
+    objective?: string,
+  ) {
+    const notice = grants.get(token)
+    if (
+      !notice ||
+      notice.sessions !== sessions ||
+      notice.row ||
+      notice.review.sessionID !== sessionID ||
+      parts.length !== 1 ||
+      parts[0]?.type !== "text" ||
+      parts[0].synthetic !== true ||
+      parts[0].ignored === true ||
+      parts[0].text !== notice.text ||
+      (objective !== undefined && objective !== notice.review.request)
+    )
+      throw new Error("Result contract original notice differs")
+    yield* freshNotice(notice)
+    const current = yield* original(sessions, sessionID)
+    if (
+      !current ||
+      digest(current) !== digest(notice.review) ||
+      held.get(current)?.authority !== notice.authority ||
+      !context(current).inputs.includes(MessageID.make(notice.current))
+    )
+      throw new Error("Result contract notice request changed")
+    return notice.review.request
+  })
 
   /** Validate plugin-resolved notice rows before any persistence changes the current input. */
   export const validateNotice = Effect.fn("ResultContract.validateNotice")(function* (

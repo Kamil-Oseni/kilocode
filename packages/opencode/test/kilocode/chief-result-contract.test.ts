@@ -13,6 +13,7 @@ import { BackgroundJob } from "@/background/job"
 import { MessageID, PartID } from "@/session/schema"
 import { RayaChief } from "@/kilocode/chief"
 import { ChiefRefinement } from "@/kilocode/chief/refinement"
+import { ChiefVerification } from "@/kilocode/chief/verification"
 import { TaskName } from "@/kilocode/tool/task-name"
 import { ResultContract } from "@/kilocode/chief/result-contract"
 import { resumeHint } from "@/kilocode/task-resume"
@@ -412,6 +413,35 @@ it.live("a result contract requires an actual saved Chief dispatch and refuses c
           const text = completed.info?.output
           if (!text) throw new Error("Actual background completion absent")
           const token = yield* ResultContract.notice(sessions, background, value, job.id, text)
+          const incoming = [{ type: "text", synthetic: true, text }]
+          expect(yield* ResultContract.continuing(sessions, token, session.id, incoming)).toBe(value.request)
+          expect((yield* ResultContract.continuing(sessions, {}, session.id, incoming).pipe(Effect.exit))._tag).toBe(
+            "Failure",
+          )
+          expect((yield* ResultContract.continuing(sessions, token, worker.id, incoming).pipe(Effect.exit))._tag).toBe(
+            "Failure",
+          )
+          expect(
+            (yield* ResultContract.continuing(sessions, token, session.id, [
+              ...incoming,
+              { type: "text", text: "New authored work" },
+            ]).pipe(Effect.exit))._tag,
+          ).toBe("Failure")
+          expect(
+            (yield* ResultContract.continuing(sessions, token, session.id, incoming, "Different goal").pipe(
+              Effect.exit,
+            ))._tag,
+          ).toBe("Failure")
+          const retained = yield* sessions.get(session.id)
+          yield* sessions.setMetadata({
+            sessionID: session.id,
+            metadata: { ...retained.metadata, [RayaChief.requestKey]: "A genuinely new request" },
+          })
+          expect((yield* ResultContract.continuing(sessions, token, session.id, incoming).pipe(Effect.exit))._tag).toBe(
+            "Failure",
+          )
+          expect(RayaChief.request((yield* sessions.get(session.id)).metadata)).toBe("A genuinely new request")
+          yield* sessions.setMetadata({ sessionID: session.id, metadata: retained.metadata ?? {} })
           completions.push({ token, text })
         }
         const published = []
@@ -466,6 +496,10 @@ it.live("a result contract requires an actual saved Chief dispatch and refuses c
         const source = collection.find((row) => row.info.role === "assistant")
         if (source?.info.role !== "assistant") throw new Error("Original contract assistant unavailable")
         yield* sessions.updateMessage({ ...source.info, id: reply, parentID: foreign, time: { created: 5 } })
+        expect(
+          (yield* ChiefVerification.saved({ sessions, sessionID: session.id, messageID: reply }).pipe(Effect.exit))
+            ._tag,
+        ).toBe("Failure")
         expect(
           (yield* ResultContract.load(sessions, { sessionID: session.id, userID: foreign, messageID: reply }).pipe(
             Effect.exit,

@@ -11,6 +11,7 @@ import { mutation } from "@/kilocode/goal/mutation"
 import { gate } from "@/kilocode/session/input-gate"
 import { RayaChief } from "."
 import { ChiefRefinement } from "./refinement"
+import { ResultContract } from "./result-contract"
 import { Refusal } from "@/kilocode/session/tool-refusal"
 import { example } from "@/kilocode/task-resume"
 
@@ -141,6 +142,45 @@ export namespace ChiefVerification {
     )
   }
 
+  /** A background continuation must be the exact authenticated current notice, never synthetic text alone. */
+  function admitted(
+    sessions: Pick<Session.Interface, "get" | "messages">,
+    rows: readonly SessionV1.WithParts[],
+    user: SessionV1.WithParts | undefined,
+    message: SessionV1.WithParts | undefined,
+    goal?: RayaGoal.State,
+  ) {
+    return Effect.gen(function* () {
+      if (dispatch(rows, user, message, goal)) return true
+      const latest = rows.findLast((row) => row.info.role === "user")
+      if (
+        !user ||
+        user.info.role !== "user" ||
+        !latest ||
+        message?.info.role !== "assistant" ||
+        message.info.agent !== "auto" ||
+        message.info.parentID !== latest.info.id ||
+        latest.info.id === user.info.id ||
+        latest.info.sessionID !== message.info.sessionID ||
+        user.info.sessionID !== message.info.sessionID
+      )
+        return false
+      const proof = yield* ResultContract.load(sessions, {
+        sessionID: message.info.sessionID,
+        userID: latest.info.id,
+        messageID: message.info.id,
+      })
+      if (!proof) return false
+      const context = ResultContract.context(proof)
+      return (
+        context.input === user.info.id &&
+        context.current === latest.info.id &&
+        proof.sessionID === message.info.sessionID &&
+        proof.request === RayaChief.requestText(user.parts)
+      )
+    })
+  }
+
   function state(storage: Storage.Interface | undefined, sessionID: SessionID) {
     if (!storage) return Effect.succeed(undefined)
     return storage.read<unknown>(["raya", "goal", sessionID]).pipe(
@@ -174,7 +214,7 @@ export namespace ChiefVerification {
       )
         return false
       const goal = message.info.parentID !== user.info.id ? yield* state(input.storage, input.sessionID) : undefined
-      return dispatch(rows, user, message, goal)
+      return yield* admitted(input.sessions, rows, user, message, goal)
     })
   }
 
@@ -201,7 +241,11 @@ export namespace ChiefVerification {
       const rows = yield* input.sessions.messages({ sessionID: input.sessionID })
       const user = rows.findLast((row) => row.info.role === "user" && !!RayaChief.requestText(row.parts))
       const message = rows.find((row) => row.info.id === input.messageID)
-      if (message?.info.role !== "assistant" || message.info.agent !== "auto" || !dispatch(rows, user, message, goal))
+      if (
+        message?.info.role !== "assistant" ||
+        message.info.agent !== "auto" ||
+        !(yield* admitted(input.sessions, rows, user, message, goal))
+      )
         throw new Error("Chief foreground recovery invocation is not current")
       if (!["goal", "verify"].includes(RayaChief.phase(parent.metadata))) return false
       if (!request || user?.info.id !== observation.userID || RayaChief.requestText(user.parts) !== request)
@@ -330,6 +374,7 @@ ${example(worker.taskID)}`,
         message?.info.role === "assistant" && message.info.parentID !== user?.info.id
           ? yield* state(input.storage, input.sessionID)
           : undefined
+      const current = yield* admitted(input.sessions, rows, user, message, goal)
       if (
         !["task", "goal", "verify"].includes(RayaChief.phase(parent.metadata)) ||
         RayaChief.request(parent.metadata) !== input.request ||
@@ -341,7 +386,7 @@ ${example(worker.taskID)}`,
             !input.userID ||
             message?.info.role !== "assistant" ||
             message.info.agent !== "auto" ||
-            !dispatch(rows, user, message, goal) ||
+            !current ||
             part?.type !== "tool" ||
             part.tool !== "task" ||
             part.state.status !== "running"))
@@ -362,7 +407,7 @@ ${example(worker.taskID)}`,
                         ? "invocation"
                         : message?.info.role !== "assistant" || message.info.agent !== "auto"
                           ? "message"
-                          : !dispatch(rows, user, message, goal)
+                          : !current
                             ? "dispatch"
                             : part?.type !== "tool" || part.tool !== "task"
                               ? "tool"
@@ -420,7 +465,7 @@ ${example(worker.taskID)}`,
             RayaChief.requestText(user.parts) !== input.request ||
             message?.info.role !== "assistant" ||
             message.info.agent !== "auto" ||
-            !dispatch(rows, user, message, goal)
+            !(yield* admitted(input.sessions, rows, user, message, goal))
           )
             throw new Error("Chief verification parent input changed")
           const part = message.parts.find((part) => part.type === "tool" && part.callID === input.callID)
@@ -505,12 +550,13 @@ ${example(worker.taskID)}`,
               : RayaChief.phase(current.metadata) !== RayaChief.phase(parent.metadata)) ||
             RayaChief.request(current.metadata) !== input.request ||
             latest?.info.id !== user.info.id ||
-            !dispatch(
+            !(yield* admitted(
+              input.sessions,
               final,
               latest,
               final.find((row) => row.info.id === input.messageID),
               goal,
-            )
+            ))
           )
             throw new Error("Chief verification publication generation changed")
           yield* input.sessions.setMetadata({

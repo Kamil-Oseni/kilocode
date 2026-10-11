@@ -26,6 +26,9 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionProcessor } from "@/session/processor"
+import * as SessionRunState from "@/session/run-state"
+import { Execution } from "@/kilocode/effect/observation"
+import { associate } from "@/kilocode/goal/turn"
 import * as NativeRuntime from "@/session/llm/native-runtime"
 import { MessageID, PartID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
@@ -33,6 +36,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { ResultContract } from "@/kilocode/chief/result-contract"
 import { RayaChief } from "@/kilocode/chief"
+import { RayaGoal } from "@/kilocode/goal"
 import { resumeHint } from "@/kilocode/task-resume"
 import { RayaTaskExecution } from "@/kilocode/task/execution"
 import * as Lineage from "@/kilocode/task/effect-lineage"
@@ -68,6 +72,7 @@ function engine(native: boolean) {
         Plugin.node,
         ToolRegistry.node,
         SessionProcessor.node,
+        SessionRunState.node,
         CrossSpawnSpawner.node,
         Database.node,
         Outcome.node,
@@ -88,6 +93,8 @@ const modes = [
   "exact",
   "resume",
   "background",
+  "background-goal",
+  "background-goal-replaced",
   "no-read",
   "command",
   "failed",
@@ -108,6 +115,7 @@ for (const run of [
       `actual Task and ${run.name} final LLM ${mode} result retain invocation-bound Read evidence`,
       () =>
         Effect.gen(function* () {
+          const asynchronous = mode === "background" || mode.startsWith("background-goal")
           const sessions = yield* Session.Service
           const prompt = yield* SessionPrompt.Service
           const jobs = yield* BackgroundJob.Service
@@ -151,11 +159,7 @@ for (const run of [
                       row.role === "user" && row.content.includes("<subagent_brief>"),
                   )
                   const phase =
-                    mode !== "background" && mode !== "resume"
-                      ? state.phase++
-                      : owner
-                        ? state.parent++
-                        : 2 + state.child++
+                    !asynchronous && mode !== "resume" ? state.phase++ : owner ? state.parent++ : 2 + state.child++
                   const schema = z
                     .object({
                       anyOf: z
@@ -186,7 +190,7 @@ for (const run of [
                     Effect.gen(function* () {
                       // Actual background transport is held until the ORIGINAL
                       // parent prompt has returned and released its queue slot.
-                      if (run.routine && mode === "background" && !owner) yield* Deferred.await(released)
+                      if (run.routine && asynchronous && !owner) yield* Deferred.await(released)
                       if (phase === 0)
                         return {
                           kind: "tool",
@@ -197,7 +201,12 @@ for (const run of [
                             result: mode === "narrative" ? "narrative" : "directory_entries",
                           },
                         }
-                      if (phase === 1)
+                      if (mode.startsWith("background-goal") && owner && phase === 1)
+                        return { kind: "tool", name: "create_goal", arguments: { objective: request } }
+                      if (
+                        (phase === 1 && !mode.startsWith("background-goal")) ||
+                        (mode.startsWith("background-goal") && owner && phase === 2)
+                      )
                         return {
                           kind: "tool",
                           name: "task",
@@ -206,7 +215,7 @@ for (const run of [
                             brief: { objective: request },
                             access: "read",
                             step_cap: mode === "resume" ? 2 : 4,
-                            ...(mode === "background" ? { background: true } : {}),
+                            ...(asynchronous ? { background: true } : {}),
                           },
                         }
                       if (mode === "resume" && owner && phase === 2) {
@@ -274,7 +283,7 @@ for (const run of [
                       }
                       if (
                         phase === 2 &&
-                        !(mode === "background" && owner) &&
+                        !(asynchronous && owner) &&
                         mode !== "resume" &&
                         mode !== "no-read" &&
                         mode !== "command" &&
@@ -299,7 +308,48 @@ for (const run of [
                       const children = yield* sessions.children(chat.id)
                       const child = children[0]
                       if (!child) return { kind: "text", content: "Invented directory listing and success." }
-                      if (mode === "background" && owner) {
+                      if (mode.startsWith("background-goal") && !owner) {
+                        const rows = yield* sessions.messages({ sessionID: child.id })
+                        const user = rows.findLast((row) => row.info.role === "user")
+                        if (
+                          !rows.some(
+                            (row) =>
+                              row.info.role === "assistant" &&
+                              row.info.parentID === user?.info.id &&
+                              row.parts.some(
+                                (part) =>
+                                  part.type === "tool" && part.tool === "read" && part.state.status === "completed",
+                              ),
+                          )
+                        )
+                          return { kind: "tool", name: "read", arguments: { filePath: directory } }
+                      }
+                      if (mode.startsWith("background-goal") && owner && phase === 3) {
+                        expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
+                        return {
+                          kind: "tool",
+                          name: "task",
+                          arguments: {
+                            task_id: child.id,
+                            background: false,
+                            brief: { objective: request },
+                            access: "read",
+                            step_cap: 4,
+                          },
+                        }
+                      }
+                      if (mode.startsWith("background-goal") && owner && phase === 4) {
+                        const current = yield* sessions.get(chat.id)
+                        expect(RayaChief.phase(current.metadata)).toBe("goal")
+                        expect(RayaChief.history(current.metadata)).toHaveLength(1)
+                        const proof = yield* ResultContract.load(sessions, chat.id)
+                        if (!proof) throw new Error("Original continuation proof absent")
+                        expect(RayaChief.history(current.metadata).at(-1)?.userID).toBe(
+                          ResultContract.context(proof).input,
+                        )
+                        return { kind: "tool", name: "get_goal", arguments: {} }
+                      }
+                      if (asynchronous && owner) {
                         const parent = yield* sessions.messages({ sessionID: chat.id })
                         const notice = parent.findLast((row) => row.info.role === "user")
                         expect(
@@ -338,6 +388,37 @@ for (const run of [
                           text: "A newer distinct invocation must not reuse the old result.",
                         })
                       }
+                      if (mode.startsWith("background-goal") && owner && phase === 5) {
+                        const parent = yield* sessions.messages({ sessionID: chat.id })
+                        const get = parent
+                          .flatMap((row) => row.parts)
+                          .findLast(
+                            (item) =>
+                              item.type === "tool" && item.tool === "get_goal" && item.state.status === "completed",
+                          )
+                        if (get?.type !== "tool" || get.state.status !== "completed")
+                          throw new Error("Actual goal evidence response missing")
+                        const catalogue = z
+                          .object({ eligibleEvidence: z.array(z.object({ callID: z.string() }).passthrough()) })
+                          .passthrough()
+                          .parse(JSON.parse(get.state.output))
+                        expect(catalogue.eligibleEvidence.some((item) => item.callID === part.callID)).toBe(true)
+                        return {
+                          kind: "tool",
+                          name: "update_goal",
+                          arguments: {
+                            status: "complete",
+                            summary: "Verified original directory entries",
+                            requirements: [
+                              {
+                                requirement: request,
+                                passed: true,
+                                evidence: [{ callID: part.callID, summary: "Actual full directory Read" }],
+                              },
+                            ],
+                          },
+                        }
+                      }
                       return {
                         kind: "text",
                         content: JSON.stringify({
@@ -354,7 +435,7 @@ for (const run of [
                   )
                   if (
                     content.kind === "text" &&
-                    mode === "background" &&
+                    asynchronous &&
                     owner &&
                     typeof content.content === "string" &&
                     content.content.length <= 8192
@@ -385,7 +466,15 @@ for (const run of [
             plugin: [],
             mcp: {},
             raya_routing: { confidence_threshold: 0 },
-            permission: { "*": "deny", chief_route: "allow", task: "allow", read: "allow" },
+            permission: {
+              "*": "deny",
+              chief_route: "allow",
+              task: "allow",
+              read: "allow",
+              create_goal: "allow",
+              get_goal: "allow",
+              update_goal: "allow",
+            },
             enabled_providers: ["openai"],
             model: "openai/fixture",
             small_model: "openai/fixture",
@@ -568,19 +657,16 @@ for (const run of [
           expect(children).toHaveLength(1)
           const child = children[0]!
           // Physical SQLite settlement and parent continuation share this bounded budget, not a five-second latency guarantee.
-          const deadline = Date.now() + 30_000
-          if (mode === "background") {
+          const deadline = Date.now() + (mode.startsWith("background-goal") ? 180_000 : 30_000)
+          if (asynchronous) {
             const completed = yield* jobs.wait({ id: child.id, timeout: Math.max(0, deadline - Date.now()) })
             if (completed.timedOut) yield* diagnose()
             expect(completed.timedOut).toBe(false)
             state.waited = true
           }
-          const rows = yield* sessions.messages({ sessionID: child.id })
-          const reads = rows.flatMap((row) => row.parts).filter((part) => part.type === "tool" && part.tool === "read")
-          const job = yield* jobs.get(child.id)
-          expect(job?.status === "completed" || job?.status === "error").toBe(true)
-          const deliveries: typeof rows = []
-          if (mode === "background") {
+          const initial = yield* sessions.messages({ sessionID: child.id })
+          const deliveries: typeof initial = []
+          if (asynchronous) {
             while (true) {
               const parent = yield* sessions.messages({ sessionID: chat.id })
               const notice = parent.find(
@@ -624,7 +710,51 @@ for (const run of [
                 ).toHaveLength(1)
                 expect(
                   parent.flatMap((row) => row.parts).filter((part) => part.type === "tool" && part.tool === "task"),
-                ).toHaveLength(1)
+                ).toHaveLength(mode.startsWith("background-goal") ? 2 : 1)
+                if (mode.startsWith("background-goal")) {
+                  const goals = RayaGoal.make({ storage: yield* Storage.Service, sessions })
+                  const goal = yield* goals.get(chat.id)
+                  expect(goal?.status).toBe("complete")
+                  expect(goal?.auditAttempt?.accepted).toBe(true)
+                  const update = parent
+                    .flatMap((row) => row.parts)
+                    .findLast((part) => part.type === "tool" && part.tool === "update_goal")
+                  if (update?.type !== "tool" || update.state.status !== "completed")
+                    throw new Error("Accepted goal completion tool missing")
+                  expect(update.state.metadata.status).toBe("complete")
+                  if (mode === "background-goal-replaced") {
+                    if (!goal?.intent || notice?.info.role !== "user")
+                      throw new Error("Original completed goal or notice missing")
+                    const runs = yield* SessionRunState.Service
+                    yield* goals.stop(chat.id, goal.intent, runs)
+                    const replacement = yield* goals.create(chat.id, request, notice.info.id)
+                    expect(replacement.intent).not.toBe(goal.intent)
+                    const saved = yield* goals.get(chat.id)
+                    if (!saved) throw new Error("Persisted replacement goal missing")
+                    const original = JSON.stringify(saved)
+                    const count = parent.length
+                    yield* runs.ensureRunning(
+                      chat.id,
+                      Effect.succeed(terminal),
+                      Effect.gen(function* () {
+                        const execution = yield* Effect.serviceOption(Execution)
+                        expect(execution._tag).toBe("Some")
+                        if (execution._tag === "None") throw new Error("Actual running execution absent")
+                        const worker = yield* runs.inspect(chat.id)
+                        expect(worker.phase === "running" && worker.id).toBe(execution.value.id)
+                        yield* associate(goals, runs, chat.id, sessions)
+                        const retained = yield* goals.get(chat.id)
+                        expect(JSON.stringify(retained)).toBe(original)
+                        expect(retained?.inputs?.includes(notice.info.id)).not.toBe(true)
+                        expect(retained?.dispatch).toBeUndefined()
+                        return terminal
+                      }),
+                    )
+                    expect(
+                      yield* sessions.messages({ sessionID: chat.id }).pipe(Effect.map((rows) => rows.length)),
+                    ).toBe(count)
+                  }
+                }
                 expect(state.waited).toBe(true)
                 break
               }
@@ -635,31 +765,37 @@ for (const run of [
               yield* Effect.sleep(25)
             }
           }
+          const rows = yield* sessions.messages({ sessionID: child.id })
+          const reads = rows.flatMap((row) => row.parts).filter((part) => part.type === "tool" && part.tool === "read")
+          const job = yield* jobs.get(child.id)
+          expect(job?.status === "completed" || job?.status === "error").toBe(true)
           const original = yield* ResultContract.load(sessions, chat.id)
           expect(original?.kind).toBe(mode === "narrative" ? "narrative" : "directory_entries")
           expect(RayaChief.history((yield* sessions.get(chat.id)).metadata).at(-1)?.result).toBe(original?.kind)
-          if (mode === "exact" || mode === "resume" || mode === "background" || mode === "narrative") {
+          if (mode === "exact" || mode === "resume" || asynchronous || mode === "narrative") {
             expect(Exit.isSuccess(outcome)).toBe(true)
             if (!Exit.isSuccess(outcome)) throw Cause.squash(outcome.cause)
             expect(outcome.value.info.role === "assistant" && outcome.value.info.error).toBeUndefined()
-            if (mode === "background") {
+            if (asynchronous) {
               expect(outcome.value.info.role === "assistant" && outcome.value.info.finish).toBe("tool-calls")
               expect(outcome.value.parts.filter((part) => part.type === "text")).toHaveLength(0)
               expect(deliveries).toHaveLength(1)
             }
-            const answer = mode === "background" ? deliveries[0]! : outcome.value
+            const answer = asynchronous ? deliveries[0]! : outcome.value
             const text = answer.parts
               .filter((part) => part.type === "text")
               .map((part) => part.text)
               .join("")
             if (mode === "narrative") expect(text).toBe("Legitimate narrative summary.")
             expect(job?.status).toBe("completed")
-            expect(reads).toHaveLength(mode === "narrative" ? 0 : mode === "resume" ? 2 : 1)
+            expect(reads).toHaveLength(
+              mode === "narrative" ? 0 : mode === "resume" || mode.startsWith("background-goal") ? 2 : 1,
+            )
             const parent = yield* sessions.messages({ sessionID: chat.id })
             const calls = parent
               .flatMap((row) => row.parts)
               .filter((part) => part.type === "tool" && part.tool === "task")
-            expect(calls).toHaveLength(mode === "resume" ? 2 : 1)
+            expect(calls).toHaveLength(mode === "resume" || mode.startsWith("background-goal") ? 2 : 1)
             const call = calls.at(-1)!
             if (call.type !== "tool" || call.state.status !== "completed")
               throw new Error("Actual completed parent Task missing")
@@ -680,7 +816,7 @@ for (const run of [
                 childMessageID: metadata.childMessageID,
               }),
             )
-            if (mode === "exact" || mode === "resume" || mode === "background") {
+            if (mode === "exact" || mode === "resume" || asynchronous) {
               const read = reads.at(-1)!
               if (read.type !== "tool" || read.state.status !== "completed")
                 throw new Error("Actual completed Read missing")
@@ -735,7 +871,7 @@ for (const run of [
                 yield* ResultContract.check(sessions, retained)
                 return
               }
-              if (mode === "background") {
+              if (asynchronous) {
                 if (!original) throw new Error("Original background contract missing")
                 const parent = yield* sessions.messages({ sessionID: chat.id })
                 const notice = parent.find(
@@ -834,5 +970,5 @@ for (const run of [
           expect(reads).toHaveLength(mode === "no-read" || mode === "command" ? 0 : 1)
         }),
       { config: { snapshot: false, plugin: [], mcp: {} } },
-      60_000,
+      mode.startsWith("background-goal") ? 210_000 : 60_000,
     )

@@ -918,20 +918,25 @@ export const layer = Layer.effect(
         editorContext: input.editorContext, // kilocode_change
       }
 
+      // kilocode_change start - authenticate exact completion before mutating Auto metadata
+      const continuation = input.resultNotice
+        ? yield* ResultContract.continuing(sessions, input.resultNotice, input.sessionID, input.parts, input.goalObjective)
+        : undefined // kilocode_change - authenticate original completion before changing Auto's phase
+      // kilocode_change end
       const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       // kilocode_change start
       // raya_change start - Milestone B target-model precedence starts from the user's selected model, not Chief's
       if (ag.name === "auto") {
         // raya_change start - preserve the exact request and reset Auto's enforced per-turn phase
         const objective =
-          RayaChief.requestText(input.parts, input.goalObjective) || RayaChief.request(current.metadata) || "" // kilocode_change - raya_change: continuations route the latest steered objective
+          continuation ?? (RayaChief.requestText(input.parts, input.goalObjective) || RayaChief.request(current.metadata) || "") // kilocode_change - raya_change: authenticated completion cannot replace original intent
         // raya_change end
         yield* sessions.setMetadata({
           sessionID: input.sessionID,
           metadata: {
             ...current.metadata,
             [RayaChief.requestKey]: objective,
-            [RayaChief.phaseKey]: RayaChief.begin(current.metadata, !!input.goalObjective),
+            [RayaChief.phaseKey]: RayaChief.begin(current.metadata, !!input.goalObjective || !!continuation), // kilocode_change - genuine completion retains its original Chief work
             [RayaChief.modelKey]: {
               providerID: requested.providerID,
               modelID: requested.modelID,

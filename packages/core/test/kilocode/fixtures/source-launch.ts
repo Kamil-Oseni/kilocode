@@ -64,6 +64,7 @@ const collect = async (stream: Readable | null) => {
 const output = [collect(session.child.stdout), collect(session.child.stderr)]
 const errors: unknown[] = []
 let observer: Awaited<ReturnType<typeof observe>> | undefined
+let witness: Awaited<ReturnType<typeof observe>> | undefined
 try {
   assert.equal(session.ticket.header.pid === process.pid, false)
   assert.equal(await Bun.file(path.join(root, "context.json")).exists(), false)
@@ -74,7 +75,8 @@ try {
         header: { ...session.ticket.header, helperBirth: String(BigInt(session.ticket.header.helperBirth) + 1n) },
       }),
     )
-  observer = await observe(session.ticket)
+  observer = await observe(session.ticket, mode === "long" ? 900000 : mode === "timeout" ? 100 : undefined)
+  if (mode === "timeout" || mode === "cancel") witness = await observe(session.ticket)
   await session.start()
   const end = Date.now() + 15000
   while (!(await Bun.file(path.join(root, "context.json")).exists())) {
@@ -112,8 +114,13 @@ try {
       settled = true
     },
   )
-  await Bun.sleep(150)
-  assert.equal(settled, false)
+  await Bun.sleep(mode === "long" ? 61000 : 150)
+  if (mode !== "timeout") assert.equal(settled, false)
+  if (mode === "timeout" || mode === "cancel") {
+    if (mode === "cancel") await observer.close()
+    await assert.rejects(observer.done)
+    assert.equal(await Bun.file(path.join(root, "final-marker")).exists(), false)
+  }
   if (mode === "forced") {
     const result = await session.abort()
     assert.equal(result.forced, true)
@@ -129,7 +136,7 @@ try {
     }
     if (mode === "missingack") await assert.rejects(observer.done)
     else {
-      const proof = await observer.done
+      const proof = await (witness ?? observer).done
       assert.equal(proof.portableCaptureAuthorized, false)
       assert.equal(proof.familyZeroObserved, true)
       assert.equal((await session.sourceExit).code, 0)
@@ -146,9 +153,12 @@ try {
 } catch (err) {
   errors.push(err)
 } finally {
+  // Admission failure still starts the exact suspended fixture so its cooperative release can join.
+  await session.start()
   await Bun.write(path.join(root, "release"), "release")
   await Bun.write(path.join(root, "family-release"), "release")
   await observer?.close()
+  await witness?.close()
   const [stdout, stderr] = await Promise.all(output)
   await Bun.write(path.join(root, "stdout.log"), stdout)
   await Bun.write(path.join(root, "stderr.log"), stderr)

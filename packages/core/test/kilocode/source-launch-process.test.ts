@@ -2,8 +2,27 @@ import { expect, test } from "bun:test"
 import { mkdtemp } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { observe } from "../../src/kilocode/source-observer"
 
-for (const mode of ["held", "nonzero", "wrongticket", "forced", "missingack", "policy", "member", "rootexit"])
+test("refuse source observation beyond the bounded extended lifetime before acquiring a native handle", () => {
+  expect(() => observe({ pid: process.pid, birth: "1", executable: process.execPath, timeout: 900001 })).toThrow(
+    "Source helper observer identity invalid",
+  )
+})
+
+for (const mode of [
+  "held",
+  "nonzero",
+  "wrongticket",
+  "forced",
+  "missingack",
+  "policy",
+  "member",
+  "rootexit",
+  "long",
+  "timeout",
+  "cancel",
+])
   test.skipIf(process.platform !== "win32")(
     `actual source launcher ${mode} binds source context and held native family observer`,
     async () => {
@@ -36,7 +55,7 @@ for (const mode of ["held", "nonzero", "wrongticket", "forced", "missingack", "p
         },
       )
       const output = [new Response(child.stdout).text(), new Response(child.stderr).text()]
-      const timer = setTimeout(() => child.kill("SIGKILL"), 60000)
+      const timer = setTimeout(() => child.kill("SIGKILL"), mode === "long" ? 95000 : 60000)
       try {
         const [code, stdout, stderr] = await Promise.all([child.exited, ...output])
         await Bun.write(path.join(root, "parent.stdout.log"), stdout)
@@ -52,5 +71,5 @@ for (const mode of ["held", "nonzero", "wrongticket", "forced", "missingack", "p
         await child.exited
       }
     },
-    65000,
+    mode === "long" ? 100000 : 65000,
   )

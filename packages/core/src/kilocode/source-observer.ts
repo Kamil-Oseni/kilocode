@@ -42,7 +42,7 @@ export function observe(input: { pid: number; birth: string; executable: string;
     !path.isAbsolute(input.executable) ||
     !Number.isSafeInteger(input.timeout) ||
     input.timeout < 100 ||
-    input.timeout > 60000
+    input.timeout > 900000
   )
     throw new Error("Source helper observer identity invalid")
   const executable = input.executable.replaceAll("'", "''")

@@ -69,7 +69,7 @@ test("cascade admission waits for real HTTP preparation and Stop fences readines
     } as unknown as KiloConnectionService
     const root = await mkdtemp(join(tmpdir(), "raya-prepare-host-"))
     const speech = new SpeechService(context)
-    const posts: { type?: string; fallback?: string }[] = []
+    const posts: { type?: string; fallback?: string; requestId?: string }[] = []
     try {
       await speech.settings.setKey("local", "private-test-key")
       await speech.update(
@@ -101,6 +101,16 @@ test("cascade admission waits for real HTTP preparation and Stop fences readines
       expect(state.deletes).toBe(1)
       expect(posts.filter((msg) => msg.fallback === "cascade-v1")).toHaveLength(action === "ready" ? 1 : 0)
       if (action === "stop") expect(posts.some((msg) => msg.type === "speechRealtimeStopped")).toBe(true)
+      if (action === "ready") {
+        await speech.realtimeStop("stale_request", (msg) => posts.push(msg as (typeof posts)[number]))
+        expect(posts.filter((msg) => msg.type === "speechRealtimeStopped")).toHaveLength(0)
+        await speech.realtimeStop("request_1", (msg) => posts.push(msg as (typeof posts)[number]))
+        expect(posts.filter((msg) => msg.type === "speechRealtimeStopped")).toEqual([
+          { type: "speechRealtimeStopped", requestId: "request_1" },
+        ])
+        await speech.realtimeStop("request_1", (msg) => posts.push(msg as (typeof posts)[number]))
+        expect(posts.filter((msg) => msg.type === "speechRealtimeStopped")).toHaveLength(1)
+      }
     } finally {
       speech.dispose()
       await server.stop(true)

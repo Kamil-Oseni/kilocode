@@ -342,7 +342,8 @@ export class SpeechService implements vscode.Disposable {
         fallback: result.fallback,
       })
     }
-    if (current() && !this.realtime.active) this.request = undefined
+    const cascade = !result.ok && result.code !== "cancelled" && result.fallback === "cascade-v1"
+    if (current() && !this.realtime.active && !cascade) this.request = undefined
   }
 
   private async prepare(

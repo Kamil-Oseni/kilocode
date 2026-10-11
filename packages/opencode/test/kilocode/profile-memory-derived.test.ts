@@ -188,7 +188,7 @@ test.skipIf(process.platform !== "win32")(
         process.execPath,
         "run",
         "--conditions=browser",
-        path.join(import.meta.dir, "fixtures/profile-memory-correspondence.ts"),
+        path.join(import.meta.dir, "fixtures/profile-memory-derived.ts"),
         root,
       ],
       {

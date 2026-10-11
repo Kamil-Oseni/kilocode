@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { createHash } from "node:crypto"
 import { fileURLToPath } from "node:url"
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { claim } from "@/kilocode/task/claim"
-import { inspect, recover } from "@/kilocode/task/recovery"
+import { inspect, recover, Record } from "@/kilocode/task/recovery"
 import { Storage } from "@/storage/storage"
-import { owner, stopped } from "@/kilocode/task/owner"
+import { owner, durable, stopped } from "@/kilocode/task/owner"
 import { SessionID } from "@/session/schema"
 import { publish } from "@/kilocode/session/review-publish"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -35,6 +35,63 @@ function store(fs: FSUtil.Interface, directory: string) {
 }
 
 describe("routine startup claims", () => {
+  it.live("an interrupted startup retains its observed process birth identity", () =>
+    Effect.gen(function* () {
+      if (process.platform !== "win32" && process.platform !== "linux") return
+      const identity = durable()
+      expect(identity.birth).toBeTruthy()
+      const fs = yield* FSUtil.Service
+      const directory = yield* tmpdirScoped()
+      const storage = store(fs, directory)
+      const key = ["raya", "agent-claims", createHash("sha256").update("routine").digest("hex")]
+      const failed = yield* claim(storage, "routine", Effect.void, () => Effect.die("interrupted startup")).pipe(
+        Effect.exit,
+      )
+      expect(Exit.isFailure(failed)).toBe(true)
+      const record = yield* Schema.decodeUnknownEffect(Record)(yield* storage.read(key))
+      expect(record.owner).toEqual(identity)
+      expect(yield* recover(storage, "routine", () => Effect.succeed(true))).toBe(false)
+      expect(yield* storage.read(key)).toMatchObject({ owner: identity })
+    }),
+  )
+
+  it.live("recovery preserves recorded birth evidence while refusing live and uncertain owners", () =>
+    Effect.gen(function* () {
+      if (process.platform !== "win32" && process.platform !== "linux") return
+      const identity = durable()
+      expect(identity.birth).toBeTruthy()
+      const fs = yield* FSUtil.Service
+      const directory = yield* tmpdirScoped()
+      const storage = store(fs, directory)
+      const key = ["raya", "agent-claims", createHash("sha256").update("routine").digest("hex")]
+      const record = { version: 1, agentID: "routine", id: crypto.randomUUID(), at: Date.now(), phase: "claimed" }
+      for (const value of [owner(), identity, { ...identity, birth: "" }]) {
+        yield* storage.replace(key, { ...record, owner: value })
+        expect(yield* recover(storage, "routine", () => Effect.succeed(true))).toBe(false)
+        expect(yield* storage.read(key)).toEqual({ ...record, owner: value })
+      }
+      // Simulate PID reuse with an earlier well-formed birth; the actual OS probe remains authoritative.
+      const stamp = identity.birth!
+      const birth =
+        process.platform === "win32"
+          ? new Date(Date.parse(stamp) - 1_000).toISOString().replace("Z", "0000Z")
+          : stamp.replace(/:\d+$/, (value) => `:${BigInt(value.slice(1)) - 1n}`)
+      const prior = { ...identity, birth }
+      expect(stopped(prior)).toBe(true)
+      yield* storage.replace(key, { ...record, owner: prior })
+      expect(yield* recover(storage, "routine", () => Effect.succeed(true))).toBe(true)
+      expect(yield* fs.exists(path.join(directory, ...key) + ".json")).toBe(false)
+      const files = yield* fs.glob("raya/agent-recovery/**/*.json", { cwd: directory })
+      expect(files).toHaveLength(1)
+      expect(yield* fs.readJson(path.join(directory, files[0]))).toMatchObject({
+        owner: identity,
+        settled: true,
+        claim: { owner: prior },
+      })
+      expect(yield* recover(storage, "routine", () => Effect.succeed(true))).toBe(false)
+    }),
+  )
+
   it.live("claim inspection withholds malformed and cross-routine identities without modifying evidence", () =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service

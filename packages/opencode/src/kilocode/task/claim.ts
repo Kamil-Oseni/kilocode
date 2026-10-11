@@ -3,7 +3,7 @@ import { Effect, Exit } from "effect"
 import type { Storage } from "@/storage/storage"
 import type { SessionID } from "@/session/schema"
 import { RayaTask } from "."
-import { owner as identity, stopped } from "./owner"
+import { durable as identity, stopped } from "./owner"
 import { read } from "./storage-read"
 
 type Store = Pick<Storage.Interface, "create" | "replace" | "remove"> & {

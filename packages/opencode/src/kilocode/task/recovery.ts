@@ -2,11 +2,11 @@ import { createHash } from "node:crypto"
 import { Cause, Effect, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
-import { owner, stopped } from "./owner"
+import { owner, durable, stopped } from "./owner"
 import { starting } from "./claim"
 import { read as readClaim } from "./storage-read"
 
-const Owner = Schema.Struct({ host: Schema.String, pid: Schema.Number })
+const Owner = Schema.Struct({ host: Schema.String, pid: Schema.Number, birth: Schema.optional(Schema.String) })
 export const Record = Schema.Struct({
   version: Schema.Literal(1),
   agentID: Schema.String,
@@ -76,7 +76,7 @@ export function recover<E, R, F = never, S = never>(
       let prior = record.id
       for (let depth = 0; depth < 64; depth++) {
         const path = ["raya", "agent-recovery", hash(id), hash(prior)]
-        const permit = { id: crypto.randomUUID(), owner: owner(), claim: record }
+        const permit = { id: crypto.randomUUID(), owner: durable(), claim: record }
         if (!(yield* storage.create(path, permit).pipe(Effect.orDie))) {
           const previous = yield* read(path).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(Permit)),

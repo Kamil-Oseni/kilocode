@@ -444,6 +444,36 @@ it.live("a result contract requires an actual saved Chief dispatch and refuses c
         if (!continued) throw new Error("Actual two-completion continuation absent")
         expect(ResultContract.context(continued).inputs).toEqual([user, ...published.map((row) => row.info.id)])
         expect(ResultContract.context(continued).current).toBe(published[1]!.info.id)
+        const foreign = MessageID.ascending()
+        const reply = MessageID.ascending()
+        yield* sessions.updateMessage({
+          id: foreign,
+          sessionID: session.id,
+          role: "user",
+          agent: "auto",
+          model,
+          time: { created: 5 },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: foreign,
+          type: "text",
+          synthetic: true,
+          text: "Unregistered completion notice",
+        })
+        const collection = yield* sessions.messages({ sessionID: session.id, limit: 129 })
+        const source = collection.find((row) => row.info.role === "assistant")
+        if (source?.info.role !== "assistant") throw new Error("Original contract assistant unavailable")
+        yield* sessions.updateMessage({ ...source.info, id: reply, parentID: foreign, time: { created: 5 } })
+        expect(
+          (yield* ResultContract.load(sessions, { sessionID: session.id, userID: foreign, messageID: reply }).pipe(
+            Effect.exit,
+          ))._tag,
+        ).toBe("Failure")
+        yield* sessions.removeMessage({ sessionID: session.id, messageID: reply })
+        yield* sessions.removeMessage({ sessionID: session.id, messageID: foreign })
+        yield* ResultContract.check(sessions, continued)
         const notice = published[0]!.parts[0]!
         yield* sessions.updatePart({ ...notice, text: "Substituted same-ID notice" })
         expect((yield* ResultContract.check(sessions, continued).pipe(Effect.exit))._tag).toBe("Failure")
@@ -496,6 +526,62 @@ it.live("a result contract requires an actual saved Chief dispatch and refuses c
         for (let index = 0; index < 129; index++)
           yield* sessions.updateMessage({ ...assistant.info, id: MessageID.ascending(), time: { created: 5 + index } })
         expect((yield* ResultContract.load(sessions, session.id).pipe(Effect.exit))._tag).toBe("Failure")
+      }),
+    )
+  }),
+)
+
+it.live("an uncontracted synthetic Routine dispatch does not require a background result notice", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    yield* provideInstance(dir)(
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({ title: "Original uncontracted continuation" })
+        const user = MessageID.ascending()
+        const message = MessageID.ascending()
+        yield* sessions.updateMessage({
+          id: user,
+          sessionID: session.id,
+          role: "user",
+          agent: "generalist",
+          model,
+          time: { created: 1 },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: user,
+          type: "text",
+          synthetic: true,
+          text: "An active persistent goal must continue. Call get_goal before performing work.",
+        })
+        const assistant = {
+          id: message,
+          sessionID: session.id,
+          role: "assistant" as const,
+          parentID: user,
+          agent: "generalist",
+          mode: "generalist",
+          providerID: model.providerID,
+          modelID: model.modelID,
+          cost: 0,
+          path: { cwd: dir, root: dir },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 2 },
+        }
+        yield* sessions.updateMessage(assistant)
+        const dispatch = { sessionID: session.id, userID: user, messageID: message }
+        expect(yield* ResultContract.load(sessions, dispatch)).toBeUndefined()
+        expect(yield* ResultContract.load(sessions, session.id)).toBeUndefined()
+        yield* sessions.updateMessage({ ...assistant, parentID: MessageID.ascending() })
+        expect((yield* ResultContract.load(sessions, dispatch).pipe(Effect.exit))._tag).toBe("Failure")
+        yield* sessions.updateMessage(assistant)
+        yield* sessions.setMetadata({
+          sessionID: session.id,
+          metadata: { [RayaChief.logKey]: [{ result: "directory_entries" }] },
+        })
+        expect((yield* ResultContract.load(sessions, dispatch).pipe(Effect.exit))._tag).toBe("Failure")
       }),
     )
   }),

@@ -79,7 +79,8 @@ const reasons = new Map([
   ["Result contract durable source evidence changed", "source-changed"],
   ["Result notice original completion was already committed", "already-committed"],
 ])
-const diagnostic = (stage: "notice" | "join" | "source" | "publication") =>
+const diagnostic =
+  (stage: "notice" | "join" | "source" | "publication") =>
   <A, E, R>(body: Effect.Effect<A, E, R>) =>
     body.pipe(
       Effect.onExit((exit) => {
@@ -569,7 +570,6 @@ export namespace ResultContract {
       const rows = yield* sessions.messages({ sessionID: selected, limit: 129 })
       const user = rows.findLast((row) => row.info.role === "user")
       const row = rows.find((row) => row.info.id === dispatch.messageID)
-      if (!session.parentID && user && !RayaChief.requestText(user.parts)) yield* continuation(sessions, user)
       if (
         rows.some(
           (item) =>

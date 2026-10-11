@@ -1,9 +1,12 @@
 import { expect } from "bun:test"
-import { Cause, Effect, Fiber, Queue, Exit, Schema } from "effect"
+import path from "node:path"
+import { Cause, Effect, Fiber, Queue, Exit, Schema, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Git } from "@/git"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
@@ -18,27 +21,30 @@ import { MessageID, PartID } from "@/session/schema"
 import { ChiefRouteTool } from "@/kilocode/tool/chief-route"
 import type { DefWithoutID } from "@/tool/tool"
 import { RayaChief } from "@/kilocode/chief"
+import { RayaGoal } from "@/kilocode/goal"
+import { goalTools } from "@/kilocode/tool/goal"
+import { Storage } from "@/storage/storage"
 import { ollama, OllamaBridgeError } from "@/kilocode/provider/ollama-bridge"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(
-  LayerNode.compile(
-    LayerNode.group([
-      CrossSpawnSpawner.node,
-      Database.node,
-      SessionProjector.node,
-      Agent.node,
-      Config.node,
-      Provider.node,
-      Question.node,
-      Permission.node,
-      Session.node,
-      EventV2Bridge.node,
-      Truncate.node,
-    ]),
-  ),
-)
+const graph = LayerNode.group([
+  CrossSpawnSpawner.node,
+  Database.node,
+  SessionProjector.node,
+  Agent.node,
+  Config.node,
+  Provider.node,
+  Question.node,
+  Permission.node,
+  Session.node,
+  EventV2Bridge.node,
+  Truncate.node,
+  Storage.node,
+  FSUtil.node,
+  Git.node,
+])
+const it = testEffect(LayerNode.compile(graph))
 const cfg = {
   snapshot: false,
   plugin: [],
@@ -120,6 +126,59 @@ const asked = Effect.fn(function* () {
   return queue
 })
 const ambiguous = "Help me decide what to do with this project"
+
+it.live("a genuinely routed Auto turn can create its original persistent goal", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const objective = "Write one text file and read it back."
+        const input = yield* dispatch(dir, objective)
+        const goals = RayaGoal.make({ storage, sessions })
+        const catalog = { create_goal: goalTools(goals, sessions).create }
+        expect(RayaChief.tools(catalog, (yield* sessions.get(input.chat.id)).metadata)).toEqual({})
+        const route = yield* (yield* ChiefRouteTool).init()
+        const decision = yield* route.execute({ result: "narrative", access: "edit", objective }, input.ctx)
+        expect(decision.metadata.decision?.direct).not.toBe(true)
+        const saved = yield* sessions.get(input.chat.id)
+        expect(RayaChief.phase(saved.metadata)).toBe("task")
+        const admitted = RayaChief.tools(catalog, saved.metadata)
+        expect(admitted.create_goal).toBe(catalog.create_goal)
+        const tool = yield* (yield* admitted.create_goal).init()
+        const result = yield* tool.execute({ objective }, input.ctx)
+        expect(result.metadata.status).toBe("active")
+        const goal = yield* goals.get(input.chat.id)
+        expect(goal?.objective).toBe(objective)
+        expect(goal?.startMessageID).toBe(input.ctx.messageID)
+        expect(goal?.status).toBe("active")
+        expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
+        const refused = yield* tool.execute({ objective: "Replace the original goal" }, input.ctx)
+        expect(refused.metadata.status).toBeUndefined()
+        expect(yield* goals.get(input.chat.id)).toEqual(goal)
+        const current = yield* sessions.get(input.chat.id)
+        expect(current.metadata?.["raya.goal.open"]).toBe(true)
+        expect(RayaChief.tools(catalog, current.metadata)).toEqual({})
+      }).pipe(
+        Effect.provide(
+          Layer.fresh(
+            LayerNode.compile(graph, [
+              [Database.node, Database.layerFromPath(path.join(dir, "goal.sqlite"))],
+              [
+                Storage.node,
+                LayerNode.make({
+                  service: Storage.Service,
+                  layer: Storage.layerWithDatabase(path.join(dir, "goal-storage")),
+                  deps: [FSUtil.node, Git.node, Database.node],
+                }),
+              ],
+            ]),
+          ),
+        ),
+      ),
+    { config: cfg },
+  ),
+)
 
 it.live("a prompted greeting cannot persist a denied delegated specialist", () =>
   provideTmpdirInstance(

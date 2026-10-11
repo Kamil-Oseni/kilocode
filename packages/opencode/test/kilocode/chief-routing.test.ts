@@ -9,6 +9,18 @@ type Fixture = {
 }
 
 const fixtures = data as Fixture[]
+
+it("offers goal creation only after routing without an open goal or absent capability", () => {
+  const tools = { create_goal: { id: "create" }, get_goal: { id: "get" } }
+  expect(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task" }).create_goal).toBe(tools.create_goal)
+  for (const phase of ["route", "verify", "goal", "done"])
+    expect(RayaChief.tools(tools, { [RayaChief.phaseKey]: phase }).create_goal).toBeUndefined()
+  expect(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task", "raya.goal.open": true }).create_goal).toBeUndefined()
+  expect(RayaChief.tools({ get_goal: tools.get_goal }, { [RayaChief.phaseKey]: "task" })).toEqual({
+    get_goal: tools.get_goal,
+  })
+  expect(RayaChief.tools(tools, { [RayaChief.phaseKey]: "verify" })).toEqual({ get_goal: tools.get_goal })
+})
 const agents: RayaChief.Agent[] = [
   { name: "generalist", description: "Fast generalist for small direct tasks" },
   { name: "coder", description: "Software implementation, fixes, refactors, APIs, and tests" },

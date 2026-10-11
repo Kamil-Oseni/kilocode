@@ -108,6 +108,7 @@ export namespace RayaChief {
       "chief_review",
       "chief_synthesize",
       ...(phase(metadata) === "route" ? [] : ["task"]), // raya_change - fresh requests must route before delegation
+      ...(phase(metadata) === "task" && metadata?.["raya.goal.open"] !== true ? ["create_goal"] : []),
       "get_goal",
       "update_goal",
       "update_goal_plan",

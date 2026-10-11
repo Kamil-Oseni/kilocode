@@ -608,13 +608,31 @@ async def handle(request: Request, path: str):
 
 if __name__ == '__main__':
     print(f'Local speech API listening on 127.0.0.1:{PORT}; models load on demand.', flush=True)
-    threading.Thread(target=maintain, daemon=True, name='result-retention').start()
+    retention = threading.Thread(target=maintain, daemon=True, name='result-retention')
+    retention.start()
+    owner = None
     try:
         import uvicorn
-        uvicorn.run(app, host='127.0.0.1', port=PORT, access_log=False)
+        service = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=PORT, access_log=False))
+        if os.environ.get('RAYA_SPEECH_OWNED_STDIN') == '1':
+            def joined():
+                # The launching owner retains this pipe; its EOF ends this service.
+                for _ in sys.stdin:
+                    pass
+                service.should_exit = True
+            owner = threading.Thread(target=joined, daemon=True, name='service-owner')
+            owner.start()
+        service.run()
     finally:
         STOP.set()
         for job in JOBS.values():
             job['cancel'].set()
         POOL.shutdown(wait=True, cancel_futures=True)
         retire()
+        retention.join(timeout=10)
+        if retention.is_alive():
+            raise RuntimeError('Speech retention thread did not retire.')
+        if owner is not None and service.should_exit:
+            owner.join(timeout=10)
+            if owner.is_alive():
+                raise RuntimeError('Speech owner pipe did not retire.')

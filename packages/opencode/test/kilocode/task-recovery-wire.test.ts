@@ -238,6 +238,28 @@ it.instance(
           },
         })
       }
+      const inspection = yield* sessions.updateMessage(assistant())
+      const inspector = yield* goalTools(goals, sessions).get.pipe(Effect.flatMap(Tool.init))
+      const preview = yield* inspector.execute(
+        {},
+        {
+          sessionID: parent.id,
+          messageID: inspection.id,
+          callID: "inspect-existing-work",
+          agent: "auto",
+          abort: new AbortController().signal,
+          messages: [],
+          ask: () => Effect.void,
+          metadata: () => Effect.void,
+        },
+      )
+      const available = JSON.parse(preview.output)
+      expect(available.recovery).toBeUndefined()
+      expect(available.verification).toContain("Inspect the actual eligibleEvidence tools")
+      expect(available.verification).toContain("Eligible receipts alone do not prove completion")
+      expect(available.eligibleEvidence.map((row: { callID: string }) => row.callID)).toContain("read-0")
+      expect(available.eligibleEvidence.map((row: { callID: string }) => row.callID)).toContain("read-1")
+      expect((yield* goals.get(parent.id))?.status).toBe("active")
       const original = yield* goals.get(parent.id)
       const criteria = original?.criteria
       if (!original?.intent || !criteria) throw new Error("Original verification criteria missing")
@@ -678,11 +700,13 @@ it.instance(
           [ChiefVerification.recovery]: { ...proof, goal: { ...proof.goal, intent: generic.intent } },
         },
       })
-      const hint = JSON.parse((yield* get.execute({}, opts)).output).recovery
-      expect(hint.task_id).toBe(child.id)
-      expect(hint.example).toContain("missing authorized work")
-      expect(hint.example).not.toContain("final newline")
-      expect(hint.example).not.toContain("source and saved target")
+      const hint = JSON.parse((yield* get.execute({}, opts)).output)
+      expect(hint.recovery).toBeUndefined()
+      expect(hint.verification).toContain("Inspect the actual eligibleEvidence tools")
+      expect(hint.verification).toContain("Eligible receipts alone do not prove completion")
+      expect(hint.verification).toContain("concrete missing or stale work identified by inspection")
+      expect(hint.eligibleEvidence.length).toBeGreaterThan(0)
+      expect((yield* goals.get(parent.id))?.status).toBe("active")
       const retained = {
         sessions,
         storage,

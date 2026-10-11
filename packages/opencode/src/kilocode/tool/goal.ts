@@ -177,7 +177,8 @@ export function goalTools(
             citation(goal.auditAttempt.reason) &&
             Array.isArray(evidence) &&
             evidence.length > 0
-          const resumed = correction.length || citing ? undefined : yield* recovery(ctx)
+          const inspect = Array.isArray(evidence) && evidence.length > 0 && goal.auditAttempt?.accepted !== false
+          const resumed = correction.length || citing || inspect ? undefined : yield* recovery(ctx)
           const offset = Array.isArray(evidence)
             ? input.before === undefined
               ? 0
@@ -211,6 +212,9 @@ export function goalTools(
                       : undefined,
                   audit_correction: citing
                     ? "Correct this same audit using the exact eligibleEvidence receipts below. Do not rerun a Task merely to repair citations; the corrected audit still checks the actual work."
+                    : undefined,
+                  verification: inspect
+                    ? "Inspect the actual eligibleEvidence tools and saved requirements before requesting more work. If every criterion is met, submit the completion audit using exact supporting callIDs. Eligible receipts alone do not prove completion; resume the retained worker only for concrete missing or stale work identified by inspection."
                     : undefined,
                   recovery: resumed,
                 },

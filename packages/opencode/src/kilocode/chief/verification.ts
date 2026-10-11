@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import type { BackgroundJob } from "@/background/job"
 import type { Session } from "@/session/session"
@@ -14,6 +14,7 @@ import { ChiefRefinement } from "./refinement"
 import { ResultContract } from "./result-contract"
 import { Refusal } from "@/kilocode/session/tool-refusal"
 import { example } from "@/kilocode/task-resume"
+import * as GoalGate from "@/kilocode/goal/tool-gate"
 
 export namespace ChiefVerification {
   export const key = "raya.chief.verification"
@@ -321,7 +322,46 @@ export namespace ChiefVerification {
             part.state.time.end >= observation.at,
         ),
       )
-      return { taskID: child.sessionID, correction }
+      const inspection = Schema.fromJsonString(Schema.Struct({ goal: RayaGoal.State }))
+      const proof = Schema.Struct({
+        version: Schema.Literal(1),
+        sessionID: SessionID,
+        messageID: MessageID,
+        revision: Schema.optional(Schema.String),
+        digest: hash,
+      })
+      const current = rows.findIndex((row) => row.info.id === input.messageID)
+      const inspected = rows.slice(0, current).some(
+        (row) =>
+          row.info.role === "assistant" &&
+          row.info.agent === "auto" &&
+          goal.inputs?.includes(row.info.parentID) &&
+          row.parts.some((part) => {
+            if (
+              part.type !== "tool" ||
+              part.tool !== "get_goal" ||
+              part.sessionID !== input.sessionID ||
+              part.messageID !== row.info.id ||
+              part.state.status !== "completed" ||
+              part.state.time.start < child.completedAt ||
+              part.state.time.end < part.state.time.start ||
+              part.state.time.end > message.info.time.created
+            )
+              return false
+            const saved = Option.getOrUndefined(Schema.decodeUnknownOption(proof)(part.state.metadata[GoalGate.key]))
+            const parsed = Option.getOrUndefined(Schema.decodeUnknownOption(inspection)(part.state.output))
+            return (
+              saved !== undefined &&
+              parsed !== undefined &&
+              saved.sessionID === input.sessionID &&
+              saved.messageID === row.info.id &&
+              saved.revision === parsed.goal.revision &&
+              saved.digest === GoalGate.observation(parsed.goal, input.sessionID, row.info.id).digest &&
+              saved.digest === GoalGate.observation(goal, input.sessionID, row.info.id).digest
+            )
+          }),
+      )
+      return { taskID: child.sessionID, correction, inspected }
     })
   }
 
@@ -342,6 +382,13 @@ export namespace ChiefVerification {
             "task-recovery",
             `This current Chief request already has a completed worker. Continue or recover that same work with task_id="${worker.taskID}"; do not create a replacement child by rewording the brief. Distinct saved branches or a genuinely new routed request remain separate work. Put the ID in arguments.task_id, not only in the objective text. Supply a concrete continuation or correction in prompt or brief.objective.
 ${example(worker.taskID)}`,
+          ),
+        )
+      if (!worker.inspected)
+        return yield* Effect.fail(
+          new Refusal(
+            "task-recovery",
+            "Inspect this original goal with get_goal in an earlier turn after the worker finishes before deciding whether a same-worker correction is needed. Do not issue get_goal and Task recovery together; read the completed inspection and its eligible evidence first. Do not repeat successful work or resume merely to repair citations.",
           ),
         )
       if (worker.correction && !input.prompt?.trim() && !input.objective?.trim())

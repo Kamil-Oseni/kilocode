@@ -259,7 +259,11 @@ it.instance(
           metadata: { ...before.metadata, [RayaChief.phaseKey]: "verify" },
         })
         yield* verify({ ...state, input, final, callID: call })
-        expect(yield* ChiefVerification.retained(query)).toEqual({ taskID: state.child.id, correction: false })
+        expect(yield* ChiefVerification.retained(query)).toEqual({
+          taskID: state.child.id,
+          correction: false,
+          inspected: false,
+        })
       }
     }),
   { config: { formatter: false, lsp: false, enabled_providers: [] } },

@@ -45,7 +45,7 @@ export function greeting(request: string) {
     .split(/[.;!]\s*/)
   if (rows.length > 6) return false
   if (
-    !/^(?:(?:hi|hello|hey|good morning|good afternoon|good evening)|(?:please )?(?:reply|respond) with (?:one|a) (?:(?:short|brief|friendly) )?greeting|(?:please )?say (?:hi|hello))$/i.test(
+    !/^(?:(?:hi|hello|hey|good morning|good afternoon|good evening)(?:,?\s+raya)?|(?:please )?(?:reply|respond) with (?:one|a) (?:(?:short|brief|friendly) )?greeting|(?:please )?say (?:hi|hello))$/i.test(
       rows[0],
     )
   )
@@ -57,7 +57,10 @@ export function greeting(request: string) {
     .slice(1)
     .every(
       (row) =>
-        /^(?:this is|it's|it is) (?:just |only )?(?:a )?(?:temporary |brief )?(?:conversation|chat|greeting) (?:check|test)$/i.test(
+        /^(?:this is|it's|it is) (?:just |only )?(?:a )?(?:(?:temporary|brief|silent|simple) )?(?:conversation|chat|greeting) (?:check|test)$/i.test(
+          row,
+        ) ||
+        /^(?:please )?(?:reply|respond) with (?:one|a) (?:(?:short|brief|friendly) ){0,3}(?:sentence|greeting)$/i.test(
           row,
         ) ||
         /^no (?:actions|tools|saving)$/i.test(row) ||

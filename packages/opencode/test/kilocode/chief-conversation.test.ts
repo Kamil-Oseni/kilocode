@@ -206,7 +206,13 @@ const cfg = {
   agent: { auto: { model: "local/fixture", steps: 1 }, generalist: { model: "local/fixture" } },
 } satisfies Partial<Config.Info>
 
-for (const text of [request, "Hello! Don't save this or take any actions.", "Hello Raya, what can you help me with?"])
+for (const text of [
+  request,
+  "Hello! Don't save this or take any actions.",
+  "Hello Raya, what can you help me with?",
+  "Hello Raya. Reply with one short friendly sentence. This is a silent conversation check; do not use tools.",
+  "Good evening, Raya! Please respond with a brief friendly sentence. No tools.",
+])
   it.instance(
     `first actual Auto greeting omits acquisition: ${text}`,
     () =>
@@ -230,7 +236,7 @@ for (const text of [request, "Hello! Don't save this or take any actions.", "Hel
           anyOf: [
             {
               type: "object",
-              properties: { kind: { const: "text" }, content: { type: "string" } },
+              properties: { kind: { const: "text" }, content: { type: "string", minLength: 1, pattern: "\\S" } },
               required: ["kind", "content"],
               additionalProperties: false,
             },
@@ -351,6 +357,39 @@ test("general capability introductions are self-contained but appended work rema
   ]) {
     const value = fixture(text)
     expect(RayaChief.direct(text)).toBe(false)
+    expect(supplied([value.user], value.session, value.user.info.id)).toBe(false)
+  }
+})
+
+test("addressed greetings with reply constraints stay conversational while appended work requires tools", () => {
+  for (const text of [
+    "Hello Raya. Reply with one short friendly sentence. This is a silent conversation check; do not use tools.",
+    "Good evening, Raya! Please respond with a brief friendly sentence. No tools.",
+    "Hi, Raya. Respond with a short sentence. Do not change anything.",
+  ]) {
+    const value = fixture(text)
+    expect(supplied([value.user], value.session, value.user.info.id)).toBe(true)
+    expect(RayaChief.direct(text)).toBe(true)
+    expect(supplied([value.user], { ...value.session, parentID: "ses_parent" }, value.user.info.id)).toBe(false)
+    expect(
+      supplied(
+        [value.user],
+        { ...value.session, metadata: { ...value.session.metadata, "raya.goal.open": true } },
+        value.user.info.id,
+      ),
+    ).toBe(false)
+  }
+  for (const text of [
+    "Hello Raya. Read my project. Do not use tools.",
+    "Hi, Raya. What did I save last time?",
+    "Hello Raya. Reply with one short sentence about my saved preferences.",
+    "Good evening, Raya. Turn on the lights.",
+    "Hello Raya. Keep working until the tests pass.",
+    "Reply with one friendly sentence about my project.",
+    "Hello Raya. This is a silent conversation check. Read my notes.",
+    "Hello Raya. Reply with one short friendly sentence. " + "No tools. ".repeat(60),
+  ]) {
+    const value = fixture(text)
     expect(supplied([value.user], value.session, value.user.info.id)).toBe(false)
   }
 })

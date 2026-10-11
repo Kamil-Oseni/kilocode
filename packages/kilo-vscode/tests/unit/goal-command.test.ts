@@ -104,5 +104,72 @@ describe("native goal command", () => {
       expect(parseGoalCommand(prompt)).toBeUndefined()
     }
   })
+
+  it("arms explicit goal-start commands without rewriting their objectives", () => {
+    for (const prompt of [
+      "Please start a durable goal to verify restart persistence.",
+      "Arm the persistent goal for the migration and its readback.",
+      "Create a durable goal: finish the checkout migration.",
+    ]) {
+      expect(hasGoalIntent(prompt)).toBe(true)
+      expect(parseGoalCommand(prompt)).toEqual({
+        kind: "start",
+        objective: prompt,
+        notice: "Raya recognized this as durable goal work and will continue until it is verified or honestly blocked.",
+      })
+    }
+  })
+
+  it("saves the exact JSON-quoted objective while leaving the original request intact", () => {
+    const objective = String.raw`Write C:\Users\kamil\AppData\Local\Temp\raya-general-model\workspace\write-readback.txt with exactly general_nonce followed by one LF newline and verify the entire file using Read.`
+    const prompt = `Create a persistent goal with objective exactly ${JSON.stringify(objective)}, then delegate the work to exactly one local General worker with edit access.`
+    expect(hasGoalIntent(prompt)).toBe(true)
+    expect(parseGoalCommand(prompt)).toMatchObject({ kind: "start", objective })
+    expect(prompt).toContain(", then delegate the work to exactly one local General worker with edit access.")
+  })
+
+  it("preserves literal goal-command tokens inside an exact objective", () => {
+    const objective = String.raw`Write C:\Raya\workspace\notes.txt with exactly /goal notes and verify the full file.`
+    expect(
+      parseGoalCommand(`Create a persistent goal with objective exactly ${JSON.stringify(objective)}.`),
+    ).toMatchObject({
+      kind: "start",
+      objective,
+    })
+  })
+
+  it("refuses malformed exact objectives instead of arming the command as the objective", () => {
+    for (const prompt of [
+      "Create a persistent goal with objective exactly",
+      "Create a persistent goal with objective exactly write the file.",
+      'Create a persistent goal with objective exactly "unfinished',
+      String.raw`Create a persistent goal with objective exactly "Write C:\Raya\result.txt".`,
+      'Create a persistent goal with objective exactly "".',
+      'Create a persistent goal with objective exactly "read" trailing unseparated instructions',
+    ]) {
+      expect(parseGoalCommand(prompt)).toEqual({
+        kind: "usage",
+        notice: 'Use a JSON-quoted objective after "with objective exactly", or use /goal <objective>.',
+      })
+    }
+  })
+
+  it("does not arm goal questions, examples, discussion, or controls", () => {
+    for (const prompt of [
+      "Should I create a persistent goal for this migration?",
+      "Can you explain how to start a durable goal?",
+      "Create a persistent goal?",
+      '"Create a persistent goal with objective exactly migration" is an example.',
+      "Example: Create a durable goal to verify restart persistence.",
+      "Discuss whether we should create a persistent goal for the migration.",
+      "Do not create a persistent goal for this bounded edit.",
+      "Pause the persistent goal for the migration.",
+      "Clear the persistent goal for the migration.",
+      "Create a persistent goalkeeper profile for the test.",
+    ]) {
+      expect(hasGoalIntent(prompt)).toBe(false)
+      expect(parseGoalCommand(prompt)).toBeUndefined()
+    }
+  })
   // raya_change end
 })

@@ -276,6 +276,7 @@ const duration = (value: string) => {
 }
 // raya_change start - infer durable goal intent from ordinary language without arming routine requests
 const durable = [
+  /^(?:please\s+)?(?:create|start|arm)\s+(?:a|the)\s+(?:persistent|durable)\s+goal(?:\s+(?:with\s+(?:the\s+)?objective(?:\s+exactly)?|for|to)\s+|:\s*)\S/i,
   /\bdone when\b/i,
   /\b(?:do not|don't|never)\s+stop\s+until\b/i,
   /\b(?:keep|continue)\s+(?:working|going)\s+until\b/i,
@@ -294,11 +295,32 @@ export function hasGoalIntent(text: string) {
 // Cursor lets the command sit at the start, middle, or end of a sentence. The token is
 // stripped and the remaining prose becomes the objective.
 const inline = /(^|\s)\/goal(?=\s|$)/i
+const exact =
+  /^(?:please\s+)?(?:create|start|arm)\s+(?:a|the)\s+(?:persistent|durable)\s+goal\s+with\s+(?:the\s+)?objective\s+exactly\b/i
+const quoted = /^\s*("(?:[^"\\]|\\.)*")(?:\s*(?:[,.;]|$))/
 
 export function parseGoalCommand(text: string): GoalCommand | undefined {
   const match = text.trim().match(/^\/goal(?:\s+([\s\S]*))?$/i)
   if (!match) {
     const objective = text.trim()
+    const prefix = objective.match(exact)
+    if (prefix) {
+      const match = objective.slice(prefix[0].length).match(quoted)
+      const notice = 'Use a JSON-quoted objective after "with objective exactly", or use /goal <objective>.'
+      if (!match) return { kind: "usage", notice }
+      try {
+        const value: unknown = JSON.parse(match[1])
+        if (typeof value !== "string" || !value.trim()) return { kind: "usage", notice }
+        return {
+          kind: "start",
+          objective: value,
+          notice:
+            "Raya recognized this as durable goal work and will continue until it is verified or honestly blocked.",
+        }
+      } catch {
+        return { kind: "usage", notice }
+      }
+    }
     // raya_change start - accept /goal placed after or inside a sentence, not only leading
     if (inline.test(objective)) {
       const stripped = objective

@@ -74,6 +74,7 @@ test("goal start gates actual prompt dispatch and preserves the submitted draft 
       if (mode === "client") state.client = createKiloClient({ baseUrl: url.origin })
       return Response.json({
         objective: mode === "mismatch" ? "Another task" : body.objective,
+        startMessageID: mode === "existing" ? "original-checkpoint" : body.messageID,
         budget: body.budget,
         intent: "saved-intent",
         status: mode === "complete" ? "complete" : "active",
@@ -121,6 +122,21 @@ test("goal start gates actual prompt dispatch and preserves the submitted draft 
       text: expect.stringContaining("1800000 milliseconds"),
       synthetic: true,
     })
+    requests.length = 0
+    messages.length = 0
+    const objective = "Write exactly the nonce and one LF to C:\\private\\result.txt, then read the full file."
+    const text = `Create a persistent goal with objective exactly ${JSON.stringify(objective)}, then delegate the work.`
+    await state.handleSendMessage(text, "explicit", "session", "draft", "provider", "model")
+    expect(requests.map((item) => item.path)).toEqual(["/session/session/goal", "/session/session/prompt_async"])
+    expect(requests[0].body).toMatchObject({ objective, messageID: "explicit" })
+    expect(requests[1].body.parts).toContainEqual({ type: "text", text })
+    expect(requests[1].body.parts).toContainEqual({ type: "text", text: goalPrompt(objective), synthetic: true })
+    mode = "existing"
+    requests.length = 0
+    messages.length = 0
+    await send()
+    expect(requests.map((item) => item.path)).toEqual(["/session/session/goal", "/session/session/prompt_async"])
+    expect(messages[0]).toMatchObject({ type: "goalState", goal: { startMessageID: "original-checkpoint" } })
     for (const failure of [
       "failure",
       "malformed",

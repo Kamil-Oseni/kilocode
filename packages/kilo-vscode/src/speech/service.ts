@@ -262,6 +262,9 @@ export class SpeechService implements vscode.Disposable {
       async () => {
         const settings = await this.settings.load()
         const fallback = voiceFallback(settings)
+        if (settings.voiceEngine === "cascade-v1" && settings.ttsEngine === "local-jobs") {
+          await this.prepare(input, settings, current)
+        }
         if (settings.voiceEngine !== "qwen-realtime" && settings.voiceEngine !== "openai-live") {
           return {
             ok: false,
@@ -340,6 +343,26 @@ export class SpeechService implements vscode.Disposable {
       })
     }
     if (current() && !this.realtime.active) this.request = undefined
+  }
+
+  private async prepare(
+    input: Parameters<SpeechService["realtimeStart"]>[0],
+    settings: SpeechSettings,
+    current: () => boolean,
+  ) {
+    const selected = () => current() && input.current?.() === true
+    if (!selected()) throw new Error("The voice workspace changed before preparation.")
+    await input.connection.getClientAsync(input.directory)
+    const key = await this.settings.key("local")
+    if (!selected() || !key) throw new Error("Local voice preparation is unavailable.")
+    await this.localtts.prepare({
+      id: input.requestId,
+      endpoint: settings.localTtsEndpoint ?? "http://127.0.0.1:8770",
+      key,
+      model: settings.localTtsModel ?? "chatterbox-nano",
+      voice: settings.localTtsVoice ?? "freeman-reference-c-AI",
+    })
+    if (!selected()) throw new Error("The voice workspace changed during preparation.")
   }
 
   async realtimeStop(request: string | undefined, post: Post): Promise<void> {

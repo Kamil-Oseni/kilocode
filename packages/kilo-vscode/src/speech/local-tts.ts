@@ -26,6 +26,32 @@ export class LocalTts {
   ) {}
 
   speak(input: TtsInput & { allowFallback?: boolean }, sink: Sink): Promise<void> {
+    return this.launch(input, sink)
+  }
+
+  async prepare(input: Omit<TtsInput, "text">): Promise<void> {
+    let failure: Error | undefined
+    let ready = false
+    await this.launch(
+      { ...input, text: "" },
+      {
+        chunk: () => {
+          throw new Error("Local speech preparation produced audio.")
+        },
+        done: () => {
+          ready = true
+        },
+        error: (message) => {
+          failure = new Error(message)
+        },
+      },
+      true,
+    )
+    if (failure) throw failure
+    if (!ready) throw new Error("Local speech preparation was cancelled.")
+  }
+
+  private launch(input: TtsInput & { allowFallback?: boolean }, sink: Sink, prepare = false): Promise<void> {
     if (this.closed) {
       sink.error("Local speech is closed.")
       return Promise.resolve()
@@ -35,7 +61,7 @@ export class LocalTts {
     const state = { id: input.id, ctrl, done: Promise.resolve(), cleanup: true }
     this.jobs.set(input.id, state)
     this.pending.add(state)
-    state.done = this.run(input, sink, state).finally(() => {
+    state.done = this.run(input, sink, state, prepare).finally(() => {
       if (this.jobs.get(input.id) === state) this.jobs.delete(input.id)
       this.pending.delete(state)
     })
@@ -54,7 +80,7 @@ export class LocalTts {
     await this.cancel()
   }
 
-  private async run(input: TtsInput & { allowFallback?: boolean }, sink: Sink, state: State) {
+  private async run(input: TtsInput & { allowFallback?: boolean }, sink: Sink, state: State, prepare: boolean) {
     const id = randomUUID().replaceAll("-", "")
     const trace = diagnostics(input.id, this.opts.diagnostic)
     trace("start", { job: id })
@@ -70,8 +96,8 @@ export class LocalTts {
     }
     let result: (TtsResult & Choice) | undefined
     try {
-      owner.origin = validate(input, timeout, poll)
-      result = await stream(input, sink, state.ctrl.signal, owner, id, poll, live, trace)
+      owner.origin = validate(input, timeout, poll, prepare)
+      result = await stream(input, sink, state.ctrl.signal, owner, id, poll, live, trace, prepare)
     } catch (err) {
       trace("error", { job: id, status: state.ctrl.signal.aborted ? "cancelled" : "failed" })
       errors.push(err)
@@ -105,7 +131,7 @@ export class LocalTts {
   }
 }
 
-function validate(input: TtsInput, timeout: number, poll: number) {
+function validate(input: TtsInput, timeout: number, poll: number, prepare: boolean) {
   deadline(timeout, poll)
   const url = new URL(input.endpoint)
   if (
@@ -121,7 +147,8 @@ function validate(input: TtsInput, timeout: number, poll: number) {
   if (
     !input.key ||
     !input.id ||
-    !input.text.trim() ||
+    (!prepare && !input.text.trim()) ||
+    (prepare && (input.model !== "chatterbox-nano" || input.text !== "")) ||
     input.text.trim().length > 4000 ||
     !["chatterbox-nano", "kokoro"].includes(input.model)
   )
@@ -179,7 +206,13 @@ async function remove(origin: string, key: string, id: string) {
   if (!response.ok) throw new Error("Local speech cleanup failed.")
 }
 
-function selection(input: TtsInput & { allowFallback?: boolean }, job: Job, previous?: Choice): Choice {
+function selection(
+  input: TtsInput & { allowFallback?: boolean },
+  job: Job,
+  previous?: Choice,
+  prepare = false,
+): Choice {
+  if (prepare && job.chunks.length) throw new Error("Local speech preparation produced audio.")
   const fallback =
     input.model === "chatterbox-nano" &&
     input.allowFallback === true &&
@@ -236,6 +269,7 @@ async function stream(
   poll: number,
   live: () => void,
   trace: ReturnType<typeof diagnostics>,
+  prepare: boolean,
 ) {
   const start = Date.now()
   const stats = { firstAudioMs: 0, chunks: 0, bytes: 0 }
@@ -256,17 +290,13 @@ async function stream(
         {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Raya-Job-ID": id },
-          body: JSON.stringify({
-            kind: "speech",
-            model: input.model,
-            input: input.text,
-            allow_fallback: input.allowFallback === true,
-          }),
+          body: payload(input, prepare),
         },
         trace,
       ),
     ),
     id,
+    prepare,
   )
   const seen: Chunk[] = []
   let choice: Choice | undefined
@@ -275,7 +305,7 @@ async function stream(
     live()
     status = publication(trace, id, job, status)
     if (job.status === "failed" || job.status === "cancelled") throw new Error("Local speech job " + job.status + ".")
-    const current = selection(input, job, choice)
+    const current = selection(input, job, choice, prepare)
     if (job.chunks.length < seen.length) throw new Error("Local speech removed published chunks.")
     for (const chunk of job.chunks) {
       if (chunk.index < seen.length) {
@@ -307,12 +337,25 @@ async function stream(
       sink.chunk(data.bytes.toString("base64"), "audio/pcm;rate=" + data.rate)
     }
     if (job.status === "completed") {
-      if (!choice || !stats.chunks) throw new Error("Local speech completed without audio.")
-      return { ...stats, ...choice }
+      return completed(prepare, stats, current, choice)
     }
     await pause(poll, signal)
-    job = parse(await json(await get("/v1/jobs/" + id)), id)
+    job = parse(await json(await get("/v1/jobs/" + id)), id, prepare)
   }
+}
+
+function payload(input: TtsInput & { allowFallback?: boolean }, prepare: boolean) {
+  return JSON.stringify(
+    prepare
+      ? { kind: "prepare", model: input.model, voice: input.voice }
+      : { kind: "speech", model: input.model, input: input.text, allow_fallback: input.allowFallback === true },
+  )
+}
+
+function completed(prepare: boolean, stats: TtsResult, current: Choice, choice?: Choice) {
+  if (prepare) return { ...stats, ...current }
+  if (!choice || !stats.chunks) throw new Error("Local speech completed without audio.")
+  return { ...stats, ...choice }
 }
 
 function publication(trace: ReturnType<typeof diagnostics>, id: string, job: Job, previous: string) {
@@ -343,8 +386,9 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
-function parse(value: unknown, id: string): Job {
+function parse(value: unknown, id: string, prepare = false): Job {
   const row = object(value)
+  if (prepare && row.kind !== "prepare") throw new Error("Local speech returned a different preparation kind.")
   if (
     row.id !== id ||
     !["queued", "running", "completed", "failed", "cancelled"].includes(String(row.status)) ||

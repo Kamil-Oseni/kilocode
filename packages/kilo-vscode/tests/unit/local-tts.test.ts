@@ -326,13 +326,52 @@ function job(mode: string, state: { id: string; polls: number; body: Record<stri
     (mode === "late-fallback" && state.polls === 0)
   return {
     id: mode === "identity" ? "f".repeat(32) : state.id,
+    kind: state.body.kind,
     model: fallback ? "kokoro" : state.body.model,
     voice: fallback || state.body.model === "kokoro" ? "am_onyx" : "freeman-reference-c-AI",
     fallback: fallback ? { from: "chatterbox-nano", reason: "primary_synthesis_failed" } : null,
     status: mode === "failed" ? "failed" : pending ? "running" : "completed",
-    chunks: descriptors(mode, state.id, bytes),
+    chunks:
+      mode === "prepare" || (state.body.kind === "prepare" && mode === "cancel")
+        ? []
+        : descriptors(mode, state.id, bytes),
   }
 }
+
+test("preparation publishes no text or audio and joins owned cleanup", async () => {
+  await fixture("prepare", async (ctx) => {
+    await ctx.client.prepare(ctx.input)
+    expect(ctx.state.body).toEqual({ kind: "prepare", model: ctx.input.model, voice: ctx.input.voice })
+    expect(ctx.state.downloads).toBe(0)
+    expect(ctx.state.deletes).toBe(1)
+    expect(ctx.chunks).toHaveLength(0)
+    expect(ctx.results).toHaveLength(0)
+  })
+  await fixture("two", async (ctx) => {
+    await expect(ctx.client.prepare(ctx.input)).rejects.toThrow("Local speech preparation produced audio.")
+    expect(ctx.state.downloads).toBe(0)
+    expect(ctx.state.deletes).toBe(1)
+  })
+})
+
+test("Stop cancels original preparation without a ready result", async () => {
+  await fixture("cancel", async (ctx) => {
+    const pending = ctx.client.prepare(ctx.input)
+    const result = pending.then(
+      () => {
+        throw new Error("Preparation unexpectedly became ready.")
+      },
+      (err: unknown) => {
+        expect(err).toMatchObject({ message: "Local speech preparation was cancelled." })
+      },
+    )
+    await until(() => !!ctx.state.id)
+    await ctx.client.cancel(ctx.input.id)
+    await result
+    expect(ctx.state.deletes).toBe(1)
+    expect(ctx.state.downloads).toBe(0)
+  })
+})
 
 test("cancelled request retains failed cleanup qualification", async () => {
   await fixture("cancel-cleanup", async (ctx) => {

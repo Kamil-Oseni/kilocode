@@ -1,0 +1,4 @@
+__pycache__/
+access-token.txt
+*.log
+temp/

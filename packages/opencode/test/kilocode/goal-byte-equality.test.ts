@@ -3,6 +3,7 @@ import path from "node:path"
 import { Effect, Schema } from "effect"
 import { GoalCriteria } from "@/kilocode/goal/criteria"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Storage } from "@/storage/storage"
@@ -21,10 +22,15 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { database, storage } from "./fixtures/effect-profile"
 
 const it = testEffect(
   LayerNode.compile(
     LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node]),
+    [
+      [Database.node, database],
+      [Storage.node, storage],
+    ],
   ),
 )
 

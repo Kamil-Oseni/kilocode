@@ -13,12 +13,19 @@ export function example(
   })}</task_recovery>`
 }
 
-export function resumeHint(sessionID: string, state?: "running") {
+export function resumeHint(sessionID: string, state?: "running" | "completed") {
   if (state === "running")
     return [
       `Retain task_id="${sessionID}" for follow-up on this same objective after the child finishes.`,
       "The child is active: do not poll, nudge, or resume it just to request progress; wait for its completion update.",
       "If genuinely new context must be sent while active, use this existing task_id rather than create a replacement child.",
+      "Keep the same authorized access, including edit access when verifying an edit task.",
+    ].join(" ")
+  if (state === "completed")
+    return [
+      `The worker finished. Retain task_id="${sessionID}" only if genuinely missing or incorrect work requires a continuation.`,
+      "First inspect get_goal and cite the child's eligible work or verification receipts; a Task summary is not completion evidence. Do not repeat successful work or resume merely to repair audit citations.",
+      "If a continuation is necessary, invoke this exact task_id once with a concrete correction. Never issue concurrent resume or wait calls for the same worker; await the original call before deciding whether further work is needed.",
       "Keep the same authorized access, including edit access when verifying an edit task.",
     ].join(" ")
   return [
@@ -27,6 +34,7 @@ export function resumeHint(sessionID: string, state?: "running") {
     "For follow-up work on the same assigned objective, reuse this task_id instead of creating another child.",
     "Put the retained ID in the task_id argument itself, not only in prompt or brief text. Replace the example prompt with the concrete continuation or correction needed; this example does not execute work or grant permission.",
     example(sessionID),
+    "Never issue concurrent resume or wait calls for the same worker; await the original call before deciding whether further work is needed.",
     "Keep the same authorized access, including edit access when verifying an edit task. Separate fresh children remain appropriate for distinct necessary work.",
   ].join(" ")
 }

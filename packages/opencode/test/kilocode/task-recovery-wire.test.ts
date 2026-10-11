@@ -50,8 +50,9 @@ import { context, schemas } from "@/kilocode/provider/ollama-context"
 import { localFetch } from "@/kilocode/provider/local-scheduler"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
+import { database, storage } from "./fixtures/effect-profile"
 
-const model = ProviderTest.model()
+const model = ProviderTest.model({ limit: { context: 32768, output: 1024 } })
 const it = testEffect(
   LayerNode.compile(
     LayerNode.group([
@@ -77,6 +78,10 @@ const it = testEffect(
       Database.node,
       CrossSpawnSpawner.node,
     ]),
+    [
+      [Database.node, database],
+      [Storage.node, storage],
+    ],
   ),
 )
 
@@ -233,6 +238,69 @@ it.instance(
           },
         })
       }
+      const original = yield* goals.get(parent.id)
+      const criteria = original?.criteria
+      if (!original?.intent || !criteria) throw new Error("Original verification criteria missing")
+      yield* goals.edit(parent.id, {
+        expectedIntent: original.intent,
+        criteria: [{ id: "verified", description: "Verify the delegated result", verification: "Actual file read" }],
+      })
+      const audit = yield* sessions.updateMessage(assistant())
+      const update = yield* goalTools(goals, sessions).update.pipe(Effect.flatMap(Tool.init))
+      const rejected = yield* update.execute(
+        {
+          status: "complete",
+          requirements: [
+            {
+              criterionID: "verified",
+              requirement: "Verify the delegated result",
+              passed: true,
+              evidence: [{ callID: call, summary: "Worker reported completion" }],
+            },
+          ],
+        },
+        {
+          sessionID: parent.id,
+          messageID: audit.id,
+          callID: "citation-audit",
+          agent: "auto",
+          abort: new AbortController().signal,
+          messages: [],
+          ask: () => Effect.void,
+          metadata: () => Effect.void,
+        },
+      )
+      expect(rejected.title).toBe("Completion audit rejected")
+      expect(rejected.output).toContain("Delegation result")
+      expect(rejected.output).toContain("audit_correction")
+      expect(rejected.output).toContain('"callID":"read-0"')
+      expect(rejected.output).toContain('"callID":"read-1"')
+      expect(rejected.output).toContain("Do not rerun a Task merely to repair citations")
+      expect(rejected.output).not.toContain("<task_recovery>")
+      expect((yield* goals.get(parent.id))?.status).toBe("active")
+      expect((yield* goals.get(parent.id))?.auditAttempt?.accepted).toBe(false)
+      const getter = yield* goalTools(goals, sessions).get.pipe(Effect.flatMap(Tool.init))
+      const inspected = yield* getter.execute(
+        {},
+        {
+          sessionID: parent.id,
+          messageID: audit.id,
+          callID: "citation-menu",
+          agent: "auto",
+          abort: new AbortController().signal,
+          messages: [],
+          ask: () => Effect.void,
+          metadata: () => Effect.void,
+        },
+      )
+      const menu = JSON.parse(inspected.output)
+      expect(menu.recovery).toBeUndefined()
+      expect(menu.audit_correction).toContain("Do not rerun a Task merely to repair citations")
+      expect(menu.eligibleEvidence.map((row: { callID: string }) => row.callID)).toContain("read-0")
+      expect(menu.eligibleEvidence.map((row: { callID: string }) => row.callID)).toContain("read-1")
+      const revised = yield* goals.get(parent.id)
+      if (!revised?.intent) throw new Error("Current verification criteria missing")
+      yield* goals.edit(parent.id, { expectedIntent: revised.intent, criteria })
       const selected = yield* goals.get(parent.id)
       if (!selected) throw new Error("Current goal required")
       const observed = Date.now()
@@ -259,8 +327,6 @@ it.instance(
           },
         },
       })
-      const audit = yield* sessions.updateMessage(assistant())
-      const update = yield* goalTools(goals, sessions).update.pipe(Effect.flatMap(Tool.init))
       const input = {
         status: "complete" as const,
         summary: "Worker summary",
@@ -385,7 +451,12 @@ it.instance(
         yield* Effect.promise(() => writeFile(report, JSON.stringify({ parameters }, null, 2) + "\n", { flag: "wx" }))
       expect(prepared.tools.update_goal).toBeDefined()
       const options = context(
-        { localInference: true, localInferenceAPI: "ollama", localInferenceToolFormat: "completion-envelope-v1" },
+        {
+          localInference: true,
+          localInferenceAPI: "ollama",
+          localInferenceToolFormat: "completion-envelope-v1",
+          localInferenceContext: 32768,
+        },
         model,
         sanitized,
       )
@@ -438,6 +509,7 @@ it.instance(
                       localInference: true,
                       localInferenceAPI: "ollama",
                       localInferenceToolFormat: "completion-envelope-v1",
+                      localInferenceContext: 32768,
                     },
                     model,
                   ),
@@ -450,6 +522,7 @@ it.instance(
               messages: [{ role: "user", content: "Synthetic recovery transport; no model inference." }],
               tools: { task: { description: sanitized.task.description, inputSchema: sanitized.task.inputSchema } },
               toolChoice: "required",
+              maxOutputTokens: 1024,
               maxRetries: 0,
             })
             const calls = []

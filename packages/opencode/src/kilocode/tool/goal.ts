@@ -37,6 +37,12 @@ const failure = (err: unknown) => {
 const uncited = (reason: string | undefined, id: string) =>
   reason?.startsWith(`Criterion ${id} requires current source and target read evidence`)
 
+const citation = (reason: string | undefined) =>
+  reason?.startsWith("Delegation result ") ||
+  (reason?.startsWith("Evidence ") &&
+    (reason.includes(" is ambiguous.") ||
+      reason.includes(" is not a completed post-goal work or verification tool call.")))
+
 export function goalTools(
   goals: Goals,
   sessions?: Pick<Session.Interface, "get" | "setMetadata"> & Partial<Pick<Session.Interface, "messages">>,
@@ -166,7 +172,12 @@ export function goalTools(
             goal.auditAttempt?.accepted === false
               ? hints.filter((hint) => uncited(goal.auditAttempt?.reason, hint.criterionID))
               : []
-          const resumed = correction.length ? undefined : yield* recovery(ctx)
+          const citing =
+            goal.auditAttempt?.accepted === false &&
+            citation(goal.auditAttempt.reason) &&
+            Array.isArray(evidence) &&
+            evidence.length > 0
+          const resumed = correction.length || citing ? undefined : yield* recovery(ctx)
           const offset = Array.isArray(evidence)
             ? input.before === undefined
               ? 0
@@ -198,6 +209,9 @@ export function goalTools(
                             Array.isArray(evidence) && offset + page.length < evidence.length ? next?.partID : null,
                         }
                       : undefined,
+                  audit_correction: citing
+                    ? "Correct this same audit using the exact eligibleEvidence receipts below. Do not rerun a Task merely to repair citations; the corrected audit still checks the actual work."
+                    : undefined,
                   recovery: resumed,
                 },
                 null,
@@ -288,6 +302,19 @@ export function goalTools(
               ...output,
               output: `${output.output}\n${JSON.stringify({ audit_correction: hints })}\nRead get_goal for the remaining criteria, then correct this same audit with these exact eligible receipts. A rejected citation audit does not require another Task or user approval.`,
             }
+          if (citation(saved?.auditAttempt?.reason) && Array.isArray(evidence) && evidence.length) {
+            const receipts = evidence.slice(0, 20).map((row) => ({
+              callID: row.callID,
+              sessionID: row.sessionID,
+              messageID: row.messageID,
+              partID: row.partID,
+              tool: row.tool,
+            }))
+            return {
+              ...output,
+              output: `${output.output}\n${JSON.stringify({ audit_correction: receipts })}\nThis rejection concerns the cited receipt, not a finding that delegated work is missing. Read get_goal and correct this same audit using its exact eligibleEvidence callIDs and saved requirements. Do not rerun a Task merely to repair citations. The corrected audit still verifies the actual work and may reject missing or stale results. A Task summary is not a Read or Write receipt.`,
+            }
+          }
           const resumed = yield* recovery(ctx, true)
           const advice =
             "A rejected audit is not a request for user approval. Continue within the existing permissions: correct the missing work or stale evidence, then read get_goal again and copy its fresh eligibleEvidence callIDs into the audit. If task_recovery is provided, invoke that Task with its task_id and correction prompt in the same retained worker. Do not block or pause merely to ask the user to repair audit citations. A real permission refusal or explicitly required human review still needs its normal approval path."

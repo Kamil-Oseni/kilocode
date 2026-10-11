@@ -40,6 +40,7 @@ import { ModelV2 } from "@opencode-ai/core/model" // raya_change - Milestone B p
 import { ProviderV2 } from "@opencode-ai/core/provider" // raya_change - Milestone B preserved target model
 import { TaskName } from "@/kilocode/tool/task-name" // kilocode_change - raya_change: durable subagent display identity
 import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse failed equivalent children
+import { admit } from "@/kilocode/tool/task-admission" // kilocode_change - own same-child calls before mutable proof reads
 import { Refusal } from "@/kilocode/session/tool-refusal" // kilocode_change - request-bound work class refusal
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
 import { Desktop } from "@/kilocode/desktop/service" // kilocode_change - exact Computer Use child grant admission
@@ -148,7 +149,7 @@ function renderOutput(input: {
 }) {
   const tag = input.state === "error" ? "task_error" : "task_result"
   // kilocode_change start - expose the retained task_id for every task result
-  const hint = resumeHint(input.sessionID, input.state === "running" ? "running" : undefined)
+  const hint = resumeHint(input.sessionID, input.state === "error" ? undefined : input.state)
   const body = !input.text.includes(hint) ? `${input.text}\n${hint}` : input.text
   // kilocode_change end
   return [
@@ -1241,7 +1242,7 @@ export const TaskTool = Tool.define(
       ),
       // kilocode_change end
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(Effect.scoped, Effect.orDie), // kilocode_change - close per-execution bridge resources
+        admit(params.task_id, run(params, ctx).pipe(Effect.scoped)).pipe(Effect.orDie), // kilocode_change - own same-child invocation through resource finalizers
     }
   }),
 )

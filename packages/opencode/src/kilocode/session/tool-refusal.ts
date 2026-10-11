@@ -13,6 +13,7 @@ export class Refusal extends Error {
       | "read-missing"
       | "task-access"
       | "task-resume"
+      | "task-concurrent"
       | "task-recovery"
       | "chief-no-eligible"
       | "exact-write",
@@ -26,6 +27,7 @@ export class Refusal extends Error {
       reason !== "read-missing" &&
       reason !== "task-access" &&
       reason !== "task-resume" &&
+      reason !== "task-concurrent" &&
       reason !== "task-recovery" &&
       reason !== "chief-no-eligible" &&
       reason !== "exact-write"

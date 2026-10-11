@@ -2763,6 +2763,11 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).toBe(child.id)
       expect(result.metadata.displayName).toBe("Existing child") // kilocode_change - raya_change
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
+      // kilocode_change start - completed workers do not advertise another invocation
+      expect(result.output).not.toContain("<task_recovery>")
+      expect(result.output).toContain("Do not repeat successful work or resume merely to repair audit citations")
+      expect(result.output).toContain("Never issue concurrent resume or wait calls for the same worker")
+      // kilocode_change end
       // kilocode_change start - completed results expose their own resumable ID
       expect(result.output).toContain(`task_id="${child.id}"`)
       expect(result.output).toContain("Keep the same authorized access")

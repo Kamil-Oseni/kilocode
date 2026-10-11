@@ -225,9 +225,18 @@ function Catalog(props) {
     ...current.kilo.models["anthropic/claude-sonnet-4-6"],
     id: "synthetic-pinned-4b",
     name: "Pinned fixture 4B",
+    ...(window.__typedVariants ? { variants: { original: {}, next: {} } } : {}),
   }
   const providers = { ...current, kilo: { ...current.kilo, models: { ...current.kilo.models, [model.id]: model } } }
-  const models = [...provider.models(), { ...provider.models()[0], id: model.id, name: model.name }]
+  const models = [
+    ...provider.models(),
+    {
+      ...provider.models()[0],
+      id: model.id,
+      name: model.name,
+      ...(window.__typedVariants ? { variants: model.variants } : {}),
+    },
+  ]
   return (
     <ProviderContext.Provider
       value={{

@@ -58,6 +58,7 @@ async function mounted(
   ordinary = false,
   action = "",
 ) {
+  const typed = action.startsWith("typed-")
   const orb = action === "orb" || action === "halfduplex" || action === "tabs"
   const root = resolve(import.meta.dir, "../..")
   const dir = resolve(root, "node_modules/.cache/voice-insertion-ownership-mounted")
@@ -116,9 +117,13 @@ async function mounted(
   })
   const browser = await chromium.launch({ headless: true, args: ["--mute-audio"] })
   const page = await browser.newPage()
-  await page.addInitScript((value) => {
-    window.__tabs = value
-  }, action === "tabs")
+  await page.addInitScript(
+    (value) => {
+      window.__tabs = value.tabs
+      window.__typedVariants = value.typed
+    },
+    { tabs: action === "tabs", typed },
+  )
   let epoch: string | undefined
   let admitted = false
   let loaded = 0
@@ -131,106 +136,181 @@ async function mounted(
     if (errors.length < 16) errors.push(err.message.slice(0, 192))
   })
   const dispatched: Record<string, unknown>[] = []
+  const pending = new Set<Promise<void>>()
+  await using storage = await (await import("../fixtures/durable-draft-storage")).draftStorage()
   try {
-    await using storage = await (await import("../fixtures/durable-draft-storage")).draftStorage()
-    await page.exposeFunction("__host", async (message) => {
-      if (message.type === "composerDraftPane") {
-        epoch = message.epoch
-        if (!admitted) return
-        if (message.active)
-          await page.evaluate(
-            (epoch) =>
-              window.__deliver({
-                type: "composerDraftState",
-                epoch,
-                generation: 1,
-                connected: true,
-                owners: [{ box: "voice-mounted", owner: "synthetic-owned-workspace" }],
-              }),
-            message.epoch,
-          )
-        return
-      }
-      if (
-        [
-          "composerDraftLoad",
-          "composerDraftSave",
-          "composerDraftClear",
-          "composerDraftPromote",
-          "composerDraftList",
-        ].includes(message.type)
-      ) {
-        const reply = await storage.handle(message)
-        if (
-          action === "agent" &&
-          !changed &&
-          message.type === "composerDraftSave" &&
-          message.content.text === "Speech after genuine first owner claim" &&
-          !reply.error
-        ) {
-          // The original physical save has completed; hold its acknowledgement across a real selection change.
-          expect(message.content.agent).toBe("voice")
-          expect(
-            await page.evaluate(() => {
-              window.__session.setSessionAgent("ses_voice", "code")
-              return window.__session.selectedAgent("ses_voice")
-            }),
-          ).toBe("code")
-          changed++
-        }
-        await page.evaluate(
-          (value) => {
-            if (window.__speechGuards.length < 128) window.__speechGuards.push(value)
-          },
-          { phase: "draft-reply", operation: message.type, error: reply.error, entry: !!reply.entry },
-        )
-        await page.evaluate((reply) => window.__deliver(reply), reply)
-        if (message.type === "composerDraftLoad") loaded++
-        if (message.type === "composerDraftPromote" && !reply.error) promoted++
-      }
-      if (message.type === "copyToClipboard")
-        await page.evaluate(
-          (id) =>
-            window.__deliver({
-              type: "clipboardWriteResult",
-              id,
-              ok: window.__copySuccess === true,
-              error: "Synthetic clipboard refusal",
-            }),
-          message.id,
-        )
-      if (message.type === "sendMessage") {
-        dispatched.push(message)
-        if (fresh) {
-          if (action) return
-          await page.evaluate(
-            (draftID) =>
-              window.__deliver({ type: "sessionCreated", draftID, session: { id: "ses_voice", title: "New Session" } }),
-            message.draftID,
-          )
+    await page.exposeFunction("__host", (message) => {
+      const original = (async () => {
+        if (message.type === "composerDraftPane") {
+          epoch = message.epoch
+          if (!admitted) return
+          if (message.active)
+            await page.evaluate(
+              (epoch) =>
+                window.__deliver({
+                  type: "composerDraftState",
+                  epoch,
+                  generation: 1,
+                  connected: true,
+                  owners: [{ box: "voice-mounted", owner: "synthetic-owned-workspace" }],
+                }),
+              message.epoch,
+            )
           return
         }
-        const receipt = await storage.handle({
-          type: "composerDraftClear",
-          owner: message.capture.owner,
-          epoch: message.capture.epoch,
-          generation: message.capture.generation,
-          identity: message.capture.identity,
-          expected: message.capture.token,
-          mutation: `accepted:${message.messageID}`,
-          requestID: crypto.randomUUID(),
-        })
-        expect(receipt.error).toBeUndefined()
-        await page.evaluate((value) => window.__deliver(value), {
-          type: "composerDraftAccepted",
-          epoch: message.capture.epoch,
-          generation: message.capture.generation,
-          sessionID: message.sessionID,
-          messageID: message.messageID,
-          capture: message.capture,
-          entry: receipt.entry,
-        })
-      }
+        if (
+          [
+            "composerDraftLoad",
+            "composerDraftSave",
+            "composerDraftClear",
+            "composerDraftPromote",
+            "composerDraftList",
+          ].includes(message.type)
+        ) {
+          const reply = await storage.handle(message)
+          if (
+            typed &&
+            action !== "typed-fresh" &&
+            !changed &&
+            message.type === "composerDraftSave" &&
+            message.content.text === "Keep this original typed General draft" &&
+            !reply.error
+          ) {
+            // Keep the real disk save acknowledgement pending until the actual send awaits capture.
+            await expect
+              .poll(() => page.evaluate(() => window.__speechGuards.some((entry) => entry.phase === "capture-start")))
+              .toBe(true)
+            expect(message.content.agent).toBe("auto")
+            await page.evaluate((action) => {
+              const id = window.__session.currentSessionID()
+              if (action === "typed-agent") window.__session.setSessionAgent(id, "code")
+              if (action === "typed-model") window.__session.setSessionModel(id, "kilo", "anthropic/claude-sonnet-4-6")
+              if (action === "typed-variant")
+                window.__session.setSessionVariant(id, "kilo", "synthetic-pinned-4b", "next", "auto")
+            }, action)
+            changed++
+          }
+          if (
+            action === "agent" &&
+            !changed &&
+            message.type === "composerDraftSave" &&
+            message.content.text === "Speech after genuine first owner claim" &&
+            !reply.error
+          ) {
+            // The original physical save has completed; hold its acknowledgement across a real selection change.
+            expect(message.content.agent).toBe("voice")
+            expect(
+              await page.evaluate(() => {
+                window.__session.setSessionAgent("ses_voice", "code")
+                return window.__session.selectedAgent("ses_voice")
+              }),
+            ).toBe("code")
+            changed++
+          }
+          await page.evaluate(
+            (value) => {
+              if (window.__speechGuards.length < 128) window.__speechGuards.push(value)
+            },
+            { phase: "draft-reply", operation: message.type, error: reply.error, entry: !!reply.entry },
+          )
+          await page.evaluate((reply) => window.__deliver(reply), reply)
+          if (message.type === "composerDraftLoad") loaded++
+          if (message.type === "composerDraftPromote" && !reply.error) promoted++
+        }
+        if (message.type === "copyToClipboard")
+          await page.evaluate(
+            (id) =>
+              window.__deliver({
+                type: "clipboardWriteResult",
+                id,
+                ok: window.__copySuccess === true,
+                error: "Synthetic clipboard refusal",
+              }),
+            message.id,
+          )
+        if (message.type === "sendMessage") {
+          dispatched.push(message)
+          if (action === "typed-fresh") console.log("TYPED_FRESH_DRAFT", { phase: "prepare" })
+          if (fresh) {
+            if (action) return
+            await page.evaluate(
+              (draftID) =>
+                window.__deliver({
+                  type: "sessionCreated",
+                  draftID,
+                  session: { id: "ses_voice", title: "New Session" },
+                }),
+              message.draftID,
+            )
+            return
+          }
+          const moved =
+            action === "typed-fresh"
+              ? await storage.handle({
+                  type: "composerDraftPromote",
+                  owner: message.capture.owner,
+                  epoch: message.capture.epoch,
+                  generation: message.capture.generation,
+                  from: message.capture.identity,
+                  to: {
+                    ...message.capture.identity,
+                    pendingID: undefined,
+                    sessionID: "ses_general",
+                    key: "voice-mounted:session:ses_general",
+                  },
+                  source: message.capture.token,
+                  mutation: `send:${message.messageID}`,
+                  requestID: crypto.randomUUID(),
+                })
+              : undefined
+          if (moved) {
+            console.log("TYPED_FRESH_DRAFT", { phase: "prepared", error: moved.error })
+            expect(moved.error).toBeUndefined()
+            expect(moved.target.identity.sessionID).toBe("ses_general")
+            await page.evaluate((value) => window.__deliver(value), {
+              type: "composerDraftPrepared",
+              epoch: message.capture.epoch,
+              generation: message.capture.generation,
+              sessionID: "ses_general",
+              messageID: message.messageID,
+              capture: message.capture,
+              entry: moved.target,
+            })
+            await page.evaluate(
+              (draftID) =>
+                window.__deliver({
+                  type: "sessionCreated",
+                  draftID,
+                  session: { id: "ses_general", title: "Typed General" },
+                }),
+              message.draftID,
+            )
+          }
+          const receipt = await storage.handle({
+            type: "composerDraftClear",
+            owner: message.capture.owner,
+            epoch: message.capture.epoch,
+            generation: message.capture.generation,
+            identity: moved?.target.identity ?? message.capture.identity,
+            expected: moved?.target.token ?? message.capture.token,
+            mutation: `accepted:${message.messageID}`,
+            requestID: crypto.randomUUID(),
+          })
+          expect(receipt.error).toBeUndefined()
+          await page.evaluate((value) => window.__deliver(value), {
+            type: "composerDraftAccepted",
+            epoch: message.capture.epoch,
+            generation: message.capture.generation,
+            sessionID: moved ? "ses_general" : message.sessionID,
+            messageID: message.messageID,
+            capture: message.capture,
+            entry: receipt.entry,
+          })
+          if (action === "typed-fresh") console.log("TYPED_FRESH_DRAFT", { phase: "accepted" })
+        }
+      })()
+      pending.add(original)
+      return original.finally(() => pending.delete(original))
     })
     await Bun.write(resolve(dir, "index.html"), '<div id="root"></div>')
     await page.goto(pathToFileURL(resolve(dir, "index.html")).href)
@@ -244,6 +324,84 @@ async function mounted(
       window.__session.selectAgent(tabs ? "auto" : "code")
       window.__session.selectModel("kilo", "synthetic-pinned-4b")
     }, action === "tabs")
+    if (typed) {
+      if (action !== "typed-fresh")
+        await page.evaluate(() => {
+          window.__deliver({ type: "sessionCreated", session: { id: "ses_general", title: "Typed General" } })
+          window.__session.setCurrentSessionID("ses_general")
+          window.__session.setSessionAgent("ses_general", "auto")
+          window.__session.setSessionModel("ses_general", "kilo", "synthetic-pinned-4b")
+          window.__session.setSessionVariant("ses_general", "kilo", "synthetic-pinned-4b", "original", "auto")
+        })
+      await expect.poll(() => epoch).toBeTruthy()
+      admitted = true
+      await page.evaluate(
+        (epoch) =>
+          window.__deliver({
+            type: "composerDraftState",
+            epoch,
+            generation: 1,
+            connected: true,
+            owners: [{ box: "voice-mounted", owner: "synthetic-owned-workspace" }],
+          }),
+        epoch,
+      )
+      await expect.poll(() => loaded).toBeGreaterThan(0)
+      if (action === "typed-fresh") {
+        await page.evaluate(() => {
+          window.__session.selectAgent("auto")
+          window.__session.selectModel("kilo", "synthetic-pinned-4b")
+        })
+        expect(await page.evaluate(() => window.__session.currentSessionID())).toBeUndefined()
+        await input.fill("Keep this original typed General draft")
+        await input.press("Enter")
+        await expect.poll(() => dispatched.length).toBe(1)
+        expect(dispatched[0]).toMatchObject({
+          text: "Keep this original typed General draft",
+          agent: "auto",
+          modelID: "synthetic-pinned-4b",
+        })
+        expect(dispatched[0].sessionID).toBeUndefined()
+        expect(dispatched[0].draftID).toBeTruthy()
+        await expect(input).toHaveValue("")
+        await expect.poll(() => page.evaluate(() => window.__session.currentSessionID())).toBe("ses_general")
+        expect(dispatched).toHaveLength(1)
+        expect(errors).toEqual([])
+        return
+      }
+      await page.evaluate(() => {
+        window.__session.setSessionAgent("ses_general", "auto")
+        window.__session.setSessionModel("ses_general", "kilo", "synthetic-pinned-4b")
+        window.__session.setSessionVariant("ses_general", "kilo", "synthetic-pinned-4b", "original", "auto")
+      })
+      expect(await page.evaluate(() => window.__session.currentSessionID())).toBe("ses_general")
+      expect(await page.evaluate(() => window.__session.selectedAgent())).toBe("auto")
+      await input.fill("Keep this original typed General draft")
+      await input.press("Enter")
+      await expect.poll(() => changed).toBe(1)
+      await expect
+        .poll(() =>
+          page.evaluate(() => window.__speechGuards.some((entry) => entry.phase === "capture-end" && entry.accepted)),
+        )
+        .toBe(true)
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      expect(dispatched).toHaveLength(0)
+      await expect(input).toHaveValue("Keep this original typed General draft")
+      expect(await page.evaluate(() => window.__messages.some((entry) => entry.type === "speechVoiceTurn"))).toBe(false)
+      // A new explicit submission owns the new selection; the abandoned capture cannot clear or duplicate it.
+      await input.press("Enter")
+      await expect.poll(() => dispatched.length).toBe(1)
+      expect(dispatched[0]).toMatchObject({
+        text: "Keep this original typed General draft",
+        sessionID: "ses_general",
+        agent: action === "typed-agent" ? "code" : "auto",
+        modelID: action === "typed-model" ? "anthropic/claude-sonnet-4-6" : "synthetic-pinned-4b",
+        ...(action === "typed-variant" ? { variant: "next" } : {}),
+      })
+      await expect(input).toHaveValue("")
+      expect(errors).toEqual([])
+      return
+    }
     if (fresh) {
       expect(await page.evaluate(() => window.__session.currentSessionID())).toBeUndefined()
       await page.evaluate((ordinary) => window.__voice.setMode(ordinary ? "off" : "hands-free"), ordinary)
@@ -863,6 +1021,11 @@ async function mounted(
       .catch((err) => {
         failures.push(err)
       })
+    for (let count = 0; pending.size && count < 8; count++) {
+      const exits = await Promise.allSettled([...pending])
+      for (const exit of exits) if (exit.status === "rejected") failures.push(exit.reason)
+    }
+    if (pending.size) failures.push(new Error("Original host operations did not settle"))
     await page.close().catch((err) => {
       failures.push(err)
     })
@@ -904,6 +1067,18 @@ for (const reverse of [false, true])
 test(
   "actual mounted speech refuses a changed agent while its original durable capture acknowledgement is delayed",
   () => mounted(true, false, false, false, false, "agent"),
+  120_000,
+)
+
+test.each(["agent", "model", "variant"])(
+  "actual mounted typed General send retains its draft when %s changes across the original save acknowledgement",
+  (kind) => mounted(false, false, false, false, false, "typed-" + kind),
+  120_000,
+)
+
+test(
+  "actual mounted typed General fresh pending send adopts its original session and clears exactly once",
+  () => mounted(false, false, false, false, false, "typed-fresh"),
   120_000,
 )
 

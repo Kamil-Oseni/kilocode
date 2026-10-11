@@ -1800,6 +1800,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const sendable = (current?: () => boolean) => !isDisabled() && current?.() !== false
 
+  const adopt = (id: string | undefined) => {
+    if (!id || session.currentSessionID() || props.pendingSessionID || session.draftSessionID()) return
+    session.setDraftSessionID(id)
+  }
+
   const sendDraft = async (draft: string, current?: () => boolean) => {
     if (consumeMemory(draft)) return
 
@@ -1837,9 +1842,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const pendingId = !origin ? (props.pendingSessionID ?? session.draftSessionID() ?? vacant) : undefined
     const id = origin ?? pendingId
     beginPending(pendingId)
-    const sel = session.selected(id)
+    const choice = session.selected(id)
+    const sel = choice ? { ...choice } : null
+    const agent = session.selectedAgent(id)
+    const variant = session.draftVariant(id)
     const context = ctx()
     const key = draftKey()
+    const owned = () =>
+      sendable(current) &&
+      session.currentSessionID() === origin &&
+      draftKey() === key &&
+      ctx() === context &&
+      session.selectedAgent(id) === agent &&
+      session.draftVariant(id) === variant &&
+      session.selected(id)?.providerID === sel?.providerID &&
+      session.selected(id)?.modelID === sel?.modelID
     persistDraft()
     const capture = origin?.startsWith("cloud:") ? undefined : await durable.capture(identity())
     if (capture) intended.delete(JSON.stringify([capture.owner, durable.partition(boxKey()), draftKey()]))
@@ -1874,7 +1891,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       finishPending(pendingId)
       return
     }
-    if (!sendable(current)) {
+    if (!owned()) {
       if (capture) durable.release(capture)
       finishPending(pendingId)
       return
@@ -1883,6 +1900,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (capture) durable.release(capture)
       return
     }
+    adopt(pendingId)
 
     const allFiles = [
       ...mentionFiles,

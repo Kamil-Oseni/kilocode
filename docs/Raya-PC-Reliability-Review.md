@@ -15,6 +15,10 @@ Observed October 10, 2026. Evidence: [PC-Reliability-Review-20261010.json](D:/Ra
 | Battery power plan | Sleep after 600 seconds | Different from AC; configuration observation only |
 | RGB bridge recovery | Disabled; main bridge task running | Historical temporary suppression remains; no lighting test performed |
 
+## Later operational status — October 11
+
+Home Assistant is running after graceful ACPI shutdown and immediate headless restart for bounded tests. Root independently verifies the dashboard through hostname and direct-IP HTTP 200. These observations supersede the historical powered-off state above; they prove current boot/web availability, not recovery after a Windows boot or a fix for earlier guest clock stalls.
+
 ## Earlier clock stalls
 
 The reported guest console showed CPU RCU stalls, a possible timer issue and a systemd watchdog timeout. Those symptoms establish a guest stall, not its cause. Current VirtualBox logs have rotated to October 9–10 and do not establish the cause of the earlier event. The last seven days of Windows events include an October 4 unexpected shutdown and October 7 Explorer-initiated restarts; neither proves that saved-state clock drift caused the guest failure.

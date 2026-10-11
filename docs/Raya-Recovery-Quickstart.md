@@ -1,17 +1,18 @@
 # Raya recovery quickstart
 
-Updated October 10, 2026. Use this when recovery is needed. The Home Assistant VM is intentionally off for Figma; that is not a fault to repair.
+Updated October 11, 2026. Use this when recovery is needed. Home Assistant is running and its dashboard returns HTTP 200. Temporary test shutdowns use ACPI and are followed immediately by restart; a deliberately stopped VM during a test is not a fault to repair.
 
 ## What is verified
 
 Fresh read-only checks are saved in [Recovery-Verification-20261010.json](D:/RayaBackups/Recovery-Verification-20261010.json).
 
-| Saved copy | October 10 result | Limit |
+| Saved copy | Verification result | Limit |
 |---|---|---|
 | Home Assistant `full-backup-8753177b-20261003.tar` | Size and SHA-256 match receipt; outer file members readable | Metadata says partial despite the filename; no live restore |
 | Home Assistant `automatic-29abd8c0-20261004.tar` | Size and SHA-256 match receipt; outer file members readable | No live restore |
 | SecondBrain `SecondBrain-Sources-20261009-2596-grocery/Files` | All 143 manifest files match size and SHA-256 | Historical source snapshot, not a current index or complete service backup |
 | SecondBrain `SecondBrain-Sources-20261009-f6327715/Files` | All 113 manifest files match size and SHA-256 | Older source snapshot |
+| SecondBrain `SecondBrain-Sources-20261010-c079638f/Files` | October 11: all 156 manifest files, 552,573 bytes, independently match size and SHA-256 | Source and retained provenance only; excludes indexes, operation debt and binary media; no live restore |
 | `Independent-20261006-curation` | All six selected files match size and SHA-256 | Historical reference copies |
 
 The later Home Assistant `sleep-ceiling-off-c1dce02b-20261006.tar` was inventoried and hashed in the report. Its checksum was not compared with a historical receipt, so it is not included in the receipt-match passes. Choose backups by their date and included components rather than their filenames. These checks did not restore anything, run models, export credentials or verify installed recall. All listed copies are on this PC; off-PC protection remains unverified.
@@ -36,7 +37,7 @@ The source snapshots exclude credentials, binary media and derived indexes. Text
 ## Raya extension and local services
 
 1. Save current profile/settings and note the installed version before changing it. Close the affected Raya window normally and allow its owned jobs to finish or cancel through supported controls.
-2. Use the supported extension install/rollback flow with a reviewed VSIX. Do not replace package-vault registries or SecretStorage manually. The private `a569352ecb` test installation is preserved and closed; its install checks do not qualify it for everyday use.
+2. Use the supported extension install/rollback flow with a reviewed VSIX. Do not replace package-vault registries or SecretStorage manually. The private `fb6b69486e` test installation has passed draft and typed conversation checks. The qualified `05fe58e60f` Stop-diagnostic package awaits private upgrade verification. Consult current readiness before selecting a package; these checks do not qualify every everyday workflow.
 3. Use the installed lifecycle owner to recover Speech, Memory and Retrieval. Inspect a busy or refused stop before retrying; do not kill every Python process. Confirm service health and a small real request after recovery.
 4. If files or dependencies are missing, recover from reviewed package/model manifests and the corresponding environments. Historical source copies alone do not include model weights, Python environments, access tokens or the complete installer. Re-enter credentials through the supported masked setup flow when required.
 

@@ -1144,7 +1144,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           params: { organizationID: Organization.fields.id },
           query: WorkspaceRoutingQuery,
           success: described(Organization, "Routine organization"),
-          error: HttpApiError.NotFound,
+          error: [InvalidRequestError, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "kilocode.routine.organization.get",

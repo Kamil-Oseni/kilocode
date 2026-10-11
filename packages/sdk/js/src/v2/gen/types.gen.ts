@@ -27410,9 +27410,9 @@ export type KilocodeRoutineOrganizationGetData = {
 
 export type KilocodeRoutineOrganizationGetErrors = {
   /**
-   * Bad request
+   * InvalidRequestError
    */
-  400: BadRequestError
+  400: InvalidRequestError
   /**
    * Not found
    */

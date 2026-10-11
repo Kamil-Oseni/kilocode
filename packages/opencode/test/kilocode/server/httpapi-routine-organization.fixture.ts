@@ -1,11 +1,16 @@
 import { expect } from "bun:test"
 import path from "node:path"
+import { and, eq, inArray } from "drizzle-orm"
+import {
+  RayaRoutineOrganizationMemberTable as Member,
+  RayaRoutineOrganizationTable as Team,
+} from "@opencode-ai/core/kilocode/routine.sql"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppRuntime } from "@/effect/app-runtime"
 import { HttpApiApp } from "@/server/routes/instance/httpapi/server"
 import { finish } from "@/kilocode/cli/finish"
 import { KiloShutdown } from "@/kilocode/cli/shutdown"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Server } from "@/server/server"
 import { RayaTask } from "@/kilocode/task"
 import { Organization, Page } from "@/kilocode/task/organization"
@@ -209,6 +214,75 @@ try {
       })
     ).status,
   ).toBe(409)
+  await AppRuntime.runPromise(
+    Database.Service.use((database) =>
+      Effect.gen(function* () {
+        const db = database.db
+        const saved = yield* db.select().from(Team).where(eq(Team.id, organization.id)).get()
+        const extra = Array.from({ length: 49 }, (_, index) => ({
+          organization_id: organization.id,
+          agent_id: `corrupt_capacity_${index}`,
+          role: "Saved corrupt reference",
+          position: index + 2,
+          supervisor_id: null,
+          time_created: 1,
+          time_updated: 1,
+        }))
+        yield* db.insert(Member).values(extra).run()
+        const before = yield* db
+          .select()
+          .from(Member)
+          .where(eq(Member.organization_id, organization.id))
+          .orderBy(Member.position)
+          .all()
+        expect(before).toHaveLength(51)
+        for (const method of ["GET", "PATCH", "DELETE"]) {
+          const response = yield* Effect.promise(() =>
+            app.request(route, {
+              method,
+              headers,
+              ...(method === "GET"
+                ? {}
+                : {
+                    body: JSON.stringify({
+                      expectedRevision: 2,
+                      ...(method === "PATCH" ? { name: "Must not replace" } : {}),
+                    }),
+                  }),
+            }),
+          )
+          expect(response.status, yield* Effect.promise(() => response.clone().text())).toBe(400)
+          expect(yield* db.select().from(Team).where(eq(Team.id, organization.id)).get()).toEqual(saved)
+          expect(
+            yield* db
+              .select()
+              .from(Member)
+              .where(eq(Member.organization_id, organization.id))
+              .orderBy(Member.position)
+              .all(),
+          ).toEqual(before)
+          const workers = yield* Effect.promise(async () => (await app.request("/kilocode/agent", { headers })).json())
+          expect(
+            Schema.decodeUnknownSync(Schema.toCodecJson(Schema.Array(RayaTask.Agent)))(workers).find(
+              (item) => item.id === chief.id,
+            )?.enabled,
+          ).toBe(true)
+        }
+        yield* db
+          .delete(Member)
+          .where(
+            and(
+              eq(Member.organization_id, organization.id),
+              inArray(
+                Member.agent_id,
+                extra.map((item) => item.agent_id),
+              ),
+            ),
+          )
+          .run()
+      }),
+    ),
+  )
   const archived = await app.request(route, {
     method: "DELETE",
     headers,

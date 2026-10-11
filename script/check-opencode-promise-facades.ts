@@ -108,7 +108,7 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     reason: "listener and shared terminal archive AppRuntime integration test",
   },
   "kilocode/server/httpapi-routine-organization.fixture.ts": {
-    count: 3,
+    count: 4,
     reason:
       "isolated production organization HTTP lifecycle verifies its selected physical SQLite database and retires its application runtime owner",
   },

@@ -875,9 +875,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const organizationGet = Effect.fn("KilocodeHttpApi.organizationGet")(function* (ctx: {
       params: { organizationID: string }
     }) {
-      return yield* organizations
-        .get(ctx.params.organizationID)
-        .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
+      return yield* organizations.get(ctx.params.organizationID).pipe(
+        Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message })),
+        ),
+        Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))),
+      )
     })
     const identity = () => {
       const cache = new Map<string, TaskIdentity>()

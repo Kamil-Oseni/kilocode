@@ -41,6 +41,11 @@ export function admission() {
       const states = running.get(fiber) ?? new Set<Ticket>()
       states.add(ticket)
       running.set(fiber, states)
+      if (ticket.stop !== undefined) {
+        ticket.requested = true
+        ticket.cancellations.add(ticket.stop)
+        ticket.cancellations.add(fiber.id)
+      }
       if (!ticket.stopping) return Effect.provideService(body, Current, { owner, ticket })
       // A reserved body must still settle its original ticket, but cannot start late work.
       if (ticket.stop === undefined) return Effect.die(new Error("Reserved scheduler cancellation has no stop owner"))
@@ -84,6 +89,51 @@ export function admission() {
     active -= 1
     finish()
   }
+  const prepare = Effect.withFiber((caller) =>
+    Effect.uninterruptible(
+      Effect.suspend(() => {
+        const current = caller.getRef(Current)
+        if (
+          running.has(caller) ||
+          (current?.owner === owner && !current.ticket.released && tickets.has(current.ticket))
+        )
+          return Effect.die(new Error("Scheduler producer cannot join its own stop"))
+        closed = true
+        for (const ticket of tickets) ticket.stop = caller.id
+        // Stamp the exact originals before either cancellation owner delivers interruption.
+        for (const [fiber, states] of running) {
+          for (const ticket of states) {
+            ticket.requested = true
+            ticket.cancellations.add(caller.id)
+            // Effect interrupts an original's race/scoped children using that original's ID.
+            // Only this live ticket whose original is actually requested may accept that propagation.
+            ticket.cancellations.add(fiber.id)
+          }
+        }
+        if (!pending) {
+          settled = Promise.withResolvers<void>()
+          pending = settled.promise
+        }
+        finish()
+        return Effect.succeed(
+          Effect.uninterruptible(
+            Effect.sync(() => {
+              stopping = true
+              for (const ticket of tickets) ticket.stopping = true
+              for (const [fiber, states] of running) {
+                for (const ticket of states) {
+                  ticket.requested = true
+                  ticket.cancellations.add(caller.id)
+                  ticket.cancellations.add(fiber.id)
+                }
+                fiber.interruptUnsafe(caller.id)
+              }
+            }).pipe(Effect.andThen(Effect.promise(() => pending!))),
+          ),
+        )
+      }),
+    ),
+  )
   return {
     track<A, E, R, F>(body: Effect.Effect<A, E, R>, refuse: () => F) {
       return Effect.acquireUseRelease(
@@ -175,42 +225,8 @@ export function admission() {
       }
       return true
     },
-    /** Authorize only this stop caller on the exact accepted original fibers, then join their original settlement. */
-    stop: Effect.withFiber((caller) =>
-      Effect.uninterruptible(
-        Effect.suspend(() => {
-          const current = caller.getRef(Current)
-          if (
-            running.has(caller) ||
-            (current?.owner === owner && !current.ticket.released && tickets.has(current.ticket))
-          )
-            return Effect.die(new Error("Scheduler producer cannot join its own stop"))
-          closed = true
-          stopping = true
-          for (const ticket of tickets) {
-            ticket.stopping = true
-            ticket.stop = caller.id
-          }
-          // Request every original before waiting for any: inner AppRuntime producers have independent ownership.
-          for (const [fiber, states] of running) {
-            for (const ticket of states) {
-              ticket.requested = true
-              ticket.cancellations.add(caller.id)
-              // Effect interrupts an original's race/scoped children using that original's ID.
-              // Only this live ticket whose original is actually requested may accept that propagation.
-              ticket.cancellations.add(fiber.id)
-            }
-            fiber.interruptUnsafe(caller.id)
-          }
-          if (!pending) {
-            settled = Promise.withResolvers<void>()
-            pending = settled.promise
-          }
-          finish()
-          return Effect.promise(() => pending!)
-        }),
-      ),
-    ),
+    prepare,
+    stop: prepare.pipe(Effect.flatten),
     snapshot() {
       return {
         closed,

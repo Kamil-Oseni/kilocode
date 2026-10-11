@@ -111,9 +111,11 @@ export async function stop() {
   await Effect.runPromise(
     Effect.uninterruptible(
       Effect.gen(function* () {
-        // The inner original must have its actual stop authority before outer AbortSignal propagation.
-        const inner = yield* SessionRetirement.stop.pipe(Effect.forkChild({ startImmediately: true }))
-        const original = yield* scheduler.stop.pipe(Effect.forkChild({ startImmediately: true }))
+        // Both exact ownership records must be ready before either sends interruption.
+        const producers = yield* SessionRetirement.prepare
+        const tickets = yield* scheduler.prepare
+        const inner = yield* producers.pipe(Effect.forkChild({ startImmediately: true }))
+        const original = yield* tickets.pipe(Effect.forkChild({ startImmediately: true }))
         const session = yield* Fiber.await(inner)
         const scheduled = yield* Fiber.await(original)
         const failures = [scheduled, session].flatMap((exit) =>

@@ -104,7 +104,7 @@ const { KiloSessions } = await import("../../../src/kilo-sessions/kilo-sessions"
 const { SessionExport } = await import("../../../src/kilocode/session-export")
 const { KiloShutdown } = await import("../../../src/kilocode/cli/shutdown")
 const { InstanceRuntime } = await import("../../../src/project/instance-runtime")
-const { serveShutdown } = await import("../../../src/kilocode/cli/serve-shutdown")
+const { serveShutdown, retire, stop } = await import("../../../src/kilocode/cli/serve-shutdown")
 const { GlobalBus } = await import("../../../src/bus/global")
 const diagnostics = { errors: 0 }
 const diagnostic = (event: { payload?: { type?: string; properties?: { error?: { data?: { code?: string } } } } }) => {
@@ -152,95 +152,205 @@ try {
     }
     const response = await request(`/session/${session.id}/prompt_async`, payload)
     assert.equal(response.status, 204)
-    await entered.promise
-    const rows = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
-    assert.equal(
-      rows
-        .flatMap((row) => row.parts)
-        .filter((part) => part.type === "tool" && part.tool === "get_goal" && part.state.status === "completed").length,
-      1,
-    )
-    assert.ok(scheduler.snapshot().active > 0)
-    if (mode === "stop") {
-      const abort = await request(`/session/${session.id}/abort`, {})
-      assert.equal(abort.status, 200)
-      assert.equal(await abort.json(), true)
-    }
-    const requests = listener.quiesce()
-    await requests
-    const closed = schedulerQuiesce()
-    const drain = serveShutdown({
-      signals: new EventEmitter(),
-      watchdog: () => {},
-      admission: () => closed,
-      tasks: [
-        async () => {
-          assert.equal(scheduler.snapshot().active, 0)
-          await native(Database.Service.use((database) => database.db.get("SELECT 1").pipe(Effect.orDie)))
-          stateful.retired = true
-        },
-      ],
-    })
-    const waiting = drain.wait.then(
-      () => undefined,
-      (err: unknown) => err,
-    )
-    const stopped = drain.run().then(
-      () => undefined,
-      (err: unknown) => err,
-    )
-    assert.equal(stateful.retired, false)
-    await native(Database.Service.use((database) => database.db.get("SELECT 1").pipe(Effect.orDie)))
-    assert.equal((await request(`/session/${session.id}/prompt_async`, payload)).status, 503)
-    const cached = await Server.Default().app.request(`/session/${session.id}/prompt_async`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    })
-    assert.equal(cached.status, 503)
-    assert.deepEqual(await cached.json(), { _tag: "ServiceUnavailable" })
-    const unchanged = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
-    assert.deepEqual(
-      unchanged.map((row) => row.info.id),
-      rows.map((row) => row.info.id),
-    )
-    assert.equal(state.calls, 2)
-    if (mode === "scope") await listener.stop(true)
-    release.resolve()
-    const outcome = await stopped
-    await waiting
-    if (mode === "scope") assert.ok(outcome instanceof AggregateError)
-    if (mode !== "scope") assert.equal(outcome, undefined)
-    if (mode === "stop") assert.equal(state.cancelled, 1)
-    assert.equal(diagnostics.errors, 0)
-    assert.equal(stateful.retired, true)
-    assert.equal(scheduler.snapshot().active, 0)
-    const after = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
-    const replies = after.filter((row) =>
-      row.parts.some((part) => part.type === "text" && part.text.includes("SCHEDULER_TRANSPORT_REPLY")),
-    )
-    assert.equal(replies.length, mode === "transport" ? 1 : 0)
-    assert.equal(state.calls, 2)
-    assert.equal(state.unexpected, 0)
-    await Bun.write(
-      join(root, "receipt.json"),
-      JSON.stringify({
-        passed: true,
-        mode,
-        session: session.id,
-        messages: after.map((row) => row.info.id),
+    if (mode === "immediate" || mode === "retire") {
+      if (mode === "retire") {
+        await entered.promise
+        const rows = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
+        assert.equal(
+          rows
+            .flatMap((row) => row.parts)
+            .filter((part) => part.type === "tool" && part.tool === "get_goal" && part.state.status === "completed")
+            .length,
+          1,
+        )
+        assert.equal(state.calls, 2)
+        assert.equal(state.cancelled, 0)
+      }
+      // Immediate admission has no entry barrier; retire cancels the actual held second provider request.
+      const before = scheduler.snapshot()
+      assert.ok(before.active > 0)
+      const outcome = await Promise.allSettled([
+        retire({
+          source: () => Promise.resolve(),
+          requests: () => listener.quiesce(),
+          scheduled: schedulerQuiesce,
+          stop,
+        }),
+      ])
+      await Bun.write(
+        join(root, `${mode}.json`),
+        JSON.stringify({ before, after: scheduler.snapshot(), outcome, calls: state.calls }),
+      )
+      const result = outcome[0]
+      if (result.status === "rejected") throw result.reason
+      assert.deepEqual(scheduler.snapshot(), {
+        closed: true,
         active: 0,
-        calls: state.calls,
-        natural: true,
-        held: true,
-        retired: stateful.retired,
-        failed: outcome instanceof AggregateError,
-        ordinaryStop: mode === "stop",
-        diagnosticErrors: diagnostics.errors,
-        transportCancelled: state.cancelled,
+        failures: 0,
+        processLocal: true,
         portableCaptureAuthorized: false,
-      }),
-    )
+      })
+      await native(Database.Service.use((database) => database.db.get("SELECT 1").pipe(Effect.orDie)))
+      stateful.retired = true
+      const rows = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
+      const calls = state.calls
+      assert.equal((await request(`/session/${session.id}/prompt_async`, payload)).status, 503)
+      const after = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
+      assert.equal(state.calls, calls)
+      assert.deepEqual(after, rows)
+      assert.equal(diagnostics.errors, 0)
+      assert.equal(state.unexpected, 0)
+      assert.ok(state.calls <= 2)
+      if (mode === "retire") {
+        assert.equal(state.calls, 2)
+        assert.equal(state.cancelled, 1)
+      }
+      assert.equal(
+        after.some((row) =>
+          row.parts.some((part) => part.type === "text" && part.text.includes("SCHEDULER_TRANSPORT_REPLY")),
+        ),
+        false,
+      )
+      await Bun.write(
+        join(root, "receipt.json"),
+        JSON.stringify({
+          passed: true,
+          mode,
+          session: session.id,
+          messages: after.map((row) => row.info.id),
+          active: 0,
+          failures: 0,
+          calls: state.calls,
+          natural: true,
+          held: mode === "retire",
+          retired: stateful.retired,
+          failed: false,
+          immediate: mode === "immediate",
+          diagnosticErrors: diagnostics.errors,
+          transportCancelled: state.cancelled,
+          portableCaptureAuthorized: false,
+        }),
+      )
+    } else {
+      await entered.promise
+      const rows = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
+      assert.equal(
+        rows
+          .flatMap((row) => row.parts)
+          .filter((part) => part.type === "tool" && part.tool === "get_goal" && part.state.status === "completed")
+          .length,
+        1,
+      )
+      if (mode === "scope")
+        await Bun.write(
+          join(root, "scope-before.json"),
+          JSON.stringify({ scheduler: scheduler.snapshot(), calls: state.calls }),
+        )
+      assert.ok(scheduler.snapshot().active > 0)
+      if (mode === "stop") {
+        const abort = await request(`/session/${session.id}/abort`, {})
+        assert.equal(abort.status, 200)
+        assert.equal(await abort.json(), true)
+      }
+      const requests = listener.quiesce()
+      await requests
+      const closed = schedulerQuiesce()
+      const drain = serveShutdown({
+        signals: new EventEmitter(),
+        watchdog: () => {},
+        admission: () => closed,
+        tasks: [
+          async () => {
+            assert.equal(scheduler.snapshot().active, 0)
+            await native(Database.Service.use((database) => database.db.get("SELECT 1").pipe(Effect.orDie)))
+            stateful.retired = true
+          },
+        ],
+      })
+      const waiting = drain.wait.then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      const stopped = drain.run().then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      assert.equal(stateful.retired, false)
+      await native(Database.Service.use((database) => database.db.get("SELECT 1").pipe(Effect.orDie)))
+      assert.equal((await request(`/session/${session.id}/prompt_async`, payload)).status, 503)
+      const cached = await Server.Default().app.request(`/session/${session.id}/prompt_async`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      })
+      assert.equal(cached.status, 503)
+      assert.deepEqual(await cached.json(), { _tag: "ServiceUnavailable" })
+      const unchanged = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
+      assert.deepEqual(
+        unchanged.map((row) => row.info.id),
+        rows.map((row) => row.info.id),
+      )
+      assert.equal(state.calls, 2)
+      if (mode === "scope") await listener.stop(true)
+      release.resolve()
+      const outcome = await stopped
+      const waited = await waiting
+      if (mode === "scope")
+        await Bun.write(
+          join(root, "scope-after.json"),
+          JSON.stringify({
+            scheduler: scheduler.snapshot(),
+            calls: state.calls,
+            cancelled: state.cancelled,
+            retired: stateful.retired,
+            outcome:
+              outcome instanceof Error
+                ? { name: outcome.name, aggregate: outcome instanceof AggregateError }
+                : "success",
+            waited:
+              waited instanceof Error ? { name: waited.name, aggregate: waited instanceof AggregateError } : "success",
+          }),
+        )
+      if (mode === "scope") {
+        assert.ok(outcome instanceof Error)
+        assert.ok("code" in outcome)
+        assert.equal(outcome.code, "RAYA_SERVE_ADMISSION_FAILED")
+        assert.ok(outcome.cause instanceof AggregateError)
+        assert.equal(waited, outcome)
+        assert.equal(scheduler.snapshot().failures, 2)
+      }
+      if (mode !== "scope") assert.equal(outcome, undefined)
+      if (mode === "stop") assert.equal(state.cancelled, 1)
+      assert.equal(diagnostics.errors, 0)
+      assert.equal(stateful.retired, true)
+      assert.equal(scheduler.snapshot().active, 0)
+      const after = await native(Session.Service.use((sessions) => sessions.messages({ sessionID: session.id })))
+      const replies = after.filter((row) =>
+        row.parts.some((part) => part.type === "text" && part.text.includes("SCHEDULER_TRANSPORT_REPLY")),
+      )
+      assert.equal(replies.length, mode === "transport" ? 1 : 0)
+      assert.equal(state.calls, 2)
+      assert.equal(state.unexpected, 0)
+      await Bun.write(
+        join(root, "receipt.json"),
+        JSON.stringify({
+          passed: true,
+          mode,
+          session: session.id,
+          messages: after.map((row) => row.info.id),
+          active: 0,
+          calls: state.calls,
+          natural: true,
+          held: true,
+          retired: stateful.retired,
+          failed: outcome instanceof Error,
+          ordinaryStop: mode === "stop",
+          diagnosticErrors: diagnostics.errors,
+          transportCancelled: state.cancelled,
+          portableCaptureAuthorized: false,
+        }),
+      )
+    }
   }
 } finally {
   release.resolve()

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { withTimeout } from "../../src/util/timeout"
 
-for (const mode of ["transport", "scope", "stop"]) {
+for (const mode of ["transport", "scope", "stop", "immediate", "retire"]) {
   test(`HTTP prompt_async ${mode} reserves the actual model/tool body after 204`, async () => {
     const root = await mkdtemp(join(tmpdir(), "raya-async-prompt-admission-"))
     for (const stage of mode === "scope" ? [mode, "recovery"] : [mode]) {
@@ -58,8 +58,27 @@ for (const mode of ["transport", "scope", "stop"]) {
         expect(receipt).toMatchObject(
           stage === "recovery"
             ? { passed: true, calls: 0, natural: true }
-            : { passed: true, mode, active: 0, natural: true, held: true },
+            : { passed: true, mode, active: 0, natural: true, held: mode !== "immediate" },
         )
+        if (mode === "immediate")
+          expect(receipt).toMatchObject({
+            failures: 0,
+            immediate: true,
+            retired: true,
+            failed: false,
+            diagnosticErrors: 0,
+          })
+        if (mode === "retire")
+          expect(receipt).toMatchObject({
+            failures: 0,
+            immediate: false,
+            held: true,
+            calls: 2,
+            retired: true,
+            failed: false,
+            diagnosticErrors: 0,
+            transportCancelled: 1,
+          })
       } finally {
         if (child.exitCode === null) child.kill("SIGKILL")
         const [, stdout, stderr] = await withTimeout(

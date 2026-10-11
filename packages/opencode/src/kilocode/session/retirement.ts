@@ -21,6 +21,7 @@ export namespace SessionRetirement {
     const outcomes = new Map<string, Map<string, { error: unknown; state: State }>>()
     let closing = false
     let stopping = false
+    let stopper: number | undefined
     let accepted = 0
     let settled = 0
     let cancelled = 0
@@ -62,9 +63,16 @@ export namespace SessionRetirement {
           states.add(ticket.state)
           running.set(fiber, states)
           return Effect.suspend(() => {
+            if (stopper !== undefined) {
+              ticket.state.cancellations.add(stopper)
+              ticket.state.cancellations.add(fiber.id)
+            }
             // A reserved child may first enter after stop took its live-fiber snapshot.
             if (stopping) {
+              if (stopper === undefined) return Effect.die(new Error("Session stop owner is unavailable"))
+              ticket.state.cancellations.add(stopper)
               ticket.state.cancellations.add(fiber.id)
+              fiber.interruptUnsafe(stopper)
               return Effect.interrupt
             }
             return body(ticket.token)
@@ -226,18 +234,33 @@ export namespace SessionRetirement {
         }),
       )
     })
-    const stop = Effect.withFiber((caller) =>
-      Effect.suspend(() => {
-        if (running.has(caller)) return Effect.die(new Error("Session producer cannot join its own stop"))
+    const prepare = Effect.withFiber((caller) =>
+      Effect.sync(() => {
+        if (running.has(caller)) throw new Error("Session producer cannot join its own stop")
         fence()
-        stopping = true
+        stopper = caller.id
+        for (const [fiber, states] of running) {
+          for (const state of states) {
+            state.cancellations.add(caller.id)
+            state.cancellations.add(fiber.id)
+          }
+        }
         return Effect.uninterruptible(
-          Effect.forEach([...running.keys()], interrupt, { concurrency: "unbounded", discard: true }).pipe(
-            Effect.andThen(drain),
-          ),
+          Effect.sync(() => {
+            stopping = true
+            // An inherited child may enter between preparation and delivery.
+            for (const [fiber, states] of running) {
+              for (const state of states) {
+                state.cancellations.add(caller.id)
+                state.cancellations.add(fiber.id)
+              }
+              fiber.interruptUnsafe(caller.id)
+            }
+          }).pipe(Effect.andThen(drain)),
         )
       }),
     )
+    const stop = prepare.pipe(Effect.flatten)
     return {
       run,
       tool,
@@ -250,6 +273,7 @@ export namespace SessionRetirement {
       current,
       accepted: Effect.map(current, (parent) => parent !== undefined),
       fence,
+      prepare,
       stop,
       drain,
       snapshot: () => ({ closing, active: pending.size, accepted, settled, failures: failures.length, cancelled }),
@@ -289,6 +313,7 @@ export namespace SessionRetirement {
       return yield* context ? port().child(body) : Effect.forkChild(body)
     })
   export const fence = () => port().fence()
+  export const prepare = Effect.suspend(() => port().prepare)
   export const stop = Effect.suspend(() => port().stop)
   export const drain = Effect.suspend(() => port().drain)
   export const current = Effect.suspend(() => live?.current ?? Effect.succeed(undefined))

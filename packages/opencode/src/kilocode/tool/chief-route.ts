@@ -167,17 +167,28 @@ export const ChiefRouteTool = Tool.define<
               } // raya_change - repeated same-response calls stay known but cannot restart the workflow
               const cfg = yield* config.get() // raya_change - Milestone I runtime routing settings
               const threshold = cfg.raya_routing?.confidence_threshold // raya_change - Milestone I
-              const caller = refinement ? yield* agents.get("auto") : undefined
+              const caller = yield* agents.get("auto")
               const rules = caller ? Permission.merge(caller.permission, session.permission ?? []) : undefined
+              const request = RayaChief.request(session.metadata) ?? params.objective
+              const conversational =
+                !refinement &&
+                params.result === "narrative" &&
+                params.access === "read" &&
+                RayaChief.request(session.metadata) === request &&
+                RayaChief.requestText(dispatch.findLast((item) => item.info.role === "user")?.parts ?? []) ===
+                  request &&
+                session.metadata?.["raya.goal.open"] !== true &&
+                RayaChief.direct(request)
               const available = (yield* agents.list()).filter(
                 (item) =>
                   item.mode !== "primary" &&
                   !item.hidden &&
                   !item.deprecated &&
-                  (!rules || Permission.evaluate("task", item.name, rules).action !== "deny"),
+                  ((conversational && item.name === "generalist") ||
+                    !rules ||
+                    Permission.evaluate("task", item.name, rules).action !== "deny"),
               )
               // raya_change start - route the persisted user text, never a model-rewritten objective
-              const request = RayaChief.request(session.metadata) ?? params.objective
               if (params.result === "directory_entries" && params.access !== "read")
                 throw new Error("Directory result contract requires read access")
               const initial = RayaChief.route({ request, agents: available, access: params.access })
@@ -200,16 +211,9 @@ export const ChiefRouteTool = Tool.define<
               // raya_change end
               if (!selected || (params.access && !RayaChief.capable(selected, params.access)))
                 throw new Error("The selected Auto specialist is unavailable")
-              const direct =
-                params.result !== "directory_entries" &&
-                selected.name === "generalist" &&
-                params.access === "read" &&
-                !answer &&
-                RayaChief.request(session.metadata) === request &&
-                RayaChief.requestText(dispatch.findLast((item) => item.info.role === "user")?.parts ?? []) ===
-                  request &&
-                session.metadata?.["raya.goal.open"] !== true &&
-                RayaChief.direct(request)
+              const direct = conversational && selected.name === "generalist" && !answer
+              if (!direct && rules && Permission.evaluate("task", selected.name, rules).action === "deny")
+                throw new Error("The selected Auto specialist is denied by Task permissions")
 
               const message = yield* sessions
                 .findMessage(ctx.sessionID, (item) => item.info.id === ctx.messageID)

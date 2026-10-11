@@ -121,6 +121,116 @@ const asked = Effect.fn(function* () {
 })
 const ambiguous = "Help me decide what to do with this project"
 
+it.live("a prompted greeting cannot persist a denied delegated specialist", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const questions = yield* Question.Service
+        const queue = yield* asked()
+        const request = "Explain the term operations"
+        const input = yield* dispatch(dir, request)
+        const agents = yield* Agent.Service
+        const initial = RayaChief.route({
+          request,
+          access: "read",
+          agents: (yield* agents.list()).filter((item) => ["generalist", "designer"].includes(item.name)),
+        })
+        expect(RayaChief.direct(request)).toBe(true)
+        expect(initial.candidates.some((item) => item.score > 0)).toBe(true)
+        expect(initial.candidates).toHaveLength(2)
+        expect(RayaChief.needsPrompt(initial, 1, request)).toBe(true)
+        const tool = yield* (yield* ChiefRouteTool).init()
+        const pending = yield* tool
+          .execute({ result: "narrative", objective: request, access: "read" }, input.ctx)
+          .pipe(Effect.forkChild)
+        const event = yield* Queue.take(queue).pipe(Effect.timeout("3 seconds"))
+        yield* questions.reply({ requestID: event.id, answers: [["generalist"]] })
+        const result = yield* Fiber.await(pending)
+        expect(Exit.isFailure(result)).toBe(true)
+        const saved = yield* sessions.get(input.chat.id)
+        expect(RayaChief.history(saved.metadata)).toHaveLength(0)
+        expect(RayaChief.phase(saved.metadata)).toBe("route")
+        expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
+      }),
+    {
+      config: {
+        ...cfg,
+        permission: { task: { "*": "deny", designer: "allow" } },
+        raya_routing: { confidence_threshold: 1 },
+      },
+    },
+  ),
+)
+
+for (const mode of ["deny", "general"] as const)
+  it.live(`a verified greeting remains direct with ${mode} Task permissions`, () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const input = yield* dispatch(dir, "Hello.")
+          const tool = yield* (yield* ChiefRouteTool).init()
+          const result = yield* tool.execute({ result: "narrative", objective: "Hello.", access: "read" }, input.ctx)
+          expect(result.metadata.decision?.direct).toBe(true)
+          expect(result.metadata.decision?.agent).toBe("generalist")
+          expect(result.metadata.decision?.userID).toBe(input.user.id)
+          expect(result.metadata.decision?.request).toBe("Hello.")
+          expect(RayaChief.phase((yield* sessions.get(input.chat.id)).metadata)).toBe("done")
+          expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
+        }),
+      { config: { ...cfg, permission: { task: mode === "deny" ? "deny" : { "*": "deny", general: "allow" } } } },
+    ),
+  )
+
+for (const mode of ["allowed", "caller", "parent"] as const)
+  it.live(`initial Chief routing respects ${mode} Task permissions`, () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const agents = yield* Agent.Service
+          const request = "Write one text file and read it back."
+          const input = yield* dispatch(dir, request)
+          if (mode === "parent")
+            yield* sessions.setPermission({
+              sessionID: input.chat.id,
+              permission: Permission.fromConfig({ task: "deny" }),
+            })
+          const caller = yield* agents.get("auto")
+          expect(caller).toBeDefined()
+          expect(caller && Permission.evaluate("task", "general", caller.permission).action).toBe(
+            mode === "caller" ? "deny" : "allow",
+          )
+          const tool = yield* (yield* ChiefRouteTool).init()
+          const result = yield* tool
+            .execute({ result: "narrative", objective: request, access: "edit" }, input.ctx)
+            .pipe(Effect.exit)
+          const saved = yield* sessions.get(input.chat.id)
+          if (mode !== "allowed") {
+            expect(Exit.isFailure(result)).toBe(true)
+            expect(RayaChief.history(saved.metadata)).toHaveLength(0)
+            expect(RayaChief.phase(saved.metadata)).toBe("route")
+            return
+          }
+          expect(Exit.isSuccess(result)).toBe(true)
+          const routed = yield* result
+          expect(routed.metadata.decision?.agent).toBe("general")
+          expect(routed.metadata.decision?.access).toBe("edit")
+          expect(routed.metadata.decision?.request).toBe(request)
+          expect(routed.metadata.decision?.candidates.every((item) => item.agent === "general")).toBe(true)
+          expect(RayaChief.history(saved.metadata)).toHaveLength(1)
+          expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
+        }),
+      {
+        config: {
+          ...cfg,
+          permission: { task: mode === "caller" ? "deny" : { "*": "deny", general: "allow" } },
+        },
+      },
+    ),
+  )
+
 it.live("a real direct greeting decision releases text continuation without releasing required acquisition", () =>
   provideTmpdirInstance(
     (dir) =>

@@ -139,7 +139,7 @@ import {
 } from "./kilo-provider/work-style"
 import { handleSidebarWorktreeMessage } from "./kilo-provider/sidebar-worktree"
 import * as McpOAuth from "./kilo-provider/mcp-oauth"
-import { retryable, backoff, MAX_RETRIES } from "./util/retry"
+import { submit } from "./kilo-provider/submission"
 import { hasGit } from "./kilo-provider/git-status"
 import { handlePersonalTodoMessage } from "./kilo-provider/personal-todos"
 import { handlePersonalTodoProposalMessage } from "./kilo-provider/personal-todo-proposals"
@@ -4821,73 +4821,45 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private closedDrafts = new Set<string>()
   private creatingDrafts = new Set<string>()
 
-  /** Abort controllers for active retry loops, keyed by session ID */
+  /** Stop fences for original human submissions, keyed by session ID */
   private retryAbortControllers = new Map<string, AbortController>()
 
-  /** Execute an SDK call with visible exponential backoff for retryable HTTP errors. */
+  /** Retain the Stop fence while submitting human input exactly once. */
   private async withRetry(
     fn: () => Promise<{ error?: unknown; response?: Response }>,
     sid: string,
     messageID?: string,
   ): Promise<void> {
-    const abortController = new AbortController()
-    this.retryAbortControllers.set(sid, abortController)
-
+    const controller = new AbortController()
+    this.retryAbortControllers.set(sid, controller)
+    const client = this.client
+    const generation = this.connectionGeneration
+    const directory = this.getWorkspaceDirectory(sid)
+    const current = () =>
+      !!client &&
+      client === this.client &&
+      generation === this.connectionGeneration &&
+      this.routeSessionDirectory(sid) !== null &&
+      sameDirectory(directory, this.getWorkspaceDirectory(sid))
     try {
-      for (let attempt = 1; ; attempt++) {
-        if (abortController.signal.aborted) {
-          // User cancelled — return normally without triggering sendMessageFailed
-          return
-        }
-
-        const result = await fn()
-        if (!result.error) return
-        if (this.confirmations.has(messageID)) return
-
-        const status = result.response?.status ?? 0
-
-        // Non-retryable status codes fail immediately without retry
-        if (!retryable(status)) {
-          this.postMessage({ type: "sessionStatus", sessionID: sid, status: "idle" })
-          throw result.error
-        }
-
-        // Stop retrying after MAX_RETRIES attempts
-        if (attempt >= MAX_RETRIES) {
-          this.postMessage({ type: "sessionStatus", sessionID: sid, status: "idle" })
-          throw result.error
-        }
-
-        const delay = backoff(attempt, result.response?.headers)
-        console.log(`[Raya] Provider: Retry on ${status}, attempt ${attempt}/${MAX_RETRIES}, delay ${delay}ms`)
-
-        this.postMessage({
-          type: "sessionStatus",
-          sessionID: sid,
-          status: "retry",
-          attempt,
-          message: `Error (${status}). Retrying...`,
-          next: Date.now() + delay,
-        })
-
-        // Wait for delay or until aborted
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            clearTimeout(timer)
-            abortController.signal.removeEventListener("abort", done)
-            resolve()
-          }
-          const timer = setTimeout(done, delay)
-          abortController.signal.addEventListener("abort", done, { once: true })
-        })
-        if (this.confirmations.has(messageID)) return
-      }
+      const accepted = await submit({
+        run: fn,
+        load: async () =>
+          client && messageID
+            ? (await client.session.message({ sessionID: sid, messageID, directory })).data
+            : undefined,
+        current,
+        cancelled: () => controller.signal.aborted,
+        sessionID: sid,
+        messageID,
+      })
+      if (accepted && messageID) this.confirmations.confirm(messageID)
     } finally {
-      this.retryAbortControllers.delete(sid)
+      if (this.retryAbortControllers.get(sid) === controller) this.retryAbortControllers.delete(sid)
     }
   }
 
-  /** Cancel an active retry loop for a session */
+  /** Cancel the original submission confirmation wait for a session */
   private cancelRetry(sid: string): void {
     const controller = this.retryAbortControllers.get(sid)
     if (controller) {

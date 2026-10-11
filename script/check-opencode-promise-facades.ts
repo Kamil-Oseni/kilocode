@@ -29,6 +29,11 @@ const allow: Record<string, string> = {
 }
 
 const testAllow: Record<string, { count: number; reason: string }> = {
+  "kilocode/fixtures/input-submission.ts": {
+    count: 2,
+    reason:
+      "process-isolated actual HTTP submission and SQLite part-write fault verify one original POST and saved-input acknowledgment without automatic resubmission",
+  },
   "kilocode/fixtures/accepted-input-draft.ts": {
     count: 3,
     reason:

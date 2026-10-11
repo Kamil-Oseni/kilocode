@@ -31,6 +31,7 @@ import type { Database } from "@opencode-ai/core/database/database"
 import * as DelegationAccounting from "./delegation-accounting"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { record as routine } from "@/kilocode/task/continuation"
+import { facts } from "./read-artifact"
 
 const log = Log.create({ service: "raya-goal-retention" })
 
@@ -1133,34 +1134,43 @@ export namespace RayaGoal {
     const evidence = Effect.fn("RayaGoal.evidence")(function* (sessionID: SessionID) {
       const state = yield* requireGoal(sessionID)
       const messages = yield* collect(deps.sessions, sessionID, state.createdAt, state.inputs)
-      return tools(messages)
-        .filter(
-          (part) => part.state.status === "completed" && part.state.time.start >= state.createdAt && supports(part),
-        )
-        .sort((a, b) => started(b) - started(a))
-        .map((part) => ({
-          messageID: part.messageID,
-          partID: part.id,
-          sessionID: part.sessionID,
-          callID: part.callID,
-          tool: part.tool,
-          title: part.state.status === "completed" ? part.state.title : "",
-          output: part.state.status === "completed" ? part.state.output.slice(0, 500) : "",
-          exit: part.state.status === "completed" ? part.state.metadata["exit"] : undefined,
-          artifact: part.state.status === "completed" ? part.state.metadata["rayaRevision"] : undefined,
-          inspection:
-            part.state.status === "completed" && part.tool === "read" ? inspection(part.state.metadata) : undefined,
-          // raya_change - Milestone G exposes host-authored smoke evidence to the completion audit
-          smoke:
-            part.state.status === "completed" && part.tool === "browser_smoke_test"
-              ? {
-                  passed: part.state.metadata["passed"],
-                  runID: part.state.metadata["runID"],
-                  artifact: part.state.metadata["artifact"],
-                  failingStep: part.state.metadata["failingStep"],
-                }
-              : undefined,
-        }))
+      return yield* Effect.forEach(
+        tools(messages)
+          .filter(
+            (part) => part.state.status === "completed" && part.state.time.start >= state.createdAt && supports(part),
+          )
+          .sort((a, b) => started(b) - started(a)),
+        (part) =>
+          Effect.gen(function* () {
+            return {
+              messageID: part.messageID,
+              partID: part.id,
+              sessionID: part.sessionID,
+              callID: part.callID,
+              tool: part.tool,
+              title: part.state.status === "completed" ? part.state.title : "",
+              output: part.state.status === "completed" ? part.state.output.slice(0, 500) : "",
+              exit: part.state.status === "completed" ? part.state.metadata["exit"] : undefined,
+              artifact: part.state.status === "completed" ? part.state.metadata["rayaRevision"] : undefined,
+              inspection:
+                part.state.status === "completed" && part.tool === "read" ? inspection(part.state.metadata) : undefined,
+              format:
+                part.state.status === "completed" && part.tool === "read"
+                  ? yield* facts(part.state.metadata)
+                  : undefined,
+              // raya_change - Milestone G exposes host-authored smoke evidence to the completion audit
+              smoke:
+                part.state.status === "completed" && part.tool === "browser_smoke_test"
+                  ? {
+                      passed: part.state.metadata["passed"],
+                      runID: part.state.metadata["runID"],
+                      artifact: part.state.metadata["artifact"],
+                      failingStep: part.state.metadata["failingStep"],
+                    }
+                  : undefined,
+            }
+          }),
+      )
     })
 
     const update = Effect.fn("RayaGoal.update")(function* (

@@ -10,7 +10,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { KiloReadObject } from "@/kilocode/tool/read-object"
 import * as Artifact from "@/kilocode/goal/artifact"
-import { read } from "@/kilocode/goal/read-artifact"
+import { facts, read } from "@/kilocode/goal/read-artifact"
 import { ReadTool } from "@/tool/read"
 import { Agent } from "@/agent/agent"
 import { Instruction } from "@/session/instruction"
@@ -169,12 +169,24 @@ it.live("binds read evidence to the inspected object and detects changes during 
       expect(result.output.includes("<file-format")).toBe(!changed)
       expect(result.output).not.toContain("<file-content-json")
       expect(result.metadata.rayaRevision.status).toBe(changed ? "unavailable" : "captured")
+      expect(result.metadata.rayaReadFormat === undefined).toBe(changed)
+      expect((yield* facts(result.metadata)) === undefined).toBe(changed)
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(!changed)
       if (changed) continue
+      const format = result.metadata.rayaReadFormat
+      if (!format) throw new Error("Actual stable read format required")
+      for (const altered of [
+        { ...format, path: path.join(directory, "foreign.txt") },
+        { ...format, sha256: "0".repeat(64) },
+        { ...format, bytes: format.bytes + 1 },
+        { ...format, endings: "invented" },
+      ])
+        expect(yield* facts({ ...result.metadata, rayaReadFormat: altered })).toBeUndefined()
       yield* fs.writeFileString(path.join(directory, "unrelated.txt"), "another file")
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(true)
       yield* fs.writeFileString(file, "modified bytes")
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(false)
+      expect(yield* facts(result.metadata)).toBeUndefined()
     }
   }),
 )
@@ -292,6 +304,8 @@ it.live("bound reads with invalid UTF-8 or binary bytes retain revision without 
         read(fs, bound, Effect.succeed({ output: "display", metadata: { display: { type: "file" } } })),
       )
       expect(result.metadata.rayaRevision.status).toBe("captured")
+      expect(result.metadata.rayaReadFormat).toBeUndefined()
+      expect(yield* facts(result.metadata)).toBeUndefined()
       expect(result.output).toBe("display")
     }
   }),

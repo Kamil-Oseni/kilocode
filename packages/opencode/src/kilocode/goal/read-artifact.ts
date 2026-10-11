@@ -1,8 +1,39 @@
 import { createHash } from "node:crypto"
-import { Cause, Effect, Option } from "effect"
+import { Cause, Effect, Option, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import type { KiloReadObject } from "@/kilocode/tool/read-object"
 import { scanner } from "./read-format"
+import * as Artifact from "./artifact"
+
+const Format = Schema.Struct({
+  version: Schema.Literal(1),
+  path: Schema.String.check(Schema.isMaxLength(4096)),
+  encoding: Schema.Literal("UTF-8"),
+  bom: Schema.Boolean,
+  endings: Schema.Literals(["LF", "CRLF", "CR", "mixed", "none"]),
+  newline: Schema.Boolean,
+  bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+  sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+})
+
+/** Bounded host-scanned facts, bound to the still-current captured file revision. */
+export const facts = (metadata: Record<string, unknown>) =>
+  Effect.gen(function* () {
+    const format = Schema.decodeUnknownOption(Format)(metadata.rayaReadFormat)
+    const entries = Artifact.entries(metadata.rayaRevision)
+    const revision = entries[0]
+    if (
+      Option.isNone(format) ||
+      entries.length !== 1 ||
+      revision?.status !== "captured" ||
+      revision.path !== format.value.path ||
+      revision.sha256 !== format.value.sha256 ||
+      revision.bytes !== format.value.bytes ||
+      !(yield* Artifact.current(metadata.rayaRevision))
+    )
+      return undefined
+    return format.value
+  })
 
 export const read = <A extends { metadata: object; output?: string }, E, R>(
   fs: FSUtil.Interface,
@@ -97,5 +128,18 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
             output: `${result.output}\n<file-format encoding="${format.encoding}" bom="${format.bom ? "UTF-8" : "none"}" line-endings="${format.endings}" final-newline="${format.newline}" bytes="${format.bytes}" sha256="${revision.sha256}" />${content !== undefined ? `\n<file-content-json encoding="UTF-8" complete="true" bytes="${format.bytes}" sha256="${revision.sha256}">\n${content}\n</file-content-json>` : ""}`,
           }
         : result
-    return { ...output, metadata: { ...result.metadata, rayaRevision: revision } }
+    return {
+      ...output,
+      metadata: {
+        ...result.metadata,
+        rayaRevision: revision,
+        rayaReadFormat:
+          revision.status === "captured" &&
+          format &&
+          format.bytes === revision.bytes &&
+          display.display?.type === "file"
+            ? { version: 1 as const, path: revision.path, ...format, sha256: revision.sha256 }
+            : undefined,
+      },
+    }
   })

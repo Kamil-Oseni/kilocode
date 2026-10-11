@@ -36,10 +36,14 @@ test("an absent assignment and absent saved request still refuse", () => {
 })
 
 test("a model-authored narrower assignment cannot erase the authenticated parent scope", () => {
-  const scope = "Implement and verify the entire endpoint"
+  const scope = "Write C:\\workspace\\result.txt with exactly maple followed by one LF newline"
   const objective = KiloTask.assignment({ brief: { objective: "Only inspect its naming" }, scope })
   const text = KiloTask.brief({ prompt: objective, scope, cap: 2 })
   expect(text).toContain("Objective: Only inspect its naming")
   expect(text).toContain(`Parent scope (authenticated reference only): ${scope}`)
   expect(text).toContain("do not repeat them as your assignment or substitute a new goal")
+  expect(text).toContain("LF (\\n) and CRLF (\\r\\n) are different bytes, including on Windows")
+  expect(text).toContain("original assigned objective")
+  expect(text).toContain("Correct a concrete mismatch in this same authorized worker")
+  expect(text).toContain("do not prove the requested bytes")
 })

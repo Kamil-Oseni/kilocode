@@ -29,6 +29,11 @@ const allow: Record<string, string> = {
 }
 
 const testAllow: Record<string, { count: number; reason: string }> = {
+  "kilocode/fixtures/accepted-input-draft.ts": {
+    count: 3,
+    reason:
+      "process-isolated real HTTP draft recovery injects a SQLite part-write fault and verifies owned reminder writes in the same application database as the original prompt, retaining its producer failures",
+  },
   "kilocode/fixtures/scheduler-question-stop.ts": {
     count: 2,
     reason:

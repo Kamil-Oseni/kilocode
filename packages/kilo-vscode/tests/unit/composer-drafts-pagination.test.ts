@@ -1,3 +1,4 @@
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import { describe, expect, it } from "bun:test"
 import { ComposerDrafts, type DraftBackend } from "../../src/kilo-provider/composer-drafts"
 import type { ComposerDraftExtensionMessage, DraftEntry } from "../../src/shared/composer-drafts-messages"
@@ -97,7 +98,13 @@ async function fixture() {
       state.peak = Math.max(state.peak, state.active)
       await Bun.sleep(1)
       state.active--
-      return { sessionID, id, role: "user" }
+      const entry = entries.find((entry) => entry.identity.sessionID === sessionID && entry.mutation === `send:${id}`)
+      if (!entry?.content) throw new Error("Missing accepted fixture content")
+      const info = { sessionID, id, role: "user" }
+      const parts = [{ id: `part-${id}`, sessionID, messageID: id, type: "text", text: entry.content.text }]
+      const sealed = InputReceipt.seal(info, parts)
+      if (!sealed) throw new Error("Missing complete fixture input")
+      return { info, parts: parts.map((part) => (part.id === sealed.id ? sealed : part)) }
     },
   })
   await controller.handle({ type: "composerDraftPane", epoch: "pane", active: true })

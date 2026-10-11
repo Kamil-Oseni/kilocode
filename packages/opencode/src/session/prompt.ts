@@ -1455,7 +1455,7 @@ export const layer = Layer.effect(
       )
 
       // kilocode_change - kilo normalizes images inside resolvePart, so there is no separate normalization pass here (unlike upstream)
-      const parts = resolvedParts
+      const parts = KiloSessionPrompt.resolved(resolvedParts) // kilocode_change - reserved completeness receipts are backend-owned
 
       const parsed = decodeMessageInfo(info, { errors: "all", propertyOrder: "original" })
       if (Exit.isFailure(parsed)) {
@@ -1496,7 +1496,7 @@ export const layer = Layer.effect(
             queuedAt: input.goalQueuedAt,
           })
       // kilocode_change end
-      for (const part of parts) yield* sessions.updatePart(part)
+      yield* KiloSessionPrompt.publishInput(sessions, { info, parts }, !input.resultNotice) // kilocode_change - acknowledge only complete resolved input
 
       return { info, parts }
     }, Effect.scoped)
@@ -1821,7 +1821,14 @@ export const layer = Layer.effect(
           step = 1
         }
         const isLastStep = Number.isFinite(maxSteps) && step >= maxSteps
-        msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
+        // kilocode_change start - extend completeness only for owned reminders after validating the original input
+        msgs = yield* KiloSessionPrompt.reminders(
+          sessions,
+          sessionID,
+          lastUser.id,
+          SessionReminders.apply({ messages: msgs, agent, session }),
+        ).pipe(
+          // kilocode_change end
           Effect.provideService(RuntimeFlags.Service, flags),
           Effect.provideService(FSUtil.Service, fsys),
           Effect.provideService(Session.Service, sessions),

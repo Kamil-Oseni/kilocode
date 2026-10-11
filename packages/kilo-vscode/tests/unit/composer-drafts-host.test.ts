@@ -1,3 +1,4 @@
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import { afterEach, describe, expect, it, spyOn } from "bun:test"
 import {
   ComposerDrafts,
@@ -111,7 +112,18 @@ async function fixture() {
     owners: () => [{ box: identity.box, owner: state.owner }],
     scope: async (target) => ({ ...target, workspace: "private", projectID: state.project }),
     post: (message) => posts.push(message),
-    message: async (sessionID, id) => ({ sessionID, id, role: state.role }),
+    message: async (sessionID, id) => {
+      const info = { sessionID, id, role: "user" }
+      const parts = [
+        { id: `part-${id}`, sessionID, messageID: id, type: "text", text: state.entry.content?.text ?? "" },
+      ]
+      const sealed = InputReceipt.seal(info, parts)
+      if (!sealed) throw new Error("Missing complete fixture input")
+      return {
+        info: { ...info, role: state.role },
+        parts: parts.map((part) => (part.id === sealed.id ? sealed : part)),
+      }
+    },
   }
   const controller = new ComposerDrafts(ctx)
   cleanup.push(() => {
@@ -202,6 +214,7 @@ describe("durable composer host bridge", () => {
     await f.controller.accepted("other", "message", "user")
     await f.controller.accepted("session", "wrong", "user")
     expect(f.requests).toHaveLength(2)
+    f.state.role = "user"
     await f.controller.accepted("session", "message", "user")
     expect(f.requests.at(-1)).toMatchObject({
       operation: "clear",
@@ -228,6 +241,7 @@ describe("durable composer host bridge", () => {
     const f = await fixture()
     await f.controller.prepare(capture, "session", "message")
     f.state.fail = true
+    f.state.role = "user"
     await f.controller.accepted("session", "message", "user")
     expect(f.posts.at(-1)).toMatchObject({ type: "composerDraftAccepted", error: "conflict" })
     expect(f.state.entry.content).toEqual(entry.content)

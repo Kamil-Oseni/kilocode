@@ -32,6 +32,7 @@ import type {
   Config,
 } from "@kilocode/sdk/v2/client"
 import { MaxCostNudge, type MaxCostChoice } from "@opencode-ai/core/kilocode/cost/max-cost-nudge"
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import { type KiloConnectionService, ServerStartupError } from "./services/cli-backend"
 import { previewSound } from "./services/attention"
 import type { EditorContext, IndexingStatus } from "./services/cli-backend/types"
@@ -419,7 +420,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     message: async (sessionID, messageID, directory) => {
       if (!this.client) return
       const { data } = await this.client.session.message({ sessionID, messageID, directory }, { throwOnError: true })
-      return data.info
+      return data
     },
   })
   private readonly routineEvents = new RoutineEvents(
@@ -5603,9 +5604,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (
       client === this.client &&
       generation === this.connectionGeneration &&
-      receipt?.data?.info.role === "user" &&
-      receipt.data.info.id === messageID &&
-      receipt.data.info.sessionID === sid
+      !!messageID &&
+      InputReceipt.complete(receipt?.data, sid, messageID)
     ) {
       await this.composer.accepted(sid, messageID, "user")
       return
@@ -6612,6 +6612,30 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     )
   }
 
+  private confirmInput(
+    part: Extract<SyncPayload, { name: "message.part.updated.1" }>["data"]["part"],
+    directory?: string,
+  ): void {
+    void this.composer
+      .accepted(part.sessionID, part.messageID, "user")
+      .catch(() => console.error("[Raya] Saved composer acceptance could not be confirmed"))
+    if (part.type !== "text" || !part.metadata?.["raya.input.complete"]) return
+    const client = this.client
+    const generation = this.connectionGeneration
+    if (!client) return
+    void client.session
+      .message({ sessionID: part.sessionID, messageID: part.messageID, directory })
+      .then((receipt) => {
+        if (
+          client === this.client &&
+          generation === this.connectionGeneration &&
+          InputReceipt.complete(receipt.data, part.sessionID, part.messageID)
+        )
+          this.confirmations.confirm(part.messageID)
+      })
+      .catch(() => console.error("[Raya] Complete input receipt could not be confirmed"))
+  }
+
   private handleEvent(event: ProviderEvent, directory?: string): void {
     if ((event as { type: string }).type === "raya.chief.note.available") {
       const raw = (event as { properties?: unknown }).properties
@@ -6706,11 +6730,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return
     }
 
+    if (event.type === "message.part.updated") this.confirmInput(event.properties.part, directory)
+
     if (event.type === "message.updated") {
       void this.composer
         .accepted(event.properties.sessionID, event.properties.info.id, event.properties.info.role)
         .catch(() => console.error("[Raya] Saved composer acceptance could not be confirmed"))
-      this.confirmations.confirm(event.properties.info.id)
       this.speech?.trackMessage(
         event.properties.sessionID,
         event.properties.info.role,

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { realpathSync } from "node:fs"
 import { canonicalizePath, samePath } from "../agent-manager/project/paths"
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import type {
   ComposerDraftAccepted,
   ComposerDraftExtensionMessage,
@@ -44,11 +45,7 @@ type Context = {
   post: (message: ComposerDraftExtensionMessage) => void
   generation: () => number
   owners: () => Array<{ box: string; owner: string }>
-  message: (
-    sessionID: string,
-    messageID: string,
-    directory: string,
-  ) => Promise<{ role: string; id: string; sessionID: string } | undefined>
+  message: (sessionID: string, messageID: string, directory: string) => Promise<InputReceipt.Row | undefined>
 }
 const panes = new Set<ComposerDrafts>()
 const history = new Set<ComposerDrafts>()
@@ -170,6 +167,7 @@ export class ComposerDrafts {
   private readonly errors: unknown[] = []
   private retirement: Promise<void> | undefined
   private sending = new Map<string, Sending>()
+  private acknowledgments = new Map<string, { state: { dirty: boolean }; job: Promise<void> }>()
   private flushes = new Map<string, { resolve: (value: ComposerDraftFlushed) => void; reject: (err: Error) => void }>()
   constructor(private readonly ctx: Context) {
     if (closed) throw new Error("Composer view registry is retired")
@@ -209,16 +207,10 @@ export class ComposerDrafts {
       const identity = await this.ctx.scope(item.identity)
       if (identity.workspace !== item.identity.workspace || identity.projectID !== item.identity.projectID) continue
       const info = await this.ctx.message(item.sessionID, item.messageID, identity.workspace).catch(() => undefined)
-      if (
-        !this.current(epoch, generation) ||
-        info?.role !== "user" ||
-        info.id !== item.messageID ||
-        info.sessionID !== item.sessionID
-      )
-        continue
+      if (!this.current(epoch, generation) || !InputReceipt.complete(info, item.sessionID, item.messageID)) continue
       item.epoch = epoch
       item.generation = generation
-      await this.acceptedOwned(item.sessionID, item.messageID, info.role)
+      await this.accepted(item.sessionID, item.messageID, "user")
     }
   }
   handle(message: ComposerDraftWebviewMessage): Promise<void> {
@@ -407,8 +399,7 @@ export class ComposerDrafts {
     if (!sessionID || !messageID) return { entry, error: "uncertain" }
     const info = await this.ctx.message(sessionID, messageID, entry.identity.workspace).catch(() => undefined)
     check?.()
-    if (info?.role !== "user" || info.sessionID !== sessionID || info.id !== messageID)
-      return { entry, error: "uncertain" }
+    if (!InputReceipt.complete(info, sessionID, messageID)) return { entry, error: "uncertain" }
     await this.owned(entry.identity)
     check?.()
     return backend.clear(entry.identity, entry.token, `accepted:${messageID}`)
@@ -482,7 +473,27 @@ export class ComposerDrafts {
   }
   accepted(sessionID: string, messageID: string, role: string): Promise<void> {
     if (this.closed) return Promise.reject(new Error("Composer draft intake is retired"))
-    return this.track(this.acceptedOwned(sessionID, messageID, role))
+    if (role !== "user" || !this.sending.has(messageID)) return Promise.resolve()
+    const current = this.acknowledgments.get(messageID)
+    if (current) {
+      current.state.dirty = true
+      return current.job
+    }
+    const state = { dirty: true }
+    const job = this.track(
+      (async () => {
+        try {
+          while (state.dirty) {
+            state.dirty = false
+            await this.acceptedOwned(sessionID, messageID, role)
+          }
+        } finally {
+          this.acknowledgments.delete(messageID)
+        }
+      })(),
+    )
+    this.acknowledgments.set(messageID, { state, job })
+    return job
   }
   private async acceptedOwned(sessionID: string, messageID: string, role: string): Promise<void> {
     const item = this.sending.get(messageID)
@@ -502,6 +513,8 @@ export class ComposerDrafts {
     try {
       await this.owned(item.identity)
       if (!this.current(item.epoch, item.generation)) return
+      const row = await this.ctx.message(sessionID, messageID, item.identity.workspace).catch(() => undefined)
+      if (!this.current(item.epoch, item.generation) || !InputReceipt.complete(row, sessionID, messageID)) return
       const { entry } = await backend.clear(item.identity, item.token, `accepted:${messageID}`)
       if (!this.current(item.epoch, item.generation)) return
       this.sending.delete(messageID)

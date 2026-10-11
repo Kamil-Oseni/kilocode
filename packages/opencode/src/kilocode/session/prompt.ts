@@ -2,7 +2,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { Cause, Effect, Exit, Fiber, Schema, Scope } from "effect"
-import { SessionID, PartID } from "@/session/schema"
+import { SessionID, PartID, MessageID } from "@/session/schema"
 import { MessageV2 } from "@/session/message-v2"
 import { Session } from "@/session/session"
 import { Agent } from "@/agent/agent"
@@ -30,8 +30,84 @@ import { TaskAuthority } from "@/kilocode/tool/task-authority"
 import ASK_CODE_SWITCH from "./ask-code-switch.txt"
 import { consumeAutoTitle, markAutoTitle } from "@/kilo-sessions/rename-adoptions"
 import { gate } from "./input-gate"
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 
 export namespace KiloSessionPrompt {
+  /** Only the reminder producer can extend a previously complete original input. */
+  export function reminders<A, E, R>(
+    sessions: Session.Interface,
+    sessionID: SessionID,
+    messageID: MessageID,
+    work: Effect.Effect<A, E, R>,
+  ) {
+    return Effect.gen(function* () {
+      const before = (yield* sessions.messages({ sessionID, limit: 128 })).find((row) => row.info.id === messageID)
+      const owned = new Map<string, string>()
+      const result = yield* work.pipe(
+        Effect.provideService(Session.Service, {
+          ...sessions,
+          updatePart: <T extends MessageV2.Part>(part: T) =>
+            Effect.gen(function* () {
+              const saved = yield* sessions.updatePart(part)
+              if (
+                saved.sessionID === sessionID &&
+                saved.messageID === messageID &&
+                saved.type === "text" &&
+                saved.synthetic
+              )
+                owned.set(saved.id, InputReceipt.hash(saved))
+              return saved
+            }),
+        }),
+      )
+      if (!before || !owned.size || !InputReceipt.complete(before, sessionID, messageID)) return result
+      const after = (yield* sessions.messages({ sessionID, limit: 128 })).find((row) => row.info.id === messageID)
+      if (!after) return result
+      const ids = new Set(before.parts.map((part) => part.id))
+      if (
+        after.parts.some(
+          (part) =>
+            !ids.has(part.id) &&
+            (part.type !== "text" ||
+              !part.synthetic ||
+              part.sessionID !== sessionID ||
+              part.messageID !== messageID ||
+              (part.metadata && "raya.input.complete" in part.metadata) ||
+              owned.get(part.id) !== InputReceipt.hash(part)),
+        )
+      )
+        return result
+      if (
+        !InputReceipt.complete(
+          { info: after.info, parts: after.parts.filter((part) => ids.has(part.id)) },
+          sessionID,
+          messageID,
+        )
+      )
+        return result
+      const anchor = before.parts.find((part) => part.type === "text" && part.metadata?.["raya.input.complete"])
+      const sealed = anchor ? InputReceipt.seal(after.info, after.parts, anchor.id) : undefined
+      if (sealed) yield* sessions.updatePart(sealed)
+      return result
+    })
+  }
+
+  export function resolved(parts: MessageV2.Part[]) {
+    return parts.map(InputReceipt.clean)
+  }
+
+  export const publishInput = Effect.fn("KiloSessionPrompt.publishInput")(function* (
+    sessions: Pick<Session.Interface, "updatePart">,
+    row: MessageV2.WithParts,
+    receipt: boolean,
+  ) {
+    const parts: MessageV2.Part[] = []
+    for (const part of row.parts) parts.push(yield* sessions.updatePart(part))
+    if (!receipt) return
+    const sealed = InputReceipt.seal(row.info, parts)
+    if (sealed) yield* sessions.updatePart(sealed)
+  })
+
   const modes = ["ask", "plan", "architect"]
   type Intake = { cancelled: boolean; fiber?: Fiber.Fiber<unknown, unknown> }
   const intakes = new Map<SessionID, Set<Intake>>()

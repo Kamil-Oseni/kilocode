@@ -1,3 +1,4 @@
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import { describe, expect, it } from "bun:test"
 import { randomUUID } from "node:crypto"
 import { ComposerDrafts, composerOwner, type DraftBackend } from "../../src/kilo-provider/composer-drafts"
@@ -23,7 +24,7 @@ describe("composer host with production durable Storage", () => {
       projectID: () => scope.projectID,
     })
     const posts: ComposerDraftExtensionMessage[] = []
-    const state = { role: "assistant", generation: 1 }
+    const state = { role: "assistant", generation: 1, text: "" }
     const call = async (request: ComposerDraftRequest) => {
       const result = await store.handle(request)
       if (result.error) throw Object.assign(new Error("Draft refused"), { code: result.error })
@@ -59,7 +60,16 @@ describe("composer host with production durable Storage", () => {
       post: (message) => posts.push(message),
       generation: () => state.generation,
       owners: () => ["prompt:default", "agent-manager:local"].map((box) => ({ box, owner: scope.owner })),
-      message: async (sessionID, id) => ({ sessionID, id, role: state.role }),
+      message: async (sessionID, id) => {
+        const info = { sessionID, id, role: "user" }
+        const parts = [{ id: `part-${id}`, sessionID, messageID: id, type: "text", text: state.text }]
+        const sealed = InputReceipt.seal(info, parts)
+        if (!sealed) throw new Error("Missing complete fixture input")
+        return {
+          info: { ...info, role: state.role },
+          parts: parts.map((part) => (part.id === sealed.id ? sealed : part)),
+        }
+      },
     }
     const identity: DraftIdentity = {
       workspace: store.root,
@@ -86,6 +96,7 @@ describe("composer host with production durable Storage", () => {
       agent: "build",
       variant: "balanced",
     }
+    state.text = content.text
     const saved = (await backend.save(identity, undefined, content, "first-save")).entry
     const capture: DraftCapture = {
       identity,
@@ -115,6 +126,7 @@ describe("composer host with production durable Storage", () => {
       expect((await backend.load(target)).entry?.content).toEqual(content)
       const newer = { ...content, text: "Newer typing must survive" }
       const edited = (await backend.save(target, promoted.token, newer, "explicit-reviewed-edit")).entry
+      state.role = "user"
       await controller.accepted("session", "message", "user")
       expect((await backend.load(target)).entry?.content).toEqual(newer)
       expect(posts.at(-1)).toMatchObject({ type: "composerDraftAccepted", error: "conflict" })
@@ -125,6 +137,8 @@ describe("composer host with production durable Storage", () => {
         mutation: edited.mutation,
         digest: edited.digest,
       }
+      state.text = newer.text
+      state.role = "assistant"
       await controller.prepare(next, "session", "second")
       expect((await backend.load(target)).entry?.mutation).toBe("send:second")
       controller.dispose()

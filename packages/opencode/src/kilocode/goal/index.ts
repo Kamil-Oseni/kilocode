@@ -142,7 +142,9 @@ export namespace RayaGoal {
 
   const controls = new Set(["create_goal", "get_goal", "update_goal", "update_goal_plan"])
   const bills = new Set(["generate_image", "websearch"])
-  const supports = (part: SessionV1.ToolPart) => !controls.has(part.tool) && part.tool !== "task"
+  // Routing and delegation receipts describe orchestration, not completed work or verification.
+  const supports = (part: SessionV1.ToolPart) =>
+    !controls.has(part.tool) && part.tool !== "task" && part.tool !== "chief_route"
   const decode = Schema.decodeUnknownEffect(State)
   const key = (sessionID: SessionID) => ["raya", "goal", sessionID]
   const clean = (value: string) => value.trim()

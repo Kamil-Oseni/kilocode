@@ -456,6 +456,26 @@ export namespace RayaChief {
     return Permission.disabled(tools, agent.permission).size === 0
   }
 
+  export function available<T extends Agent & { mode?: string; hidden?: boolean; deprecated?: boolean }>(
+    agents: readonly T[],
+    rules?: Permission.Ruleset,
+    conversational = false,
+  ) {
+    return agents.filter(
+      (item) =>
+        item.mode !== "primary" &&
+        !item.hidden &&
+        !item.deprecated &&
+        ((conversational && item.name === "generalist") ||
+          !rules ||
+          Permission.evaluate("task", item.name, rules).action !== "deny"),
+    )
+  }
+
+  export function accesses(agents: readonly Agent[]) {
+    return Access.literals.filter((access) => agents.some((item) => capable(item, access)))
+  }
+
   export function route(input: { request: string; agents: readonly Agent[]; access?: Access }) {
     const access = input.access
     const agents = access ? input.agents.filter((item) => capable(item, access)) : input.agents
@@ -476,7 +496,11 @@ export namespace RayaChief {
           a.agent.name.localeCompare(b.agent.name),
       )
     const first = ranked[0]
-    if (!first) throw new Refusal("chief-no-eligible", "Auto routing requires at least one eligible specialist")
+    if (!first)
+      throw new Refusal(
+        "chief-no-eligible",
+        `No eligible specialist supports ${access ?? "this request"}. Available delegated work classes: ${accesses(input.agents).join(", ") || "none"}. Keep the complete request and its required work class; do not downgrade requested file changes to read or retry an unavailable class unchanged.`,
+      )
     const quick = ranked.find((item) => item.profile.role === "generalist")
     const parallel =
       /\b(?:two|three|2|3)\b.{0,100}\b(?:independent|parallel|specialists|agents)\b|\b(?:independent|parallel)\b.{0,100}\b(?:two|three|2|3)\b/i.test(

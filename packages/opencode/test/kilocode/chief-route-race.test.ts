@@ -127,57 +127,133 @@ const asked = Effect.fn(function* () {
 })
 const ambiguous = "Help me decide what to do with this project"
 
-it.live("a genuinely routed Auto turn can create its original persistent goal", () =>
+it.live("Chief acquisition needs no instance and initialization uses its private instance", () =>
+  Effect.gen(function* () {
+    const info = yield* ChiefRouteTool
+    expect(info.id).toBe("chief_route")
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const tool = yield* info.init()
+          const schema = tool.jsonSchema?.properties?.access
+          if (!schema || typeof schema === "boolean") throw new Error("Missing actual Chief access schema")
+          expect(schema.enum).toEqual(["read", "edit"])
+        }),
+      {
+        config: {
+          ...cfg,
+          permission: { task: { "*": "deny", general: "allow" } },
+          agent: {
+            ...cfg.agent,
+            general: { model: "local/fixture", permission: { "*": "deny", read: "allow", edit: "allow" } },
+          },
+        },
+      },
+    )
+  }),
+)
+
+it.live("Chief advertises feasible access and refuses an unavailable class without changing the request", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
         const sessions = yield* Session.Service
-        const storage = yield* Storage.Service
-        const objective = "Write one text file and read it back."
-        const input = yield* dispatch(dir, objective)
-        const goals = RayaGoal.make({ storage, sessions })
-        const catalog = { create_goal: goalTools(goals, sessions).create }
-        expect(RayaChief.tools(catalog, (yield* sessions.get(input.chat.id)).metadata)).toEqual({})
-        const route = yield* (yield* ChiefRouteTool).init()
-        const decision = yield* route.execute({ result: "narrative", access: "edit", objective }, input.ctx)
-        expect(decision.metadata.decision?.direct).not.toBe(true)
+        const request = "Write one text file and read it back."
+        const input = yield* dispatch(dir, request)
+        const tool = yield* (yield* ChiefRouteTool).init()
+        const schema = tool.jsonSchema?.properties?.access
+        if (!schema || typeof schema === "boolean") throw new Error("Missing actual Chief access schema")
+        expect(schema.enum).toEqual(["read", "edit"])
+        const result = yield* tool
+          .execute({ result: "narrative", objective: request, access: "computer" }, input.ctx)
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result))
+          expect(String(Cause.squash(result.cause))).toContain("Available delegated work classes: read, edit")
         const saved = yield* sessions.get(input.chat.id)
-        expect(RayaChief.phase(saved.metadata)).toBe("task")
-        const admitted = RayaChief.tools(catalog, saved.metadata)
-        expect(admitted.create_goal).toBe(catalog.create_goal)
-        const tool = yield* (yield* admitted.create_goal).init()
-        const result = yield* tool.execute({ objective }, input.ctx)
-        expect(result.metadata.status).toBe("active")
-        const goal = yield* goals.get(input.chat.id)
-        expect(goal?.objective).toBe(objective)
-        expect(goal?.startMessageID).toBe(input.ctx.messageID)
-        expect(goal?.status).toBe("active")
+        expect(RayaChief.request(saved.metadata)).toBe(request)
+        expect(RayaChief.phase(saved.metadata)).toBe("route")
+        expect(RayaChief.history(saved.metadata)).toHaveLength(0)
         expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
-        const refused = yield* tool.execute({ objective: "Replace the original goal" }, input.ctx)
-        expect(refused.metadata.status).toBeUndefined()
-        expect(yield* goals.get(input.chat.id)).toEqual(goal)
-        const current = yield* sessions.get(input.chat.id)
-        expect(current.metadata?.["raya.goal.open"]).toBe(true)
-        expect(RayaChief.tools(catalog, current.metadata)).toEqual({})
-      }).pipe(
-        Effect.provide(
-          Layer.fresh(
-            LayerNode.compile(graph, [
-              [Database.node, Database.layerFromPath(path.join(dir, "goal.sqlite"))],
-              [
-                Storage.node,
-                LayerNode.make({
-                  service: Storage.Service,
-                  layer: Storage.layerWithDatabase(path.join(dir, "goal-storage")),
-                  deps: [FSUtil.node, Git.node, Database.node],
-                }),
-              ],
-            ]),
+        yield* sessions.setPermission({ sessionID: input.chat.id, permission: Permission.fromConfig({ task: "deny" }) })
+        const stale = yield* tool
+          .execute({ result: "narrative", objective: request, access: "edit" }, input.ctx)
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(stale)).toBe(true)
+        if (Exit.isFailure(stale))
+          expect(String(Cause.squash(stale.cause))).toContain("Available delegated work classes: none")
+        expect(RayaChief.history((yield* sessions.get(input.chat.id)).metadata)).toHaveLength(0)
+      }),
+    {
+      config: {
+        ...cfg,
+        permission: { task: { "*": "deny", general: "allow" } },
+        agent: {
+          ...cfg.agent,
+          general: {
+            model: "local/fixture",
+            permission: { "*": "deny", read: "allow", edit: { "*": "deny", "/private/result.txt": "allow" } },
+          },
+        },
+      },
+    },
+  ),
+)
+
+it.live(
+  "a genuinely routed Auto turn can create its original persistent goal",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const storage = yield* Storage.Service
+          const objective = "Write one text file and read it back."
+          const input = yield* dispatch(dir, objective)
+          const goals = RayaGoal.make({ storage, sessions })
+          const catalog = { create_goal: goalTools(goals, sessions).create }
+          expect(RayaChief.tools(catalog, (yield* sessions.get(input.chat.id)).metadata)).toEqual({})
+          const route = yield* (yield* ChiefRouteTool).init()
+          const decision = yield* route.execute({ result: "narrative", access: "edit", objective }, input.ctx)
+          expect(decision.metadata.decision?.direct).not.toBe(true)
+          const saved = yield* sessions.get(input.chat.id)
+          expect(RayaChief.phase(saved.metadata)).toBe("task")
+          const admitted = RayaChief.tools(catalog, saved.metadata)
+          expect(admitted.create_goal).toBe(catalog.create_goal)
+          const tool = yield* (yield* admitted.create_goal).init()
+          const result = yield* tool.execute({ objective }, input.ctx)
+          expect(result.metadata.status).toBe("active")
+          const goal = yield* goals.get(input.chat.id)
+          expect(goal?.objective).toBe(objective)
+          expect(goal?.startMessageID).toBe(input.ctx.messageID)
+          expect(goal?.status).toBe("active")
+          expect(yield* sessions.children(input.chat.id)).toHaveLength(0)
+          const refused = yield* tool.execute({ objective: "Replace the original goal" }, input.ctx)
+          expect(refused.metadata.status).toBeUndefined()
+          expect(yield* goals.get(input.chat.id)).toEqual(goal)
+          const current = yield* sessions.get(input.chat.id)
+          expect(current.metadata?.["raya.goal.open"]).toBe(true)
+          expect(RayaChief.tools(catalog, current.metadata)).toEqual({})
+        }).pipe(
+          Effect.provide(
+            Layer.fresh(
+              LayerNode.compile(graph, [
+                [Database.node, Database.layerFromPath(path.join(dir, "goal.sqlite"))],
+                [
+                  Storage.node,
+                  LayerNode.make({
+                    service: Storage.Service,
+                    layer: Storage.layerWithDatabase(path.join(dir, "goal-storage")),
+                    deps: [FSUtil.node, Git.node, Database.node],
+                  }),
+                ],
+              ]),
+            ),
           ),
         ),
-      ),
-    { config: cfg },
-  ),
+      { config: cfg },
+    ),
+  { timeout: 30000 },
 )
 
 it.live("a prompted greeting cannot persist a denied delegated specialist", () =>

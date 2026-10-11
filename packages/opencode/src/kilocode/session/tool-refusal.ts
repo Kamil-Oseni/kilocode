@@ -16,6 +16,8 @@ export class Refusal extends Error {
       | "task-concurrent"
       | "task-recovery"
       | "chief-no-eligible"
+      | "chief-result-class"
+      | "chief-work-class"
       | "exact-write",
     message: string,
   ) {
@@ -30,6 +32,8 @@ export class Refusal extends Error {
       reason !== "task-concurrent" &&
       reason !== "task-recovery" &&
       reason !== "chief-no-eligible" &&
+      reason !== "chief-result-class" &&
+      reason !== "chief-work-class" &&
       reason !== "exact-write"
     )
       throw new Error("Invalid tool refusal reason")

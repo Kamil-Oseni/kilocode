@@ -55,6 +55,7 @@ import { Instruction } from "../../src/session/instruction"
 import { Storage } from "../../src/storage/storage"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import * as ExactWrite from "../../src/kilocode/tool/exact-write"
+import { captureCurrent } from "@opencode-ai/core/kilocode/source-launch"
 
 await Log.init({ print: false })
 
@@ -263,6 +264,107 @@ it.effect("late producer observations cannot recreate an already completed actua
     }),
   ),
 )
+
+if (process.env.RAYA_HA_REFUSAL_SOURCE === "1")
+  it.effect(
+    "actual Home Assistant model class refusals publish before clean producer retirement",
+    () =>
+      Effect.scoped(
+        provideTmpdirProject((dir) =>
+          Effect.gen(function* () {
+            const item = yield* setup(dir)
+            const bridge = yield* EffectBridge.make()
+            const chief = yield* ChiefRouteTool.pipe(Effect.flatMap(Tool.init))
+            for (const row of [
+              {
+                call: "ha-result",
+                args: {
+                  objective: "Inspect connected lights",
+                  workflow: "home_assistant",
+                  result: "directory_entries",
+                  access: "read",
+                },
+                reason: "chief-result-class",
+              },
+              {
+                call: "ha-work",
+                args: {
+                  objective: "Inspect the desktop",
+                  workflow: "home_assistant",
+                  result: "narrative",
+                  access: "computer",
+                },
+                reason: "chief-work-class",
+              },
+            ]) {
+              const before = yield* item.session.get(item.chat.id)
+              const failures = SessionRetirement.snapshot().failures ?? 0
+              const tools = nativeTools(
+                {
+                  chief_route: aitool({
+                    inputSchema: jsonSchema({ type: "object" }),
+                    execute: (args, opts) =>
+                      bridge.promise(
+                        chief
+                          .execute(args, {
+                            sessionID: item.chat.id,
+                            messageID: item.handle.message.id,
+                            agent: "auto",
+                            abort: new AbortController().signal,
+                            callID: opts.toolCallId,
+                            messages: [],
+                            ask: () => Effect.void,
+                            metadata: () => Effect.void,
+                          })
+                          .pipe(SessionRetirement.tool(item.chat.id, opts.toolCallId)),
+                      ),
+                  }),
+                },
+                { messages: [], abort: new AbortController().signal },
+              )
+              const event = LLMEvent.toolCall({ id: row.call, name: "chief_route", input: row.args })
+              const dispatch = yield* ToolRuntime.dispatch(tools, event)
+              const error = dispatch.events.find((event) => event.type === "tool-error")?.error
+              expect(error).toBeInstanceOf(Refusal)
+              expect(error).toMatchObject({ reason: row.reason })
+              expect(SessionRetirement.snapshot().failures).toBe(failures + 1)
+              expect(completed(item.chat.id, "foreign", error)).toBe(false)
+              yield* item.test.reply(
+                LLMEvent.toolError({ id: row.call, name: "chief_route", message: "unpublished", error }),
+              )
+              yield* item.handle.process(item.input)
+              expect(SessionRetirement.snapshot().failures).toBe(failures + 1)
+              yield* item.test.reply(
+                LLMEvent.stepStart({ index: 0 }),
+                event,
+                ...dispatch.events,
+                LLMEvent.stepFinish({ index: 0, reason: "stop", usage: usage() }),
+                LLMEvent.finish({ reason: "stop", usage: usage() }),
+              )
+              yield* item.handle.process(item.input)
+              const parts = yield* MessageV2.parts(item.handle.message.id)
+              expect(
+                parts.some(
+                  (part) =>
+                    part.type === "tool" &&
+                    part.callID === row.call &&
+                    part.state.status === "error" &&
+                    part.state.error === (error instanceof Error ? error.message : ""),
+                ),
+              ).toBe(true)
+              expect(SessionRetirement.snapshot().failures).toBe(failures)
+              expect(completed(item.chat.id, row.call, error)).toBe(false)
+              expect((yield* item.session.get(item.chat.id)).metadata).toEqual(before.metadata)
+              expect(yield* item.session.children(item.chat.id)).toEqual([])
+            }
+            // This selected positive case owns no generic failed producer: publication must permit natural drain.
+            yield* SessionRetirement.drain
+            expect(SessionRetirement.snapshot().active).toBe(0)
+          }),
+        ),
+      ).pipe(Effect.ensuring(Effect.promise(() => captureCurrent()).pipe(Effect.asVoid))),
+    30_000,
+  )
 
 it.effect(
   "durable processor handling settles actual permission and schema refusals through native SDK",
@@ -558,7 +660,11 @@ it.effect(
             expect(completed(item.chat.id, call, error)).toBe(false)
             if (call === "chief-unavailable") {
               expect(error).toBeInstanceOf(Refusal)
-              expect(error).toMatchObject({ message: "Auto routing requires at least one eligible specialist" })
+              expect(error).toMatchObject({ reason: "chief-no-eligible" })
+              if (!(error instanceof Refusal)) throw new Error("Chief must retain its actual typed refusal")
+              expect(error.message).toContain("No eligible specialist supports computer.")
+              expect(error.message).toContain("Available delegated work classes:")
+              expect(error.message).toContain("do not downgrade requested file changes to read")
               const chat = yield* item.session.get(item.chat.id)
               expect(RayaChief.phase(chat.metadata)).toBe("route")
               expect(RayaChief.history(chat.metadata)).toEqual([])
@@ -630,7 +736,11 @@ test("unavailable Chief refusal preserves generic and mixed retirement failures"
   })()
   expect(error).toBeInstanceOf(Refusal)
   expect(error).toMatchObject({ reason: "chief-no-eligible" })
-  const generic = new Error("Auto routing requires at least one eligible specialist")
+  if (!(error instanceof Refusal)) throw new Error("Chief must retain its actual typed refusal")
+  expect(error.message).toContain("No eligible specialist supports computer.")
+  expect(error.message).toContain("Available delegated work classes: none.")
+  expect(error.message).toContain("do not downgrade requested file changes to read")
+  const generic = new Error(error.message)
   expect(completed("session", "call", generic)).toBe(false)
   const owner = SessionRetirement.make()
   await Effect.runPromiseExit(owner.tool("session", "call", Effect.die(error)))

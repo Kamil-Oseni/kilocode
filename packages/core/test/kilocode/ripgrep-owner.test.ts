@@ -1,12 +1,14 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { Cause, Effect, Exit, Fiber } from "effect"
 import { createOwner, cleanup } from "../../src/kilocode/ripgrep-owner"
 import { createRegistry } from "../../src/kilocode/runtime-registry"
-import { coordinateNativeRoots } from "../../src/kilocode/profile-maintenance"
+import { coordinateNativeRoots, resolveProfileRoot } from "../../src/kilocode/profile-maintenance"
 import { processProfileSnapshot } from "../../src/kilocode/process-profile"
+import { Flock } from "../../src/util/flock"
+import { Hash } from "../../src/util/hash"
 
 async function directory() {
   const root = await mkdtemp(path.join(os.tmpdir(), "raya-ripgrep-owner-"))
@@ -97,6 +99,146 @@ test("canonical admission precedes effects and retirement joins publication", as
   expect(await readFile(path.join(bin, "finalized"), "utf8")).toBe("complete")
   expect(owner.snapshot().active).toBe(0)
 })
+
+test("cancel lookup before its body under real profile maintenance without poisoning retirement", async () => {
+  const bin = await directory()
+  const registry = createRegistry()
+  const owner = createOwner(registry)
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const held = coordinateNativeRoots([{ kind: "json", path: bin }], async () => {
+    entered.resolve()
+    await release.promise
+  })
+  await Promise.race([
+    entered.promise,
+    held.then(() => {
+      throw new Error("Maintenance completed before the held admission barrier")
+    }),
+  ])
+  let called = false
+  const fiber = Effect.runFork(
+    owner.run(
+      () => bin,
+      () => {
+        called = true
+        return Effect.promise(() => writeFile(path.join(bin, "unexpected"), "entered"))
+      },
+    ),
+  )
+  try {
+    const stop = performance.now() + 2_000
+    while (!owner.snapshot().active && performance.now() < stop) await Bun.sleep(5)
+    expect(owner.snapshot().active).toBe(1)
+    expect(called).toBe(false)
+    fiber.interruptUnsafe()
+    release.resolve()
+    await held
+    const exit = await Effect.runPromise(Fiber.await(fiber))
+    expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+    expect(called).toBe(false)
+    expect(await readdir(bin)).toEqual([])
+    const retired = await registry.drain().then(
+      () => "success",
+      (err: unknown) => err,
+    )
+    expect(retired).toBe("success")
+    expect(owner.snapshot()).toEqual({ installed: true, closed: true, active: 0, failures: 0 })
+  } finally {
+    fiber.interruptUnsafe()
+    release.resolve()
+    await Promise.allSettled([held, Effect.runPromise(Fiber.await(fiber)), registry.drain()])
+  }
+}, 10_000)
+
+test("prebody interruption retains actual owned profile marker release refusal", async () => {
+  const bin = await directory()
+  const root = await resolveProfileRoot({ kind: "json", path: bin })
+  const dir = path.join(path.dirname(root.path), ".raya-profile-locks", Hash.fast(root.id) + ".writers")
+  const lock = await Flock.acquire(`ripgrep-bin:${root.id}`, {
+    dir: path.join(root.path, ".raya-ripgrep-locks"),
+    recover: "dead",
+  })
+  const registry = createRegistry()
+  const owner = createOwner(registry)
+  let called = false
+  let marker: string | undefined
+  let original: string | undefined
+  const failures: unknown[] = []
+  let released = false
+  const fiber = Effect.runFork(
+    owner.run(
+      () => bin,
+      () => {
+        called = true
+        return Effect.void
+      },
+    ),
+  )
+  try {
+    const stop = performance.now() + 2_000
+    let names: string[] = []
+    while (!names.length && performance.now() < stop) {
+      names = await readdir(dir).catch((err: unknown) => {
+        if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return []
+        throw err
+      })
+      if (!names.length) await Bun.sleep(5)
+    }
+    expect(names).toHaveLength(1)
+    const name = names[0]
+    expect(name).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.json$/)
+    const file = path.join(dir, name)
+    const bytes = await readFile(file, "utf8")
+    const record: unknown = JSON.parse(bytes)
+    if (
+      !record ||
+      typeof record !== "object" ||
+      !("pid" in record) ||
+      !("hostname" in record) ||
+      !("token" in record) ||
+      typeof record.token !== "string"
+    )
+      throw new Error("Expected the actual owned profile operation marker")
+    expect(record.pid).toBe(process.pid)
+    expect(record.hostname).toBe(os.hostname())
+    expect(`${record.token}.json`).toBe(name)
+    marker = file
+    original = bytes
+    expect(called).toBe(false)
+    await writeFile(marker, JSON.stringify({ ...record, token: "changed-by-own-fixture" }))
+    fiber.interruptUnsafe()
+    await lock.release()
+    released = true
+    const exit = await Effect.runPromise(Fiber.await(fiber))
+    expect(called).toBe(false)
+    expect(Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+    if (!Exit.isFailure(exit)) throw new Error("Expected actual profile release refusal")
+    expect(String(Cause.squash(exit.cause))).toContain("Refusing to release changed profile operation ownership")
+    const retired = await registry.drain().then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+    expect(retired).toBeInstanceOf(AggregateError)
+    expect(owner.snapshot()).toEqual({ installed: true, closed: true, active: 0, failures: 1 })
+  } catch (err) {
+    failures.push(err)
+  } finally {
+    fiber.interruptUnsafe()
+    if (!released) await lock.release().catch((err: unknown) => failures.push(err))
+    // Retirement's expected refusal is asserted above; cleanup still joins that original promise.
+    const joins = await Promise.allSettled([Effect.runPromise(Fiber.await(fiber)), registry.drain()])
+    if (joins[0].status === "rejected") failures.push(joins[0].reason)
+    if (marker && original !== undefined) {
+      await (async () => {
+        await writeFile(marker, original)
+        expect(await readFile(marker, "utf8")).toBe(original)
+        await unlink(marker)
+      })().catch((err: unknown) => failures.push(err))
+    }
+  }
+  if (failures.length) throw new AggregateError(failures, "Fixture operation or cleanup failed")
+}, 10_000)
 
 test("interrupt stalled real child but join its held exit and finalizer before retirement", async () => {
   const bin = await directory()

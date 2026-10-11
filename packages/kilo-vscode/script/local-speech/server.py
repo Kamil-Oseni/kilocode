@@ -27,6 +27,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 os.environ['HF_HUB_OFFLINE'] = '1'
 os.environ['HF_HOME'] = r'D:\Raya\Models\Cache\chatterbox-nano'
 os.environ['TORCH_HOME'] = r'D:\Raya\Models\Cache\torch'
+# Initialize the native numeric runtime on the main thread before request workers.
+# The installed Windows NumPy import stalled inside the transcription worker.
+import numpy as np
 SOURCE_ROOT = Path(__file__).parent
 ROOT = Path(os.environ.get('RAYA_SPEECH_ROOT', str(SOURCE_ROOT))).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -558,7 +561,6 @@ class Api:
                 if data['kind'] == 'transcription':
                     return self.send(200, {'text': text})
                 import soundfile as sf
-                import numpy as np
                 arrays = [sf.read(io.BytesIO(chunk), dtype='int16')[0] for chunk in audio]
                 file = io.BytesIO()
                 # Current Nano and Kokoro voices both emit 24 kHz PCM.

@@ -236,19 +236,18 @@ try {
           .orderBy(Member.position)
           .all()
         expect(before).toHaveLength(51)
-        for (const method of ["GET", "PATCH", "DELETE"]) {
-          const response = yield* Effect.promise(() =>
-            app.request(route, {
+        for (const [method, suffix, body] of [
+          ["GET", "", undefined],
+          ["PATCH", "", { expectedRevision: 2, name: "Must not replace" }],
+          ["DELETE", "", { expectedRevision: 2 }],
+          ["GET", "/activity", undefined],
+          ["POST", "/assignment-proposal", { revision: 2, intent: "Must not propose" }],
+        ] as const) {
+          const response = yield* Effect.promise(async () =>
+            app.request(route + suffix, {
               method,
               headers,
-              ...(method === "GET"
-                ? {}
-                : {
-                    body: JSON.stringify({
-                      expectedRevision: 2,
-                      ...(method === "PATCH" ? { name: "Must not replace" } : {}),
-                    }),
-                  }),
+              ...(body ? { body: JSON.stringify(body) } : {}),
             }),
           )
           expect(response.status, yield* Effect.promise(() => response.clone().text())).toBe(400)

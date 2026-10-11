@@ -907,9 +907,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { organizationID: string }
       query: { cursor?: string; limit?: number }
     }) {
-      yield* organizations
-        .get(ctx.params.organizationID)
-        .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
+      yield* organizations.get(ctx.params.organizationID).pipe(
+        Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message })),
+        ),
+        Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))),
+      )
       const resolve = identity()
       return yield* info
         .activity(ctx.params.organizationID, resolve, ctx.query.cursor, ctx.query.limit ?? 50)
@@ -923,9 +926,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { organizationID: string }
       payload: typeof AssignmentProposalPayload.Type
     }) {
-      const item = yield* organizations
-        .get(ctx.params.organizationID)
-        .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
+      const item = yield* organizations.get(ctx.params.organizationID).pipe(
+        Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message })),
+        ),
+        Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))),
+      )
       if (item.archived || item.revision !== ctx.payload.revision) return yield* new HttpApiError.Conflict({})
       const workers = yield* runner.tasks.list()
       const members = workers.filter((worker) => item.members.some((member) => member.agentID === worker.id))
@@ -933,9 +939,12 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         try: () => propose(item, members, ctx.payload.intent),
         catch: () => new HttpApiError.BadRequest({}),
       })
-      const current = yield* organizations
-        .get(item.id)
-        .pipe(Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))))
+      const current = yield* organizations.get(item.id).pipe(
+        Effect.catchTag("RayaTaskOrganization.Invalid", (err) =>
+          Effect.fail(new InvalidRequestError({ message: err.message })),
+        ),
+        Effect.catchTag("RayaTaskOrganization.NotFound", () => Effect.fail(new HttpApiError.NotFound({}))),
+      )
       if (current.archived || current.revision !== item.revision) return yield* new HttpApiError.Conflict({})
       const latest = yield* runner.tasks.list()
       if (!validate(draft, current, latest)) return yield* new HttpApiError.Conflict({})

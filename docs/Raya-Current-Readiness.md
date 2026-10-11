@@ -1,23 +1,29 @@
 # Raya current readiness
 
-## Current status — October 10
+## Current status — October 11
 
-The current private test installation is `7.4.23-snapshot+a569352ecb.local.1791652393132`. Its exact package and installed payloads are verified; the profile is closed. Everyday Raya has not been promoted to this candidate.
+The current private test installation is `7.4.23-snapshot+8f315c668e.local.1791692284956`. Installation preserved all 1,470 existing saved files, verified 303 delivery payloads and left everyday extension registration unchanged. The installer exited normally with both output streams joined. The original failed greeting session remains saved. Everyday Raya has not been promoted to this candidate.
+
+The exact previously failed greeting now completes through the installed client on Auto with genuine 9B: “Hello Raya. Reply with one short friendly sentence. This is a silent conversation check; do not use tools.” Session `ses_ed6cc5ccfffeHrdCjMHP0UZied` received the title “Friendly Greeting”, cleared its composer and completed with a nonempty response in 12 UI-reported seconds. Its persisted record has one user message, one assistant message, zero tool calls and zero child sessions. Thinking and Stop cleared. Speech playback was disabled and no microphone was used; this is typed conversation evidence, not voice acceptance.
+
+The follow-up draft check failed: `Raya: New Task` created a distinct pending tab, but inherited another new tab's unsent draft. The test text was never submitted. BUILD reports source repairs at `7033db8d55` for pending-tab draft ownership and misleading media-read refusal wording; their fb6b69486e package is qualified and the installed retest is running. No Memory grant or capture policy was broadened to bypass the media refusal.
 
 | Area | Current evidence | Next action |
 |---|---|---|
-| Private installation | a569 preserved 1,366 saved files, verified 303 payloads and 17 runtime pins, and left everyday registration unchanged | Keep this candidate stable for its human test |
+| Private installation | 8f315 preserved 1,470 saved files, verified 303 delivery payloads, and left everyday registration unchanged | The fb6b69486e package is qualified; private installation and draft retest are running |
 | Local model and file tools | Genuine 9B on 802 performed an actual directory Read and returned exact names | This narrow pass does not qualify every request or later candidate |
-| Voice | Human 0eb test produced audible speech but interrupted itself and submitted its own audio as another prompt | Test the installed a569 turn-taking repair when the user is ready |
-| Voice session and routing | Actual voice requests still recorded Auto; backend-generated titles did not update visibly | Verify actual submitted mode, title updates, completion state and next-turn ownership |
+| Voice | Source and private service checks support preparation, speech generation, cancellation and recovery; actual installed listening and audible continuity remain unverified | Test the matching installed turn-taking candidate with the user |
+| Conversation and drafts | Exact failed greeting now replies, names the session, clears input and avoids the Memory loop; fresh pending tabs still share an unsent draft | Retest pending-tab isolation after the source repair is packaged |
 | Memory and multimedia | Earlier failed saves and recovery evidence remain preserved; everyday Gemma capture/retrieval acceptance is incomplete | Continue the supported Memory setup/recovery work separately; do not replay old saves |
 | Jobs and recovery | BUILD owns current Routine/background recovery source repairs | Await a concrete qualified delivery; source tests alone do not prove installed routines |
-| Home Assistant VM | Powered off by the user's latest instruction to free RAM for Figma; current state rechecked | Leave it off until the user requests startup |
+| Home Assistant VM | Restarted under the latest user instruction; VBoxManage confirms running | Temporarily stop only when needed for tests, then restart immediately, under the latest human authorization |
 | Archive and restore | Historical attempts retained; full installed archive/restore acceptance remains incomplete | Deferred from the daily-use release path |
 
-All native VS Code interaction stays on the second display. Keep the main display, Sovereign Blueprint, Eden and Figma untouched. No microphone or model is running in the private test profile. The user requested turn-taking: capture pauses during recognition, thinking and speaking, then resumes after the matching audio queue drains and the echo tail clears; explicit Stop remains available. This behavior is installed for testing, not yet confirmed by a human listening test.
+All native VS Code interaction stays on the second display. Keep the main display, Sovereign Blueprint, Eden and Figma untouched. The private profile is closed and its temporary model/provider configuration and speech settings have been restored with guards while preserving sessions. No private microphone or playback test is running. The user requested turn-taking: capture pauses during recognition, thinking and speaking, then resumes after the matching audio queue drains and the echo tail clears; explicit Stop remains available. Human listening acceptance remains outstanding.
 
-Current installation proof: `.tmp/private-install-d541ca4b465f4f7a89011e5fda70f3e5/result.json`. Human voice failure evidence: `.tmp/private-voice-0eb-98e26008b0a24e52811892e5fdeb73ee/controlled-human-voice-failure.json`. Detailed Memory history is in [Raya-Memory-Installed-Acceptance-Next.md](Raya-Memory-Installed-Acceptance-Next.md).
+Current installation proof: `.tmp/private-install-54bf3d11efd946698c2f8bf9f2e285c3/result.json`. Installed greeting and draft evidence: `.tmp/private-greeting-8f315-receipt.json` and `.tmp/private-greeting-8f315-original.log`. Guarded restoration: `.tmp/private-ui-e271-2f46fb2847b5414f88683f3a90951887/restoration.json`. Runtime source pins remain qualified by BUILD's original package audit; ROOT's installer receipt verifies delivery payloads without independently repeating that source audit. Earlier human voice failure evidence remains in `.tmp/private-voice-0eb-98e26008b0a24e52811892e5fdeb73ee/controlled-human-voice-failure.json`. Detailed Memory history is in [Raya-Memory-Installed-Acceptance-Next.md](Raya-Memory-Installed-Acceptance-Next.md).
+
+Readiness remains **48/100**, with **38 unfinished requirements (35 In progress, 3 Planned)**. The source/browser draft fix, host/webview types, lint, Knip and package audit pass; the current installed draft result remains pending. Home Assistant was restarted immediately after packaging and both canonical hostname and direct-IP web access are verified. Eden stays running.
 
 The requirement classifications below are the historical tracker, not a fresh completion audit. Report concrete installed behavior and remaining work; do not use an unchanged aggregate percentage as a substitute. Previous candidate, VM, process and resource observations below apply only to their recorded test time.
 

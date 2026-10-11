@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
 import { eq, sql } from "drizzle-orm"
-import { Deferred, Effect, Exit, Fiber } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -11,13 +11,16 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineOrganizationRevisionTable as Revision,
+  RayaRoutineOrganizationTable as Team,
+  RayaRoutineOrganizationMemberTable as Member,
+  RayaRoutineOrganizationDelegationTable as Edge,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { RayaTask } from "@/kilocode/task"
 import { archive as indexed } from "@/kilocode/task/archive"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
-import { Conflict, RayaTaskOrganization } from "@/kilocode/task/organization"
+import { Conflict, Invalid, RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { PtyArchive } from "@/kilocode/pty/archive"
@@ -1200,6 +1203,109 @@ test("routine usage names every durable evidence domain without mutating it", as
     }).pipe(Effect.provide(layer()), Effect.scoped),
   )
 })
+
+for (const kind of ["member", "delegation"])
+  for (const action of ["get", "update", "archive"])
+    test(`saved organization overflow ${kind} ${action} refuses before changes or worker stops`, async () => {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const database = yield* Database.Service
+          const storage = memory()
+          const tasks = RayaTask.make({ storage, database })
+          const observed = { stops: 0 }
+          const organizations = RayaTaskOrganization.make(
+            database,
+            {
+              ...tasks,
+              stop: () =>
+                Effect.sync(() => {
+                  observed.stops++
+                }),
+            },
+            storage,
+          )
+          const workers = yield* Effect.forEach(
+            Array.from({ length: 50 }, (_, index) => index),
+            (index) =>
+              tasks.create({
+                name: `Capacity ${index}`,
+                objective: "Retain organization evidence",
+                enabled: false,
+                schedule: { kind: "manual" },
+              }),
+          )
+          const members = workers.map((worker) => ({ agentID: worker.id, role: "Member" }))
+          const edges = members.flatMap((sender, index) =>
+            members.slice(index + 1).map((recipient) => ({ senderID: sender.agentID, recipientID: recipient.agentID })),
+          )
+          const org = yield* organizations.create({ name: "At capacity", members, delegations: edges.slice(0, 500) })
+          expect((yield* organizations.get(org.id)).members).toHaveLength(50)
+          expect((yield* organizations.get(org.id)).delegations).toHaveLength(500)
+          if (kind === "member")
+            yield* database.db
+              .insert(Member)
+              .values({
+                organization_id: org.id,
+                agent_id: "extra_capacity_worker",
+                role: "Extra",
+                position: 50,
+                time_created: 1,
+                time_updated: 1,
+              })
+          if (kind === "delegation")
+            yield* database.db
+              .insert(Edge)
+              .values({
+                organization_id: org.id,
+                sender_id: edges[500].senderID,
+                recipient_id: edges[500].recipientID,
+                position: 500,
+                time_created: 1,
+                time_updated: 1,
+              })
+          const before = {
+            members: yield* database.db
+              .select()
+              .from(Member)
+              .where(eq(Member.organization_id, org.id))
+              .orderBy(Member.position)
+              .all(),
+            edges: yield* database.db
+              .select()
+              .from(Edge)
+              .where(eq(Edge.organization_id, org.id))
+              .orderBy(Edge.position)
+              .all(),
+          }
+          const result = yield* (
+            action === "get"
+              ? organizations.get(org.id)
+              : action === "update"
+                ? organizations.update(org.id, { expectedRevision: 1, name: "Must not replace" })
+                : organizations.archive(org.id, { expectedRevision: 1 })
+          ).pipe(Effect.exit)
+          expect(observed.stops).toBe(0)
+          expect(Exit.isFailure(result)).toBe(true)
+          if (Exit.isFailure(result)) expect(Cause.squash(result.cause)).toBeInstanceOf(Invalid)
+          const row = yield* database.db.select().from(Team).where(eq(Team.id, org.id)).get()
+          expect(row?.stopping_at).toBeNull()
+          expect(row?.archived_at).toBeNull()
+          expect(row?.revision).toBe(1)
+          expect(row?.name).toBe("At capacity")
+          expect(
+            yield* database.db
+              .select()
+              .from(Member)
+              .where(eq(Member.organization_id, org.id))
+              .orderBy(Member.position)
+              .all(),
+          ).toEqual(before.members)
+          expect(
+            yield* database.db.select().from(Edge).where(eq(Edge.organization_id, org.id)).orderBy(Edge.position).all(),
+          ).toEqual(before.edges)
+        }).pipe(Effect.provide(layer()), Effect.scoped),
+      )
+    }, 30_000)
 
 test("organization creation and worker removal share one deterministic mutation gate", async () => {
   await Effect.runPromise(

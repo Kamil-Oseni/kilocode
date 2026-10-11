@@ -201,8 +201,10 @@ function decoded(
   row: typeof OrganizationRow.$inferSelect,
   members: readonly (typeof MemberRow.$inferSelect)[],
   delegations: readonly (typeof DelegationRow.$inferSelect)[],
-): Organization {
-  return {
+): Effect.Effect<Organization, Invalid> {
+  if (members.length > MAX || delegations.length > EDGES)
+    return Effect.fail(new Invalid({ message: "Saved organization exceeds the supported member or delegation limit." }))
+  return Effect.succeed<Organization>({
     version: 1,
     id: row.id,
     name: row.name,
@@ -225,7 +227,7 @@ function decoded(
       recipientID: item.recipient_id,
       position: item.position,
     })),
-  }
+  })
 }
 
 type Workers = {
@@ -265,6 +267,7 @@ export namespace RayaTaskOrganization {
         .from(MemberRow)
         .where(eq(MemberRow.organization_id, row.id))
         .orderBy(asc(MemberRow.position))
+        .limit(MAX + 1)
         .all()
         .pipe(Effect.orDie)
       const delegations = yield* db
@@ -272,9 +275,10 @@ export namespace RayaTaskOrganization {
         .from(DelegationRow)
         .where(eq(DelegationRow.organization_id, row.id))
         .orderBy(asc(DelegationRow.position))
+        .limit(EDGES + 1)
         .all()
         .pipe(Effect.orDie)
-      return decoded(row, members, delegations)
+      return yield* decoded(row, members, delegations)
     })
 
     const get = Effect.fn("RayaTaskOrganization.get")(function* (id: string) {
@@ -438,6 +442,7 @@ export namespace RayaTaskOrganization {
                 .from(MemberRow)
                 .where(eq(MemberRow.organization_id, row.id))
                 .orderBy(asc(MemberRow.position))
+                .limit(MAX + 1)
                 .all()
                 .pipe(Effect.orDie)
               const storedEdges = yield* tx
@@ -445,9 +450,10 @@ export namespace RayaTaskOrganization {
                 .from(DelegationRow)
                 .where(eq(DelegationRow.organization_id, row.id))
                 .orderBy(asc(DelegationRow.position))
+                .limit(EDGES + 1)
                 .all()
                 .pipe(Effect.orDie)
-              const prior = decoded(row, stored, storedEdges)
+              const prior = yield* decoded(row, stored, storedEdges)
               const now = Date.now()
               const next: Organization = {
                 ...prior,
@@ -563,6 +569,23 @@ export namespace RayaTaskOrganization {
                   if (!row) return yield* new NotFound({ message: "Organization not found." })
                   if (row.revision !== value.expectedRevision || row.archived_at !== null)
                     return yield* new Conflict({ message: "This organization changed. Reload it before archiving." })
+                  const stored = yield* tx
+                    .select()
+                    .from(MemberRow)
+                    .where(eq(MemberRow.organization_id, id))
+                    .orderBy(asc(MemberRow.position))
+                    .limit(MAX + 1)
+                    .all()
+                    .pipe(Effect.orDie)
+                  const edges = yield* tx
+                    .select()
+                    .from(DelegationRow)
+                    .where(eq(DelegationRow.organization_id, id))
+                    .orderBy(asc(DelegationRow.position))
+                    .limit(EDGES + 1)
+                    .all()
+                    .pipe(Effect.orDie)
+                  const prior = yield* decoded(row, stored, edges)
                   if (row.stopping_at === null)
                     yield* tx
                       .update(OrganizationRow)
@@ -570,12 +593,7 @@ export namespace RayaTaskOrganization {
                       .where(eq(OrganizationRow.id, id))
                       .run()
                       .pipe(Effect.orDie)
-                  return yield* tx
-                    .select({ id: MemberRow.agent_id })
-                    .from(MemberRow)
-                    .where(eq(MemberRow.organization_id, id))
-                    .all()
-                    .pipe(Effect.orDie)
+                  return prior.members.map((member) => ({ id: member.agentID }))
                 }),
               { behavior: "immediate" },
             )
@@ -619,6 +637,7 @@ export namespace RayaTaskOrganization {
                   .from(MemberRow)
                   .where(eq(MemberRow.organization_id, row.id))
                   .orderBy(asc(MemberRow.position))
+                  .limit(MAX + 1)
                   .all()
                   .pipe(Effect.orDie)
                 const storedEdges = yield* tx
@@ -626,9 +645,10 @@ export namespace RayaTaskOrganization {
                   .from(DelegationRow)
                   .where(eq(DelegationRow.organization_id, row.id))
                   .orderBy(asc(DelegationRow.position))
+                  .limit(EDGES + 1)
                   .all()
                   .pipe(Effect.orDie)
-                const prior = decoded(row, stored, storedEdges)
+                const prior = yield* decoded(row, stored, storedEdges)
                 if (!workers.runsFor)
                   return yield* new Conflict({
                     message: "Worker run history is unavailable. Cannot safely archive this organization.",

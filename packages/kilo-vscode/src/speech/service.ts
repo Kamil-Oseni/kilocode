@@ -447,6 +447,12 @@ export class SpeechService implements vscode.Disposable {
     if (request && request === this.waiting) {
       this.waiting = undefined
       post({ type: "speechRealtimeStopped", requestId: request })
+      diagnostics(request, this.diagnostic)("callback", {
+        kind: "voice",
+        boundary: "cancel",
+        ended: true,
+        forwarded: true,
+      })
       return
     }
     if (!request || request !== this.request) return
@@ -477,6 +483,13 @@ export class SpeechService implements vscode.Disposable {
           return false
         }
         post({ type: "speechRealtimeStopped", requestId: request })
+        diagnostics(request, this.diagnostic)("callback", {
+          kind: "voice",
+          boundary: "cancel",
+          ended: true,
+          forwarded: true,
+          confirmed: true,
+        })
         return true
       },
       (err) => {

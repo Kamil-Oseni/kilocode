@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path"
 import type * as vscode from "vscode"
 import type { KiloConnectionService } from "../../src/services/cli-backend/connection-service"
 import { SpeechService } from "../../src/speech/service"
+import type { PlaybackDiagnostic } from "../../src/speech/diagnostics"
 
 function context() {
   const values = new Map<string, unknown>()
@@ -79,7 +80,9 @@ for (const action of ["stop", "failure", "stale", "switch", "switch-failure", "d
     } as unknown as KiloConnectionService
     const base = resolve(tmpdir())
     const root = await mkdtemp(join(base, "raya-readiness-"))
-    const speech = new SpeechService(context(), { refresh: 20 })
+    const rows: PlaybackDiagnostic[] = []
+    const speech = new SpeechService(context(), { refresh: 20, diagnostic: (row) => rows.push(row) })
+    const request = "9a1d6a7d-8387-4381-b9bf-e7bfda2d66c3"
     const posts: { type?: string; code?: string; fallback?: string }[] = []
     const post = (msg: unknown) => posts.push(msg as (typeof posts)[number])
     try {
@@ -96,7 +99,7 @@ for (const action of ["stop", "failure", "stale", "switch", "switch-failure", "d
         () => {},
       )
       await speech.realtimeStart(
-        { requestId: "call_1", sessionID: "session_1", directory: root, connection, current: () => state.current },
+        { requestId: request, sessionID: "session_1", directory: root, connection, current: () => state.current },
         post,
       )
       await speech.ended()
@@ -126,7 +129,7 @@ for (const action of ["stop", "failure", "stale", "switch", "switch-failure", "d
           speech.dispose()
           return speech.ended()
         }
-        return speech.realtimeStop("call_1", post)
+        return speech.realtimeStop(request, post)
       })().then(
         () => {
           settled.done = true
@@ -139,6 +142,7 @@ for (const action of ["stop", "failure", "stale", "switch", "switch-failure", "d
       await Bun.sleep(30)
       if (action !== "stale") expect(settled.done).toBe(false)
       expect(posts.some((msg) => msg.type === "speechRealtimeStopped")).toBe(false)
+      expect(rows.filter((row) => row.kind === "voice" && row.boundary === "cancel")).toHaveLength(0)
       if (action.startsWith("switch")) expect((await speech.settings.load()).voiceEngine).toBe("cascade-v1")
       gate.resolve()
       await operation
@@ -147,11 +151,17 @@ for (const action of ["stop", "failure", "stale", "switch", "switch-failure", "d
       expect(state.posts).toBe(2)
       expect(state.deletes).toBe(2)
       expect(speech.admin().active).toBe(0)
-      if (action === "stop") expect(posts.filter((msg) => msg.type === "speechRealtimeStopped")).toHaveLength(1)
+      if (action === "stop") {
+        expect(posts.filter((msg) => msg.type === "speechRealtimeStopped")).toHaveLength(1)
+        expect(rows.filter((row) => row.kind === "voice" && row.boundary === "cancel")).toEqual([
+          expect.objectContaining({ request, phase: "callback", ended: true, confirmed: true, forwarded: true }),
+        ])
+      }
       if (action === "failure") {
         expect(posts.some((msg) => msg.code === "cleanup_failed")).toBe(true)
         expect(posts.some((msg) => msg.type === "speechRealtimeStopped")).toBe(false)
         expect(speech.admin().incomplete).toBe(1)
+        expect(rows.filter((row) => row.kind === "voice" && row.boundary === "cancel")).toHaveLength(0)
       }
       if (action.startsWith("switch")) {
         expect(settled.failed).toBe(action.includes("failure"))

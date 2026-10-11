@@ -4,6 +4,14 @@ import { hostname } from "node:os"
 
 const cache: { probing: boolean; next: number; value?: string } = { probing: false, next: 0 }
 
+function valid(value: string) {
+  if (process.platform === "linux")
+    return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}:(?:0|[1-9]\d*)$/.test(value)
+  if (process.platform !== "win32" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{7}Z$/.test(value)) return false
+  const stamp = Date.parse(value)
+  return Number.isFinite(stamp) && new Date(stamp).toISOString() === value.replace(/\.(\d{3})\d{4}Z$/, ".$1Z")
+}
+
 function birth(pid: number) {
   if (process.platform === "linux") {
     try {
@@ -72,7 +80,7 @@ export function stopped(value: unknown) {
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ESRCH") return true
   }
-  if (!("birth" in value) || typeof value.birth !== "string" || !value.birth) return false
+  if (!("birth" in value) || typeof value.birth !== "string" || !valid(value.birth)) return false
   const observed = value.pid === process.pid ? current() : birth(value.pid)
   return !!observed && observed !== value.birth
 }

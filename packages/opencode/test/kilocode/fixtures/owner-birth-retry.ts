@@ -35,9 +35,11 @@ const { FSUtil } = await import("@opencode-ai/core/fs-util")
 const { LayerNode } = await import("@opencode-ai/core/effect/layer-node")
 const { Git } = await import("../../../src/git")
 const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
+const { Database } = await import("@opencode-ai/core/database/database")
 const { RayaTaskExecution } = await import("../../../src/kilocode/task/execution")
 const { SessionID } = await import("../../../src/session/schema")
-const layer = Storage.layerFromDir(join(dir, "storage")).pipe(
+const layer = Storage.layerWithDatabase(join(dir, "storage")).pipe(
+  Layer.provide(Database.layerFromPath(join(dir, "authority.sqlite"))),
   Layer.provide(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node]))),
 )
 try {
@@ -69,7 +71,9 @@ try {
         assert.ok(identity.birth, "A failed first probe was cached permanently")
         assert.equal(calls, 4)
         assert.equal(stopped(identity), false)
-        assert.equal(stopped({ ...identity, birth: `${identity.birth}-older` }), true)
+        assert.equal(stopped({ ...identity, birth: `${identity.birth}-older` }), false)
+        const birth = new Date(Date.parse(identity.birth) - 1_000).toISOString().replace("Z", "0000Z")
+        assert.equal(stopped({ ...identity, birth }), true)
         for (const attempt of Array.from({ length: 16 }, (_, index) => index)) {
           assert.deepEqual(durable(), identity, `Successful identity changed at attempt ${attempt}`)
         }

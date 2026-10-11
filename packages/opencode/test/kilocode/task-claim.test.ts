@@ -65,7 +65,22 @@ describe("routine startup claims", () => {
       const storage = store(fs, directory)
       const key = ["raya", "agent-claims", createHash("sha256").update("routine").digest("hex")]
       const record = { version: 1, agentID: "routine", id: crypto.randomUUID(), at: Date.now(), phase: "claimed" }
-      for (const value of [owner(), identity, { ...identity, birth: "" }]) {
+      const malformed =
+        process.platform === "win32"
+          ? ["invalid", "2026-02-30T01:02:03.0000000Z", identity.birth!.replace(/\.(\d{3})\d{4}Z$/, ".$1Z")]
+          : [
+              "invalid",
+              "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:123",
+              identity.birth!.replace(/:\d+$/, ":-1"),
+              identity.birth!.toUpperCase(),
+            ]
+      for (const value of [
+        owner(),
+        identity,
+        { ...identity, birth: "" },
+        ...malformed.map((birth) => ({ ...identity, birth })),
+      ]) {
+        expect(stopped(value)).toBe(false)
         yield* storage.replace(key, { ...record, owner: value })
         expect(yield* recover(storage, "routine", () => Effect.succeed(true))).toBe(false)
         expect(yield* storage.read(key)).toEqual({ ...record, owner: value })

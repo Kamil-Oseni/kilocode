@@ -6,7 +6,7 @@ const fixture = fileURLToPath(new URL("./fixtures/owner-birth.ts", import.meta.u
 
 test("distinguishes a live foreign process from a reused owner PID", async () => {
   if (process.platform !== "win32" && process.platform !== "linux") return
-  const proc = Bun.spawn([process.execPath, fixture], { stdout: "pipe", stderr: "pipe" })
+  const proc = Bun.spawn([process.execPath, fixture], { stdout: "pipe", stderr: "pipe", windowsHide: true })
   const reader = proc.stdout.getReader()
   const timer = { id: undefined as ReturnType<typeof setTimeout> | undefined }
   try {
@@ -28,7 +28,12 @@ test("distinguishes a live foreign process from a reused owner PID", async () =>
     expect(identity.pid).toBe(proc.pid)
     expect(identity.birth).toBeTruthy()
     expect(stopped(identity)).toBe(false)
-    expect(stopped({ ...identity, birth: `${identity.birth}-older` })).toBe(true)
+    expect(stopped({ ...identity, birth: `${identity.birth}-older` })).toBe(false)
+    const birth =
+      process.platform === "win32"
+        ? new Date(Date.parse(identity.birth) - 1_000).toISOString().replace("Z", "0000Z")
+        : identity.birth.replace(/:\d+$/, (value: string) => `:${BigInt(value.slice(1)) - 1n}`)
+    expect(stopped({ ...identity, birth })).toBe(true)
   } finally {
     if (timer.id) clearTimeout(timer.id)
     proc.kill("SIGKILL")

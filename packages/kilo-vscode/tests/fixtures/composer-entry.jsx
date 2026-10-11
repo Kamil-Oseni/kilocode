@@ -11,6 +11,7 @@ import { StoryProviders, mockSessionValue } from "../../webview-ui/src/stories/S
 import { ProviderContext, useProvider } from "../../webview-ui/src/context/provider"
 import { isModelValid } from "../../webview-ui/src/context/provider-utils"
 import { SessionContext } from "../../webview-ui/src/context/session"
+import { LocalTabsProvider, useLocalTabs } from "../../webview-ui/src/context/local-tabs"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
 import { NativeProjection } from "../../webview-ui/src/context/native-projection"
 import { OpenAIVoice } from "../../webview-ui/src/context/openai-voice"
@@ -392,6 +393,16 @@ function Fixture() {
       accept(args[8])
     },
   }
+  const Composer = () => {
+    const tabs = useLocalTabs()
+    window.__draftTarget = () => tabs?.pending() ?? pending()
+    window.__selectDraft = (value) => {
+      if (tabs) return tabs.select(value)
+      setID("")
+      setPending(value)
+    }
+    return <PromptInput boxId="fixture" pendingSessionID={tabs?.pending()} />
+  }
   return (
     <ServerContext.Provider
       value={{
@@ -411,7 +422,13 @@ function Fixture() {
           <VoiceProvider>
             <main style={{ padding: "12px", "max-width": "760px", margin: "auto" }}>
               <WelcomeEmptyState />
-              <PromptInput boxId="fixture" />
+              {new URLSearchParams(location.search).has("tabs") ? (
+                <LocalTabsProvider>
+                  <Composer />
+                </LocalTabsProvider>
+              ) : (
+                <Composer />
+              )}
               <div aria-label="Fixture controls">
                 <button onClick={() => setConnected(!connected())}>Toggle connection</button>
                 <button onClick={() => setID(id() === "first" ? "second" : "first")}>Switch session</button>

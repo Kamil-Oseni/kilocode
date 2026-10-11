@@ -383,3 +383,35 @@ test("recovery stops after a held original rejection across disconnect and recon
     await bridge.close()
   }
 })
+
+test("media recall rejection remains a read failure without inventing proposal uncertainty", async () => {
+  const cfg = await fixture()
+  cfg.queued.push({
+    id: "req-media-refused",
+    sessionID: "ses-original",
+    project: cfg.root,
+    command: { action: "mediaContext", query: "approved image", top: 1 },
+  })
+  const calls: string[] = []
+  const bridge = new BrainBridge(cfg.connection, {
+    model: async (request) => {
+      calls.push(request.project)
+      throw new Error("Approved media grant is unavailable")
+    },
+  })
+  try {
+    cfg.connected()
+    await until(() => cfg.rejects.length === 1)
+    await bridge.close()
+    expect(calls).toEqual([cfg.root])
+    expect(cfg.replies).toEqual([])
+    expect(cfg.rejects).toHaveLength(1)
+    expect(cfg.rejects[0]).toMatchObject({ error: { code: "conflict" } })
+    const encoded = JSON.stringify(cfg.rejects[0])
+    expect(encoded).toContain("Memory media recall")
+    expect(encoded).toContain("approved media sources")
+    expect(encoded).not.toMatch(/proposal|pending ledger|replay a write/i)
+  } finally {
+    await bridge.close()
+  }
+})

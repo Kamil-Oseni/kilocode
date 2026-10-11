@@ -861,18 +861,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   window.addEventListener("raya:prefill-prompt", onPrefillPrompt)
   onCleanup(() => window.removeEventListener("raya:prefill-prompt", onPrefillPrompt))
 
-  // Start a new task, carrying over the current prompt text (without auto-sending it)
+  // Preserve this task's draft before switching to a fresh, empty task.
   const onNewTaskRequest = () => {
-    const snapshot = content()
-    const draft = text()
-    const comments = reviewComments()
-    const imgs = imageAttach.images()
-    const scroll = textareaRef?.scrollTop ?? 0
-    const id = tabs?.add()
-    if (!id) session.clearCurrentSession()
-    const key = id ? scopeDraftKey(boxKey(), pendingDraftKey(id) ?? "new") : draftKey()
-    saveDraft(key, draft, comments, imgs, scroll)
-    durable.edit({ box: boxKey(), key, pendingID: id ?? session.draftSessionID() ?? vacant }, snapshot)
+    persistDraft()
+    if (tabs) {
+      tabs.add()
+      return
+    }
+    session.clearCurrentSession()
+    session.setDraftSessionID(`pending:${crypto.randomUUID()}`)
   }
   window.addEventListener("newTaskRequest", onNewTaskRequest)
   onCleanup(() => window.removeEventListener("newTaskRequest", onNewTaskRequest))

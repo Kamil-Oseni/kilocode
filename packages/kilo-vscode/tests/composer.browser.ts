@@ -1,6 +1,45 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+for (const tabs of [false, true]) {
+  test(`New Task preserves the original draft and opens an empty ${tabs ? "tab" : "standalone composer"}`, async ({
+    page,
+  }) => {
+    await page.goto(`/?theme=dark&draft=${crypto.randomUUID()}&pending=original${tabs ? "&tabs" : ""}`)
+    const prompt = page.locator("textarea.prompt-input")
+    await expect(prompt).toHaveValue("")
+    const original = await page.evaluate(() => (window as Window & { __draftTarget: () => string }).__draftTarget())
+    const text = "  Private unsent draft A — cedar postcard.  "
+    await prompt.fill(text)
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "cedar.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("Private attachment A"),
+    })
+    await expect(page.locator(".image-attachment")).toHaveCount(1)
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("newTaskRequest")))
+    await expect(prompt).toHaveValue("")
+    await expect(page.locator(".image-attachment")).toHaveCount(0)
+    const fresh = await page.evaluate(() => (window as Window & { __draftTarget: () => string }).__draftTarget())
+    expect(fresh).toBeTruthy()
+    expect(fresh).not.toBe(original)
+    await prompt.fill("Unsent draft B")
+    await page.evaluate(
+      (value) => (window as Window & { __selectDraft: (id: string) => void }).__selectDraft(value),
+      original,
+    )
+    await expect(prompt).toHaveValue(text)
+    await expect(page.locator(".image-attachment")).toHaveCount(1)
+    await page.evaluate(
+      (value) => (window as Window & { __selectDraft: (id: string) => void }).__selectDraft(value),
+      fresh,
+    )
+    await expect(prompt).toHaveValue("Unsent draft B")
+    await expect(page.locator(".image-attachment")).toHaveCount(0)
+    await expect(page.locator("[data-sent]")).toHaveText("[]")
+  })
+}
+
 test("actual composer saves and sends a reactive model selection without clone errors", async ({ page }) => {
   const failures: string[] = []
   page.on("pageerror", (error) => failures.push(error.message))
@@ -24,16 +63,14 @@ test("actual composer restores rich exact-whitespace drafts from disk after a fr
   const prompt = page.locator("textarea.prompt-input")
   const text = `  Learn violin\n${Array.from({ length: 30 }, (_, index) => `Practice ${index}: 你好 🎻`).join("\n")}  `
   await prompt.fill(text)
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "violin.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/a5FAAAAAASUVORK5CYII=",
-        "base64",
-      ),
-    })
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "violin.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/a5FAAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  })
   await page.evaluate(() =>
     window.postMessage(
       {
@@ -62,11 +99,7 @@ test("actual composer restores rich exact-whitespace drafts from disk after a fr
   const read = async () =>
     page.evaluate(async () => {
       const host = window as Window & {
-        __readDraft: (identity: {
-          box: string
-          key: string
-          sessionID: string
-        }) => Promise<{
+        __readDraft: (identity: { box: string; key: string; sessionID: string }) => Promise<{
           entry?: {
             content: {
               text: string
@@ -82,15 +115,13 @@ test("actual composer restores rich exact-whitespace drafts from disk after a fr
       return (await host.__readDraft({ box: "fixture", key: "fixture:session:first", sessionID: "first" })).entry
         ?.content
     })
-  await expect
-    .poll(read)
-    .toMatchObject({
-      text,
-      images: [{ filename: "violin.png" }],
-      comments: [{ id: "durable-review" }],
-      selection: { start: 2, end: 7 },
-      model: { providerID: "missing-provider", modelID: "missing-model" },
-    })
+  await expect.poll(read).toMatchObject({
+    text,
+    images: [{ filename: "violin.png" }],
+    comments: [{ id: "durable-review" }],
+    selection: { start: 2, end: 7 },
+    model: { providerID: "missing-provider", modelID: "missing-model" },
+  })
   const saved = await read()
   await page.reload()
   await expect(prompt).toHaveValue(text)
@@ -579,17 +610,13 @@ test("actual composer leaves an untouched mount pristine but retains an explicit
   await page.getByRole("button", { name: /Claude Sonnet 4.6/ }).click()
   await page.getByRole("treeitem").filter({ hasText: "Claude Sonnet 4.6" }).last().click()
   await page.keyboard.press("Enter")
-  await expect
-    .poll(list)
-    .toMatchObject({
-      entries: [{ content: { text: "", model: { providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" } } }],
-    })
+  await expect.poll(list).toMatchObject({
+    entries: [{ content: { text: "", model: { providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" } } }],
+  })
   await page.reload()
-  await expect
-    .poll(list)
-    .toMatchObject({
-      entries: [{ content: { text: "", model: { providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" } } }],
-    })
+  await expect.poll(list).toMatchObject({
+    entries: [{ content: { text: "", model: { providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" } } }],
+  })
   await prompt.press("Shift+Tab")
   await expect.poll(list).toMatchObject({ entries: [{ content: { text: "", variant: "low" } }] })
   await page.reload()

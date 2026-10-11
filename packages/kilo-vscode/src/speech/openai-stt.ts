@@ -49,9 +49,9 @@ export async function transcribe(input: SttInput, signal?: AbortSignal): Promise
   }
 }
 
-function loopback(input: SttInput) {
+export function endpoint(value: string) {
   try {
-    const url = new URL(input.endpoint)
+    const url = new URL(value)
     return (
       url.protocol === "http:" &&
       url.hostname === "127.0.0.1" &&
@@ -59,13 +59,15 @@ function loopback(input: SttInput) {
       !url.search &&
       !url.hash &&
       !url.username &&
-      !url.password &&
-      input.model === "whisper-small.en" &&
-      input.data.length <= 16_000_000
+      !url.password
     )
   } catch {
     return false
   }
+}
+
+function loopback(input: SttInput) {
+  return endpoint(input.endpoint) && input.model === "whisper-small.en" && input.data.length <= 16_000_000
 }
 
 function scope(local: boolean | undefined, signal?: AbortSignal) {

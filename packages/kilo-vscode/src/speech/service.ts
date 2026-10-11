@@ -2,7 +2,7 @@
 import type * as vscode from "vscode"
 import { MiniMaxTts } from "./minimax-tts"
 import { LocalTts } from "./local-tts"
-import { transcribe } from "./openai-stt"
+import { transcribe, endpoint } from "./openai-stt"
 import { SpeechSettingsStore, type SpeechSettings } from "./settings"
 import { VoiceReplies } from "./replies"
 import { diagnostics, type PlaybackDiagnostic } from "./diagnostics"
@@ -763,7 +763,7 @@ export class SpeechService implements vscode.Disposable {
   ): Promise<void> {
     const settings = await this.settings.load()
     const local = settings.sttEngine === "local"
-    if (local && settings.sttEndpoint !== "http://127.0.0.1:8770/v1/audio/transcriptions") {
+    if (local && !endpoint(settings.sttEndpoint)) {
       post({
         type: "speechToTextError",
         requestId: input.requestId,
@@ -806,10 +806,7 @@ export class SpeechService implements vscode.Disposable {
   // raya_change start - configured STT through extension-host capture and VAD
   async configured(): Promise<boolean> {
     const settings = await this.settings.load()
-    if (settings.sttEngine === "local")
-      return (
-        settings.sttEndpoint === "http://127.0.0.1:8770/v1/audio/transcriptions" && !!(await this.settings.key("local"))
-      )
+    if (settings.sttEngine === "local") return endpoint(settings.sttEndpoint) && !!(await this.settings.key("local"))
     return !!settings.sttEndpoint && !!(await this.settings.key("stt"))
   }
 

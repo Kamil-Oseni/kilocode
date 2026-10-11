@@ -42,6 +42,10 @@ export class SpeechService implements vscode.Disposable {
   private readonly store: vscode.Memento
   private closed = false
   private request: string | undefined
+  private warm:
+    | { request: string; alive: boolean; timer?: ReturnType<typeof setTimeout>; done: Promise<void> }
+    | undefined
+  private readonly interval: number
   private waiting: string | undefined
   private closing: Promise<boolean> | undefined
   private retiring: string | undefined
@@ -56,8 +60,12 @@ export class SpeechService implements vscode.Disposable {
       openai?: OpenAIBroker
       realtime?: RealtimeBroker
       diagnostic?: (row: PlaybackDiagnostic) => void
+      refresh?: number
     },
   ) {
+    this.interval = opts?.refresh ?? 60_000
+    if (!Number.isInteger(this.interval) || this.interval < 1 || this.interval > 60_000)
+      throw new Error("Invalid local speech readiness interval.")
     this.store = context.globalState
     this.health = loadHealth(this.store.get<unknown>(healthKey))
     this.settings = new SpeechSettingsStore(context.globalState, context.secrets)
@@ -83,11 +91,26 @@ export class SpeechService implements vscode.Disposable {
   private async release() {
     const request = this.request
     this.retiring = request
-    await cancelLiveCapture()
-    const failures = await Promise.all([this.live.stop(), this.openai.stop(), this.realtime.stop()])
-    if (!failures.some(Boolean) && this.request === request) this.request = undefined
-    if (failures.some(Boolean)) this.incomplete()
-    return !failures.some(Boolean)
+    const warm = this.warm
+    this.cancel()
+    const results = await Promise.allSettled([
+      this.localtts.cancel(),
+      warm?.done,
+      cancelLiveCapture(),
+      this.live.stop(),
+      this.openai.stop(),
+      this.realtime.stop(),
+    ])
+    const failed = results.some((result) => result.status === "rejected" || !!result.value)
+    for (const result of results) {
+      if (result.status === "rejected") console.error("[Raya] Voice resource release failed.", result.reason)
+      if (result.status === "fulfilled" && result.value)
+        console.error("[Raya] Voice resource release is unconfirmed.", result.value)
+    }
+    if (this.warm === warm) this.warm = undefined
+    if (!failed && this.request === request) this.request = undefined
+    if (failed) this.incomplete()
+    return !failed
   }
 
   drop() {
@@ -119,7 +142,7 @@ export class SpeechService implements vscode.Disposable {
   admin(): AdminVoiceSignal {
     return {
       available: !this.closed,
-      active: [this.live.active, this.openai.active, this.realtime.active].filter(Boolean).length,
+      active: [this.live.active, this.openai.active, this.realtime.active, this.warm?.alive].filter(Boolean).length,
       failed: Number(this.health === "failed"),
       incomplete: Number(this.health === "incomplete"),
     }
@@ -164,7 +187,8 @@ export class SpeechService implements vscode.Disposable {
     if (input.voiceEngine !== undefined) {
       await this.enqueue(async () => {
         const prior = await this.settings.load()
-        if (input.voiceEngine !== prior.voiceEngine) await this.release()
+        if (input.voiceEngine !== prior.voiceEngine && !(await this.release()))
+          throw new Error("Voice cleanup is unconfirmed; the engine was not changed.")
         await this.settings.update(input)
       })
     } else {
@@ -258,12 +282,14 @@ export class SpeechService implements vscode.Disposable {
       if (current()) this.request = undefined
       return
     }
+    const state: { settings?: SpeechSettings } = {}
     const result = await this.realtime.start(
       async () => {
         const settings = await this.settings.load()
         const fallback = voiceFallback(settings)
         if (settings.voiceEngine === "cascade-v1" && settings.ttsEngine === "local-jobs") {
           await this.prepare(input, settings, current)
+          state.settings = settings
         }
         if (settings.voiceEngine !== "qwen-realtime" && settings.voiceEngine !== "openai-live") {
           return {
@@ -332,8 +358,20 @@ export class SpeechService implements vscode.Disposable {
         })
       },
     )
+    this.admitted(input, result, state.settings, current, post)
+  }
+
+  private admitted(
+    input: Parameters<SpeechService["realtimeStart"]>[0],
+    result: Awaited<ReturnType<RealtimeBroker["start"]>>,
+    settings: SpeechSettings | undefined,
+    current: () => boolean,
+    post: Post,
+  ) {
+    const cascade = !result.ok && result.code !== "cancelled" && result.fallback === "cascade-v1"
     if (current() && !result.ok && result.code !== "cancelled") {
-      this.degrade(result.code)
+      if (cascade && settings) this.healthy()
+      if (!cascade || !settings) this.degrade(result.code)
       post({
         type: "speechRealtimeError",
         requestId: input.requestId,
@@ -342,8 +380,47 @@ export class SpeechService implements vscode.Disposable {
         fallback: result.fallback,
       })
     }
-    const cascade = !result.ok && result.code !== "cancelled" && result.fallback === "cascade-v1"
+    if (current() && cascade && settings) this.retain(input, current, post)
     if (current() && !this.realtime.active && !cascade) this.request = undefined
+  }
+
+  private retain(input: Parameters<SpeechService["realtimeStart"]>[0], current: () => boolean, post: Post) {
+    const state: NonNullable<SpeechService["warm"]> = { request: input.requestId, alive: true, done: Promise.resolve() }
+    this.warm = state
+    const selected = () => state.alive && this.warm === state && current() && input.current?.() === true
+    const schedule = () => {
+      if (!selected()) {
+        if (this.warm === state) this.warm = undefined
+        return
+      }
+      state.timer = setTimeout(() => {
+        state.timer = undefined
+        state.done = (async () => {
+          if (!selected()) return
+          const settings = await this.settings.load()
+          if (!selected()) return
+          if (settings.voiceEngine !== "cascade-v1" || settings.ttsEngine !== "local-jobs") {
+            if (this.warm === state) this.warm = undefined
+            return
+          }
+          await this.prepare(input, settings, selected)
+        })().then(schedule, (err) => {
+          const active = selected()
+          if (this.warm === state) this.warm = undefined
+          if (!active) return
+          this.degrade("setup_failed")
+          console.error("[Raya] Local speech readiness refresh failed.", err)
+          post({
+            type: "speechRealtimeError",
+            requestId: input.requestId,
+            code: "setup_failed",
+            error: "Local speech readiness was lost. Stop voice and reconnect.",
+          })
+        })
+      }, this.interval)
+      state.timer.unref()
+    }
+    schedule()
   }
 
   private async prepare(
@@ -378,17 +455,42 @@ export class SpeechService implements vscode.Disposable {
       return
     }
     this.retiring = request
+    const warm = this.warm
     this.cancel()
-    const closing = this.realtime.stop().then((failure) => {
-      if (!failure && this.request === request) this.request = undefined
-      if (failure) {
-        this.degrade(failure.code)
-        post({ type: "speechRealtimeError", requestId: request, error: failure.error, code: failure.code })
-        return false
+    const closing = (async () => {
+      const results = await Promise.allSettled([this.realtime.stop(), this.localtts.cancel(), warm?.done])
+      const result = results[0]
+      const failure = result.status === "fulfilled" ? result.value : undefined
+      const errors: unknown[] = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+      if (this.warm === warm) this.warm = undefined
+      if (errors.length) {
+        if (failure) errors.push(new Error(failure.error))
+        throw new AggregateError(errors, "Voice Stop could not confirm every original resource release.")
       }
-      post({ type: "speechRealtimeStopped", requestId: request })
-      return true
-    })
+      return failure
+    })().then(
+      (failure) => {
+        if (!failure && this.request === request) this.request = undefined
+        if (failure) {
+          this.degrade(failure.code)
+          post({ type: "speechRealtimeError", requestId: request, error: failure.error, code: failure.code })
+          return false
+        }
+        post({ type: "speechRealtimeStopped", requestId: request })
+        return true
+      },
+      (err) => {
+        this.incomplete()
+        console.error("[Raya] Local voice Stop could not confirm cleanup.", err)
+        post({
+          type: "speechRealtimeError",
+          requestId: request,
+          code: "cleanup_failed",
+          error: "Local voice cleanup is unconfirmed. Restart Raya before reconnecting.",
+        })
+        return false
+      },
+    )
     this.closing = closing
     try {
       await closing
@@ -963,6 +1065,10 @@ export class SpeechService implements vscode.Disposable {
   // raya_change end
 
   cancel(requestId?: string): void {
+    if (this.warm && (!requestId || requestId === this.warm.request)) {
+      clearTimeout(this.warm.timer)
+      this.warm.alive = false
+    }
     this.replies.cancel(requestId)
     if (requestId) this.aborts.get(requestId)?.abort()
     if (requestId) void cancelSpeechCapture(requestId) // raya_change - extension-host microphone fallback
@@ -981,6 +1087,7 @@ export class SpeechService implements vscode.Disposable {
   dispose(): void {
     this.closed = true
     this.cancel()
+    const warm = this.warm
     void cancelLiveCapture()
     void this.enqueue(async () => {
       const live = await this.live.dispose()
@@ -990,7 +1097,12 @@ export class SpeechService implements vscode.Disposable {
       const realtime = await this.realtime.dispose()
       if (realtime) console.error("[Raya] Voice disposal failed:", realtime.error)
       this.tts.dispose()
-      await this.localtts.dispose()
+      try {
+        await this.localtts.dispose()
+      } finally {
+        await warm?.done
+        if (this.warm === warm) this.warm = undefined
+      }
     })
   }
 }

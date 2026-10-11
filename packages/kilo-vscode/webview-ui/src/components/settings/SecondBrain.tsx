@@ -17,7 +17,8 @@ const labels: Record<string, string> = {
   service_draining: "Memory is draining and cannot accept searches.",
   identity_mismatch: "Memory does not match the selected setup manifest.",
   setup_invalid: "Select a valid reviewed setup manifest and credential.",
-  managed_generation_conflict: "An earlier Memory startup is incomplete. Review a fresh start to recover.",
+  managed_generation_conflict:
+    "An earlier Memory startup is incomplete. Restart Raya, then review a fresh start in Memory setup.",
   unsupported: "Linked context requires a reviewed context-capable Memory release. Import its service setup first.",
   setup_changing: "Memory setup is changing. Wait for local requests to finish, then check the service.",
   transport_error: "The local Memory service could not finish the request.",
@@ -165,9 +166,9 @@ export function SecondBrain() {
               Recover prior failed search
             </Button>
           </Show>
-          <Show when={["control_uncertain", "closed_pair_recovery_required"].includes(state().code ?? "")}>
+          <Show when={state().configured}>
             <Button onClick={() => request("archive")} disabled={busy()}>
-              Archive prior setup and start fresh
+              Review fresh start
             </Button>
           </Show>
           <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>

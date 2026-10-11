@@ -27077,6 +27077,7 @@ export type KilocodeRoutineSnapshotResponses = {
   200: {
     version: 1 | 2
     runID: string
+    sessionID?: string
     agentID: string
     at: number
     definition: {

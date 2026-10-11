@@ -9,7 +9,9 @@ import { profile } from "./task-orphan-profile"
 
 const dir = process.argv[2]
 const kind = process.argv[3]
-if (!dir || (kind !== "manual" && kind !== "event")) throw new Error("Expected physical profile and trigger")
+const boundary = process.argv[4] ?? "linked"
+if (!dir || (kind !== "manual" && kind !== "event") || (boundary !== "linked" && boundary !== "unlinked"))
+  throw new Error("Expected physical profile, trigger, and boundary")
 
 await Effect.runPromise(
   Effect.gen(function* () {
@@ -19,10 +21,18 @@ await Effect.runPromise(
     const guarded = {
       ...storage,
       replace: (key: string[], value: unknown) => {
-        if (key[0] !== "raya" || key[1] !== "agent-runs") return storage.replace(key, value)
+        const selected =
+          boundary === "linked"
+            ? key[1] === "agent-runs"
+            : key[1] === "agent-claims" &&
+              typeof value === "object" &&
+              value !== null &&
+              "phase" in value &&
+              value.phase === "session-created"
+        if (key[0] !== "raya" || !selected) return storage.replace(key, value)
         return Effect.gen(function* () {
           yield* Effect.promise(() => Bun.write(path.join(dir, "boundary.json"), JSON.stringify({ key, value })))
-          // Crash the actual original runner before its first real history publication.
+          // Crash the actual original runner before its real claim-link or history publication.
           process.exit(23)
         })
       },

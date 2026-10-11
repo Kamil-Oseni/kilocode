@@ -5,7 +5,8 @@ import { createRequire } from "node:module"
 import { writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
-import { Cause, Deferred, Effect, Exit, Fiber, Schema, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -3327,61 +3328,81 @@ describe("RayaGoal", () => {
 
   it.live("persists pause and resume state across service recreation", () =>
     Effect.gen(function* () {
-      const storage = yield* Storage.Service
-      const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
-      const messageID = MessageID.ascending()
-      const goals = setup(storage, () => [])
-      yield* Effect.addFinalizer(() => goals.clear(sessionID))
+      const dir = yield* tmpdirScoped()
+      return yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const sessionID = SessionID.make(`ses_goal_${crypto.randomUUID()}`)
+        const messageID = MessageID.ascending()
+        const goals = setup(storage, () => [])
+        yield* Effect.addFinalizer(() => goals.clear(sessionID))
 
-      const created = yield* goals.create(sessionID, "Ship verified goal mode", messageID)
-      expect(created.status).toBe("active")
-      expect(created.startMessageID).toBe(messageID)
-      expect((yield* goals.create(sessionID, "Ship verified goal mode")).createdAt).toBe(created.createdAt)
-      yield* goals.control(sessionID, "paused")
-      const revised = yield* goals.revise(sessionID, "Ship the revised verified goal")
-      expect(revised.objective).toBe("Ship the revised verified goal")
-      expect(revised.status).toBe("paused")
-      expect(revised.progress.at(-1)?.message).toContain("current step will finish")
+        const created = yield* goals.create(sessionID, "Ship verified goal mode", messageID)
+        expect(created.status).toBe("active")
+        expect(created.startMessageID).toBe(messageID)
+        expect(created.routine).toBeUndefined()
+        const saved = yield* goals.get(sessionID)
+        if (!saved) throw new Error("The created ordinary goal was not persisted")
+        expect(yield* setup(storage, () => []).create(sessionID, "Ship verified goal mode")).toEqual(saved)
+        expect(yield* goals.get(sessionID)).toEqual(saved)
+        expect(yield* goals.create(sessionID, "Replace the active goal").pipe(Effect.flip)).toMatchObject({
+          _tag: "RayaGoal.ExistsError",
+        })
+        expect(yield* goals.get(sessionID)).toEqual(saved)
+        yield* goals.control(sessionID, "paused")
+        const revised = yield* goals.revise(sessionID, "Ship the revised verified goal")
+        expect(revised.objective).toBe("Ship the revised verified goal")
+        expect(revised.status).toBe("paused")
+        expect(revised.progress.at(-1)?.message).toContain("current step will finish")
 
-      const reloaded = setup(storage, () => [])
-      expect((yield* reloaded.get(sessionID))?.status).toBe("paused")
-      yield* reloaded.control(sessionID, "active")
-      const queued = yield* reloaded.continued(sessionID)
-      let directory = ""
-      let message: MessageID | undefined
-      yield* RayaGoalContinuation.resume({
-        sessionID,
-        storage,
-        sessions: {
-          get: () => Effect.succeed({ directory: process.cwd() }),
-          messages: () => Effect.succeed([]),
-          children: () => Effect.succeed([]),
-        } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
-        run: async (_sid, _goal, dir, id) => {
-          message = id
-          directory = dir
-        },
-      })
-      expect((yield* goals.get(sessionID))?.status).toBe("active")
-      expect((yield* goals.get(sessionID))?.usage.continuations).toBe(1)
-      expect(directory).toBe(process.cwd())
-      expect(message).toStartWith("msg")
-      expect((yield* goals.get(sessionID))?.dispatch?.messageID).toBe(message)
-      expect(message).toBe(queued?.dispatch?.messageID)
-      const started = yield* goals.get(sessionID)
-      yield* RayaGoalContinuation.resume({
-        sessionID,
-        storage,
-        sessions: {
-          get: () => Effect.succeed({ directory: process.cwd() }),
-          messages: () => Effect.succeed([]),
-          children: () => Effect.succeed([]),
-        } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
-        run: async () => {
-          throw new Error("An unconfirmed started dispatch must not be replayed")
-        },
-      })
-      expect(yield* goals.get(sessionID)).toEqual(started)
+        const reloaded = setup(storage, () => [])
+        expect((yield* reloaded.get(sessionID))?.status).toBe("paused")
+        yield* reloaded.control(sessionID, "active")
+        const queued = yield* reloaded.continued(sessionID)
+        let directory = ""
+        let message: MessageID | undefined
+        yield* RayaGoalContinuation.resume({
+          sessionID,
+          storage,
+          sessions: {
+            get: () => Effect.succeed({ directory: process.cwd() }),
+            messages: () => Effect.succeed([]),
+            children: () => Effect.succeed([]),
+          } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
+          run: async (_sid, _goal, dir, id) => {
+            message = id
+            directory = dir
+          },
+        })
+        expect((yield* goals.get(sessionID))?.status).toBe("active")
+        expect((yield* goals.get(sessionID))?.usage.continuations).toBe(1)
+        expect(directory).toBe(process.cwd())
+        expect(message).toStartWith("msg")
+        expect((yield* goals.get(sessionID))?.dispatch?.messageID).toBe(message)
+        expect(message).toBe(queued?.dispatch?.messageID)
+        const started = yield* goals.get(sessionID)
+        yield* RayaGoalContinuation.resume({
+          sessionID,
+          storage,
+          sessions: {
+            get: () => Effect.succeed({ directory: process.cwd() }),
+            messages: () => Effect.succeed([]),
+            children: () => Effect.succeed([]),
+          } as unknown as Pick<Session.Interface, "get" | "messages" | "children">,
+          run: async () => {
+            throw new Error("An unconfirmed started dispatch must not be replayed")
+          },
+        })
+        expect(yield* goals.get(sessionID)).toEqual(started)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.fresh(
+            Storage.layerWithDatabase(path.join(dir, "storage")).pipe(
+              Layer.provide(Database.layerFromPath(path.join(dir, "authority.sqlite"))),
+            ),
+          ),
+        ),
+      )
     }),
   )
 

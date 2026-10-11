@@ -41672,6 +41672,10 @@
                       "type": "string",
                       "minLength": 1
                     },
+                    "sessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
                     "agentID": {
                       "type": "string",
                       "minLength": 1

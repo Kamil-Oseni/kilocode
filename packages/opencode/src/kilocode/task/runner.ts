@@ -683,9 +683,11 @@ export namespace RayaTaskRunner {
                     yield* schedule.reserve(admitted.selected.trigger, owner.id)
                   }
                   const objective = policy(note ?? (yield* seed(item)), admitted.organization)
+                  const sid = SessionID.descending()
                   yield* snapshots.save({
                     version: 2,
                     runID: owner.id,
+                    sessionID: sid,
                     agentID: item.id,
                     at: owner.at,
                     definition: item,
@@ -705,6 +707,7 @@ export namespace RayaTaskRunner {
                     Effect.gen(function* () {
                       const worktree = item.dir ? (yield* InstanceState.context).worktree : undefined
                       return yield* input.sessions.create({
+                        id: sid,
                         title: item.name,
                         agent: specialist(item),
                         metadata: {
@@ -735,6 +738,11 @@ export namespace RayaTaskRunner {
                       })
                     }),
                   )
+                  if (created.id !== sid)
+                    return yield* new RayaTask.GuardError({
+                      kind: "conflict",
+                      message: "The created session does not match its saved startup identity.",
+                    })
                   yield* transfer.check()
                   yield* owner.link(created.id)
                   if (reservations)
@@ -2060,8 +2068,23 @@ export namespace RayaTaskRunner {
         (row?.session_id ? SessionID.make(row.session_id) : undefined) ??
         (current?.runID === runID ? current.sessionID : undefined)
       const incomplete = !row && (!prior || (prior.status === "error" && prior.blockedReason === reason))
+      const discovered = (claim: typeof Claim.Type) =>
+        incomplete &&
+        (!!claim.sessionID ||
+          (claim.phase === "claimed" &&
+            claim.trigger !== undefined &&
+            !claim.operation &&
+            !claim.delegationID &&
+            !claim.messageSource &&
+            !claim.messageSessionID))
       const orphan = Effect.fn("RayaTaskRunner.resolve.orphan")(function* (claim: typeof Claim.Type) {
-        if (!input.database || claim.phase !== "session-created" || !claim.sessionID || !claim.trigger) return undefined
+        if (
+          !input.database ||
+          !claim.trigger ||
+          (claim.phase === "session-created" && !claim.sessionID) ||
+          (claim.phase === "claimed" && claim.sessionID)
+        )
+          return undefined
         const matches = yield* input.database.db
           .select({ id: SessionTable.id })
           .from(SessionTable)
@@ -2074,15 +2097,16 @@ export namespace RayaTaskRunner {
           .limit(2)
           .all()
           .pipe(Effect.orDie)
-        if (matches.length !== 1 || matches[0].id !== claim.sessionID) return undefined
-        const session = yield* input.sessions.get(claim.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+        if (matches.length !== 1 || (claim.sessionID && matches[0].id !== claim.sessionID)) return undefined
+        const sid = claim.sessionID ?? SessionID.make(matches[0].id)
+        const session = yield* input.sessions.get(sid).pipe(Effect.orElseSucceed(() => undefined))
         const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session?.metadata?.rayaRoutine).pipe(
           Effect.orElseSucceed(() => undefined),
         )
         const snapshot = yield* snapshots.find(runID).pipe(Effect.orElseSucceed(() => undefined))
         if (
           !session ||
-          session.id !== claim.sessionID ||
+          session.id !== sid ||
           !identity ||
           identity.trigger.kind === "timer" ||
           identity.delegationID ||
@@ -2093,16 +2117,18 @@ export namespace RayaTaskRunner {
           identity.runID !== runID ||
           !isDeepStrictEqual(identity.trigger, claim.trigger) ||
           !snapshot ||
+          (claim.phase === "claimed" && snapshot.sessionID !== sid) ||
           snapshot.agentID !== id ||
           snapshot.at !== claim.at ||
           (snapshot.definition.scheduleVersion ?? 1) !== identity.scheduleVersion
         )
           return undefined
-        const goal = yield* goals.get(claim.sessionID)
+        const goal = yield* goals.get(sid)
+        if (claim.phase === "claimed" && goal) return undefined
         if (prior && goal?.createdAt !== prior.goalCreatedAt) return undefined
         if (
           goal &&
-          (!isDeepStrictEqual(goal.routine, { agentID: id, runID, sessionID: claim.sessionID }) ||
+          (!isDeepStrictEqual(goal.routine, { agentID: id, runID, sessionID: sid }) ||
             goal.objective !== snapshot.objective)
         )
           return undefined
@@ -2110,7 +2136,7 @@ export namespace RayaTaskRunner {
           id: runID,
           agentID: id,
           at: claim.at,
-          sessionID: claim.sessionID,
+          sessionID: sid,
           scheduleVersion: identity.scheduleVersion,
           trigger: identity.trigger,
           status: "error",
@@ -2122,10 +2148,11 @@ export namespace RayaTaskRunner {
       const result = Effect.fn("RayaTaskRunner.resolve.result")(function* () {
         const current = inbox ? yield* inbox.page(id) : undefined
         const saved = current?.messages.find((item) => item.source === source)
+        const sessionID = saved?.sessionID ?? sid
         return {
           agentID: id,
           runID,
-          ...(sid ? { sessionID: sid } : {}),
+          ...(sessionID ? { sessionID } : {}),
           closedAt: saved?.time ?? now,
           reason,
         }
@@ -2134,7 +2161,7 @@ export namespace RayaTaskRunner {
         trusted: boolean,
         recovered?: Effect.Success<ReturnType<typeof orphan>>,
       ) {
-        const sessionID = sid
+        const sessionID = recovered?.run.sessionID ?? sid
         if (recovered) {
           if (!isDeepStrictEqual(yield* goals.get(recovered.run.sessionID), recovered.goal)) return false
           const saved = yield* tasks.restore(recovered.run)
@@ -2194,13 +2221,13 @@ export namespace RayaTaskRunner {
           (claim) =>
             Effect.gen(function* () {
               if (claim.id !== runID) return false
-              if (incomplete && claim.sessionID) return !!(yield* orphan(claim))
+              if (discovered(claim)) return !!(yield* orphan(claim))
               return true
             }),
           (claim) =>
             Effect.gen(function* () {
-              const recovered = incomplete && claim.sessionID ? yield* orphan(claim) : undefined
-              if (incomplete && claim.sessionID && !recovered) return false
+              const recovered = discovered(claim) ? yield* orphan(claim) : undefined
+              if (discovered(claim) && !recovered) return false
               return yield* finish(stopped(claim.owner), recovered)
             }),
           (claim) =>

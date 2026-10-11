@@ -527,6 +527,7 @@ export interface Interface {
   // kilocode_change start - session create metadata and sandbox inheritance extensions
   readonly listGlobal: (input?: GlobalListInput) => Effect.Effect<GlobalInfo[]>
   readonly create: (input?: {
+    id?: SessionID // kilocode_change - bind routine startup to its immutable session identity
     parentID?: SessionID
     title?: string
     agent?: string
@@ -832,6 +833,7 @@ export const layer: Layer.Layer<
 
     // kilocode_change start - session create metadata and sandbox inheritance extensions
     const create = Effect.fn("Session.create")(function* (input?: {
+      id?: SessionID // kilocode_change - bind routine startup to its immutable session identity
       parentID?: SessionID
       title?: string
       agent?: string
@@ -849,6 +851,7 @@ export const layer: Layer.Layer<
       // kilocode_change end
       // kilocode_change start - propagate trusted sandbox inheritance grant
       const session = yield* createNext({
+        id: input?.id, // kilocode_change - preserve preallocated routine session identity
         parentID: input?.parentID,
         directory: ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),

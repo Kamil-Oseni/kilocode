@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util"
 import { Cause, Effect, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
 import { RayaTask } from "."
+import { SessionID } from "@/session/schema"
 
 export namespace RayaTaskSnapshot {
   export class Invalid extends Schema.TaggedErrorClass<Invalid>()("RayaTaskSnapshot.Invalid", {
@@ -10,6 +11,7 @@ export namespace RayaTaskSnapshot {
   }) {}
   const Base = {
     runID: Schema.String.check(Schema.isMinLength(1)),
+    sessionID: Schema.optional(SessionID),
     agentID: Schema.String.check(Schema.isMinLength(1)),
     at: Schema.Finite,
     definition: RayaTask.Agent,

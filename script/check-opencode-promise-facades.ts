@@ -107,6 +107,11 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     count: 6,
     reason: "listener and shared terminal archive AppRuntime integration test",
   },
+  "kilocode/server/httpapi-routine-organization.fixture.ts": {
+    count: 3,
+    reason:
+      "isolated production organization HTTP lifecycle verifies its selected physical SQLite database and retires its application runtime owner",
+  },
   "kilocode/server/http-retirement.fixture.ts": {
     count: 1,
     reason: "isolated production cached HTTP handler retirement closes its realized application runtime owner",

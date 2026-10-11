@@ -1242,27 +1242,23 @@ for (const kind of ["member", "delegation"])
           expect((yield* organizations.get(org.id)).members).toHaveLength(50)
           expect((yield* organizations.get(org.id)).delegations).toHaveLength(500)
           if (kind === "member")
-            yield* database.db
-              .insert(Member)
-              .values({
-                organization_id: org.id,
-                agent_id: "extra_capacity_worker",
-                role: "Extra",
-                position: 50,
-                time_created: 1,
-                time_updated: 1,
-              })
+            yield* database.db.insert(Member).values({
+              organization_id: org.id,
+              agent_id: "extra_capacity_worker",
+              role: "Extra",
+              position: 50,
+              time_created: 1,
+              time_updated: 1,
+            })
           if (kind === "delegation")
-            yield* database.db
-              .insert(Edge)
-              .values({
-                organization_id: org.id,
-                sender_id: edges[500].senderID,
-                recipient_id: edges[500].recipientID,
-                position: 500,
-                time_created: 1,
-                time_updated: 1,
-              })
+            yield* database.db.insert(Edge).values({
+              organization_id: org.id,
+              sender_id: edges[500].senderID,
+              recipient_id: edges[500].recipientID,
+              position: 500,
+              time_created: 1,
+              time_updated: 1,
+            })
           const before = {
             members: yield* database.db
               .select()

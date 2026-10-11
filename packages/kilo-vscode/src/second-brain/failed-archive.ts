@@ -11,6 +11,7 @@ import { parse as value } from "./managed/value"
 import { inspect as completed } from "./completed-archive"
 import { release } from "./control/catalog-capture"
 import { current } from "./managed/catalog"
+import { inspect as conflict, absent as partial, snapshot } from "./generation-conflict"
 
 async function retained(input: unknown) {
   const ref = receipt(input)
@@ -189,6 +190,12 @@ function native(
 }
 
 async function historical(format: unknown, witness: ReturnType<typeof receipt>, entry: unknown, pending: unknown) {
+  if (format === "raya.memory.closed-generation.fresh-start") {
+    const saved = object(entry as Parameters<typeof object>[0])
+    const prior = object(saved.launch)
+    check(isDeepStrictEqual(receipt(prior.receipt), witness), "Exact saved closure required")
+    return conflict(saved as { setup: unknown; managed?: unknown; launch?: unknown }, pending)
+  }
   if (format === "raya.memory.interrupted-startup.fresh-start") return startup(entry, pending, witness)
   if (format === "raya.memory.completed-handoff.fresh-start") return completed(witness.path, entry, pending)
   if (format === "raya.memory.unclosed-pair.fresh-start") return unclosed(entry, pending, witness)
@@ -197,6 +204,21 @@ async function historical(format: unknown, witness: ReturnType<typeof receipt>, 
 
 function completion(old: Awaited<ReturnType<typeof historical>>): old is Awaited<ReturnType<typeof completed>> {
   return old.outcome === "completed" && "terminal" in old && "closed" in old && "downstream" in old
+}
+
+function metadata(old: Awaited<ReturnType<typeof historical>>) {
+  return {
+    ...("identities" in old ? { identities: old.identities } : {}),
+    ...(unfinished(old) ? { partial: old.partial, python: old.cfg.python.path } : {}),
+  }
+}
+
+function unfinished(old: Awaited<ReturnType<typeof historical>>): old is Awaited<ReturnType<typeof conflict>> {
+  return "partial" in old
+}
+
+function separate(old: Awaited<ReturnType<typeof historical>>, root: string) {
+  if (unfinished(old)) check(disjoint(root, old.partial.root), "Partial generation cannot be reused")
 }
 
 /** Historical failure is quarantined, never accepted as joined or settled. */
@@ -211,6 +233,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
         "raya.memory.unclosed-pair.fresh-start",
         "raya.memory.interrupted-startup.fresh-start",
         "raya.memory.completed-handoff.fresh-start",
+        "raya.memory.closed-generation.fresh-start",
       ].includes(String(input.format)) &&
       input.version === 1,
     "Explicit reviewed fresh-start selection required",
@@ -236,16 +259,21 @@ export async function review(file: string, entry: unknown, pending: unknown) {
   check(
     cfg.version === 2 &&
       cfg.python.sha256 === old.cfg.python.sha256 &&
-      (input.format !== "raya.memory.failed-search.fresh-start" || cfg.supervisor.sha256 === old.cfg.supervisor.sha256),
+      (!["raya.memory.failed-search.fresh-start", "raya.memory.closed-generation.fresh-start"].includes(
+        String(input.format),
+      ) ||
+        cfg.supervisor.sha256 === old.cfg.supervisor.sha256),
     "Reviewed paired fresh runtime required",
   )
   const spaces = Object.values(cfg.namespaces)
+  separate(old, cfg.root)
   check(disjoint(spaces[0].root, spaces[1].root), "Separate fresh service namespaces required")
   for (const space of spaces) {
     check(
       Object.values(old.cfg.namespaces).every((prior) => disjoint(prior.root, space.root)),
       "Old operation namespace cannot be reused",
     )
+    separate(old, space.root)
     for (const kind of ["Runs", "Requests"]) {
       await directory(path.join(space.root, kind))
       check((await readdir(path.join(space.root, kind))).length === 0, "Unused fresh operation namespace required")
@@ -279,7 +307,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
     selection: Object.freeze({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple }),
     observation: witness,
     pids: Object.freeze([...new Set(pids)]),
-    ...("identities" in old ? { identities: old.identities } : {}),
+    ...metadata(old),
     ports: Object.freeze(ports),
     outcome: old.outcome,
     ...(completion(old)
@@ -293,7 +321,13 @@ export async function review(file: string, entry: unknown, pending: unknown) {
 }
 
 /** Current absence is only admission to new ports; it proves no historical lifecycle. */
-export async function absent(input: Pick<Awaited<ReturnType<typeof review>>, "pids" | "ports">) {
+export async function absent(
+  input: Pick<Awaited<ReturnType<typeof review>>, "pids" | "ports"> & {
+    partial?: Awaited<ReturnType<typeof snapshot>>
+    python?: string
+  },
+) {
+  const retained = input.partial ? await partial(input.partial, input.python ?? "") : undefined
   const script = `$ErrorActionPreference='Stop'; $pids=@(${input.pids.join(",")}); $ports=@(${input.ports.join(",")}); $processes=@(Get-CimInstance Win32_Process | Where-Object {$_.ProcessId -in $pids}); $listeners=@(Get-NetTCPConnection -State Listen | Where-Object {$_.LocalPort -in $ports}); if($processes.Count -or $listeners.Count){throw 'Historical process or selected service port remains present'}; [ordered]@{processes=0;listeners=0}|ConvertTo-Json -Compress`
   const result = await command(
     powershell(),
@@ -304,11 +338,14 @@ export async function absent(input: Pick<Awaited<ReturnType<typeof review>>, "pi
     isDeepStrictEqual(JSON.parse(result.stdout), { processes: 0, listeners: 0 }),
     "Fresh-start absence observation refused",
   )
+  if (input.partial)
+    check(isDeepStrictEqual(await snapshot(input.partial.root), input.partial), "Partial generation changed")
   return Object.freeze({
     observed: Date.now(),
     pids: input.pids,
     ports: input.ports,
     helper: result.receipt,
+    ...(retained ? { partial: retained } : {}),
     qualification: "Current process/listener absence only; this observation does not prove historical closure",
   })
 }

@@ -7,6 +7,7 @@ import { command } from "../control/command"
 import { descriptor, type Descriptor } from "./descriptor"
 import type { Launch } from "./restart"
 import { release } from "../control/catalog-v2"
+import { Failure } from "../client"
 
 type Space = Descriptor["namespaces"]["memory"]
 
@@ -206,7 +207,15 @@ export async function fresh(cfg: Descriptor, root: string, files: readonly { raw
 
 async function create(cfg: Descriptor, launch: Launch, files: readonly { raw: Buffer }[]) {
   await directory(path.dirname(launch.root))
-  await mkdir(launch.root)
+  await mkdir(launch.root).catch((err: unknown) => {
+    if (err && typeof err === "object" && "code" in err && err.code === "EEXIST")
+      throw new Failure(
+        "managed_generation_conflict",
+        "A previous Memory startup left an incomplete generation. Review a fresh-start selection to recover.",
+        0,
+      )
+    throw err
+  })
   await directory(launch.root)
   const roots = {
     memory: await space(path.join(launch.root, "memory"), cfg.namespaces.memory.sid),

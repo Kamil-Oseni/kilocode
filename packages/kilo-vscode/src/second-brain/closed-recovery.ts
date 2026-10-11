@@ -47,14 +47,20 @@ export async function review(entry: { setup: unknown; managed?: unknown; launch?
   const setup = parse(entry.setup)
   const cfg = descriptor(entry.managed)
   const prior = object(entry.launch as Parameters<typeof object>[0])
-  check(setup.version === 2 && cfg.version === 2 && prior.phase === "running", "Saved running pair required")
-  const original = receipt(prior.receipt)
-  check(path.basename(original.path) === "managed-original.json", "Original paired receipt required")
-  const file = path.join(path.dirname(original.path), "managed-closed.json")
+  check(
+    setup.version === 2 && cfg.version === 2 && ["running", "closed"].includes(String(prior.phase)),
+    "Saved running or closed pair required",
+  )
+  const saved = receipt(prior.receipt)
+  const file = prior.phase === "closed" ? saved.path : path.join(path.dirname(saved.path), "managed-closed.json")
+  check(path.basename(file) === "managed-closed.json", "Original closed receipt required")
   await directory(path.dirname(file))
   const held = await image(file, 65536)
   const closed = Object.freeze({ path: file, bytes: held.raw.length, sha256: held.digest, tuple: held.tuple })
   const value = object(document(held.raw, 65536).value)
+  if (prior.phase === "closed") check(isDeepStrictEqual(closed, saved), "Saved closure changed")
+  const original = prior.phase === "closed" ? receipt(value.original) : saved
+  check(path.basename(original.path) === "managed-original.json", "Original paired receipt required")
   check(isDeepStrictEqual(receipt(value.original), original), "Closed pair differs from saved original")
   await launch(cfg, setup, closed)
   const before = await image(original.path, 65536)

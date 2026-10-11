@@ -19,6 +19,7 @@ import { images, fingerprint as reusable } from "../../src/second-brain/managed/
 import { image } from "../../src/second-brain/control/identity"
 import { review as archive, absent } from "../../src/second-brain/failed-archive"
 import { review as closure, ClosedRequired } from "../../src/second-brain/closed-recovery"
+import { inspect as conflict } from "../../src/second-brain/generation-conflict"
 
 test("missed shutdown publication after explicit termination recovers only the exact closed pair after its original parent exits", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "raya-closed-pair-parent-"))
@@ -89,6 +90,28 @@ test("missed shutdown publication after explicit termination recovers only the e
     expect(storage.get(key)).toEqual(value.running)
     await writeFile(value.closed.path, original)
     // Restoring bytes changes the tuple, so derive a fresh exact review rather than reuse prior authority.
+    const current = await closure(value.running as Parameters<typeof closure>[0])
+    const saved = { ...value.running, launch: { phase: "closed", receipt: current.closed } } as Parameters<
+      typeof conflict
+    >[0]
+    expect((await closure(saved)).original).toEqual(current.original)
+    const next = await launch(descriptor(saved.managed), saved.setup as Parameters<typeof launch>[1], current.closed)
+    await mkdir(next.root)
+    for (const kind of ["memory", "retrieval"]) {
+      await mkdir(path.join(next.root, kind, "Requests"), { recursive: true })
+      await mkdir(path.join(next.root, kind, "Runs"))
+      await writeFile(path.join(next.root, kind + "-plan.json"), "{}")
+    }
+    const partial = await conflict(saved, undefined)
+    expect(partial.original).toEqual(current.original)
+    expect(partial.partial.root).toBe(next.root)
+    expect(partial.outcome).toBe("unknown")
+    await expect(conflict(saved, { request: "unsettled" })).rejects.toThrow("Request uncertainty")
+    await writeFile(path.join(next.root, "managed-reservation.json"), "{}")
+    await expect(conflict(saved, undefined)).rejects.toThrow("Unknown partial-generation artifacts")
+    // This disposable test namespace is removed; production recovery always retains it.
+    expect(path.relative(value.root, next.root).startsWith("..")).toBe(false)
+    await rm(next.root, { recursive: true })
     const loaded = await Promise.all([cfg.load(), cfg.load()])
     expect(loaded.map((item) => item?.launch?.predecessor?.sha256)).toEqual([value.closed.sha256, value.closed.sha256])
     expect(storage.get<{ launch: { phase: string } }>(key)?.launch.phase).toBe("closed")
@@ -662,7 +685,7 @@ test("file-backed interrupted startup archive applies after actual parent exit w
   const fixture = source.slice(source.indexOf("\nconst python ="), source.indexOf("\nasync function failed("))
   const helpers = source.slice(
     source.indexOf("\nasync function failed("),
-    source.indexOf('\ntest("original managed shutdown'),
+    source.indexOf('\ntest("ordinary disconnect'),
   )
   const fresh = source.slice(
     source.indexOf("\nasync function fresh("),

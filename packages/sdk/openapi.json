@@ -23077,6 +23077,23 @@
                     "startSnapshot": {
                       "type": "string"
                     },
+                    "routine": {
+                      "type": "object",
+                      "properties": {
+                        "agentID": {
+                          "type": "string"
+                        },
+                        "runID": {
+                          "type": "string"
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        }
+                      },
+                      "required": ["agentID", "runID", "sessionID"],
+                      "additionalProperties": false
+                    },
                     "selfHealAttempt": {
                       "type": "string"
                     },
@@ -27286,6 +27303,23 @@
                     "startSnapshot": {
                       "type": "string"
                     },
+                    "routine": {
+                      "type": "object",
+                      "properties": {
+                        "agentID": {
+                          "type": "string"
+                        },
+                        "runID": {
+                          "type": "string"
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        }
+                      },
+                      "required": ["agentID", "runID", "sessionID"],
+                      "additionalProperties": false
+                    },
                     "selfHealAttempt": {
                       "type": "string"
                     },
@@ -31412,6 +31446,23 @@
                     },
                     "startSnapshot": {
                       "type": "string"
+                    },
+                    "routine": {
+                      "type": "object",
+                      "properties": {
+                        "agentID": {
+                          "type": "string"
+                        },
+                        "runID": {
+                          "type": "string"
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        }
+                      },
+                      "required": ["agentID", "runID", "sessionID"],
+                      "additionalProperties": false
                     },
                     "selfHealAttempt": {
                       "type": "string"

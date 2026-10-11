@@ -23303,6 +23303,11 @@ export type KilocodeGoalGetResponses = {
     startMessageID?: string
     startAfter?: string
     startSnapshot?: string
+    routine?: {
+      agentID: string
+      runID: string
+      sessionID: string
+    }
     selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
@@ -24085,6 +24090,11 @@ export type KilocodeGoalUpdateResponses = {
     startMessageID?: string
     startAfter?: string
     startSnapshot?: string
+    routine?: {
+      agentID: string
+      runID: string
+      sessionID: string
+    }
     selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
@@ -24834,6 +24844,11 @@ export type KilocodeGoalCreateResponses = {
     startMessageID?: string
     startAfter?: string
     startSnapshot?: string
+    routine?: {
+      agentID: string
+      runID: string
+      sessionID: string
+    }
     selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"

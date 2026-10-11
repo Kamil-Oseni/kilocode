@@ -217,8 +217,36 @@ function unfinished(old: Awaited<ReturnType<typeof historical>>): old is Awaited
   return "partial" in old
 }
 
-function separate(old: Awaited<ReturnType<typeof historical>>, root: string) {
-  if (unfinished(old)) check(disjoint(root, old.partial.root), "Partial generation cannot be reused")
+function separate(old: Awaited<ReturnType<typeof historical>>, root: string, container = false) {
+  if (!unfinished(old)) return
+  // The reviewed runtime container may be shared; plans and request namespaces may not.
+  if (container && normalize(root) === normalize(old.cfg.root)) return
+  check(disjoint(root, old.partial.root), "Partial generation cannot be reused")
+}
+
+async function shared(
+  old: Awaited<ReturnType<typeof historical>>,
+  cfg: ReturnType<typeof descriptor>,
+  fresh: Awaited<ReturnType<typeof selection>>,
+  plan: Record<string, unknown>,
+) {
+  if (!unfinished(old) || normalize(cfg.root) !== normalize(old.cfg.root)) return
+  check(
+    isDeepStrictEqual(cfg.python, old.cfg.python) &&
+      isDeepStrictEqual(cfg.supervisor, old.cfg.supervisor) &&
+      isDeepStrictEqual(cfg.notes, old.cfg.notes) &&
+      fresh.plan.source === plan.source &&
+      isDeepStrictEqual(fresh.plan.files, plan.files),
+    "Shared runtime must preserve its exact reviewed resources",
+  )
+  const ref = old.cfg.retrieval!
+  const held = await image(ref.path, 16777216)
+  check(held.raw.length === ref.bytes && held.digest === ref.sha256, "Historical Retrieval plan changed")
+  const original = object(value(held.raw))
+  check(
+    fresh.retrieval!.source === original.source && isDeepStrictEqual(fresh.retrieval!.files, original.files),
+    "Shared Retrieval source changed",
+  )
 }
 
 /** Historical failure is quarantined, never accepted as joined or settled. */
@@ -266,7 +294,9 @@ export async function review(file: string, entry: unknown, pending: unknown) {
     "Reviewed paired fresh runtime required",
   )
   const spaces = Object.values(cfg.namespaces)
-  separate(old, cfg.root)
+  separate(old, cfg.root, true)
+  separate(old, cfg.plan.path)
+  separate(old, cfg.retrieval!.path)
   check(disjoint(spaces[0].root, spaces[1].root), "Separate fresh service namespaces required")
   for (const space of spaces) {
     check(
@@ -287,6 +317,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
     "Historical service plan changed",
   )
   const plan = object(value(prior.raw))
+  await shared(old, cfg, fresh, plan)
   const env = object(plan.env)
   const ports = [
     Number(new URL(old.setup.origin).port),

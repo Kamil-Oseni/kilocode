@@ -6,6 +6,7 @@ import { snapshot, absent } from "../../src/second-brain/generation-conflict"
 import type { Descriptor } from "../../src/second-brain/managed/descriptor"
 import { generation } from "../../src/second-brain/managed/generation"
 import { Failure } from "../../src/second-brain/client"
+import { interpreter } from "./fixtures/private-python"
 
 test("partial managed generation reports its conflict without altering retained files", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "raya-generation-conflict-"))
@@ -43,7 +44,8 @@ test("partial managed generation reports its conflict without altering retained 
 
 test("partial generation admission retains files and refuses live owners or changed work", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "raya-partial-generation-"))
-  const python = "D:/Raya/Services/Packaging/Python/3.12.14/python.exe"
+  const dir = await mkdtemp(path.join(tmpdir(), "raya-partial-interpreter-"))
+  const python = await interpreter(dir)
   try {
     for (const kind of ["memory", "retrieval"]) {
       await mkdir(path.join(root, kind, "Requests"), { recursive: true })
@@ -80,6 +82,31 @@ test("partial generation admission retains files and refuses live owners or chan
       expect(code, err).toBe(0)
       expect(out).toBe("")
     }
+    const worker = Bun.spawn([python, "-I", "-S", "-c", "import sys;sys.stdin.buffer.read()"], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      windowsHide: true,
+    })
+    try {
+      const refused = await absent(held, python).then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      expect(refused).toBeInstanceOf(AggregateError)
+      expect((refused as AggregateError & { output: { stderr: string } }).output.stderr).toContain(
+        "Selected interpreter remains live",
+      )
+    } finally {
+      worker.stdin.end()
+      const [code, out, err] = await Promise.all([
+        worker.exited,
+        new Response(worker.stdout).text(),
+        new Response(worker.stderr).text(),
+      ])
+      expect(code, err).toBe(0)
+      expect(out).toBe("")
+    }
     expect((await absent(held, python)).receipt.code).toBe(0)
     // Windows' protected session-manager process exposes neither path nor command here.
     // Its non-Python executable name must still be refused when selected as interpreter.
@@ -99,5 +126,7 @@ test("partial generation admission retains files and refuses live owners or chan
   } finally {
     expect(path.dirname(root)).toBe(path.resolve(tmpdir()))
     await rm(root, { recursive: true, force: true })
+    expect(path.dirname(dir)).toBe(path.resolve(tmpdir()))
+    await rm(dir, { recursive: true, force: true })
   }
 }, 30000)

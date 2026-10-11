@@ -20,6 +20,7 @@ import { image } from "../../src/second-brain/control/identity"
 import { review as archive, absent } from "../../src/second-brain/failed-archive"
 import { review as closure, ClosedRequired } from "../../src/second-brain/closed-recovery"
 import { inspect as conflict } from "../../src/second-brain/generation-conflict"
+import { interpreter as isolated } from "./fixtures/private-python"
 
 test("missed shutdown publication after explicit termination recovers only the exact closed pair after its original parent exits", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "raya-closed-pair-parent-"))
@@ -131,6 +132,125 @@ test("missed shutdown publication after explicit termination recovers only the e
   }
 }, 60000)
 
+test("closed generation archive preserves the partial directory and credential, refuses stale selection, and publishes a fresh setup", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "raya-partial-archive-parent-"))
+  const python = await isolated(dir)
+  const runner = path.join(dir, "producer.ts")
+  const source = await readFile(import.meta.filename, "utf8")
+  const header = source
+    .slice(0, source.indexOf('test("missed shutdown'))
+    .replace(/from "(\.[^"]+)"/g, (_, name: string) => `from ${JSON.stringify(path.resolve(import.meta.dir, name))}`)
+  const fixture = source.slice(
+    source.indexOf("\n// Controlled nonmodel producer"),
+    source.indexOf("\nasync function failed("),
+  )
+  const replacement = source.slice(
+    source.indexOf("\nasync function replacement("),
+    source.indexOf("\nasync function interrupted("),
+  )
+  await writeFile(
+    runner,
+    header +
+      "\nconst python = " +
+      JSON.stringify(python) +
+      ";\n" +
+      fixture +
+      replacement +
+      `
+const value = await fixture("raya.memory.operation.v2", undefined, undefined, release, true);
+const next = await launch(value.cfg, value.setup, value.closed);
+await mkdir(next.root);
+for (const kind of ["memory", "retrieval"]) {
+  await mkdir(path.join(next.root, kind, "Requests"), {recursive:true});
+  await mkdir(path.join(next.root, kind, "Runs"));
+  await writeFile(path.join(next.root, kind + "-plan.json"), "{}");
+}
+const selected = await replacement(value, value.closed, "raya.memory.closed-generation.fresh-start");
+console.log(JSON.stringify({root:value.root,file:value.file,partial:next.root,selection:selected.file,closed:value.closed}));
+`,
+  )
+  const child = Bun.spawn([process.execPath, runner], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+    windowsHide: true,
+  })
+  const [code, out, err] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ])
+  expect(code, err).toBe(0)
+  const value = JSON.parse(out) as {
+    root: string
+    file: string
+    partial: string
+    selection: string
+    closed: { path: string; sha256: string }
+  }
+  const storage = {
+    get<T>(key: string) {
+      return JSON.parse(readFileSync(value.file, "utf8"))[key] as T | undefined
+    },
+    async update(key: string, item: unknown) {
+      const data = JSON.parse(await readFile(value.file, "utf8"))
+      data[key] = item
+      await writeFile(value.file, JSON.stringify(data))
+    },
+  }
+  const host = new BrainSettings(storage, {
+    async get() {
+      return "synthetic"
+    },
+    async store() {},
+    async delete() {},
+  })
+  const key = "raya.secondBrain.setup"
+  const entry = storage.get<Parameters<typeof conflict>[0]>(key)!
+  const file = path.join(value.partial, "memory-plan.json")
+  const original = await readFile(file)
+  const closure = await readFile(value.closed.path)
+  try {
+    const reviewed = await archive(value.selection, entry, undefined)
+    expect(reviewed.partial?.root).toBe(value.partial)
+    expect(reviewed.pids).toContain(child.pid)
+    expect(reviewed.settlement).toBe(false)
+    await expect(archive(value.selection, entry, { request: "unsettled" })).rejects.toThrow("Request uncertainty")
+    await host.archive(value.selection, async () => false)
+    expect(storage.get(key)).toEqual(entry)
+    await expect(
+      host.archive(value.selection, async () => {
+        await writeFile(file, '{"changed":true}')
+        return true
+      }),
+    ).rejects.toThrow("Reviewed fresh-start selection changed")
+    expect(storage.get(key)).toEqual(entry)
+    await writeFile(file, original)
+    await host.archive(value.selection, async () => true)
+    const saved = storage.get<{ credential: string; setup: { origin: string }; launch?: unknown }>(key)!
+    expect(saved.credential).toBe((entry as { credential?: string }).credential)
+    expect(saved.setup.origin).toBe("http://127.0.0.1:58743")
+    expect(saved.launch).toBeUndefined()
+    expect(host.pending()).toBeUndefined()
+    expect(await readFile(file)).toEqual(original)
+    expect(await readFile(value.closed.path)).toEqual(closure)
+    const audit = storage.get<{
+      phase: string
+      previous: unknown
+      settlement: boolean
+      review: { partial: { root: string } }
+    }>(`raya.secondBrain.failedSearchArchive.${value.closed.sha256}`)!
+    expect(audit.phase).toBe("applied")
+    expect(audit.previous).toEqual(entry)
+    expect(audit.settlement).toBe(false)
+    expect(audit.review.partial.root).toBe(value.partial)
+  } finally {
+    expect(path.dirname(value.root)).toBe(path.resolve(tmpdir()))
+    await rm(value.root, { recursive: true, force: true })
+    expect(path.dirname(dir)).toBe(path.resolve(tmpdir()))
+    await rm(dir, { recursive: true, force: true })
+  }
+}, 60000)
 const python = "D:/Raya/Services/Packaging/Python/3.12.14/python.exe"
 // Controlled nonmodel producer; actual Pipes observes the original process and both readers.
 const body = `import sys,json
@@ -150,6 +270,7 @@ async function fixture(
     closed: Awaited<ReturnType<typeof publish>>,
   ) => Promise<void>,
   pins: Readonly<Record<string, string>> = release,
+  plans = false,
 ) {
   const root = await mkdtemp(path.join(tmpdir(), "raya-memory-control-restart-"))
   await protect(root)
@@ -191,13 +312,17 @@ async function fixture(
   const script = path.join(root, "supervise.py")
   await copyFile(path.resolve("script/memory/supervise.py"), script)
   const held = await image(script)
+  if (plans) await writeFile(path.join(root, "memory.json"), JSON.stringify({ env: { RAYA_RETRIEVAL_PORT: "58742" } }))
+  const plan = plans ? await image(path.join(root, "memory.json")) : undefined
   const cfg = descriptor({
     format: "raya.memory.managed.launch",
     version: 2,
     root,
     python: { path: python, bytes: Number((await lstat(python)).size), sha256: interpreter },
     supervisor: { path: script, bytes: held.raw.length, sha256: held.digest },
-    plan: ref("memory.json", "a".repeat(64)),
+    plan: plan
+      ? { path: path.join(root, "memory.json"), bytes: plan.raw.length, sha256: plan.digest }
+      : ref("memory.json", "a".repeat(64)),
     retrieval: ref("retrieval.json", "b".repeat(64)),
     namespaces: { memory: space("memory"), retrieval: space("retrieval") },
   })
@@ -525,6 +650,31 @@ test("original managed shutdown detects a concurrent debt change during state pu
 async function fresh(value: Awaited<ReturnType<typeof fixture>>) {
   const failure = await failed(value)
   await rm(value.closed.path)
+  const old = path.join(value.root, "old-plan.json")
+  await writeFile(old, JSON.stringify({ env: { RAYA_RETRIEVAL_PORT: "58742" } }))
+  const held = await image(old)
+  value.running.managed.plan = { path: old, bytes: held.raw.length, sha256: held.digest }
+  failure.witness.entry_sha256 = fingerprint(value.running)
+  await writeFile(failure.file, JSON.stringify(failure.witness))
+  const saved = JSON.parse(await readFile(value.file, "utf8"))
+  saved["raya.secondBrain.setup"] = value.running
+  await writeFile(value.file, JSON.stringify(saved))
+  const witness = await image(failure.file)
+  return {
+    ...failure,
+    ...(await replacement(
+      value,
+      { path: failure.file, bytes: witness.raw.length, sha256: witness.digest, tuple: witness.tuple },
+      "raya.memory.failed-search.fresh-start",
+    )),
+  }
+}
+
+async function replacement(
+  value: Awaited<ReturnType<typeof fixture>>,
+  observation: Awaited<ReturnType<typeof publish>>,
+  format: string,
+) {
   const root = path.join(value.root, "raya-memory-managed-" + crypto.randomUUID().replaceAll("-", ""))
   await mkdir(root)
   await mkdir(path.join(value.root, "System"))
@@ -535,14 +685,6 @@ async function fresh(value: Awaited<ReturnType<typeof fixture>>) {
     return { path: file, bytes: held.raw.length, sha256: held.digest }
   }
   const cfg = structuredClone(value.cfg)
-  const old = path.join(value.root, "old-plan.json")
-  await writeFile(old, JSON.stringify({ env: { RAYA_RETRIEVAL_PORT: "58742" } }))
-  value.running.managed.plan = await ref(old)
-  failure.witness.entry_sha256 = fingerprint(value.running)
-  await writeFile(failure.file, JSON.stringify(failure.witness))
-  const saved = JSON.parse(await readFile(value.file, "utf8"))
-  saved["raya.secondBrain.setup"] = value.running
-  await writeFile(value.file, JSON.stringify(saved))
   cfg.root = root
   cfg.python = await ref(path.join(root, "python.exe"), 536870912)
   cfg.supervisor = await ref(path.join(root, "supervise.py"))
@@ -620,17 +762,16 @@ async function fresh(value: Awaited<ReturnType<typeof fixture>>) {
   await writeFile(path.join(root, "retrieval.json"), JSON.stringify(retrieval))
   cfg.plan = await ref(path.join(root, "memory.json"))
   cfg.retrieval = await ref(path.join(root, "retrieval.json"))
-  const witness = await image(failure.file)
   const input = {
-    format: "raya.memory.failed-search.fresh-start",
+    format,
     version: 1,
-    observation: { path: failure.file, bytes: witness.raw.length, sha256: witness.digest, tuple: witness.tuple },
+    observation,
     setup: { ...value.setup, origin: "http://127.0.0.1:58743" },
     managed: cfg,
   }
   const file = path.join(root, "fresh-start.json")
   await writeFile(file, JSON.stringify(input))
-  return { ...failure, file, input }
+  return { file, input }
 }
 
 async function interrupted(value: Awaited<ReturnType<typeof fixture>>) {

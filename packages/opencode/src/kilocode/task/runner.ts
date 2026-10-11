@@ -29,7 +29,7 @@ import {
 } from "./delegation"
 import { claim } from "./claim"
 import { record as ContinuationRecord } from "./continuation"
-import { inspect, recover } from "./recovery"
+import { inspect, recover, Record as Claim } from "./recovery"
 import { stopped } from "./owner"
 import { hold } from "./hold"
 import { poll } from "./poll"
@@ -48,7 +48,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { BackgroundProcess } from "@/kilocode/background-process"
 import { lineage } from "@/kilocode/background-process/lifecycle"
 import { SessionTable } from "@opencode-ai/core/session/sql"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import type { PtyArchive } from "@/kilocode/pty/archive"
 import { RayaTaskExecution } from "./execution"
 import { scheduler as admission } from "./admission"
@@ -754,6 +754,7 @@ export namespace RayaTaskRunner {
                     note ? undefined : item.output?.criteria,
                     opts?.budget ?? (item.budget ? { modelCost: item.budget } : undefined),
                     opts?.follow || opts?.delegationID ? "reply" : undefined,
+                    { agentID: item.id, runID: owner.id, sessionID: created.id },
                   )
                   const run: RayaTask.Run = {
                     id: owner.id,
@@ -2054,7 +2055,70 @@ export namespace RayaTaskRunner {
           message: "This interrupted start is no longer current. Reload its recovery review.",
         })
       const expired = !!row && (row.lease_until ?? 0) <= now
-      const sid = prior?.sessionID ?? (row?.session_id ? SessionID.make(row.session_id) : undefined)
+      const sid =
+        prior?.sessionID ??
+        (row?.session_id ? SessionID.make(row.session_id) : undefined) ??
+        (current?.runID === runID ? current.sessionID : undefined)
+      const incomplete = !row && (!prior || (prior.status === "error" && prior.blockedReason === reason))
+      const orphan = Effect.fn("RayaTaskRunner.resolve.orphan")(function* (claim: typeof Claim.Type) {
+        if (!input.database || claim.phase !== "session-created" || !claim.sessionID || !claim.trigger) return undefined
+        const matches = yield* input.database.db
+          .select({ id: SessionTable.id })
+          .from(SessionTable)
+          .where(
+            sql`CASE WHEN json_valid(${SessionTable.metadata}) THEN
+            json_extract(${SessionTable.metadata}, '$.rayaRoutine.agentID') = ${id}
+            AND json_extract(${SessionTable.metadata}, '$.rayaRoutine.runID') = ${runID}
+          ELSE 0 END`,
+          )
+          .limit(2)
+          .all()
+          .pipe(Effect.orDie)
+        if (matches.length !== 1 || matches[0].id !== claim.sessionID) return undefined
+        const session = yield* input.sessions.get(claim.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+        const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session?.metadata?.rayaRoutine).pipe(
+          Effect.orElseSucceed(() => undefined),
+        )
+        const snapshot = yield* snapshots.find(runID).pipe(Effect.orElseSucceed(() => undefined))
+        if (
+          !session ||
+          session.id !== claim.sessionID ||
+          !identity ||
+          identity.trigger.kind === "timer" ||
+          identity.delegationID ||
+          claim.delegationID ||
+          claim.messageSource ||
+          claim.messageSessionID ||
+          identity.agentID !== id ||
+          identity.runID !== runID ||
+          !isDeepStrictEqual(identity.trigger, claim.trigger) ||
+          !snapshot ||
+          snapshot.agentID !== id ||
+          snapshot.at !== claim.at ||
+          (snapshot.definition.scheduleVersion ?? 1) !== identity.scheduleVersion
+        )
+          return undefined
+        const goal = yield* goals.get(claim.sessionID)
+        if (prior && goal?.createdAt !== prior.goalCreatedAt) return undefined
+        if (
+          goal &&
+          (!isDeepStrictEqual(goal.routine, { agentID: id, runID, sessionID: claim.sessionID }) ||
+            goal.objective !== snapshot.objective)
+        )
+          return undefined
+        const run: RayaTask.Run = {
+          id: runID,
+          agentID: id,
+          at: claim.at,
+          sessionID: claim.sessionID,
+          scheduleVersion: identity.scheduleVersion,
+          trigger: identity.trigger,
+          status: "error",
+          blockedReason: reason,
+          ...(goal ? { goalCreatedAt: goal.createdAt } : {}),
+        }
+        return { run, goal }
+      })
       const result = Effect.fn("RayaTaskRunner.resolve.result")(function* () {
         const current = inbox ? yield* inbox.page(id) : undefined
         const saved = current?.messages.find((item) => item.source === source)
@@ -2066,10 +2130,22 @@ export namespace RayaTaskRunner {
           reason,
         }
       })
-      const finish = Effect.fn("RayaTaskRunner.resolve.finish")(function* (trusted: boolean) {
+      const finish = Effect.fn("RayaTaskRunner.resolve.finish")(function* (
+        trusted: boolean,
+        recovered?: Effect.Success<ReturnType<typeof orphan>>,
+      ) {
         const sessionID = sid
+        if (recovered) {
+          if (!isDeepStrictEqual(yield* goals.get(recovered.run.sessionID), recovered.goal)) return false
+          const saved = yield* tasks.restore(recovered.run)
+          if (!isDeepStrictEqual(saved, { ...recovered.run, revision: saved.revision })) return false
+        }
         if (sessionID) {
           const goal = yield* goals.get(sessionID)
+          if (recovered && !isDeepStrictEqual(goal, recovered.goal)) return false
+          if (prior?.goalCreatedAt !== undefined && goal?.createdAt !== prior.goalCreatedAt) return false
+          if (prior && !row && goal?.routine && !isDeepStrictEqual(goal.routine, { agentID: id, runID, sessionID }))
+            return false
           if (goal?.status === "active" || goal?.status === "paused")
             yield* goals.update(sessionID, { status: "blocked", reason }, goal.revision).pipe(
               Effect.catchTag("RayaGoal.AuditError", (err) =>
@@ -2078,7 +2154,7 @@ export namespace RayaTaskRunner {
               Effect.catchTag("RayaGoal.NotFoundError", () => Effect.void),
             )
           yield* settle(sessionID)
-          if (reservations && !prior) {
+          if (reservations && (!prior || recovered)) {
             const msgs = yield* input.sessions.messages({ sessionID })
             const cost = msgs.reduce((sum, item) => sum + (item.info.role === "assistant" ? item.info.cost : 0), 0)
             yield* reservations.settle(runID, sessionID, cost).pipe(Effect.orDie)
@@ -2115,8 +2191,18 @@ export namespace RayaTaskRunner {
         const closed = yield* recover(
           input.storage,
           id,
-          (claim) => Effect.succeed(claim.id === runID),
-          (claim) => finish(stopped(claim.owner)),
+          (claim) =>
+            Effect.gen(function* () {
+              if (claim.id !== runID) return false
+              if (incomplete && claim.sessionID) return !!(yield* orphan(claim))
+              return true
+            }),
+          (claim) =>
+            Effect.gen(function* () {
+              const recovered = incomplete && claim.sessionID ? yield* orphan(claim) : undefined
+              if (incomplete && claim.sessionID && !recovered) return false
+              return yield* finish(stopped(claim.owner), recovered)
+            }),
           (claim) =>
             Effect.gen(function* () {
               if (stopped(claim.owner)) return true

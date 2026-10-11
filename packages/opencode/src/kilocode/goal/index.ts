@@ -474,7 +474,10 @@ export namespace RayaGoal {
       criteria?: Criteria,
       budget?: Budget,
       completion?: "reply",
+      routine?: State["routine"],
     ) {
+      if (routine && routine.sessionID !== sessionID)
+        return yield* new AuditError({ message: "Routine goal ownership does not match its session." })
       const linked = selfHealID ? yield* ownership(sessionID, selfHealID) : undefined
       const text = clean(objective)
       if (!text) return yield* new AuditError({ message: "A goal objective is required." })
@@ -506,7 +509,8 @@ export namespace RayaGoal {
         existing.status === "active" &&
         isDeepStrictEqual(existing.criteria, required) &&
         isDeepStrictEqual(existing.budget, budget) &&
-        existing.completion === completion
+        existing.completion === completion &&
+        isDeepStrictEqual(existing.routine, routine)
       )
         return existing // raya_change - retry failed first request without changing requirements
       // A completed goal must not block the next /goal. Archive it so the banner
@@ -556,6 +560,7 @@ export namespace RayaGoal {
           startAfter: startMessageID ? undefined : MessageID.ascending(),
           startSnapshot,
           selfHealID,
+          routine,
           selfHealAttempt: linked?.id,
           status: "active",
           createdAt: now,

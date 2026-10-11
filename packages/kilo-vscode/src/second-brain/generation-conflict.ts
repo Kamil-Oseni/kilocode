@@ -79,7 +79,7 @@ export async function absent(partial: Awaited<ReturnType<typeof snapshot>>, pyth
   check(path.isAbsolute(python), "Selected interpreter required")
   const exe = normalize(python).replace(/'/g, "''")
   const name = path.basename(python).replace(/'/g, "''")
-  const script = `$ErrorActionPreference='Stop';$root='${root}';$exe='${exe}';$name='${name}';$rows=@(Get-CimInstance Win32_Process);foreach($row in $rows){$cmd=$row.CommandLine;$file=$row.ExecutablePath;if($cmd -and $cmd.Replace([char]92,[char]47).ToLowerInvariant().Contains($root)){throw 'Partial generation has a live owner'};$selected=($row.Name -ieq $name) -or ($file -and $file.Replace([char]92,[char]47).ToLowerInvariant() -eq $exe);if(($selected -or $row.Name -match '^python.*[.]exe$') -and (!$file -or !$cmd)){throw 'Interpreter ownership is unverified'}};[ordered]@{owners=0;unknown=0}|ConvertTo-Json -Compress`
+  const script = `$ErrorActionPreference='Stop';$root='${root}';$exe='${exe}';$name='${name}';$rows=@(Get-CimInstance Win32_Process);foreach($row in $rows){$cmd=$row.CommandLine;$file=$row.ExecutablePath;if($cmd -and $cmd.Replace([char]92,[char]47).ToLowerInvariant().Contains($root)){throw 'Partial generation has a live owner'};$selected=$file -and $file.Replace([char]92,[char]47).ToLowerInvariant() -eq $exe;if(($selected -or $row.Name -ieq $name -or $row.Name -match '^python.*[.]exe$') -and (!$file -or !$cmd)){throw 'Interpreter ownership is unverified'};if($selected){throw 'Selected interpreter remains live; partial ownership is unverified'}};[ordered]@{owners=0;unknown=0}|ConvertTo-Json -Compress`
   const result = await command(
     powershell(),
     ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],

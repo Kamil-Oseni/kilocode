@@ -334,6 +334,7 @@ export namespace Codec {
     startMessageID: Schema.optional(MessageID), // raya_change - restore the pre-goal checkpoint on discard
     startAfter: Schema.optional(MessageID), // reserve initial intake without changing the original checkpoint
     startSnapshot: Schema.optional(Schema.String), // raya_change - restore edits made by child sessions and missing patch parts
+    routine: Schema.optional(Schema.Struct({ agentID: Schema.String, runID: Schema.String, sessionID: SessionID })),
     selfHealAttempt: Schema.optional(Schema.String), // server-derived durable repair owner
     selfHealID: Schema.optional(Schema.String), // raya_change - link an isolated repair session to the global backlog
     status: Status,

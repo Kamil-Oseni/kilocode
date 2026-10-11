@@ -11,6 +11,12 @@ const wire = z.discriminatedUnion("kind", [
 
 /** Outer protocol validation only. Tool execution retains semantic/evidence authority. */
 export namespace ToolEnvelope {
+  export class Empty extends Error {
+    constructor() {
+      super("Text envelope omitted a reply")
+      this.name = "EmptyTextEnvelope"
+    }
+  }
   export function mode(enabled: boolean, count: number, choice?: "auto" | "required" | "none", structured = false) {
     if (!enabled) return undefined
     if (choice === "required") return "required"
@@ -124,7 +130,7 @@ export namespace ToolEnvelope {
     const value = wire.parse(JSON.parse(text))
     if (value.kind === "text") {
       if (choice === "required") throw new Error("Required envelope omitted tools")
-      if (!value.content.trim()) throw new Error("Text envelope omitted a reply")
+      if (!value.content.trim()) throw new Empty()
       if (refs !== undefined && !refs.includes(value.content))
         throw new Error("Result envelope omitted an eligible source reference")
       return { content: value.content }

@@ -18,6 +18,7 @@ type Diagnostic = {
     | "envelope-json"
     | "envelope-schema"
     | "envelope-validation"
+    | "empty-text"
     | "required-acquisition"
     | "ordinary-stream"
     | "required-frame-json"
@@ -428,7 +429,9 @@ async function required(
               ? "envelope-json"
               : err instanceof z.ZodError
                 ? "envelope-schema"
-                : "envelope-validation",
+                : err instanceof ToolEnvelope.Empty
+                  ? "empty-text"
+                  : "envelope-validation",
           finish: terminal.done_reason,
           prompt: terminal.prompt_eval_count,
           eval: terminal.eval_count,
@@ -443,6 +446,28 @@ async function required(
   return [{ ...rows.at(-1)!, message: { role: "assistant" as const, ...message, ...(thinking ? { thinking } : {}) } }]
 }
 
+async function correction<T>(acquire: () => Promise<T>, repair: () => Promise<T>, eligible: boolean) {
+  try {
+    return await acquire()
+  } catch (err) {
+    if (
+      !eligible ||
+      !(err instanceof OllamaBridgeError) ||
+      err.diagnostic?.reason !== "empty-text" ||
+      err.diagnostic.finish !== "stop"
+    )
+      throw err
+    // The first response is fully read, retired, strict text-only and unpublished.
+    // No tools ran. Permit one fresh, context-checked generation, never a replay
+    // after transport/cleanup failure, partial output or selected result evidence.
+    console.warn("[Raya] Correcting one empty local reply.", {
+      prompt: err.diagnostic.prompt,
+      eval: err.diagnostic.eval,
+    })
+    return repair()
+  }
+}
+
 export class OllamaBridgeError extends Error {
   readonly isRetryable = false
   readonly diagnostic?: Readonly<Partial<Diagnostic>>
@@ -454,6 +479,7 @@ export class OllamaBridgeError extends Error {
             "envelope-json",
             "envelope-schema",
             "envelope-validation",
+            "empty-text",
             "required-acquisition",
             "ordinary-stream",
             "required-frame-json",
@@ -644,7 +670,7 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
     const timer = controller ? setTimeout(() => controller.abort(new OllamaBridgeError()), duration) : undefined
     try {
       if (controller) signal?.throwIfAborted()
-      const payload = JSON.stringify({
+      const body = {
         model: data.model,
         messages,
         stream: data.stream ?? false,
@@ -668,7 +694,8 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
           ...(data.presence_penalty !== undefined ? { presence_penalty: data.presence_penalty } : {}),
           ...(data.stop ? { stop: typeof data.stop === "string" ? [data.stop] : data.stop } : {}),
         },
-      })
+      }
+      const payload = JSON.stringify(body)
       if (envelope && Buffer.byteLength(payload) > bound) throw new OllamaBridgeError()
       signal?.throwIfAborted()
       const native = await Lineage.run(Lineage.runner(), () => {
@@ -741,14 +768,34 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       if (!native.body) throw new OllamaBridgeError()
       const reader = native.body.getReader()
       if (data.tool_choice === "required" || envelope) {
-        const rows = await required(
-          reader,
-          data.model,
-          advertised,
-          data.stream === true,
-          signal,
-          envelope,
-          ResultFrame.selected(frame),
+        const acquire = (reader: ReadableStreamDefaultReader<Uint8Array>) =>
+          required(reader, data.model, advertised, data.stream === true, signal, envelope, ResultFrame.selected(frame))
+        const rows = await correction(
+          () => acquire(reader),
+          async () => {
+            const corrected = [
+              ...messages,
+              {
+                role: "system" as const,
+                content:
+                  "The previous completed text envelope contained no reply. Answer the user's latest message with nonempty content. A greeting or thanks needs a brief natural acknowledgment. Return only the requested JSON envelope; never omit the reply or invent a tool result.",
+              },
+            ]
+            OllamaPrompt.check(corrected, [], size, data.max_tokens)
+            const payload = JSON.stringify({ ...body, messages: corrected })
+            if (Buffer.byteLength(payload) > bound) throw new OllamaBridgeError()
+            const repaired = await Lineage.run(Lineage.runner(), () => {
+              signal?.throwIfAborted()
+              return fetcher(url, { ...init, ...(signal ? { signal } : {}), headers, body: payload })
+            })
+            if (!repaired.body) throw new OllamaBridgeError()
+            if (!repaired.ok) {
+              await read(repaired.body.getReader(), signal)
+              throw new OllamaBridgeError()
+            }
+            return acquire(repaired.body.getReader())
+          },
+          envelope !== "required" && frame === undefined,
         )
         signal?.throwIfAborted()
         const values = rows.map(convert)
@@ -950,7 +997,12 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
     } catch (err) {
       if (controller?.signal.aborted && !caller?.aborted && !(err instanceof OllamaBridgeError))
         throw new OllamaBridgeError({ cause: err })
-      if ((!envelope && data.tool_choice !== "required") || err instanceof OllamaBridgeError || signal?.aborted)
+      if (
+        (!envelope && data.tool_choice !== "required") ||
+        err instanceof OllamaBridgeError ||
+        err instanceof OllamaPrompt.OllamaWindowError ||
+        signal?.aborted
+      )
         throw err
       throw new OllamaBridgeError({ cause: err })
     } finally {

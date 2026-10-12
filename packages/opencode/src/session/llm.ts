@@ -48,6 +48,8 @@ import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_ch
 import * as ObservedResult from "@/kilocode/provider/result-contract" // kilocode_change - final entries are rendered from verified completed Read parts
 import * as ResultFrame from "@/kilocode/provider/result-frame" // kilocode_change - native result grammar remains private to the original request
 import * as Lineage from "@/kilocode/task/effect-lineage" // kilocode_change - original execution liveness, not native effect authorization
+import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - transient native grammar for an authenticated goal dispatch
+import * as GoalNative from "@/kilocode/goal/native" // kilocode_change - private cue cannot be supplied by provider JSON
 // kilocode_change end
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -376,11 +378,12 @@ const live: Layer.Layer<
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
       // kilocode_change start - raya_change: DeepSeek bypasses the opt-in flag because AI SDK cannot execute DSML
-      if (flags.experimentalNativeLlm || LLMNativeRuntime.requiresNative(input.model)) {
+      const transport = yield* GoalGate.native(item.options, input.model.api.npm, input.tools) // kilocode_change - preserve persistent provider settings
+      if (flags.experimentalNativeLlm || LLMNativeRuntime.requiresNative(input.model) || GoalNative.admitted(transport)) {
         // kilocode_change end
         const native = LLMNativeRuntime.stream({
           model: input.model,
-          provider: item,
+          provider: { ...item, options: transport }, // kilocode_change - exact owned cue and original native tool schemas
           auth: info,
           llmClient,
           messages: prepared.messages,

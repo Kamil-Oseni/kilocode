@@ -1903,6 +1903,7 @@ export const layer = Layer.effect(
           // raya_change start - Auto exposes its bounded workflow until goal handling releases synthesis
           const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
           const complete = yield* GoalGate.closed(resolved) // kilocode_change - current original dispatch only
+          const mandatory = yield* GoalGate.required(resolved) // kilocode_change - require goal controls in owned specialist dispatches
           const conversation = agent.name === "auto" && acknowledged(msgs, current, lastUser.id)
           const chat = agent.name === "auto" && chatting(msgs, current, lastUser.id)
           const original = chat ? RayaChief.request(current.metadata) : undefined
@@ -2051,7 +2052,7 @@ export const layer = Layer.effect(
             toolChoice:
               complete || conversation || chat
                 ? "none"
-                : format.type === "json_schema"
+                : mandatory || format.type === "json_schema"
                   ? "required"
                   : agent.name === "auto"
                     ? phase === "done" || (direct && isLastStep)

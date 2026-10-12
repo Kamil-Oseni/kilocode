@@ -31,8 +31,18 @@ import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TestInstance, disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { database, storage } from "./fixtures/effect-profile"
+import * as GoalNative from "@/kilocode/goal/native"
 
 const requests: Record<string, unknown>[] = []
+const kinds = (value: unknown) =>
+  Schema.decodeUnknownSync(
+    Schema.Struct({
+      anyOf: Schema.Array(
+        Schema.Struct({ properties: Schema.Struct({ kind: Schema.Struct({ const: Schema.String }) }) }),
+      ),
+    }),
+  )(value).anyOf.map((row) => row.properties.kind.const)
 const state = { phase: 0, file: "", fresh: false, queued: false, paused: false }
 const endpoint = Bun.serve({
   port: 0,
@@ -114,7 +124,11 @@ const it = testEffect(
       Database.node,
       EventV2Bridge.node,
     ]),
-    [[RuntimeFlags.node, flags]],
+    [
+      [RuntimeFlags.node, flags],
+      [Database.node, database],
+      [Storage.node, storage],
+    ],
   ),
 )
 it.instance(
@@ -150,7 +164,7 @@ it.instance(
       const reply = yield* prompt.prompt({
         sessionID: session.id,
         agent: "gate",
-        model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("fixture") },
+        model: { providerID: ProviderV2.ID.make("qwen-local"), modelID: ModelV2.ID.make("fixture") },
         parts: [{ type: "text", text: armed.objective }],
       })
       const saved = yield* goals.get(session.id)
@@ -172,8 +186,16 @@ it.instance(
           .map((part) => part.tool),
       ).toEqual(["read", "update_goal"])
       expect(requests).toHaveLength(3)
+      expect(requests[0]?.format).toBeDefined()
+      expect(requests[1]?.format).toBeDefined()
+      expect(kinds(requests[0]?.format)).not.toContain("text")
+      expect(kinds(requests[1]?.format)).not.toContain("text")
       expect(requests[2]?.tools).toBeUndefined()
       expect(requests[2]?.format).toBeUndefined()
+      expect(
+        (yield* (yield* Provider.Service).getProvider(ProviderV2.ID.make("qwen-local"))).options
+          .localInferenceToolFormat,
+      ).toBeUndefined()
       expect(saved?.usage.continuations).toBe(0)
     }),
   {
@@ -181,15 +203,14 @@ it.instance(
       snapshot: false,
       formatter: false,
       lsp: false,
-      enabled_providers: ["openai"],
+      enabled_providers: ["qwen-local"],
       provider: {
-        openai: {
+        "qwen-local": {
           npm: "@ai-sdk/openai-compatible",
           options: {
             baseURL: `${endpoint.url}v1`,
             localInference: true,
             localInferenceAPI: "ollama",
-            localInferenceToolFormat: "completion-envelope-v1",
           },
           models: { fixture: { name: "Gate fixture", limit: { context: 32768, output: 1024 } } },
         },
@@ -237,9 +258,19 @@ it.instance(
           Effect.orDie,
         )
       const check = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, current)
+      const tools = GoalGate.bind({}, check, Effect.runPromise)
+      expect(yield* GoalGate.required(tools)).toBe(true)
+      const options = { localInference: true, localInferenceAPI: "ollama", baseURL: `${endpoint.url}v1` }
+      expect(GoalNative.admitted(yield* GoalGate.native(options, "@ai-sdk/openai-compatible", tools))).toBe(true)
+      expect(GoalNative.admitted(yield* GoalGate.native(options, "@ai-sdk/openai-compatible", {}))).toBe(false)
+      expect(GoalNative.admitted({ ...options, localInferenceToolFormat: "completion-envelope-v1" })).toBe(false)
+      const cloud = { ...options, localInference: false }
+      expect(yield* GoalGate.native(cloud, "@ai-sdk/openai-compatible", tools)).toBe(cloud)
       const paused = yield* goals.control(session.id, "paused")
       expect(paused.pause).toBe("user-control")
       expect(yield* check()).toBe(true)
+      expect(yield* GoalGate.required(tools)).toBe(false)
+      expect(yield* GoalGate.native(options, "@ai-sdk/openai-compatible", tools)).toBe(options)
       const fresh = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, current)
       expect(yield* fresh()).toBe(true)
       state.paused = true
@@ -253,7 +284,7 @@ it.instance(
       const reply = yield* prompt.loop({ sessionID: session.id })
       expect(requests).toHaveLength(1)
       expect(requests[0]?.tools).toBeUndefined()
-      expect(requests[0]?.format).toBeUndefined()
+      expect(kinds(requests[0]?.format)).toEqual(["text"])
       expect(reply.parts.some((part) => part.type === "text" && part.text === "DONE")).toBe(true)
       // Exercise the same durable acknowledgement used by the actual TurnClose subscriber.
       const settled = yield* goals.finished(session.id, reply.info.id)
@@ -274,6 +305,8 @@ it.instance(
       expect(resumed?.dispatch?.phase).toBe("queued")
       expect(resumed?.dispatch?.id).not.toBe(dispatch.id)
       expect(yield* check()).toBe(false)
+      expect(yield* GoalGate.required(tools)).toBe(false)
+      expect(yield* GoalGate.native(options, "@ai-sdk/openai-compatible", tools)).toBe(options)
     }),
   {
     config: {
@@ -338,9 +371,10 @@ it.instance(
         ),
       )
       expect(yield* check()).toBe(true)
+      expect(yield* GoalGate.required(GoalGate.bind({}, check, Effect.runPromise))).toBe(false)
       expect(requests).toHaveLength(4)
       expect(requests[3]?.tools).toBeUndefined()
-      expect(requests[3]?.format).toBeUndefined()
+      expect(kinds(requests[3]?.format)).toEqual(["text"])
       const tools = (yield* sessions.messages({ sessionID: created.id }))
         .flatMap((row) => row.parts)
         .filter((row) => row.type === "tool")
@@ -355,7 +389,8 @@ it.instance(
         Schema.Array(Schema.Struct({ role: Schema.String, content: Schema.String })),
       )(requests[3]?.messages)
       const returned = wire.findLast((row) => row.role === "tool")
-      expect(returned?.content).toBe(completed.state.output)
+      if (!returned) throw new Error("Actual completion tool projection missing")
+      expect(JSON.parse(returned.content)).toEqual({ toolCallId: completed.callID, output: completed.state.output })
       // Exercise a genuine already queued callback through the original processor,
       // then let SessionPrompt finish the dispatch without retaining its refusal.
       const agents = yield* Agent.Service
@@ -416,7 +451,7 @@ it.instance(
       expect(refusal?.type === "tool" && refusal.state.status === "error" && refusal.state.error).toContain(
         "Tool admission for this goal dispatch is closed",
       )
-      expect(requests[5]?.format).toBeUndefined()
+      expect(kinds(requests[5]?.format)).toEqual(["text"])
       const synthesis = (yield* sessions.messages({ sessionID: created.id })).at(-1)
       expect(synthesis?.parts.some((row) => row.type === "text" && row.text === "DONE")).toBe(true)
       expect(
@@ -436,6 +471,7 @@ it.instance(
       expect((yield* goals.get(created.id))?.intent).toBe(saved.intent)
       expect(requests[6]?.format).toBeDefined()
       expect(yield* GoalGate.closed(catalog)).toBe(false)
+      expect(yield* GoalGate.required(catalog)).toBe(false)
       yield* goals.clear(created.id)
       yield* goals.create(created.id, "A new goal intent")
       expect(yield* check()).toBe(false)
@@ -470,4 +506,23 @@ it.instance(
     },
   },
   45000,
+)
+
+it.instance("conversational reply goals do not acquire persistent tool enforcement", () =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const storage = yield* Storage.Service
+    const goals = RayaGoal.make({ storage, sessions })
+    const session = yield* sessions.create({ title: "Conversational reply gate" })
+    yield* goals.create(session.id, "Answer once", undefined, undefined, undefined, undefined, undefined, "reply")
+    yield* Effect.addFinalizer(() => goals.clear(session.id))
+    const queued = yield* goals.continued(session.id)
+    const message = queued?.dispatch?.messageID
+    if (!message) throw new Error("Actual reply dispatch missing")
+    const definition = yield* goalTools(goals).update.pipe(Effect.flatMap(Tool.init))
+    const check = yield* GoalGate.prepare(definition.jsonSchema, session.id, message, () => Effect.succeed(message))
+    const tools = GoalGate.bind({}, check, Effect.runPromise)
+    expect(yield* GoalGate.required(tools)).toBe(false)
+    expect(yield* GoalGate.closed(tools)).toBe(false)
+  }),
 )

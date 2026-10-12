@@ -25,6 +25,7 @@ import { terminal } from "@/kilocode/provider/native-admission" // kilocode_chan
 import { context as ollamaContext } from "@/kilocode/provider/ollama-context" // kilocode_change
 import * as ResultFrame from "@/kilocode/provider/result-frame" // kilocode_change - private original-request result grammar
 import * as Lineage from "@/kilocode/task/effect-lineage" // kilocode_change - original execution transfer only
+import * as GoalNative from "@/kilocode/goal/native" // kilocode_change - authenticated local goal request only
 
 export type RuntimeStatus =
   | { readonly type: "supported"; readonly apiKey?: string; readonly baseURL?: string } // kilocode_change - explicitly local compatible servers may omit authentication
@@ -75,7 +76,8 @@ function statusWithFetch(
     providerID !== "openai" &&
     providerID !== "anthropic" &&
     !providerID.startsWith("opencode") &&
-    !requiresNative(input.model)
+    !requiresNative(input.model) &&
+    !GoalNative.admitted(input.provider.options) // kilocode_change - no provider-ID or configured-format bypass
   )
     return { type: "unsupported", reason: "provider is not openai, opencode, anthropic, or DSML-compatible DeepSeek" }
   // kilocode_change end

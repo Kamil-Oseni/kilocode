@@ -6,11 +6,13 @@ import { record } from "@/kilocode/task/continuation"
 import type { Session } from "@/session/session"
 import { RayaGoal } from "."
 import type { MessageID, SessionID } from "@/session/schema"
+import * as Native from "./native"
 
 type Read = (id: SessionID) => Effect.Effect<RayaGoal.State | undefined>
 type Check = () => Effect.Effect<boolean>
 const owners = new WeakMap<JSONSchema7, Read>()
 const checks = new WeakMap<Record<string, AITool>, Check>()
+const workflows = new WeakMap<Check, Check>()
 
 export function owned(schema: JSONSchema7, read: Read) {
   owners.set(schema, read)
@@ -27,7 +29,7 @@ export const prepare = Effect.fn("GoalToolGate.prepare")(function* (
   const goal = read ? yield* read(session) : undefined
   const dispatch = goal?.dispatch
   if (!read || !goal || !dispatch || dispatch.messageID !== message) return () => Effect.succeed(false)
-  return () =>
+  const check = () =>
     Effect.gen(function* () {
       if ((yield* current()) !== message) return false
       const saved = yield* read(session)
@@ -49,6 +51,23 @@ export const prepare = Effect.fn("GoalToolGate.prepare")(function* (
         saved.audit?.verifiedAt !== undefined
       )
     })
+  workflows.set(check, () =>
+    Effect.gen(function* () {
+      if ((yield* current()) !== message) return false
+      const saved = yield* read(session)
+      if ((yield* current()) !== message) return false
+      return (
+        saved?.status === "active" &&
+        saved.completion !== "reply" &&
+        saved.createdAt === goal.createdAt &&
+        saved.intent === goal.intent &&
+        saved.dispatch?.id === dispatch.id &&
+        saved.dispatch.messageID === message &&
+        saved.dispatch.intent === dispatch.intent
+      )
+    }),
+  )
+  return check
 })
 
 export const key = "raya.goal.observation"
@@ -190,3 +209,17 @@ export function bind(
 export function closed(tools: Record<string, AITool>) {
   return checks.get(tools)?.() ?? Effect.succeed(false)
 }
+
+/** Owned persistent work needs actual tools until audited completion releases final synthesis. */
+export function required(tools: Record<string, AITool>) {
+  const check = checks.get(tools)
+  return check ? (workflows.get(check)?.() ?? Effect.succeed(false)) : Effect.succeed(false)
+}
+
+export const native = Effect.fn("GoalToolGate.native")(function* (
+  options: Readonly<Record<string, unknown>>,
+  npm: string,
+  tools: Record<string, AITool>,
+) {
+  return (yield* required(tools)) ? Native.select(options, npm) : options
+})

@@ -12,6 +12,7 @@ import { inspect as completed } from "./completed-archive"
 import { release } from "./control/catalog-capture"
 import { current } from "./managed/catalog"
 import { inspect as conflict, absent as partial, snapshot } from "./generation-conflict"
+import { inspect as uncertain } from "./uncertain-sync-archive"
 
 async function retained(input: unknown) {
   const ref = receipt(input)
@@ -190,6 +191,7 @@ function native(
 }
 
 async function historical(format: unknown, witness: ReturnType<typeof receipt>, entry: unknown, pending: unknown) {
+  if (format === "raya.memory.uncertain-sync.fresh-start") return uncertain(entry, pending, witness)
   if (format === "raya.memory.closed-generation.fresh-start") {
     const saved = object(entry as Parameters<typeof object>[0])
     const prior = object(saved.launch)
@@ -262,6 +264,7 @@ export async function review(file: string, entry: unknown, pending: unknown) {
         "raya.memory.interrupted-startup.fresh-start",
         "raya.memory.completed-handoff.fresh-start",
         "raya.memory.closed-generation.fresh-start",
+        "raya.memory.uncertain-sync.fresh-start",
       ].includes(String(input.format)) &&
       input.version === 1,
     "Explicit reviewed fresh-start selection required",
@@ -287,9 +290,11 @@ export async function review(file: string, entry: unknown, pending: unknown) {
   check(
     cfg.version === 2 &&
       cfg.python.sha256 === old.cfg.python.sha256 &&
-      (!["raya.memory.failed-search.fresh-start", "raya.memory.closed-generation.fresh-start"].includes(
-        String(input.format),
-      ) ||
+      (![
+        "raya.memory.failed-search.fresh-start",
+        "raya.memory.closed-generation.fresh-start",
+        "raya.memory.uncertain-sync.fresh-start",
+      ].includes(String(input.format)) ||
         cfg.supervisor.sha256 === old.cfg.supervisor.sha256),
     "Reviewed paired fresh runtime required",
   )

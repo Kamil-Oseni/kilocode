@@ -37,7 +37,13 @@ These are source changes until included in a qualified installed package. They d
 
 The first slice is now included in qualified everyday package `7.4.23-snapshot+1113d35b8b.local.1791820426652`. Five focused tests, full CLI types, host/webview production checks, Knip and independent binary/archive qualification pass; closed installation preserves saved settings/history. The new due-date labels are present in the production bundle. No new loaded-GUI, routine-run, missed-run or human UX acceptance is claimed; exact evidence is recorded in `Raya-Implementation-Progress.md`.
 
-## Follow-up implementation
+## Conversation reporting and policy slice
+
+The four follow-up features are now implemented in original Raya code and included in qualified everyday package `7.4.23-snapshot+f3a3aa4df9.local.1791823909482`. Durable cards update in the originating or chosen existing workspace chat without creating model turns. A recorded waiting notice remains on the same occurrence card. The existing schedule review offers explicit skip/one pending run and skip/one eligible latest missed-run choices, preserving unspecified legacy behavior. Saved origin/destination and version checks prevent confirmation substitutions; unavailable destinations are retained rather than rerouted. Worker approvals remain in their real execution context.
+
+Focused backend/component/SDK checks, host/webview types, production lint/bundle, Knip, source-matched compilation, complete archive checks and closed installation preservation pass. No actual enabled routine, model run, loaded GUI or human acceptance is claimed for this package; those limits and exact evidence are recorded in `Raya-Implementation-Progress.md`.
+
+## Interaction examples
 
 Return one compact, updateable run receipt to the conversation that requested the job: Running, Needs your input, Completed or Failed, with its actual result and an Open run action. Then add report destination and explicit missed/overlap policy through existing Ask cards. Examples include job searches, an Eden daily brief, groceries, and project follow-ups; external messages/orders still follow their existing authorization rules.
 

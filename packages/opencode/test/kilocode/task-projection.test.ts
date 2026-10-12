@@ -121,6 +121,13 @@ it.live("routine cards survive reopening, upgrade queued occurrences and keep th
     yield* Effect.gen(function* () {
       const reports = RayaRoutineReports.make({ storage: yield* Storage.Service, sessions, scope: source })
       expect(yield* reports.list(source.id)).toHaveLength(2)
+      const storage = yield* Storage.Service
+      const key = ["raya", "routine-reports", createHash("sha256").update("occurrence").digest("hex")]
+      const retained = yield* storage.read(key)
+      yield* storage.remove(key)
+      expect(yield* reports.page({ sessionID: source.id }).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
+      yield* storage.replace(key, retained)
+      expect(yield* reports.list(source.id)).toHaveLength(2)
       items.delete(source.id)
       const card = yield* reports.publish({
         agent: saved.agent,

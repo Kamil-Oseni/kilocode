@@ -10,6 +10,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { isDeepStrictEqual } from "node:util"
+import { history } from "./report-history"
 
 export namespace RayaRoutineReports {
   export const Card = Schema.Struct({
@@ -32,6 +33,12 @@ export namespace RayaRoutineReports {
     notice: Schema.optional(Schema.Struct({ at: Codec.Timestamp, reason: Schema.Literals(["busy", "deferred"]) })),
   })
   export type Card = typeof Card.Type
+  export const Page = Schema.Struct({
+    items: Schema.Array(Card),
+    next: Schema.optional(Schema.String),
+    bootstrap: Schema.optional(Schema.Struct({ complete: Schema.Boolean, scanned: Schema.Int, total: Schema.Int })),
+  })
+  export type Page = typeof Page.Type
   export const Changed = BusEvent.define("raya.routine.report.changed", Schema.Struct({ card: Card }))
 
   const prefix = ["raya", "routine-reports"]
@@ -43,6 +50,7 @@ export namespace RayaRoutineReports {
     sessions: Pick<Session.Interface, "get">
     scope?: { projectID: string; directory: string }
   }) {
+    const index = history(input.storage, decode)
     const lookup = (id: SessionID) => input.sessions.get(id).pipe(Effect.option)
     const same = (left: { projectID: string; directory: string }, right: { projectID: string; directory: string }) =>
       left.projectID === right.projectID && path.resolve(left.directory) === path.resolve(right.directory)
@@ -65,10 +73,16 @@ export namespace RayaRoutineReports {
       const prior = yield* read(value.id)
       if (prior && prior.agentID !== value.agent.id)
         return yield* Effect.fail(new Error("Report run identity belongs to another worker."))
-      if (prior?.runID && !value.run) return prior
+      if (prior?.runID && !value.run) {
+        yield* index.upsert(prior)
+        return prior
+      }
       if (prior?.runID && value.run && prior.runID !== value.run.id)
         return yield* Effect.fail(new Error("This occurrence already belongs to another run."))
-      if (prior?.runRevision && value.run && prior.runRevision > (value.run.revision ?? 1)) return prior
+      if (prior?.runRevision && value.run && prior.runRevision > (value.run.revision ?? 1)) {
+        yield* index.upsert(prior)
+        return prior
+      }
       const source = prior ? prior.sourceSessionID : value.agent.sourceSessionID
       const destination = prior?.reportSessionID ?? value.agent.reportSessionID ?? source
       if (!destination) return undefined
@@ -111,9 +125,13 @@ export namespace RayaRoutineReports {
         notice: prior?.notice ?? value.notice,
       }
       const saved = yield* decode(JSON.parse(JSON.stringify(card)))
-      if (isDeepStrictEqual(prior, saved)) return prior
+      if (isDeepStrictEqual(prior, saved)) {
+        yield* index.upsert(saved)
+        return prior
+      }
       const next = yield* decode({ ...saved, revision: (prior?.revision ?? 0) + 1 })
       yield* input.storage.replace(key(value.id), next)
+      yield* index.upsert(next)
       GlobalBus.emit("event", {
         directory: next.directory,
         project: next.projectID,
@@ -121,7 +139,34 @@ export namespace RayaRoutineReports {
       })
       return next
     })
+    const page = Effect.fn("RayaRoutineReports.page")(function* (query: {
+      sessionID: SessionID
+      cursor?: string
+      limit?: number
+    }) {
+      const target = yield* input.sessions.get(query.sessionID)
+      const scope =
+        input.scope ??
+        (yield* InstanceState.context.pipe(
+          Effect.map((ctx) => ({ projectID: ctx.project.id, directory: ctx.directory })),
+        ))
+      if (!same(scope, target))
+        return yield* Effect.fail(new Error("This report conversation belongs to another workspace."))
+      if (target.metadata?.rayaRoutine) {
+        const empty: Page = { items: [], bootstrap: { complete: true, scanned: 0, total: 0 } }
+        return empty
+      }
+      const bootstrap = yield* mutate(input.storage, index.bootstrap(), "Routine report history")
+      const result = yield* index.page(query)
+      const response: Page = {
+        ...result,
+        items: result.items.filter((card) => same(card, target)),
+        bootstrap: { complete: bootstrap.complete, scanned: bootstrap.scanned, total: bootstrap.total },
+      }
+      return response
+    })
     return {
+      page,
       publish: (value: { agent: Codec.Agent; run: Codec.Run; occurrenceID?: string }) =>
         mutate(
           input.storage,
@@ -140,30 +185,7 @@ export namespace RayaRoutineReports {
         summary: string
         notice?: Card["notice"]
       }) => mutate(input.storage, publish(value), "Routine report"),
-      list: Effect.fn("RayaRoutineReports.list")(function* (id: SessionID) {
-        const target = yield* input.sessions.get(id)
-        const scope =
-          input.scope ??
-          (yield* InstanceState.context.pipe(
-            Effect.map((ctx) => ({ projectID: ctx.project.id, directory: ctx.directory })),
-          ))
-        if (!same(scope, target))
-          return yield* Effect.fail(new Error("This report conversation belongs to another workspace."))
-        if (target.metadata?.rayaRoutine) return []
-        const items: Card[] = []
-        const entries = yield* input.storage.list(prefix)
-        if (entries.length > 500)
-          return yield* Effect.fail(
-            new Error(
-              "Routine report history exceeds this view's bounded scan. Archive older reports before retrying.",
-            ),
-          )
-        for (const entry of entries) {
-          const card = yield* input.storage.readBounded<unknown>(entry, 40 * 1024).pipe(Effect.flatMap(decode))
-          if (card.reportSessionID === id && same(card, target)) items.push(card)
-        }
-        return items.toSorted((a, b) => b.at - a.at).slice(0, 200)
-      }),
+      list: (sessionID: SessionID) => page({ sessionID }).pipe(Effect.map((result) => result.items)),
     }
   }
 }

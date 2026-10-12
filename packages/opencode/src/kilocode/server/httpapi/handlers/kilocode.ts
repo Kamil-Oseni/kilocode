@@ -42,6 +42,7 @@ import { Session } from "@/session/session" // raya_change - Milestone A goal se
 import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace checkpoints
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
+import * as GoalResume from "@/kilocode/goal/resume"
 import { RayaTask } from "@/kilocode/task"
 import { RayaRoutineReports } from "@/kilocode/task/projection"
 import { MissingRoster } from "@/kilocode/task/roster"
@@ -597,6 +598,15 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           .reviewReply(ctx.params.sessionID, intent)
           .pipe(Effect.mapError(() => new HttpApiError.Conflict({})))
       }
+      if (
+        ctx.payload.status === "active" &&
+        (pending?.status === "paused" || pending?.status === "blocked") &&
+        !pending.replyRecovery &&
+        !(yield* GoalResume.allowed({ sessions, tasks: runner.tasks }, ctx.params.sessionID).pipe(
+          Effect.mapError(() => new HttpApiError.Conflict({})),
+        ))
+      )
+        return yield* new HttpApiError.Conflict({})
       const result = yield* goals.edit(ctx.params.sessionID, ctx.payload).pipe(
         Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
         Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),

@@ -10,7 +10,7 @@ Everyday Raya is **`7.4.23-snapshot+c7c8c07ce1.local.1791829554106`**, built fro
 |---|---|---|
 | Routine conversation reports | Genuine private manual run delivers its running→complete card and preserves three histories after cold reopen; bounded pages are installed | Loaded GUI workflow, scheduled repeats, boot and broader lifecycle acceptance |
 | Routine scheduling choices | Installed: skip or queue one busy occurrence; skip or run the latest missed occurrence once | Installed acceptance; no blanket replay or recovery guarantee |
-| Conversation Memory | Native recovery and same-ten-source policy refresh passed; current c7 pair has authenticated ready/namespace-valid health | Panel remains Connecting; current startup/UI, indexing and live save/recall need acceptance |
+| Conversation Memory | Connected health verified; failed index request reconciled through its original live owner; exact pair closure recovered | Packaged runtime upgrade refused its control catalog; indexing and live save/recall remain pending |
 | Voice | Source improvements are present in the installed package | User explicitly deferred voice; no fresh microphone, audible continuity or hands-free acceptance |
 | Recovery | Closed installation preserved saved data; protected rollback copy verified | Live restore, full local-service recovery and actual Windows postboot acceptance |
 | Models, tools and context | Earlier model comparisons and targeted context fixes have evidence | Candidate-specific everyday General/Coder/tool acceptance; historical model trials do not qualify every current workflow |
@@ -29,7 +29,7 @@ These checks establish source/component correctness and closed installation pres
 ## Next work
 
 1. Build chat: complete normal Git delivery and loaded-client/scheduled/boot acceptance. The genuine c7 private worker and cold persistence pass; preserve both prior failures. Ordinary terminal Routine Goal resume can still falsely report active before refusing execution; repair that explicit control gap without replay.
-2. Setup chat: use the exact existing `70b0...` closure for supported recovery, then check health with refreshed source policy revision 11. Verify indexing and conversation saving/recall only after coordinating the inference slot. No separate pending uncertainty entry was present; historical audits remain retained. Do not substitute older fresh-start plans from another managed container.
+2. Setup chat: fix the native runtime update's `Unreviewed control release refused` before retrying indexing. Pair `ecb21c692efec5d01c3df8c7bd5153c0` connected and passed authenticated health; indexing failed before worker creation and was reconciled through Inspect unfinished request. Normal closure retired both original producers without force, and supported recovery applied exact closure `748bdd627e97ebf356cdfffda359df980f00e957dce4ef41982488a9d799cca1`. The prior thirteen-file setup remains selected and closed, with no pending request uncertainty. Preserve the failed attempt and generated upgrade folder; do not edit selected pins or silently replay.
 3. User: reopen Raya and try the routine workflow. The [routine guide](Raya-Routine-Conversation-Reports.md) explains the chat-header reports control, report destination and scheduling choices. Human listening remains deferred until requested.
 
 ## Constraints observed now

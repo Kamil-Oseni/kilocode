@@ -2,6 +2,16 @@
 
 ## Current profile checkpoint — October 12
 
+### Installed c7 connection and upgrade
+
+Installed `c7c8c07ce1` connected the original pair `ecb21c692efec5d01c3df8c7bd5153c0` on ports 53676/53677. Authenticated health returned ready, valid namespace, no unconfirmed retirement and index approved against the exact revision-11 policy. The UI eventually reported Memory connected; endpoint readiness preceded completion of the host's managed admission work.
+
+One native indexing attempt used Memory request `9f9c989aca9240dd944fcf8ad1a38835`, owner `5bb56fb7178a70a4e47835903a207c24`. Its terminal reports failed sync and downstream request `deaa7b504a4c493ea6765cda18c0cdcc` settled with inference failed, no worker creation and cleanup not started. The retained runtime's cold Gemma gate requires six GiB reserve plus five GiB loading headroom; approximately 10.51 GiB free is below that gate. Memory pressure is the likely cause, but that older release did not retain the detailed failure string. No new index is claimed.
+
+Installed Inspect unfinished request reconciled that exact live operation and cleared the pending marker without resubmission. Normal Code closure retired original PIDs 1832/29484 at zero, with both EOFs, joined readers and no force. The saved phase remained running; supported native recovery published exact closure `748bdd627e97ebf356cdfffda359df980f00e957dce4ef41982488a9d799cca1` as closed with an applied audit. This qualifies the two original processes and streams, not blanket downstream-family settlement.
+
+Supported Update a Closed Memory Runtime generated immutable source folder `raya-memory-source-upgrade-9a616a529dd941329ba26ef17212e465`, then refused `Unreviewed control release refused` in control catalog parsing. The previous thirteen-file runtime remains selected and closed; request uncertainty is absent. Preserve this generated artifact and original receipts. No direct source-pin change, retry, capture activation or successful recall occurred.
+
 ### Installed 1a observation
 
 The helper fix is now installed in `7.4.23-snapshot+1a869ca158.local.1791827879084`. The actual native Recover a Closed Memory Pair command accepted the exact `044a...` review and published saved phase closed with an applied audit and requestSettlement false. Capture preference stayed enabled; no old request was replayed.

@@ -22,6 +22,7 @@ const namespace = new Set([
   "agent",
   "agent-runs",
   "agent-memory",
+  "routine-reports",
   "agent-stage",
   "agent-executions",
   "agent-execution-reviews",
@@ -153,6 +154,11 @@ function keys(key: readonly string[], prior: unknown, next: unknown) {
         throw fail()
       }
       fields(row)
+      if (key[1] === "routine-reports") {
+        if (typeof row.id !== "string" || key[2] !== hash(row.id)) throw fail()
+        for (const field of ["sourceSessionID", "reportSessionID", "workerSessionID"])
+          if (row[field] !== undefined) add("session", row[field])
+      }
       if (key[1] === "agent-starts" && object(row.organizationPolicy)) fields(row.organizationPolicy)
       if (["goal-child-reservations", "goal-charge-reservations"].includes(key[1] ?? "") && row.goalID !== undefined)
         add("session", row.goalID)

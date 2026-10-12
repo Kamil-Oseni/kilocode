@@ -14,6 +14,10 @@ import { tmpdirScoped } from "../fixture/fixture"
 import { Git } from "@/git"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import {
+  RoutineEffectScope as Scopes,
+  RoutineEffectRevocation as Revocations,
+} from "@opencode-ai/core/kilocode/routine-effect.sql"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node])))
 const state = (directory: string) =>
@@ -171,6 +175,24 @@ it.live("foreign destinations stay undelivered and policy edits advance the sche
           summary: "Legacy",
         }),
       ).toBeUndefined()
+      const database = yield* Database.Service
+      // A synthetic negative association tests publication retirement only;
+      // it grants no enrolled writer, session execution or external authority.
+      yield* database.db
+        .insert(Scopes)
+        .values({
+          id: "a".repeat(64),
+          kind: "session",
+          principal: target.id,
+          birth: "1",
+          generation: "b".repeat(32),
+          projection: "c".repeat(64),
+          state: "active",
+        })
+        .run()
+      yield* reports.publishDeferred({ agent, id: "occurrence", at: 2, summary: "Still waiting" })
+      expect((yield* database.db.select().from(Scopes).all())[0].state).toBe("revoking")
+      expect((yield* database.db.select().from(Revocations).all())[0].state).toBe("published")
     }).pipe(Effect.provide(state(directory)))
   }),
 )

@@ -58,6 +58,9 @@ test("actual environment injection keeps authored text intact and separates SDK/
     {},
   )[0]
   if (!Array.isArray(cached.content)) throw new Error("Actual converted content parts required")
-  expect(cached.content[0].providerOptions?.openai).toEqual({ promptCacheBreakpoint: { mode: "explicit" } })
-  expect(cached.content[1].providerOptions?.openai).toBeUndefined()
+  const first = cached.content[0]
+  const last = cached.content[1]
+  if (first?.type !== "text" || last?.type !== "text") throw new Error("Actual converted text parts required")
+  expect(first.providerOptions?.openai).toEqual({ promptCacheBreakpoint: { mode: "explicit" } })
+  expect(last.providerOptions?.openai).toBeUndefined()
 })

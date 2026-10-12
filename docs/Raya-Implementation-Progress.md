@@ -17412,3 +17412,17 @@ Actual pre-session-link startup regressions fail on de59 original18288:2cases/24
 Next source now preallocates the original SessionID before immutable startup snapshot publication, passes it through a three-line internal Session.create hook, and verifies the actual returned ID before linking. The shared lines are narrowly marked; public HTTP CreateInput/schema remains unchanged. Pre-link recovery requires the exact saved original ID, unique metadata, exact original snapshot/trigger and stopped owner; missing legacy original-ID proof or zero matches stays held rather than inferring absent effects. Forks, foreign/ambiguous bindings, unexpected goals, replacement races and uncertain/live owners are covered by the expanded genuine original-runner suite, now executing. No passing final suite/typecheck or new installed candidate is claimed yet. Annotation/Effect facade/whitespace guards pass.
 
 The source-only UI discoverability follow-up644940bc27 is imported as exact code+changeset bytes for the next candidate: Review fresh start remains available after a reopen whenever configured, and conflict copy explains restart. It leaves service authority unchanged and does not touch the installed trust dialog. Readiness **48/100**, **38 unfinished**; fullgoalactive, second-PC migration canceled and cloud workers released. Eden/main reader stay protected; HA remainsrunning throughout these bounded8GiB no-model checks.
+
+## Research input RSH-HARNESS-01 — software sleep-mode/RSI
+
+Recorded October 11, 2026. **Pending research; excluded from current shipping gates and the 38 unfinished requirements.**
+
+[An Empirical Study of Harness Design for Coding Agents](https://arxiv.org/pdf/2609.20804) compares harness components on four models of 30B or larger. Staged stale-output elision before summarization improves efficiency; task/preamble, current plan and recent turns remain protected. Structured tools help weaker shell users. Identical-failure detection is fixed across experiments, so its benefit is not independently established. This supports harness experiments, not demonstrated recursive self-improvement or automatic deployment of self-written changes.
+
+Proposed Raya evaluation, not a measured result:
+
+- [ ] Compare current, elision-only, summarization-only and staged policies on the same pinned 4B/9B tasks; independently score completion, overflow, latency, token use and peak RAM/VRAM.
+- [ ] Compare structured tools and shell interfaces under identical permissions; test repeated failures and preservation of task, plan, recent input and evidence identities.
+- [ ] Evaluate pause/restart checkpoints separately; require unchanged authority and original input, with explicit review before promoting any candidate.
+
+No model or GPU test ran. Music-test resource coordination remains in force. Readiness stays **48/100**.

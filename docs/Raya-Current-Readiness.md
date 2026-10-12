@@ -1,5 +1,7 @@
 # Raya current readiness
 
+October 11, 2026 - Research input RSH-HARNESS-01 is recorded in the implementation document as a pending 4B/9B comparison. It adds no shipping gate or readiness credit. Model/GPU experiments remain deferred during the authorized music test; Home Assistant remains on under the user's latest instruction.
+
 October 11, 2026 - Required runtime and build checks blocked by RAM headroom.
 
 The same 8 GiB starting threshold prevents the next required ownership/runtime and extension build checks across three consecutive goal turns. A user-authorized graceful Home Assistant shutdown measures only 4.48 GiB free; no test process starts, and the VM is immediately restarted with both canonical/direct application pages subsequently verified HTTP 200. The latest revalidation measures 3.68 GiB free with the VM running and finds no live reclaimable private Raya test family. Eden remains running as requested. No test is being waited on or presumed live.

@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { MediaRecall, MediaResult } from "./media-protocol"
+import { Manage, ManageResult } from "./management-protocol"
 import {
   Capture,
   CapturePolicy,
@@ -82,6 +83,7 @@ export const Request = Schema.Struct({
     Capture,
     CaptureFailed,
     MediaRecall,
+    Manage,
   ]),
 }).annotate({ identifier: "SecondBrainRequest" })
 export type Request = typeof Request.Type
@@ -188,6 +190,7 @@ export const Result = Schema.Union([
   CaptureResult,
   CaptureFailedResult,
   MediaResult,
+  ManageResult,
 ]).annotate({
   identifier: "SecondBrainResult",
 })

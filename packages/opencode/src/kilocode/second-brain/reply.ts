@@ -2,6 +2,7 @@ import path from "node:path"
 import { Schema } from "effect"
 import { Result, type Request } from "./protocol"
 import { valid as media } from "./media-protocol"
+import { valid as managed, result as management } from "./management-source"
 
 const restricted = new Set(["system", "archive", ".git", "health", "medical", "private", "sensitive"])
 
@@ -9,6 +10,15 @@ const restricted = new Set(["system", "archive", ".git", "health", "medical", "p
 export function valid(request: Request, value: Result) {
   if (!Schema.is(Result)(value) || request.command.action !== value.action || request.project !== value.project)
     return false
+  if (value.action === "manage") {
+    const command = request.command
+    return (
+      command.action === "manage" &&
+      command.source.sessionID === request.sessionID &&
+      managed(command) &&
+      management(command, value)
+    )
+  }
   if (value.action === "captureState") {
     if (request.command.action !== "captureState") return false
     if (value.changed && request.command.mode === "resume" && !value.configured) return false
@@ -62,6 +72,7 @@ export function valid(request: Request, value: Result) {
       request.command.action === "context" ||
       request.command.action === "setup" ||
       request.command.action === "captureState" ||
+      request.command.action === "manage" ||
       request.command.action === "mediaContext" ||
       request.command.action === "capturePolicy" ||
       request.command.action === "capture" ||

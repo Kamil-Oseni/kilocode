@@ -8,6 +8,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ErrorCode, Event, type Failure, Request, RequestID, Result } from "./protocol"
 import { valid } from "./reply"
+import { valid as managed } from "./management-source"
 
 const log = Log.create({ service: "second-brain-host" })
 
@@ -17,6 +18,7 @@ function read(command: Request["command"]) {
     command.action === "status" ||
     command.action === "setup" ||
     command.action === "captureState" ||
+    command.action === "manage" ||
     command.action === "capturePolicy" ||
     command.action === "capture" ||
     command.action === "captureFailed"
@@ -36,6 +38,7 @@ export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrain
       "status",
       "setup",
       "captureState",
+      "manage",
       "capturePolicy",
       "capture",
       "captureFailed",
@@ -43,6 +46,8 @@ export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrain
   ),
 }) {
   override get message() {
+    if (this.operation === "manage")
+      return `${this.detail}. The personal Memory change is unconfirmed; inspect the original operation before continuing. Do not automatically repeat publication.`
     if (this.operation === "captureState")
       return `${this.detail}. Automatic saving state is unconfirmed; inspect its current state before retrying. Existing saves and retained history were not cancelled or deleted.`
     if (this.operation === "setup")
@@ -216,6 +221,15 @@ export function layer(timeout: Duration.Input = "2 minutes") {
           return yield* new HostError({
             code: "invalid_request",
             detail: "Invalid pending Second Brain request",
+            operation,
+          })
+        if (
+          input.command.action === "manage" &&
+          (input.command.source.sessionID !== input.sessionID || !managed(input.command))
+        )
+          return yield* new HostError({
+            code: "invalid_request",
+            detail: "Original personal Memory source is invalid",
             operation,
           })
         pending.set(id, { info, deferred })

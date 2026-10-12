@@ -4,13 +4,13 @@ Updated October 12, 2026 from the installed registry, current Git delivery, save
 
 ## Installed now
 
-Everyday Raya is **`7.4.23-snapshot+f3a3aa4df9.local.1791823909482`**, built from `f3a3aa4df9e39f4979010357aefcdbaad2d2642d`. The installed registry was independently read after delivery. Main and the consolidation branch include this release and its delivery documentation; the current documentation checkpoint is `5ea449a666`.
+Everyday Raya is **`7.4.23-snapshot+1a869ca158.local.1791827879084`**, built from `1a869ca1589fbd05cf4b21d3398d031ba31bf952`. Official installation and closed saved-data/payload verification pass. This candidate adds audited persistent-worker tool control, bounded report-history pages and the reviewed Memory helper fix. Its normal Git delivery is pending; genuine worker completion and native Memory acceptance remain separate checks.
 
 | Area | Current status | Remaining scope |
 |---|---|---|
-| Routine conversation reports | Installed: one saved card per occurrence, selectable ordinary workspace conversation, worker link and persistent long-wait notice | Ordinary installed workflow, actual enabled runs and restart behaviour on this release |
+| Routine conversation reports | Installed: saved cards, selected conversation, worker link, wait notice and bounded older/latest pages with retry | Ordinary installed workflow, actual enabled runs and restart behaviour on this release |
 | Routine scheduling choices | Installed: skip or queue one busy occurrence; skip or run the latest missed occurrence once | Installed acceptance; no blanket replay or recovery guarantee |
-| Conversation Memory | Setup, management and scoped retrieval source improvements are installed; capture preference is enabled | Actual native recovery exposed an omitted helper recipe. Verified source fix awaits installation; supported closed-pair recovery and live save/recall remain required |
+| Conversation Memory | Reviewed helper recipe and visible recovery errors are installed; capture preference is retained | Supported closed-pair recovery and live save/recall remain required |
 | Voice | Source improvements are present in the installed package | User explicitly deferred voice; no fresh microphone, audible continuity or hands-free acceptance |
 | Recovery | Closed installation preserved saved data; protected rollback copy verified | Live restore, full local-service recovery and actual Windows postboot acceptance |
 | Models, tools and context | Earlier model comparisons and targeted context fixes have evidence | Candidate-specific everyday General/Coder/tool acceptance; historical model trials do not qualify every current workflow |
@@ -19,9 +19,9 @@ The full roadmap remains in [Raya-Implementation-Progress.md](Raya-Implementatio
 
 ## What was verified
 
-- The official installer exited successfully. Closed comparison preserved **2,892 saved files**, their listed folder structure, **538 non-package payloads**, and unrelated extension registrations.
+- The official installer exited successfully. Closed comparison preserved **2,911 saved files**, their listed folder structure, **538 non-package payloads**, and unrelated extension registrations. Current backup: `.tmp/new-pc/everyday-conversation-preservation-f1339eebfb0c4fc99237d1b713fa7f8c`.
 - Backend checks cover bounded scheduling policies, queue identities/leases, destination binding, monotonic report updates, waiting-notice deduplication and publication scope. UI/host checks cover real controls, SDK transport and the repaired refresh race.
-- Production host/webview types, lint, bundle and Knip passed. The qualified CLI and archive match their source inputs. Normal Git delivery passed its unchanged pre-push gates.
+- Production CLI/host/webview types, lint, bundle and Knip passed. The qualified CLI and archive match all **7,192** recorded source inputs; archive CRC and payload checks pass. Original compiler/package targets exit 0; forced descendant cleanup makes their outer lifecycles fail separately. Normal Git delivery is pending for this candidate.
 - A permanent rollback copy at `D:/RayaBackups/Everyday-routines-20261012-ce50c5684e5342139cbc317fd4804ad4` matches all **2,897 source files / 1,913,355,083 bytes** by path, length and SHA-256. Its copy receipt SHA-256 is `77eb69c2c7f6996d734819c5ca5dc2b1805705e2d93cd545e49b91b62e1762c3`.
 
 These checks establish source/component correctness and closed installation preservation. They do not establish loaded GUI, ordinary-profile routine execution, live Memory use or human voice acceptance. Original compiler/package cleanup failures remain separately recorded in the implementation journal; successful artifacts do not turn those lifecycle failures into passes.

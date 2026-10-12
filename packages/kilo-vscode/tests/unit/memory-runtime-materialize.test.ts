@@ -11,7 +11,7 @@ import { lineage } from "../../src/second-brain/managed/upgrade-lineage"
 import { descriptor, paired, selection, type Descriptor } from "../../src/second-brain/managed/descriptor"
 import { current } from "../../src/second-brain/managed/catalog"
 import { images, fingerprint } from "../../src/second-brain/managed/reuse-catalog"
-import { release, bridge } from "../../src/second-brain/control/catalog-capture"
+import { release, bridge, selected as catalog } from "../../src/second-brain/control/catalog-capture"
 import { fingerprint as digest } from "../../src/second-brain/failed-repair"
 import { command } from "../../src/second-brain/control/command"
 import { image } from "../../src/second-brain/control/identity"
@@ -149,7 +149,7 @@ print('two-native-plans-qualified-without-models')`
 
 test("native upgrade observes root-omitting inventories and refuses changed or duplicate retained directory rows", async () => {
   const original = await image(cfg.plan.path, 16777216)
-  expect((await observe(cfg)).prior).toHaveLength(13)
+  expect((await observe(cfg)).prior).toHaveLength(Object.keys(release).length)
   const script = `import json,pathlib,sys
 file=pathlib.Path(sys.argv[1]);plan=json.loads(file.read_bytes());root=pathlib.Path(plan['root']);info=root.lstat()
 row={'path':str(root),'identity':[info.st_dev,info.st_ino,info.st_ctime_ns]}
@@ -169,7 +169,7 @@ for name in ('root','changed','duplicate','missing','source'):
     const held = await image(file, 16777216)
     const result = observe({ ...cfg, plan: { path: file, bytes: held.raw.length, sha256: held.digest } })
     if (name === "root") {
-      expect((await result).prior).toHaveLength(13)
+      expect((await result).prior).toHaveLength(Object.keys(release).length)
       continue
     }
     await expect(result).rejects.toThrow("original_upgrade_directory_changed")
@@ -180,13 +180,13 @@ for name in ('root','changed','duplicate','missing','source'):
 }, 30000)
 
 test("upgraded source metadata admits only its exact historical or current supervisor cohort", async () => {
-  const next = await materialize(cfg, setup, path.resolve("."), "e".repeat(32))
+  const next = await materialize(cfg, setup, path.resolve("."), "e".repeat(32), 1)
   const selected = await selection(next.next.managed, next.next.setup)
-  const pins = {
-    ...release,
+  const pins = catalog({
+    "capture.py": release["capture.py"],
     "server.py": "8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e9b164443c",
     "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3",
-  }
+  })
   const prior = {
     ...next.next.managed,
     supervisor: {
@@ -213,10 +213,10 @@ test("upgraded source metadata admits only its exact historical or current super
       sha256: "2249c00ff1755613ca0d8eadf6e9b8e51ed2dd53ff91c52dae7e36153b4fa72f",
     },
   }
-  expect(() => paired(retained, selected.plan, selected.retrieval!)).not.toThrow()
+  expect(() => paired(retained, selected.plan, selected.retrieval!)).toThrow("Paired source directory differs")
   expect(() => paired(retained, memory, retrieval)).not.toThrow()
   expect(() => paired(next.next.managed, memory, retrieval)).not.toThrow()
-  expect(() => paired(prior, selected.plan, selected.retrieval!)).not.toThrow()
+  expect(() => paired(prior, selected.plan, selected.retrieval!)).toThrow("Paired source directory differs")
   expect(() =>
     paired(prior, { ...memory, source_sha256: { ...pins, "server.py": release["server.py"] } }, retrieval),
   ).toThrow("Paired source directory differs")

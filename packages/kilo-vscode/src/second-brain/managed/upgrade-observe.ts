@@ -2,7 +2,7 @@ import path from "node:path"
 import { check, document, sha } from "../control/frames"
 import { command } from "../control/command"
 import { environment } from "../control/identity"
-import { release } from "../control/catalog-capture"
+import { release, selected, resident } from "../control/catalog-capture"
 import { current, supervisors } from "./catalog"
 import type { Descriptor } from "./descriptor"
 
@@ -79,12 +79,36 @@ type Observation = {
   spaces: { path: string; identity: string[] }[]
 }
 
+function reviewed(pins: Readonly<Record<string, string>>, expected: string) {
+  return (
+    resident(pins) &&
+    JSON.stringify(Object.entries(pins).sort()) === JSON.stringify(Object.entries(selected(pins)).sort()) &&
+    (!("management.py" in pins) || expected === current)
+  )
+}
+
+function counted(value: Observation, pins: Readonly<Record<string, string>>, source: string) {
+  return (
+    Array.isArray(value.prior) &&
+    [13, 15].includes(value.prior.length) &&
+    Array.isArray(value.images) &&
+    value.images.length === (source ? Object.keys(pins).length + 1 : 0)
+  )
+}
+
 /** Observe existing old/new code with native uint64 tuples and actual inherited Windows ACLs; never repair. */
-export async function observe(cfg: Descriptor, source = "", namespaces?: Descriptor["namespaces"], expected = current) {
+export async function observe(
+  cfg: Descriptor,
+  source = "",
+  namespaces?: Descriptor["namespaces"],
+  expected = current,
+  pins: Readonly<Record<string, string>> = release,
+) {
   check(
     supervisors.some((hash) => hash === expected),
     "Known selected upgrade supervisor required",
   )
+  check(reviewed(pins, expected), "Exact selected upgrade source cohort required")
   const result = await command(
     cfg.python.path,
     [
@@ -97,7 +121,7 @@ export async function observe(cfg: Descriptor, source = "", namespaces?: Descrip
       cfg.plan.sha256,
       cfg.namespaces.memory.sid,
       source,
-      JSON.stringify({ ...release, "supervise.py": expected }),
+      JSON.stringify({ ...pins, "supervise.py": expected }),
       namespaces ? JSON.stringify(namespaces) : "",
     ],
     { windowsHide: true, env: { ...environment(), TEMP: cfg.root, TMP: cfg.root } },
@@ -114,13 +138,7 @@ export async function observe(cfg: Descriptor, source = "", namespaces?: Descrip
     throw new Error("Native upgrade observation refused: " + parsed.refused)
   }
   const value = parsed as unknown as Observation
-  check(
-    Array.isArray(value.prior) &&
-      value.prior.length === 13 &&
-      Array.isArray(value.images) &&
-      value.images.length === (source ? 14 : 0),
-    "Exact native upgrade observation required",
-  )
+  check(counted(value, pins, source), "Exact native upgrade observation required")
   for (const item of [...value.prior, ...value.images])
     check(
       path.isAbsolute(item.path) &&

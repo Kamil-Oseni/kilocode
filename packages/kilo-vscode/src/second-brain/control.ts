@@ -7,6 +7,7 @@ import { isDeepStrictEqual } from "node:util"
 import { Refused } from "./control/frames"
 import { CaptureFailure } from "./capture-failure"
 import { IndexUnavailable } from "./index-admission"
+import type { Proposal } from "./management-wire"
 
 type Row = Record<string, unknown>
 export type Session = {
@@ -17,6 +18,11 @@ export type Session = {
   metadata(ticket: object): unknown
   pause(expected: string, before?: (metadata: unknown) => Promise<void>, mutation?: unknown): Promise<Row>
   captureAuthorize?(body: Publication, expected: string): Promise<Row>
+  manualAuthorize?(body: { id: string; proposal_digest: string; expected_policy_sha256: string }): Promise<Row>
+  manualPublish?(
+    body: { id: string; proposal_digest: string; expected_policy_sha256: string },
+    before: (metadata: unknown) => Promise<void>,
+  ): Promise<Row>
   captureAdmit?(
     body: { id: string; input_sha256: string; expected_policy_sha256: string },
     before: (metadata: unknown) => Promise<void>,
@@ -338,6 +344,76 @@ export class BrainControl {
         if (err instanceof Cancelled) throw err
         throw new CaptureFailure(stage, err)
       })
+  }
+
+  async manage(proposal: Proposal, expected: string, authorize: (admitted?: true) => Promise<void>) {
+    const result = {
+      published: false,
+      indexed: false,
+      changes: [] as { relative: string; note_sha256: string | null }[],
+    }
+    await this.transaction(async (session, check, close) => {
+      const gate = async () => {
+        check()
+        await authorize()
+        check()
+      }
+      await gate()
+      if (!session.manualAuthorize || !session.manualPublish)
+        throw new Failure("unsupported", "Select the reviewed personal-entry Memory control", 0)
+      const state = await session.state()
+      await gate()
+      if (row(state.policy).enabled !== true || state.policy_sha256 !== expected) throw new Unapproved()
+      const body = { id: proposal.id, proposal_digest: proposal.digest, expected_policy_sha256: expected }
+      await session.manualAuthorize(body)
+      await gate()
+      let original: unknown
+      const receipt = await session.manualPublish(body, async (metadata) => {
+        await gate()
+        await this.record(metadata)
+        original = metadata
+        if (!isDeepStrictEqual(this.settings.pending()?.request, original))
+          throw new Error("Original native personal Memory publication debt changed")
+        await authorize(true)
+        if (!isDeepStrictEqual(this.settings.pending()?.request, original))
+          throw new Error("Original native personal Memory publication debt changed")
+        check()
+      })
+      if (
+        receipt.proposal_id !== proposal.id ||
+        receipt.publication_confirmed !== true ||
+        !Array.isArray(receipt.changes)
+      )
+        throw new Error("Original manual publication was not verified")
+      result.changes = receipt.changes.map((change) => {
+        const value = row(change)
+        if (typeof value.relative !== "string" || (value.note_sha256 !== null && typeof value.note_sha256 !== "string"))
+          throw new Error("Original affected source hashes required")
+        return { relative: value.relative, note_sha256: value.note_sha256 }
+      })
+      result.published = true
+      await close()
+      check()
+      const debt = this.settings.pending()
+      if (!debt || debt.version !== 1 || !isDeepStrictEqual(debt.request, original))
+        throw new Error("Original personal Memory publication journal required")
+      await this.settings.record(undefined).catch(async (err: unknown) => {
+        await this.settings.record(debt)
+        throw err
+      })
+      await gate()
+      const successor = digest(receipt.policy_sha256)
+      this.state = Object.freeze({ status: "syncing", digest: successor })
+      await this.service.sync(successor, this.signal!.signal, close)
+      await gate()
+      this.state = Object.freeze({ status: "synced", digest: successor })
+      result.indexed = true
+    }).catch((err: unknown) => {
+      if (!result.published) throw err
+      // Keep the original control debt/failure; verified notes are not applied again to repair indexing.
+      console.warn("[Raya] Personal Memory publication is verified; its original indexing requires review")
+    })
+    return result
   }
 
   pause(confirm: (review: Review) => Promise<boolean>) {

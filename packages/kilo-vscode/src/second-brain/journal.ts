@@ -51,7 +51,9 @@ function sync(input: unknown, root: unknown) {
 function mutation(input: unknown) {
   const request = row(input, ["op", "seq", "bytes", "digest", "identity", "mutation"])
   if (
-    !["approve", "policy_pause", "capture_admit"].includes(String(request.op)) ||
+    !["approve", "policy_pause", "capture_admit", "manual_proposal_admit", "manual_proposal_publish"].includes(
+      String(request.op),
+    ) ||
     !count(request.seq) ||
     !count(request.bytes) ||
     Number(request.bytes) > 65536 ||
@@ -59,6 +61,10 @@ function mutation(input: unknown) {
   )
     throw new Error("Memory uncertainty request refused")
   identity(request.identity)
+  if (request.op === "manual_proposal_admit" || request.op === "manual_proposal_publish") {
+    manual(request.mutation)
+    return
+  }
   if (request.op === "capture_admit") {
     const value = row(request.mutation, ["expected", "capture", "input_sha256", "namespace"])
     if (
@@ -80,6 +86,19 @@ function mutation(input: unknown) {
   )
     throw new Error("Memory mutation metadata refused")
   namespace(mutation.namespace)
+}
+
+function manual(input: unknown) {
+  const value = row(input, ["expected", "proposal", "proposal_digest", "namespace"])
+  if (
+    !hash(value.expected) ||
+    !hash(value.proposal_digest) ||
+    typeof value.proposal !== "string" ||
+    !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.proposal)
+  )
+    throw new Error("Original manual mutation metadata refused")
+  namespace(value.namespace)
+  return
 }
 
 function identity(input: unknown) {

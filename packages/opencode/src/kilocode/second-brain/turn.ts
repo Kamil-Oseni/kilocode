@@ -5,6 +5,8 @@ import { Request, Result } from "./protocol"
 import { valid } from "./reply"
 import { requested } from "./setup"
 import { selected } from "./capture-state"
+import { requested as managing, command as managed, Params } from "./management"
+import { current as projection } from "./management-source"
 
 export const acknowledgement =
   "This turn states a personal preference. Briefly acknowledge the user's actual preference in one sentence. Treat references to first-time setup as the preference being described; do not begin setup or ask configuration questions. Preserve the user's restrictions. Do not claim that anything was changed or saved: separately authorized automatic Memory saving runs after the reply and must confirm its own result."
@@ -78,7 +80,11 @@ export function settled(
   const state = status(request)
   const configuring = requested(request)
   const mode = selected(request)
-  if (request !== RayaChief.request(session.metadata) || (!state && !configuring && !mode && !question(request)))
+  const change = managing(request)
+  if (
+    request !== RayaChief.request(session.metadata) ||
+    (!state && !configuring && !mode && !change && !question(request))
+  )
     return false
   return messages.some(
     (row) =>
@@ -90,13 +96,47 @@ export function settled(
       row.parts.some((part) => {
         if (
           part.type !== "tool" ||
-          part.tool !== "second_brain_recall" ||
+          part.tool !== (change ? "second_brain_manage" : "second_brain_recall") ||
           part.messageID !== row.info.id ||
           part.sessionID !== session.id ||
           part.state.status !== "completed"
         )
           return false
         const input = part.state.input
+        if (change) {
+          const args = Schema.decodeUnknownResult(Params, { onExcessProperty: "error" })(input)
+          const source = projection(messages, session, user)
+          if (Decode.isFailure(args) || !source || Buffer.byteLength(part.state.output, "utf8") > 200000) return false
+          const original = (() => {
+            try {
+              return managed(source, args.success)
+            } catch {
+              return undefined
+            }
+          })()
+          if (!original) return false
+          const value = (() => {
+            try {
+              return JSON.parse(part.state.output) as unknown
+            } catch {
+              return undefined
+            }
+          })()
+          const decoded = Schema.decodeUnknownResult(Result, { onExcessProperty: "error" })(value)
+          const receipt = Schema.decodeUnknownResult(Request, { onExcessProperty: "error" })({
+            id: part.callID,
+            sessionID: current.info.sessionID,
+            project: session.directory,
+            command: original,
+          })
+          return (
+            Decode.isSuccess(receipt) &&
+            Decode.isSuccess(decoded) &&
+            decoded.success.action === "manage" &&
+            !decoded.success.question &&
+            valid(receipt.success, decoded.success)
+          )
+        }
         if (
           state || configuring || mode
             ? input.action !== (mode ?? (configuring ? "setup" : "status")) || Object.keys(input).length !== 1

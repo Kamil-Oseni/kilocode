@@ -99,11 +99,11 @@ function checked(value: Observation, source: string, fresh: boolean) {
   check(
     !value.refused &&
       Array.isArray(value.prior) &&
-      value.prior.length === 13 &&
+      [13, 15].includes(value.prior.length) &&
       Array.isArray(value.retrieval) &&
       value.retrieval.length === 16 &&
       Array.isArray(value.images) &&
-      value.images.length === (source ? 30 : 0) &&
+      value.images.length === (source ? Object.keys(release).length + Object.keys(images).length + 1 : 0) &&
       Array.isArray(value.directories) &&
       value.directories.length === (source ? 3 : 0) &&
       Array.isArray(value.spaces) &&

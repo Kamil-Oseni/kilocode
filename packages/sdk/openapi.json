@@ -82332,6 +82332,98 @@
         "required": ["action", "query", "top"],
         "additionalProperties": false
       },
+      "SecondBrainManageSource": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "\\S"
+          },
+          "messageID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "\\S"
+          },
+          "created_utc": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "\\S"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000,
+            "pattern": "\\S"
+          },
+          "source_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": ["sessionID", "messageID", "created_utc", "text", "source_sha256"],
+        "additionalProperties": false
+      },
+      "SecondBrainManage": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["manage"]
+          },
+          "stage": {
+            "type": "string",
+            "enum": ["inspect", "select", "review", "cancel"]
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["remember", "correct", "forget"]
+          },
+          "operation": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SecondBrainManageSource"
+          },
+          "fact": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 16000
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 16000
+              }
+            },
+            "required": ["start", "end"],
+            "additionalProperties": false
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S"
+          },
+          "attempt": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "choice": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          }
+        },
+        "required": ["action", "stage", "mode", "operation", "source"],
+        "additionalProperties": false
+      },
       "SecondBrainRequest": {
         "type": "object",
         "properties": {
@@ -82595,6 +82687,9 @@
               },
               {
                 "$ref": "#/components/schemas/SecondBrainMediaRecall"
+              },
+              {
+                "$ref": "#/components/schemas/SecondBrainManage"
               }
             ]
           }
@@ -98685,6 +98780,141 @@
         "required": ["action", "project", "query_sha256", "selection", "candidates", "truncated", "capture_enabled"],
         "additionalProperties": false
       },
+      "SecondBrainManageResult": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["manage"]
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "pattern": "\\S"
+          },
+          "operation": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sessionID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "\\S"
+          },
+          "messageID": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "\\S"
+          },
+          "source_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["remember", "correct", "forget"]
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["pending", "cancelled", "published", "indexed", "no_match", "unconfirmed"]
+          },
+          "publication_confirmed": {
+            "type": "boolean"
+          },
+          "index_confirmed": {
+            "type": "boolean"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "relative": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512,
+                  "pattern": "\\S"
+                },
+                "note_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "required": ["relative", "note_sha256"],
+              "additionalProperties": false
+            },
+            "maxItems": 16
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "attempt": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "proposal": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "stage": {
+            "type": "string",
+            "enum": ["select", "review"]
+          },
+          "question": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "pattern": "\\S"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 700,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": ["id", "label"],
+                  "additionalProperties": false
+                },
+                "minItems": 2,
+                "maxItems": 13
+              }
+            },
+            "required": ["prompt", "options"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "action",
+          "project",
+          "operation",
+          "sessionID",
+          "messageID",
+          "source_sha256",
+          "mode",
+          "disposition",
+          "publication_confirmed",
+          "index_confirmed",
+          "changes"
+        ],
+        "additionalProperties": false
+      },
       "SecondBrainResult": {
         "anyOf": [
           {
@@ -98883,6 +99113,9 @@
           },
           {
             "$ref": "#/components/schemas/SecondBrainMediaResult"
+          },
+          {
+            "$ref": "#/components/schemas/SecondBrainManageResult"
           }
         ]
       },

@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 import posixpath
 from urllib.parse import unquote
 from notes import clean
+from entries import project as active
 from admission import Store, Lease, Refused, Retirement, closing, entry, leaf, image
 from policy import Policy
 from retirement import decode as metadata, certificate, canonical, fingerprint, hex as hexadecimal
@@ -123,7 +124,7 @@ if PROTOCOL not in ('raya.retrieval.retirement.v1', 'raya.retrieval.request.sett
     raise Refused('Select a supported downstream ownership protocol.')
 if not hexadecimal(RELEASE, 64):
     raise Refused('Explicit reviewed downstream release selection is required.')
-SIGNATURE = f"markdown-v4:300tokens:{SPACE['dimensions']}:normalized:local-link-labels:" + MODEL['revision']
+SIGNATURE = f"markdown-v5:300tokens:{SPACE['dimensions']}:normalized:active-entries:local-link-labels:" + MODEL['revision']
 
 
 def digest(value):
@@ -372,7 +373,7 @@ def scan(root, policy=None):
             policy.verify(relative, raw)
             if len(raw) > 256000:
                 raise ValueError('Split the oversized Markdown note: ' + relative)
-            text = raw.decode('utf-8-sig')
+            text = raw.decode('utf-8')
             result[relative] = {'hash': digest(raw), 'text': text}
             if len(result) > 1000:
                 raise ValueError('The first index supports at most 1000 Markdown files.')
@@ -402,7 +403,7 @@ def headings(lines, check):
 
 
 def split(path, note, measure=tokens):
-    lines = note['text'].splitlines()
+    lines = active(path, note['text']).removeprefix('\ufeff').splitlines()
     sections = headings(lines, remaining)
     heading = ''
     section = []
@@ -524,10 +525,10 @@ def address(source, target):
     return name
 
 
-def links(text):
+def links(text, name=''):
     # Links inside fenced examples are not navigation instructions.
     fence = None
-    for line in text.splitlines():
+    for line in active(name, text).removeprefix('\ufeff').splitlines():
         marker = re.match(r'^\s{0,3}(`{3,}|~{3,})', line)
         if marker:
             value = marker.group(1)
@@ -583,7 +584,7 @@ def capture_passage(name, lines, sections, terms, limit, measure, check):
 
 
 def passage(name, text, query, limit, measure, check):
-    lines = text.splitlines()
+    lines = active(name, text).removeprefix('\ufeff').splitlines()
     if not lines:
         return None
     sections = headings(lines, check)
@@ -681,7 +682,7 @@ def retrieve(root, policy, seeds, query, budget, measure, check, *, depth=2, cou
             sha = hashlib.sha256(raw).hexdigest()
             if expected is not None and expected != sha:
                 raise ValueError('Search seed revision is stale.')
-            text = raw.decode('utf-8-sig')
+            text = raw.decode('utf-8')
         except (OSError, ValueError) as err:
             diagnostics.append({'relative': name, 'reason': str(err)})
             continue
@@ -695,7 +696,7 @@ def retrieve(root, policy, seeds, query, budget, measure, check, *, depth=2, cou
             diagnostics.append({'relative': selected, 'reason': 'No passage fits the remaining token budget.'})
         if level >= depth:
             continue
-        for target in links(text):
+        for target in links(text, selected):
             check()
             # Count navigation attempts as well as returned notes; a hostile
             # document cannot cause an unbounded queue or diagnostic list.

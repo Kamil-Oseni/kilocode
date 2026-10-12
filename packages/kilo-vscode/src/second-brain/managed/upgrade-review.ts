@@ -3,7 +3,7 @@ import { paired } from "./projection-cache"
 import { isDeepStrictEqual } from "node:util"
 import { check, child, document } from "../control/frames"
 import { directory, image } from "../control/identity"
-import { release } from "../control/catalog-capture"
+import { selected as catalog, resident } from "../control/catalog-capture"
 import { parse, type Setup } from "../settings"
 import { fingerprint } from "../failed-repair"
 import { descriptor, selection, type Descriptor } from "./descriptor"
@@ -103,7 +103,9 @@ function metadata(value: Value, prior: Entry, id: string) {
   const previous = entry(value.previous)
   const next = entry(value.next)
   check(
-    isDeepStrictEqual(previous, prior) && isDeepStrictEqual(next.setup, { ...prior.setup, source_sha256: release }),
+    isDeepStrictEqual(previous, prior) &&
+      resident(next.setup.source_sha256) &&
+      isDeepStrictEqual(next.setup, { ...prior.setup, source_sha256: catalog(next.setup.source_sha256) }),
     "Reviewed old/new setup linkage differs",
   )
   return next
@@ -183,7 +185,13 @@ export async function review(input: Descriptor["plan"], expected: Entry, cache?:
   const upgraded = "retrieval" in value ? value.retrieval : undefined
   const observed = upgraded
     ? await activation(prior.managed, upgraded.previous, value.source, next.managed.namespaces)
-    : await observe(prior.managed, value.source, next.managed.namespaces, next.managed.supervisor.sha256)
+    : await observe(
+        prior.managed,
+        value.source,
+        next.managed.namespaces,
+        next.managed.supervisor.sha256,
+        next.setup.source_sha256,
+      )
   const observedDirs = evidence(observed, value)
   check(typeof original.plan.source === "string", "Original source location required")
   const replacements = new Map(
@@ -210,7 +218,7 @@ export async function review(input: Descriptor["plan"], expected: Entry, cache?:
     {
       protocol: "raya.upgrade.pure-projection.v1",
       source: value.source,
-      release,
+      release: next.setup.source_sha256,
       replacements: [...replacements.entries()],
       supervisor,
       directories: observedDirs[0],
@@ -225,7 +233,7 @@ export async function review(input: Descriptor["plan"], expected: Entry, cache?:
         project(
           original.files[index].raw,
           value.source,
-          release,
+          next.setup.source_sha256,
           replacements,
           supervisor,
           observedDirs[0]!,

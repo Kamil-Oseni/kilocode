@@ -24,7 +24,7 @@ import { explanation } from "./dream-review"
 import { DreamTransport } from "./dream-transport"
 import { entry as dreamEntry } from "./dream-entry"
 import { DreamActivity } from "./dream-activity"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { choices } from "./note-choices"
 import { unchanged } from "./review"
 import { ClosedRequired } from "./closed-recovery"
@@ -43,6 +43,9 @@ import { hydrate } from "./setup-health"
 import type { CaptureReceipt } from "../shared/second-brain"
 import { mkdir, rename, writeFile } from "node:fs/promises"
 import { createHash, randomUUID } from "node:crypto"
+import { ManagementFlow, type ManagementAuthority } from "./management-flow"
+import { review as reviewManagement } from "./management-native"
+import { Manage } from "../../../opencode/src/kilocode/second-brain/management-protocol"
 
 type IndexScope = {
   signal: AbortSignal
@@ -186,6 +189,7 @@ export class BrainHost {
   private debt?: unknown
   private readonly activity = new DreamActivity()
   private onboarding?: SetupFlow
+  private management?: ManagementFlow
 
   observeCapture(listener: (receipt: CaptureReceipt | undefined) => void): vscode.Disposable {
     const publish = () => {
@@ -686,6 +690,7 @@ export class BrainHost {
       }),
     )
     const close = (terminating = false) => {
+      this.management?.close()
       if (terminating) this.settings.retire()
       return join([this.retireIndex(), this.control.dispose(), this.service.dispose(), Control.drain()])
     }
@@ -763,21 +768,30 @@ export class BrainHost {
     request: { project: string; sessionID?: string; command: unknown },
     directory: string,
     signal: AbortSignal,
+    authority?: ManagementAuthority,
   ) {
     signal.throwIfAborted()
     const project = path.resolve(directory)
     if (project.toLowerCase() !== path.resolve(request.project).toLowerCase())
       throw new Error("Authenticated trusted project required")
     const row = decode(request.command)
-    const guard = ["setup", "captureState", "status", "context", "capturePolicy", "capture", "captureFailed"].includes(
-      String(row.action),
-    )
+    const guard = [
+      "setup",
+      "manage",
+      "captureState",
+      "status",
+      "context",
+      "capturePolicy",
+      "capture",
+      "captureFailed",
+    ].includes(String(row.action))
       ? personal(project, () => ({
           trusted: vscode.workspace.isTrusted,
           folders: (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
         }))
       : () => trusted(project)
     guard()
+    if (row.action === "manage") return this.manage(row, project, request.sessionID, authority, signal, guard)
     if (row.action === "setup") return this.conversationSetup(row, project, request.sessionID, signal, guard)
     if (row.action === "captureState") return this.captureState(row, project, signal, guard)
     if (["capturePolicy", "capture", "captureFailed"].includes(String(row.action)))
@@ -819,6 +833,44 @@ export class BrainHost {
     if (row.action === "propose" && proposals[0]?.status !== "pending")
       throw new Error("Original proposal creation is unconfirmed")
     return { action: row.action as "list" | "read" | "propose", project, proposals }
+  }
+
+  private async manage(
+    row: Record<string, unknown>,
+    project: string,
+    session: string | undefined,
+    authority: ManagementAuthority | undefined,
+    signal: AbortSignal,
+    guard: () => void,
+  ) {
+    if (!authority || session !== Schema.decodeUnknownSync(Manage)(row).source.sessionID)
+      throw new Error("Original personal Memory conversation authority required")
+    this.management ??= new ManagementFlow({
+      bind: async (current, check) => {
+        await hydrate(this.service, this.control, await this.service.status(), current, check)
+        const binding = await this.service.captureSelection(current)
+        const policy = this.control.snapshot()
+        if (
+          binding.index !== "synced" ||
+          policy.status !== "synced" ||
+          !policy.digest ||
+          binding.digest !== policy.digest
+        )
+          throw new Error("Current reviewed personal Memory sources and index required")
+        return { selection: binding, policy: policy.digest }
+      },
+      current: (binding) => !this.closing && this.service.captureCurrent(binding.selection),
+      execute: (body, current, check) => this.service.management(body, current, check),
+      review: reviewManagement,
+      publish: (proposal, binding, _signal, authorize) => this.control.manage(proposal, binding.policy, authorize),
+    })
+    return this.management.run(
+      Schema.decodeUnknownSync(Manage)(row, { onExcessProperty: "error" }),
+      project,
+      authority,
+      signal,
+      guard,
+    )
   }
 
   private async multimedia(row: Record<string, unknown>, project: string, signal: AbortSignal, guard: () => void) {

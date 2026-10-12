@@ -70,7 +70,7 @@ class Release(unittest.TestCase):
     def test_current_release_admits_all_original_bytes(self):
         plan, images = self.load()
         self.assertEqual(plan, self.plan)
-        self.assertEqual(len(images), 13)
+        self.assertEqual(len(images), 15)
         self.assertEqual(set(images), {Path(plan['source'])/name for name in module.CAPTURE})
         for path, raw in images.items():
             self.assertEqual(raw, path.read_bytes())

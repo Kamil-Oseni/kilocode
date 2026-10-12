@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto"
 import { parseTree, type Node, type ParseError } from "jsonc-parser"
 
-export type Op = "state" | "preview" | "discard" | "approve" | "policy_pause" | "capture_authorize" | "capture_admit"
+export type Op =
+  | "state"
+  | "preview"
+  | "discard"
+  | "approve"
+  | "policy_pause"
+  | "capture_authorize"
+  | "capture_admit"
+  | "manual_proposal_authorize"
+  | "manual_proposal_admit"
+  | "manual_proposal_publish"
 export class Refused extends Error {
   readonly code: "capture_source_capacity" | "control_refused"
   constructor(
@@ -166,8 +176,42 @@ export function reply(raw: Uint8Array, op: Op, seq: number, root: string) {
   if (op === "approve" || op === "policy_pause") publication(value, op)
   if (op === "capture_authorize") authorization(value, root)
   if (op === "capture_admit") admission(value)
+  if (op === "manual_proposal_authorize") authorization(value, root)
+  if (op === "manual_proposal_admit" || op === "manual_proposal_publish") manual(value, root)
   if (op === "preview") preview(value, decoded, root)
   return value
+}
+
+function manual(value: { [key: string]: Value }, root: string) {
+  fields(value, [
+    "policy_sha256",
+    "policy",
+    "capture_enabled",
+    "proposal_id",
+    "journal_id",
+    "source_policy_refreshed",
+    "publication_confirmed",
+    "index_confirmed",
+    "changes",
+  ])
+  hash(value.policy_sha256)
+  policy(value.policy, root)
+  check(value.capture_enabled === false, "Manual admission cannot enable capture")
+  for (const key of ["proposal_id", "journal_id"])
+    check(typeof value[key] === "string" && /^[a-f0-9-]{36}$/.test(value[key]), "Original manual admission required")
+  check(
+    value.source_policy_refreshed === true && value.publication_confirmed === true && value.index_confirmed === false,
+    "Manual note publication and source-policy advancement required",
+  )
+  check(
+    Array.isArray(value.changes) && value.changes.length >= 1 && value.changes.length <= 12,
+    "Bounded manual changes required",
+  )
+  for (const change of value.changes) {
+    const row = fields(change, ["relative", "note_sha256"])
+    name(row.relative)
+    hash(row.note_sha256, true)
+  }
 }
 
 function refusal(value: Value, op: Op): never {
@@ -175,7 +219,10 @@ function refusal(value: Value, op: Op): never {
   check(
     err.kind === "control_refused" &&
       err.message === "Control operation refused; inspect current identity and review." &&
-      err.publication === (["approve", "policy_pause", "capture_admit"].includes(op) ? "may_have_happened" : "none"),
+      err.publication ===
+        (["approve", "policy_pause", "capture_admit", "manual_proposal_admit", "manual_proposal_publish"].includes(op)
+          ? "may_have_happened"
+          : "none"),
     "Refusal identity refused",
   )
   check(

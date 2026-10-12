@@ -6,6 +6,8 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { RayaChief } from "../../src/kilocode/chief"
 import { settled, acknowledged } from "../../src/kilocode/second-brain/turn"
 import { ollama, OllamaBridgeError } from "../../src/kilocode/provider/ollama-bridge"
+import { command as managed } from "../../src/kilocode/second-brain/management"
+import { current as projection } from "../../src/kilocode/second-brain/management-source"
 
 const sid = SessionID.make("ses_recall_turn")
 const uid = MessageID.make("msg_user")
@@ -86,6 +88,39 @@ function fixture() {
   }
   return { messages: [user, assistant], session, tool }
 }
+
+test("personal management settles only its own observed receipt without claiming indexed publication", () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text" || original.tool.state.status !== "completed")
+    throw new Error("Original tool fixture required")
+  part.text = "Forget my drink preference."
+  original.session.metadata[RayaChief.requestKey] = part.text
+  const source = projection(original.messages, original.session, uid)
+  if (!source) throw new Error("Original user source required")
+  const request = managed(source, { action: "forget" })
+  original.tool.tool = "second_brain_manage"
+  const receipt = {
+    action: "manage",
+    project: original.session.directory,
+    operation: request.operation,
+    mode: request.mode,
+    sessionID: sid,
+    messageID: uid,
+    source_sha256: source.source_sha256,
+    disposition: "published",
+    publication_confirmed: true,
+    index_confirmed: false,
+    changes: [{ relative: "Preferences/Drink.md", note_sha256: "a".repeat(64) }],
+  }
+  original.tool.state = { ...original.tool.state, input: { action: "forget" }, output: JSON.stringify(receipt) }
+  expect(settled(original.messages, original.session, uid)).toBe(true)
+  expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+  original.tool.state = { ...original.tool.state, output: JSON.stringify({ ...receipt, index_confirmed: true }) }
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  original.tool.state = { ...original.tool.state, output: JSON.stringify({ ...receipt, messageID: "msg_foreign" }) }
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+})
 
 test("original completed Memory read releases conversational synthesis without changing goal state", () => {
   const original = fixture()

@@ -1,6 +1,6 @@
 import path from "node:path"
 import { check, child, document, object } from "../control/frames"
-import { release, selected } from "../control/catalog-capture"
+import { selected, resident } from "../control/catalog-capture"
 import { normalize } from "../control/identity"
 import { current, supervisors } from "./catalog"
 import { images, fingerprint, cohort } from "./reuse-catalog"
@@ -68,10 +68,23 @@ function selection(
       !normalize(prior.path).startsWith(normalize(source) + "/"),
     "Separate new ordinary source directory required",
   )
-  check(same(pins, release), "Exact current Memory release required")
+  check(
+    same(pins, selected(pins)) && resident(pins) && (!("management.py" in pins) || expected === current),
+    "Exact current Memory release required",
+  )
   check(
     same(prior.pins, selected(prior.pins)) &&
-      same({ ...prior.pins, "server.py": pins["server.py"], "index.py": pins["index.py"] }, pins),
+      same(
+        {
+          ...prior.pins,
+          "server.py": pins["server.py"],
+          "index.py": pins["index.py"],
+          ...("management.py" in pins
+            ? { "entries.py": pins["entries.py"], "management.py": pins["management.py"] }
+            : {}),
+        },
+        pins,
+      ),
     "Exact previous capture release required",
   )
   check(
@@ -201,9 +214,24 @@ export function project(
       return [{ node, text: image(selected) }]
     },
   )
-  check(found.size === replacements.size && found.size === count, "Exact upgrade source inventory required")
+  const added = Object.keys(pins)
+    .filter((name) => !Object.hasOwn(prior.pins, name))
+    .map((name) => {
+      check(["entries.py", "management.py"].includes(name), "Unreviewed source addition refused")
+      const key = normalize(path.join(prior.path, name))
+      const ref = mapping.get(key)
+      check(
+        !paths.has(key) && ref && ref.path === path.join(source, name) && ref.sha256 === pins[name],
+        "Exact new personal Memory source required",
+      )
+      return image(ref)
+    })
+  check(
+    found.size + added.length === replacements.size && found.size + added.length === count,
+    "Exact upgrade source inventory required",
+  )
   const end = { offset: files.offset + files.length - 1, length: 0 }
-  changes.push({ node: end, text: (files.children?.length ? "," : "") + image(supervisor) })
+  changes.push({ node: end, text: (files.children?.length ? "," : "") + [...added, image(supervisor)].join(",") })
   const addition = [directory, ...(activated?.directories ?? [])]
     .map((item) => {
       check(

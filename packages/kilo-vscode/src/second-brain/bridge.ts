@@ -1,9 +1,36 @@
-import type { SecondBrainRequest } from "@kilocode/sdk/v2/client"
+import type { SecondBrainManageResult, SecondBrainRequest } from "@kilocode/sdk/v2/client"
 import type { CanvasConnection } from "../services/canvas/canvas-bridge"
 import type { SSEPayload } from "../services/cli-backend/sdk-sse-adapter"
 import type { BrainHost } from "./host"
 import { register } from "./retirement"
 import * as path from "node:path"
+import { Schema } from "effect"
+import { Manage, type ManageResult } from "../../../opencode/src/kilocode/second-brain/management-protocol"
+import { current as managementSource } from "../../../opencode/src/kilocode/second-brain/management-source"
+
+function reply(result: ManageResult): SecondBrainManageResult {
+  if (result.changes.some((change) => change.note_sha256 === null))
+    return {
+      ...result,
+      disposition: "unconfirmed",
+      publication_confirmed: false,
+      index_confirmed: false,
+      changes: [],
+      stage: undefined,
+      question: undefined,
+      detail: "The original personal Memory change has an unsupported note-deletion receipt; do not replay it.",
+    }
+  return {
+    ...result,
+    changes: result.changes.map((change) => {
+      if (change.note_sha256 === null) throw new Error("Personal Memory note hash required")
+      return { relative: change.relative, note_sha256: change.note_sha256 }
+    }),
+    question: result.question
+      ? { prompt: result.question.prompt, options: result.question.options.map((option) => ({ ...option })) }
+      : undefined,
+  }
+}
 
 /** One retained extension owner; a lost reply never replays a proposal write. */
 export class BrainBridge {
@@ -90,10 +117,28 @@ export class BrainBridge {
       if (!this.current(client, generation)) return
       if (path.resolve(directory).toLowerCase() !== path.resolve(request.project).toLowerCase())
         throw new Error("Project context differs")
-      const result = await this.host.model(request, directory, signal)
+      const result = await this.host.model(request, directory, signal, {
+        current: () => this.current(client, generation),
+        source: async () => {
+          const command = Schema.decodeUnknownSync(Manage)(request.command, { onExcessProperty: "error" })
+          if (!this.current(client, generation)) throw new Error("Original Memory connection changed")
+          const [session, messages] = await Promise.all([
+            client.session.get({ sessionID: request.sessionID, directory }, { signal, throwOnError: true }),
+            client.session.messages(
+              { sessionID: request.sessionID, directory, limit: 32 },
+              { signal, throwOnError: true },
+            ),
+          ])
+          if (!this.current(client, generation)) throw new Error("Original Memory connection changed")
+          return managementSource(messages.data, session.data, command.source.messageID)
+        },
+      })
       signal.throwIfAborted()
       if (!this.current(client, generation)) return
-      const response = await client.kilocode.secondBrain.reply({ requestID: request.id, directory, result }, { signal })
+      const response = await client.kilocode.secondBrain.reply(
+        { requestID: request.id, directory, result: result.action === "manage" ? reply(result) : result },
+        { signal },
+      )
       if (response.error) throw new Error("Reply refused")
     } catch (error) {
       if (signal.aborted || !this.current(client, generation)) return

@@ -1,7 +1,7 @@
 import path from "node:path"
 import { check } from "./frames"
 import { release, bridge as modern } from "./catalog-v2"
-import { selected as capture, bridge as captured } from "./catalog-capture"
+import { selected as capture, transport as captured } from "./catalog-capture"
 
 const sources = Object.freeze({
   "server.py": "51a19ed48dc3ec36ca608a141b3d1acca681c6993dde189ac8fc2ab04ae288b2",
@@ -56,7 +56,7 @@ export function parseCatalog(input: unknown): Catalog {
   const pins = object(row.source_sha256)
   const current = row.version === 2 && "capture.py" in pins
   const selected = current ? capture(pins) : row.version === 2 ? release : sources
-  const transport = current ? captured : row.version === 2 ? modern : bridge
+  const transport = current ? captured(pins) : row.version === 2 ? modern : bridge
   check(row.python_sha256 === interpreter && row.bridge_sha256 === transport, "Unreviewed control release refused")
   check(Object.keys(pins).sort().join("|") === Object.keys(selected).sort().join("|"), "Exact source pins required")
   for (const [name, digest] of Object.entries(selected)) {

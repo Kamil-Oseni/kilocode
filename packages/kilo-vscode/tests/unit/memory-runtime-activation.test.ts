@@ -25,6 +25,52 @@ import { exec } from "../../src/util/process"
 let outer: string
 let cfg: Descriptor
 let setup: Setup
+async function archive(name: string) {
+  const result = await exec("git", ["show", "44967c2bdc:" + name], { maxBuffer: 1048576, timeout: 10000 })
+  return Buffer.from(result.stdout)
+}
+
+async function history(dir: string) {
+  const extension = path.join(dir, "extension")
+  const base = path.join(extension, "script/memory")
+  const modules = path.join(dir, "recipe")
+  await mkdir(modules)
+  for (const name of ["catalog-capture", "catalog-v2"])
+    await writeFile(
+      path.join(modules, name + ".ts"),
+      await archive("packages/kilo-vscode/src/second-brain/control/" + name + ".ts"),
+    )
+  for (const name of ["materialize", "upgrade", "upgrade-observe", "catalog"]) {
+    const raw = await archive("packages/kilo-vscode/src/second-brain/managed/" + name + ".ts")
+    const bound = raw.toString().replace(/from "([^"]+)"/g, (match, spec: string) => {
+      if (spec.startsWith("node:")) return match
+      if (spec === "../control/catalog-capture") return 'from "./catalog-capture"'
+      if (["./upgrade", "./upgrade-observe", "./catalog"].includes(spec)) return match
+      return "from " + JSON.stringify(path.resolve("src/second-brain/managed", spec) + ".ts")
+    })
+    await writeFile(path.join(modules, name + ".ts"), bound)
+  }
+  const captured = (await import(pathToFileURL(path.join(modules, "catalog-capture.ts")).href)) as {
+    release: Readonly<Record<string, string>>
+  }
+  expect(Object.keys(captured.release)).toHaveLength(13)
+  const old = "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86"
+  const pins = cohort(old)
+  for (const [name, digest] of [
+    ...Object.entries(captured.release).map(([name, digest]) => ["service/" + name, digest]),
+    ...Object.entries(pins),
+  ]) {
+    const raw = await archive("packages/kilo-vscode/script/memory/" + name)
+    expect(sha(raw)).toBe(digest)
+    const target = path.join(base, name)
+    await mkdir(path.dirname(target), { recursive: true })
+    await writeFile(target, raw)
+  }
+  const supervisor = await archive("packages/kilo-vscode/script/memory/supervise.py")
+  expect(sha(supervisor)).toBe("a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b")
+  await writeFile(path.join(base, "supervise.py"), supervisor)
+  return { extension, base, modules, captured: captured.release, old, pins, supervisor }
+}
 beforeAll(async () => {
   outer = await mkdtemp(path.join(os.tmpdir(), "raya-memory-control-activation-"))
   await protect(outer)
@@ -46,8 +92,8 @@ test("v2 activates both native selections, preserves original integer tokens and
   expect(value.version).toBe(2)
   expect("retrieval" in value).toBe(true)
   if (!("retrieval" in value)) throw new Error("V2 fixture required")
-  expect(value.images).toHaveLength(30)
-  expect(value.original).toHaveLength(13)
+  expect(value.images).toHaveLength(Object.keys(release).length + Object.keys(images).length + 1)
+  expect(value.original).toHaveLength(Object.keys(release).length)
   expect(value.retrieval.previous.images).toHaveLength(16)
   const after = await selection(value.next.managed, value.next.setup)
   expect(after.retrieval!.source_sha256).toEqual(images)
@@ -140,7 +186,7 @@ test("explicit v1 remains Memory-only and cannot be relabeled as v2 activation",
   const value = await materialize(cfg, setup, path.resolve("."), "4".repeat(32), 1)
   expect(value.version).toBe(1)
   expect(value).not.toHaveProperty("retrieval")
-  expect(value.images).toHaveLength(14)
+  expect(value.images).toHaveLength(Object.keys(release).length + 1)
   const next = await selection(value.next.managed, value.next.setup)
   expect(next.retrieval!.source).toBe(before.retrieval!.source)
   expect(next.retrieval!.source_sha256).toEqual(before.retrieval!.source_sha256)
@@ -191,20 +237,34 @@ print('finite-qualified')`
 }, 30000)
 
 test("historical v1 native observer and projection retain the immutable original program and known supervisor", async () => {
-  const original = await selection(cfg, setup)
-  const source = path.join(cfg.root, "raya-memory-source-upgrade-" + "6".repeat(32))
-  await mkdir(source)
-  for (const name of Object.keys(release))
-    await copyFile(path.resolve("script/memory/service", name), path.join(source, name))
-  const archived = await exec("git", ["show", "44967c2bdc:packages/kilo-vscode/script/memory/supervise.py"], {
-    maxBuffer: 1048576,
-    timeout: 10000,
+  const dir = path.join(outer, "raya-memory-control-history-observer")
+  await mkdir(dir)
+  await protect(dir)
+  const notes = path.join(dir, "notes")
+  await mkdir(path.join(notes, "System"), { recursive: true })
+  const saved = await history(dir)
+  const selected = await runtime(dir, { path: path.join(saved.base, "service"), pins: saved.captured }, notes, {
+    path: saved.base,
+    pins: saved.pins,
+    release: saved.old,
+    supervisor: path.join(saved.base, "supervise.py"),
   })
-  const raw = Buffer.from(archived.stdout)
+  const original = await selection(selected.cfg, selected.setup)
+  const source = path.join(selected.cfg.root, "raya-memory-source-upgrade-" + "6".repeat(32))
+  await mkdir(source)
+  for (const name of Object.keys(saved.captured))
+    await copyFile(path.join(saved.base, "service", name), path.join(source, name))
+  const raw = saved.supervisor
   const expected = "a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b"
   expect(sha(raw)).toBe(expected)
   await writeFile(path.join(source, "supervise.py"), raw)
-  const observed = await historical(cfg, source, undefined, expected)
+  const archived = (await import(pathToFileURL(path.join(saved.modules, "upgrade-observe.ts")).href)) as {
+    observe: typeof historical
+  }
+  const projected = (await import(pathToFileURL(path.join(saved.modules, "upgrade.ts")).href)) as {
+    project: typeof project
+  }
+  const observed = await archived.observe(selected.cfg, source, undefined, expected)
   expect(observed.images).toHaveLength(14)
   expect(observed.producer).toMatchObject({
     code: 0,
@@ -223,19 +283,19 @@ test("historical v1 native observer and projection retain the immutable original
   const constants = legacy.stdout.slice(legacy.stdout.indexOf("const body ="), legacy.stdout.indexOf("type Image ="))
   const program = new Function(constants + "\nreturn script")() as string
   expect(observed.programSHA).toBe(sha(program))
-  await expect(historical(cfg, source)).rejects.toThrow("Native upgrade observation refused")
+  await expect(historical(selected.cfg, source)).rejects.toThrow("Native upgrade observation refused")
   const supervisor = observed.images.find((row) => path.basename(row.path) === "supervise.py")!
   const mapping = new Map(
     observed.images
       .filter((row) => path.basename(row.path) !== "supervise.py")
       .map((row) => [path.join(String(original.plan.source), path.basename(row.path)), row]),
   )
-  const base = { path: String(original.plan.source), pins: setup.source_sha256 }
+  const base = { path: String(original.plan.source), pins: selected.setup.source_sha256 }
   for (const index of [2, 3]) {
-    const changed = project(
+    const changed = projected.project(
       original.files[index].raw,
       source,
-      release,
+      saved.captured,
       mapping,
       supervisor,
       observed.directory!,
@@ -247,8 +307,8 @@ test("historical v1 native observer and projection retain the immutable original
     expect(parsed.source).toBe(index === 2 ? source : original.retrieval!.source)
     expect(parsed.env).toEqual(index === 2 ? original.plan.env : original.retrieval!.env)
     expect(() =>
-      project(original.files[index].raw, source, release, mapping, supervisor, observed.directory!, base),
-    ).toThrow("supervisor")
+      project(original.files[index].raw, source, saved.captured, mapping, supervisor, observed.directory!, base),
+    ).toThrow()
   }
 }, 30000)
 
@@ -258,40 +318,14 @@ test("an actual archived v1 recipe creates an immutable old-cohort artifact that
   await protect(dir)
   const notes = path.join(dir, "notes")
   await mkdir(path.join(notes, "System"), { recursive: true })
-  const extension = path.join(dir, "extension")
-  const base = path.join(extension, "script/memory")
-  const modules = path.join(dir, "recipe")
-  await mkdir(modules)
-  const archive = async (name: string) => {
-    const result = await exec("git", ["show", "44967c2bdc:" + name], { maxBuffer: 1048576, timeout: 10000 })
-    return Buffer.from(result.stdout)
-  }
-  const old = "6e0cb18e4c8e1fdeba4e8992dca898cc94ddafacce3e31a79b364b3d42697c86"
-  const pins = cohort(old)
-  for (const [name, digest] of [
-    ...Object.entries(release).map(([name, digest]) => ["service/" + name, digest]),
-    ...Object.entries(pins),
-  ]) {
-    const raw = await archive("packages/kilo-vscode/script/memory/" + name)
-    expect(sha(raw)).toBe(digest)
-    const target = path.join(base, name)
-    await mkdir(path.dirname(target), { recursive: true })
-    await writeFile(target, raw)
-  }
-  const supervisor = await archive("packages/kilo-vscode/script/memory/supervise.py")
-  expect(sha(supervisor)).toBe("a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b")
-  await writeFile(path.join(base, "supervise.py"), supervisor)
-  for (const name of ["materialize", "upgrade", "upgrade-observe", "catalog"]) {
-    const raw = await archive("packages/kilo-vscode/src/second-brain/managed/" + name + ".ts")
-    const bound = raw.toString().replace(/from "([^"]+)"/g, (match, spec: string) => {
-      if (spec.startsWith("node:")) return match
-      if (["./upgrade", "./upgrade-observe", "./catalog"].includes(spec)) return match
-      const location = path.resolve("src/second-brain/managed", spec) + ".ts"
-      return "from " + JSON.stringify(location)
-    })
-    await writeFile(path.join(modules, name + ".ts"), bound)
-  }
-  const selected = await runtime(dir, undefined, notes, {
+  const saved = await history(dir)
+  const extension = saved.extension
+  const base = saved.base
+  const modules = saved.modules
+  const old = saved.old
+  const pins = saved.pins
+  const supervisor = saved.supervisor
+  const selected = await runtime(dir, { path: path.join(base, "service"), pins: saved.captured }, notes, {
     path: base,
     pins,
     release: old,
@@ -326,7 +360,7 @@ test("an actual archived v1 recipe creates an immutable old-cohort artifact that
   expect(unchanged.digest).toBe(prepared.receipt.sha256)
   const finiteRoot = path.join(dir, "raya-memory-control-historical-finite")
   await mkdir(finiteRoot)
-  const finite = await runtime(finiteRoot, undefined, undefined, {
+  const finite = await runtime(finiteRoot, { path: path.join(base, "service"), pins: saved.captured }, undefined, {
     path: base,
     pins,
     release: old,

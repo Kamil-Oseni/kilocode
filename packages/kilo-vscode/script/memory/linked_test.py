@@ -15,6 +15,7 @@ from urllib.parse import unquote
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / 'service'))
 from policy import Policy
+from entries import project as active
 # Execute the actual production reader without importing model catalogs, tokens
 # or service runtime. No implementation is copied into this test.
 SOURCE = HERE / 'service/index.py'
@@ -37,7 +38,7 @@ class Tests(unittest.TestCase):
     def test_latest_relevant_capture_is_complete_instead_of_an_early_duplicate_with_a_cut_tail(self):
         old = self.capture('00000000-0000-5000-8000-000000000001', 'For first-time Raya setup, I prefer concise conversational ask cards instead of lengthy forms.')
         latest = self.capture('00000000-0000-5000-8000-000000000002', 'Concise conversational ask cards.\n\nOriginal user preference: For first-time Raya setup, I prefer concise conversational ask cards instead of lengthy forms.')
-        text = '# Preferences\n\n' + old * 6 + '\n' + latest
+        text = '# Preferences\n\n' + ''.join(old.replace('00000000-0000-5000-8000-000000000001', f'00000000-0000-5000-8000-{number:012x}') for number in range(16, 22)) + '\n' + latest
         query = 'first-time Raya setup preferences and Memory tab settings'
         row = passage('Preferences/Raya.md', text, query, 2000, len, lambda: None)
         self.assertIn('00000000-0000-5000-8000-000000000002', row['heading'])
@@ -266,7 +267,7 @@ class Tests(unittest.TestCase):
                     any(isinstance(target, ast.Name) and target.id == 'SIGNATURE' for target in row.targets))
         scope = {'MODEL': {'revision': 'synthetic-unchanged-model'}, 'SPACE': {'dimensions': 1024}}
         exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), str(SOURCE), 'exec'), scope)
-        self.assertEqual(scope['SIGNATURE'], 'markdown-v4:300tokens:1024:normalized:local-link-labels:synthetic-unchanged-model')
+        self.assertEqual(scope['SIGNATURE'], 'markdown-v5:300tokens:1024:normalized:active-entries:local-link-labels:synthetic-unchanged-model')
         self.assertNotEqual(scope['SIGNATURE'], 'markdown-v3:300tokens:1024:normalized:local-link-labels:synthetic-unchanged-model')
 
     def test_recall_preserves_following_conflict_qualifier(self):

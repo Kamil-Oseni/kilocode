@@ -18,12 +18,14 @@ export type ManageSource = typeof ManageSource.Type
 
 export const Manage = Schema.Struct({
   action: Schema.Literal("manage"),
-  stage: Schema.Literal("inspect"),
+  stage: Schema.Literals(["inspect", "select", "review", "cancel"]),
   mode: Schema.Literals(["remember", "correct", "forget"]),
   operation: id,
   source: ManageSource,
   fact: Schema.optional(Schema.Struct({ start: integer, end: integer })),
   query: Schema.optional(text(2000)),
+  attempt: Schema.optional(id),
+  choice: Schema.optional(id),
 }).annotate({ identifier: "SecondBrainManage" })
 export type Manage = typeof Manage.Type
 
@@ -45,5 +47,17 @@ export const ManageResult = Schema.Struct({
     }),
   ).check(Schema.isMaxLength(16)),
   detail: Schema.optional(Schema.String.check(Schema.isMaxLength(1024))),
+  attempt: Schema.optional(id),
+  proposal: Schema.optional(id),
+  stage: Schema.optional(Schema.Literals(["select", "review"])),
+  question: Schema.optional(
+    Schema.Struct({
+      prompt: text(300),
+      options: Schema.Array(Schema.Struct({ id, label: text(700) })).check(
+        Schema.isMinLength(2),
+        Schema.isMaxLength(13),
+      ),
+    }),
+  ),
 }).annotate({ identifier: "SecondBrainManageResult" })
 export type ManageResult = typeof ManageResult.Type

@@ -32,17 +32,21 @@ print(json.dumps({'counter':True,'model_stack':False}))
 
     def test_actual_source_release_and_separate_legacy_selection(self):
         current = {name: hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest() for name in module.CAPTURE}
-        self.assertEqual(len(current), 13)
+        self.assertEqual(len(current), 15)
         self.assertEqual(module.release('memory', current), module.CAPTURE)
         self.assertEqual(module.release('memory', module.CLOSED), module.CLOSED)
-        self.assertEqual({key for key in module.CAPTURE if module.CAPTURE[key] != module.CLOSED[key]}, {'index.py'})
+        self.assertEqual({key for key in module.CAPTURE if module.CAPTURE[key] != module.CLOSED.get(key)},
+                         {'server.py', 'index.py', 'entries.py', 'management.py'})
         self.assertEqual(module.CLOSED['index.py'], 'e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7')
         for prior in module.PREVIOUS:
             self.assertEqual(module.release('memory', prior), prior)
         self.assertEqual(module.release('memory', module.RELEASES['memory']), module.RELEASES['memory'])
         self.assertEqual(module.release('retrieval', module.RELEASES['retrieval']), module.RELEASES['retrieval'])
         for changed in [dict(current, **{'capture.py': 'f' * 64}),
+                        dict(current, **{'entries.py': 'f' * 64}),
+                        dict(current, **{'management.py': 'f' * 64}),
                         {name: sha for name, sha in current.items() if name != 'capture.py'},
+                        {name: sha for name, sha in current.items() if name != 'entries.py'},
                         dict(current, **{'extra.py': 'f' * 64})]:
             with self.assertRaises(ValueError):
                 module.release('memory', changed)

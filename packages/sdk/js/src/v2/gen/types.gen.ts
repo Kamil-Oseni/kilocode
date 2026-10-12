@@ -2010,6 +2010,29 @@ export type SecondBrainMediaRecall = {
   top: number
 }
 
+export type SecondBrainManageSource = {
+  sessionID: string
+  messageID: string
+  created_utc: string
+  text: string
+  source_sha256: string
+}
+
+export type SecondBrainManage = {
+  action: "manage"
+  stage: "inspect" | "select" | "review" | "cancel"
+  mode: "remember" | "correct" | "forget"
+  operation: string
+  source: SecondBrainManageSource
+  fact?: {
+    start: number
+    end: number
+  }
+  query?: string
+  attempt?: string
+  choice?: string
+}
+
 export type SecondBrainRequest = {
   id: SecondBrainRequestId
   sessionID: string
@@ -2077,6 +2100,7 @@ export type SecondBrainRequest = {
           | "cancelled"
       }
     | SecondBrainMediaRecall
+    | SecondBrainManage
 }
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
@@ -7099,6 +7123,34 @@ export type SecondBrainMediaResult = {
   capture_enabled: false
 }
 
+export type SecondBrainManageResult = {
+  action: "manage"
+  project: string
+  operation: string
+  sessionID: string
+  messageID: string
+  source_sha256: string
+  mode: "remember" | "correct" | "forget"
+  disposition: "pending" | "cancelled" | "published" | "indexed" | "no_match" | "unconfirmed"
+  publication_confirmed: boolean
+  index_confirmed: boolean
+  changes: Array<{
+    relative: string
+    note_sha256: string
+  }>
+  detail?: string
+  attempt?: string
+  proposal?: string
+  stage?: "select" | "review"
+  question?: {
+    prompt: string
+    options: Array<{
+      id: string
+      label: string
+    }>
+  }
+}
+
 export type SecondBrainResult =
   | SecondBrainProposalResult
   | SecondBrainContextResult
@@ -7152,6 +7204,7 @@ export type SecondBrainResult =
       replay: false
     }
   | SecondBrainMediaResult
+  | SecondBrainManageResult
 
 export type SecondBrainFailure = {
   code: "cancelled" | "disconnected" | "invalid_request" | "not_found" | "timeout" | "unsupported" | "conflict"

@@ -1,4 +1,4 @@
-/** Exact source-qualified thirteen-file capture release; native activation is separate. */
+/** Exact reviewed Memory cohorts; native activation and publication are separate. */
 import { release as legacy } from "./catalog-v2"
 
 const historical = Object.freeze({
@@ -25,9 +25,16 @@ const closed = Object.freeze({
   ...handoff,
   "server.py": "ddcffa6ec22432f1622850aa36e04e48cfe8cad94db28648e1b6b8dd2fefcf1d",
 })
-export const release = Object.freeze({
+const captured = Object.freeze({
   ...closed,
   "index.py": "3c106c8e45267ee808a3c2bd8dfacf85a4d3c1ca47e23785706d7663d6791f65",
+})
+export const release = Object.freeze({
+  ...captured,
+  "server.py": "d3b3bba2166c30358442a1ef274d18a272d8e1a1f1c3ea44b70276dc61932af6",
+  "index.py": "b6bd48d00bca2565c8c6690691b7f9b1e2e7680abbd48058ab62b4a2770ef5cd",
+  "entries.py": "20b59cdc4a4ea3b5124ee81c0950ffbb6429ba05dcd6f0ac8d9d8656c2a13472",
+  "management.py": "0794a56bc81e326431d8bbcc961d1e703e03062d18cd9088d9ceae85366d8324",
 })
 const previous = Object.freeze({
   ...historical,
@@ -39,6 +46,8 @@ const retained = Object.freeze({
 })
 export function selected(pins: Readonly<Record<string, unknown>>) {
   if (!("capture.py" in pins)) return legacy
+  if ("entries.py" in pins || "management.py" in pins) return release
+  if (pins["server.py"] === captured["server.py"] && pins["index.py"] === captured["index.py"]) return captured
   if (pins["server.py"] === handoff["server.py"] && pins["index.py"] === handoff["index.py"]) return handoff
   if (pins["server.py"] === closed["server.py"] && pins["index.py"] === closed["index.py"]) return closed
   if (pins["server.py"] === historical["server.py"] && pins["index.py"] === historical["index.py"]) return historical
@@ -46,14 +55,17 @@ export function selected(pins: Readonly<Record<string, unknown>>) {
     ? previous
     : pins["index.py"] === retained["index.py"]
       ? retained
-      : release
+      : captured
 }
 export function resident(pins: Readonly<Record<string, unknown>>) {
   const cohort = selected(pins)
   return (
-    (cohort === release || cohort === closed || cohort === handoff) &&
+    (cohort === release || cohort === captured || cohort === closed || cohort === handoff) &&
     Object.keys(pins).length === Object.keys(cohort).length &&
     Object.entries(cohort).every(([name, hash]) => pins[name] === hash)
   )
 }
-export const bridge = "a07325ca6e504cca3ce8714469423706d3e333c2399bfa451f41c896170b898c"
+export const bridge = "0c75ad3254fb85a0a187a6dfd69ebf3774ceaeb322eaa793a4e7de1b40993c85"
+export function transport(pins: Readonly<Record<string, unknown>>) {
+  return selected(pins) === release ? bridge : "a07325ca6e504cca3ce8714469423706d3e333c2399bfa451f41c896170b898c"
+}

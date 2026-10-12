@@ -11,6 +11,8 @@ def review(cfg):
     pins = cfg['pins']
     names = {'server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
              'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py', 'capture.py'}
+    if isinstance(pins, dict) and ('entries.py' in pins or 'management.py' in pins):
+        names |= {'entries.py', 'management.py'}
     assert isinstance(pins, dict) and set(pins) == names
     for name, expected in pins.items():
         file = source / name

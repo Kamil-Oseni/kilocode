@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, spyOn, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
-import { release } from "../../src/second-brain/control/catalog-capture"
+import { release, selected } from "../../src/second-brain/control/catalog-capture"
 import { project } from "../../src/second-brain/managed/upgrade"
 import * as frames from "../../src/second-brain/control/frames"
 
@@ -91,7 +91,7 @@ test("upgrade projects actual native file identities without rounding unrelated 
   const plan = JSON.parse(output)
   expect(plan.source).toBe(path.join(root, "next"))
   expect(plan.source_sha256).toEqual(release)
-  expect(plan.files).toHaveLength(14)
+  expect(plan.files).toHaveLength(Object.keys(release).length + 1)
   expect(plan.directories).toHaveLength(3)
   for (const row of fixture.rows) expect(output).toContain('"identity":[' + row.identity.join(",") + "]")
   const prior = fixture.raw.slice(fixture.raw.indexOf('"directories":'), fixture.raw.indexOf(',"retained":'))
@@ -115,15 +115,43 @@ test("upgrade parses the complete native inventory only twice without reparsing 
     expect(held).toHaveBeenCalledTimes(2)
     const original = JSON.parse(fixture.bulk)
     const selected = JSON.parse(output)
-    expect(selected.files).toHaveLength(142)
+    expect(selected.files).toHaveLength(Object.keys(release).length + 129)
     expect(selected.directories).toHaveLength(35)
-    expect(selected.files.slice(13, -1)).toEqual(original.files.slice(13))
+    expect(selected.files.slice(Object.keys(release).length, -1)).toEqual(
+      original.files.slice(Object.keys(release).length),
+    )
     expect(selected.directories.slice(0, -1)).toEqual(original.directories)
     expect(output).toContain('"retained":{"identity":[18446744073709551615,1791503155482873601]}')
     for (const row of fixture.rows) expect(output).toContain('"identity":[' + row.identity.join(",") + "]")
   } finally {
     held.mockRestore()
   }
+})
+
+test("upgrade adds only the two reviewed personal Memory modules to an original capture inventory", () => {
+  const prior = selected({
+    "capture.py": release["capture.py"],
+    "server.py": "ddcffa6ec22432f1622850aa36e04e48cfe8cad94db28648e1b6b8dd2fefcf1d",
+    "index.py": "3c106c8e45267ee808a3c2bd8dfacf85a4d3c1ca47e23785706d7663d6791f65",
+  })
+  const original = JSON.parse(fixture.bulk)
+  original.source_sha256 = prior
+  original.files = original.files.filter((row: Image) => {
+    const name = path.basename(row.path)
+    if (["entries.py", "management.py"].includes(name)) return false
+    if (Object.hasOwn(prior, name)) row.sha256 = prior[name as keyof typeof prior]
+    return true
+  })
+  const output = JSON.parse(run(JSON.stringify(original), fixture.rows, release, prior).toString())
+  expect(output.files).toHaveLength(original.files.length + 3)
+  expect(output.source_sha256).toEqual(release)
+  expect(output.files.slice(-3).map((row: Image) => path.basename(row.path))).toEqual([
+    "entries.py",
+    "management.py",
+    "supervise.py",
+  ])
+  expect(output.files.slice(13, -3)).toEqual(original.files.slice(13))
+  expect(original.source_sha256).toEqual(prior)
 })
 
 test("one complete parse still refuses duplicate fields and nonobject inventory rows", () => {
@@ -140,25 +168,31 @@ test("one complete parse still refuses duplicate fields and nonobject inventory 
 
 test("upgrade accepts the exact retained thirteen-file cohort and refuses a mixed historical release", () => {
   const old = "dbbe3a56da1222956dc1d1d8a082e78a5920fc4ccef9275416f68e45c8795f8e"
-  const pins = {
-    ...release,
+  const pins = selected({
+    "capture.py": release["capture.py"],
     "index.py": old,
     "server.py": "8764ed7600cefb9a33684e06d35ca82df8b408284849fb47442701e9b164443c",
-  }
-  const raw = fixture.raw.replaceAll(release["index.py"], old).replaceAll(release["server.py"], pins["server.py"])
+  })
+  const plan = JSON.parse(fixture.raw)
+  plan.source_sha256 = pins
+  plan.files = plan.files.filter((row: Image) => Object.hasOwn(pins, path.basename(row.path)))
+  for (const row of plan.files) row.sha256 = pins[path.basename(row.path) as keyof typeof pins]
+  const raw = JSON.stringify(plan)
   expect(JSON.parse(run(raw, fixture.rows, release, pins).toString()).source_sha256).toEqual(release)
   expect(() => run(raw, fixture.rows, release, { ...pins, "server.py": "f".repeat(64) })).toThrow()
 })
 
 test("upgrade accepts the exact retained handoff cohort without changing Retrieval selection", () => {
-  const pins = {
-    ...release,
+  const pins = selected({
+    "capture.py": release["capture.py"],
     "server.py": "deb92041d4cc08c64d64403cb23edfe71221105b2c8094a064aa1e184a168b8b",
     "index.py": "e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7",
-  }
-  const raw = fixture.raw
-    .replaceAll(release["server.py"], pins["server.py"])
-    .replaceAll(release["index.py"], pins["index.py"])
+  })
+  const plan = JSON.parse(fixture.raw)
+  plan.source_sha256 = pins
+  plan.files = plan.files.filter((row: Image) => Object.hasOwn(pins, path.basename(row.path)))
+  for (const row of plan.files) row.sha256 = pins[path.basename(row.path) as keyof typeof pins]
+  const raw = JSON.stringify(plan)
   expect(JSON.parse(run(raw, fixture.rows, release, pins).toString()).source_sha256).toEqual(release)
   expect(() => run(raw, fixture.rows, release, { ...pins, "index.py": release["index.py"] })).toThrow(
     "Exact previous capture release required",

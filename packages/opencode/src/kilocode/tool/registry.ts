@@ -51,6 +51,7 @@ import { CanvasTools } from "./canvas-host" // raya_change - Milestone E canvas 
 import { SecondBrain } from "@/kilocode/second-brain/service"
 import { SecondBrainTool } from "./second-brain"
 import { BrainRecallTool } from "./second-brain-recall"
+import { BrainManageTool } from "./second-brain-manage"
 import { MediaRecallTool } from "./media-recall"
 import { Canvas } from "@/kilocode/canvas/service" // raya_change - Milestone E canvas bridge
 import { DiscoverCapabilitiesTool } from "./discover-capabilities"
@@ -124,6 +125,10 @@ export namespace KiloToolRegistry {
       const linked =
         brain._tag === "Some"
           ? yield* BrainRecallTool.pipe(Effect.provideService(SecondBrain.Service, brain.value))
+          : undefined
+      const personal =
+        brain._tag === "Some"
+          ? yield* BrainManageTool.pipe(Effect.provideService(SecondBrain.Service, brain.value))
           : undefined
       const media =
         brain._tag === "Some"
@@ -224,6 +229,7 @@ export namespace KiloToolRegistry {
         return {
           proposal,
           linked,
+          personal,
           media,
           recall,
           managerModels,
@@ -267,6 +273,7 @@ export namespace KiloToolRegistry {
       return {
         proposal,
         linked,
+        personal,
         media,
         recall,
         managerModels,
@@ -312,6 +319,7 @@ export namespace KiloToolRegistry {
     tools: {
       proposal?: Tool.Info
       linked?: Tool.Info
+      personal?: Tool.Info
       media?: Tool.Info
       recall: Tool.Info
       managerModels: Tool.Info
@@ -366,6 +374,7 @@ export namespace KiloToolRegistry {
       const base = yield* Effect.all({
         proposal: tools.proposal ? Tool.init(tools.proposal) : Effect.succeed(undefined),
         linked: tools.linked ? Tool.init(tools.linked) : Effect.succeed(undefined),
+        personal: tools.personal ? Tool.init(tools.personal) : Effect.succeed(undefined),
         media: tools.media ? Tool.init(tools.media) : Effect.succeed(undefined),
         recall: Tool.init(tools.recall),
         managerModels: Tool.init(tools.managerModels),
@@ -506,6 +515,7 @@ export namespace KiloToolRegistry {
 
   /** Hide human-driven tools from agents that cannot interact with the user directly. */
   export function available(tool: Tool.Def, agent: Agent.Info) {
+    if (tool.id === "second_brain_manage") return agent.mode === "primary"
     if (["chief_route", "chief_plan", "chief_inspect", "chief_review", "chief_synthesize"].includes(tool.id))
       return agent.name === "auto"
     if (tool.id === "chief_message") return agent.mode !== "primary"
@@ -535,6 +545,7 @@ export namespace KiloToolRegistry {
       semantic?: Tool.Def
       proposal?: Tool.Def
       linked?: Tool.Def
+      personal?: Tool.Def
       media?: Tool.Def
       recall: Tool.Def
       managerModels: Tool.Def
@@ -633,6 +644,7 @@ export namespace KiloToolRegistry {
       ...(tools.personalTodo ? [tools.personalTodo] : []),
       ...(Flag.KILO_CLIENT === "vscode" && tools.proposal ? [tools.proposal] : []),
       ...(Flag.KILO_CLIENT === "vscode" && tools.linked ? [tools.linked] : []),
+      ...(Flag.KILO_CLIENT === "vscode" && tools.personal ? [tools.personal] : []),
       ...(Flag.KILO_CLIENT === "vscode" && tools.media ? [tools.media] : []),
       tools.notify,
       tools.send,

@@ -66,7 +66,10 @@ def review(cfg):
         assert len(witnesses) <= 1024
         return raw
 
-    assert set(cfg['pins']) == {'server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py', 'capture.py'}
+    names = {'server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py', 'capture.py'}
+    if 'entries.py' in cfg['pins'] or 'management.py' in cfg['pins']:
+        names |= {'entries.py', 'management.py'}
+    assert set(cfg['pins']) == names
     modules = {}
     for name, sha in cfg['pins'].items():
         raw = image(source / name)

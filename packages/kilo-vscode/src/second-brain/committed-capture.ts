@@ -14,7 +14,7 @@ import { command } from "./control/command"
 import { review as refusedIndex } from "./capture-sync"
 import * as revisions from "./capture-revisions"
 
-const helper = "7f41ea4776d51da5c6f294fa0ddcfb78136d9a775462ec5fdb6bdc7f85c43a91"
+const helper = "8bf9c59f9140dfa81a93834017b454a5aa7beb1439dc1d05300c027e67edfdaa"
 const qualified = new WeakSet<object>()
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const turn = z

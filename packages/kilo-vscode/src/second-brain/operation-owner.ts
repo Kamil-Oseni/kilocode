@@ -77,6 +77,17 @@ export class OperationOwner {
     return this.run((before, signal, id) => this.#client.capture(body, expected, { id, before, signal }), opts)
   }
 
+  management(body: Record<string, unknown>, signal: AbortSignal, check: () => void) {
+    if (this.#closed || this.#slot || this.#failures.size || this.settings.pending())
+      return Promise.reject(new Failure("control_uncertain", "Original personal Memory owner is unavailable", 0))
+    check()
+    // Reuse the original health-bound client; never adopt a restarted service epoch.
+    return this.#client.management(body, signal).then((value) => {
+      check()
+      return value
+    })
+  }
+
   sync(expected: string, opts: Options & { close: () => Promise<void> }) {
     if (
       typeof expected !== "string" ||

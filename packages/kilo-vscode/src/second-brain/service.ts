@@ -71,6 +71,21 @@ export class BrainService {
     return result.value
   }
 
+  async management(body: Record<string, unknown>, signal: AbortSignal, check: () => void) {
+    check()
+    const result: { value?: Awaited<ReturnType<ClientV2["management"]>> } = {}
+    await this.configure(async () => {
+      const cfg = await this.prepare(signal)
+      check()
+      if (!cfg || cfg.setup.version !== 2) throw new Error("Reviewed personal Memory setup required")
+      if (!this.operation) throw new Error("Original personal Memory selection required")
+      result.value = await this.operation.management(body, signal, check)
+      check()
+    }, false)
+    if (!result.value) throw new Error("Original personal Memory response was not observed")
+    return result.value
+  }
+
   async context(query: string, budget: number, parent: AbortSignal): Promise<{ root: string; context: BrainContext }> {
     if (!query.trim() || query.length > 8000 || !Number.isSafeInteger(budget) || budget < 1 || budget > 12000)
       throw new Error("Supply a bounded Memory context query")

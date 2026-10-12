@@ -40,6 +40,21 @@ function command(): Manage {
   }
 }
 
+test("current-user projection accepts structural SDK rows and refuses missing text", () => {
+  const row = {
+    info: { id: "msg_sdk", sessionID: "ses_sdk", role: "user", time: { created: 1791768600000 } },
+    parts: [{ id: "prt_sdk", sessionID: "ses_sdk", messageID: "msg_sdk", type: "text", text }],
+  }
+  expect(current([row], { id: "ses_sdk" }, "msg_sdk")).toMatchObject({
+    sessionID: "ses_sdk",
+    messageID: "msg_sdk",
+    text,
+  })
+  expect(
+    current([{ ...row, parts: [{ ...row.parts[0], text: undefined }] }], { id: "ses_sdk" }, "msg_sdk"),
+  ).toBeUndefined()
+})
+
 test("current-user projection needs no assistant completion and preserves exact original bytes and ownership", () => {
   const row = fixture()
   const original = current([row], { id: sid }, uid)
@@ -98,6 +113,19 @@ test("personal fact spans and modes bind actual Unicode-safe original evidence",
   expect(source({ ...value, mode: "correct", query: "drink preference" })).toBe(true)
   expect(source({ ...value, mode: "forget", query: "drink preference" })).toBe(false)
   expect(source({ ...value, mode: "forget", fact: undefined, query: "drink preference" })).toBe(true)
+})
+
+test("personal fact admission bounds UTF-8 bytes without splitting UTF-16 evidence", () => {
+  const row = fixture()
+  if (row.parts[0].type !== "text") throw new Error("Original text required")
+  for (const count of [1024, 1025]) {
+    row.parts[0].text = "Remember " + "📝".repeat(count)
+    const original = current([row], { id: sid }, uid)
+    if (!original) throw new Error("Original bounded user source required")
+    expect(source({ ...command(), source: original, fact: { start: 9, end: original.text.length } })).toBe(
+      count === 1024,
+    )
+  }
 })
 
 test("personal receipts bind the original request and do not equate publication with indexing", () => {

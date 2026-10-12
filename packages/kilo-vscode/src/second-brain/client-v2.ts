@@ -129,6 +129,38 @@ export class ClientV2 {
     return value as BrainProposalResult
   }
 
+  /** Dedicated personal-management route; existing project proposal admission is unchanged. */
+  async management(body: { [key: string]: unknown }, signal: AbortSignal) {
+    if (Buffer.byteLength(JSON.stringify(body)) > 65536) throw new Error("Bounded personal Memory request required")
+    const selected = await this.health(signal)
+    signal.throwIfAborted()
+    const response = await fetch(this.#setup.origin + "/v1/memory/management", {
+      method: "POST",
+      redirect: "error",
+      signal,
+      headers: {
+        Authorization: `Bearer ${this.#token}`,
+        "Content-Type": "application/json",
+        "X-Raya-Memory-Owner-Epoch": selected.epoch,
+      },
+      body: JSON.stringify(body),
+    })
+    const bytes = await raw(response, signal, 1048576)
+    if (!response.ok)
+      throw new Failure(
+        "proposal_conflict",
+        "Inspect the original personal Memory change; do not replay it.",
+        response.status,
+      )
+    const value = object(
+      decode(bytes[bytes.length - 1] === 10 ? bytes : Buffer.concat([bytes, Buffer.from("\n")]), 1048577).value,
+    )
+    if (value.capture_enabled !== false)
+      throw new Failure("invalid_response", "Personal Memory management response refused", response.status)
+    signal.throwIfAborted()
+    return value
+  }
+
   private async request(path: string, signal: AbortSignal, method = "GET", selected?: Selection, body?: object) {
     signal.throwIfAborted()
     const response = await fetch(this.#setup.origin + path, {

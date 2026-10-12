@@ -82,13 +82,18 @@ class Bridge:
         self.source = local(cfg['source_dir'])
         self.generation[self.source] = directory(self.source)
         names = (*FILES, 'capture.py') if 'capture.py' in cfg['source_sha256'] else FILES
+        if 'management.py' in cfg['source_sha256']:
+            if 'capture.py' not in cfg['source_sha256']:
+                raise ValueError('Manual entry control requires the reviewed capture-source reader.')
+            names = (*names, 'entries.py', 'management.py')
         fields(cfg['source_sha256'], names)
         self.pins = cfg['source_sha256']
         if any(not isinstance(value, str) or not re.fullmatch('[a-f0-9]{64}', value) for value in self.pins.values()):
             raise ValueError('Exact source hashes required.')
         self.check()
         self.modules = {}
-        modules = ('retirement', 'policy', 'admission', 'notes', 'host', *(['capture'] if 'capture.py' in self.pins else []))
+        modules = ('retirement', 'policy', 'admission', 'notes', 'host', *(['capture'] if 'capture.py' in self.pins else []),
+                   *(['entries', 'proposals', 'management'] if 'management.py' in self.pins else []))
         for name in modules:
             if name in sys.modules:
                 raise ValueError('Unselected module already loaded.')
@@ -167,6 +172,21 @@ class Bridge:
                 # mutation. The selected bridge continuously checks its generation.
                 return self.modules['capture'].refresh(self.root, args['id'], args['input_sha256'],
                     args['expected_policy_sha256'], self.check)
+            if op in ('manual_proposal_authorize', 'manual_proposal_admit', 'manual_proposal_publish'):
+                fields(args, ('id', 'proposal_digest', 'expected_policy_sha256'))
+                if 'management' not in self.modules:
+                    raise ValueError('Select the reviewed manual-entry control release.')
+                for key in ('proposal_digest', 'expected_policy_sha256'):
+                    if not isinstance(args[key], str) or not re.fullmatch('[a-f0-9]{64}', args[key]):
+                        raise ValueError('Original manual proposal and policy hashes required.')
+                if op == 'manual_proposal_authorize':
+                    self.modules['management'].authorize(self.root, args['id'], args['proposal_digest'], args['expected_policy_sha256'])
+                    return {'root': str(self.root), 'expected_policy_sha256': args['expected_policy_sha256'],
+                            'namespace': {key: [None if item is None else str(item) for item in self.generation[path]]
+                                          for key, path in [('root', self.root), ('system', self.system)]}}
+                method = 'publish' if op == 'manual_proposal_publish' else 'refresh'
+                return getattr(self.modules['management'], method)(self.root, args['id'], args['proposal_digest'],
+                    args['expected_policy_sha256'], self.check)
             raise ValueError('Operation not allowed.')
 
 
@@ -196,7 +216,7 @@ def main():
         except Exception as err:
             types = [type(item).__name__ for item in sys.modules['admission'].failures(err)]
             reply.update(ok=False, error={'kind': 'control_refused', 'message': 'Control operation refused; inspect current identity and review.',
-                                         'types': types, 'publication': 'may_have_happened' if request['op'] in ('approve', 'policy_pause', 'capture_admit') else 'none'})
+                                         'types': types, 'publication': 'may_have_happened' if request['op'] in ('approve', 'policy_pause', 'capture_admit', 'manual_proposal_admit', 'manual_proposal_publish') else 'none'})
         output = json.dumps(reply, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode('utf-8') + b'\n'
         if len(output) > 2097152:
             raise ValueError('Oversized reply; inspect original operation.')

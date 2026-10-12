@@ -20,6 +20,8 @@ type Mutation = Readonly<{
   namespace?: Generation
   capture?: string
   input_sha256?: string
+  proposal?: string
+  proposal_digest?: string
 }>
 export type Before = (
   request: Readonly<{
@@ -278,6 +280,55 @@ export class Transport {
     return this.request("state", {})
   }
   private captures = new Map<string, Mutation>()
+  private manuals = new Map<string, Mutation>()
+  async manualAuthorize(body: { id: string; proposal_digest: string; expected_policy_sha256: string }) {
+    check(
+      /^[a-f0-9-]{36}$/.test(body.id) &&
+        /^[a-f0-9]{64}$/.test(body.proposal_digest) &&
+        /^[a-f0-9]{64}$/.test(body.expected_policy_sha256),
+      "Exact reviewed manual proposal required",
+    )
+    const value = await this.request("manual_proposal_authorize", body)
+    check(value.expected_policy_sha256 === body.expected_policy_sha256, "Original manual policy differs")
+    const namespace = exact(value)
+    check(namespace, "Original manual namespace required")
+    this.manuals.set(body.id, {
+      expected: body.expected_policy_sha256,
+      namespace,
+      proposal: body.id,
+      proposal_digest: body.proposal_digest,
+    })
+    return value
+  }
+  async manualAdmit(body: { id: string; proposal_digest: string; expected_policy_sha256: string }, before: Before) {
+    const mutation = this.manuals.get(body.id)
+    check(
+      mutation &&
+        mutation.expected === body.expected_policy_sha256 &&
+        mutation.proposal_digest === body.proposal_digest,
+      "Original manual proposal preflight required",
+    )
+    this.manuals.delete(body.id)
+    const value = await this.request("manual_proposal_admit", body, mutation, before)
+    check(value.proposal_id === body.id && value.journal_id === body.id, "Different manual publication refused")
+    return value
+  }
+  async manualPublish(body: { id: string; proposal_digest: string; expected_policy_sha256: string }, before: Before) {
+    const mutation = this.manuals.get(body.id)
+    check(
+      mutation &&
+        mutation.expected === body.expected_policy_sha256 &&
+        mutation.proposal_digest === body.proposal_digest,
+      "Original manual publication preflight required",
+    )
+    this.manuals.delete(body.id)
+    const value = await this.request("manual_proposal_publish", body, mutation, before)
+    check(
+      value.proposal_id === body.id && value.journal_id === body.id,
+      "Different original manual publication refused",
+    )
+    return value
+  }
   async captureAuthorize(publication: Publication, expected: string) {
     check(/^[a-f0-9]{64}$/.test(expected), "Original capture policy required")
     const value = await this.request("capture_authorize", { publication, expected_policy_sha256: expected })
@@ -404,7 +455,9 @@ export class Transport {
       history: this.history.map((row) => ({ ...row })),
       mutationUncertain: this.history.some(
         (row) =>
-          ["approve", "policy_pause", "capture_admit"].includes(row.op) &&
+          ["approve", "policy_pause", "capture_admit", "manual_proposal_admit", "manual_proposal_publish"].includes(
+            row.op,
+          ) &&
           !row.verified &&
           row.outcome?.state !== "not_sent",
       ),

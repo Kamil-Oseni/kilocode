@@ -17,7 +17,12 @@ export const sources = [
 export function pins(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Memory source pins are required")
   const rows = input as Record<string, unknown>
-  const names = "capture.py" in rows ? [...sources, "capture.py"] : sources
+  const names =
+    "entries.py" in rows || "management.py" in rows
+      ? [...sources, "capture.py", "entries.py", "management.py"]
+      : "capture.py" in rows
+        ? [...sources, "capture.py"]
+        : sources
   if (
     Object.keys(rows).sort().join() !== [...names].sort().join() ||
     names.some(

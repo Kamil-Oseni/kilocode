@@ -15,6 +15,7 @@ from admission import Retirement, failures
 from operations import Journal
 from dispatch import prepare, submit
 from proposals import Proposals
+from management import Management
 from capture import publish, validate
 from retirement import decode, canonical, fingerprint, hex
 
@@ -31,7 +32,7 @@ if not KEY:
     raise ValueError('An existing token is required.')
 SOURCE = {name: hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in
           ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py', 'host.py',
-           'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py', 'capture.py')}
+           'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py', 'capture.py', 'entries.py', 'management.py')}
 RELEASE = fingerprint(SOURCE)
 EPOCH = secrets.token_hex(16)
 JOURNAL = Journal(os.environ['RAYA_MEMORY_OPERATION_ROOT'],
@@ -48,6 +49,7 @@ SLOTS = threading.BoundedSemaphore(1)
 GUARD = threading.Lock()
 RECORDS = {}
 PROPOSALS = Proposals(NOTES)
+MANAGEMENT = Management(NOTES)
 REVIEWS = set()
 REVIEW_ERRORS = []
 READS = {}
@@ -234,11 +236,11 @@ async def handle(request: Request, path: str):
             return JSONResponse(proof, headers={'Cache-Control': 'no-store'})
         except Exception:
             return fail('residency_unconfirmed', 'Original worker release remains unconfirmed.', 503)
-    if request.method == 'POST' and path == 'v1/memory/proposals':
+    if request.method == 'POST' and path in {'v1/memory/proposals', 'v1/memory/management'}:
         if request.headers.get('content-type', '').split(';')[0] != 'application/json':
             return fail('unsupported_media', 'Use application/json.', 415)
         with GUARD:
-            if UNCERTAIN or ACTIVE or READS or DRAIN['until'] > time.monotonic() or not SLOTS.acquire(blocking=False):
+            if (UNCERTAIN and path != 'v1/memory/management') or ACTIVE or READS or DRAIN['until'] > time.monotonic() or not SLOTS.acquire(blocking=False):
                 return fail('admission_closed', 'Memory is busy or requires reconciliation.', 409)
         try:
             async def read():
@@ -249,6 +251,12 @@ async def handle(request: Request, path: str):
                         raise ValueError('Proposal exceeds the bounded review size.')
                 return decode(bytes(raw), 2100000)
             body = await asyncio.wait_for(read(), 15)
+            if path == 'v1/memory/management' and isinstance(body, dict) and body.get('action') == 'apply':
+                SLOTS.release()
+                return fail('native_review_required', 'Personal entry publication requires the original native review boundary.', 403)
+            if UNCERTAIN and (not isinstance(body, dict) or body.get('action') != 'read'):
+                SLOTS.release()
+                return fail('admission_closed', 'Inspect the original personal proposal before any further write.', 409)
         except (ValueError, UnicodeDecodeError):
             SLOTS.release()
             return fail('invalid_proposal', 'Proposal input is invalid.', 422)
@@ -261,7 +269,7 @@ async def handle(request: Request, path: str):
         def work():
             if integrity():
                 raise Retirement('Memory has pending retirement.')
-            return PROPOSALS.execute(body)
+            return (MANAGEMENT if path == 'v1/memory/management' else PROPOSALS).execute(body)
         try:
             future = STORAGE.submit(work)
         except BaseException:

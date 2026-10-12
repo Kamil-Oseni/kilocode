@@ -1,8 +1,26 @@
 import { createHash } from "node:crypto"
 import { Schema } from "effect"
-import type { MessageV2 } from "@/session/message-v2"
 import { MemoryRedact } from "@kilocode/kilo-memory/redact"
 import { ManageSource, Manage, ManageResult } from "./management-protocol"
+
+type Message = {
+  readonly info: {
+    readonly id: string
+    readonly sessionID: string
+    readonly role: string
+    readonly time: { readonly created: number }
+    readonly format?: { readonly type: string }
+  }
+  readonly parts: readonly {
+    readonly id: string
+    readonly sessionID: string
+    readonly messageID: string
+    readonly type: string
+    readonly text?: string
+    readonly synthetic?: boolean
+    readonly ignored?: boolean
+  }[]
+}
 
 function restricted(text: string) {
   return (
@@ -20,7 +38,7 @@ export function digest(value: Omit<ManageSource, "source_sha256">) {
 
 /** Project only the exact current user message, without requiring a completed assistant reply. */
 export function current(
-  messages: readonly MessageV2.WithParts[],
+  messages: readonly Message[],
   session: { id: string; parentID?: string },
   user: string,
 ): ManageSource | undefined {
@@ -33,9 +51,13 @@ export function current(
   const created = row.info.time.created
   if (!Number.isSafeInteger(created) || created < 0 || created > 8640000000000000) return undefined
   const parts = row.parts.filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
-  if (!parts.length || parts.some((part) => part.sessionID !== session.id || part.messageID !== user)) return undefined
+  if (
+    !parts.length ||
+    parts.some((part) => typeof part.text !== "string" || part.sessionID !== session.id || part.messageID !== user)
+  )
+    return undefined
   if (new Set(parts.map((part) => part.id)).size !== parts.length) return undefined
-  const text = parts.map((part) => (part.type === "text" ? part.text : "")).join("\n\n")
+  const text = parts.map((part) => part.text).join("\n\n")
   // Reject secrets rather than changing offsets or hashing a redacted version of the original request.
   if (restricted(text) || Buffer.byteLength(text, "utf8") > 24000) return undefined
   const source = { sessionID: session.id, messageID: user, created_utc: new Date(created).toISOString(), text }
@@ -52,6 +74,10 @@ function boundary(text: string, index: number) {
 
 export function valid(command: Manage) {
   if (!Schema.is(Manage)(command)) return false
+  if (command.stage === "inspect" && (command.attempt !== undefined || command.choice !== undefined)) return false
+  if (command.stage !== "inspect" && !command.attempt) return false
+  if (command.stage === "cancel" && command.choice !== undefined) return false
+  if ((command.stage === "select" || command.stage === "review") && !command.choice) return false
   const source = command.source
   const date = new Date(source.created_utc)
   if (!Number.isFinite(date.getTime()) || date.toISOString() !== source.created_utc) return false
@@ -69,6 +95,7 @@ export function valid(command: Manage) {
     span.end <= source.text.length &&
     boundary(source.text, span.start) &&
     boundary(source.text, span.end) &&
+    Buffer.byteLength(source.text.slice(span.start, span.end), "utf8") <= 4096 &&
     Boolean(source.text.slice(span.start, span.end).trim()) &&
     (command.mode !== "correct" || Boolean(command.query))
   )
@@ -84,6 +111,13 @@ export function result(command: Manage, value: ManageResult) {
     value.source_sha256 !== command.source.source_sha256
   )
     return false
+  if (command.attempt && value.attempt !== command.attempt) return false
+  if (command.stage === "cancel" && !["cancelled", "unconfirmed"].includes(value.disposition)) return false
+  if (value.question) {
+    if (value.disposition !== "pending" || !value.attempt || !value.stage) return false
+    if (new Set(value.question.options.map((option) => option.id)).size !== value.question.options.length) return false
+    if (value.stage === "review" && !value.proposal) return false
+  } else if (value.stage !== undefined) return false
   if (value.disposition === "published" || value.disposition === "indexed") {
     if (!value.publication_confirmed || !value.changes.length) return false
   } else if (value.publication_confirmed || value.index_confirmed || value.changes.length) return false
@@ -93,7 +127,7 @@ export function result(command: Manage, value: ManageResult) {
     const name = change.relative.toLowerCase()
     const parts = name.split("/")
     if (
-      !/^(daily|preferences|projects|areas|commitments|decisions)\/.+\.md$/.test(name) ||
+      !/^(daily|preferences|projects|areas|people|commitments|decisions)\/.+\.md$/.test(name) ||
       names.has(name) ||
       parts.some(
         (part) =>

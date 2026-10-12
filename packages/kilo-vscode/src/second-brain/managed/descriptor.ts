@@ -217,6 +217,10 @@ function credentials(cfg: Descriptor, memory: Record<string, unknown>, retrieval
   )
 }
 
+function compatible(pins: Readonly<Record<string, unknown>>, digest: string) {
+  return !("management.py" in pins) || digest === current
+}
+
 function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, reuse: boolean) {
   const original = path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind]))
   if (plan.source === original) return
@@ -234,6 +238,7 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
   }
   const pins = [
     current,
+    "e2a86b4b0947b31c67e210b33538e3730727c44934f8856d038e27e84c1b2048",
     "baed8f707876f323d4dac18492ac35a2af304f91fcc7a60422013b5c368d45c2",
     "a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b",
     "7c2286962a606fade513e4742369d0f084609549961650347b89f44f1f266bcd",
@@ -252,6 +257,7 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
       /^raya-memory-source-upgrade-[a-f0-9]{32}$/.test(path.basename(plan.source)) &&
       cfg.supervisor.path === path.join(plan.source, "supervise.py") &&
       pins &&
+      compatible(pins, cfg.supervisor.sha256) &&
       isDeepStrictEqual({ ...row(plan.source_sha256) }, pins),
     "Paired source directory differs",
   )

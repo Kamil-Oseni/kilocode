@@ -4,6 +4,8 @@ This feature keeps background execution in its worker conversation and shows sav
 
 ## Reporting destination
 
+Open **Routine reports** in the conversation header to read saved progress and results. Choose **Report conversation** in the routine's existing review form to set its destination; use **View worker conversation** for the actual run and its questions or approvals.
+
 - A routine requested in conversation defaults to reporting there.
 - Choose another existing ordinary conversation in the same workspace to receive its reports.
 - With no current conversation, an explicitly selected report conversation is supported without inventing an originating chat.
@@ -34,4 +36,4 @@ These choices apply to calendar scheduling. They do not duplicate manual runs or
 
 Focused physical SQLite/storage checks cover policies, queue identity and leases, report revision/idempotence, destination binding, waiting-notice persistence and publication guards. The report's own publication scope is guarded without revoking the observed worker's execution scopes. Actual HTTP checks cover report reads and invalid destinations. Positive routine writes are qualified at the physical service boundary; the default HTTP unit fixture uses an in-memory database that cannot satisfy the physical authority guard.
 
-The build chat owns SDK/UI integration, packaging and installation. Source checks alone do not establish installed visual or ordinary-profile acceptance.
+The qualified package `7.4.23-snapshot+f3a3aa4df9.local.1791823909482` is installed with saved conversations preserved. Component and installation checks do not establish loaded visual or ordinary-profile routine acceptance.

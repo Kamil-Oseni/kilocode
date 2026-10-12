@@ -28,7 +28,13 @@ type Dependencies = {
   tasks: Tasks
   inbox: Pick<Inbox, "publish">
   check(): Effect.Effect<void, RayaTask.GuardError>
-  publish?(input: { agent: RayaTask.Agent; id: string; at: number; summary: string }): Effect.Effect<unknown, unknown>
+  publish?(input: {
+    agent: RayaTask.Agent
+    id: string
+    at: number
+    summary: string
+    notice: { at: number; reason: Input["reason"] }
+  }): Effect.Effect<unknown, unknown>
 }
 
 function definition(agent: RayaTask.Agent) {
@@ -113,6 +119,7 @@ export namespace RayaTaskWait {
           id: request.occurrenceID,
           at: result.record.time,
           summary: result.record.body,
+          notice: { at: result.record.time, reason: request.reason },
         })
       return result
     })

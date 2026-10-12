@@ -93,6 +93,7 @@ test("a long-wait notice persists once across reopening and retries report proje
         publish: (value) =>
           Effect.sync(() => {
             projected.push(value.id)
+            expect(value.notice).toEqual({ at: first.time, reason: "busy" })
           }),
       })
       const request = {

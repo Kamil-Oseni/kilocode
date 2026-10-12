@@ -1,5 +1,13 @@
 # Raya current readiness
 
+October 11, 2026 - Delayed receipt ownership and fresh extension build qualify after music resource hold ends.
+
+After the separate music process exits, RAM recovers to 8.47 GiB with Home Assistant on. The original prepared ownership regression runs without replay: `.tmp/new-pc/submission-owner-physical-20261011-v1.{json,log}` passes **2 tests / 32 assertions**. Target 32248 / helper 24880 exits 0 naturally, no force, empty Windows Job and joined EOF readers, in 88.281 seconds; minimum free RAM is 6.59 GiB. Independent audit `.tmp/new-pc/submission-owner-physical-v1-independent.json` (6562 bytes, SHA256 `c92fd9f1ac6322f98d56232840a8e4cc93ebf79e3c87d295775ed0375188270d`) verifies both original child receipts, unchanged six source pins, exact original text and canonical manifests against immutable SQLite/SDK, one original POST and receipt GET, complete unchanged send-stamped drafts, actual Stop idle event with suppressed confirmation, and refusal after combined client/generation/workspace departure. This tests exact extracted Provider methods against real backend publication; it does not establish installed UI, independently isolated departure axes or overlapping newer-controller preservation.
+
+Fresh `.tmp/new-pc/input-submission-buildcheck-20261011-v2.{json,log}` passes extension host/webview types, full extension lint and bundling for the current submission repair. Target 38944 / helper 28912 exits 0 naturally, no force, empty Job and joined EOF readers, in 19.687 seconds; minimum free RAM is 5.20 GiB. The earlier V1 admission refusal remains retained. Home Assistant stays on and both direct/canonical application URLs return HTTP 200 with the expected page; no model or UI test runs.
+
+Knip, full CLI types at 14 GiB admission, fresh matching compiler/package and installed acceptance remain pending. The recovered headroom permits these two source gates, while remaining operation-specific admissions are still enforced. No formal shipping requirement closes; readiness remains **48/100**, **38 unfinished requirements**. The full objective remains incomplete.
+
 October 11, 2026 - Research input RSH-HARNESS-01 is recorded in the implementation document as a pending 4B/9B comparison. It adds no shipping gate or readiness credit. Model/GPU experiments remain deferred during the authorized music test; Home Assistant remains on under the user's latest instruction.
 
 October 11, 2026 - Required runtime and build checks blocked by RAM headroom.

@@ -27,7 +27,8 @@ export async function packaged(extension: string) {
         row.recipe === "7ee9b6893912140187a3feaaee83fa1058c0b4f1d82f48d0690fce751af6ac5b" ||
         row.recipe === "a2d7ec6c76b6211fadcb13607293fd16ed30dd0f97eaef761526e58b1c783925" ||
         row.recipe === "7b5d46b56cb26d18041272f351e6e9cf5167cfc7747e39d33a68926e220f71ef" ||
-        row.recipe === "49ac0bfd8edc84babd69839bb0322f5bbde32906fd675eb4804fe0f86b936695") &&
+        row.recipe === "49ac0bfd8edc84babd69839bb0322f5bbde32906fd675eb4804fe0f86b936695" ||
+        row.recipe === "30920c2fddefe0d4be0aa9a5eb4425a29ac498fcbd4346c237ee0342680b8e3d") &&
       row.exe === files[0].digest &&
       row.pdb === files[1].digest,
     "Packaged helper fingerprint refused",

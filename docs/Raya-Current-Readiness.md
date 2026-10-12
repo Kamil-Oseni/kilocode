@@ -10,7 +10,7 @@ Everyday Raya is **`7.4.23-snapshot+f3a3aa4df9.local.1791823909482`**, built fro
 |---|---|---|
 | Routine conversation reports | Installed: one saved card per occurrence, selectable ordinary workspace conversation, worker link and persistent long-wait notice | Ordinary installed workflow, actual enabled runs and restart behaviour on this release |
 | Routine scheduling choices | Installed: skip or queue one busy occurrence; skip or run the latest missed occurrence once | Installed acceptance; no blanket replay or recovery guarantee |
-| Conversation Memory | Setup, management and scoped retrieval source improvements are installed; capture preference is enabled | Saved launch still says running although its exact producer pair has a validated closure. Supported closed-pair recovery and live save/recall remain required |
+| Conversation Memory | Setup, management and scoped retrieval source improvements are installed; capture preference is enabled | Actual native recovery exposed an omitted helper recipe. Verified source fix awaits installation; supported closed-pair recovery and live save/recall remain required |
 | Voice | Source improvements are present in the installed package | User explicitly deferred voice; no fresh microphone, audible continuity or hands-free acceptance |
 | Recovery | Closed installation preserved saved data; protected rollback copy verified | Live restore, full local-service recovery and actual Windows postboot acceptance |
 | Models, tools and context | Earlier model comparisons and targeted context fixes have evidence | Candidate-specific everyday General/Coder/tool acceptance; historical model trials do not qualify every current workflow |

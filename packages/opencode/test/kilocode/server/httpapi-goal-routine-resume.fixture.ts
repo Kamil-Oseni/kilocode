@@ -6,6 +6,7 @@ import { Global } from "@opencode-ai/core/global"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceStore } from "@/project/instance-store"
 import { Session } from "@/session/session"
+import { MessageID, SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaTask } from "@/kilocode/task"
@@ -57,7 +58,15 @@ try {
           const session = yield* sessions.create({
             metadata: { rayaRoutine: { version: 2, agentID: agent.id, runID: id, scheduleVersion: 1, trigger } },
           })
-          const goal = yield* goals.create(session.id, agent.objective)
+          const goal = yield* goals.create(
+            session.id,
+            agent.objective,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            terminal ? { modelCost: 1 } : undefined,
+          )
           const reason =
             "Automatic continuation stopped after 3 provider errors. Resume the goal or send a message to continue."
           if (terminal) yield* goals.update(session.id, { status: "blocked", reason })
@@ -119,13 +128,30 @@ try {
   const original = await read()
   const route = `/session/${seed.terminal.row.sessionID}/goal`
   const saved = await (await request("GET", route)).json()
-  for (const intent of ["stale-intent", seed.terminal.goal.intent]) {
-    const response = await request("PATCH", route, { status: "active", expectedIntent: intent })
+  for (const body of [
+    { status: "active", expectedIntent: "stale-intent" },
+    { status: "active", expectedIntent: seed.terminal.goal.intent },
+    { objective: "Changed work", expectedIntent: seed.terminal.goal.intent },
+    {
+      criteria: [{ id: "result", description: "Working result", verification: "Run checks", required: false }],
+      expectedIntent: seed.terminal.goal.intent,
+    },
+    { budget: { modelCost: 2 }, budgetReason: "Allow the remaining work", expectedIntent: seed.terminal.goal.intent },
+    { clearBudget: true, budgetReason: "Remove the current limit", expectedIntent: seed.terminal.goal.intent },
+  ]) {
+    const response = await request("PATCH", route, body)
     expect(response.status).toBe(409)
     refusals.push(await response.json())
     expect(await read()).toEqual(original)
     expect(await (await request("GET", route)).json()).toEqual(saved)
   }
+  const unchanged = await request("PATCH", route, {
+    objective: `  ${seed.terminal.goal.objective}  `,
+    expectedIntent: seed.terminal.goal.intent,
+  })
+  expect(unchanged.status).toBe(200)
+  expect(await unchanged.json()).toEqual(saved)
+  expect(await read()).toEqual(original)
   for (const id of [seed.mismatch.id, seed.malformed.id]) {
     const prior = await run(seed.goals.get(id))
     expect(
@@ -144,6 +170,95 @@ try {
     sessionID: seed.pending.row.sessionID,
   })
   expect(await read()).toEqual(original)
+  const paused = await request("PATCH", route, {
+    objective: "Review the remaining work without starting it",
+    status: "paused",
+    expectedIntent: seed.terminal.goal.intent,
+  })
+  expect(paused.status).toBe(200)
+  expect(await paused.json()).toMatchObject({
+    status: "paused",
+    objective: "Review the remaining work without starting it",
+  })
+  // Keep the existing reviewed-reply HTTP assertions on the same actual physical Storage graph.
+  const review = async () => {
+    const created = await request("POST", "/session", {})
+    expect(created.status).toBe(200)
+    const session = await created.json()
+    const id = SessionID.make(session.id)
+    const route = `/session/${id}/goal`
+    const response = await request("POST", route, { objective: "Original direction" })
+    const body = await response.json()
+    await Bun.write(path.join(root, "http-goal-create.json"), JSON.stringify({ status: response.status, body }))
+    expect(response.status).toBe(200)
+    const state = await run(Storage.Service.use((storage) => storage.read<RayaGoal.State>(["raya", "goal", id])))
+    if (!state.intent) throw new Error("The actual goal did not retain its intent")
+    const marker = {
+      version: 1 as const,
+      dispatchID: "original-dispatch",
+      messageID: MessageID.ascending(),
+      oldIntent: "original-intent",
+      intent: "blocked-intent",
+      source: "attached-followup",
+      outcome: "error" as const,
+      execution: "a".repeat(64),
+      at: Date.now(),
+    }
+    const saved = {
+      ...state,
+      dispatch: {
+        id: marker.dispatchID,
+        messageID: marker.messageID,
+        intent: marker.oldIntent,
+        phase: "finished" as const,
+        queuedAt: marker.at,
+      },
+      replyRecovery: marker,
+      status: "blocked" as const,
+      intent: marker.intent,
+    }
+    const write = (value: RayaGoal.State) =>
+      run(Storage.Service.use((storage) => storage.replace(["raya", "goal", id], value)))
+    await write(saved)
+    for (const body of [
+      { status: "active", expectedIntent: marker.intent, objective: "Changed during review" },
+      { status: "active", expectedIntent: marker.intent, budget: { modelCost: 2 }, budgetReason: "Changed limit" },
+      { status: "active", expectedIntent: "stale" },
+    ])
+      expect((await request("PATCH", route, body)).status).toBe(409)
+    const reviewed = {
+      ...saved,
+      status: "active" as const,
+      intent: state.intent,
+      replyRecovery: { ...marker, reviewedAt: marker.at, reviewIntent: state.intent },
+    }
+    await write(reviewed)
+    const retry = await request("PATCH", route, { status: "active", expectedIntent: marker.intent })
+    expect(retry.status).toBe(200)
+    expect(await retry.json()).toMatchObject({ intent: state.intent, objective: state.objective })
+    const changed = await request("PATCH", route, {
+      status: "active",
+      expectedIntent: state.intent,
+      objective: "New reviewed direction",
+      budget: { modelCost: 2 },
+      budgetReason: "Allow the remaining work",
+    })
+    expect(changed.status).toBe(200)
+    expect(await changed.json()).toMatchObject({ objective: "New reviewed direction", budget: { modelCost: 2 } })
+    expect(
+      (await request("PATCH", route, { status: "active", expectedIntent: state.intent, objective: "Stale edit" }))
+        .status,
+    ).toBe(409)
+    await write({ ...reviewed, status: "complete" })
+    const terminal = await request("PATCH", route, { status: "active", expectedIntent: marker.intent })
+    expect(terminal.status).toBe(200)
+    expect(await terminal.json()).toMatchObject({ status: "complete", intent: state.intent })
+    expect(
+      (await request("PATCH", route, { status: "active", expectedIntent: state.intent, objective: "Resurrect" }))
+        .status,
+    ).toBe(400)
+  }
+  await review()
 } catch (err) {
   console.error(err)
   process.exitCode = 1

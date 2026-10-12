@@ -4,12 +4,16 @@ import type { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
 import { record } from "@/kilocode/task/continuation"
+import type { RayaGoal } from "."
 
 /** A control edit must not claim to resume a Routine whose retained run is terminal. */
 export const allowed = Effect.fn("GoalResume.allowed")(function* (
   input: { sessions: Pick<Session.Interface, "get">; tasks: Pick<ReturnType<typeof RayaTask.make>, "runsFor"> },
   id: SessionID,
+  prior: RayaGoal.State,
+  status: RayaGoal.State["status"],
 ) {
+  if (status !== "active" || prior.status === "active" || prior.replyRecovery) return true
   const session = yield* input.sessions.get(id)
   const raw = session.metadata?.rayaRoutine
   if (raw === undefined) return true

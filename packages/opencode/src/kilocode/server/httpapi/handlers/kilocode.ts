@@ -598,22 +598,19 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           .reviewReply(ctx.params.sessionID, intent)
           .pipe(Effect.mapError(() => new HttpApiError.Conflict({})))
       }
-      if (
-        ctx.payload.status === "active" &&
-        (pending?.status === "paused" || pending?.status === "blocked") &&
-        !pending.replyRecovery &&
-        !(yield* GoalResume.allowed({ sessions, tasks: runner.tasks }, ctx.params.sessionID).pipe(
-          Effect.mapError(() => new HttpApiError.Conflict({})),
-        ))
-      )
-        return yield* new HttpApiError.Conflict({})
-      const result = yield* goals.edit(ctx.params.sessionID, ctx.payload).pipe(
-        Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-        Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-        Effect.catchTag("RayaGoal.AuditError", (err) =>
-          Effect.fail(err.conflict ? new HttpApiError.Conflict({}) : new HttpApiError.BadRequest({})),
-        ),
-      )
+      const result = yield* goals
+        .edit(ctx.params.sessionID, ctx.payload, (prior, status) =>
+          GoalResume.allowed({ sessions, tasks: runner.tasks }, ctx.params.sessionID, prior, status).pipe(
+            Effect.orElseSucceed(() => false),
+          ),
+        )
+        .pipe(
+          Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+          Effect.catchTag("RayaGoal.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+          Effect.catchTag("RayaGoal.AuditError", (err) =>
+            Effect.fail(err.conflict ? new HttpApiError.Conflict({}) : new HttpApiError.BadRequest({})),
+          ),
+        )
       const prior = result.prior
       const goal = result.state
       if (

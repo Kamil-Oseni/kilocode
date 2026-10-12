@@ -2,4 +2,4 @@
 "@kilocode/cli": patch
 ---
 
-Refuse unsupported terminal Routine resumes before changing the saved Goal, while preserving pending-run and reviewed-reply recovery.
+Refuse explicit and implicit terminal Routine resumes before changing the saved Goal, while preserving paused edits, pending-run and reviewed-reply recovery.

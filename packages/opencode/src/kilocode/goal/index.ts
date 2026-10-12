@@ -666,7 +666,11 @@ export namespace RayaGoal {
     })
     // raya_change end
 
-    const edit = Effect.fn("RayaGoal.edit")(function* (sessionID: SessionID, input: typeof Control.Type) {
+    const edit = Effect.fn("RayaGoal.edit")(function* (
+      sessionID: SessionID,
+      input: typeof Control.Type,
+      admit?: (prior: State, status: State["status"]) => Effect.Effect<boolean>,
+    ) {
       const prior = yield* requireGoal(sessionID)
       const review = prior.replyRecovery && prior.replyRecovery.reviewedAt === undefined
       if (review && (input.status !== "active" || input.expectedIntent !== prior.intent))
@@ -755,6 +759,8 @@ export namespace RayaGoal {
         return yield* new AuditError({ message: "A blocked goal cannot be paused." })
       }
       if (!changed && input.status === undefined) return { prior, state: prior }
+      if (admit && !(yield* admit(prior, status)))
+        return yield* new AuditError({ message: "This Routine run cannot resume through a Goal edit.", conflict: true })
       const now = Date.now()
       if (status === "active") {
         const usage = yield* spend(sessionID, prior)

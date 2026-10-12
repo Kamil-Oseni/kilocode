@@ -54,6 +54,8 @@ import { RayaTaskExecution } from "./execution"
 import { scheduler as admission } from "./admission"
 import { TaskRetirement } from "@/kilocode/goal/stop-receipt"
 import { trace } from "./trace"
+import { RayaRoutineReports } from "./projection"
+import { RayaTaskWait } from "./wait-notice"
 
 const WAIT = "waiting on you"
 
@@ -265,12 +267,45 @@ export namespace RayaTaskRunner {
     const tasks = RayaTask.make(input)
     const execution = RayaTaskExecution.make(input.storage)
     const snapshots = RayaTaskSnapshot.make(input)
+    const reports = RayaRoutineReports.make(input)
     const goals = RayaGoal.make(input)
     const reservations = input.database ? reservation(input.database) : undefined
     const schedule = input.database ? scheduler({ ...input, database: input.database }) : undefined
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
     const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
     const organizations = input.database ? RayaTaskOrganization.make(input.database, tasks, input.storage) : undefined
+    const waiting =
+      input.database && inbox
+        ? RayaTaskWait.make({
+            storage: input.storage,
+            database: input.database,
+            tasks,
+            inbox,
+            check: () => transfer.check(),
+            publish: (value) => reports.publishDeferred(value),
+          })
+        : undefined
+    const report = Effect.fn("RayaTaskRunner.report")(function* (run: RayaTask.Run) {
+      const saved = yield* snapshots.find(run.id)
+      if (!saved || (!saved.definition.sourceSessionID && !saved.definition.reportSessionID)) return
+      if (saved.agentID !== run.agentID || saved.at !== run.at)
+        yield* Effect.die(new Error("Routine report startup identity changed."))
+      yield* reports.publish({
+        agent: saved.definition,
+        run,
+        ...(run.trigger?.kind === "timer" ? { occurrenceID: run.trigger.id } : {}),
+      })
+    })
+    const publish = (run: RayaTask.Run) =>
+      report(run).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.failCause(cause)
+            : Effect.sync(() =>
+                log.error("routine report publication failed", { runID: run.id, err: Cause.squash(cause) }),
+              ),
+        ),
+      )
     // Lazy directory/tool runners share the actual injected services' cutoff; timestamps never infer ownership.
     const cold = registry(input.storage, input.database)
     const retained = cold.retained
@@ -536,6 +571,7 @@ export namespace RayaTaskRunner {
       }
     })
     const retain = Effect.fn("RayaTaskRunner.retain")(function* (run: RayaTask.Run) {
+      yield* publish(run)
       const item = posted(run)
       if (!inbox || !item) return
       const kids = errands ? yield* errands.byRun(run.id) : []
@@ -792,6 +828,7 @@ export namespace RayaTaskRunner {
                     goalCreatedAt: goal.createdAt,
                   }
                   const stored = yield* tasks.record(run)
+                  yield* publish(stored)
                   if (opts?.bind && inbox) yield* inbox.move(item.id, opts.bind.source, opts.bind.sessionID, created.id)
                   if (!opts?.defer) yield* launch(stored)
                   return stored
@@ -920,6 +957,8 @@ export namespace RayaTaskRunner {
         if (run.status !== "blocked" || run.blockedReason !== WAIT) continue
         if (!(yield* tasks.transition(run, { ...run, status: "running", blockedReason: undefined })))
           return yield* new RayaTask.GuardError({ message: "This worker changed before the answer could continue." })
+        const resumed = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
+        if (resumed) yield* publish(resumed)
       }
     })
 
@@ -2482,6 +2521,21 @@ export namespace RayaTaskRunner {
                 if (!schedule) return yield* Effect.die(new Error("The routine occurrence database is unavailable."))
                 const selected = yield* schedule.prepare(item.id, from)
                 if (selected) yield* fire(item.id, { kind: "timer", selected })
+                if (!selected && waiting) {
+                  const queued = (yield* schedule.queued(item.id, item.scheduleVersion ?? 1))[0]
+                  const busy =
+                    (yield* tasks.runsFor(item.id)).some(RayaTask.pending) ||
+                    (yield* schedule.active(item.id)).length > 0
+                  if (queued && busy) {
+                    yield* reports.publishDeferred({
+                      agent: item,
+                      id: queued.id,
+                      at: queued.observed_at,
+                      summary: "Queued until the current run of this routine finishes.",
+                    })
+                    yield* waiting.notice({ agent: item, occurrenceID: queued.id, reason: "busy", now: from })
+                  }
+                }
                 return undefined
               }).pipe(Effect.catch(() => Effect.void)),
             { concurrency: 4, discard: true },

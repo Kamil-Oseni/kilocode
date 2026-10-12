@@ -1,5 +1,6 @@
 import { cancel as cancelBackground } from "../background-cancel"
 import { Cause, Effect, Result, Schema } from "effect"
+import path from "node:path"
 import { composerHandlers } from "./composer-drafts"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { Database } from "@opencode-ai/core/database/database"
@@ -42,6 +43,7 @@ import { Snapshot } from "@/snapshot" // raya_change - durable goal workspace ch
 import { Storage } from "@/storage/storage" // raya_change - Milestone A durable goal storage
 import { RayaGoal } from "@/kilocode/goal" // raya_change - Milestone A goal operations
 import { RayaTask } from "@/kilocode/task"
+import { RayaRoutineReports } from "@/kilocode/task/projection"
 import { MissingRoster } from "@/kilocode/task/roster"
 import { hold } from "@/kilocode/task/hold"
 import { Global } from "@opencode-ai/core/global"
@@ -161,6 +163,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       halt: (sessionID) => runState.cancel(sessionID),
     })
     const inbox = RayaTaskInbox.make(database)
+    const reports = RayaRoutineReports.make({ storage, sessions })
     const global = yield* Global.Service
     const restore = destinationReview({ storage, data: global.data, workers: () => runner.tasks.list() })
     const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
@@ -747,12 +750,48 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         ),
       )
     })
+    const agentReports = (ctx: { query: { sessionID: SessionID } }) =>
+      reports
+        .list(ctx.query.sessionID)
+        .pipe(
+          Effect.mapError(
+            () =>
+              new InvalidRequestError({
+                message: "Routine reports could not be read. Check the conversation and retry.",
+              }),
+          ),
+        )
     const agentAuthorityServices = Effect.fn("KilocodeHttpApi.agentAuthorityServices")(function* () {
       return RayaTaskAuthority.catalog(yield* mcp.tools())
     })
+    const destination = Effect.fn("KilocodeHttpApi.routineDestination")(function* (value: {
+      sourceSessionID?: SessionID
+      reportSessionID?: SessionID
+    }) {
+      const ids = [...new Set([value.sourceSessionID, value.reportSessionID].filter((id) => id !== undefined))]
+      if (!ids.length) return
+      const scope = yield* InstanceState.context
+      for (const id of ids) {
+        const session = yield* sessions.get(id)
+        if (
+          session.metadata?.rayaRoutine ||
+          session.projectID !== scope.project.id ||
+          path.resolve(session.directory) !== path.resolve(scope.directory)
+        )
+          yield* Effect.fail(new Error("Choose an ordinary conversation in this workspace."))
+      }
+    })
+    const routing = (value: { sourceSessionID?: SessionID; reportSessionID?: SessionID }) =>
+      destination(value).pipe(
+        Effect.mapError(
+          () =>
+            new InvalidRequestError({ message: "Choose an existing ordinary report conversation in this workspace." }),
+        ),
+      )
     const agentCreate = Effect.fn("KilocodeHttpApi.agentCreate")(function* (ctx: {
       payload: typeof TaskCreatePayload.Type
     }) {
+      yield* routing(ctx.payload)
       const created = ctx.payload.id
         ? runner.tasks.provision(ctx.payload, ctx.payload.id)
         : runner.tasks.create(ctx.payload)
@@ -766,6 +805,8 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       params: { agentID: string }
       payload: typeof TaskUpdatePayload.Type
     }) {
+      if (ctx.payload.sourceSessionID !== undefined || ctx.payload.reportSessionID !== undefined)
+        yield* routing(ctx.payload)
       return yield* runner.tasks.update(ctx.params.agentID, ctx.payload).pipe(
         Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
         Effect.catchTag("RayaTask.GuardError", (err) =>
@@ -1353,6 +1394,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("profileRestoreReview", profileRestoreReview)
         .handle("profileRestoreApprove", profileRestoreApprove)
         .handle("agentList", agentList)
+        .handle("agentReports", agentReports)
         .handle("agentAuthorityServices", agentAuthorityServices)
         .handle("agentArchive", (ctx) =>
           runner.tasks

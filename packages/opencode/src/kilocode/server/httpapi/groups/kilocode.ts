@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { RayaRoutineReports } from "@/kilocode/task/projection"
 import { endpoints as composerDrafts } from "./composer-drafts"
 import { Approval as RestoreApproval, Summary as RestoreSummary } from "@/kilocode/migration/destination-review"
 import { UploadChunk } from "@/kilocode/browser/upload-schema"
@@ -181,6 +182,11 @@ export const TaskUpdatePayload = Schema.Struct({
   role: Schema.optional(Schema.String),
   objective: Schema.optional(Schema.String),
   output: Schema.optional(RayaTask.Output),
+  sourceSessionID: Schema.optional(SessionID),
+  reportSessionID: Schema.optional(SessionID),
+  expectedReportSessionID: Schema.optional(Schema.Union([SessionID, Schema.Literal("unset")])),
+  overlap: RayaTask.Create.fields.overlap,
+  missed: RayaTask.Create.fields.missed,
   capabilities: Schema.optional(Schema.Array(Schema.String)),
   memoryScope: Schema.optional(Schema.Literals(["role", "project", "session"])),
   schedule: Schema.optional(RayaTask.Schedule),
@@ -321,6 +327,7 @@ export const KilocodePaths = {
   agentRuns: `${root}/agent/:agentID/runs`,
   agentEvents: `${root}/agent/:agentID/events`,
   agentHistories: `${root}/agent-runs`,
+  agentReports: `${root}/agent-reports`,
   agentArchive: `${root}/agent-archive`,
   agentSnapshot: `${root}/agent/:agentID/runs/:runID/snapshot`,
   agentTemplates: `${root}/agent-templates`,
@@ -949,6 +956,17 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.list",
             summary: "List assigned agents",
             description: "List persistent role-based agents and their standing jobs.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentReports", KilocodePaths.agentReports, {
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, sessionID: SessionID }),
+          success: described(Schema.Array(RayaRoutineReports.Card), "Saved routine reports for this conversation"),
+          error: InvalidRequestError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.reports",
+            summary: "Read conversation routine reports",
+            description: "Read authoritative routine progress and results without starting a model turn or worker.",
           }),
         ),
         HttpApiEndpoint.get("agentAuthorityServices", KilocodePaths.agentAuthorityServices, {

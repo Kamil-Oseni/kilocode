@@ -149,7 +149,13 @@ export function stream(input: StreamInput): StreamResult {
     topP: input.topP,
     topK: input.topK,
     maxOutputTokens: input.maxOutputTokens,
-    providerOptions: ProviderTransform.providerOptions(input.model, input.providerOptions ?? {}),
+    // kilocode_change start - preserve selected local model parameters across the owned native route
+    providerOptions: GoalNative.parameters(
+      input.provider.options,
+      ProviderTransform.providerOptions(input.model, input.providerOptions ?? {}),
+      input.model.providerID,
+    ),
+    // kilocode_change end
     headers: { ...providerHeaders(input.provider.options.headers), ...input.headers },
   })
   const stream = Stream.scoped(

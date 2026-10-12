@@ -192,6 +192,8 @@ it.instance(
       expect(kinds(requests[1]?.format)).not.toContain("text")
       expect(requests[2]?.tools).toBeUndefined()
       expect(requests[2]?.format).toBeUndefined()
+      expect(requests.every((request) => request.think === false)).toBe(true)
+      for (const request of requests) expect(request.options).toEqual(expect.objectContaining({ num_ctx: 32768 }))
       expect(
         (yield* (yield* Provider.Service).getProvider(ProviderV2.ID.make("qwen-local"))).options
           .localInferenceToolFormat,
@@ -212,7 +214,13 @@ it.instance(
             localInference: true,
             localInferenceAPI: "ollama",
           },
-          models: { fixture: { name: "Gate fixture", limit: { context: 32768, output: 1024 } } },
+          models: {
+            fixture: {
+              name: "Gate fixture",
+              limit: { context: 32768, output: 1024 },
+              options: { reasoningEffort: "none" },
+            },
+          },
         },
       },
       permission: { "*": "deny", read: "allow", create_goal: "allow", get_goal: "allow", update_goal: "allow" },

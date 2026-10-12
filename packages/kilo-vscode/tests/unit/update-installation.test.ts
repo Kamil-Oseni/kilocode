@@ -9,6 +9,7 @@ import type { Readable } from "node:stream"
 import type { Package } from "../../src/services/package-vault"
 import { Installation, type InstallRequest } from "../../src/services/update-installation"
 import { inspect } from "../../src/services/update-vsix"
+import { outcome } from "../../src/services/update-outcome"
 
 const require = createRequire(import.meta.url)
 const writer = createRequire(require.resolve("@vscode/vsce"))("yazl") as {
@@ -296,6 +297,13 @@ test("dispatches one exact rollback and verifies it only after the restored host
       }),
     ).toMatchObject({ dispatched: false, record: { phase: "rollback-awaiting-reload" } })
     expect(paths).toHaveLength(1)
+    const retried = await new Installation(memory().store, root).run(value, async () => {
+      throw new Error("A pending rollback must not dispatch the update again")
+    })
+    expect(retried).toMatchObject({ dispatched: false, record: { phase: "rollback-awaiting-reload" } })
+    expect(outcome(retried.record).warning).toBe(true)
+    expect(outcome(retried.record).message).toContain("waiting for reload verification")
+    expect(outcome(retried.record).message).not.toContain("1.2.3 installed")
     expect(await journal.recover(active(value))).toMatchObject({ phase: "rollback-awaiting-reload" })
     expect(await journal.recover(active(value, true))).toBeUndefined()
   } finally {
@@ -319,6 +327,16 @@ test("retains uncertain rollback without replay after acknowledgement is lost", 
         replayed = true
       }),
     ).toMatchObject({ dispatched: false, record: { phase: "rollback-unknown" } })
+    expect(replayed).toBe(false)
+    const retried = await new Installation(memory().store, root).run(input(root), async () => {
+      replayed = true
+    })
+    expect(retried).toMatchObject({ dispatched: false, record: { phase: "rollback-unknown" } })
+    expect(outcome(retried.record)).toEqual({
+      warning: true,
+      message:
+        "Raya's rollback to 1.2.2 is waiting for reload verification. The 1.2.3 update was not dispatched again. Reload the window to verify which version is active.",
+    })
     expect(replayed).toBe(false)
     expect(await journal.recover(active(input(root), true))).toBeUndefined()
   } finally {

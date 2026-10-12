@@ -9,6 +9,7 @@ import { latest, remote } from "./update-release"
 import { verify } from "./update-vsix"
 import { UpdateRun } from "./update-run"
 import { Installation } from "./update-installation"
+import { outcome } from "./update-outcome"
 import { PackageVault } from "./package-vault"
 import { writeFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -138,19 +139,13 @@ async function installFrom(
   )
   if (!active()) return
   if (!result.value) return
-  if (!result.value.dispatched && result.value.record.phase === "installing") {
-    const reload = await vscode.window.showWarningMessage(
-      `Raya already dispatched the ${version} installer, but completion was not confirmed. Reload the window to verify which version is active.`,
-      "Reload",
-      "Later",
-    )
+  const notice = outcome(result.value.record)
+  if (notice.warning) {
+    const reload = await vscode.window.showWarningMessage(notice.message, "Reload", "Later")
     if (reload === "Reload" && active()) await vscode.commands.executeCommand("workbench.action.reloadWindow")
     return
   }
-  const reload = await vscode.window.showInformationMessage(
-    `Raya ${version} installed. Reload the window to apply it.`,
-    "Reload",
-  )
+  const reload = await vscode.window.showInformationMessage(notice.message, "Reload")
   if (reload === "Reload" && active()) await vscode.commands.executeCommand("workbench.action.reloadWindow")
 }
 

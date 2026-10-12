@@ -1,6 +1,6 @@
 # Raya recovery quickstart
 
-Updated October 11, 2026. Use this when recovery is needed. Home Assistant is running and its dashboard returns HTTP 200. Temporary test shutdowns use ACPI and are followed immediately by restart; a deliberately stopped VM during a test is not a fault to repair.
+Updated October 12, 2026. Use this when recovery is needed. Home Assistant's VM is intentionally powered off at the latest read-only check; do not restart it or change lights without a new request. A deliberately stopped VM is not a fault to repair. Consult [current readiness](Raya-Current-Readiness.md) for installed version and acceptance scope.
 
 ## What is verified
 
@@ -37,7 +37,7 @@ The source snapshots exclude credentials, binary media and derived indexes. Text
 ## Raya extension and local services
 
 1. Save current profile/settings and note the installed version before changing it. Close the affected Raya window normally and allow its owned jobs to finish or cancel through supported controls.
-2. Use the supported extension install/rollback flow with a reviewed VSIX. Do not replace package-vault registries or SecretStorage manually. The private `05fe58e60f` Stop-diagnostic installation is closed and its delivery/saved-file preservation is independently verified. Prior `fb6b69486e` draft/typed/quiet voice checks remain candidate-specific; the new installed acknowledgement and human voice tests are pending. Consult current readiness before selecting a package; these checks do not qualify every everyday workflow.
+2. Use the supported extension install/rollback flow with a reviewed VSIX. Do not replace package-vault registries or SecretStorage manually. Current everyday release is `7.4.23-snapshot+f3a3aa4df9.local.1791823909482`. Its protected rollback package is `D:/RayaBackups/Everyday-routines-20261012-ce50c5684e5342139cbc317fd4804ad4/rollback.vsix`, which restores the preceding `1113d35b8b` release. The saved profile copies and copy receipt are in the same folder. Preserve newer profile data before any rollback; package rollback alone is not a profile restore. Historical candidate checks do not qualify every everyday workflow.
 3. Use the installed lifecycle owner to recover Speech, Memory and Retrieval. Inspect a busy or refused stop before retrying; do not kill every Python process. Confirm service health and a small real request after recovery.
 4. If files or dependencies are missing, recover from reviewed package/model manifests and the corresponding environments. Historical source copies alone do not include model weights, Python environments, access tokens or the complete installer. Re-enter credentials through the supported masked setup flow when required.
 

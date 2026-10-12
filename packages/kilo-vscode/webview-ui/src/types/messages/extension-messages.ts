@@ -240,6 +240,10 @@ export interface RoutineStateMessage {
 export interface RoutineForecastMessage {
   type: "routineForecast"
   requestID: string
+  overlap?: import("../../../../src/shared/routine-policy").Policy["overlap"]
+  missed?: import("../../../../src/shared/routine-policy").Policy["missed"]
+  reportSessionID?: string
+  sourceSessionID?: string
   forecastID?: string
   schedule?: import("@kilocode/sdk/v2/client").KilocodeRoutineForecastResponse["schedule"]
   occurrences?: import("@kilocode/sdk/v2/client").KilocodeRoutineForecastResponse["occurrences"]
@@ -2110,6 +2114,7 @@ export type ExtensionMessage =
   | RoutineForecastMessage
   | RoutineScheduleUpdatedMessage
   | RoutineRunsLoadedMessage
+  | import("../../../../src/shared/routine-reports").AgentReportsLoaded
   | RoutineSnapshotMessage
   | RoutineRecoveryClosedMessage
   | RoutineAccessUpdatedMessage

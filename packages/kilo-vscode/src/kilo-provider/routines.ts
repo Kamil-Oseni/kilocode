@@ -11,6 +11,7 @@ import { recovery } from "../shared/routine-error"
 import { bundle, MAX_ROUTINE_FILE_BYTES, MAX_ROUTINE_FILES, type RoutineUpload } from "./routine-files"
 import { organization } from "./routine-refresh"
 import { restoreReview } from "./restore-review"
+import type { Policy } from "../shared/routine-policy"
 
 type Msg = { type: string } & Record<string, unknown>
 type Kilo = KiloClient["kilocode"]["routine"]
@@ -35,6 +36,7 @@ type Ctx = {
   }) => boolean
   sendProof?: { owner: string; conversationID: string; revision: number }
   current?: () => boolean
+  currentSession?: () => string | undefined
 }
 
 type Listed = { id: string }
@@ -55,7 +57,16 @@ type Assignment = {
 const phases = new Set(["queued", "accepted", "running", "needs_input", "completed", "failed", "cancelled"])
 const previews = new Map<
   string,
-  { kilo: Kilo; dir: string; data: KilocodeRoutineForecastResponse; expires: number; submitted?: boolean; edit?: Edit }
+  {
+    kilo: Kilo
+    dir: string
+    data: KilocodeRoutineForecastResponse
+    expires: number
+    submitted?: boolean
+    edit?: Edit
+    settings: Policy & { reportSessionID?: string }
+    source?: string
+  }
 >()
 
 function issue(kind: "schedule" | "output" | "access" | "unavailable", message: string, field?: string) {
@@ -87,11 +98,14 @@ async function forecast(ctx: Ctx) {
   const proposal = ctx.message.schedule === undefined ? undefined : Proposal.safeParse(ctx.message.schedule)
   if (proposal && !proposal.success)
     throw issue("schedule", "Choose a valid schedule and preview it again.", "schedule")
+  const prepared = preparation(ctx, edit?.data)
   const result = await ctx.kilo.forecast(
     { directory: ctx.dir, body: proposal?.data ?? schedule(ctx.message) },
     { throwOnError: true },
   )
   if (!result.data) throw issue("schedule", "No schedule preview was returned. Try again.", "schedule")
+  if (ctx.currentSession?.() !== prepared.source)
+    throw issue("schedule", "The current conversation changed. Preview this routine again.", "sourceSessionID")
   const token = crypto.randomUUID()
   previews.set(token, {
     kilo: ctx.kilo,
@@ -99,12 +113,54 @@ async function forecast(ctx: Ctx) {
     data: result.data,
     expires: Date.now() + 600_000,
     edit: edit?.data,
+    ...prepared,
   })
   while (previews.size > 32) {
     const oldest = previews.keys().next().value
     if (oldest) previews.delete(oldest)
   }
-  ctx.post({ type: "routineForecast", requestID: id, forecastID: token, ...result.data })
+  ctx.post({
+    type: "routineForecast",
+    requestID: id,
+    forecastID: token,
+    ...result.data,
+    ...prepared.settings,
+    sourceSessionID: edit ? undefined : prepared.source,
+  })
+}
+
+function preparation(ctx: Ctx, edit?: Edit) {
+  const settings = choices(ctx.message)
+  const source = ctx.currentSession?.()
+  if (edit) {
+    for (const field of ["Overlap", "Missed", "ReportSessionID"] as const) {
+      const desired = field.charAt(0).toLowerCase() + field.slice(1)
+      if (ctx.message[desired] !== undefined && edit[`expected${field}`] === undefined)
+        throw issue("schedule", "Reload the routine before reviewing these choices.", desired)
+    }
+  }
+  if (!edit && settings.reportSessionID === undefined && source) settings.reportSessionID = source
+  return { settings, source }
+}
+
+function choices(msg: Msg) {
+  const value: Policy & { reportSessionID?: string } = {}
+  if (msg.overlap !== undefined) {
+    if (msg.overlap !== "skip" && msg.overlap !== "queue")
+      throw issue("schedule", "Choose valid overlap handling.", "overlap")
+    value.overlap = msg.overlap
+  }
+  if (msg.missed !== undefined) {
+    if (msg.missed !== "skip" && msg.missed !== "latest")
+      throw issue("schedule", "Choose valid missed-run handling.", "missed")
+    value.missed = msg.missed
+  }
+  if (msg.reportSessionID !== undefined) {
+    if (typeof msg.reportSessionID !== "string" || !/^ses_\S{1,124}$/.test(msg.reportSessionID))
+      throw issue("schedule", "Choose an existing report conversation.", "reportSessionID")
+    value.reportSessionID = msg.reportSessionID
+  }
+  return value
 }
 
 function confirmed(ctx: Ctx) {
@@ -112,6 +168,8 @@ function confirmed(ctx: Ctx) {
   const item = previews.get(String(ctx.message.forecastID))
   if (!item || item.kilo !== ctx.kilo || item.dir !== ctx.dir || item.expires <= Date.now())
     throw issue("schedule", "This schedule preview has expired. Preview it again before saving.", "schedule")
+  if (ctx.currentSession?.() !== item.source)
+    throw issue("schedule", "The current conversation changed. Preview this routine again.", "sourceSessionID")
   if (
     ctx.message.type === "routineScheduleUpdate" ? item.edit?.agentID !== ctx.message.agentID : item.edit !== undefined
   )
@@ -146,7 +204,18 @@ async function reschedule(ctx: Ctx) {
   const item = previews.get(msg.forecastID)
   if (!item?.edit) throw issue("schedule", "Preview this routine's schedule before saving.", "schedule")
   item.submitted = true
-  await ctx.kilo.update({ directory: ctx.dir, ...item.edit, schedule }, { throwOnError: true })
+  await ctx.kilo.update(
+    {
+      directory: ctx.dir,
+      agentID: item.edit.agentID,
+      expectedSchedule: item.edit.expectedSchedule,
+      expectedScheduleVersion: item.edit.expectedScheduleVersion,
+      expectedReportSessionID: item.edit.expectedReportSessionID,
+      ...item.settings,
+      schedule,
+    },
+    { throwOnError: true },
+  )
   previews.delete(msg.forecastID)
   ctx.post({ type: "routineScheduleUpdated", requestID: msg.requestID, agentID: item.edit.agentID })
 }
@@ -966,8 +1035,6 @@ async function create(ctx: Ctx) {
   const dir = folder(msg)
   if (dir) await mkdir(dir, { recursive: true })
   const schedule = confirmed(ctx)
-  const preview = previews.get(String(msg.forecastID))
-  if (preview) preview.submitted = true
   const created = await ctx.kilo.create(
     {
       directory: ctx.dir,
@@ -985,6 +1052,7 @@ async function create(ctx: Ctx) {
       access: access(msg),
       tools: tools(msg),
       budget: budget(msg),
+      ...creation(ctx),
     },
     { throwOnError: true },
   )
@@ -1002,8 +1070,19 @@ async function create(ctx: Ctx) {
   await refresh(ctx)
 }
 
+function creation(ctx: Ctx) {
+  const preview = previews.get(String(ctx.message.forecastID))
+  const settings = preview?.settings ?? choices(ctx.message)
+  if (!preview && Object.keys(settings).length)
+    throw issue("schedule", "Preview these routine choices before assigning them.", "schedule")
+  if (preview) preview.submitted = true
+  return { ...settings, ...(preview?.source ? { sourceSessionID: preview.source } : {}) }
+}
+
 async function update(ctx: Ctx) {
   const msg = ctx.message
+  if (["overlap", "missed", "reportSessionID", "sourceSessionID"].some((field) => msg[field] !== undefined))
+    throw issue("schedule", "Preview these routine choices before saving them.", "schedule")
   await ctx.kilo.update(
     {
       directory: ctx.dir,
@@ -1384,6 +1463,7 @@ type Input = {
   finishSend?: Ctx["finishSend"]
   sendProof?: Ctx["sendProof"]
   current?: () => boolean
+  currentSession?: () => string | undefined
 }
 
 async function selected(
@@ -1498,6 +1578,7 @@ export async function handleRoutineMessage(input: Input): Promise<boolean> {
     finishSend: input.finishSend,
     sendProof: input.sendProof,
     current: input.current,
+    currentSession: input.currentSession,
   }
   try {
     await (routes[type] ?? one)(ctx)

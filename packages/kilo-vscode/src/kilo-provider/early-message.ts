@@ -28,6 +28,7 @@ type Ctx = {
   cancelBackgroundJob: (jobID: string, sessionID: string, requestID: string, revision: string) => Promise<void>
   backgroundSubagents: (sessionID: string) => Promise<void>
   chiefNotes: (input: ChiefNotesRequest) => Promise<void>
+  reports?: (input: { type: string; requestID?: unknown; sessionID?: unknown }) => Promise<boolean>
   childSteer: (message: ChildSteerMessage) => Promise<void>
   speech?: SpeechService // raya_change - Milestone H configured speech bridge
   voiceScope?: (sessionID: string) => { directory: string; current: () => boolean } | undefined
@@ -38,6 +39,10 @@ async function routeBackgroundMessage(
   message: { type: string; sessionID?: unknown; jobID?: unknown; requestID?: unknown; revision?: unknown },
   ctx: Ctx,
 ): Promise<boolean | undefined> {
+  if (message.type === "agentReportsRead") {
+    await ctx.reports?.(message)
+    return true
+  }
   if (message.type === "chiefNotesRead") {
     const input = message as ChiefNotesRequest
     if (

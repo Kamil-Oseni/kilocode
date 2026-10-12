@@ -85,6 +85,8 @@ import { recovery } from "./shared/routine-error"
 import { encode as encodeRoutineFile, MAX_ROUTINE_FILE_BYTES } from "./kilo-provider/routine-files"
 import { RoutineRefresh } from "./kilo-provider/routine-refresh"
 import { RoutineEvents } from "./kilo-provider/routine-events"
+import { RoutineReporting, reports } from "./kilo-provider/routine-reporting"
+import type { RoutineReport } from "./shared/routine-reports"
 import { RoutineDrafts, type RoutineDraftProof } from "./kilo-provider/routine-drafts"
 import type { WebviewMessage } from "../webview-ui/src/types/messages/webview-messages"
 import { editGoal, start as startGoal, stopGoal, stopResult } from "./kilo-provider/goal"
@@ -431,6 +433,20 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     () => this.routineRefresh.request(),
   )
   private readonly routineDrafts = new RoutineDrafts()
+  private readonly routineReporting = new RoutineReporting<RoutineReport>(
+    () => ({
+      client: this.client,
+      directory: this.getWorkspaceDirectory(this.contextSessionID ?? this.currentSession?.id),
+      generation: this.connectionGeneration,
+      sessionID: this.contextSessionID ?? this.currentSession?.id,
+    }),
+    async (client, directory, sessionID, signal) => {
+      const config = this.connectionService.getServerConfig()
+      if (!config || client !== this.client) throw new Error("Original report connection unavailable")
+      return reports(config, directory, sessionID, signal)
+    },
+    (message) => this.postMessage(message),
+  )
   private readonly routineRefresh = new RoutineRefresh(
     () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
     (message) => {
@@ -748,6 +764,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (this.projectDirectory === directory) return
     this.routineRefresh.invalidate()
     this.routineEvents.invalidate()
+    this.routineReporting.invalidate()
     this.projectDirectory = directory
     this.providerUsageGeneration++
     this.cachedProviderUsageMessage = null
@@ -1322,6 +1339,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             this.cancelBackgroundJob(jobID, sessionID, requestID, revision),
           backgroundSubagents: (sessionID) => this.backgroundSubagents(sessionID),
           chiefNotes: (input) => this.readChiefNotes(input),
+          reports: (input) => this.report(input),
           childSteer: (message) => this.steerChild(message),
           speech: this.speech, // raya_change - Milestone H
           voiceDraftScope: (id) => {
@@ -2123,6 +2141,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           })
         : undefined
       return await dispatchRoutine({
+        currentSession: () => this.contextSessionID ?? this.currentSession?.id,
         message,
         client,
         directory,
@@ -2654,6 +2673,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (prior !== state) {
         this.routineRefresh.invalidate()
         this.routineEvents.invalidate()
+        this.routineReporting.invalidate()
         this.connectionGeneration++
         this.configBindings.clear()
         if (state !== "connected") {
@@ -2732,6 +2752,16 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           if (event.type === "kilo-sessions.remote-status-changed") return true
           if (event.type === "memory.status" || event.type === "memory.updated" || event.type === "memory.error")
             return true
+          if ((event as { type: string }).type === "raya.routine.report.changed") {
+            const raw = (event as { properties?: { card?: unknown } }).properties?.card
+            if (!raw || typeof raw !== "object" || !("reportSessionID" in raw)) return false
+            return Boolean(
+              raw.reportSessionID === (this.contextSessionID ?? this.currentSession?.id) &&
+                directory &&
+                directory !== "global" &&
+                sameDirectory(directory, this.getWorkspaceDirectory(this.contextSessionID ?? this.currentSession?.id)),
+            )
+          }
           if ((event as { type: string }).type === "raya.routine.run.changed")
             return Boolean(
               directory && directory !== "global" && sameDirectory(directory, this.getWorkspaceDirectory()),
@@ -2773,8 +2803,13 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         (payload, directory) => {
           const event = unwrapSyncEvent(payload)
           if (!event) return
+          if ((event as { type: string }).type === "raya.routine.report.changed") {
+            void this.routineReporting.hint()
+            return
+          }
           if ((event as { type: string }).type === "raya.routine.run.changed") {
             this.handleRoutineEvent(event, directory)
+            void this.routineReporting.hint()
             return
           }
           this.handleEvent(event, directory)
@@ -3071,6 +3106,21 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         error: "Specialist messages could not be refreshed.",
       })
     }
+  }
+
+  private async report(message: { type: string; requestID?: unknown; sessionID?: unknown }) {
+    if (message.type !== "agentReportsRead") return false
+    const session = this.contextSessionID ?? this.currentSession?.id
+    if (
+      typeof message.requestID === "string" &&
+      message.requestID.length > 0 &&
+      message.requestID.length <= 256 &&
+      typeof message.sessionID === "string" &&
+      message.sessionID === session &&
+      this.trackedSessionIds.has(message.sessionID)
+    )
+      await this.routineReporting.load({ requestID: message.requestID, sessionID: message.sessionID })
+    return true
   }
 
   private async handleLoadMessages(
@@ -7713,6 +7763,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.voicePage.clear()
     this.routineRefresh.dispose()
     this.routineEvents.dispose()
+    this.routineReporting.dispose()
     this.deliveries.clear()
     if (this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)

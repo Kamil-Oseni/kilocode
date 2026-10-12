@@ -24,6 +24,8 @@ import { showToast } from "@kilocode/kilo-ui/toast"
 import { DropdownMenu } from "@kilocode/kilo-ui/dropdown-menu"
 import { TaskHeader } from "./TaskHeader"
 import { MessageList } from "./MessageList"
+import { RoutineActivity } from "./RoutineActivity"
+import { reports } from "./routine-reports"
 import { PromptInput } from "./PromptInput"
 import { PermissionDock } from "./PermissionDock"
 import { QuestionDock } from "./QuestionDock"
@@ -75,6 +77,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const pendingSessionID = () => props.pendingSessionID ?? tabs?.pending()
 
   const id = () => session.currentSessionID()
+  const activity = reports({
+    session: id,
+    directory: server.workspaceDirectory,
+    connected: server.isConnected,
+    post: vscode.postMessage,
+    listen: vscode.onMessage,
+  })
   // Counts the in-flight first message too, so the dock reserves the same row on
   // the very first send instead of growing once the message lands.
   const hasMessages = () => session.messages().length > 0 || session.submitting()
@@ -563,6 +572,25 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           <TaskHeader readonly={props.readonly} />
           <Show when={!props.readonly}>
             <GoalBanner /> {/* raya_change - Milestone A persistent goal UI */}
+          </Show>
+          <Show when={activity.items().length || activity.error()}>
+            <details class="routine-reports-panel">
+              <summary>Routine reports ({activity.items().length})</summary>
+              <RoutineActivity
+                items={activity.items()}
+                loading={activity.loading()}
+                error={activity.error()}
+                onRefresh={activity.refresh}
+                onOpen={(agentID, workerSessionID) => {
+                  if (workerSessionID) {
+                    if (props.onSelectSession) props.onSelectSession(workerSessionID)
+                    else session.selectSession(workerSessionID)
+                    return
+                  }
+                  window.dispatchEvent(new CustomEvent("raya:open-routines", { detail: { agentID } }))
+                }}
+              />
+            </details>
           </Show>
         </div>
         <div class="chat-messages-wrapper">

@@ -34,6 +34,9 @@ export const Edit = z
     agentID: z.string().min(1),
     expectedSchedule: Stored,
     expectedScheduleVersion: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    expectedOverlap: z.enum(["unset", "skip", "queue"]).optional(),
+    expectedMissed: z.enum(["unset", "skip", "latest"]).optional(),
+    expectedReportSessionID: z.union([z.literal("unset"), z.string().startsWith("ses_").max(128)]).optional(),
   })
   .strict()
 export type Edit = z.infer<typeof Edit>

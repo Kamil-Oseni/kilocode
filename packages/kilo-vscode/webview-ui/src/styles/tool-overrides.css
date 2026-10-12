@@ -99,6 +99,39 @@
   overflow-wrap: anywhere;
 }
 
+[data-component="routine-activity"] {
+  margin-block: 8px;
+  color: var(--text-base);
+  font-size: var(--kilo-font-size-12);
+}
+
+[data-component="routine-activity"] [data-slot="routine-activity-heading"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+[data-component="routine-activity"] [data-slot="routine-activity-card"] {
+  margin-block: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 4px;
+}
+
+[data-component="routine-activity"] [data-slot="routine-activity-body"],
+[data-component="routine-activity"] [data-slot="routine-activity-notice"],
+[data-component="routine-activity"] [data-slot="routine-activity-error"] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-block: 6px;
+}
+
+[data-component="routine-activity"] [data-slot="routine-activity-error"] {
+  color: var(--text-weak);
+}
+
 /* Chief branch activity stays in the conversation, with details available on demand. */
 .chief-activity {
   max-width: 100%;

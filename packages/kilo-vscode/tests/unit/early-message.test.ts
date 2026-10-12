@@ -13,6 +13,20 @@ function context(copied: string[], posted: unknown[], fail = false) {
   } as Ctx
 }
 
+it("routes original conversation report-card reads through the host early-message boundary", async () => {
+  const received: unknown[] = []
+  const posted: unknown[] = []
+  const ctx = context([], posted)
+  ctx.reports = async (message) => {
+    received.push(message)
+    return true
+  }
+  const message = { type: "agentReportsRead", requestID: "original-view", sessionID: "original-session" }
+  expect(await routeEarlyMessage(message, ctx)).toBe(true)
+  expect(received).toEqual([message])
+  expect(posted).toEqual([])
+})
+
 describe("routeEarlyMessage clipboard handling", () => {
   it("routes clipboard text to the host", async () => {
     const copied: string[] = []

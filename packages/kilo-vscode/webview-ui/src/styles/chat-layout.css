@@ -33,6 +33,17 @@
   border-bottom: 0;
 }
 
+.routine-reports-panel {
+  max-height: 32vh;
+  overflow-y: auto;
+  padding: 8px var(--chat-gutter);
+}
+
+.routine-reports-panel > summary {
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+}
+
 /* ============================================
    Sidebar Top Bar
    ============================================ */

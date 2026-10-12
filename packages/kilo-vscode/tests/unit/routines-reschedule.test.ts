@@ -2,6 +2,134 @@ import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
 import { handleRoutineMessage } from "../../src/kilo-provider/routines"
 
+test("policy and report changes use only nonce-bound choices and saved schedule CAS", async () => {
+  const calls: { method: string; body: unknown }[] = []
+  const messages: unknown[] = []
+  const schedule = { kind: "manual" }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      calls.push({ method: request.method, body: await request.json() })
+      return Response.json(
+        request.method === "POST" ? { schedule, from: Date.now(), occurrences: [] } : { id: "routine" },
+      )
+    },
+  })
+  const post = (value: unknown) => messages.push(value)
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: {
+      type: "routineForecast",
+      requestID: "policy",
+      schedule,
+      overlap: "queue",
+      missed: "latest",
+      reportSessionID: "ses_reports",
+      edit: {
+        agentID: "routine",
+        expectedSchedule: schedule,
+        expectedScheduleVersion: 4,
+        expectedOverlap: "unset",
+        expectedMissed: "skip",
+        expectedReportSessionID: "ses_old",
+      },
+    },
+  })
+  const preview = messages[0]
+  if (!preview || typeof preview !== "object" || !("forecastID" in preview)) throw new Error("Missing preview")
+  const message = {
+    type: "routineScheduleUpdate",
+    requestID: "save",
+    agentID: "routine",
+    forecastID: preview.forecastID,
+    overlap: "skip",
+    missed: "skip",
+    reportSessionID: "ses_other",
+    expectedScheduleVersion: 999,
+  }
+  await handleRoutineMessage({ client, directory: "workspace", post, message })
+  expect(calls[1]).toEqual({
+    method: "PATCH",
+    body: {
+      schedule,
+      expectedSchedule: schedule,
+      expectedScheduleVersion: 4,
+      expectedReportSessionID: "ses_old",
+      overlap: "queue",
+      missed: "latest",
+      reportSessionID: "ses_reports",
+    },
+  })
+  await handleRoutineMessage({ client, directory: "workspace", post, message })
+  expect(calls).toHaveLength(2)
+  await handleRoutineMessage({
+    client,
+    directory: "workspace",
+    post,
+    message: { type: "routineUpdate", agentID: "routine", overlap: "queue" },
+  })
+  expect(calls).toHaveLength(2)
+})
+
+test("creation freezes the actual originating chat and refuses a changed host conversation", async () => {
+  const calls: { method: string; body: unknown }[] = []
+  const messages: unknown[] = []
+  const current = { id: "ses_origin" }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      const body: unknown = request.method === "GET" ? undefined : await request.json()
+      calls.push({ method: request.method, body })
+      if (new URL(request.url).pathname === "/kilocode/agent-forecast")
+        return Response.json({ schedule: { kind: "manual" }, from: Date.now(), occurrences: [] })
+      if (request.method === "POST")
+        return Response.json({ id: body && typeof body === "object" && "id" in body ? body.id : "" })
+      return Response.json([])
+    },
+  })
+  const post = (value: unknown) => messages.push(value)
+  const context = { client, directory: "workspace", post, currentSession: () => current.id }
+  await handleRoutineMessage({
+    ...context,
+    message: {
+      type: "routineForecast",
+      requestID: "origin",
+      schedule: { kind: "manual" },
+      overlap: "skip",
+      missed: "skip",
+    },
+  })
+  const preview = messages[0]
+  if (!preview || typeof preview !== "object" || !("forecastID" in preview)) throw new Error("Missing preview")
+  expect(preview).toMatchObject({ sourceSessionID: "ses_origin", reportSessionID: "ses_origin" })
+  current.id = "ses_other"
+  await handleRoutineMessage({
+    ...context,
+    message: { type: "routineCreate", forecastID: preview.forecastID, sourceSessionID: "ses_forged" },
+  })
+  expect(calls).toHaveLength(1)
+  expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("conversation changed") })
+  current.id = "ses_origin"
+  await handleRoutineMessage({
+    ...context,
+    message: {
+      type: "routineCreate",
+      forecastID: preview.forecastID,
+      sourceSessionID: "ses_forged",
+      reportSessionID: "ses_forged",
+      overlap: "queue",
+    },
+  })
+  expect(
+    calls.find((item) => item.method === "POST" && item.body && typeof item.body === "object" && "id" in item.body)
+      ?.body,
+  ).toMatchObject({ sourceSessionID: "ses_origin", reportSessionID: "ses_origin", overlap: "skip", missed: "skip" })
+})
+
 test("an edit preview binds the target, original version and exact confirmed schedule", async () => {
   const calls: { method: string; path: string; body: unknown }[] = []
   const messages: unknown[] = []

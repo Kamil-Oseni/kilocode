@@ -24,6 +24,9 @@ import type { AgentInfo, ConnectionState, ExtensionMessage } from "../../types/m
 import { action, select, type Execution } from "./run"
 import { compile, initial, populate } from "../../../../src/shared/routine-schedule"
 import { ScheduleEditor } from "./ScheduleEditor"
+import { SchedulePolicy } from "./SchedulePolicy"
+import { ReportingChoice } from "./ReportingChoice"
+import { summary, type Policy } from "../../../../src/shared/routine-policy"
 import { RunReview } from "./RunReview"
 import { Archive } from "./Archive"
 import { AccessReview } from "./AccessReview"
@@ -62,6 +65,10 @@ type Agent = {
   }
   schedule: Schedule
   scheduleVersion?: number
+  overlap?: Policy["overlap"]
+  missed?: Policy["missed"]
+  sourceSessionID?: string
+  reportSessionID?: string
   enabled: boolean
   note?: string
   nextRun?: number
@@ -848,12 +855,30 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [output, setOutput] = createSignal<Output>(defaultOutput())
   const deliverable = createMemo(() => Output.safeParse(output()).success)
   const [draft, setDraft] = createSignal(initial(Intl.DateTimeFormat().resolvedOptions().timeZone))
+  const [policy, setPolicy] = createSignal<Policy>({})
+  const [report, setReport] = createSignal<string>()
   const [editing, setEditing] = createSignal<Agent>()
   const [pending, setPending] = createSignal("")
   const [notice, setNotice] = createSignal("")
   const [request, setRequest] = createSignal<{ id: string; key: string }>()
   const [preview, setPreview] = createSignal<Extract<ExtensionMessage, { type: "routineForecast" }>>()
-  const key = () => JSON.stringify([draft(), editing()?.id, editing()?.schedule, editing()?.scheduleVersion])
+  const effective = () => ({
+    overlap: policy().overlap ?? editing()?.overlap,
+    missed: policy().missed ?? editing()?.missed,
+  })
+  const key = () =>
+    JSON.stringify([
+      draft(),
+      effective(),
+      report(),
+      editing()?.id,
+      editing()?.schedule,
+      editing()?.scheduleVersion,
+      editing()?.reportSessionID,
+      session.currentSessionID(),
+      props.workspace,
+      dir(),
+    ])
   const confirmed = () => Boolean(preview()?.forecastID) && request()?.key === key()
   const previewing = () => request()?.key === key() && !preview()
   const [money, setMoney] = createSignal(false)
@@ -862,6 +887,28 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [budget, setBudget] = createSignal("")
   const [mode, setMode] = createSignal("chat")
   const [dir, setDir] = createSignal(scope(props.workspace ?? ""))
+  const [workspace, setWorkspace] = createSignal(scope(props.workspace ?? ""))
+  const destinations = createMemo(() => {
+    const saved = editing()?.reportSessionID
+    const items = session
+      .sessions()
+      .filter((item) => scope(item.directory ?? "") === workspace() && !item.parentID)
+      .map((item) => ({ id: item.id, label: item.title?.trim() || "Untitled conversation" }))
+    return [
+      {
+        id: "default",
+        label: editing()
+          ? "Keep the saved report destination"
+          : session.currentSessionID()
+            ? "The conversation requesting this routine"
+            : "Worker conversation",
+      },
+      ...(saved && !items.some((item) => item.id === saved)
+        ? [{ id: saved, label: "Saved destination (currently unavailable)" }]
+        : []),
+      ...items,
+    ]
+  })
   const [wait, setWait] = createSignal("")
   const [access, setAccess] = createSignal<"full" | "brief">("brief")
   const [screen, setScreen] = createSignal<"roster" | "assign">("roster")
@@ -879,7 +926,6 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [query, setQuery] = createSignal("")
   const [idea, setIdea] = createSignal("")
   const [attention, setAttention] = createSignal<"all" | "unread" | "needs">("all")
-  const [workspace, setWorkspace] = createSignal(scope(props.workspace ?? ""))
   let correlation = crypto.randomUUID()
   let revision = 0
   let dirty = false
@@ -898,6 +944,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setObjective("")
     setOutput(defaultOutput())
     setDraft(initial(Intl.DateTimeFormat().resolvedOptions().timeZone))
+    setPolicy({})
+    setReport()
     setMoney(false)
     setMessages(false)
     setPlan("")
@@ -1483,6 +1531,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setObjective(item.objective)
     setOutput(defaultOutput())
     setDraft(populate(item.schedule, draft().zone))
+    setPolicy({})
+    setReport()
     setSetup("review")
     setDir(workspace())
     setPreview()
@@ -1509,7 +1559,12 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     if (!item) return false
     const zone =
       item.schedule.kind === "cron" && !item.schedule.tz?.trim() ? "" : Intl.DateTimeFormat().resolvedOptions().timeZone
-    return JSON.stringify(draft()) !== JSON.stringify(populate(item.schedule, zone))
+    return (
+      JSON.stringify(draft()) !== JSON.stringify(populate(item.schedule, zone)) ||
+      effective().overlap !== item.overlap ||
+      effective().missed !== item.missed ||
+      (report() !== undefined && report() !== item.reportSessionID)
+    )
   }
 
   const caption = () => {
@@ -1526,6 +1581,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       : "Review shows the exact schedule before anything is saved."
   const submitBlocked = () => saving() || previewing()
   const settings = () => !!editing() || setup() === "review"
+  const policies = () => !!editing() || setup() === "schedule" || setup() === "review"
+  const target = () => report() ?? "default"
 
   const forecast = () => {
     const id = crypto.randomUUID()
@@ -1538,11 +1595,16 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
         type: "routineForecast",
         requestID: id,
         schedule: compile(draft()),
+        ...effective(),
+        reportSessionID: report(),
         edit: item
           ? {
               agentID: item.id,
               expectedSchedule: item.schedule,
               expectedScheduleVersion: item.scheduleVersion ?? 1,
+              expectedOverlap: item.overlap ?? "unset",
+              expectedMissed: item.missed ?? "unset",
+              expectedReportSessionID: item.reportSessionID ?? "unset",
             }
           : undefined,
       })
@@ -1664,6 +1726,8 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
   const edit = (item: Agent) => {
     setEditing(item)
+    setPolicy({ overlap: item.overlap, missed: item.missed })
+    setReport()
     setName(item.name)
     setObjective(item.objective)
     if (known(item.role)) {
@@ -2207,6 +2271,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 onProvision={saveProvisioning}
               />
             </Show>
+
             <Show when={!worker() && !editingOrganization() ? currentOrganization() : undefined} keyed>
               {(item) => (
                 <section
@@ -2488,6 +2553,18 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
               />
             </Show>
 
+            <Show when={policies()}>
+              <SchedulePolicy value={effective()} onChange={setPolicy} disabled={saving()} />
+            </Show>
+            <Show when={settings()}>
+              <ReportingChoice
+                value={target()}
+                choices={destinations()}
+                onChange={(value) => setReport(value === "default" ? undefined : value)}
+                disabled={saving()}
+              />
+            </Show>
+
             <Show when={request()?.key === key() && preview()?.error}>
               {(message) => (
                 <p class="routines-error" role="alert">
@@ -2517,6 +2594,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     )}
                   </For>
                   <span class="routines-hint">Raya must be running and this PC awake at the scheduled time.</span>
+                  <span>{summary(effective()).overlap}</span>
+                  <span>{summary(effective()).missed}</span>
+                  <span>Reports: {destinations().find((item) => item.id === target())?.label}</span>
                 </div>
               )}
             </Show>

@@ -22,6 +22,7 @@ import type {
 } from "./migration"
 import type { MemoryShowMessage, MemoryOperationMessage, RequestMemoryMessage } from "./memory"
 import type { RestoreRequest } from "../../../../src/shared/restore-review"
+import type { AgentReportsRead } from "../../../../src/shared/routine-reports"
 
 // ============================================
 // Messages FROM webview TO extension
@@ -108,6 +109,9 @@ export interface RoutineListMessage {
 export interface RoutineForecastRequestMessage {
   type: "routineForecast"
   requestID: string
+  overlap?: import("../../../../src/shared/routine-policy").Policy["overlap"]
+  missed?: import("../../../../src/shared/routine-policy").Policy["missed"]
+  reportSessionID?: string
   when?: string
   tz?: string
   schedule?: import("../../../../src/shared/routine-schedule").Proposal
@@ -2144,6 +2148,7 @@ export interface FocusTimerActionMessage {
 }
 
 export type WebviewMessage =
+  | AgentReportsRead
   | BrainRequest
   | RestoreRequest
   | ComposerDraftWebviewMessage

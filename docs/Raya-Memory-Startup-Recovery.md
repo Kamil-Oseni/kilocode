@@ -12,6 +12,8 @@ Installed Inspect unfinished request reconciled that exact live operation and cl
 
 Supported Update a Closed Memory Runtime generated immutable source folder `raya-memory-source-upgrade-9a616a529dd941329ba26ef17212e465`, then refused `Unreviewed control release refused` in control catalog parsing. The previous thirteen-file runtime remains selected and closed; request uncertainty is absent. Preserve this generated artifact and original receipts. No direct source-pin change, retry, capture activation or successful recall occurred.
 
+Sanitized current observation: `D:/Raya/Tools/Readiness-20261012/Memory-Installed-c7-Observation.json`, SHA-256 `f273898d401e371e7f80bb7a72fa8a69a704b5347f46292ffb002d6425fa4656`. Source diagnosis proved that paired upgrade publication selected new service pins while retaining the old control bridge. Commit `f3bb5f4c85` copies the exact current packaged bridge into the immutable upgrade bundle, includes it in native inventory evidence and selects/rechecks that image for catalog publication. Historical artifact review remains supported; missing or stale bridges do not authorize new publication. A focused real-file catalog regression, host/webview types and scoped lint passed. The complete native upgrade on the next matching installed package remains required.
+
 ### Installed 1a observation
 
 The helper fix is now installed in `7.4.23-snapshot+1a869ca158.local.1791827879084`. The actual native Recover a Closed Memory Pair command accepted the exact `044a...` review and published saved phase closed with an applied audit and requestSettlement false. Capture preference stayed enabled; no old request was replayed.

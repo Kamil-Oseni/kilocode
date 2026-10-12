@@ -7,7 +7,7 @@ import { SecondBrain, HostError } from "@/kilocode/second-brain/service"
 import { fit, reserve } from "@/kilocode/second-brain/context"
 import { requested, setup } from "@/kilocode/second-brain/setup"
 import { RayaChief } from "@/kilocode/chief"
-import { selected } from "@/kilocode/second-brain/capture-state"
+import { selected as saving } from "@/kilocode/second-brain/capture-state"
 import { Question } from "@/question"
 import * as Tool from "@/tool/tool"
 
@@ -60,7 +60,7 @@ export const BrainRecallTool = Tool.define<
           })
           if ("action" in args && (args.action === "pause" || args.action === "resume")) {
             const original = ctx.messages.findLast((row) => row.info.role === "user")
-            if (!original || selected(RayaChief.requestText(original.parts)) !== args.action)
+            if (!original || saving(RayaChief.requestText(original.parts)) !== args.action)
               return yield* Effect.die(new Error("An explicit original automatic-saving request is required"))
             const result = yield* brain
               .request({

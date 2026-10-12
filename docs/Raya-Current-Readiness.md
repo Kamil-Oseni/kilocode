@@ -4,13 +4,13 @@ Updated October 12, 2026 from the installed registry, current Git delivery, save
 
 ## Installed now
 
-Everyday Raya is **`7.4.23-snapshot+c7c8c07ce1.local.1791829554106`**, built from `c7c8c07ce18aaea250ffd3e02e082107bc931530`. Official installation and closed saved-data/payload verification pass. The custom local provider preserves its selected thinking setting. One genuine private manual worker completes with audited file-read evidence and its report survives a fresh model-off backend; this is a specific acceptance result, not the full roadmap.
+Everyday Raya is **`7.4.23-snapshot+3a1500d26f.local.1791833486314`**, built from `3a1500d26ff38af11a4d311dd2431c6d2999ac9a`. Official installation and closed saved-data/payload verification pass. This candidate adds compact Memory layout and the reviewed control bridge needed for the closed runtime upgrade. The custom local provider preserves its selected thinking setting; the preceding c7 candidate has a genuine private manual worker and cold report-persistence acceptance result. Native Memory upgrade, index and recall acceptance for this candidate remains pending.
 
 | Area | Current status | Remaining scope |
 |---|---|---|
 | Routine conversation reports | Genuine private manual run delivers its running→complete card and preserves three histories after cold reopen; bounded pages are installed | Loaded GUI workflow, scheduled repeats, boot and broader lifecycle acceptance |
 | Routine scheduling choices | Installed: skip or queue one busy occurrence; skip or run the latest missed occurrence once | Installed acceptance; no blanket replay or recovery guarantee |
-| Conversation Memory | Connected health verified; failed index request reconciled through its original live owner; exact pair closure recovered | Packaged runtime upgrade refused its control catalog; indexing and live save/recall remain pending |
+| Conversation Memory | Connected health verified; failed index request reconciled through its original live owner; exact pair closure recovered; control-bridge upgrade fix installed | Native runtime upgrade, indexing and live save/recall remain pending |
 | Voice | Source improvements are present in the installed package | User explicitly deferred voice; no fresh microphone, audible continuity or hands-free acceptance |
 | Recovery | Closed installation preserved saved data; protected rollback copy verified | Live restore, full local-service recovery and actual Windows postboot acceptance |
 | Models, tools and context | Earlier model comparisons and targeted context fixes have evidence | Candidate-specific everyday General/Coder/tool acceptance; historical model trials do not qualify every current workflow |
@@ -19,7 +19,7 @@ The full roadmap remains in [Raya-Implementation-Progress.md](Raya-Implementatio
 
 ## What was verified
 
-- The official installer exited successfully. Closed comparison preserved **2,937 saved files**, their listed folder structure, **538 non-package payloads**, and unrelated extension registrations. Current local backup: `.tmp/new-pc/everyday-conversation-preservation-0103ac98200f4e1e86a8f376e8d9d428`. Its extra managed-namespace copy remains unqualified; the exact policy 11 raw copy is separately verified.
+- The official installer exited successfully. Closed comparison preserved **2,963 saved files**, their listed folder structure, **538 non-package payloads**, and unrelated extension registrations. Current local backup: `.tmp/new-pc/everyday-conversation-preservation-bc041113070f4392866aa2e510fd65a5`; after-receipt SHA-256 `951dc509bd12dd67052c4e2a844bc1138e724894aa125e2b6e8fc81dd220f0e3`. Policy 11 remains exact SHA-256 `140365acc4cbfbe1cb28a227e8a88b11333216baa378bcb9527705c14c514ff9`. The preceding cohort's extra managed-namespace copy remains unqualified.
 - Backend checks cover bounded scheduling policies, queue identities/leases, destination binding, monotonic report updates, waiting-notice deduplication and publication scope. UI/host checks cover real controls, SDK transport and the repaired refresh race.
 - Production CLI/host/webview types, lint, bundle and Knip passed. The qualified CLI and archive match all **7,192** recorded source inputs; archive CRC and payload checks pass. Original compiler/package targets exit 0; forced descendant cleanup makes their outer lifecycles fail separately. Normal Git delivery is pending for this candidate.
 - A permanent rollback copy at `D:/RayaBackups/Everyday-routines-20261012-ce50c5684e5342139cbc317fd4804ad4` matches all **2,897 source files / 1,913,355,083 bytes** by path, length and SHA-256. Its copy receipt SHA-256 is `77eb69c2c7f6996d734819c5ca5dc2b1805705e2d93cd545e49b91b62e1762c3`.
@@ -29,7 +29,7 @@ These checks establish source/component correctness and closed installation pres
 ## Next work
 
 1. Build chat: complete normal Git delivery and loaded-client/scheduled/boot acceptance. The genuine c7 private worker and cold persistence pass; preserve both prior failures. Ordinary terminal Routine Goal resume can still falsely report active before refusing execution; repair that explicit control gap without replay.
-2. Setup chat: fix the native runtime update's `Unreviewed control release refused` before retrying indexing. Pair `ecb21c692efec5d01c3df8c7bd5153c0` connected and passed authenticated health; indexing failed before worker creation and was reconciled through Inspect unfinished request. Normal closure retired both original producers without force, and supported recovery applied exact closure `748bdd627e97ebf356cdfffda359df980f00e957dce4ef41982488a9d799cca1`. The prior thirteen-file setup remains selected and closed, with no pending request uncertainty. Preserve the failed attempt and generated upgrade folder; do not edit selected pins or silently replay.
+2. Setup chat: exercise the installed control-bridge fix through the supported native runtime update, then indexing and recall. Pair `ecb21c692efec5d01c3df8c7bd5153c0` connected and passed authenticated health; indexing failed before worker creation and was reconciled through Inspect unfinished request. Normal closure retired both original producers without force, and supported recovery applied exact closure `748bdd627e97ebf356cdfffda359df980f00e957dce4ef41982488a9d799cca1`. The prior thirteen-file setup remains selected and closed, with no pending request uncertainty. Preserve the failed attempt and generated upgrade folder; do not edit selected pins or silently replay.
 3. User: reopen Raya and try the routine workflow. The [routine guide](Raya-Routine-Conversation-Reports.md) explains the chat-header reports control, report destination and scheduling choices. Human listening remains deferred until requested.
 
 ## Constraints observed now

@@ -150,6 +150,87 @@ test("capture binds the stored original reply and excludes queued successor cont
   expect(original.source_sha256).toBe(source(rows, sid, aid)!.source_sha256)
 })
 
+function managed(state: MessageV2.ToolPart["state"]): MessageV2.ToolPart {
+  return {
+    id: PartID.make("prt_manage"),
+    sessionID: sid,
+    messageID: aid,
+    type: "tool",
+    tool: "second_brain_manage",
+    callID: "call_manage",
+    state,
+  }
+}
+
+test("manual Memory invocation suppresses automatic capture for every original-turn outcome", () => {
+  const states: MessageV2.ToolPart["state"][] = [
+    { status: "pending", input: { action: "forget" }, raw: "" },
+    { status: "running", input: { action: "remember" }, time: { start: stamp - 100 } },
+    {
+      status: "error",
+      input: { action: "forget" },
+      error: "Outcome unconfirmed",
+      time: { start: stamp - 100, end: stamp },
+    },
+    ...["indexed", "cancelled", "unconfirmed"].map((disposition) => ({
+      status: "completed" as const,
+      input: { action: "forget" },
+      output: JSON.stringify({ disposition }),
+      title: "Personal Memory",
+      metadata: {},
+      time: { start: stamp - 100, end: stamp },
+    })),
+  ]
+  for (const state of states) {
+    const rows = messages()
+    rows[1].parts.push(managed(state))
+    expect(source(rows, sid, aid)).toBeUndefined()
+  }
+})
+
+test("foreign, historical, summary and text-only Memory mentions do not suppress unrelated capture", () => {
+  const state: MessageV2.ToolPart["state"] = {
+    status: "error",
+    input: { action: "forget" },
+    error: "Unconfirmed",
+    time: { start: stamp - 100, end: stamp },
+  }
+  for (const scope of [
+    "part_session",
+    "part_message",
+    "row_session",
+    "parent",
+    "summary",
+    "previous",
+    "future",
+    "text",
+  ] as const) {
+    const rows = messages()
+    const original = rows[1]
+    if (original.info.role !== "assistant") throw new Error("Assistant fixture required")
+    const id = MessageID.make("msg_manage_step")
+    const part = { ...managed(state), messageID: id }
+    const step: MessageV2.WithParts = { info: { ...original.info, id }, parts: [part] }
+    if (scope === "part_session") part.sessionID = SessionID.make("ses_foreign")
+    if (scope === "part_message") part.messageID = MessageID.make("msg_foreign")
+    if (scope === "row_session") step.info.sessionID = SessionID.make("ses_foreign")
+    if (step.info.role !== "assistant") throw new Error("Assistant step required")
+    if (scope === "parent") step.info.parentID = MessageID.make("msg_other_user")
+    if (scope === "summary") step.info.summary = true
+    if (scope === "previous") rows.unshift(step)
+    if (scope === "future") rows.push(step)
+    if (scope === "text") rows[1].parts.push(text(aid, "second_brain_manage cancelled"))
+    if (!["previous", "future", "text"].includes(scope)) rows.splice(1, 0, step)
+    expect(source(rows, sid, aid)?.source.user.id).toBe(uid)
+  }
+  const rows = messages()
+  const original = rows[1]
+  if (original.info.role !== "assistant") throw new Error("Assistant fixture required")
+  const id = MessageID.make("msg_real_manage_step")
+  rows.splice(1, 0, { info: { ...original.info, id }, parts: [{ ...managed(state), messageID: id }] })
+  expect(source(rows, sid, aid)).toBeUndefined()
+})
+
 test("unfinished, summary, foreign and absent original replies are not captured", () => {
   for (const change of [
     { finish: undefined },

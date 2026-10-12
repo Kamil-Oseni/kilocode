@@ -65,7 +65,7 @@ export function source(messages: MessageV2.WithParts[], session: string, message
         .join("\n\n")
         .trim(),
     )
-  const tools = messages
+  const parts = messages
     .slice(index + 1, end + 1)
     .filter(
       (row) =>
@@ -75,18 +75,21 @@ export function source(messages: MessageV2.WithParts[], session: string, message
         !row.info.summary,
     )
     .flatMap((row) => row.parts.filter((part) => part.sessionID === session && part.messageID === row.info.id))
-    .flatMap((part) => {
-      if (part.type !== "tool" || (part.state.status !== "completed" && part.state.status !== "error")) return []
-      const value = part.state.status === "completed" ? part.state.output : part.state.error
-      return [
-        {
-          id: part.id,
-          name: part.tool,
-          status: part.state.status,
-          text: MemoryRedact.text(value).trim(),
-        },
-      ]
-    })
+  // A manual Memory change owns this turn even when declined or unconfirmed.
+  // Automatic extraction must not append the same facts after that decision.
+  if (parts.some((part) => part.type === "tool" && part.tool === "second_brain_manage")) return undefined
+  const tools = parts.flatMap((part) => {
+    if (part.type !== "tool" || (part.state.status !== "completed" && part.state.status !== "error")) return []
+    const value = part.state.status === "completed" ? part.state.output : part.state.error
+    return [
+      {
+        id: part.id,
+        name: part.tool,
+        status: part.state.status,
+        text: MemoryRedact.text(value).trim(),
+      },
+    ]
+  })
   const value = {
     user: { id: user.info.id, text: text(user.parts, user.info.id) },
     assistant: { id: reply.info.id, text: text(reply.parts, reply.info.id) },

@@ -129,7 +129,7 @@ export function SecondBrain() {
       vscode.postMessage({ type: "secondBrain", action: "cancel", id: crypto.randomUUID(), target: id() })
   })
   return (
-    <Card>
+    <Card class="raya-memory-service">
       <h4>Memory</h4>
       <p>
         {state().configured
@@ -139,6 +139,7 @@ export function SecondBrain() {
       <p role="status">{state().configured ? status[state().status] : "Setup required"}</p>
       <Show when={onboarding(state())}>
         <Button
+          variant="primary"
           onClick={() => window.dispatchEvent(new Event("raya:setup-memory"))}
           disabled={busy() || !server.isConnected()}
         >
@@ -200,52 +201,58 @@ export function SecondBrain() {
       <Show when={expanded()}>
         <section aria-label="Memory service settings">
           <p>Import reviewed setup files here. Keep credentials in the secure input when prompted.</p>
-          <Button onClick={() => request("setup")} disabled={busy()}>
-            Import service setup
-          </Button>
-          <Button onClick={() => request("check")} disabled={!state().configured || busy()}>
-            Check service
-          </Button>
-          <Show when={state().code === "control_uncertain"}>
-            <Button onClick={() => request("reconcile")} disabled={!state().configured || busy()}>
-              Inspect unfinished request
+          <div class="raya-memory-row">
+            <Button onClick={() => request("setup")} disabled={busy()}>
+              Import service setup
             </Button>
-            <Button onClick={() => request("repair")} disabled={!state().configured || busy()}>
-              Recover prior failed search
+            <Button onClick={() => request("check")} disabled={!state().configured || busy()}>
+              Check service
             </Button>
-          </Show>
-          <Show when={state().configured}>
-            <Button onClick={() => request("archive")} disabled={busy()}>
-              Review fresh start
+            <Show when={state().code === "control_uncertain"}>
+              <Button onClick={() => request("reconcile")} disabled={!state().configured || busy()}>
+                Inspect unfinished request
+              </Button>
+              <Button onClick={() => request("repair")} disabled={!state().configured || busy()}>
+                Recover prior failed search
+              </Button>
+            </Show>
+            <Show when={state().configured}>
+              <Button onClick={() => request("archive")} disabled={busy()}>
+                Review fresh start
+              </Button>
+            </Show>
+            <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>
+              Disconnect
             </Button>
-          </Show>
-          <Button onClick={() => request("disconnect")} disabled={!state().configured || busy()}>
-            Disconnect
-          </Button>
-          <Show when={state().code === "closed_pair_recovery_required"}>
-            <Button onClick={() => request("resume")} disabled={busy()}>
-              Restore closed Memory setup
+            <Show when={state().code === "closed_pair_recovery_required"}>
+              <Button onClick={() => request("resume")} disabled={busy()}>
+                Restore closed Memory setup
+              </Button>
+            </Show>
+            <Button onClick={() => request("controlSetup")} disabled={!state().configured || busy()}>
+              Import control setup
             </Button>
-          </Show>
-          <Button onClick={() => request("controlSetup")} disabled={!state().configured || busy()}>
-            Import control setup
-          </Button>
+          </div>
         </section>
       </Show>
-      <Button onClick={() => request("review")} disabled={!state().configured || busy()}>
-        Choose notes
-      </Button>
-      <Button
-        onClick={() => request("sync")}
-        disabled={
-          !state().configured || busy() || !["unchecked", "approved", "synced"].includes(state().control?.status ?? "")
-        }
-      >
-        Index selected notes
-      </Button>
-      <Button onClick={() => request("disable")} disabled={!state().configured || busy()}>
-        Disable note access
-      </Button>
+      <div class="raya-memory-row">
+        <Button onClick={() => request("review")} disabled={!state().configured || busy()}>
+          Choose notes
+        </Button>
+        <Button
+          onClick={() => request("sync")}
+          disabled={
+            !state().configured ||
+            busy() ||
+            !["unchecked", "approved", "synced"].includes(state().control?.status ?? "")
+          }
+        >
+          Index selected notes
+        </Button>
+        <Button onClick={() => request("disable")} disabled={!state().configured || busy()}>
+          Disable note access
+        </Button>
+      </div>
       <Show when={state().control}>
         <p role="status">{indexing[state().control!.status]}</p>
         <Show when={state().control!.hostJoinRequired}>
@@ -271,12 +278,14 @@ export function SecondBrain() {
             Choose setup file
           </Button>
         </Show>
-        <Button onClick={() => request("search")} disabled={blocked()}>
-          Search notes
-        </Button>
-        <Button onClick={() => request("context")} disabled={blocked()}>
-          Preview linked context
-        </Button>
+        <div class="raya-memory-row">
+          <Button onClick={() => request("search")} disabled={blocked()}>
+            Search notes
+          </Button>
+          <Button onClick={() => request("context")} disabled={blocked()}>
+            Preview linked context
+          </Button>
+        </div>
       </Show>
       <Show when={searching()}>
         <Button onClick={() => request("cancel")}>Cancel search</Button>

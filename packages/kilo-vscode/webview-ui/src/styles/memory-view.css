@@ -1,0 +1,49 @@
+/* Memory uses the existing controls with a readable, compact hierarchy. */
+:where(.raya-memory-view, .raya-memory-service) {
+  font-size: var(--font-size-base);
+  line-height: var(--raya-leading-body);
+}
+
+:where(.raya-memory-view, .raya-memory-service) :where(h2, h3, h4, h5, p) {
+  margin: 0;
+}
+
+.raya-memory-view h2 {
+  font-size: var(--kilo-font-size-24);
+  line-height: var(--raya-leading-tight);
+}
+
+:where(.raya-memory-view, .raya-memory-service) :where(h3, h4) {
+  font-size: var(--kilo-font-size-18);
+  line-height: var(--raya-leading-tight);
+}
+
+:where(.raya-memory-view, .raya-memory-service) h5 {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+}
+
+:where(.raya-memory-view, .raya-memory-service) [data-component="card"],
+.raya-memory-service {
+  gap: var(--raya-space-12);
+}
+
+:where(.raya-memory-view, .raya-memory-service) [data-component="button"] {
+  align-self: flex-start;
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+}
+
+.raya-memory-service > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raya-space-12);
+}
+
+.raya-memory-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--raya-space-8);
+}

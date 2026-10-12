@@ -32,6 +32,7 @@
 @import "./settings.css";
 @import "./provider-usage.css";
 @import "./memory-provenance.css";
+@import "./memory-view.css";
 @import "./high-contrast.css";
 @import "./child-steer.css";
 

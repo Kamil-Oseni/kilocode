@@ -2,7 +2,13 @@
 
 ## Current profile checkpoint — October 12
 
-### Current installed 3a observation
+### Current installed a93 observation
+
+Everyday `7.4.23-snapshot+a93eb8de60.local.1791836884196` includes the exact fifteen-file source fix and supported uncertain-Sync quarantine. Native quarantine applied for request `817aec363c66459c8fbd9267fb25c4d6`: its old debt remains in the audit with settlement false, and the separate replacement setup is selected at port 50247. This is not original request completion. Evidence: `D:/Raya/Tools/Readiness-20261012/Memory-a93-Native-Quarantine-6fe3e78e87be4304a7b907c6ef9bfcf9.json`, SHA-256 `0d43acedf3d9bc4b7acb8bfae12eba1b7b91c4c6898fe3a33565a77620230552`.
+
+Replacement services have not started because free RAM is below the six-GiB live reserve. Preserve the user's applications. Once headroom permits, start the selected idle old-runtime pair, close it normally, recover its exact closed state and upgrade to the corrected runtime. Only then submit one new authorized indexing request and verify conversation save/recall. Consult [current readiness](Raya-Current-Readiness.md) for the latest resource and installation checkpoint.
+
+### Historical installed 3a observation
 
 Everyday `7.4.23-snapshot+3a1500d26f.local.1791833486314` applied the supported native runtime upgrade and connected using fifteen reviewed service files. The control-bridge refusal described below is historical and fixed in this package. Index request `817aec363c66459c8fbd9267fb25c4d6` then became uncertain: the old historical source validator accepts only twelve/thirteen files and rejects this fifteen-file cohort before reservation publication. Original request outcome remains unknown; an empty request folder does not establish settlement.
 

@@ -122,6 +122,11 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     reason:
       "isolated production organization HTTP lifecycle verifies its selected physical SQLite database and retires its application runtime owner",
   },
+  "kilocode/server/httpapi-goal-routine-resume.fixture.ts": {
+    count: 3,
+    reason:
+      "process-isolated production Goal HTTP resume verifies terminal and implicit activation against saved Routine history, preserves reviewed-reply controls on the same physical SQLite/Storage graph, and retires its actual application runtime owner",
+  },
   "kilocode/server/http-retirement.fixture.ts": {
     count: 1,
     reason: "isolated production cached HTTP handler retirement closes its realized application runtime owner",

@@ -328,6 +328,7 @@ export const KilocodePaths = {
   agentEvents: `${root}/agent/:agentID/events`,
   agentHistories: `${root}/agent-runs`,
   agentReports: `${root}/agent-reports`,
+  agentReportPage: `${root}/agent-reports/page`,
   agentArchive: `${root}/agent-archive`,
   agentSnapshot: `${root}/agent/:agentID/runs/:runID/snapshot`,
   agentTemplates: `${root}/agent-templates`,
@@ -967,6 +968,25 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.routine.reports",
             summary: "Read conversation routine reports",
             description: "Read authoritative routine progress and results without starting a model turn or worker.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentReportPage", KilocodePaths.agentReportPage, {
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            sessionID: SessionID,
+            cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+            limit: Schema.optional(
+              Schema.NumberFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 200 })),
+            ),
+          }),
+          success: described(RayaRoutineReports.Page, "A bounded page of conversation routine reports"),
+          error: InvalidRequestError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.routine.reportPage",
+            summary: "Read a page of conversation routine reports",
+            description:
+              "Read saved routine reports with resumable history indexing without starting a model or worker.",
           }),
         ),
         HttpApiEndpoint.get("agentAuthorityServices", KilocodePaths.agentAuthorityServices, {

@@ -15,6 +15,7 @@ export function inactive(source: z.output<typeof payload>, now: number, mapping:
     if (
       [
         "agent-stage",
+        "routine-report-index",
         "agent-claims",
         "agent-recovery",
         "agent-starts",

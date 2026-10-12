@@ -98,6 +98,7 @@ const prefixes = [
   "raya/agent-runs",
   "raya/agent-memory",
   "raya/routine-reports",
+  "raya/routine-report-index",
   "raya/agent-stage",
   "raya/agent-claims",
   "raya/agent-recovery",

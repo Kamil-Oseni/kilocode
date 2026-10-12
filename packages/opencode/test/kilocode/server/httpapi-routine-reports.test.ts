@@ -21,6 +21,18 @@ test("routine report HTTP validates ordinary conversations and missing destinati
   const list = await app.request(`/kilocode/agent-reports?sessionID=${encodeURIComponent(session.id)}`, { headers })
   expect(list.status).toBe(200)
   expect(await list.json()).toEqual([])
+  const page = await app.request(`/kilocode/agent-reports/page?sessionID=${encodeURIComponent(session.id)}&limit=17`, {
+    headers,
+  })
+  expect(page.status).toBe(200)
+  expect(await page.json()).toEqual({ items: [], bootstrap: { complete: true, scanned: 0, total: 0 } })
+  const invalid = await app.request(
+    `/kilocode/agent-reports/page?sessionID=${encodeURIComponent(session.id)}&limit=201`,
+    {
+      headers,
+    },
+  )
+  expect(invalid.status).toBe(400)
   const assigned = await app.request("/kilocode/agent", {
     method: "POST",
     headers,

@@ -23,6 +23,7 @@ const namespace = new Set([
   "agent-runs",
   "agent-memory",
   "routine-reports",
+  "routine-report-index",
   "agent-stage",
   "agent-executions",
   "agent-execution-reviews",
@@ -158,6 +159,35 @@ function keys(key: readonly string[], prior: unknown, next: unknown) {
         // Report references describe execution; publishing a card must not
         // retire the worker, run or conversations it observes.
         add("config", `routine-report:${key[2]}`)
+        continue
+      }
+      if (key[1] === "routine-report-index") {
+        if (row.version !== 1) throw fail()
+        if (key.length === 3 && key[2] === "bootstrap") {
+          if (
+            !Number.isSafeInteger(row.scanned) ||
+            !Number.isSafeInteger(row.total) ||
+            typeof row.scanned !== "number" ||
+            typeof row.total !== "number" ||
+            row.scanned < 0 ||
+            row.scanned > row.total ||
+            typeof row.complete !== "boolean" ||
+            (row.last !== undefined && (typeof row.last !== "string" || !/^[a-f0-9]{64}$/.test(row.last)))
+          )
+            throw fail()
+        } else if (
+          key.length !== 4 ||
+          typeof row.id !== "string" ||
+          typeof row.reportSessionID !== "string" ||
+          typeof row.at !== "number" ||
+          !Number.isFinite(row.at) ||
+          key[2] !== hash(row.reportSessionID) ||
+          !/^[a-f0-9]{16}-[a-f0-9]{64}$/.test(key[3] ?? "") ||
+          key[3]?.slice(17) !== hash(row.id)
+        )
+          throw fail()
+        // Derived history indexes observe reports without retiring their workers.
+        add("config", `routine-report-index:${hash(JSON.stringify(key.slice(2)))}`)
         continue
       }
       fields(row)

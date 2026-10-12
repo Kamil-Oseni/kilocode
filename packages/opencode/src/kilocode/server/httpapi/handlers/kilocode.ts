@@ -751,16 +751,23 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       )
     })
     const agentReports = (ctx: { query: { sessionID: SessionID } }) =>
-      reports
-        .list(ctx.query.sessionID)
-        .pipe(
-          Effect.mapError(
-            () =>
-              new InvalidRequestError({
-                message: "Routine reports could not be read. Check the conversation and retry.",
-              }),
-          ),
-        )
+      reports.list(ctx.query.sessionID).pipe(
+        Effect.mapError(
+          () =>
+            new InvalidRequestError({
+              message: "Routine reports could not be read. Check the conversation and retry.",
+            }),
+        ),
+      )
+    const agentReportPage = (ctx: { query: { sessionID: SessionID; cursor?: string; limit?: number } }) =>
+      reports.page(ctx.query).pipe(
+        Effect.mapError(
+          () =>
+            new InvalidRequestError({
+              message: "Routine report history could not be read. Check the conversation and retry.",
+            }),
+        ),
+      )
     const agentAuthorityServices = Effect.fn("KilocodeHttpApi.agentAuthorityServices")(function* () {
       return RayaTaskAuthority.catalog(yield* mcp.tools())
     })
@@ -1395,6 +1402,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("profileRestoreApprove", profileRestoreApprove)
         .handle("agentList", agentList)
         .handle("agentReports", agentReports)
+        .handle("agentReportPage", agentReportPage)
         .handle("agentAuthorityServices", agentAuthorityServices)
         .handle("agentArchive", (ctx) =>
           runner.tasks

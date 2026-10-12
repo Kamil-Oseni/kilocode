@@ -997,15 +997,17 @@ export class BrainHost {
       "Resume automatic saving",
     )
     check()
+    if (!this.service.captureCurrent(binding) || !isDeepStrictEqual(this.intake.saved(binding), cfg))
+      throw new Error("Original Memory preference changed during review")
     if (approved !== "Resume automatic saving")
       return {
         action: "captureState" as const,
         project,
         configured: true,
-        capture: state.status,
-        enabled: false,
+        capture: this.intake.snapshot(this.service.captureSnapshot()).status,
+        enabled: this.intake.enabled(),
         changed: false,
-        detail: "Automatic saving remains paused.",
+        detail: "Future automatic saving remains paused. Any earlier save keeps its original status.",
       }
     const current = () => {
       check()

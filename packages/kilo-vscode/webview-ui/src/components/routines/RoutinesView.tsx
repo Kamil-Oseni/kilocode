@@ -39,6 +39,7 @@ import { polling } from "./routine-polling"
 import { projectRuns } from "./run-projection"
 import { Output } from "../../../../src/shared/routine-output"
 import type { RoutinePaths } from "../../../../src/shared/routine-paths"
+import { due } from "../../../../src/shared/routine-due"
 
 type Schedule =
   | { kind: "once"; at: number }
@@ -706,6 +707,7 @@ const Person: Component<{
       >
         <span class="routines-name">{props.item.name}</span>
         <span class="routines-job">{props.box?.latest?.body ?? props.item.objective}</span>
+        <Show when={due(props.item)}>{(date) => <span class="routines-note">{date()}</span>}</Show>
         <Show when={props.stale}>
           <span class="routines-note" role="status">
             History may be stale: {props.stale}
@@ -2514,7 +2516,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       </span>
                     )}
                   </For>
-                  <span class="routines-hint">Raya must be running at the scheduled time.</span>
+                  <span class="routines-hint">Raya must be running and this PC awake at the scheduled time.</span>
                 </div>
               )}
             </Show>

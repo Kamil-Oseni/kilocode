@@ -26347,6 +26347,67 @@ export type KilocodeRoutineReportsResponses = {
 
 export type KilocodeRoutineReportsResponse = KilocodeRoutineReportsResponses[keyof KilocodeRoutineReportsResponses]
 
+export type KilocodeRoutineReportPageData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    sessionID: string
+    cursor?: string
+    limit?: string
+  }
+  url: "/kilocode/agent-reports/page"
+}
+
+export type KilocodeRoutineReportPageErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+}
+
+export type KilocodeRoutineReportPageError = KilocodeRoutineReportPageErrors[keyof KilocodeRoutineReportPageErrors]
+
+export type KilocodeRoutineReportPageResponses = {
+  /**
+   * A bounded page of conversation routine reports
+   */
+  200: {
+    items: Array<{
+      version: 1
+      id: string
+      runID?: string
+      agentID: string
+      name: string
+      sourceSessionID?: string
+      reportSessionID: string
+      workerSessionID?: string
+      projectID: string
+      directory: string
+      revision: number
+      runRevision?: number
+      status: "queued" | "running" | "complete" | "blocked" | "error"
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summary: string
+      delivery: "delivered" | "unavailable"
+      notice?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        reason: "busy" | "deferred"
+      }
+    }>
+    next?: string
+    bootstrap?: {
+      complete: boolean
+      scanned: number
+      total: number
+    }
+  }
+}
+
+export type KilocodeRoutineReportPageResponse =
+  KilocodeRoutineReportPageResponses[keyof KilocodeRoutineReportPageResponses]
+
 export type KilocodeRoutineAuthorityServicesData = {
   body?: never
   path?: never

@@ -84,6 +84,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     post: vscode.postMessage,
     listen: vscode.onMessage,
   })
+  const reported = () =>
+    activity.items().length ||
+    activity.error() ||
+    activity.historical() ||
+    activity.next() ||
+    (!activity.bootstrap()?.complete && activity.bootstrap())
   // Counts the in-flight first message too, so the dock reserves the same row on
   // the very first send instead of growing once the message lands.
   const hasMessages = () => session.messages().length > 0 || session.submitting()
@@ -573,14 +579,21 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           <Show when={!props.readonly}>
             <GoalBanner /> {/* raya_change - Milestone A persistent goal UI */}
           </Show>
-          <Show when={activity.items().length || activity.error()}>
+          <Show when={reported()}>
             <details class="routine-reports-panel">
               <summary>Routine reports ({activity.items().length})</summary>
               <RoutineActivity
                 items={activity.items()}
                 loading={activity.loading()}
                 error={activity.error()}
+                next={activity.next()}
+                historical={activity.historical()}
+                bootstrap={activity.bootstrap()}
                 onRefresh={activity.refresh}
+                onOlder={activity.older}
+                onLatest={activity.refresh}
+                onRetry={activity.retry}
+                onContinue={activity.resume}
                 onOpen={(agentID, workerSessionID) => {
                   if (workerSessionID) {
                     if (props.onSelectSession) props.onSelectSession(workerSessionID)

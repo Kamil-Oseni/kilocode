@@ -351,6 +351,8 @@ import type {
   KilocodeRoutineRecoveryCloseResponses,
   KilocodeRoutineRemoveErrors,
   KilocodeRoutineRemoveResponses,
+  KilocodeRoutineReportPageErrors,
+  KilocodeRoutineReportPageResponses,
   KilocodeRoutineReportsErrors,
   KilocodeRoutineReportsResponses,
   KilocodeRoutineRunErrors,
@@ -10941,6 +10943,46 @@ export class Routine extends HeyApiClient {
       ThrowOnError
     >({
       url: "/kilocode/agent-reports",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Read a page of conversation routine reports
+   *
+   * Read saved routine reports with resumable history indexing without starting a model or worker.
+   */
+  public reportPage<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      sessionID: string
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineReportPageResponses,
+      KilocodeRoutineReportPageErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-reports/page",
       ...options,
       ...params,
     })

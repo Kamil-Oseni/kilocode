@@ -37837,6 +37837,254 @@
         ]
       }
     },
+    "/kilocode/agent-reports/page": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.reportPage",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A bounded page of conversation routine reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "runID": {
+                            "type": "string"
+                          },
+                          "agentID": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "sourceSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "reportSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "workerSessionID": {
+                            "type": "string",
+                            "pattern": "^ses"
+                          },
+                          "projectID": {
+                            "type": "string"
+                          },
+                          "directory": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "runRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["queued", "running", "complete", "blocked", "error"]
+                          },
+                          "at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "summary": {
+                            "type": "string",
+                            "maxLength": 8000
+                          },
+                          "delivery": {
+                            "type": "string",
+                            "enum": ["delivered", "unavailable"]
+                          },
+                          "notice": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["NaN"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["-Infinity"]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": ["Infinity", "-Infinity", "NaN"]
+                                  }
+                                ]
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": ["busy", "deferred"]
+                              }
+                            },
+                            "required": ["at", "reason"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "version",
+                          "id",
+                          "agentID",
+                          "name",
+                          "reportSessionID",
+                          "projectID",
+                          "directory",
+                          "revision",
+                          "status",
+                          "at",
+                          "summary",
+                          "delivery"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next": {
+                      "type": "string"
+                    },
+                    "bootstrap": {
+                      "type": "object",
+                      "properties": {
+                        "complete": {
+                          "type": "boolean"
+                        },
+                        "scanned": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["complete", "scanned", "total"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["items"],
+                  "additionalProperties": false,
+                  "description": "A bounded page of conversation routine reports"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read saved routine reports with resumable history indexing without starting a model or worker.",
+        "summary": "Read a page of conversation routine reports",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.reportPage({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/kilocode/agent-authority/services": {
       "get": {
         "tags": ["kilocode"],

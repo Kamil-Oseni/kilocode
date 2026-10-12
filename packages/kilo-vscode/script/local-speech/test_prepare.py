@@ -17,6 +17,13 @@ spec.loader.exec_module(server)
 
 
 class Prepare(unittest.TestCase):
+    def test_capability(self):
+        api = server.Api('/health', 'GET', {'Host': f'127.0.0.1:{server.PORT}', 'Authorization': 'Bearer ' + server.KEY})
+        result = api.dispatch()
+        self.assertEqual(result.status_code, 200)
+        self.assertIn('prepare', json.loads(result.body)['capabilities'])
+        self.assertEqual(server.RUNTIME, {})
+
     def test_selection(self):
         data = server.validate({'kind': 'prepare'})
         self.assertEqual(data['chunks'], [])

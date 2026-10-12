@@ -467,7 +467,7 @@ class Api:
         self.authorize()
         if self.command == 'GET' and self.path == '/health':
             with GUARD:
-                state = {'ready': True, 'draining': DRAIN['until'] > time.monotonic(), 'loaded': list(RUNTIME), 'active': sum(job['finished'] is None for job in JOBS.values()), 'device': 'cpu', 'version': 2, 'source_sha256': SOURCE, 'workers_sha256': WORKERS}
+                state = {'ready': True, 'draining': DRAIN['until'] > time.monotonic(), 'loaded': list(RUNTIME), 'active': sum(job['finished'] is None for job in JOBS.values()), 'device': 'cpu', 'version': 2, 'capabilities': ['prepare'], 'source_sha256': SOURCE, 'workers_sha256': WORKERS}
             return self.send(200, state)
         if self.command == 'POST' and self.path in {'/v1/runtime/drain', '/v1/runtime/resume'}:
             key = self.headers.get('X-Raya-Drain-ID', '')

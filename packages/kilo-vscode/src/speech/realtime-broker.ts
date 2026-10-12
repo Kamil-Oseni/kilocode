@@ -1,5 +1,6 @@
 import type { SpeechSettings } from "../shared/speech"
 import { local } from "./local"
+import { compatibility } from "./local-tts"
 
 type Session = {
   id: string
@@ -43,6 +44,12 @@ type Claim = {
 const failure = (code: Failure["code"], error: string): Failure => ({ ok: false, code, error })
 const recovery =
   "End voice and restart the media frontend and Raya before reconnecting; remote resource release is unconfirmed."
+
+function setup(err: unknown) {
+  return err instanceof Error && err.message === compatibility
+    ? compatibility
+    : "Voice setup could not finish. Check the configured backend and media frontend, then reconnect."
+}
 
 /** One owner spans settings lookup, admission, delivery, and confirmed teardown. */
 export class RealtimeBroker {
@@ -181,13 +188,10 @@ export class RealtimeBroker {
       if (claim.cancelled) return await this.abandon(claim, failure("cancelled", "Voice start cancelled."))
       ready(claim.info)
       return { ok: true, info: claim.info }
-    } catch {
+    } catch (err) {
       return this.abandon(
         claim,
-        failure(
-          "setup_failed",
-          "Voice setup could not finish. Check the configured backend and media frontend, then reconnect.",
-        ),
+        failure("setup_failed", setup(err)),
       )
     }
   }

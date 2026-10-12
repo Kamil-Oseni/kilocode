@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto"
 import type { TtsInput, TtsResult } from "./minimax-tts"
 import { diagnostics, type PlaybackDiagnostic } from "./diagnostics"
 
+export const compatibility = "Update the local Speech service to match this Raya installation, then start voice again."
+
 type Choice = { model: string; voice: string; fallback: { from: string; reason: string } | null }
 type Sink = {
   cleanup?: (confirmed: boolean) => void
@@ -276,8 +278,7 @@ async function stream(
   const get = (path: string) => request(owner.origin, input.key, path, signal, {}, trace)
   const health = object(await json(await get("/health")))
   trace("health", { job: id, http: 200 })
-  if (!Number.isInteger(health.version) || Number(health.version) < 2 || health.ready !== true)
-    throw new Error("Local speech does not support owned jobs.")
+  support(health, prepare)
   live()
   owner.attempted = true
   let job = parse(
@@ -344,6 +345,13 @@ async function stream(
   }
 }
 
+function support(health: Record<string, unknown>, prepare: boolean) {
+  if (!Number.isInteger(health.version) || Number(health.version) < 2 || health.ready !== true)
+    throw new Error("Local speech does not support owned jobs.")
+  if (prepare && (!Array.isArray(health.capabilities) || !health.capabilities.includes("prepare")))
+    throw new Error(compatibility)
+}
+
 function payload(input: TtsInput & { allowFallback?: boolean }, prepare: boolean) {
   return JSON.stringify(
     prepare
@@ -375,6 +383,7 @@ function amplitude(bytes: Buffer) {
 }
 
 function safe(err: unknown) {
+  if (err instanceof Error && err.message === compatibility) return compatibility
   return err instanceof Error && err.message.startsWith("Local speech")
     ? err.message
     : "Local speech request or audio validation failed."

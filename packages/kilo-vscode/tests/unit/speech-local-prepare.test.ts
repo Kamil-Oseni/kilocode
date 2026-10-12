@@ -7,7 +7,7 @@ import type { KiloConnectionService } from "../../src/services/cli-backend/conne
 import { SpeechService } from "../../src/speech/service"
 
 test("cascade admission waits for real HTTP preparation and Stop fences readiness", async () => {
-  for (const action of ["ready", "stop", "stale"]) {
+  for (const action of ["ready", "stop", "stale", "legacy"]) {
     const values = new Map<string, unknown>()
     const secrets = new Map<string, string>()
     const context = {
@@ -31,14 +31,16 @@ test("cascade admission waits for real HTTP preparation and Stop fences readines
         },
       },
     } as vscode.ExtensionContext
-    const state = { id: "", ready: false, current: true, deletes: 0, connects: 0 }
+    const state = { id: "", ready: false, current: true, deletes: 0, connects: 0, posts: 0 }
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
       async fetch(request) {
         expect(request.headers.get("authorization")).toBe("Bearer private-test-key")
-        if (new URL(request.url).pathname === "/health") return Response.json({ version: 2, ready: true })
+        if (new URL(request.url).pathname === "/health")
+          return Response.json({ version: 2, ready: true, ...(action === "legacy" ? {} : { capabilities: ["prepare"] }) })
         if (request.method === "POST") {
+          state.posts++
           state.id = request.headers.get("x-raya-job-id") ?? ""
           expect(await request.json()).toEqual({
             kind: "prepare",
@@ -87,6 +89,22 @@ test("cascade admission waits for real HTTP preparation and Stop fences readines
         { requestId: "request_1", sessionID: "session_1", directory: root, connection, current: () => state.current },
         (msg) => posts.push(msg as (typeof posts)[number]),
       )
+      if (action === "legacy") {
+        await pending
+        expect(posts).toEqual([
+          {
+            type: "speechRealtimeError",
+            requestId: "request_1",
+            code: "setup_failed",
+            error: "Update the local Speech service to match this Raya installation, then start voice again.",
+            fallback: undefined,
+          },
+        ])
+        expect(state.posts).toBe(0)
+        expect(state.deletes).toBe(0)
+        expect(state.connects).toBe(1)
+        continue
+      }
       const deadline = Date.now() + 3000
       while (!state.id) {
         if (Date.now() > deadline) throw new Error("Preparation was not submitted.")

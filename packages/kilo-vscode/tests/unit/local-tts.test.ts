@@ -54,7 +54,8 @@ async function setup(mode: string) {
     async fetch(request) {
       const path = new URL(request.url).pathname
       calls.push({ method: request.method, path, auth: request.headers.get("authorization") })
-      if (path === "/health") return Response.json({ version: 2, ready: true })
+      if (path === "/health")
+        return Response.json({ version: 2, ready: true, ...(mode === "legacy" ? {} : { capabilities: ["prepare"] }) })
       if (request.method === "DELETE") {
         state.deletes++
         if (["replacement", "cleanup-delay", "replacement-failure"].includes(mode))
@@ -351,6 +352,15 @@ test("preparation publishes no text or audio and joins owned cleanup", async () 
     await expect(ctx.client.prepare(ctx.input)).rejects.toThrow("Local speech preparation produced audio.")
     expect(ctx.state.downloads).toBe(0)
     expect(ctx.state.deletes).toBe(1)
+  })
+})
+
+test("legacy owned jobs service cannot admit preparation or load a model", async () => {
+  await fixture("legacy", async (ctx) => {
+    await expect(ctx.client.prepare(ctx.input)).rejects.toThrow("Update the local Speech service")
+    expect(ctx.calls.map((call) => call.path)).toEqual(["/health"])
+    expect(ctx.state.deletes).toBe(0)
+    expect(ctx.chunks).toHaveLength(0)
   })
 })
 

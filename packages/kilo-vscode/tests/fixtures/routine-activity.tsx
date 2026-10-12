@@ -49,15 +49,31 @@ const card = {
 const [items, setItems] = createSignal<Parameters<typeof RoutineActivity>[0]["items"]>([card])
 const [error, setError] = createSignal<string>()
 const [choice, setChoice] = createSignal("origin")
+const [next, setNext] = createSignal<string>()
+const [historical, setHistorical] = createSignal(false)
+const [loading, setLoading] = createSignal(false)
+const [bootstrap, setBootstrap] = createSignal<Parameters<typeof RoutineActivity>[0]["bootstrap"]>()
 const opened: [string, string | undefined][] = []
 let refreshed = 0
+let older = 0
+let latest = 0
+let retried = 0
+let resumed = 0
 const dispose = render(
   () => (
     <>
       <RoutineActivity
         items={items()}
         error={error()}
+        next={next()}
+        historical={historical()}
+        loading={loading()}
+        bootstrap={bootstrap()}
         onRefresh={() => refreshed++}
+        onOlder={() => older++}
+        onLatest={() => latest++}
+        onRetry={() => retried++}
+        onContinue={() => resumed++}
         onOpen={(agent, worker) => opened.push([agent, worker])}
       />
       <ReportingChoice
@@ -111,7 +127,7 @@ try {
   assert.match(root.textContent!, /Previously loaded reports remain visible/)
   assert.equal(root.querySelectorAll("[data-report-id]").length, 1)
   buttons()
-    .find((button) => button.textContent?.includes("Refresh reports"))!
+    .find((button) => button.textContent?.includes("Refresh latest reports"))!
     .click()
   assert.equal(refreshed, 1)
   const select = root.querySelector<HTMLButtonElement>('[data-slot="select-select-trigger"]')!
@@ -132,6 +148,40 @@ try {
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(choice(), "review")
   assert.equal(root.querySelectorAll('[data-slot="select-select-trigger"]').length, 1)
+  setNext("opaque-next")
+  buttons()
+    .find((button) => button.textContent?.trim() === "Older reports")!
+    .click()
+  assert.equal(older, 1)
+  setHistorical(true)
+  assert.match(root.textContent!, /Viewing older reports/)
+  buttons()
+    .find((button) => button.textContent?.trim() === "Back to latest")!
+    .click()
+  assert.equal(latest, 1)
+  buttons()
+    .find((button) => button.textContent?.trim() === "Retry this page")!
+    .click()
+  assert.equal(retried, 1)
+  setItems([])
+  setError(undefined)
+  setNext(undefined)
+  assert.ok(root.querySelector('[data-component="routine-activity"]'), "An empty historical page remains visible")
+  assert.ok(buttons().find((button) => button.textContent?.trim() === "Back to latest"))
+  setBootstrap({ complete: false, scanned: 200, total: 501 })
+  assert.match(root.textContent!, /200 of 501 records checked/)
+  assert.equal(root.querySelectorAll("[data-report-id]").length, 0)
+  assert.doesNotMatch(root.textContent!, /No reports|No history/)
+  buttons()
+    .find((button) => button.textContent?.trim() === "Continue loading reports")!
+    .click()
+  assert.equal(resumed, 1)
+  setNext("opaque-next")
+  setLoading(true)
+  const pending = buttons().find((button) => button.textContent?.trim() === "Older reports")!
+  assert.equal(pending.disabled, true)
+  pending.click()
+  assert.equal(older, 1)
 } finally {
   dispose()
   await window.happyDOM.close()

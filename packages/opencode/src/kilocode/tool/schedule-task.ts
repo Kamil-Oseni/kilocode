@@ -10,6 +10,7 @@ import type { Storage } from "@/storage/storage"
 import type { Database } from "@opencode-ai/core/database/database"
 import { request, settled } from "./schedule-request"
 import { confirm } from "./routine-confirmation"
+import { SessionID } from "@/session/schema"
 
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
 const Label = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(120))
@@ -53,6 +54,9 @@ const Parameters = Schema.Struct({
   }),
   plan: Schema.optional(Schema.String),
   runNow: Schema.optional(Schema.Boolean),
+  reportSessionID: Schema.optional(SessionID),
+  overlap: RayaTask.Agent.fields.overlap,
+  missed: RayaTask.Agent.fields.missed,
 })
 
 function resolve(params: typeof Parameters.Type) {
@@ -101,6 +105,16 @@ export function scheduleTaskTool(input: {
             }
           }
           const schedule = parsed.value
+          if (params.reportSessionID) {
+            const source = yield* input.sessions.get(ctx.sessionID)
+            const target = yield* input.sessions.get(params.reportSessionID)
+            if (
+              source.projectID !== target.projectID ||
+              source.directory !== target.directory ||
+              target.metadata?.rayaRoutine
+            )
+              return yield* Effect.fail(new Error("Choose a normal report conversation in this workspace."))
+          }
           const prior = yield* settled(input.storage, ctx, params)
           if (prior) return prior
           const summary = [
@@ -112,6 +126,7 @@ export function scheduleTaskTool(input: {
             `Capabilities: ${params.capabilities.join(", ") || "none"}; per-run budget: ${params.budget === undefined ? "no saved limit" : `$${params.budget}`}`,
             `Output: ${params.output.description}; criteria: ${params.output.criteria.map((item) => `${item.id}: ${item.description}`).join("; ")}`,
             `Run now: ${params.runNow === true ? "yes" : "no"}`,
+            `Reports: ${params.reportSessionID ?? "this conversation"}; overlap: ${params.overlap ?? "existing policy"}; missed runs: ${params.missed ?? "existing policy"}`,
           ].join("\n")
           const decision = yield* confirm(input.storage, ctx, "schedule_task", { params, schedule }, summary).pipe(
             Effect.exit,
@@ -166,6 +181,10 @@ export function scheduleTaskTool(input: {
                   role: params.role,
                   objective: params.objective,
                   output: params.output,
+                  sourceSessionID: ctx.sessionID,
+                  reportSessionID: params.reportSessionID,
+                  overlap: params.overlap,
+                  missed: params.missed,
                   capabilities: [...params.capabilities],
                   access: params.access,
                   tools: [...params.tools],
@@ -233,7 +252,15 @@ export function scheduleTaskTool(input: {
               ),
             ),
           )
-        }),
+        }).pipe(
+          Effect.catch((err) =>
+            Effect.succeed({
+              title: "Routine request needs review",
+              output: err instanceof Error ? err.message : String(err),
+              metadata: { requestStatus: "unresolved" },
+            }),
+          ),
+        ),
     }),
   )
 }

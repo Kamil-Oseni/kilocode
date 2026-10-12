@@ -5,6 +5,7 @@ import { payload } from "./profile-bundle"
 import type { z } from "zod"
 import { mapper } from "./profile-workspaces"
 import { inactiveSQL } from "./profile-inactive-sql"
+import { RayaRoutineReports } from "../task/projection"
 
 /** Source evidence stays in the review archive. Unfinished source-device work never becomes destination work. */
 export function inactive(source: z.output<typeof payload>, now: number, mapping: ReadonlyMap<string, string>) {
@@ -65,6 +66,19 @@ export function inactive(source: z.output<typeof payload>, now: number, mapping:
           // Source event cursors belong to the source-device journal. Preserve that
           // complete journal in restore-source; the destination starts without replay.
           value: JSON.stringify({ ...history, runs, events: [], cursor: 0 }),
+        },
+      ]
+    }
+    if (item.path.startsWith("raya/routine-reports/")) {
+      const card = Schema.decodeUnknownSync(RayaRoutineReports.Card)(JSON.parse(item.value))
+      return [
+        {
+          ...item,
+          value: JSON.stringify({
+            ...card,
+            directory: card.directory ? translate(card.directory) : "",
+            delivery: "unavailable",
+          }),
         },
       ]
     }

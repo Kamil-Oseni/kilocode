@@ -1,4 +1,5 @@
 import { Codec } from "./schema"
+import { SessionID } from "@/session/schema"
 import * as capacity from "./capacity"
 import { Effect, Exit, Schema } from "effect"
 import { createHash } from "node:crypto"
@@ -134,6 +135,10 @@ export namespace RayaTask {
     role: Schema.optional(Schema.String),
     objective: Schema.String,
     output: Schema.optional(Output),
+    sourceSessionID: Schema.optional(SessionID),
+    reportSessionID: Schema.optional(SessionID),
+    overlap: Agent.fields.overlap,
+    missed: Agent.fields.missed,
     capabilities: Schema.optional(Schema.Array(Schema.String)),
     memoryScope: Schema.optional(Schema.Literals(["role", "project", "session"])),
     schedule: Schedule,
@@ -218,6 +223,10 @@ export namespace RayaTask {
       role: value.definition.role,
       objective: value.definition.objective,
       output: value.definition.output,
+      sourceSessionID: value.definition.sourceSessionID,
+      reportSessionID: value.definition.reportSessionID,
+      overlap: value.definition.overlap,
+      missed: value.definition.missed,
       capabilities: value.definition.capabilities,
       memoryScope: value.definition.memoryScope,
       schedule: value.definition.schedule,
@@ -984,6 +993,10 @@ export namespace RayaTask {
         role,
         objective: input.objective.trim(),
         output: contract,
+        sourceSessionID: input.sourceSessionID,
+        reportSessionID: input.reportSessionID,
+        overlap: input.overlap,
+        missed: input.missed,
         capabilities,
         memoryScope: input.memoryScope ?? "role",
         schedule,
@@ -1298,6 +1311,7 @@ export namespace RayaTask {
         expectedPaths?: PathAccess | "unset"
         expectedOutput?: Output | "unset"
         expectedBudget?: number | "unset"
+        expectedReportSessionID?: SessionID | "unset"
         expectedProvisioning?: boolean
         provisioning?: typeof Provisioning.Type
       },
@@ -1307,6 +1321,21 @@ export namespace RayaTask {
       const index = items.findIndex((item) => item.id === id)
       if (index < 0) return yield* new NotFoundError({ message: "Agent not found" })
       const prior = items[index]!
+      if (prior.sourceSessionID && patch.sourceSessionID && patch.sourceSessionID !== prior.sourceSessionID)
+        return yield* new GuardError({
+          kind: "conflict",
+          field: "sourceSessionID",
+          message: "A routine cannot change its originating conversation.",
+        })
+      if (
+        patch.expectedReportSessionID !== undefined &&
+        patch.expectedReportSessionID !== (prior.reportSessionID ?? "unset")
+      )
+        return yield* new GuardError({
+          kind: "conflict",
+          field: "reportSessionID",
+          message: "This routine's report destination changed. Reload it before editing again.",
+        })
       if (patch.enabled === true && deps.database) {
         const { RayaTaskOrganization } = yield* Effect.promise(() => import("./organization"))
         if (yield* RayaTaskOrganization.make(deps.database, { get }, deps.storage).stopped(id))
@@ -1375,7 +1404,10 @@ export namespace RayaTask {
           field: "paths",
           message: "Choose a primary write folder before adding other folders.",
         })
-      const changed = !isDeepStrictEqual(schedule, prior.schedule)
+      const changed =
+        !isDeepStrictEqual(schedule, prior.schedule) ||
+        (patch.overlap !== undefined && patch.overlap !== prior.overlap) ||
+        (patch.missed !== undefined && patch.missed !== prior.missed)
       const version = (prior.scheduleVersion ?? 1) + (changed ? 1 : 0)
       if (!Number.isSafeInteger(version))
         return yield* new GuardError({ message: "Routine schedule version limit reached." })
@@ -1388,6 +1420,10 @@ export namespace RayaTask {
         capabilities: patch.capabilities ?? prior.capabilities,
         provisioning: patch.provisioning ?? prior.provisioning,
         memoryScope: patch.memoryScope ?? prior.memoryScope,
+        sourceSessionID: patch.sourceSessionID ?? prior.sourceSessionID,
+        reportSessionID: patch.reportSessionID ?? prior.reportSessionID,
+        overlap: patch.overlap ?? prior.overlap,
+        missed: patch.missed ?? prior.missed,
         schedule,
         budget: patch.budget === null || patch.budget === 0 ? undefined : (patch.budget ?? prior.budget),
         scheduleVersion: version,

@@ -26,6 +26,7 @@ import type { Storage } from "@/storage/storage"
 import * as Tool from "@/tool/tool"
 import { workflow } from "./workflow-request"
 import { confirm } from "./routine-confirmation"
+import { SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
@@ -82,6 +83,9 @@ const Existing = Schema.Struct({
   ...Relations,
 })
 const New = Schema.Struct({
+  reportSessionID: Schema.optional(SessionID),
+  overlap: RayaTask.Agent.fields.overlap,
+  missed: RayaTask.Agent.fields.missed,
   kind: Schema.Literal("new"),
   key: Key,
   name: Label,
@@ -106,6 +110,9 @@ const CreateOrganization = Schema.Struct({
   workers: Schema.Array(Schema.Union([Existing, New])).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
 })
 const RoutinePatch = Schema.Struct({
+  reportSessionID: Schema.optional(SessionID),
+  overlap: RayaTask.Agent.fields.overlap,
+  missed: RayaTask.Agent.fields.missed,
   name: Schema.optional(Label),
   role: Schema.optional(Label),
   objective: Schema.optional(Text),
@@ -143,6 +150,10 @@ const OrganizationPlan = Schema.Struct({
   create: OrganizationCreate,
 })
 const RoutineMutation = Schema.Struct({
+  sourceSessionID: Schema.optional(SessionID),
+  reportSessionID: Schema.optional(SessionID),
+  overlap: RayaTask.Agent.fields.overlap,
+  missed: RayaTask.Agent.fields.missed,
   name: Schema.optional(Label),
   role: Schema.optional(Label),
   objective: Schema.optional(Schema.String),
@@ -156,6 +167,7 @@ const RoutineMutation = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   schedule: Schema.optional(RayaTask.Schedule),
   expectedScheduleVersion: Schema.Int,
+  expectedReportSessionID: Schema.Union([SessionID, Schema.Literal("unset")]),
   expectedAccess: Schema.Literals(["brief", "full", "unset"]),
   expectedTools: Schema.optional(Schema.Union([Tools, Schema.Literal("unset")])),
   expectedOutput: Schema.Union([RayaTask.Output, Schema.Literal("unset")]),
@@ -291,6 +303,10 @@ function routineResult(agent: RayaTask.Agent, title = "Routine updated") {
 }
 
 function matches(agent: RayaTask.Agent, patch: typeof RoutineMutation.Type) {
+  if (patch.sourceSessionID !== undefined && agent.sourceSessionID !== patch.sourceSessionID) return false
+  if (patch.reportSessionID !== undefined && agent.reportSessionID !== patch.reportSessionID) return false
+  if (patch.overlap !== undefined && agent.overlap !== patch.overlap) return false
+  if (patch.missed !== undefined && agent.missed !== patch.missed) return false
   if (patch.name !== undefined && agent.name !== patch.name) return false
   if (patch.role !== undefined && agent.role !== patch.role) return false
   if (patch.objective !== undefined && agent.objective !== patch.objective) return false
@@ -366,6 +382,10 @@ function matchesWorker(agent: RayaTask.Agent, input: typeof RayaTask.Create.Type
     agent.name === input.name.trim() &&
     agent.role === (input.role ?? "generalist").trim() &&
     agent.objective === input.objective.trim() &&
+    agent.sourceSessionID === input.sourceSessionID &&
+    agent.reportSessionID === input.reportSessionID &&
+    agent.overlap === input.overlap &&
+    agent.missed === input.missed &&
     isDeepStrictEqual(agent.output, input.output) &&
     isDeepStrictEqual(agent.capabilities, input.capabilities ?? []) &&
     isDeepStrictEqual(agent.schedule, input.schedule) &&
@@ -607,6 +627,10 @@ export function routineManagementTools(input: {
                 continue
               }
               const create = {
+                sourceSessionID: ctx.sessionID,
+                reportSessionID: item.reportSessionID,
+                overlap: item.overlap,
+                missed: item.missed,
                 name: item.name,
                 role: item.role,
                 objective: item.objective,
@@ -618,6 +642,16 @@ export function routineManagementTools(input: {
                 schedule: yield* schedule(item),
                 plan: item.plan,
                 enabled: item.enabled,
+              }
+              if (item.reportSessionID) {
+                const source = yield* input.sessions.get(ctx.sessionID)
+                const target = yield* input.sessions.get(item.reportSessionID)
+                if (
+                  source.projectID !== target.projectID ||
+                  source.directory !== target.directory ||
+                  target.metadata?.rayaRoutine
+                )
+                  return yield* Effect.fail(new Error("Choose a normal report conversation in this workspace."))
               }
               yield* tasks.check(create)
               workers.push({
@@ -685,6 +719,13 @@ export function routineManagementTools(input: {
                   item.kind === "existing"
                     ? `${item.key}: existing worker ${item.agentID}; role ${item.role}; supervisor ${item.supervisorKey ?? "none"}; delegates to ${item.delegatesTo?.join(", ") || "none"}`
                     : `${item.key}: ${item.name}, ${item.role}; job ${item.objective}; schedule ${item.when ?? item.cron}${item.timezone ? ` (${item.timezone})` : ""}; access ${item.access}; tools ${item.tools.join(", ") || "questions only"}; capabilities ${item.capabilities.join(", ") || "none"}; budget ${item.budget === undefined ? "no saved limit" : `$${item.budget}`}; output ${item.output.description}; criteria ${item.output.criteria.map((criterion) => `${criterion.id}: ${criterion.description}`).join("; ")}; supervisor ${item.supervisorKey ?? "none"}; delegates to ${item.delegatesTo?.join(", ") || "none"}; may create workers ${item.canCreateWorkers === true ? "yes" : "no"}`,
+                ),
+                ...params.workers.flatMap((item) =>
+                  item.kind === "new"
+                    ? [
+                        `${item.key}: reports ${item.reportSessionID ?? "this conversation"}; overlap ${item.overlap ?? "existing policy"}; missed runs ${item.missed ?? "existing policy"}`,
+                      ]
+                    : [],
                 ),
               ].join("\n")
               if (!(yield* confirm(input.storage, ctx, "create_organization", plan, summary)))
@@ -1347,6 +1388,21 @@ export function routineManagementTools(input: {
           if (params.patch.timezone !== undefined && params.patch.when === undefined && params.patch.cron === undefined)
             return yield* Effect.fail(new Error("Timezone requires a calendar schedule change."))
           const before = yield* tasks.get(params.agentID)
+          if (params.patch.reportSessionID) {
+            const source = yield* input.sessions.get(ctx.sessionID)
+            const target = yield* input.sessions.get(params.patch.reportSessionID)
+            if (
+              source.projectID !== target.projectID ||
+              source.directory !== target.directory ||
+              target.metadata?.rayaRoutine
+            )
+              return yield* Effect.fail(new Error("Choose a normal report conversation in this workspace."))
+            if (before.sourceSessionID) {
+              const origin = yield* input.sessions.get(before.sourceSessionID)
+              if (origin.projectID !== target.projectID || origin.directory !== target.directory)
+                return yield* Effect.fail(new Error("Reports must remain in the originating workspace."))
+            }
+          }
           const allowed = before.capabilities.some((item) => item.toLowerCase() === Provision)
           const base = params.patch.capabilities ?? before.capabilities
           const capabilities =
@@ -1367,6 +1423,10 @@ export function routineManagementTools(input: {
           const timed = params.patch.when !== undefined || params.patch.cron !== undefined
           const nextSchedule = timed ? yield* schedule(params.patch) : undefined
           const patch = yield* Schema.decodeUnknownEffect(RoutineMutation)({
+            sourceSessionID: params.patch.reportSessionID ? (before.sourceSessionID ?? ctx.sessionID) : undefined,
+            reportSessionID: params.patch.reportSessionID,
+            overlap: params.patch.overlap,
+            missed: params.patch.missed,
             name: params.patch.name,
             role: params.patch.role,
             objective: params.patch.objective,
@@ -1380,6 +1440,7 @@ export function routineManagementTools(input: {
             enabled: params.patch.enabled,
             ...(nextSchedule ? { schedule: nextSchedule } : {}),
             expectedScheduleVersion: before.scheduleVersion ?? 1,
+            expectedReportSessionID: before.reportSessionID ?? "unset",
             expectedAccess: before.access ?? "unset",
             expectedTools: before.tools ?? "unset",
             expectedOutput: before.output ?? "unset",

@@ -4,9 +4,10 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { ProcessHost, recipe } from "../../../opencode/script/kilocode/process-host"
 import { packaged } from "../../src/second-brain/control/index"
+const extension = path.resolve(process.env.RAYA_MEMORY_CONTROL_EXTENSION ?? path.join(import.meta.dir, "../.."))
 
 test("Memory accepts the current authenticated native producer and its actual x64 protocol", async () => {
-  const root = path.resolve(".")
+  const root = extension
   const helper = await packaged(root)
   const metadata = JSON.parse(await readFile(path.join(root, "bin/raya-process-host.json"), "utf8"))
   expect(metadata.recipe).toBe(await recipe())
@@ -20,7 +21,7 @@ test("Memory refuses a foreign recipe even when executable and symbols hashes ma
   try {
     const bin = path.join(root, "bin")
     await mkdir(bin)
-    const current = await packaged(path.resolve("."))
+    const current = await packaged(extension)
     for (const file of current.names) await copyFile(file, path.join(bin, path.basename(file)))
     const file = path.join(bin, "raya-process-host.json")
     const metadata = JSON.parse(await readFile(file, "utf8"))
@@ -33,13 +34,23 @@ test("Memory refuses a foreign recipe even when executable and symbols hashes ma
   }
 })
 
-for (const variant of ["retained", "previous", "reviewed", "attribution", "version", "executable", "symbols"] as const)
+for (const variant of [
+  "retained",
+  "previous",
+  "reviewed",
+  "attribution",
+  "version",
+  "executable",
+  "symbols",
+  "exe-bytes",
+  "pdb-bytes",
+] as const)
   test(`Memory ${["retained", "previous", "reviewed", "attribution"].includes(variant) ? "accepts" : "refuses"} ${variant} metadata with actual packaged files`, async () => {
     const root = await mkdtemp(path.join(tmpdir(), "raya-memory-helper-metadata-"))
     try {
       const bin = path.join(root, "bin")
       await mkdir(bin)
-      const current = await packaged(path.resolve("."))
+      const current = await packaged(extension)
       for (const file of current.names) await copyFile(file, path.join(bin, path.basename(file)))
       const file = path.join(bin, "raya-process-host.json")
       const metadata = JSON.parse(await readFile(file, "utf8"))
@@ -62,6 +73,12 @@ for (const variant of ["retained", "previous", "reviewed", "attribution", "versi
         ...(variant === "symbols" ? { pdb: "0".repeat(64) } : {}),
       }
       await writeFile(file, JSON.stringify(row))
+      if (variant === "exe-bytes" || variant === "pdb-bytes") {
+        const image = path.join(bin, variant === "exe-bytes" ? "raya-process-host.exe" : "raya-process-host.pdb")
+        const bytes = await readFile(image)
+        bytes[bytes.length - 1] ^= 1
+        await writeFile(image, bytes)
+      }
       // These metadata fixtures exercise admission, not a newly compiled producer or native protocol.
       if (["retained", "previous", "reviewed", "attribution"].includes(variant)) {
         const accepted = await packaged(root)

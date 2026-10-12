@@ -48,8 +48,17 @@ export type BrainDreamActivity = Readonly<{
   lifecycle: "active" | "settling" | "joined" | "uncertain"
 }>
 
+export type CaptureReceipt = Readonly<{
+  id: string
+  project: string
+  sessionID: string
+  messageID: string
+  receipt: string
+}>
+
 export type BrainCapture = Readonly<{
   enabled?: boolean
+  lastSaved?: CaptureReceipt
   status: "unavailable" | "paused" | "ready" | "saving" | "uncertain" | "capacity"
   reason?: "source_capacity" | "ledger_capacity"
 }>

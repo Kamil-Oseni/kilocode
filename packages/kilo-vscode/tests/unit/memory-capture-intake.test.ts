@@ -10,6 +10,77 @@ import { fingerprint } from "../../src/second-brain/failed-repair"
 import { parse } from "../../src/second-brain/settings"
 import { metadata } from "../../src/second-brain/manifest"
 
+test("last saved receipt follows confirmed publication order and excludes other scopes or uncertain attempts", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "raya-capture-receipt-"))
+  const file = path.join(dir, "state.json")
+  const storage = {
+    get<T>(key: string): T | undefined {
+      return existsSync(file) ? JSON.parse(readFileSync(file, "utf8"))[key] : undefined
+    },
+    async update(key: string, value: unknown) {
+      const prior = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {}
+      await Bun.write(file, JSON.stringify({ ...prior, [key]: value }))
+    },
+  }
+  try {
+    const intake = new CaptureIntake(storage)
+    const binding = {
+      root: path.join(dir, "notes"),
+      release: "a".repeat(64),
+      owner: "owner",
+      generation: {},
+      index: "synced" as const,
+    }
+    await intake.save(
+      {
+        version: 1,
+        enabled: true,
+        root: binding.root,
+        release: binding.release,
+        model: "local-selected",
+        zone: "America/Toronto",
+        authorization: { source: "Reviewed choice", sha256: "b".repeat(64) },
+      },
+      binding,
+    )
+    const first = { project: dir, sessionID: "conversation", messageID: "first", source_sha256: "c".repeat(64) }
+    const second = { ...first, messageID: "second" }
+    expect(await intake.grant(first, binding, () => {})).toBeDefined()
+    expect(await intake.grant(second, binding, () => {})).toBeDefined()
+    expect(intake.lastSaved(binding)).toBeUndefined()
+    await intake.finish(second, "published", "d".repeat(64))
+    expect(intake.lastSaved(binding)?.messageID).toBe("second")
+    await intake.finish(first, "published", "e".repeat(64))
+    const receipt = intake.lastSaved(binding)!
+    expect(receipt).toEqual({
+      id: receipt.id,
+      project: dir,
+      sessionID: "conversation",
+      messageID: "first",
+      receipt: "e".repeat(64),
+    })
+    expect(receipt.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(new CaptureIntake(storage).lastSaved(binding)).toEqual(receipt)
+    expect(intake.lastSaved()).toBeUndefined()
+    expect(intake.lastSaved({ ...binding, root: path.join(dir, "other") })).toBeUndefined()
+    expect(intake.lastSaved({ ...binding, release: "f".repeat(64) })).toBeUndefined()
+    const skipped = { ...first, messageID: "skipped" }
+    await intake.grant(skipped, binding, () => {})
+    await intake.finish(skipped, "skipped")
+    expect(intake.lastSaved(binding)).toEqual(receipt)
+    const uncertain = { ...first, messageID: "uncertain" }
+    await intake.grant(uncertain, binding, () => {})
+    await intake.finish(uncertain, "uncertain")
+    expect(intake.lastSaved(binding)).toEqual(receipt)
+    expect(intake.snapshot(binding).status).toBe("uncertain")
+    await storage.update("raya.secondBrain.personalCapture.confirmed", { id: receipt.id, receipt: "f".repeat(64) })
+    expect(intake.lastSaved(binding)?.messageID).toBe("second")
+  } finally {
+    expect(path.dirname(dir)).toBe(tmpdir())
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("pausing future capture preserves original consent fields and an in-flight save ledger", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "raya-capture-pause-"))
   const file = path.join(dir, "state.json")

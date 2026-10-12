@@ -40,6 +40,7 @@ import { register as mediaCommands } from "./media/native"
 import { inspect as preparation, pinned, type PreparedSetup } from "./prepared-setup"
 import { SetupFlow } from "./setup-flow"
 import { hydrate } from "./setup-health"
+import type { CaptureReceipt } from "../shared/second-brain"
 import { mkdir, rename, writeFile } from "node:fs/promises"
 import { createHash, randomUUID } from "node:crypto"
 
@@ -185,6 +186,24 @@ export class BrainHost {
   private debt?: unknown
   private readonly activity = new DreamActivity()
   private onboarding?: SetupFlow
+
+  observeCapture(listener: (receipt: CaptureReceipt | undefined) => void): vscode.Disposable {
+    const publish = () => {
+      if (this.closing || !vscode.workspace.isTrusted) {
+        listener(undefined)
+        return
+      }
+      try {
+        listener(this.intake.lastSaved(this.service.captureSnapshot()))
+      } catch {
+        console.warn("[Raya] Confirmed Memory saved-entry metadata is unavailable")
+        listener(undefined)
+      }
+    }
+    const subscription = this.intake.observe(publish)
+    publish()
+    return subscription
+  }
 
   dreamActivity() {
     return this.activity.snapshot()
@@ -594,7 +613,11 @@ export class BrainHost {
         live: true,
         state: {
           ...view.state,
-          capture: { ...this.intake.snapshot(this.service.captureSnapshot()), enabled: this.intake.enabled() },
+          capture: {
+            ...this.intake.snapshot(this.service.captureSnapshot()),
+            enabled: this.intake.enabled(),
+            lastSaved: this.intake.lastSaved(this.service.captureSnapshot()),
+          },
           control: this.control.snapshot(),
         },
       })
@@ -1289,7 +1312,11 @@ export class BrainHost {
         state: {
           ...state,
           control: this.control.snapshot(),
-          capture: { ...this.intake.snapshot(this.service.captureSnapshot()), enabled: this.intake.enabled() },
+          capture: {
+            ...this.intake.snapshot(this.service.captureSnapshot()),
+            enabled: this.intake.enabled(),
+            lastSaved: this.intake.lastSaved(this.service.captureSnapshot()),
+          },
         },
       })
     }

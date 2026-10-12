@@ -27,6 +27,7 @@ type Storage = { get<T>(key: string): T | undefined; update(key: string, value: 
 const key = "raya.secondBrain.personalCapture"
 const ledger = "raya.secondBrain.personalCapture.turns"
 const diagnostics = "raya.secondBrain.personalCapture.failures"
+const marker = "raya.secondBrain.personalCapture.confirmed"
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const text = (max: number) => z.string().min(1).max(max)
 const source = z
@@ -138,6 +139,7 @@ const record = z
   })
   .strict()
 const rows = z.array(record).max(10000)
+const completed = z.object({ id: z.string().uuid(), receipt: hash }).strict()
 export function records(input: unknown) {
   return rows.parse(input ?? [])
 }
@@ -432,6 +434,39 @@ export class CaptureIntake {
     const cfg = consent.parse(raw)
     if (cfg.root !== binding.root || cfg.release !== binding.release) return undefined
     return cfg
+  }
+
+  /** Confirmed ledger evidence only, scoped to the current admitted root and release. */
+  lastSaved(binding?: CaptureBinding): BrainCapture["lastSaved"] {
+    if (!binding || !this.saved(binding)) return undefined
+    const published = rows
+      .parse(this.storage.get(ledger) ?? [])
+      .filter(
+        (row) =>
+          row.root === binding.root &&
+          row.release === binding.release &&
+          row.phase === "published" &&
+          hash.safeParse(row.receipt).success,
+      )
+    const parsed = completed.safeParse(this.storage.get(marker))
+    const latest = parsed.success
+      ? (published.find((row) => row.id === parsed.data.id && row.receipt === parsed.data.receipt) ?? published.at(-1))
+      : published.at(-1)
+    if (!latest) return undefined
+    return {
+      id: latest.id,
+      project: latest.project,
+      sessionID: latest.sessionID,
+      messageID: latest.messageID,
+      receipt: latest.receipt!,
+    }
+  }
+
+  private async confirmed(row: Record) {
+    const next = completed.parse({ id: row.id, receipt: row.receipt })
+    await this.storage.update(marker, next)
+    if (!isDeepStrictEqual(this.storage.get(marker), next))
+      throw new Error("Saved-entry completion metadata was not recorded")
   }
 
   grant(turn: Turn, binding: CaptureBinding, check: () => void) {
@@ -811,6 +846,10 @@ export class CaptureIntake {
       )
       await this.storage.update(ledger, next)
       if (!isDeepStrictEqual(this.storage.get(ledger), next)) throw new Error("Capture outcome persistence failed")
+      if (phase === "published")
+        await this.confirmed(next.find((row) => row.id === id)!).catch(() => {
+          console.warn("[Raya] Confirmed Memory publication has no recorded latest-entry metadata")
+        })
       if (phase === "saving") this.active.add(id)
       if (phase !== "saving") this.active.delete(id)
       this.changed()

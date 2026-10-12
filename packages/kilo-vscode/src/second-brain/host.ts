@@ -663,9 +663,18 @@ export class BrainHost {
       }),
       vscode.commands.registerCommand("raya.memory.archiveFailedSetup", () => this.archive()),
       vscode.commands.registerCommand("raya.memory.resumeClosedPair", () => this.resume()),
-      vscode.commands.registerCommand("kilo-code.new.memory.recoverClosedPair", (...args: unknown[]) => {
-        if (args.length || !vscode.workspace.isTrusted) throw new Error("Trusted native Memory recovery required")
-        return this.resume()
+      vscode.commands.registerCommand("kilo-code.new.memory.recoverClosedPair", async (...args: unknown[]) => {
+        try {
+          if (args.length || !vscode.workspace.isTrusted) throw new Error("Trusted native Memory recovery required")
+          return await this.resume()
+        } catch (err) {
+          const message =
+            err instanceof Error && err.message === "Packaged helper fingerprint refused"
+              ? "Memory recovery could not verify its packaged helper. Install the updated Raya package, then retry recovery."
+              : "Memory recovery could not finish. Open Memory to review its status before trying again."
+          void vscode.window.showErrorMessage(message)
+          throw err
+        }
       }),
       vscode.commands.registerCommand("raya.memory.inspectDream", () => this.inspectDream()),
       vscode.commands.registerCommand("kilo-code.new.memory.activateReviewedCapture", (...args: unknown[]) => {

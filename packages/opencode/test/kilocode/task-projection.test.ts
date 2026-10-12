@@ -53,8 +53,17 @@ it.live("routine cards survive reopening, upgrade queued occurrences and keep th
         sourceSessionID: source.id,
       })
       const reports = RayaRoutineReports.make({ storage, sessions, scope: source })
-      yield* reports.publishDeferred({ agent, id: "occurrence", at: 1, summary: "Waiting" })
-      expect((yield* reports.publishDeferred({ agent, id: "occurrence", at: 1, summary: "Waiting" }))?.revision).toBe(1)
+      yield* reports.publishDeferred({
+        agent,
+        id: "occurrence",
+        at: 1,
+        summary: "Waiting",
+        notice: { at: 30, reason: "busy" },
+      })
+      const pending = yield* reports.publishDeferred({ agent, id: "occurrence", at: 0, summary: "Queued" })
+      expect(pending?.revision).toBe(1)
+      expect(pending?.summary).toBe("Waiting")
+      expect(pending?.notice).toEqual({ at: 30, reason: "busy" })
       const run: RayaTask.Run = {
         id: "run",
         agentID: agent.id,
@@ -85,6 +94,7 @@ it.live("routine cards survive reopening, upgrade queued occurrences and keep th
         runRevision: 2,
         reportSessionID: source.id,
         delivery: "delivered",
+        notice: { at: 30, reason: "busy" },
       })
       expect(cards[0].summary).toHaveLength(8000)
       expect(yield* reports.list(target.id)).toEqual([])

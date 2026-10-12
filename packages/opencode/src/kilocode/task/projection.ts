@@ -29,6 +29,7 @@ export namespace RayaRoutineReports {
     at: Codec.Timestamp,
     summary: Schema.String.check(Schema.isMaxLength(8000)),
     delivery: Schema.Literals(["delivered", "unavailable"]),
+    notice: Schema.optional(Schema.Struct({ at: Codec.Timestamp, reason: Schema.Literals(["busy", "deferred"]) })),
   })
   export type Card = typeof Card.Type
   export const Changed = BusEvent.define("raya.routine.report.changed", Schema.Struct({ card: Card }))
@@ -50,7 +51,14 @@ export namespace RayaRoutineReports {
         Effect.flatMap(decode),
         Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
       )
-    type Input = { agent: Codec.Agent; id: string; run?: Codec.Run; at: number; summary: string }
+    type Input = {
+      agent: Codec.Agent
+      id: string
+      run?: Codec.Run
+      at: number
+      summary: string
+      notice?: Card["notice"]
+    }
     const publish = Effect.fn("RayaRoutineReports.publish")(function* (value: Input) {
       if (value.run && value.agent.id !== value.run.agentID)
         return yield* Effect.fail(new Error("Report worker identity changed."))
@@ -96,9 +104,11 @@ export namespace RayaRoutineReports {
         revision: prior?.revision ?? 1,
         runRevision: value.run?.revision ?? (value.run ? 1 : undefined),
         status: replay ? prior!.status : (value.run?.status ?? "queued"),
-        at: replay ? prior!.at : value.at,
-        summary: replay ? prior!.summary : value.summary.slice(0, 8000),
+        at: replay || (prior?.notice && !value.run && !value.notice) ? prior!.at : value.at,
+        summary:
+          replay || (prior?.notice && !value.run && !value.notice) ? prior!.summary : value.summary.slice(0, 8000),
         delivery,
+        notice: prior?.notice ?? value.notice,
       }
       const saved = yield* decode(JSON.parse(JSON.stringify(card)))
       if (isDeepStrictEqual(prior, saved)) return prior
@@ -123,8 +133,13 @@ export namespace RayaRoutineReports {
           }),
           "Routine report",
         ),
-      publishDeferred: (value: { agent: Codec.Agent; id: string; at: number; summary: string }) =>
-        mutate(input.storage, publish(value), "Routine report"),
+      publishDeferred: (value: {
+        agent: Codec.Agent
+        id: string
+        at: number
+        summary: string
+        notice?: Card["notice"]
+      }) => mutate(input.storage, publish(value), "Routine report"),
       list: Effect.fn("RayaRoutineReports.list")(function* (id: SessionID) {
         const target = yield* input.sessions.get(id)
         const scope =

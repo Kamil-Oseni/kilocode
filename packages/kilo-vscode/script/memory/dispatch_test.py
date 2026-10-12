@@ -18,13 +18,32 @@ from retirement import decode, fingerprint
 
 
 class Tests(Base):
-    def journal(self, protocol="raya.retrieval.retirement.v1"):
+    def journal(self, protocol="raya.retrieval.retirement.v1", personal=False):
         self.folder.rmdir()
         names = ('server.py', 'index.py', 'notes.py', 'policy.py', 'admission.py',
                  'host.py', 'operations.py', 'retirement.py', 'namespace.py', 'historical.py', 'dispatch.py', 'proposals.py')
+        if personal:
+            names += ('capture.py', 'entries.py', 'management.py')
         self.source = {name: hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest() for name in names}
         self.generations = {name: MODULE.generation(self.root if name == 'root' else self.root / name) for name in ('root', 'Runs', 'Requests')}
         return Journal(str(self.root), self.sid, self.generations, 'e' * 32, fingerprint(self.source), protocol)
+
+    def test_personal_cohort_reserves_original_request_before_dispatch(self):
+        journal = self.journal('raya.retrieval.request.settlement.v2', personal=True)
+        for name in ('capture.py', 'entries.py', 'management.py'):
+            malformed = dict(self.source)
+            malformed.pop(name)
+            with self.assertRaisesRegex(ValueError, 'Exact reviewed source set required'):
+                prepare(journal, '2' * 32, 'sync', {}, malformed)
+            self.assertEqual(list(journal.folder.iterdir()), [])
+        with self.assertRaisesRegex(ValueError, 'Exact reviewed source set required'):
+            prepare(journal, '2' * 32, 'sync', {}, dict(self.source, **{'unknown.py': 'a' * 64}))
+        self.assertEqual(list(journal.folder.iterdir()), [])
+        prepared = prepare(journal, '1' * 32, 'sync', {'force_rebuild': False}, self.source)
+        self.assertEqual(prepared['pending']['status'], 'pending')
+        self.assertEqual(prepared['pending']['selected_release_sha256'], fingerprint(self.source))
+        self.assertEqual(len(prepared['selection'].record()['source_sha256']), 15)
+        self.assertEqual(len(list(journal.folder.glob('*.json'))), 2)
 
     def test_reusable_operation_preserves_original_dispatch(self):
         journal = self.journal('raya.retrieval.request.settlement.v2')

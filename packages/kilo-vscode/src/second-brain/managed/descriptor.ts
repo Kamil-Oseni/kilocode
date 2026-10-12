@@ -4,7 +4,7 @@ import { document, child, check } from "../control/frames"
 import { image, directory, normalize } from "../control/identity"
 import { selected as catalog, resident } from "../control/catalog-capture"
 import type { Setup } from "../settings"
-import { interpreter, supervisors, current, finitecohort } from "./catalog"
+import { interpreter, supervisors, current, finitecohort, compatible, paired as supported } from "./catalog"
 import { cohort, fingerprint, images } from "./reuse-catalog"
 import { parse } from "./value"
 
@@ -217,10 +217,6 @@ function credentials(cfg: Descriptor, memory: Record<string, unknown>, retrieval
   )
 }
 
-function compatible(pins: Readonly<Record<string, unknown>>, digest: string) {
-  return !("management.py" in pins) || digest === current
-}
-
 function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, reuse: boolean) {
   const original = path.join(cfg.root, "source", ...(reuse && kind === "retrieval" ? [] : [kind]))
   if (plan.source === original) return
@@ -230,7 +226,7 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
         path.dirname(plan.source) === cfg.root &&
         /^raya-memory-source-upgrade-[a-f0-9]{32}$/.test(path.basename(plan.source)) &&
         cfg.supervisor.path === path.join(plan.source, "supervise.py") &&
-        cfg.supervisor.sha256 === current &&
+        supported(cfg.supervisor.sha256) &&
         isDeepStrictEqual({ ...row(plan.source_sha256) }, images),
       "Paired Retrieval upgrade source differs",
     )
@@ -238,6 +234,7 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
   }
   const pins = [
     current,
+    "f9b6762a5bb729c7d04fe5e20821fefa420ec2be1934986d73d47664b217071c",
     "e2a86b4b0947b31c67e210b33538e3730727c44934f8856d038e27e84c1b2048",
     "baed8f707876f323d4dac18492ac35a2af304f91fcc7a60422013b5c368d45c2",
     "a18db2a202bdd20c1a62209eefc1cfd5d89a5e27b56169f65cf0927cdf159d0b",

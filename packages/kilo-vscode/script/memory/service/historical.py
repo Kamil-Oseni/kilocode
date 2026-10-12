@@ -26,7 +26,9 @@ def request(value):
 
 
 def sources(value):
-    if not isinstance(value, dict) or set(value) not in (set(SOURCES), set(SOURCES) | {'capture.py'}):
+    if not isinstance(value, dict) or set(value) not in (
+            set(SOURCES), set(SOURCES) | {'capture.py'},
+            set(SOURCES) | {'capture.py', 'entries.py', 'management.py'}):
         raise ValueError('Exact reviewed source set required.')
     for name, digest in value.items():
         path = Path(__file__).resolve().parent / name

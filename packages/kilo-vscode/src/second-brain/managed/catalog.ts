@@ -1,9 +1,11 @@
 import { isDeepStrictEqual } from "node:util"
 import { check } from "../control/frames"
+import { release, selected } from "../control/catalog-capture"
 
 export const interpreter = "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2"
 export const supervisor = "55530325cc6e8836b49722e39f0b7f87d93c2fe30699d2f5373ff650beb50618"
-export const current = "f9b6762a5bb729c7d04fe5e20821fefa420ec2be1934986d73d47664b217071c"
+export const current = "e971a2f6678b9ede506ec656ca13fec8a1dedeea4239524bd39186c337fb2da7"
+const prior = "f9b6762a5bb729c7d04fe5e20821fefa420ec2be1934986d73d47664b217071c"
 export const supervisors = [
   supervisor,
   "31200051a3248182a01284fa0f8524d07c5360aaf21b5df76025574ff7497e60",
@@ -13,6 +15,7 @@ export const supervisors = [
   "2249c00ff1755613ca0d8eadf6e9b8e51ed2dd53ff91c52dae7e36153b4fa72f",
   "0fc0c18acd7574b7fb0d9bff8378de953645113ac5619f4673688cd2ab27fb62",
   "ffbff9b96ada90e9d04e26a0d96dfd0a42abd13eb7aa5c787f6b7fe1f70ad4e4",
+  prior,
   current,
   "e2a86b4b0947b31c67e210b33538e3730727c44934f8856d038e27e84c1b2048",
   "baed8f707876f323d4dac18492ac35a2af304f91fcc7a60422013b5c368d45c2",
@@ -20,6 +23,16 @@ export const supervisors = [
   "7c2286962a606fade513e4742369d0f084609549961650347b89f44f1f266bcd",
   "715dc3ff0bd136363c3b77e47c9c3e5717645518b9c98060139caf785566dbe4",
 ] as const
+
+export function compatible(pins: Readonly<Record<string, unknown>>, digest: string) {
+  if (!("management.py" in pins)) return true
+  if (!isDeepStrictEqual({ ...pins }, selected(pins))) return false
+  return digest === (pins["historical.py"] === release["historical.py"] ? current : prior)
+}
+
+export function paired(digest: string) {
+  return digest === current || digest === prior
+}
 
 const finite = Object.freeze({
   "bootstrap.py": "530527b8df81642dd9ab420841d478e3ff25d46e2476be46aa2fefb9b91dc37d",

@@ -3,7 +3,7 @@ import { check, document, sha } from "../control/frames"
 import { command } from "../control/command"
 import { environment } from "../control/identity"
 import { release, selected, resident } from "../control/catalog-capture"
-import { current, supervisors } from "./catalog"
+import { current, supervisors, compatible } from "./catalog"
 import type { Descriptor } from "./descriptor"
 
 const body = `import hashlib,json,os,pathlib,stat,sys
@@ -83,7 +83,7 @@ function reviewed(pins: Readonly<Record<string, string>>, expected: string) {
   return (
     resident(pins) &&
     JSON.stringify(Object.entries(pins).sort()) === JSON.stringify(Object.entries(selected(pins)).sort()) &&
-    (!("management.py" in pins) || expected === current)
+    compatible(pins, expected)
   )
 }
 

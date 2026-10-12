@@ -2,7 +2,7 @@ import path from "node:path"
 import { check, child, document, object } from "../control/frames"
 import { selected, resident } from "../control/catalog-capture"
 import { normalize } from "../control/identity"
-import { current, supervisors } from "./catalog"
+import { current, supervisors, compatible } from "./catalog"
 import { images, fingerprint, cohort } from "./reuse-catalog"
 import type { Retrieval } from "./upgrade-observe-v2"
 
@@ -69,7 +69,7 @@ function selection(
     "Separate new ordinary source directory required",
   )
   check(
-    same(pins, selected(pins)) && resident(pins) && (!("management.py" in pins) || expected === current),
+    same(pins, selected(pins)) && resident(pins) && compatible(pins, expected),
     "Exact current Memory release required",
   )
   check(
@@ -80,7 +80,11 @@ function selection(
           "server.py": pins["server.py"],
           "index.py": pins["index.py"],
           ...("management.py" in pins
-            ? { "entries.py": pins["entries.py"], "management.py": pins["management.py"] }
+            ? {
+                "entries.py": pins["entries.py"],
+                "management.py": pins["management.py"],
+                "historical.py": pins["historical.py"],
+              }
             : {}),
         },
         pins,

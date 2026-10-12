@@ -5,6 +5,7 @@ import os from "node:os"
 import { release, selected } from "../../src/second-brain/control/catalog-capture"
 import { project } from "../../src/second-brain/managed/upgrade"
 import * as frames from "../../src/second-brain/control/frames"
+import { compatible, current } from "../../src/second-brain/managed/catalog"
 
 type Image = { path: string; bytes: number; sha256: string; identity: string[] }
 type Fixture = { raw: string; bulk: string; rows: Image[]; directory: { path: string; identity: string[] } }
@@ -180,6 +181,26 @@ test("upgrade accepts the exact retained thirteen-file cohort and refuses a mixe
   const raw = JSON.stringify(plan)
   expect(JSON.parse(run(raw, fixture.rows, release, pins).toString()).source_sha256).toEqual(release)
   expect(() => run(raw, fixture.rows, release, { ...pins, "server.py": "f".repeat(64) })).toThrow()
+})
+
+test("upgrade accepts the retained personal cohort with its exact corrected provenance reader", () => {
+  const pins = selected({
+    ...release,
+    "historical.py": "2d97c96d13b906d8aadcae47a89704cb1b839f5e09da144ca28bd20a0af779bc",
+  })
+  const prior = "f9b6762a5bb729c7d04fe5e20821fefa420ec2be1934986d73d47664b217071c"
+  expect(compatible(pins, prior)).toBe(true)
+  expect(compatible(release, current)).toBe(true)
+  expect(compatible(pins, current)).toBe(false)
+  expect(compatible(release, prior)).toBe(false)
+  const plan = JSON.parse(fixture.raw)
+  plan.source_sha256 = pins
+  for (const row of plan.files) row.sha256 = pins[path.basename(row.path) as keyof typeof pins]
+  const raw = JSON.stringify(plan)
+  expect(JSON.parse(run(raw, fixture.rows, release, pins).toString()).source_sha256).toEqual(release)
+  expect(() => run(raw, fixture.rows, release, { ...pins, "historical.py": "f".repeat(64) })).toThrow(
+    "Exact previous capture release required",
+  )
 })
 
 test("upgrade accepts the exact retained handoff cohort without changing Retrieval selection", () => {

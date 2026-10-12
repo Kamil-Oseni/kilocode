@@ -1017,6 +1017,11 @@ export class BrainHost {
         (!isDeepStrictEqual(saved, cfg) && !isDeepStrictEqual(saved, { ...cfg, enabled: true }))
       )
         throw new Error("Original Memory preference changed during review")
+      if (
+        ["saving", "uncertain", "capacity", "unavailable"].includes(this.intake.snapshot(binding).status) ||
+        this.service.captureSnapshot()?.index !== "synced"
+      )
+        throw new Error("An earlier Memory save or index needs review before automatic saving can resume")
     }
     current()
     await this.saveCapture({ ...cfg, enabled: true }, AbortSignal.any([signal, AbortSignal.timeout(35000)]), current)

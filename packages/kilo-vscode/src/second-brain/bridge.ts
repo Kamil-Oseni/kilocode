@@ -116,7 +116,9 @@ export class BrainBridge {
                         ? "The original extraction failure disposition could not be confirmed. Review the retained attempt; do not replay it."
                         : request.command.action === "capture"
                           ? "Automatic saving could not be confirmed. Review the original turn's saving status; do not replay it."
-                          : "The original Memory proposal request could not be confirmed. Review its pending ledger; do not replay a write.",
+                          : request.command.action === "captureState"
+                            ? "Automatic Memory saving state could not be confirmed. Review saving and recovery status in Memory before retrying; earlier saves were not cancelled or deleted."
+                            : "The original Memory proposal request could not be confirmed. Review its pending ledger; do not replay a write.",
           },
         },
         { signal },

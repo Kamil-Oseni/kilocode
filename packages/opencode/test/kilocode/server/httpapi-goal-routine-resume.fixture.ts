@@ -94,7 +94,7 @@ try {
             definition: agent,
             objective: agent.objective,
           })
-          yield* reports.publish({ agent, id, run: row, at: row.at, summary: terminal ? reason : "" })
+          yield* reports.publish({ agent, run: row })
           return { agent, row, goal: (yield* goals.get(session.id))! }
         })
       const terminal = yield* create(true)

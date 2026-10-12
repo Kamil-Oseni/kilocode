@@ -130,6 +130,24 @@ test("rollback availability shows checked metadata without installing or asserti
   }
 })
 
+test("running refreshes retain the original pending Stop and accept its late receipt", async ({ page }) => {
+  await page.clock.install()
+  await page.goto("/?state=workers-stopping")
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  const stop = workers.getByRole("button", { name: "Stop: Code", exact: true })
+  await stop.click()
+  await page.clock.fastForward(20_000)
+  await expect(stop).toBeDisabled()
+  await expect(workers.getByText("Stopping…", { exact: true })).toBeVisible()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "cancelBackgroundJob")).toHaveLength(1)
+  expect(sent.filter((message: { type: string }) => message.type === "requestBackgroundJobs").length).toBeGreaterThan(1)
+  await page.evaluate(() => (window as unknown as { __confirmStop: () => void }).__confirmStop())
+  await expect(workers.getByText("Cancelled", { exact: true })).toBeVisible()
+  await expect(stop).toHaveCount(0)
+})
+
 test("a lost Stop receipt refreshes observed worker state without replaying cancellation", async ({ page }) => {
   await page.clock.install()
   await page.goto("/?state=workers-delayed")

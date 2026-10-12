@@ -51,7 +51,8 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const [hidden, setHidden] = createSignal<Set<string>>(new Set())
   const [mounted, setMounted] = createSignal(false)
   const [now, setNow] = createSignal(Date.now())
-  const [cancelling, setCancelling] = createSignal<string>()
+  const [stop, setStop] = createSignal<{ id: string; revision: string; request: string }>()
+  const cancelling = () => stop()?.id
   let pending: string | undefined
   let deadline = 0
 
@@ -64,7 +65,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
       setSnapshot({ jobs: [], loaded: false, unavailable: false })
       pending = undefined
       setRefreshing(false)
-      setCancelling()
+      setStop()
       if (mounted()) requestJobs()
     }),
   )
@@ -75,7 +76,6 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     if (pending && Date.now() < deadline) return
     if (pending) {
       setSnapshot((state) => ({ ...state, unavailable: true }))
-      setCancelling()
     }
     pending = `${id}:${crypto.randomUUID()}`
     deadline = Date.now() + 15_000
@@ -88,10 +88,19 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     const unsub = vscode.onMessage((message) => {
       if (message.type !== "backgroundJobsLoaded") return
       if (message.sessionID !== session.currentSessionID()) return
-      if (message.requestID !== pending) return
-      pending = undefined
-      setRefreshing(false)
-      setCancelling()
+      const original = stop()
+      const receipt = original?.request === message.requestID
+      const refresh = pending === message.requestID
+      if (!receipt && !refresh) return
+      if (refresh || receipt) {
+        pending = undefined
+        setRefreshing(false)
+      }
+      if (receipt) setStop()
+      if (!receipt && !message.error && original) {
+        const job = message.jobs.find((item) => item.id === original.id)
+        if (job && (job.status !== "running" || (job.revision && job.revision !== original.revision))) setStop()
+      }
       setSnapshot((state) => reconcileBackgroundAgents(state, message))
     })
     requestJobs()
@@ -180,10 +189,9 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     if (agent.status !== "running" || !agent.revision) return
     const id = session.currentSessionID()
     if (!id) return
-    pending = `${id}:${crypto.randomUUID()}`
-    deadline = Date.now() + 15_000
-    setCancelling(agent.jobID)
-    const message = backgroundAgentCancellation(agent, id, pending)
+    const request = `${id}:${crypto.randomUUID()}`
+    setStop({ id: agent.jobID, revision: agent.revision, request })
+    const message = backgroundAgentCancellation(agent, id, request)
     if (message) vscode.postMessage(message)
   }
 
@@ -237,7 +245,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
               />
             </button>
           </Show>
-          <Show when={snapshot().unavailable}>
+          <Show when={snapshot().unavailable || cancelling()}>
             <Button
               icon="refresh"
               variant="ghost"

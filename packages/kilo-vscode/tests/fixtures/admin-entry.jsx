@@ -137,7 +137,12 @@ window.acquireVsCodeApi = () => ({
   postMessage: (message) => {
     record(message)
     if (message.type === "requestBackgroundJobs" || message.type === "cancelBackgroundJob") {
-      if (message.type === "cancelBackgroundJob" && message.revision === "synthetic-worker-revision") stopped = true
+      if (
+        message.type === "cancelBackgroundJob" &&
+        message.revision === "synthetic-worker-revision" &&
+        state !== "workers-stopping"
+      )
+        stopped = true
       const reply = {
         type: "backgroundJobsLoaded",
         sessionID: message.sessionID,
@@ -173,6 +178,13 @@ window.acquireVsCodeApi = () => ({
       }
       if (state === "workers-delayed" && message.type === "cancelBackgroundJob") {
         window.__confirmStop = () => emit(reply)
+        return
+      }
+      if (state === "workers-stopping" && message.type === "cancelBackgroundJob") {
+        window.__confirmStop = () => {
+          stopped = true
+          emit({ ...reply, jobs: reply.jobs.map((job) => ({ ...job, status: "cancelled" })) })
+        }
         return
       }
       if (["workers-failed", "workers-longerror"].includes(state) && message.type === "cancelBackgroundJob") {

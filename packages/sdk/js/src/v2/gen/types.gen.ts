@@ -1978,6 +1978,27 @@ export type SecondBrainStatus = {
   action: "status"
 }
 
+export type SecondBrainSetup =
+  | {
+      action: "setup"
+      stage: "inspect"
+      model?: {
+        providerID: string
+        modelID: string
+      }
+    }
+  | {
+      action: "setup"
+      stage: "continue"
+      attempt: string
+      choice: string
+    }
+  | {
+      action: "setup"
+      stage: "cancel"
+      attempt: string
+    }
+
 export type SecondBrainMediaRecall = {
   action: "mediaContext"
   query: string
@@ -1992,6 +2013,7 @@ export type SecondBrainRequest = {
     | SecondBrainCommand
     | SecondBrainRecall
     | SecondBrainStatus
+    | SecondBrainSetup
     | {
         action: "capturePolicy"
         messageID: string
@@ -6985,6 +7007,25 @@ export type SecondBrainStatusResult = {
   preparation: "unavailable"
 }
 
+export type SecondBrainSetupResult = {
+  action: "setup"
+  project: string
+  attempt: string
+  status: "choice" | "configured" | "cancelled" | "needs_attention"
+  configured: boolean
+  root?: string
+  index: "unchecked" | "reviewing" | "approved" | "syncing" | "synced" | "policy_disabled" | "uncertain"
+  capture: "unavailable" | "paused" | "ready" | "saving" | "uncertain" | "capacity"
+  detail?: string
+  question?: {
+    prompt: string
+    options: Array<{
+      id: string
+      label: string
+    }>
+  }
+}
+
 export type SecondBrainMediaResult = {
   action: "mediaContext"
   project: string
@@ -7046,6 +7087,7 @@ export type SecondBrainResult =
   | SecondBrainProposalResult
   | SecondBrainContextResult
   | SecondBrainStatusResult
+  | SecondBrainSetupResult
   | {
       action: "capturePolicy"
       project: string

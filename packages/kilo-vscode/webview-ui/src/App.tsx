@@ -378,15 +378,28 @@ const AppContent: Component = () => {
     )
   }
 
+  const send = (text: string) => {
+    const model = session.selected(session.currentSessionID() ?? tabs?.pending() ?? session.draftSessionID())
+    const pending = fresh()
+    session.sendMessage(text, model?.providerID, model?.modelID, undefined, pending, undefined, undefined, null)
+  }
+
   const sendFromWorkspace = (text: string) => {
     if (!server.isConnected() || session.cloudPreviewId()) {
       askRaya(text)
       return
     }
-    const model = session.selected(session.currentSessionID() ?? tabs?.pending() ?? session.draftSessionID())
-    const pending = fresh()
-    session.sendMessage(text, model?.providerID, model?.modelID, undefined, pending, undefined, undefined, null)
+    send(text)
   }
+
+  onMount(() => {
+    const setup = () => {
+      if (!server.isConnected()) return
+      send("Set up my personal memory.")
+    }
+    window.addEventListener("raya:setup-memory", setup)
+    onCleanup(() => window.removeEventListener("raya:setup-memory", setup))
+  })
 
   const cycleAgent = (direction: 1 | -1) => {
     const id = session.currentSessionID() ?? tabs?.pending() ?? session.draftSessionID()

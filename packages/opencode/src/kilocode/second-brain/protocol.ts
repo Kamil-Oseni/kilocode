@@ -45,11 +45,30 @@ export const Recall = Schema.Struct({
 }).annotate({ identifier: "SecondBrainRecall" })
 export type Recall = typeof Recall.Type
 export const Status = Schema.Struct({ action: Schema.Literal("status") }).annotate({ identifier: "SecondBrainStatus" })
+export const Setup = Schema.Union([
+  Schema.Struct({
+    action: Schema.Literal("setup"),
+    stage: Schema.Literal("inspect"),
+    model: Schema.optional(
+      Schema.Struct({
+        providerID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+        modelID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+      }),
+    ),
+  }),
+  Schema.Struct({
+    action: Schema.Literal("setup"),
+    stage: Schema.Literal("continue"),
+    attempt: ID,
+    choice: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64)),
+  }),
+  Schema.Struct({ action: Schema.Literal("setup"), stage: Schema.Literal("cancel"), attempt: ID }),
+]).annotate({ identifier: "SecondBrainSetup" })
 export const Request = Schema.Struct({
   id: RequestID,
   sessionID: SessionID,
   project: Path,
-  command: Schema.Union([Command, Recall, Status, CapturePolicy, Capture, CaptureFailed, MediaRecall]),
+  command: Schema.Union([Command, Recall, Status, Setup, CapturePolicy, Capture, CaptureFailed, MediaRecall]),
 }).annotate({ identifier: "SecondBrainRequest" })
 export type Request = typeof Request.Type
 const Proposal = Schema.Struct({
@@ -112,10 +131,34 @@ export const StatusResult = Schema.Struct({
   capture_reason: Schema.optional(Schema.Literals(["source_capacity", "ledger_capacity"])),
   preparation: Schema.Literal("unavailable"),
 }).annotate({ identifier: "SecondBrainStatusResult" })
+export const SetupResult = Schema.Struct({
+  action: Schema.Literal("setup"),
+  project: Path,
+  attempt: ID,
+  status: Schema.Literals(["choice", "configured", "cancelled", "needs_attention"]),
+  configured: StatusResult.fields.configured,
+  root: StatusResult.fields.root,
+  index: StatusResult.fields.index,
+  capture: StatusResult.fields.capture,
+  detail: Schema.optional(Schema.String.check(Schema.isMaxLength(1024))),
+  question: Schema.optional(
+    Schema.Struct({
+      prompt: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(300)),
+      options: Schema.Array(
+        Schema.Struct({
+          id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64)),
+          label: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+        }),
+      ).check(Schema.isMinLength(2), Schema.isMaxLength(4)),
+    }),
+  ),
+}).annotate({ identifier: "SecondBrainSetupResult" })
+export type SetupResult = typeof SetupResult.Type
 export const Result = Schema.Union([
   ProposalResult,
   ContextResult,
   StatusResult,
+  SetupResult,
   CapturePolicyResult,
   CaptureResult,
   CaptureFailedResult,

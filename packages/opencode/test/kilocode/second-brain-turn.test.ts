@@ -140,6 +140,33 @@ test("Memory synthesis preserves cited and empty results but refuses invalid sou
   expect(settled(original.messages, { ...original.session, directory: "/other" }, uid)).toBe(false)
 })
 
+test("conversation setup explains only its original configured or cancelled receipt", () => {
+  for (const status of ["configured", "cancelled", "needs_attention"] as const) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+    part.text = "Set up my personal memory."
+    original.session.metadata[RayaChief.requestKey] = part.text
+    original.tool.state = {
+      ...original.tool.state,
+      input: { action: "setup" },
+      output: JSON.stringify({
+        action: "setup",
+        project: "/repo",
+        attempt: "b43ff5f0-6049-4009-905a-7649022ee5b7",
+        status,
+        configured: true,
+        root: "/notes",
+        index: "unchecked",
+        capture: "paused",
+      }),
+    }
+    expect(settled(original.messages, original.session, uid)).toBe(true)
+    original.tool.state = { ...original.tool.state, output: "{}" }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("explicit recall releases synthesis after the original read while preserving file and light restrictions", () => {
   for (const text of [
     "Recall my saved preferences for delivering Raya builds and choosing how much testing to do. Use my local notes and cite the source. Do not change files or lights.",

@@ -15,6 +15,7 @@ function read(command: Request["command"]) {
   return command.action === "context" ||
     command.action === "mediaContext" ||
     command.action === "status" ||
+    command.action === "setup" ||
     command.action === "capturePolicy" ||
     command.action === "capture" ||
     command.action === "captureFailed"
@@ -28,10 +29,12 @@ export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrain
   code: ErrorCode,
   detail: Schema.String,
   operation: Schema.optional(
-    Schema.Literals(["context", "mediaContext", "status", "capturePolicy", "capture", "captureFailed"]),
+    Schema.Literals(["context", "mediaContext", "status", "setup", "capturePolicy", "capture", "captureFailed"]),
   ),
 }) {
   override get message() {
+    if (this.operation === "setup")
+      return `${this.detail}. Memory setup completion is unconfirmed; inspect the retained setup attempt before continuing.`
     if (this.operation === "captureFailed")
       return `${this.detail}. The original extraction failure disposition is unconfirmed; do not replay the conversation.`
     if (this.operation === "capturePolicy")

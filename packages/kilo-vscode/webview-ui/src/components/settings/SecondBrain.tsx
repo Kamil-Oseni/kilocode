@@ -3,6 +3,7 @@ import { Button } from "@kilocode/kilo-ui/button"
 import { Card } from "@kilocode/kilo-ui/card"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import { useVSCode } from "../../context/vscode"
+import { useServer } from "../../context/server"
 import type { BrainState, BrainRequest, BrainCapture } from "../../../../src/shared/second-brain"
 import { BrainProposals } from "./BrainProposals"
 import { BrainConsolidation } from "./BrainConsolidation"
@@ -63,6 +64,7 @@ const captures: Record<BrainCapture["status"], string> = {
 export function SecondBrain() {
   const [expanded, expand] = createSignal(false)
   const vscode = useVSCode()
+  const server = useServer()
   const [state, setState] = createSignal<BrainState>({ configured: false, status: "disconnected", results: [] })
   const [query, setQuery] = createSignal("")
   const [id, setId] = createSignal("")
@@ -123,9 +125,20 @@ export function SecondBrain() {
       <p>
         {state().configured
           ? "Manage your notes, automatic saving and search."
-          : "Connect local memory, then choose the notes Raya can use."}
+          : "Let Raya remember your preferences and project details. Set it up in conversation."}
       </p>
       <p role="status">{state().configured ? status[state().status] : "Setup required"}</p>
+      <Show when={!state().configured}>
+        <Button
+          onClick={() => window.dispatchEvent(new Event("raya:setup-memory"))}
+          disabled={busy() || !server.isConnected()}
+        >
+          Set up with Raya
+        </Button>
+        <Show when={!server.isConnected()}>
+          <p role="status">Connect to Raya to set up memory.</p>
+        </Show>
+      </Show>
       <Show when={state().root}>{(root) => <p>Notes folder: {root()}</p>}</Show>
       <Show when={state().capture}>
         {(capture) => (

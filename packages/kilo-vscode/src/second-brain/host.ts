@@ -37,6 +37,10 @@ import { admission } from "./index-admission"
 import { currentPolicy, freshHistory, disposeHistory } from "./capture-revisions"
 import { MediaCoordinator } from "./media/coordinator"
 import { register as mediaCommands } from "./media/native"
+import { inspect as preparation, pinned, type PreparedSetup } from "./prepared-setup"
+import { SetupFlow } from "./setup-flow"
+import { mkdir, rename, writeFile } from "node:fs/promises"
+import { createHash, randomUUID } from "node:crypto"
 
 type IndexScope = {
   signal: AbortSignal
@@ -125,6 +129,45 @@ export function drainBrain() {
   return drain(true)
 }
 
+function decode(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Memory command required")
+  return input as Record<string, unknown>
+}
+
+function setupModel(input: unknown) {
+  if (input === undefined) return undefined
+  const row = decode(input)
+  if (
+    Object.keys(row).sort().join() !== "modelID,providerID" ||
+    typeof row.providerID !== "string" ||
+    typeof row.modelID !== "string" ||
+    !row.providerID ||
+    !row.modelID ||
+    row.providerID.length > 255 ||
+    row.modelID.length > 255
+  )
+    throw new Error("Original conversation model required")
+  return { providerID: row.providerID, modelID: row.modelID }
+}
+
+function setupCommand(row: Record<string, unknown>) {
+  const fields = Object.keys(row).sort().join()
+  if (row.stage === "inspect" && ["action,stage", "action,model,stage"].includes(fields))
+    return { stage: "inspect" as const, model: setupModel(row.model) }
+  if (typeof row.attempt !== "string" || !/^[0-9a-f-]{36}$/.test(row.attempt))
+    throw new Error("Original Memory setup attempt required")
+  if (row.stage === "cancel" && fields === "action,attempt,stage")
+    return { stage: "cancel" as const, attempt: row.attempt }
+  if (
+    row.stage === "continue" &&
+    fields === "action,attempt,choice,stage" &&
+    typeof row.choice === "string" &&
+    row.choice.length <= 64
+  )
+    return { stage: "continue" as const, attempt: row.attempt, choice: row.choice }
+  throw new Error("Exact conversation Memory setup command required")
+}
+
 export class BrainHost {
   private readonly settings: BrainSettings
   private readonly service: BrainService
@@ -140,6 +183,7 @@ export class BrainHost {
   private controller?: AbortController
   private debt?: unknown
   private readonly activity = new DreamActivity()
+  private onboarding?: SetupFlow
 
   dreamActivity() {
     return this.activity.snapshot()
@@ -566,6 +610,16 @@ export class BrainHost {
     register(() => this.media.retire())
     mediaCommands(context, this.media, this.settings, trusted)
     context.subscriptions.push(
+      vscode.commands.registerCommand("raya.memory.registerPreparedSetup", async (input: unknown) => {
+        if (!vscode.workspace.isTrusted || this.closing) throw new Error("Trusted Memory preparation required")
+        const cfg = await preparation(input)
+        const folder = this.context.globalStorageUri.fsPath
+        await mkdir(folder, { recursive: true })
+        const file = path.join(folder, "memory-prepared-" + randomUUID() + ".json")
+        await writeFile(file, JSON.stringify(cfg.bundle), { flag: "wx", mode: 0o600 })
+        await rename(file, path.join(folder, "memory-prepared.json"))
+        return { root: cfg.setup.root, prepared: true, authorized: false }
+      }),
       vscode.commands.registerCommand("raya.memory.inspectConfiguration", () =>
         diagnostic(this.settings, context.globalState),
       ),
@@ -690,16 +744,17 @@ export class BrainHost {
     const project = path.resolve(directory)
     if (project.toLowerCase() !== path.resolve(request.project).toLowerCase())
       throw new Error("Authenticated trusted project required")
-    if (!request.command || typeof request.command !== "object" || Array.isArray(request.command))
-      throw new Error("Proposal command required")
-    const row = request.command as Record<string, unknown>
-    const guard = ["status", "context", "capturePolicy", "capture", "captureFailed"].includes(String(row.action))
+    const row = decode(request.command)
+    const guard = ["setup", "status", "context", "capturePolicy", "capture", "captureFailed"].includes(
+      String(row.action),
+    )
       ? personal(project, () => ({
           trusted: vscode.workspace.isTrusted,
           folders: (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
         }))
       : () => trusted(project)
     guard()
+    if (row.action === "setup") return this.conversationSetup(row, project, request.sessionID, signal, guard)
     if (["capturePolicy", "capture", "captureFailed"].includes(String(row.action)))
       return this.capture(request, project, signal, guard)
     if (row.action === "status") {
@@ -766,10 +821,12 @@ export class BrainHost {
     )
   }
 
-  async saveCapture(value: unknown, signal: AbortSignal) {
+  async saveCapture(value: unknown, signal: AbortSignal, caller: () => void = () => {}) {
+    caller()
     if (this.closing || !vscode.workspace.isTrusted) throw new Error("Trusted capture setup required")
     const binding = await this.service.captureSelection(signal)
     const check = () => {
+      caller()
       signal.throwIfAborted()
       if (this.closing || !vscode.workspace.isTrusted || !this.service.captureCurrent(binding))
         throw new Error("Original capture setup changed during consent publication")
@@ -875,6 +932,150 @@ export class BrainHost {
       ...(state.configured && capture.reason ? { capture_reason: capture.reason } : {}),
       preparation: "unavailable" as const,
     }
+  }
+
+  private async prepared() {
+    const file = path.join(this.context.globalStorageUri.fsPath, "memory-prepared.json")
+    return metadata(file, (value) => preparation(value)).catch((err: unknown) => {
+      if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return undefined
+      throw err
+    })
+  }
+
+  private async conversationSetup(
+    row: Record<string, unknown>,
+    project: string,
+    session: string | undefined,
+    signal: AbortSignal,
+    guard: () => void,
+  ) {
+    if (!session) throw new Error("Memory setup requires its original conversation")
+    const command = setupCommand(row)
+    this.onboarding ??= new SetupFlow({
+      snapshot: async () => {
+        const state = await this.service.status().catch((err: unknown): BrainResponse["state"] => {
+          if (
+            err instanceof ClosedRequired ||
+            (err instanceof Failure &&
+              ["managed_generation_conflict", "closed_pair_recovery_required", "control_uncertain"].includes(err.code))
+          )
+            return {
+              configured: this.settings.version() !== undefined,
+              status: "unavailable",
+              results: [],
+              code: err instanceof ClosedRequired ? "closed_pair_recovery_required" : err.code,
+            }
+          if (
+            err instanceof Error &&
+            err.message === "Original managed launch remains retained; restarted hosts cannot adopt or replay it"
+          )
+            return {
+              configured: this.settings.version() !== undefined,
+              status: "unavailable",
+              code: "closed_pair_recovery_required",
+              results: [],
+            }
+          throw err
+        })
+        return {
+          configured: state.configured,
+          root: state.root,
+          recovery:
+            state.status === "unavailable" &&
+            [
+              "managed_generation_conflict",
+              "closed_pair_recovery_required",
+              "control_uncertain",
+              "setup_invalid",
+            ].includes(state.code ?? ""),
+          index: state.configured ? this.control.snapshot().status : "unchecked",
+          capture: state.configured ? this.intake.snapshot(this.service.captureSnapshot()).status : "unavailable",
+        }
+      },
+      prepared: async () => {
+        const cfg = await this.prepared()
+        return cfg
+          ? {
+              root: cfg.setup.root,
+              capture: !!cfg.bundle.capture,
+              fresh: !!cfg.bundle.fresh,
+              identity: createHash("sha256").update(JSON.stringify(cfg.bundle)).digest("hex"),
+            }
+          : undefined
+      },
+      connect: async (check) => {
+        check()
+        const cfg = await this.prepared()
+        check()
+        if (!cfg) throw new Error("Installer-prepared Memory selection required")
+        return this.setup(cfg, check)
+      },
+      notes: async (check) => {
+        const cfg = await this.settings.load()
+        check()
+        if (!cfg) throw new Error("Reviewed Memory setup required")
+        const saved = this.context.globalState.get<{ root: string; catalog: unknown }>(catalogKey)
+        if (
+          !saved ||
+          saved.root !== cfg.setup.root ||
+          Object.entries(cfg.setup.source_sha256).some(
+            ([name, hash]) => parseCatalog(saved.catalog).source_sha256[name] !== hash,
+          )
+        ) {
+          const prepared = await this.prepared()
+          check()
+          if (!prepared || prepared.setup.root !== cfg.setup.root || !(await this.catalog(prepared.catalog, check)))
+            return false
+        }
+        await this.review(check)
+        check()
+        return this.control.snapshot().status === "approved"
+      },
+      index: async (check, _model, signal) => {
+        await this.sync(check, signal)
+        check()
+        return this.control.snapshot().status === "synced"
+      },
+      capture: async (check, model, signal) => {
+        const cfg = await this.prepared()
+        check()
+        const timeout = AbortSignal.timeout(35000)
+        const active = signal ? AbortSignal.any([signal, timeout]) : timeout
+        const binding = await this.service.captureSelection(active)
+        check()
+        const choices = cfg?.bundle.capture
+          ? await pinned(cfg.bundle.capture, (value, digest) => this.intake.reviewed(value, digest))
+          : model
+            ? {
+                version: 1 as const,
+                enabled: true,
+                root: binding.root,
+                release: binding.release,
+                zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                model: model.providerID + "/" + model.modelID,
+                authorization: {
+                  source: "raya.memory.conversationSetup",
+                  sha256: createHash("sha256")
+                    .update(JSON.stringify({ root: binding.root, release: binding.release, model }))
+                    .digest("hex"),
+                },
+              }
+            : undefined
+        if (!choices) throw new Error("Original conversation model or prepared capture choices required")
+        check()
+        const answer = await vscode.window.showWarningMessage(
+          `Allow Raya to ${choices.enabled ? "save useful conversation and completed-action information" : "keep automatic saving paused"} in ${binding.root} using your selected model? Sensitive information is excluded. You can review or pause saving in Memory.`,
+          { modal: true },
+          "Apply saving preference",
+        )
+        check()
+        if (answer !== "Apply saving preference") return false
+        await this.saveCapture(choices, active, check)
+        check()
+        return true
+      },
+    })
+    return this.onboarding.run(command, project + "|" + session, project, signal, guard)
   }
 
   private async proposal(message: Record<string, unknown>, post: (value: BrainResponse) => void) {
@@ -999,38 +1200,7 @@ export class BrainHost {
       }
       if (message.action === "review") await this.review()
       if (message.action === "controlSetup") await this.catalog()
-      if (message.action === "sync")
-        await this.control.sync(
-          (value) => this.confirm(value, "Sync now"),
-          async (expected, signal, close) => {
-            const cfg = await this.settings.load()
-            if (!cfg) throw new Error("Memory setup required")
-            if (cfg.setup.version === 2) {
-              await this.service.sync(expected, signal, close)
-              return
-            }
-            const client = new BrainClient(cfg.key, cfg.setup)
-            try {
-              await client.sync(expected, signal, async (request) => {
-                await this.settings.record({
-                  format: "raya.memory.control.uncertainty",
-                  version: 1,
-                  root: cfg.setup.root,
-                  request,
-                })
-              })
-            } catch (error) {
-              // Transport settlement is not downstream retirement: preserve a fresh backend refusal.
-              const health = await client.health().then(
-                () => undefined,
-                (cause: unknown) => cause,
-              )
-              if (health !== undefined)
-                throw new AggregateError([error, health], "Memory sync and retirement status failed")
-              throw error
-            }
-          },
-        )
+      if (message.action === "sync") await this.sync()
       if (message.action === "disable") await this.control.pause((value) => this.confirm(value, "Disable policy"))
       if (message.action === "cancel" && this.current?.id === message.target)
         await this.service.stop(this.current.owner)
@@ -1125,15 +1295,59 @@ export class BrainHost {
     )
   }
 
-  private async setup() {
-    await this.control.stop()
-    const selected = await vscode.window.showOpenDialog({
+  private async sync(check: () => void = () => {}, parent?: AbortSignal) {
+    check()
+    await this.control.sync(
+      async (value) => {
+        check()
+        const accepted = await this.confirm(value, "Sync now")
+        check()
+        return accepted
+      },
+      async (expected, signal, close) => {
+        check()
+        const active = parent ? AbortSignal.any([parent, signal]) : signal
+        const cfg = await this.settings.load()
+        if (!cfg) throw new Error("Memory setup required")
+        if (cfg.setup.version === 2) {
+          await this.service.sync(expected, active, close)
+          return
+        }
+        const client = new BrainClient(cfg.key, cfg.setup)
+        try {
+          await client.sync(expected, active, async (request) => {
+            await this.settings.record({
+              format: "raya.memory.control.uncertainty",
+              version: 1,
+              root: cfg.setup.root,
+              request,
+            })
+          })
+        } catch (error) {
+          // Transport settlement is not downstream retirement: preserve a fresh backend refusal.
+          const health = await client.health().then(
+            () => undefined,
+            (cause: unknown) => cause,
+          )
+          if (health !== undefined)
+            throw new AggregateError([error, health], "Memory sync and retirement status failed")
+          throw error
+        }
+      },
+      check,
+    )
+    check()
+  }
+
+  private async chooseSetup(check: () => void) {
+    const files = await vscode.window.showOpenDialog({
       canSelectMany: false,
       filters: { "Memory setup": ["json"] },
       title: "Select a reviewed local Memory setup manifest",
     })
-    if (!selected?.[0] || selected[0].scheme !== "file") return
-    const cfg = await manifest(selected[0].fsPath)
+    check()
+    if (!files?.[0] || files[0].scheme !== "file") return undefined
+    const cfg = await manifest(files[0].fsPath)
     const mode = await vscode.window.showQuickPick(
       [
         {
@@ -1149,31 +1363,57 @@ export class BrainHost {
       ],
       { title: "Memory service ownership" },
     )
-    if (!mode) return
-    let managed: Descriptor | undefined
-    if (mode.value === "managed") {
-      const files = await vscode.window.showOpenDialog({
-        canSelectMany: false,
-        filters: { "Managed launch descriptor": ["json"] },
-        title: "Select the reviewed managed Memory launch",
-      })
-      if (!files?.[0] || files[0].scheme !== "file") return
-      managed = await metadata(files[0].fsPath, descriptor)
-      await selection(managed, cfg)
+    check()
+    if (!mode) return undefined
+    if (mode.value !== "managed") return { setup: cfg, managed: undefined }
+    const launch = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: { "Managed launch descriptor": ["json"] },
+      title: "Select the reviewed managed Memory launch",
+    })
+    check()
+    if (!launch?.[0] || launch[0].scheme !== "file") return undefined
+    const managed = await metadata(launch[0].fsPath, descriptor)
+    await selection(managed, cfg)
+    check()
+    return { setup: cfg, managed }
+  }
+
+  private async setup(prepared?: PreparedSetup, check: () => void = () => {}) {
+    check()
+    if (prepared?.bundle.fresh) {
+      if (!(await this.archive(prepared.bundle.fresh.path, check, prepared.bundle.fresh.sha256))) return false
+      check()
+      return this.catalog(prepared.catalog, check)
     }
+    await this.control.stop()
+    check()
+    const selected = prepared ?? (await this.chooseSetup(check))
+    if (!selected) return false
+    const cfg = selected.setup
+    const managed = selected.managed
+    check()
     const accepted = await vscode.window.showWarningMessage(
       `Trust ${cfg.origin} for standalone search of ${cfg.root}? ${managed ? "Check, Search or Sync starts the service. Raya stops it when Memory is disconnected or Raya closes." : "You start and stop the service yourself."} Search results stay in this panel. This does not approve source indexing or enable capture.`,
       { modal: true },
       "Trust service",
     )
-    if (accepted !== "Trust service") return
+    check()
+    if (accepted !== "Trust service") return false
     const key = await vscode.window.showInputBox({
       password: true,
       ignoreFocusOut: true,
       prompt: "Local Memory service credential (stored only in VS Code Secret Storage)",
     })
-    if (key === undefined) return
-    await this.service.configure(() => this.settings.save(cfg, key, managed))
+    check()
+    if (key === undefined) return false
+    await this.service.configure(async () => {
+      check()
+      await this.settings.save(cfg, key, managed)
+      check()
+    })
+    check()
+    return prepared ? this.catalog(prepared.catalog, check) : true
   }
 
   private async repair() {
@@ -1199,22 +1439,33 @@ export class BrainHost {
     })
   }
 
-  private async archive() {
+  private async archive(file?: string, check: () => void = () => {}, expected?: string) {
+    check()
     if (!vscode.workspace.isTrusted) throw new Error("Trusted workspace required for Memory recovery")
-    const selected = await vscode.window.showOpenDialog({
-      canSelectMany: false,
-      filters: { "Fresh Memory setup": ["json"] },
-      title: "Select the reviewed fresh-start Memory setup",
-    })
-    if (!selected?.[0] || selected[0].scheme !== "file") return
-    await this.service.archive(selected[0].fsPath, async (review) => {
+    const selected = file
+      ? undefined
+      : await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: { "Fresh Memory setup": ["json"] },
+          title: "Select the reviewed fresh-start Memory setup",
+        })
+    check()
+    if (!file && (!selected?.[0] || selected[0].scheme !== "file")) return false
+    let approved = false
+    await this.service.archive(file ?? selected![0].fsPath, async (review) => {
+      check()
+      if (expected && review.selection.sha256 !== expected) throw new Error("Prepared fresh Memory selection changed")
       const accepted = await vscode.window.showWarningMessage(
         `Archive the prior setup and start fresh for ${review.root}? ${review.outcome === "completed" ? `Search ${review.request} completed, but its original worker release receipt is unavailable. Its completion record, downstream receipts and recovery record will remain preserved; this action does not settle that request.` : review.outcome === "unknown" ? "Earlier startup work remains unverified; this action does not claim that its work settled." : `Search ${review.request} failed without downstream requests.`} The old setup, credential reference and request records remain in a quarantined audit. Trust fresh setup SHA-256 ${review.selection.sha256} and observation ${review.observation.sha256}. New service addresses and request folders will be used. Your notes are preserved; prior work is not retried.`,
         { modal: true },
         "Archive and start fresh",
       )
-      return accepted === "Archive and start fresh"
+      check()
+      approved = accepted === "Archive and start fresh"
+      return approved
     })
+    check()
+    return approved
   }
 
   private async resume() {
@@ -1593,10 +1844,12 @@ export class BrainHost {
     }
   }
 
-  private async review() {
+  private async review(check: () => void = () => {}) {
+    check()
     const cfg = await this.settings.load()
     if (!cfg) throw new Error("Memory setup required")
     const names = await choices(cfg.setup.root)
+    check()
     if (!names.length) throw new Error("No eligible Markdown notes found")
     const picked = await vscode.window.showQuickPick(
       names.map((name) => ({ label: name })),
@@ -1607,6 +1860,7 @@ export class BrainHost {
         placeHolder: "Choose the complete set. Previously selected notes you omit will be removed. Review follows.",
       },
     )
+    check()
     if (picked === undefined) return
     const selected = picked.map((item) => item.label)
     if (!selected.length || selected.length > 128) throw new Error("Select 1–128 relative source files")
@@ -1618,19 +1872,31 @@ export class BrainHost {
       ],
       { title: "Memory source policy enablement" },
     )
+    check()
     if (!enabled) return
-    await this.control.review(selected, enabled.value, (value) => this.confirm(value, "Approve policy"))
+    await this.control.review(selected, enabled.value, async (value) => {
+      check()
+      const accepted = await this.confirm(value, "Approve policy")
+      check()
+      return accepted
+    })
+    check()
   }
 
-  private async catalog() {
+  private async catalog(prepared?: ReturnType<typeof parseCatalog>, check: () => void = () => {}) {
+    check()
     await this.control.stop()
-    const selected = await vscode.window.showOpenDialog({
-      canSelectMany: false,
-      filters: { "Memory control catalog": ["json"] },
-      title: "Select the reviewed local Memory control release",
-    })
-    if (!selected?.[0] || selected[0].scheme !== "file") return
-    const catalog = await metadata(selected[0].fsPath, parseCatalog)
+    check()
+    const selected = prepared
+      ? undefined
+      : await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: { "Memory control catalog": ["json"] },
+          title: "Select the reviewed local Memory control release",
+        })
+    check()
+    if (!prepared && (!selected?.[0] || selected[0].scheme !== "file")) return false
+    const catalog = prepared ?? (await metadata(selected![0].fsPath, parseCatalog))
     const cfg = await this.settings.load()
     if (!cfg) throw new Error("Search setup required")
     if (
@@ -1643,14 +1909,18 @@ export class BrainHost {
       { modal: true },
       "Trust control release",
     )
-    if (accepted !== "Trust control release") return
+    check()
+    if (accepted !== "Trust control release") return false
     await this.service.configure(async () => {
+      check()
       const current = await this.settings.load()
       if (!current || !this.settings.current(cfg.setup) || JSON.stringify(current.setup) !== JSON.stringify(cfg.setup))
         throw new Error("Memory setup changed during control review")
       await this.context.globalState.update(catalogKey, { root: cfg.setup.root, catalog })
       if (!this.settings.current(cfg.setup)) throw new Error("Memory setup changed during control publication")
+      check()
     }, false)
+    return true
   }
 
   private async confirm(value: Review, action: string) {

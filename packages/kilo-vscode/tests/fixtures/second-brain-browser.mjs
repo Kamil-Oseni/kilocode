@@ -157,7 +157,24 @@ try {
   await wait(() => sent.some((row) => row.action === "state"))
   await Promise.all(jobs)
   assert.match(node.textContent, /Setup required/)
-  assert.match(node.textContent, /Connect local memory, then choose the notes Raya can use/)
+  assert.match(node.textContent, /Set it up in conversation/)
+  let setups = 0
+  const guided = () => setups++
+  window.addEventListener("raya:setup-memory", guided)
+  assert.equal(button("Set up with Raya").disabled, true)
+  assert.match(node.textContent, /Connect to Raya to set up memory/)
+  button("Set up with Raya").click()
+  assert.equal(setups, 0)
+  window.dispatchEvent(new window.MessageEvent("message", { data: { type: "connectionState", state: "connected" } }))
+  await wait(() => !button("Set up with Raya").disabled)
+  assert.equal(node.textContent.includes("Connect to Raya to set up memory"), false)
+  button("Set up with Raya").click()
+  assert.equal(setups, 1)
+  assert.equal(
+    sent.some((row) => row.action === "setup"),
+    false,
+  )
+  window.removeEventListener("raya:setup-memory", guided)
   assert.equal(node.textContent.includes("Import reviewed setup files"), false)
   assert.equal(button("Search notes"), undefined)
   assert.equal(posts, 0)
@@ -273,7 +290,10 @@ try {
   assert.match(node.textContent, /Missing.md: missing <img src=x>/)
   const details = [...node.querySelectorAll('[aria-label="Linked memory context"] details')]
   assert.equal(details.length, 2)
-  assert.equal(details.every((item) => !item.open), true)
+  assert.equal(
+    details.every((item) => !item.open),
+    true,
+  )
   assert.equal(details[0].querySelector("summary").textContent, "Source details")
   assert.match(details[0].textContent, /Source SHA-256: a{64}/)
   assert.equal(details[1].querySelector("summary").textContent, "Skipped links (1)")

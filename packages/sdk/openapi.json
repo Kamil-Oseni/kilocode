@@ -82216,6 +82216,85 @@
         "required": ["action"],
         "additionalProperties": false
       },
+      "SecondBrainSetup": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["setup"]
+              },
+              "stage": {
+                "type": "string",
+                "enum": ["inspect"]
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "providerID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "modelID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                },
+                "required": ["providerID", "modelID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["action", "stage"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["setup"]
+              },
+              "stage": {
+                "type": "string",
+                "enum": ["continue"]
+              },
+              "attempt": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "choice": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": ["action", "stage", "attempt", "choice"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["setup"]
+              },
+              "stage": {
+                "type": "string",
+                "enum": ["cancel"]
+              },
+              "attempt": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              }
+            },
+            "required": ["action", "stage", "attempt"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "SecondBrainMediaRecall": {
         "type": "object",
         "properties": {
@@ -82263,6 +82342,9 @@
               },
               {
                 "$ref": "#/components/schemas/SecondBrainStatus"
+              },
+              {
+                "$ref": "#/components/schemas/SecondBrainSetup"
               },
               {
                 "type": "object",
@@ -98195,6 +98277,84 @@
         "required": ["action", "project", "configured", "index", "capture", "preparation"],
         "additionalProperties": false
       },
+      "SecondBrainSetupResult": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["setup"]
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "attempt": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["choice", "configured", "cancelled", "needs_attention"]
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "root": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "index": {
+            "type": "string",
+            "enum": ["unchecked", "reviewing", "approved", "syncing", "synced", "policy_disabled", "uncertain"]
+          },
+          "capture": {
+            "type": "string",
+            "enum": ["unavailable", "paused", "ready", "saving", "uncertain", "capacity"]
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "question": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    }
+                  },
+                  "required": ["id", "label"],
+                  "additionalProperties": false
+                },
+                "minItems": 2,
+                "maxItems": 4
+              }
+            },
+            "required": ["prompt", "options"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["action", "project", "attempt", "status", "configured", "index", "capture"],
+        "additionalProperties": false
+      },
       "SecondBrainMediaResult": {
         "type": "object",
         "properties": {
@@ -98484,6 +98644,9 @@
           },
           {
             "$ref": "#/components/schemas/SecondBrainStatusResult"
+          },
+          {
+            "$ref": "#/components/schemas/SecondBrainSetupResult"
           },
           {
             "type": "object",

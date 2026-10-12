@@ -2,6 +2,14 @@
 
 ## Current profile checkpoint — October 12
 
+### Installed 1a observation
+
+The helper fix is now installed in `7.4.23-snapshot+1a869ca158.local.1791827879084`. The actual native Recover a Closed Memory Pair command accepted the exact `044a...` review and published saved phase closed with an applied audit and requestSettlement false. Capture preference stayed enabled; no old request was replayed.
+
+Supported Check service created fresh original pair `5ec6678bff5863717f9149ab4436d675` (original SHA-256 `ca5521e491ad91a96473900059ea1556552a93dac931388f4280e5c99bb997aa`). Memory and Retrieval ports 53676/53677 listened, but the panel reported Memory unavailable. Natural Alt+F4 retired original PIDs 33688/26356 at zero, null signal, both EOFs/readers/original joins and no force. New closure SHA-256: `70b0cb52cede1ec6a95acd41a1cbbcf759c229854b29a35d691a1e393410f361`. Saved launch still says running; there is no separate uncertainty entry. Do not replay Check service or clear state while diagnosing that failed result. The closure qualifies two original processes/streams only, not downstream family or cold settlement.
+
+Observation is preserved at `D:/Raya/Tools/Readiness-20261012/Memory-Installed-1a-Observation.json` (SHA-256 `eb383126265f1e5afb564f0d4da8b9c939234d359c6ad0c5a240410b20b3a87b`). Code is closed, no indexing or model inference ran, and no notes changed. The preceding source preparation below remains historical evidence.
+
 Read-only inspection of the closed ordinary VS Code profile selected container `raya-memory-managed-ec734ff345644fc6b1f13257270c2f46`, run `f4a1448cc1bbbecc79c1dad70f654155`, ports 53676/53677. The saved launch still says running, but its exact `managed-closed.json` is present. Actual `closed-recovery.review()` and `absent()` accepted the references, closure, producer identities and listener absence. Closure SHA-256: `044a98dc28fbf84e9467007b5aa1444620249ea080523ba4509830d5b9c9e05f`. No separate pending uncertainty or committed-capture-recovery entry was present; automatic capture preference remains enabled.
 
 Use the installed **Raya: Recover a Closed Memory Pair** command to publish the reviewed closure through the supported path, then check Memory and conversation save/recall. The command revalidates current state before publication. Nothing was published or started during this inspection. The older `45b36...` fresh-start selection below belongs to a different saved container and must not replace this current selection. Historical failed operations and audits remain evidence, and current absence does not settle them.

@@ -10,7 +10,7 @@ Everyday Raya is **`7.4.23-snapshot+1a869ca158.local.1791827879084`**, built fro
 |---|---|---|
 | Routine conversation reports | Installed: saved cards, selected conversation, worker link, wait notice and bounded older/latest pages with retry | Ordinary installed workflow, actual enabled runs and restart behaviour on this release |
 | Routine scheduling choices | Installed: skip or queue one busy occurrence; skip or run the latest missed occurrence once | Installed acceptance; no blanket replay or recovery guarantee |
-| Conversation Memory | Reviewed helper recipe and visible recovery errors are installed; capture preference is retained | Supported closed-pair recovery and live save/recall remain required |
+| Conversation Memory | Installed helper fix passed actual native recovery; capture preference remains enabled | Fresh service check ended unavailable. Both new original producers closed naturally, but saved launch still says running; diagnose before another start or live save/recall |
 | Voice | Source improvements are present in the installed package | User explicitly deferred voice; no fresh microphone, audible continuity or hands-free acceptance |
 | Recovery | Closed installation preserved saved data; protected rollback copy verified | Live restore, full local-service recovery and actual Windows postboot acceptance |
 | Models, tools and context | Earlier model comparisons and targeted context fixes have evidence | Candidate-specific everyday General/Coder/tool acceptance; historical model trials do not qualify every current workflow |
@@ -28,8 +28,8 @@ These checks establish source/component correctness and closed installation pres
 
 ## Next work
 
-1. Build chat: verify the installed routine-report API and cold reopening in a private profile, preserving occurrence identity and checking that no work replays. Run a small model-backed case only where it supplies missing evidence.
-2. Setup chat: complete supported closed-pair recovery for the currently selected Memory pair, then verify conversation saving and recall. The October 12 read-only check found no separate pending uncertainty entry; historical audits remain retained. Do not substitute older fresh-start plans from another managed container.
+1. Build chat: diagnose the retained corrected private worker admission failure, complete current-release worker/report acceptance and normal Git delivery. Preserve prior failed runs rather than replaying them.
+2. Setup chat: diagnose the actual installed Memory unavailable result and missed shutdown publication for fresh pair `5ec6678bff5863717f9149ab4436d675`, then verify conversation saving and recall. No separate pending uncertainty entry was present; historical audits remain retained. Do not substitute older fresh-start plans from another managed container.
 3. User: reopen Raya and try the routine workflow. The [routine guide](Raya-Routine-Conversation-Reports.md) explains the chat-header reports control, report destination and scheduling choices. Human listening remains deferred until requested.
 
 ## Constraints observed now
@@ -38,7 +38,9 @@ At the read-only check, Code/kilo were absent, Ollama's resident-model list was 
 
 Keep original notes, capture policy, credentials, grants and uncertain operation receipts. Do not silently enable capture, clear debt or reinterpret a failed trial as successful. Repeat a passed check only after relevant changes, a failure, or a concrete unresolved requirement.
 
-The current saved Memory container is `raya-memory-managed-ec734ff345644fc6b1f13257270c2f46`, run `f4a1448cc1bbbecc79c1dad70f654155`, ports 53676/53677. The actual `closed-recovery.review()` and `absent()` accepted its original pair references, exact closure and present producer/listener absence without starting services or modifying the profile. Closed receipt SHA-256: `044a98dc28fbf84e9467007b5aa1444620249ea080523ba4509830d5b9c9e05f`. The installed package exposes **Raya: Recover a Closed Memory Pair**. This establishes recovery eligibility, not publication, startup, capture success or downstream family settlement.
+Before native recovery, the selected Memory container was `raya-memory-managed-ec734ff345644fc6b1f13257270c2f46`, run `f4a1448cc1bbbecc79c1dad70f654155`, ports 53676/53677. The actual `closed-recovery.review()` and `absent()` accepted its original pair references, exact closure and present producer/listener absence without starting services or modifying the profile. Closed receipt SHA-256: `044a98dc28fbf84e9467007b5aa1444620249ea080523ba4509830d5b9c9e05f`. That preparatory check established eligibility; the installed result follows.
+
+On installed `1a869ca158`, supported native recovery published that exact closure: saved phase closed, audit applied, requestSettlement false. The subsequent supported Check service started fresh pair `5ec6678bff5863717f9149ab4436d675`, and both ports listened, but the panel ended **Memory unavailable**. Natural Code closure retired both original producers at zero with joined readers and no force; its exact closure is `70b0cb52cede1ec6a95acd41a1cbbcf759c229854b29a35d691a1e393410f361`. Saved phase nevertheless remained running. Observation: `D:/Raya/Tools/Readiness-20261012/Memory-Installed-1a-Observation.json`, SHA-256 `eb383126265f1e5afb564f0d4da8b9c939234d359c6ad0c5a240410b20b3a87b`. No indexing, inference, capture activation or notes changes occurred. This is not healthy Memory or full family/cold settlement acceptance.
 
 Manual SecondBrain curation updated Projects/Raya, Preferences/Raya, Commitments/Setup and Daily/2026-10-12 through the actual journaled note writer, change `23253de6-86ef-4a32-89ed-125a06dfcc71`. The committed journal and all four saved hashes match; prior versions and source snapshots remain available. `D:/Raya/TODO.md` now has an October 12 checkpoint and a byte-identical previous-checklist archive. A post-curation protected backup verifies all 182 files / 1,103,179 bytes. No indexing or capture activation ran, so current retrieval policy/index freshness must be checked after service recovery.
 

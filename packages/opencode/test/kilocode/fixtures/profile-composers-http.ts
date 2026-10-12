@@ -88,13 +88,28 @@ const host = new ComposerDrafts({
     }),
   message: async (id, message, workspace) => {
     const entries = z
-      .array(z.object({ info: z.object({ id: z.string(), role: z.string(), sessionID: z.string() }) }))
+      .array(
+        z.object({
+          info: z.object({ id: z.string(), role: z.string(), sessionID: z.string() }),
+          parts: z.array(
+            z
+              .object({
+                id: z.string(),
+                sessionID: z.string(),
+                messageID: z.string(),
+                type: z.string(),
+                metadata: z.record(z.string(), z.unknown()).optional(),
+              })
+              .passthrough(),
+          ),
+        }),
+      )
       .parse(
         await (
           await app.request(`/session/${id}/message?directory=${encodeURIComponent(workspace)}`, { headers })
         ).json(),
       )
-    return entries.find((entry) => entry.info.id === message)?.info
+    return entries.find((entry) => entry.info.id === message)
   },
 })
 await host.handle({ type: "composerDraftPane", epoch: "actual-bridge", active: true })

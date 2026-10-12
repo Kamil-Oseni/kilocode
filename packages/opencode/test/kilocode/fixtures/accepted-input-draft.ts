@@ -67,11 +67,14 @@ const requests: Array<{ method: string; path: string }> = []
 const client = createKiloClient({
   baseUrl: String(listener.url),
   directory: root,
-  fetch: async (input, init) => {
-    const request = new Request(input, init)
-    requests.push({ method: request.method, path: new URL(request.url).pathname })
-    return fetch(request)
-  },
+  fetch: Object.assign(
+    async (input: string | URL | Request, init?: RequestInit) => {
+      const request = new Request(input, init)
+      requests.push({ method: request.method, path: new URL(request.url).pathname })
+      return fetch(request)
+    },
+    { preconnect: fetch.preconnect },
+  ),
 })
 const clears: string[] = []
 const posts: ComposerDraftExtensionMessage[] = []

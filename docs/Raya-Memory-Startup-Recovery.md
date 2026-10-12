@@ -1,5 +1,13 @@
 # Memory startup recovery
 
+## Current profile checkpoint — October 12
+
+Read-only inspection of the closed ordinary VS Code profile selected container `raya-memory-managed-ec734ff345644fc6b1f13257270c2f46`, run `f4a1448cc1bbbecc79c1dad70f654155`, ports 53676/53677. The saved launch still says running, but its exact `managed-closed.json` is present. Actual `closed-recovery.review()` and `absent()` accepted the references, closure, producer identities and listener absence. Closure SHA-256: `044a98dc28fbf84e9467007b5aa1444620249ea080523ba4509830d5b9c9e05f`. No separate pending uncertainty or committed-capture-recovery entry was present; automatic capture preference remains enabled.
+
+Use the installed **Raya: Recover a Closed Memory Pair** command to publish the reviewed closure through the supported path, then check Memory and conversation save/recall. The command revalidates current state before publication. Nothing was published or started during this inspection. The older `45b36...` fresh-start selection below belongs to a different saved container and must not replace this current selection. Historical failed operations and audits remain evidence, and current absence does not settle them.
+
+## Earlier preparation and source evidence
+
 This patch targets a saved, genuinely closed service pair whose deterministic successor already exists with only the two plan files and empty Memory/Retrieval request namespaces. It does not adopt, remove, or overwrite that successor.
 
 A reviewed selector uses format `raya.memory.closed-generation.fresh-start`, version `1`, and the existing `observation`, `setup`, and `managed` fields. The observation must be the exact saved closed receipt. Recovery validates the original pair and closure, preserves the reviewed notes root, release and interpreter/supervisor hashes, and admits only separate unused namespaces and different service ports. Pending request uncertainty, unfamiliar partial artifacts, changed files, current producers, unreadable selected interpreter identities, and occupied ports refuse admission. Existing archive publication retains the previous setup, credential reference, and partial snapshot; it does not claim historical settlement or replay a failed request.

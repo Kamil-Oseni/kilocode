@@ -10,7 +10,7 @@ Everyday Raya is **`7.4.23-snapshot+f3a3aa4df9.local.1791823909482`**, built fro
 |---|---|---|
 | Routine conversation reports | Installed: one saved card per occurrence, selectable ordinary workspace conversation, worker link and persistent long-wait notice | Ordinary installed workflow, actual enabled runs and restart behaviour on this release |
 | Routine scheduling choices | Installed: skip or queue one busy occurrence; skip or run the latest missed occurrence once | Installed acceptance; no blanket replay or recovery guarantee |
-| Conversation Memory | Setup, management and scoped retrieval source improvements are installed | Real setup, saving and recall acceptance; retained shutdown debt remains unresolved |
+| Conversation Memory | Setup, management and scoped retrieval source improvements are installed; capture preference is enabled | Saved launch still says running although its exact producer pair has a validated closure. Supported closed-pair recovery and live save/recall remain required |
 | Voice | Source improvements are present in the installed package | User explicitly deferred voice; no fresh microphone, audible continuity or hands-free acceptance |
 | Recovery | Closed installation preserved saved data; protected rollback copy verified | Live restore, full local-service recovery and actual Windows postboot acceptance |
 | Models, tools and context | Earlier model comparisons and targeted context fixes have evidence | Candidate-specific everyday General/Coder/tool acceptance; historical model trials do not qualify every current workflow |
@@ -29,7 +29,7 @@ These checks establish source/component correctness and closed installation pres
 ## Next work
 
 1. Build chat: verify the installed routine-report API and cold reopening in a private profile, preserving occurrence identity and checking that no work replays. Run a small model-backed case only where it supplies missing evidence.
-2. Setup chat: inspect existing Memory service/provenance state without replaying or clearing real shutdown debt. Complete the supported conversation setup/recovery path when its required review is available.
+2. Setup chat: complete supported closed-pair recovery for the currently selected Memory pair, then verify conversation saving and recall. The October 12 read-only check found no separate pending uncertainty entry; historical audits remain retained. Do not substitute older fresh-start plans from another managed container.
 3. User: reopen Raya and try the routine workflow. The [routine guide](Raya-Routine-Conversation-Reports.md) explains the chat-header reports control, report destination and scheduling choices. Human listening remains deferred until requested.
 
 ## Constraints observed now
@@ -37,6 +37,8 @@ These checks establish source/component correctness and closed installation pres
 At the read-only check, Code/kilo were absent, Ollama's resident-model list was empty, and Home Assistant's VM was **powered off intentionally**. Do not treat that as an outage or restart it without a new request. Do not change lights, microphone state, or protected user applications for acceptance work. Second-PC migration and Raya's cloud-worker work remain canceled/released. Current peer/subagent coordination is authorized.
 
 Keep original notes, capture policy, credentials, grants and uncertain operation receipts. Do not silently enable capture, clear debt or reinterpret a failed trial as successful. Repeat a passed check only after relevant changes, a failure, or a concrete unresolved requirement.
+
+The current saved Memory container is `raya-memory-managed-ec734ff345644fc6b1f13257270c2f46`, run `f4a1448cc1bbbecc79c1dad70f654155`, ports 53676/53677. The actual `closed-recovery.review()` and `absent()` accepted its original pair references, exact closure and present producer/listener absence without starting services or modifying the profile. Closed receipt SHA-256: `044a98dc28fbf84e9467007b5aa1444620249ea080523ba4509830d5b9c9e05f`. The installed package exposes **Raya: Recover a Closed Memory Pair**. This establishes recovery eligibility, not publication, startup, capture success or downstream family settlement.
 
 ## History
 

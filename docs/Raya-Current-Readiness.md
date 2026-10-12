@@ -10,7 +10,7 @@ Everyday Raya is **`7.4.23-snapshot+1a869ca158.local.1791827879084`**, built fro
 |---|---|---|
 | Routine conversation reports | Installed: saved cards, selected conversation, worker link, wait notice and bounded older/latest pages with retry | Ordinary installed workflow, actual enabled runs and restart behaviour on this release |
 | Routine scheduling choices | Installed: skip or queue one busy occurrence; skip or run the latest missed occurrence once | Installed acceptance; no blanket replay or recovery guarantee |
-| Conversation Memory | Installed helper fix passed actual native recovery; capture preference remains enabled | Fresh service check ended unavailable. Both new original producers closed naturally, but saved launch still says running; diagnose before another start or live save/recall |
+| Conversation Memory | Installed helper fix passed native recovery; supported review refreshed the same ten source approvals to revision 11 with zero stale hashes | Fresh health check on the next candidate, current closed-pair publication and live save/recall remain pending |
 | Voice | Source improvements are present in the installed package | User explicitly deferred voice; no fresh microphone, audible continuity or hands-free acceptance |
 | Recovery | Closed installation preserved saved data; protected rollback copy verified | Live restore, full local-service recovery and actual Windows postboot acceptance |
 | Models, tools and context | Earlier model comparisons and targeted context fixes have evidence | Candidate-specific everyday General/Coder/tool acceptance; historical model trials do not qualify every current workflow |
@@ -29,7 +29,7 @@ These checks establish source/component correctness and closed installation pres
 ## Next work
 
 1. Build chat: diagnose the retained corrected private worker admission failure, complete current-release worker/report acceptance and normal Git delivery. Preserve prior failed runs rather than replaying them.
-2. Setup chat: diagnose the actual installed Memory unavailable result and missed shutdown publication for fresh pair `5ec6678bff5863717f9149ab4436d675`, then verify conversation saving and recall. No separate pending uncertainty entry was present; historical audits remain retained. Do not substitute older fresh-start plans from another managed container.
+2. Setup chat: use the exact existing `70b0...` closure for supported recovery, then check health with refreshed source policy revision 11. Verify indexing and conversation saving/recall only after coordinating the inference slot. No separate pending uncertainty entry was present; historical audits remain retained. Do not substitute older fresh-start plans from another managed container.
 3. User: reopen Raya and try the routine workflow. The [routine guide](Raya-Routine-Conversation-Reports.md) explains the chat-header reports control, report destination and scheduling choices. Human listening remains deferred until requested.
 
 ## Constraints observed now

@@ -82,7 +82,7 @@ export class SetupFlow {
           )
         }
       }
-      return this.next(attempt, project, prepared, check)
+      return await this.next(attempt, project, prepared, check)
     } catch (err) {
       attempt.closed = true
       throw err

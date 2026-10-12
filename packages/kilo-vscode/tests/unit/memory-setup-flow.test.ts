@@ -90,6 +90,31 @@ test("A failed preparation closes its lost attempt so setup can resume immediate
   expect((await run({ stage: "inspect" })).status).toBe("choice")
 })
 
+test("A held setup snapshot retains ownership and closes its failed attempt before retry", async () => {
+  const { input, run, calls } = fixture()
+  const first = await run({ stage: "inspect" })
+  const original = input.snapshot
+  const held = Promise.withResolvers<Awaited<ReturnType<typeof original>>>()
+  const entered = Promise.withResolvers<void>()
+  input.snapshot = async () => {
+    entered.resolve()
+    return held.promise
+  }
+  const active = run({ stage: "continue", attempt: first.attempt, choice: "use_prepared" })
+  await entered.promise
+  await expect(run({ stage: "inspect" })).rejects.toThrow("Resume or cancel the original")
+  held.reject(new Error("Snapshot unavailable"))
+  await expect(active).rejects.toThrow("Snapshot unavailable")
+  input.snapshot = original
+  await expect(run({ stage: "continue", attempt: first.attempt, choice: "use_prepared" })).rejects.toThrow(
+    "expired or changed",
+  )
+  const next = await run({ stage: "inspect" })
+  expect(next.attempt).not.toBe(first.attempt)
+  expect(next.question?.options[0].id).toBe("choose_notes")
+  expect(calls).toEqual(["connect"])
+})
+
 test("A configured but unconfirmed generation enters reviewed fresh recovery before note selection", async () => {
   const { input, run, state, candidate, calls } = fixture()
   state.configured = true

@@ -2114,7 +2114,7 @@ export type ExtensionMessage =
   | RoutineForecastMessage
   | RoutineScheduleUpdatedMessage
   | RoutineRunsLoadedMessage
-  | import("../../../../src/shared/routine-reports").AgentReportsLoaded
+  | AgentReportsLoaded
   | RoutineSnapshotMessage
   | RoutineRecoveryClosedMessage
   | RoutineAccessUpdatedMessage
@@ -2346,3 +2346,4 @@ export type ExtensionMessage =
   | MemoryOperationResultMessage
   | BackgroundJobsLoadedMessage
   | ChildSteerResultMessage
+import type { AgentReportsLoaded } from "../../../../src/shared/routine-reports"

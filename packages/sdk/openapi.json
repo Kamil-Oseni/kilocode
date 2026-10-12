@@ -36546,6 +36546,22 @@
                         "required": ["destination", "description", "criteria"],
                         "additionalProperties": false
                       },
+                      "sourceSessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "reportSessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "overlap": {
+                        "type": "string",
+                        "enum": ["skip", "queue"]
+                      },
+                      "missed": {
+                        "type": "string",
+                        "enum": ["skip", "latest"]
+                      },
                       "capabilities": {
                         "type": "array",
                         "items": {
@@ -36991,6 +37007,22 @@
                       "required": ["destination", "description", "criteria"],
                       "additionalProperties": false
                     },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "reportSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "overlap": {
+                      "type": "string",
+                      "enum": ["skip", "queue"]
+                    },
+                    "missed": {
+                      "type": "string",
+                      "enum": ["skip", "latest"]
+                    },
                     "capabilities": {
                       "type": "array",
                       "items": {
@@ -37399,6 +37431,22 @@
                     "required": ["destination", "description", "criteria"],
                     "additionalProperties": false
                   },
+                  "sourceSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "reportSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "overlap": {
+                    "type": "string",
+                    "enum": ["skip", "queue"]
+                  },
+                  "missed": {
+                    "type": "string",
+                    "enum": ["skip", "latest"]
+                  },
                   "capabilities": {
                     "type": "array",
                     "items": {
@@ -37581,6 +37629,210 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/kilocode/agent-reports": {
+      "get": {
+        "tags": ["kilocode"],
+        "operationId": "kilocode.routine.reports",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved routine reports for this conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "runID": {
+                        "type": "string"
+                      },
+                      "agentID": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "sourceSessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "reportSessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "workerSessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "projectID": {
+                        "type": "string"
+                      },
+                      "directory": {
+                        "type": "string"
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "runRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["queued", "running", "complete", "blocked", "error"]
+                      },
+                      "at": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 8000
+                      },
+                      "delivery": {
+                        "type": "string",
+                        "enum": ["delivered", "unavailable"]
+                      },
+                      "notice": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": ["busy", "deferred"]
+                          }
+                        },
+                        "required": ["at", "reason"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "id",
+                      "agentID",
+                      "name",
+                      "reportSessionID",
+                      "projectID",
+                      "directory",
+                      "revision",
+                      "status",
+                      "at",
+                      "summary",
+                      "delivery"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "Saved routine reports for this conversation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read authoritative routine progress and results without starting a model turn or worker.",
+        "summary": "Read conversation routine reports",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.kilocode.routine.reports({\n  ...\n})"
           }
         ]
       }
@@ -37794,6 +38046,22 @@
                                 },
                                 "required": ["destination", "description", "criteria"],
                                 "additionalProperties": false
+                              },
+                              "sourceSessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "reportSessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "overlap": {
+                                "type": "string",
+                                "enum": ["skip", "queue"]
+                              },
+                              "missed": {
+                                "type": "string",
+                                "enum": ["skip", "latest"]
                               },
                               "capabilities": {
                                 "type": "array",
@@ -38261,6 +38529,22 @@
                       "required": ["destination", "description", "criteria"],
                       "additionalProperties": false
                     },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "reportSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "overlap": {
+                      "type": "string",
+                      "enum": ["skip", "queue"]
+                    },
+                    "missed": {
+                      "type": "string",
+                      "enum": ["skip", "latest"]
+                    },
                     "capabilities": {
                       "type": "array",
                       "items": {
@@ -38678,6 +38962,34 @@
                     },
                     "required": ["destination", "description", "criteria"],
                     "additionalProperties": false
+                  },
+                  "sourceSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "reportSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "expectedReportSessionID": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["unset"]
+                      }
+                    ]
+                  },
+                  "overlap": {
+                    "type": "string",
+                    "enum": ["skip", "queue"]
+                  },
+                  "missed": {
+                    "type": "string",
+                    "enum": ["skip", "latest"]
                   },
                   "capabilities": {
                     "type": "array",
@@ -39243,6 +39555,22 @@
                       },
                       "required": ["destination", "description", "criteria"],
                       "additionalProperties": false
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "reportSessionID": {
+                      "type": "string",
+                      "pattern": "^ses"
+                    },
+                    "overlap": {
+                      "type": "string",
+                      "enum": ["skip", "queue"]
+                    },
+                    "missed": {
+                      "type": "string",
+                      "enum": ["skip", "latest"]
                     },
                     "capabilities": {
                       "type": "array",
@@ -41742,6 +42070,22 @@
                           },
                           "required": ["destination", "description", "criteria"],
                           "additionalProperties": false
+                        },
+                        "sourceSessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        },
+                        "reportSessionID": {
+                          "type": "string",
+                          "pattern": "^ses"
+                        },
+                        "overlap": {
+                          "type": "string",
+                          "enum": ["skip", "queue"]
+                        },
+                        "missed": {
+                          "type": "string",
+                          "enum": ["skip", "latest"]
                         },
                         "capabilities": {
                           "type": "array",
@@ -76081,6 +76425,9 @@
             "$ref": "#/components/schemas/EventRayaChiefNoteAvailable1"
           },
           {
+            "$ref": "#/components/schemas/EventRayaRoutineReportChanged1"
+          },
+          {
             "$ref": "#/components/schemas/EventKilocodeBrowserRequested"
           },
           {
@@ -84822,6 +85169,9 @@
               },
               {
                 "$ref": "#/components/schemas/EventRayaChiefNoteAvailable"
+              },
+              {
+                "$ref": "#/components/schemas/EventRayaRoutineReportChanged"
               },
               {
                 "$ref": "#/components/schemas/EventKilocodeBrowserRequested"
@@ -105687,6 +106037,160 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventRayaRoutineReportChanged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.routine.report.changed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "card": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "runID": {
+                    "type": "string"
+                  },
+                  "agentID": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "sourceSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "reportSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "workerSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "directory": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "runRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["queued", "running", "complete", "blocked", "error"]
+                  },
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity", "-Infinity", "NaN"]
+                      }
+                    ]
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 8000
+                  },
+                  "delivery": {
+                    "type": "string",
+                    "enum": ["delivered", "unavailable"]
+                  },
+                  "notice": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "type": "string",
+                        "enum": ["busy", "deferred"]
+                      }
+                    },
+                    "required": ["at", "reason"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "version",
+                  "id",
+                  "agentID",
+                  "name",
+                  "reportSessionID",
+                  "projectID",
+                  "directory",
+                  "revision",
+                  "status",
+                  "at",
+                  "summary",
+                  "delivery"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["card"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventKilocodeBrowserRequested": {
         "type": "object",
         "properties": {
@@ -123263,6 +123767,156 @@
               }
             },
             "required": ["version", "sessionID", "goalCreatedAt", "requestID", "revision", "noteID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventRayaRoutineReportChanged1": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["raya.routine.report.changed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "card": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "enum": [1]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "runID": {
+                    "type": "string"
+                  },
+                  "agentID": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "sourceSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "reportSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "workerSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "directory": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "runRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["queued", "running", "complete", "blocked", "error"]
+                  },
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ],
+                    "minimum": -8640000000000000,
+                    "maximum": 8640000000000000
+                  },
+                  "summary": {
+                    "type": "string",
+                    "maxLength": 8000
+                  },
+                  "delivery": {
+                    "type": "string",
+                    "enum": ["delivered", "unavailable"]
+                  },
+                  "notice": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          }
+                        ],
+                        "minimum": -8640000000000000,
+                        "maximum": 8640000000000000
+                      },
+                      "reason": {
+                        "type": "string",
+                        "enum": ["busy", "deferred"]
+                      }
+                    },
+                    "required": ["at", "reason"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "version",
+                  "id",
+                  "agentID",
+                  "name",
+                  "reportSessionID",
+                  "projectID",
+                  "directory",
+                  "revision",
+                  "status",
+                  "at",
+                  "summary",
+                  "delivery"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["card"],
             "additionalProperties": false
           }
         },

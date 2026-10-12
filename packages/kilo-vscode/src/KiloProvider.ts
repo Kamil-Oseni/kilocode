@@ -440,11 +440,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       generation: this.connectionGeneration,
       sessionID: this.contextSessionID ?? this.currentSession?.id,
     }),
-    async (client, directory, sessionID, signal) => {
-      const config = this.connectionService.getServerConfig()
-      if (!config || client !== this.client) throw new Error("Original report connection unavailable")
-      return reports(config, directory, sessionID, signal)
-    },
+    reports,
     (message) => this.postMessage(message),
   )
   private readonly routineRefresh = new RoutineRefresh(

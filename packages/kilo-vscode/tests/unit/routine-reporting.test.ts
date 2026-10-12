@@ -71,12 +71,14 @@ test("authoritative routine cards survive a failed refresh without transcript or
       ])
     },
   })
-  const client = createKiloClient({ baseUrl: server.url.toString() })
+  const client = createKiloClient({
+    baseUrl: server.url.toString(),
+    headers: { Authorization: `Basic ${btoa("kilo:synthetic-only")}` },
+  })
   const messages: Record<string, unknown>[] = []
   const reporting = new RoutineReporting(
     () => ({ client, directory: "workspace", generation: 1, sessionID: "origin" }),
-    (_client, directory, sessionID, signal) =>
-      reports({ baseUrl: server.url.toString(), password: "synthetic-only" }, directory, sessionID, signal),
+    reports,
     (message) => messages.push(message),
   )
   try {
@@ -103,7 +105,7 @@ test("authoritative routine cards survive a failed refresh without transcript or
       requestID: "reopened",
       items: [{ ...card, revision: 3, status: "running", runID: "original-run", workerSessionID: "worker-session" }],
     })
-    expect(paths).toEqual(Array(4).fill("GET /kilocode/agent-reports?sessionID=origin&directory=workspace"))
+    expect(paths).toEqual(Array(4).fill("GET /kilocode/agent-reports?directory=workspace&sessionID=origin"))
     expect(messages.every((message) => message.type === "agentReportsLoaded")).toBe(true)
   } finally {
     reporting.dispose()
@@ -117,7 +119,8 @@ test("held original report response cannot cross connection generation or origin
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    async fetch() {
+    async fetch(request) {
+      expect(request.headers.get("authorization")).toBe(`Basic ${btoa("kilo:synthetic-only")}`)
       reached.resolve()
       await release.promise
       return Response.json([
@@ -138,13 +141,15 @@ test("held original report response cannot cross connection generation or origin
       ])
     },
   })
-  const client = createKiloClient({ baseUrl: server.url.toString() })
+  const client = createKiloClient({
+    baseUrl: server.url.toString(),
+    headers: { Authorization: `Basic ${btoa("kilo:synthetic-only")}` },
+  })
   const scope = { client, directory: "workspace", generation: 1, sessionID: "origin" }
   const messages: Record<string, unknown>[] = []
   const reporting = new RoutineReporting(
     () => scope,
-    (_client, directory, sessionID, signal) =>
-      reports({ baseUrl: server.url.toString(), password: "synthetic-only" }, directory, sessionID, signal),
+    reports,
     (message) => messages.push(message),
   )
   try {

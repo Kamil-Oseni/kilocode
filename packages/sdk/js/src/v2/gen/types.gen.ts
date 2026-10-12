@@ -123,6 +123,7 @@ export type Event =
   | EventKilocodeNotebookCancelled
   | EventKiloSessionsRemoteStatusChanged
   | EventRayaChiefNoteAvailable1
+  | EventRayaRoutineReportChanged1
   | EventKilocodeBrowserRequested
   | EventKilocodeBrowserCancelled
   | EventKilocodeDesktopRequested
@@ -2824,6 +2825,7 @@ export type GlobalEvent = {
     | EventKilocodeNotebookCancelled
     | EventKiloSessionsRemoteStatusChanged
     | EventRayaChiefNoteAvailable
+    | EventRayaRoutineReportChanged
     | EventKilocodeBrowserRequested
     | EventKilocodeBrowserCancelled
     | EventKilocodeDesktopRequested
@@ -9044,6 +9046,35 @@ export type EventRayaChiefNoteAvailable = {
   }
 }
 
+export type EventRayaRoutineReportChanged = {
+  id: string
+  type: "raya.routine.report.changed"
+  properties: {
+    card: {
+      version: 1
+      id: string
+      runID?: string
+      agentID: string
+      name: string
+      sourceSessionID?: string
+      reportSessionID: string
+      workerSessionID?: string
+      projectID: string
+      directory: string
+      revision: number
+      runRevision?: number
+      status: "queued" | "running" | "complete" | "blocked" | "error"
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summary: string
+      delivery: "delivered" | "unavailable"
+      notice?: {
+        at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        reason: "busy" | "deferred"
+      }
+    }
+  }
+}
+
 export type EventKilocodeBrowserRequested = {
   id: string
   type: "kilocode.browser.requested"
@@ -14564,6 +14595,35 @@ export type EventRayaChiefNoteAvailable1 = {
     requestID: string
     revision: string
     noteID: string
+  }
+}
+
+export type EventRayaRoutineReportChanged1 = {
+  id: string
+  type: "raya.routine.report.changed"
+  properties: {
+    card: {
+      version: 1
+      id: string
+      runID?: string
+      agentID: string
+      name: string
+      sourceSessionID?: string
+      reportSessionID: string
+      workerSessionID?: string
+      projectID: string
+      directory: string
+      revision: number
+      runRevision?: number
+      status: "queued" | "running" | "complete" | "blocked" | "error"
+      at: number | "NaN" | "Infinity" | "-Infinity"
+      summary: string
+      delivery: "delivered" | "unavailable"
+      notice?: {
+        at: number | "NaN" | "Infinity" | "-Infinity"
+        reason: "busy" | "deferred"
+      }
+    }
   }
 }
 
@@ -26010,6 +26070,10 @@ export type KilocodeRoutineListResponses = {
         verification: string
       }>
     }
+    sourceSessionID?: string
+    reportSessionID?: string
+    overlap?: "skip" | "queue"
+    missed?: "skip" | "latest"
     capabilities: Array<string>
     provisioning?: {
       enabled: boolean
@@ -26086,6 +26150,10 @@ export type KilocodeRoutineCreateData = {
         verification: string
       }>
     }
+    sourceSessionID?: string
+    reportSessionID?: string
+    overlap?: "skip" | "queue"
+    missed?: "skip" | "latest"
     capabilities?: Array<string>
     memoryScope?: "role" | "project" | "session"
     schedule:
@@ -26163,6 +26231,10 @@ export type KilocodeRoutineCreateResponses = {
         verification: string
       }>
     }
+    sourceSessionID?: string
+    reportSessionID?: string
+    overlap?: "skip" | "queue"
+    missed?: "skip" | "latest"
     capabilities: Array<string>
     provisioning?: {
       enabled: boolean
@@ -26224,6 +26296,56 @@ export type KilocodeRoutineCreateResponses = {
 }
 
 export type KilocodeRoutineCreateResponse = KilocodeRoutineCreateResponses[keyof KilocodeRoutineCreateResponses]
+
+export type KilocodeRoutineReportsData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    sessionID: string
+  }
+  url: "/kilocode/agent-reports"
+}
+
+export type KilocodeRoutineReportsErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+}
+
+export type KilocodeRoutineReportsError = KilocodeRoutineReportsErrors[keyof KilocodeRoutineReportsErrors]
+
+export type KilocodeRoutineReportsResponses = {
+  /**
+   * Saved routine reports for this conversation
+   */
+  200: Array<{
+    version: 1
+    id: string
+    runID?: string
+    agentID: string
+    name: string
+    sourceSessionID?: string
+    reportSessionID: string
+    workerSessionID?: string
+    projectID: string
+    directory: string
+    revision: number
+    runRevision?: number
+    status: "queued" | "running" | "complete" | "blocked" | "error"
+    at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    summary: string
+    delivery: "delivered" | "unavailable"
+    notice?: {
+      at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      reason: "busy" | "deferred"
+    }
+  }>
+}
+
+export type KilocodeRoutineReportsResponse = KilocodeRoutineReportsResponses[keyof KilocodeRoutineReportsResponses]
 
 export type KilocodeRoutineAuthorityServicesData = {
   body?: never
@@ -26305,6 +26427,10 @@ export type KilocodeRoutineArchiveResponses = {
             verification: string
           }>
         }
+        sourceSessionID?: string
+        reportSessionID?: string
+        overlap?: "skip" | "queue"
+        missed?: "skip" | "latest"
         capabilities: Array<string>
         provisioning?: {
           enabled: boolean
@@ -26418,6 +26544,11 @@ export type KilocodeRoutineUpdateData = {
         verification: string
       }>
     }
+    sourceSessionID?: string
+    reportSessionID?: string
+    expectedReportSessionID?: string | "unset"
+    overlap?: "skip" | "queue"
+    missed?: "skip" | "latest"
     capabilities?: Array<string>
     memoryScope?: "role" | "project" | "session"
     schedule?:
@@ -26543,6 +26674,10 @@ export type KilocodeRoutineUpdateResponses = {
         verification: string
       }>
     }
+    sourceSessionID?: string
+    reportSessionID?: string
+    overlap?: "skip" | "queue"
+    missed?: "skip" | "latest"
     capabilities: Array<string>
     provisioning?: {
       enabled: boolean
@@ -26652,6 +26787,10 @@ export type KilocodeRoutineAuthorityResponses = {
         verification: string
       }>
     }
+    sourceSessionID?: string
+    reportSessionID?: string
+    overlap?: "skip" | "queue"
+    missed?: "skip" | "latest"
     capabilities: Array<string>
     provisioning?: {
       enabled: boolean
@@ -27207,6 +27346,10 @@ export type KilocodeRoutineSnapshotResponses = {
           verification: string
         }>
       }
+      sourceSessionID?: string
+      reportSessionID?: string
+      overlap?: "skip" | "queue"
+      missed?: "skip" | "latest"
       capabilities: Array<string>
       provisioning?: {
         enabled: boolean

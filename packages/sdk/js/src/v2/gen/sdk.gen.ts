@@ -351,6 +351,8 @@ import type {
   KilocodeRoutineRecoveryCloseResponses,
   KilocodeRoutineRemoveErrors,
   KilocodeRoutineRemoveResponses,
+  KilocodeRoutineReportsErrors,
+  KilocodeRoutineReportsResponses,
   KilocodeRoutineRunErrors,
   KilocodeRoutineRunResponses,
   KilocodeRoutineRunsErrors,
@@ -10812,6 +10814,10 @@ export class Routine extends HeyApiClient {
           verification: string
         }>
       }
+      sourceSessionID?: string
+      reportSessionID?: string
+      overlap?: "skip" | "queue"
+      missed?: "skip" | "latest"
       capabilities?: Array<string>
       memoryScope?: "role" | "project" | "session"
       schedule?:
@@ -10866,6 +10872,10 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "role" },
             { in: "body", key: "objective" },
             { in: "body", key: "output" },
+            { in: "body", key: "sourceSessionID" },
+            { in: "body", key: "reportSessionID" },
+            { in: "body", key: "overlap" },
+            { in: "body", key: "missed" },
             { in: "body", key: "capabilities" },
             { in: "body", key: "memoryScope" },
             { in: "body", key: "schedule" },
@@ -10897,6 +10907,42 @@ export class Routine extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Read conversation routine reports
+   *
+   * Read authoritative routine progress and results without starting a model turn or worker.
+   */
+  public reports<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeRoutineReportsResponses,
+      KilocodeRoutineReportsErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/agent-reports",
+      ...options,
+      ...params,
     })
   }
 
@@ -11030,6 +11076,11 @@ export class Routine extends HeyApiClient {
           verification: string
         }>
       }
+      sourceSessionID?: string
+      reportSessionID?: string
+      expectedReportSessionID?: string | "unset"
+      overlap?: "skip" | "queue"
+      missed?: "skip" | "latest"
       capabilities?: Array<string>
       memoryScope?: "role" | "project" | "session"
       schedule?:
@@ -11127,6 +11178,11 @@ export class Routine extends HeyApiClient {
             { in: "body", key: "role" },
             { in: "body", key: "objective" },
             { in: "body", key: "output" },
+            { in: "body", key: "sourceSessionID" },
+            { in: "body", key: "reportSessionID" },
+            { in: "body", key: "expectedReportSessionID" },
+            { in: "body", key: "overlap" },
+            { in: "body", key: "missed" },
             { in: "body", key: "capabilities" },
             { in: "body", key: "memoryScope" },
             { in: "body", key: "schedule" },

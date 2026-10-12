@@ -2,22 +2,10 @@ import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { Reports } from "../shared/routine-reports"
 import { sameDirectory } from "../kilo-provider-utils"
 
-export async function reports(
-  config: { baseUrl: string; password: string },
-  directory: string,
-  sessionID: string,
-  signal: AbortSignal,
-) {
-  const url = new URL("/kilocode/agent-reports", config.baseUrl)
-  url.searchParams.set("sessionID", sessionID)
-  url.searchParams.set("directory", directory)
-  const response = await fetch(url, {
-    headers: { Authorization: `Basic ${Buffer.from(`kilo:${config.password}`).toString("base64")}` },
-    redirect: "error",
-    signal,
-  })
-  if (!response.ok) throw new Error("Original report snapshot unavailable")
-  return Reports.parse(await response.json())
+export async function reports(client: KiloClient, directory: string, sessionID: string, signal: AbortSignal) {
+  const response = await client.kilocode.routine.reports({ directory, sessionID }, { signal, throwOnError: true })
+  signal.throwIfAborted()
+  return Reports.parse(response.data)
 }
 
 type Scope = { client: KiloClient | null; directory: string; generation: number; sessionID?: string }

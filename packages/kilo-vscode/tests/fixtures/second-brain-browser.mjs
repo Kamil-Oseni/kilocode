@@ -214,6 +214,29 @@ try {
   assert.match(node.textContent, /Notes folder:/)
   assert.match(node.textContent, /Memory connected/)
   assert.match(node.textContent, /Selected notes indexed; search is ready/)
+  assert.equal(button("Continue setup with Raya"), undefined)
+  let continuations = 0
+  const continuation = () => continuations++
+  window.addEventListener("raya:setup-memory", continuation)
+  emit(current, {
+    configured: true,
+    status: "unavailable",
+    code: "managed_generation_conflict",
+    root,
+    results: [],
+  })
+  const requests = sent.length
+  button("Continue setup with Raya").click()
+  assert.equal(continuations, 1)
+  assert.equal(sent.length, requests)
+  assert.match(node.textContent, /Memory unavailable/)
+  assert.match(node.textContent, /Notes folder:/)
+  assert.match(node.textContent, new RegExp(root))
+  emit(current, { configured: true, status: "ready", results: [], root, control: { status: "uncertain" } })
+  assert.equal(button("Continue setup with Raya").disabled, false)
+  emit(current, { configured: true, status: "ready", results: [], root, control: { status: "synced" } })
+  assert.equal(button("Continue setup with Raya"), undefined)
+  window.removeEventListener("raya:setup-memory", continuation)
   const field = document.querySelector("input")
   field.value = "D:\\Raya\\Services\\Memory\\setup.json"
   field.dispatchEvent(new window.Event("input", { bubbles: true }))

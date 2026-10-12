@@ -61,6 +61,15 @@ const captures: Record<BrainCapture["status"], string> = {
   capacity: "Automatic saving needs space",
 }
 
+function onboarding(state: BrainState) {
+  return (
+    !state.configured ||
+    state.status === "unavailable" ||
+    state.control?.status === "uncertain" ||
+    ["managed_generation_conflict", "closed_pair_recovery_required", "setup_invalid"].includes(state.code ?? "")
+  )
+}
+
 export function SecondBrain() {
   const [expanded, expand] = createSignal(false)
   const vscode = useVSCode()
@@ -128,12 +137,12 @@ export function SecondBrain() {
           : "Let Raya remember your preferences and project details. Set it up in conversation."}
       </p>
       <p role="status">{state().configured ? status[state().status] : "Setup required"}</p>
-      <Show when={!state().configured}>
+      <Show when={onboarding(state())}>
         <Button
           onClick={() => window.dispatchEvent(new Event("raya:setup-memory"))}
           disabled={busy() || !server.isConnected()}
         >
-          Set up with Raya
+          {state().configured ? "Continue setup with Raya" : "Set up with Raya"}
         </Button>
         <Show when={!server.isConnected()}>
           <p role="status">Connect to Raya to set up memory.</p>

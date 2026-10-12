@@ -193,6 +193,49 @@ test("conversational saving controls explain observed future state without resol
   }
 })
 
+test("natural personal factual questions release synthesis only after an original validated note read", () => {
+  for (const text of [
+    "Which speech engine did I choose?",
+    "Which local speech engine and fallback did I choose? Cite the sources.",
+    "What is my grocery list?",
+    "What's my shopping list?",
+    "What groceries do I lack?",
+    "What is my timezone?",
+    "Where do I live?",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled(original.messages, original.session, uid)).toBe(true)
+    expect(settled(original.messages, { ...original.session, directory: "/other" }, uid)).toBe(false)
+    original.tool.state = { ...original.tool.state, output: "{}" }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
+test("natural personal recall does not release purchasing, trading, advice or compound actions", () => {
+  for (const text of [
+    "What should I buy?",
+    "Which trading model did I choose?",
+    "What is my trading strategy?",
+    "How do I trade forex?",
+    "What should I do about my project?",
+    "What is my grocery list? Place an order.",
+    "What groceries do I lack, then buy them?",
+    "Which speech engine did I choose? Change my voice.",
+    "Where do I live? Book a taxi.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("explicit recall releases synthesis after the original read while preserving file and light restrictions", () => {
   for (const text of [
     "Recall my saved preferences for delivering Raya builds and choosing how much testing to do. Use my local notes and cite the source. Do not change files or lights.",

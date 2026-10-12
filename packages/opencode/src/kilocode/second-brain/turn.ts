@@ -136,6 +136,23 @@ function status(request: string) {
   )
 }
 
+/** Familiar personal fact questions do not require the user to mention the Memory implementation. */
+function personal(request: string) {
+  const text = request.replace(/\s+Cite (?:the saved |the |my )?sources[.!]?$/i, "").replace(/^please /i, "")
+  return (
+    /^(?:what|which) (?:(?:local|preferred|selected) )?(?:voice|speech engine|transcription engine|TTS engine|STT engine|embedding model|memory model|fallback)(?: and (?:fallback|voice|speech engine))? did I (?:choose|pick|select)\??$/i.test(
+      text,
+    ) ||
+    /^(?:what (?:is|was)|what's) my (?:(?:current|preferred) )?(?:shopping list|grocery list|timezone|time zone|city|voice|speech engine|transcription engine|embedding model|fallback)\??$/i.test(
+      text,
+    ) ||
+    /^what (?:groceries|grocery items) (?:am I missing|do I lack|do I need|are missing from my shopping list)\??$/i.test(
+      text,
+    ) ||
+    /^where (?:do|did) I live\??$/i.test(text)
+  )
+}
+
 function question(request: string) {
   const original = request
     .replace(/[.!?]\s*(?:do not|don't)\s+change (?:anything|files|lights)(?: or (?:files|lights))?[.!]?$/i, "")
@@ -161,7 +178,7 @@ function question(request: string) {
     )
   )
     return false
-  if (!/\b(?:memory|remember|saved|notes?|preferences?)\b/i.test(request)) return false
+  if (!/\b(?:memory|remember|saved|notes?|preferences?)\b/i.test(request) && !personal(text)) return false
   return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|orders|place|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|set up)\b/i.test(
     text,
   )

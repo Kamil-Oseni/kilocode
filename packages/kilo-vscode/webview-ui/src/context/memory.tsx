@@ -7,8 +7,13 @@ import { useLanguage } from "./language"
 import { showToast } from "@kilocode/kilo-ui/toast"
 import type { MemoryStatusResponse } from "@kilocode/sdk/v2"
 import type { ExtensionMessage } from "../types/messages"
+import type { CaptureReceipt } from "../../../src/shared/second-brain"
+import { receipt } from "../utils/capture-receipt"
+import { project } from "../components/settings/brain-proposal-state"
 
 export interface MemoryContextValue {
+  saved?: Accessor<CaptureReceipt | undefined>
+  confirmed?: (sessionID: string, messageID: string) => boolean
   status: Accessor<MemoryStatusResponse | undefined>
   loading: Accessor<boolean>
   pending: Accessor<boolean>
@@ -36,6 +41,14 @@ export const MemoryProvider: ParentComponent = (props) => {
   const [loading, setLoading] = createSignal(false)
   const [pending, setPending] = createSignal<string | undefined>()
   const [error, setError] = createSignal<string | undefined>()
+  const [captures, setCaptures] = createSignal<ReadonlyMap<string, CaptureReceipt>>(new Map())
+  let folder = ""
+  createEffect(() => {
+    const current = project(server.workspaceDirectory())
+    if (folder === current) return
+    folder = current
+    setCaptures(new Map())
+  })
 
   const id = () => session.currentSessionID()
   const key = (sid?: string) => sid ?? ""
@@ -144,6 +157,23 @@ export const MemoryProvider: ParentComponent = (props) => {
   }
 
   const receive = (message: ExtensionMessage) => {
+    if (message.type === "secondBrainSaved") {
+      const value = message.receipt
+      if (value === undefined) {
+        setCaptures(new Map())
+        return
+      }
+      if (!receipt(value) || !folder || project(value.project) !== folder) return
+      setCaptures((previous) => {
+        const next = new Map(previous)
+        const key = JSON.stringify([value.sessionID, value.messageID])
+        next.delete(key)
+        next.set(key, { ...value })
+        if (next.size > 128) next.delete(next.keys().next().value!)
+        return next
+      })
+      return
+    }
     if (message.type === "memoryEvent") {
       event(message)
       return
@@ -182,6 +212,8 @@ export const MemoryProvider: ParentComponent = (props) => {
   const total = createMemo(() => status()?.index.estimatedTokens ?? 0)
 
   const value: MemoryContextValue = {
+    saved: () => Array.from(captures().values()).at(-1),
+    confirmed: (sid, mid) => captures().has(JSON.stringify([sid, mid])),
     status,
     loading,
     pending: createMemo(() => pending() === key(id())),

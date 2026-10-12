@@ -588,6 +588,7 @@ const AppContent: Component = () => {
             </Match>
             <Match when={currentView() === "memory"}>
               <MemoryView
+                conversation={handleSelectSession}
                 settings={() => {
                   setSettingsTab("context")
                   setCurrentView("settings")

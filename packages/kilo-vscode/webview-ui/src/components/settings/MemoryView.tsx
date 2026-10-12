@@ -4,14 +4,16 @@ import { Card } from "@kilocode/kilo-ui/card"
 import { useMemory } from "../../context/memory"
 import { MemoryActions } from "./ContextTab"
 import { SecondBrain } from "./SecondBrain"
+import { SavedConversation } from "../chat/SavedMemory"
 
-export function MemoryView(props: { settings: () => void }) {
+export function MemoryView(props: { settings: () => void; conversation: (sessionID: string) => void }) {
   const memory = useMemory()
   return (
     <div class="raya-memory-view">
       <h2>Memory</h2>
       <p>Find source-backed notes and review changes before saving them.</p>
       <SecondBrain />
+      <SavedConversation open={props.conversation} />
       <Card>
         <h3>Current project memory</h3>
         <p>{memory.status()?.root ?? "Connect to the workspace to load project memory."}</p>

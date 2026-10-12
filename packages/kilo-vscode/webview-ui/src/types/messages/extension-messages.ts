@@ -1,5 +1,5 @@
 import type { LiveUsage } from "../../../../src/shared/live-usage"
-import type { BrainResponse } from "../../../../src/shared/second-brain"
+import type { BrainResponse, CaptureReceipt } from "../../../../src/shared/second-brain"
 import type { HandoffCommand } from "../../../../src/shared/voice-handoff"
 import type { VoiceUsage } from "../../../../src/shared/voice-usage"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
@@ -2067,6 +2067,7 @@ export interface FocusTimerResultMessage {
 }
 
 export type ExtensionMessage =
+  | { type: "secondBrainSaved"; receipt?: CaptureReceipt }
   | BrainResponse
   | RestoreResult
   | import("../../../../src/shared/composer-drafts-messages").ComposerDraftExtensionMessage

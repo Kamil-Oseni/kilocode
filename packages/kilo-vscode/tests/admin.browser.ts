@@ -1,6 +1,38 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("confirmed memory saves bind to their original reply and current project", async ({ page }) => {
+  await page.goto("/?state=memory-saved")
+  const badge = page.getByText("Saved to memory", { exact: true })
+  const receipt = {
+    id: "90000000-0000-4000-8000-000000000000",
+    project: "C:/work/raya-feature",
+    sessionID: "original-session",
+    messageID: "original-message",
+    receipt: "a".repeat(64),
+  }
+  const publish = (value: unknown) =>
+    page.evaluate((value) => (window as unknown as { __saved: (value: unknown) => void }).__saved(value), value)
+  await expect(badge).toHaveCount(0)
+  await publish({ ...receipt, project: "C:/work/other" })
+  await expect(badge).toHaveCount(0)
+  await publish({ ...receipt, receipt: "unconfirmed" })
+  await expect(badge).toHaveCount(0)
+  await publish(receipt)
+  await expect(badge).toHaveCount(1)
+  await expect(page.getByText("Last saved conversation", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "View conversation", exact: true }).click()
+  const sent = JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  expect(sent.filter((message: { type: string }) => message.type === "viewSaved")).toEqual([
+    { type: "viewSaved", sessionID: "original-session" },
+  ])
+  expect(sent.some((message: { type: string }) => message.type === "sendMessage")).toBe(false)
+  await page.getByRole("button", { name: "Switch fixture workspace" }).click()
+  await expect(badge).toHaveCount(0)
+  await publish(undefined)
+  await expect(page.getByRole("button", { name: "View conversation", exact: true })).toHaveCount(0)
+})
+
 test("remounted worker panel refuses previous status receipts for the same conversation", async ({ page }) => {
   await page.clock.install()
   await page.goto("/?state=workers-held")

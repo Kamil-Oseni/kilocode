@@ -238,6 +238,7 @@ import { detail as selfHealRollbackDetail, rollback as rollbackSelfHeal } from "
 import { cleanup as cleanupSelfHeal, detail as selfHealCleanupDetail } from "./self-heal/cleanup"
 import { SpeechService } from "./speech/service" // raya_change - Milestone H voice orchestration
 import { BrainHost } from "./second-brain/host"
+import type { CaptureReceipt } from "./shared/second-brain"
 import { VoiceOrigin } from "./speech/voice-origin"
 import {
   buildIndexingSettingsMessage,
@@ -455,6 +456,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly providerSecrets: ProviderSecrets | undefined // raya_change - encrypted BYOK source
   private readonly speech: SpeechService | undefined // raya_change - Milestone H encrypted speech and streaming audio
   private readonly brain: BrainHost | undefined
+  private readonly captureObserver: vscode.Disposable | undefined
+  private saved: CaptureReceipt | undefined
   private readonly cloudJournal: CloudContinuationJournal | undefined
   /** Coalesce provider refreshes — at most one follow-up rerun when a request lands mid-flight. */
   private providersRefresh: Promise<void> | null = null
@@ -657,6 +660,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         })
       : undefined
     this.brain = extensionContext ? new BrainHost(extensionContext) : undefined
+    this.captureObserver = this.brain?.observeCapture((receipt) => {
+      this.saved = receipt
+      this.announce()
+    })
     this.cloudJournal = extensionContext
       ? new CloudContinuationJournal(path.join(extensionContext.globalStorageUri.fsPath, "cloud-continuations"))
       : undefined
@@ -747,6 +754,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.configBindings.clear()
     this.cachedConfigMessage = null
     this.postMessage({ type: "workspaceDirectoryChanged", directory: directory ?? "" })
+    this.announce()
     this.postMessage({ type: "configBindingExpired", reason: "project-changed" })
     void this.fetchAndSendProviders().catch(() => {
       console.error("[Raya] Provider: Project provider refresh could not finish")
@@ -1423,6 +1431,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           this.visibleTaskStreams.clear()
           this.flushPendingKiloModel()
           await this.syncWebviewState("webviewReady")
+          this.announce()
           this.flushPendingReviewComments()
           this.recoverPendingPrompts()
           this.readyResolvers.splice(0).forEach((r) => r())
@@ -7390,6 +7399,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     return resolveProjectDirectory(this.projectDirectory, () => this.getWorkspaceDirectory(sessionId))
   }
 
+  private announce(): void {
+    const directory = this.getProjectDirectory(this.currentSession?.id)
+    this.postMessage({
+      type: "secondBrainSaved",
+      receipt: this.saved && directory && sameDirectory(this.saved.project, directory) ? this.saved : undefined,
+    })
+  }
+
   private _getHtmlForWebview(webview: vscode.Webview): string {
     return buildWebviewHtml(webview, {
       scriptUri: webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview.js")),
@@ -7748,6 +7765,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.ignoreController?.dispose()
     this.chatAutocomplete?.dispose()
     this.speech?.dispose() // raya_change - Milestone H
+    this.captureObserver?.dispose()
     this.brain?.detach()
     disposeGitChangesTarget()
   }

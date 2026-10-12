@@ -7,6 +7,8 @@ import { StoryProviders } from "../../webview-ui/src/stories/StoryProviders"
 import { AdminView } from "../../webview-ui/src/components/admin/AdminView"
 import { BrainProposals } from "../../webview-ui/src/components/settings/BrainProposals"
 import { SecondBrain } from "../../webview-ui/src/components/settings/SecondBrain"
+import { SavedMemory, SavedConversation } from "../../webview-ui/src/components/chat/SavedMemory"
+import { MemoryProvider } from "../../webview-ui/src/context/memory"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
 import { createSignal, Show } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
@@ -366,10 +368,33 @@ function AdminFixture() {
   )
 }
 
+function SavedFixture() {
+  const server = useServer()
+  const [root, setRoot] = createSignal("C:/work/raya-feature")
+  window.__saved = (receipt) => emit({ type: "secondBrainSaved", receipt })
+  return (
+    <ServerContext.Provider value={{ ...server, workspaceDirectory: root }}>
+      <MemoryProvider>
+        <SavedMemory sessionID="original-session" messageID="original-message" />
+        <SavedMemory sessionID="other-session" messageID="original-message" />
+        <SavedMemory sessionID="original-session" messageID="other-message" />
+        <SavedConversation open={(sessionID) => record({ type: "viewSaved", sessionID })} />
+        <Button onClick={() => setRoot("C:/work/other")}>Switch fixture workspace</Button>
+      </MemoryProvider>
+    </ServerContext.Provider>
+  )
+}
+
 render(
   () => (
     <StoryProviders noPadding config={{}}>
-      {state.startsWith("proposals") ? <ProposalFixture /> : <AdminFixture />}
+      {state === "memory-saved" ? (
+        <SavedFixture />
+      ) : state.startsWith("proposals") ? (
+        <ProposalFixture />
+      ) : (
+        <AdminFixture />
+      )}
       <output data-messages hidden>
         {JSON.stringify(messages)}
       </output>

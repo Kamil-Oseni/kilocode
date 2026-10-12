@@ -157,18 +157,23 @@ try {
   await wait(() => sent.some((row) => row.action === "state"))
   await Promise.all(jobs)
   assert.match(node.textContent, /Setup required/)
+  assert.match(node.textContent, /Connect local memory, then choose the notes Raya can use/)
+  assert.equal(node.textContent.includes("Import reviewed setup files"), false)
   assert.equal(button("Search notes"), undefined)
   assert.equal(posts, 0)
-  button("Memory setup").click()
-  assert.equal(button("Memory setup").getAttribute("aria-expanded"), "true")
+  button("Service settings").click()
+  assert.equal(button("Service settings").getAttribute("aria-expanded"), "true")
   await wait(() => button("Import service setup"))
+  assert.match(node.textContent, /Keep credentials in the secure input/)
   button("Import service setup").click()
   await wait(() => node.textContent.includes("Service not connected"))
+  assert.match(node.textContent, /Manage your notes, automatic saving and search/)
+  assert.equal(node.textContent.includes("Connect local memory, then choose"), false)
   for (const [label, action] of [
     ["Import control setup", "controlSetup"],
-    ["1. Choose notes", "review"],
-    ["2. Index selected notes", "sync"],
-    ["Disable source policy", "disable"],
+    ["Choose notes", "review"],
+    ["Index selected notes", "sync"],
+    ["Disable note access", "disable"],
   ]) {
     if (action === "sync")
       emit(sent.at(-1).id, { configured: true, status: "ready", results: [], control: { status: "approved" } })
@@ -266,6 +271,14 @@ try {
   assert.match(node.textContent, /Limited passage/)
   assert.match(node.textContent, /Skipped links/)
   assert.match(node.textContent, /Missing.md: missing <img src=x>/)
+  const details = [...node.querySelectorAll('[aria-label="Linked memory context"] details')]
+  assert.equal(details.length, 2)
+  assert.equal(details.every((item) => !item.open), true)
+  assert.equal(details[0].querySelector("summary").textContent, "Source details")
+  assert.match(details[0].textContent, /Source SHA-256: a{64}/)
+  assert.equal(details[1].querySelector("summary").textContent, "Skipped links (1)")
+  details[1].open = true
+  assert.equal(details[1].open, true)
   assert.equal(node.querySelector('[aria-label="Linked memory context"] img'), null)
   emit(original.id, {
     configured: true,

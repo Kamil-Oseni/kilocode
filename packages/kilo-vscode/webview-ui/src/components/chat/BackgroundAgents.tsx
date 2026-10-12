@@ -281,9 +281,12 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
             </Show>
             <For each={visible()}>
               {(agent) => {
-                const activity = createMemo(() => backgroundAgentActivity(session.getSessionToolParts(agent.id)))
+                const activity = createMemo(() =>
+                  backgroundAgentActivity(session.getSessionToolParts(agent.id), session.allMessages()[agent.id] ?? []),
+                )
                 const detail = createMemo(() => {
                   if (agent.error) return agent.error
+                  if (agent.status !== "running") return
                   const part = activity()
                   if (!part) return undefined
                   const info = getToolInfo(part.tool, part.state.input)

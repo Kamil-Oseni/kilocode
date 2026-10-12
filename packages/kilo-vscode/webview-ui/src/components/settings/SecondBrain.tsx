@@ -10,7 +10,7 @@ import { MediaEvidence } from "./MediaEvidence"
 import { setup } from "../../../../src/shared/memory-query"
 
 const labels: Record<string, string> = {
-  setup_file_query: "This is a file path. Choose your setup file in Memory setup.",
+  setup_file_query: "This is a file path. Choose your setup file in Service settings.",
   namespace_changed: "Memory folder changed. Trusted re-admission is required.",
   retirement_pending: "Memory is waiting for the current retrieval request to retire.",
   retirement_unconfirmed: "Memory cleanup is uncertain. Trusted local inspection is required.",
@@ -18,7 +18,7 @@ const labels: Record<string, string> = {
   identity_mismatch: "Memory does not match the selected setup manifest.",
   setup_invalid: "Select a valid reviewed setup manifest and credential.",
   managed_generation_conflict:
-    "An earlier Memory startup is incomplete. Restart Raya, then review a fresh start in Memory setup.",
+    "An earlier Memory startup is incomplete. Restart Raya, then review a fresh start in Service settings.",
   unsupported: "Linked context requires a reviewed context-capable Memory release. Import its service setup first.",
   setup_changing: "Memory setup is changing. Wait for local requests to finish, then check the service.",
   transport_error: "The local Memory service could not finish the request.",
@@ -121,10 +121,9 @@ export function SecondBrain() {
     <Card>
       <h4>Memory</h4>
       <p>
-        Import your service setup using the file picker, then choose and approve the notes you want Raya to remember.
-      </p>
-      <p>
-        Setup file paths belong in the file picker. After indexing, the search box accepts questions about your notes.
+        {state().configured
+          ? "Manage your notes, automatic saving and search."
+          : "Connect local memory, then choose the notes Raya can use."}
       </p>
       <p role="status">{state().configured ? status[state().status] : "Setup required"}</p>
       <Show when={state().root}>{(root) => <p>Notes folder: {root()}</p>}</Show>
@@ -148,10 +147,11 @@ export function SecondBrain() {
         <p role="alert">{labels[state().code!] ?? "Memory is unavailable. Check the local service."}</p>
       </Show>
       <Button aria-expanded={expanded()} onClick={() => expand(!expanded())}>
-        Memory setup
+        Service settings
       </Button>
       <Show when={expanded()}>
-        <section aria-label="Memory setup">
+        <section aria-label="Memory service settings">
+          <p>Import reviewed setup files here. Keep credentials in the secure input when prompted.</p>
           <Button onClick={() => request("setup")} disabled={busy()}>
             Import service setup
           </Button>
@@ -185,7 +185,7 @@ export function SecondBrain() {
         </section>
       </Show>
       <Button onClick={() => request("review")} disabled={!state().configured || busy()}>
-        1. Choose notes
+        Choose notes
       </Button>
       <Button
         onClick={() => request("sync")}
@@ -193,10 +193,10 @@ export function SecondBrain() {
           !state().configured || busy() || !["unchecked", "approved", "synced"].includes(state().control?.status ?? "")
         }
       >
-        2. Index selected notes
+        Index selected notes
       </Button>
       <Button onClick={() => request("disable")} disabled={!state().configured || busy()}>
-        Disable source policy
+        Disable note access
       </Button>
       <Show when={state().control}>
         <p role="status">{indexing[state().control!.status]}</p>
@@ -212,13 +212,13 @@ export function SecondBrain() {
         fallback={<p>Choose notes and finish indexing to open note search.</p>}
       >
         <TextField
-          label="3. Search indexed note contents"
+          label="Search your notes"
           value={query()}
           onChange={setQuery}
           placeholder="Ask about the contents of your selected notes"
         />
         <Show when={setup(query())}>
-          <p role="alert">This is a file path. Choose your setup file in Memory setup, then ask a question here.</p>
+          <p role="alert">This is a file path. Choose your setup file in Service settings, then ask a question here.</p>
           <Button onClick={() => request("setup")} disabled={busy()}>
             Choose setup file
           </Button>
@@ -251,7 +251,10 @@ export function SecondBrain() {
               <p>{result.heading}</p>
             </Show>
             <pre>{result.text}</pre>
-            <small>Source SHA-256: {result.source_sha256}</small>
+            <details>
+              <summary>Source details</summary>
+              <small>Source SHA-256: {result.source_sha256}</small>
+            </details>
           </section>
         )}
       </For>
@@ -277,24 +280,28 @@ export function SecondBrain() {
                   <Show when={source.truncated}>
                     <small>Limited passage · </small>
                   </Show>
-                  <small>Source SHA-256: {source.source_sha256}</small>
+                  <details>
+                    <summary>Source details</summary>
+                    <small>Source SHA-256: {source.source_sha256}</small>
+                  </details>
                 </section>
               )}
             </For>
             <Show when={context().diagnostics.length}>
-              <h5>Skipped links</h5>
-              <For each={context().diagnostics}>
-                {(row) => (
-                  <p>
-                    {row.relative}: {row.reason}
-                  </p>
-                )}
-              </For>
+              <details>
+                <summary>Skipped links ({context().diagnostics.length})</summary>
+                <For each={context().diagnostics}>
+                  {(row) => (
+                    <p>
+                      {row.relative}: {row.reason}
+                    </p>
+                  )}
+                </For>
+              </details>
             </Show>
           </section>
         )}
       </Show>
-      <p>Manual source review and sync require confirmation.</p>
       <BrainConsolidation configured={state().configured} />
       <Show when={state().media}>{(value) => <MediaEvidence value={value()} />}</Show>
       <BrainProposals configured={state().configured} busy={busy()} index={(action) => request(action)} />

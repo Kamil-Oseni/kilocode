@@ -112,7 +112,12 @@ export const ChiefActivity: Component<{ plan: ChiefPart }> = (props) => {
                       </Show>
                       <Show when={branch().state === "working" ? branch().child : undefined}>
                         {(child) => (
-                          <Show when={backgroundAgentActivity(session.getSessionToolParts(child()))}>
+                          <Show
+                            when={backgroundAgentActivity(
+                              session.getSessionToolParts(child()),
+                              session.allMessages()[child()] ?? [],
+                            )}
+                          >
                             {(part) => {
                               const info = getToolInfo(part().tool, part().state.input)
                               return (

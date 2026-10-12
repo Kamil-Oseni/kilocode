@@ -15,6 +15,7 @@ import {
 import type {
   BackgroundJobInfo,
   BackgroundJobsLoadedMessage,
+  Message,
   PermissionRequest,
   QuestionRequest,
   SessionStatusInfo,
@@ -139,22 +140,50 @@ describe("backgroundAgents", () => {
   })
 
   it("projects only a child's current pending or running tool", () => {
+    const messages: Message[] = [
+      { id: "user", role: "user", sessionID: "child", createdAt: "" },
+      { id: "answer", role: "assistant", sessionID: "child", createdAt: "", parentID: "user" },
+    ]
     const done = {
       id: "done",
+      messageID: "answer",
       type: "tool",
       tool: "read",
       state: { status: "completed", input: {}, output: "", title: "Read" },
     } as ToolPart
     const active = {
       id: "active",
+      messageID: "answer",
       type: "tool",
       tool: "bash",
       state: { status: "running", input: { description: "Build" } },
     } as ToolPart
-    const queued = { id: "queued", type: "tool", tool: "write", state: { status: "pending", input: {} } } as ToolPart
+    const queued = {
+      id: "queued",
+      messageID: "answer",
+      type: "tool",
+      tool: "write",
+      state: { status: "pending", input: {} },
+    } as ToolPart
 
-    expect(backgroundAgentActivity([done, active, queued])?.id).toBe("queued")
-    expect(backgroundAgentActivity([done])).toBeUndefined()
+    expect(backgroundAgentActivity([done, active, queued], messages)?.id).toBe("queued")
+    expect(backgroundAgentActivity([done], messages)).toBeUndefined()
+  })
+
+  it("does not present retained tools from a previous worker turn as current work", () => {
+    const messages: Message[] = [
+      { id: "first", role: "user", sessionID: "child", createdAt: "" },
+      { id: "old", role: "assistant", sessionID: "child", createdAt: "", parentID: "first" },
+      { id: "next", role: "user", sessionID: "child", createdAt: "" },
+      { id: "current", role: "assistant", sessionID: "child", createdAt: "", parentID: "next" },
+    ]
+    const stale = { ...taskPart(), messageID: "old" }
+    const current = { ...taskPart({ id: "current-tool" }), messageID: "current" }
+    expect(backgroundAgentActivity([current, stale], messages)?.id).toBe("current-tool")
+    expect(backgroundAgentActivity([stale], messages)).toBeUndefined()
+    expect(backgroundAgentActivity([current], [])).toBeUndefined()
+    expect(backgroundAgentActivity([current], messages.slice(0, -1))).toBeUndefined()
+    expect(backgroundAgentActivity([taskPart()], messages)).toBeUndefined()
   })
 
   it("formats elapsed time from authoritative job timestamps", () => {

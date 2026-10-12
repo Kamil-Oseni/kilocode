@@ -13,6 +13,26 @@ const aid = MessageID.make("msg_reader")
 const request = "Which local speech engine and fallback did I choose? Please use saved Memory and cite the note."
 const preference =
   "I prefer first-time Raya setup inside the conversation, using the existing Ask cards with minimal text. The Memory tab should be for inspecting and managing settings later. Please acknowledge this preference; do not run setup or control any lights."
+const context = {
+  action: "context",
+  project: "/repo",
+  root: "/notes",
+  context: {
+    sources: [],
+    diagnostics: [],
+    tokens: 0,
+    truncated: false,
+    capture_enabled: false,
+  },
+}
+const status = JSON.stringify({
+  action: "status",
+  project: "/repo",
+  configured: false,
+  index: "unchecked",
+  capture: "unavailable",
+  preparation: "unavailable",
+})
 function fixture() {
   const user: MessageV2.WithParts = {
     info: {
@@ -35,7 +55,7 @@ function fixture() {
     state: {
       status: "completed",
       input: { query: "local speech engine fallback" },
-      output: "{}",
+      output: JSON.stringify(context),
       title: "Second Brain recall",
       metadata: { count: 1 },
       time: { start: 12, end: 13 },
@@ -59,7 +79,11 @@ function fixture() {
     },
     parts: [tool],
   }
-  const session = { id: sid, metadata: { [RayaChief.phaseKey]: "route", [RayaChief.requestKey]: request } }
+  const session = {
+    id: sid,
+    directory: "/repo",
+    metadata: { [RayaChief.phaseKey]: "route", [RayaChief.requestKey]: request },
+  }
   return { messages: [user, assistant], session, tool }
 }
 
@@ -70,6 +94,50 @@ test("original completed Memory read releases conversational synthesis without c
   if (original.tool.state.status !== "completed") throw new Error("Completed fixture required")
   original.tool.state = { ...original.tool.state, metadata: { count: 0 } }
   expect(settled(original.messages, original.session, uid)).toBe(true)
+})
+
+test("Memory synthesis rejects damaged, mismatched and oversized completed receipts", () => {
+  for (const output of [
+    "{}",
+    "{",
+    status,
+    JSON.stringify({ ...context, project: "/other" }),
+    JSON.stringify({ ...context, context: { ...context.context, tokens: 1 } }),
+    JSON.stringify({ ...context, root: "relative" }),
+    " ".repeat(200001),
+  ]) {
+    const original = fixture()
+    if (original.tool.state.status !== "completed") throw new Error("Completed fixture required")
+    original.tool.state = { ...original.tool.state, output }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
+test("Memory synthesis preserves cited and empty results but refuses invalid source provenance", () => {
+  const source = {
+    path: "/notes/Preferences/Voice.md",
+    relative: "Preferences/Voice.md",
+    line: 1,
+    end_line: 2,
+    heading: "Voice",
+    text: "Chosen voice: Onyx.",
+    source_sha256: "a".repeat(64),
+    depth: 0,
+    tokens: 8,
+    truncated: false,
+  }
+  for (const value of [source, { ...source, path: "/other/Voice.md" }, { ...source, end_line: 0 }]) {
+    const original = fixture()
+    if (original.tool.state.status !== "completed") throw new Error("Completed fixture required")
+    original.tool.state = {
+      ...original.tool.state,
+      output: JSON.stringify({ ...context, context: { ...context.context, sources: [value], tokens: 8 } }),
+    }
+    expect(settled(original.messages, original.session, uid)).toBe(value === source)
+  }
+  const original = fixture()
+  expect(settled(original.messages, original.session, uid)).toBe(true)
+  expect(settled(original.messages, { ...original.session, directory: "/other" }, uid)).toBe(false)
 })
 
 test("explicit recall releases synthesis after the original read while preserving file and light restrictions", () => {
@@ -97,7 +165,7 @@ test("an original status read answers only a status question without releasing a
     part.text = text
     original.session.metadata[RayaChief.requestKey] = text
     expect(settled(original.messages, original.session, uid)).toBe(false)
-    original.tool.state = { ...original.tool.state, input: { action: "status" } }
+    original.tool.state = { ...original.tool.state, input: { action: "status" }, output: status }
     expect(settled(original.messages, original.session, uid)).toBe(true)
     expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
     expect(settled(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
@@ -122,7 +190,7 @@ test("an original status read answers only a status question without releasing a
     if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
     part.text = text
     original.session.metadata[RayaChief.requestKey] = text
-    original.tool.state = { ...original.tool.state, input: { action: "status" } }
+    original.tool.state = { ...original.tool.state, input: { action: "status" }, output: status }
     expect(settled(original.messages, original.session, uid)).toBe(false)
   }
 })
@@ -180,7 +248,7 @@ test("the installed preference statement can finish after status without treatin
   if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
   part.text = text
   original.session.metadata[RayaChief.requestKey] = text
-  original.tool.state = { ...original.tool.state, input: { action: "status" } }
+  original.tool.state = { ...original.tool.state, input: { action: "status" }, output: status }
   expect(acknowledged(original.messages, original.session, uid)).toBe(true)
   expect(settled(original.messages, original.session, uid)).toBe(false)
   expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
@@ -223,7 +291,7 @@ test("grocery assistance preferences acknowledge without purchase or acquisition
   original.session.metadata[RayaChief.requestKey] = text
   expect(acknowledged(original.messages, original.session, uid)).toBe(true)
   expect(settled(original.messages, original.session, uid)).toBe(false)
-  original.tool.state = { ...original.tool.state, input: { action: "status" } }
+  original.tool.state = { ...original.tool.state, input: { action: "status" }, output: status }
   expect(acknowledged(original.messages, original.session, uid)).toBe(true)
   expect(settled(original.messages, original.session, uid)).toBe(false)
   expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
@@ -283,7 +351,7 @@ test("shopping-list purpose remains a saved-note question only after its origina
   expect(settled(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
   expect(settled(original.messages, original.session, "foreign-user")).toBe(false)
   const state = original.tool.state
-  original.tool.state = { ...state, input: { action: "status" } }
+  original.tool.state = { ...state, input: { action: "status" }, output: status }
   expect(settled(original.messages, original.session, uid)).toBe(false)
   original.tool.state = { ...state, status: "running", time: { start: 12 } }
   expect(settled(original.messages, original.session, uid)).toBe(false)
@@ -328,7 +396,7 @@ test("coordinated shopping topics release only this turn's completed saved-note 
         uid,
       ),
     ).toBe(false)
-    original.tool.state = { ...original.tool.state, input: { action: "status" } }
+    original.tool.state = { ...original.tool.state, input: { action: "status" }, output: status }
     expect(settled(original.messages, original.session, uid)).toBe(false)
   }
   for (const text of [
@@ -392,7 +460,7 @@ test("historical, foreign and queued successor reads never release the original 
 test("Memory setup status is not a completed note query", () => {
   const original = fixture()
   if (original.tool.state.status !== "completed") throw new Error("Completed fixture required")
-  original.tool.state = { ...original.tool.state, input: { action: "status" } }
+  original.tool.state = { ...original.tool.state, input: { action: "status" }, output: status }
   expect(settled(original.messages, original.session, uid)).toBe(false)
   original.tool.state = { ...original.tool.state, input: { query: " " } }
   expect(settled(original.messages, original.session, uid)).toBe(false)
@@ -409,11 +477,12 @@ test("saved-note search continuation releases synthesis only after this turn's c
   original.session.metadata[RayaChief.requestKey] = text
   expect(settled(original.messages, original.session, uid)).toBe(true)
   expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
-  original.tool.state = { ...original.tool.state, input: { action: "status" } }
+  original.tool.state = { ...original.tool.state, input: { action: "status" }, output: status }
   expect(settled(original.messages, original.session, uid)).toBe(false)
   original.tool.state = {
     ...original.tool.state,
     input: { query: "first-time Raya setup preferences and Memory tab settings" },
+    output: JSON.stringify(context),
   }
   expect(settled(original.messages, original.session, uid)).toBe(true)
   original.tool.messageID = MessageID.make("msg_foreign")

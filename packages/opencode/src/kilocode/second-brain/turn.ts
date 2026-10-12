@@ -1,5 +1,8 @@
 import type { MessageV2 } from "@/session/message-v2"
+import { Result as Decode, Schema } from "effect"
 import { RayaChief } from "../chief"
+import { Request, Result } from "./protocol"
+import { valid } from "./reply"
 
 export const acknowledgement =
   "This turn states a personal preference. Briefly acknowledge the user's actual preference in one sentence. Treat references to first-time setup as the preference being described; do not begin setup or ask configuration questions. Preserve the user's restrictions. Do not claim that anything was changed or saved: separately authorized automatic Memory saving runs after the reply and must confirm its own result."
@@ -63,7 +66,7 @@ function statement(request: string) {
 /** A personal-memory question can finish after its own read, without closing a work goal. */
 export function settled(
   messages: readonly MessageV2.WithParts[],
-  session: { id: string; parentID?: string; metadata?: Record<string, unknown> },
+  session: { id: string; directory: string; parentID?: string; metadata?: Record<string, unknown> },
   user: string,
 ) {
   if (session.parentID || RayaChief.phase(session.metadata) !== "route") return false
@@ -79,19 +82,39 @@ export function settled(
       row.info.sessionID === session.id &&
       !row.info.error &&
       !row.info.summary &&
-      row.parts.some(
-        (part) =>
-          part.type === "tool" &&
-          part.tool === "second_brain_recall" &&
-          part.messageID === row.info.id &&
-          part.sessionID === session.id &&
-          part.state.status === "completed" &&
-          (state
-            ? part.state.input.action === "status" && Object.keys(part.state.input).length === 1
-            : !("action" in part.state.input) &&
-              typeof part.state.input.query === "string" &&
-              !!part.state.input.query.trim()),
-      ),
+      row.parts.some((part) => {
+        if (
+          part.type !== "tool" ||
+          part.tool !== "second_brain_recall" ||
+          part.messageID !== row.info.id ||
+          part.sessionID !== session.id ||
+          part.state.status !== "completed"
+        )
+          return false
+        const input = part.state.input
+        if (
+          state
+            ? input.action !== "status" || Object.keys(input).length !== 1
+            : Object.keys(input).some((key) => key !== "query" && key !== "budget")
+        )
+          return false
+        const command = Schema.decodeUnknownResult(Request, { onExcessProperty: "error" })({
+          id: part.callID,
+          sessionID: session.id,
+          project: session.directory,
+          command: state ? input : { ...input, action: "context", budget: input.budget ?? 6000 },
+        })
+        if (Decode.isFailure(command) || Buffer.byteLength(part.state.output, "utf8") > 200000) return false
+        const value = (() => {
+          try {
+            return JSON.parse(part.state.output) as unknown
+          } catch {
+            return undefined
+          }
+        })()
+        const decoded = Schema.decodeUnknownResult(Result, { onExcessProperty: "error" })(value)
+        return Decode.isSuccess(decoded) && valid(command.success, decoded.success)
+      }),
   )
 }
 

@@ -18,6 +18,7 @@ import type {
   BackgroundJobInfo,
   CancelBackgroundJobMessage,
   BackgroundJobsLoadedMessage,
+  Message,
   PermissionRequest,
   QuestionRequest,
   SessionStatusInfo,
@@ -87,8 +88,26 @@ export function backgroundAgentUsage(
   return usage?.find((item) => item.sessionID === sessionID && item.steps > 0)
 }
 
-export function backgroundAgentActivity(tools: ToolPart[]): ToolPart | undefined {
-  return tools.findLast((part) => part.state.status === "pending" || part.state.status === "running")
+export function backgroundAgentActivity(
+  tools: readonly ToolPart[],
+  messages: readonly Message[],
+): ToolPart | undefined {
+  const user = messages.findLast((message) => message.role === "user")
+  if (!user) return
+  const ids = new Set(
+    messages
+      .filter(
+        (message) =>
+          message.role === "assistant" && message.parentID === user.id && message.sessionID === user.sessionID,
+      )
+      .map((message) => message.id),
+  )
+  return tools.findLast(
+    (part) =>
+      !!part.messageID &&
+      ids.has(part.messageID) &&
+      (part.state.status === "pending" || part.state.status === "running"),
+  )
 }
 
 export function backgroundAgentElapsed(agent: BackgroundAgent, now: number): number | undefined {

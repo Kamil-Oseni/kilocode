@@ -40,6 +40,8 @@ Keep original notes, capture policy, credentials, grants and uncertain operation
 
 The current saved Memory container is `raya-memory-managed-ec734ff345644fc6b1f13257270c2f46`, run `f4a1448cc1bbbecc79c1dad70f654155`, ports 53676/53677. The actual `closed-recovery.review()` and `absent()` accepted its original pair references, exact closure and present producer/listener absence without starting services or modifying the profile. Closed receipt SHA-256: `044a98dc28fbf84e9467007b5aa1444620249ea080523ba4509830d5b9c9e05f`. The installed package exposes **Raya: Recover a Closed Memory Pair**. This establishes recovery eligibility, not publication, startup, capture success or downstream family settlement.
 
+Manual SecondBrain curation updated Projects/Raya, Preferences/Raya, Commitments/Setup and Daily/2026-10-12 through the actual journaled note writer, change `23253de6-86ef-4a32-89ed-125a06dfcc71`. The committed journal and all four saved hashes match; prior versions and source snapshots remain available. `D:/Raya/TODO.md` now has an October 12 checkpoint and a byte-identical previous-checklist archive. A post-curation protected backup verifies all 182 files / 1,103,179 bytes. No indexing or capture activation ran, so current retrieval policy/index freshness must be checked after service recovery.
+
 ## History
 
 The previous 124,492-byte readiness page is preserved byte-for-byte in [Raya-Readiness-Journal-20261012.md](Raya-Readiness-Journal-20261012.md), SHA-256 `3054b9c88cffb841dc8705652966105a4252c56fe027bc4e99c69e2657458d9f`. Earlier material also remains in [Raya-Readiness-History.md](Raya-Readiness-History.md). Historical active-version, VM-state and pending-build statements are not current instructions.

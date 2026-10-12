@@ -39,6 +39,7 @@ import { MediaCoordinator } from "./media/coordinator"
 import { register as mediaCommands } from "./media/native"
 import { inspect as preparation, pinned, type PreparedSetup } from "./prepared-setup"
 import { SetupFlow } from "./setup-flow"
+import { hydrate } from "./setup-health"
 import { mkdir, rename, writeFile } from "node:fs/promises"
 import { createHash, randomUUID } from "node:crypto"
 
@@ -1037,6 +1038,33 @@ export class BrainHost {
     }
   }
 
+  private async setupStatus() {
+    return await this.service.status().catch((err: unknown): BrainResponse["state"] => {
+      if (
+        err instanceof ClosedRequired ||
+        (err instanceof Failure &&
+          ["managed_generation_conflict", "closed_pair_recovery_required", "control_uncertain"].includes(err.code))
+      )
+        return {
+          configured: this.settings.version() !== undefined,
+          status: "unavailable",
+          results: [],
+          code: err instanceof ClosedRequired ? "closed_pair_recovery_required" : err.code,
+        }
+      if (
+        err instanceof Error &&
+        err.message === "Original managed launch remains retained; restarted hosts cannot adopt or replay it"
+      )
+        return {
+          configured: this.settings.version() !== undefined,
+          status: "unavailable",
+          code: "closed_pair_recovery_required",
+          results: [],
+        }
+      throw err
+    })
+  }
+
   private async conversationSetup(
     row: Record<string, unknown>,
     project: string,
@@ -1046,32 +1074,10 @@ export class BrainHost {
   ) {
     if (!session) throw new Error("Memory setup requires its original conversation")
     const command = setupCommand(row)
+    if (command.stage !== "cancel") await hydrate(this.service, this.control, await this.setupStatus(), signal, guard)
     this.onboarding ??= new SetupFlow({
       snapshot: async () => {
-        const state = await this.service.status().catch((err: unknown): BrainResponse["state"] => {
-          if (
-            err instanceof ClosedRequired ||
-            (err instanceof Failure &&
-              ["managed_generation_conflict", "closed_pair_recovery_required", "control_uncertain"].includes(err.code))
-          )
-            return {
-              configured: this.settings.version() !== undefined,
-              status: "unavailable",
-              results: [],
-              code: err instanceof ClosedRequired ? "closed_pair_recovery_required" : err.code,
-            }
-          if (
-            err instanceof Error &&
-            err.message === "Original managed launch remains retained; restarted hosts cannot adopt or replay it"
-          )
-            return {
-              configured: this.settings.version() !== undefined,
-              status: "unavailable",
-              code: "closed_pair_recovery_required",
-              results: [],
-            }
-          throw err
-        })
+        const state = await this.setupStatus()
         return {
           configured: state.configured,
           root: state.root,

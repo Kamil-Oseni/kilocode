@@ -1284,6 +1284,70 @@ it.live(
   30_000,
 )
 
+it.live("disabled overdue routines survive storage reopening and re-enable without replay", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const reopen = () =>
+      Storage.layerWithDatabase(path.join(directory, "storage")).pipe(
+        Layer.provideMerge(Database.layerFromPath(path.join(directory, "queue.sqlite"))),
+      )
+    const at = Date.now() - 60_000
+    const saved = yield* Effect.gen(function* () {
+      const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+      const tasks = RayaTask.make(input)
+      const schedule = scheduler(input)
+      const agent = yield* tasks.create({
+        name: "Paused reminder",
+        objective: "Work",
+        schedule: { kind: "once", at },
+        enabled: false,
+      })
+      expect(yield* schedule.prepare(agent.id, Date.now())).toBeUndefined()
+      expect(yield* RayaTaskQueue.make(input.database).cursor(agent.id, 1)).toBeUndefined()
+      yield* tasks.update(agent.id, { enabled: true })
+      const trigger = yield* schedule.prepare(agent.id, Date.now())
+      if (!trigger) throw new Error("Expected the original overdue occurrence")
+      yield* tasks.update(agent.id, { enabled: false })
+      return { id: agent.id, trigger }
+    }).pipe(Effect.provide(reopen()))
+    yield* Effect.gen(function* () {
+      const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+      const tasks = RayaTask.make(input)
+      const schedule = scheduler(input)
+      const queue = RayaTaskQueue.make(input.database)
+      const paused = yield* tasks.get(saved.id)
+      expect(paused.enabled).toBe(false)
+      expect(yield* schedule.prepare(saved.id, Date.now())).toBeUndefined()
+      expect((yield* schedule.check(paused, saved.trigger).pipe(Effect.flip))._tag).toBe("RayaTask.GuardError")
+      expect((yield* queue.get(saved.trigger.id))?.state).toBe("queued")
+      const enabled = yield* tasks.update(saved.id, { enabled: true })
+      expect(yield* schedule.prepare(saved.id, Date.now())).toEqual(saved.trigger)
+      expect(yield* schedule.check(enabled, saved.trigger)).toEqual(saved.trigger)
+      const id = "resumed-once"
+      const sessionID = SessionID.make("ses_resumed_once")
+      yield* schedule.reserve(saved.trigger, id)
+      yield* schedule.link(saved.trigger, id, sessionID)
+      const run = yield* tasks.record({
+        id,
+        agentID: saved.id,
+        sessionID,
+        at: Date.now(),
+        scheduleVersion: 1,
+        trigger: saved.trigger,
+        status: "complete",
+      })
+      yield* schedule.settle(run)
+      expect((yield* queue.get(saved.trigger.id))?.state).toBe("complete")
+    }).pipe(Effect.provide(reopen()))
+    yield* Effect.gen(function* () {
+      const input = { storage: yield* Storage.Service, database: yield* Database.Service }
+      expect(yield* scheduler(input).prepare(saved.id, Date.now() + 86_400_000)).toBeUndefined()
+      expect((yield* RayaTask.make(input).runsFor(saved.id)).map((run) => run.id)).toEqual(["resumed-once"])
+      expect((yield* RayaTaskQueue.make(input.database).get(saved.trigger.id))?.state).toBe("complete")
+    }).pipe(Effect.provide(reopen()))
+  }),
+)
+
 it.live("queued work obeys version changes and legacy consumption", () =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()

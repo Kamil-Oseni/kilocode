@@ -1,16 +1,26 @@
 import type { KiloClient } from "@kilocode/sdk/v2/client"
-import { Reports } from "../shared/routine-reports"
+import { ReportPage, type RoutineReportPage } from "../shared/routine-reports"
 import { sameDirectory } from "../kilo-provider-utils"
 
-export async function reports(client: KiloClient, directory: string, sessionID: string, signal: AbortSignal) {
-  const response = await client.kilocode.routine.reports({ directory, sessionID }, { signal, throwOnError: true })
+export async function reports(
+  client: KiloClient,
+  directory: string,
+  sessionID: string,
+  signal: AbortSignal,
+  cursor?: string,
+) {
+  const response = await client.kilocode.routine.reportPage(
+    { directory, sessionID, cursor, limit: "200" },
+    { signal, throwOnError: true },
+  )
   signal.throwIfAborted()
-  return Reports.parse(response.data)
+  return ReportPage.parse(response.data)
 }
 
 type Scope = { client: KiloClient | null; directory: string; generation: number; sessionID?: string }
 type Report = { id: string; reportSessionID: string; revision: number; directory: string }
-type Request = { requestID: string; sessionID: string }
+type Request = { requestID: string; sessionID: string; cursor?: string }
+type Page<T> = { items: readonly T[]; next?: string; bootstrap?: RoutineReportPage["bootstrap"] }
 
 function snapshot<T extends Report>(
   items: readonly T[],
@@ -51,12 +61,16 @@ export class RoutineReporting<T extends Report> {
       directory: string,
       sessionID: string,
       signal: AbortSignal,
-    ) => Promise<readonly T[]>,
+      cursor?: string,
+    ) => Promise<Page<T>>,
     private readonly post: (message: {
       type: "agentReportsLoaded"
       requestID: string
       sessionID: string
+      cursor?: string
       items?: readonly T[]
+      next?: string
+      bootstrap?: RoutineReportPage["bootstrap"]
       error?: string
     }) => void,
     private readonly timeout = 15_000,
@@ -64,7 +78,7 @@ export class RoutineReporting<T extends Report> {
 
   load(request: Request): Promise<void> {
     if (this.stopped || !request.requestID || !request.sessionID) return Promise.resolve()
-    if (this.request?.sessionID !== request.sessionID) this.revisions.clear()
+    if (this.request?.sessionID !== request.sessionID || this.request?.cursor !== request.cursor) this.revisions.clear()
     this.controller?.abort()
     this.request = { ...request }
     this.queued = true
@@ -72,7 +86,7 @@ export class RoutineReporting<T extends Report> {
   }
 
   hint(): Promise<void> {
-    if (this.stopped || !this.request) return Promise.resolve()
+    if (this.stopped || !this.request || this.request.cursor !== undefined) return Promise.resolve()
     this.queued = true
     return this.start()
   }
@@ -126,11 +140,11 @@ export class RoutineReporting<T extends Report> {
       )
     }
     try {
-      const items = await this.read(scope.client, scope.directory, request.sessionID, controller.signal)
+      const page = await this.read(scope.client, scope.directory, request.sessionID, controller.signal, request.cursor)
       if (!owned() || controller.signal.aborted) return
-      snapshot(items, request.sessionID, scope.directory, this.revisions)
-      for (const item of items) this.revisions.set(item.id, item.revision)
-      this.post({ type: "agentReportsLoaded", ...request, items })
+      snapshot(page.items, request.sessionID, scope.directory, this.revisions)
+      for (const item of page.items) this.revisions.set(item.id, item.revision)
+      this.post({ type: "agentReportsLoaded", ...request, ...page })
     } catch {
       if (!owned()) return
       this.post({

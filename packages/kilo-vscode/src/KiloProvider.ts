@@ -3104,7 +3104,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
   }
 
-  private async report(message: { type: string; requestID?: unknown; sessionID?: unknown }) {
+  private async report(message: { type: string; requestID?: unknown; sessionID?: unknown; cursor?: unknown }) {
     if (message.type !== "agentReportsRead") return false
     const session = this.contextSessionID ?? this.currentSession?.id
     if (
@@ -3113,9 +3113,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       message.requestID.length <= 256 &&
       typeof message.sessionID === "string" &&
       message.sessionID === session &&
-      this.trackedSessionIds.has(message.sessionID)
+      this.trackedSessionIds.has(message.sessionID) &&
+      (message.cursor === undefined ||
+        (typeof message.cursor === "string" && message.cursor.length > 0 && message.cursor.length <= 256))
     )
-      await this.routineReporting.load({ requestID: message.requestID, sessionID: message.sessionID })
+      await this.routineReporting.load({
+        requestID: message.requestID,
+        sessionID: message.sessionID,
+        cursor: message.cursor,
+      })
     return true
   }
 

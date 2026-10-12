@@ -399,6 +399,14 @@ const AppContent: Component = () => {
     }
     window.addEventListener("raya:setup-memory", setup)
     onCleanup(() => window.removeEventListener("raya:setup-memory", setup))
+    const saving = (event: Event) => {
+      if (!server.isConnected()) return
+      const detail = (event as CustomEvent<{ action?: unknown }>).detail
+      if (detail?.action !== "pause" && detail?.action !== "resume") return
+      send(detail.action === "pause" ? "Pause automatic memory saving." : "Resume automatic memory saving.")
+    }
+    window.addEventListener("raya:memory-saving", saving)
+    onCleanup(() => window.removeEventListener("raya:memory-saving", saving))
   })
 
   const cycleAgent = (direction: 1 | -1) => {

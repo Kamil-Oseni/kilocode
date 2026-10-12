@@ -367,6 +367,25 @@ export class CaptureIntake {
     return value !== undefined && consent.parse(value).enabled
   }
 
+  /** Stop future grants without erasing an original grant, turn or uncertain effect. */
+  pause(check: () => void) {
+    return this.serial(async () => {
+      check()
+      const raw = this.storage.get(key)
+      if (raw === undefined) return false
+      const cfg = consent.parse(raw)
+      if (!cfg.enabled) return false
+      const next = consent.parse({ ...cfg, enabled: false })
+      check()
+      if (!isDeepStrictEqual(this.storage.get(key), raw)) throw new Error("Original capture preference changed")
+      await this.storage.update(key, next)
+      if (!isDeepStrictEqual(this.storage.get(key), next)) throw new Error("Paused capture preference was not saved")
+      this.changed()
+      check()
+      return true
+    })
+  }
+
   recoverable() {
     return records(this.storage.get(ledger)).filter(
       (turn) =>

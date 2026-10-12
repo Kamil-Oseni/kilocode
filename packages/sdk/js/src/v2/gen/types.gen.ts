@@ -1999,6 +1999,11 @@ export type SecondBrainSetup =
       attempt: string
     }
 
+export type SecondBrainCaptureState = {
+  action: "captureState"
+  mode: "pause" | "resume"
+}
+
 export type SecondBrainMediaRecall = {
   action: "mediaContext"
   query: string
@@ -2014,6 +2019,7 @@ export type SecondBrainRequest = {
     | SecondBrainRecall
     | SecondBrainStatus
     | SecondBrainSetup
+    | SecondBrainCaptureState
     | {
         action: "capturePolicy"
         messageID: string
@@ -7026,6 +7032,16 @@ export type SecondBrainSetupResult = {
   }
 }
 
+export type SecondBrainCaptureStateResult = {
+  action: "captureState"
+  project: string
+  configured: boolean
+  enabled: boolean
+  capture: "unavailable" | "paused" | "ready" | "saving" | "uncertain" | "capacity"
+  changed: boolean
+  detail?: string
+}
+
 export type SecondBrainMediaResult = {
   action: "mediaContext"
   project: string
@@ -7088,6 +7104,7 @@ export type SecondBrainResult =
   | SecondBrainContextResult
   | SecondBrainStatusResult
   | SecondBrainSetupResult
+  | SecondBrainCaptureStateResult
   | {
       action: "capturePolicy"
       project: string

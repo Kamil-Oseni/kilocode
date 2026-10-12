@@ -49,6 +49,7 @@ function result(request: Request): ProposalResult {
     request.command.action === "mediaContext" ||
     request.command.action === "status" ||
     request.command.action === "setup" ||
+    request.command.action === "captureState" ||
     request.command.action === "capture" ||
     request.command.action === "capturePolicy" ||
     request.command.action === "captureFailed"

@@ -49,6 +49,7 @@ export type BrainDreamActivity = Readonly<{
 }>
 
 export type BrainCapture = Readonly<{
+  enabled?: boolean
   status: "unavailable" | "paused" | "ready" | "saving" | "uncertain" | "capacity"
   reason?: "source_capacity" | "ledger_capacity"
 }>

@@ -16,6 +16,7 @@ function read(command: Request["command"]) {
     command.action === "mediaContext" ||
     command.action === "status" ||
     command.action === "setup" ||
+    command.action === "captureState" ||
     command.action === "capturePolicy" ||
     command.action === "capture" ||
     command.action === "captureFailed"
@@ -29,10 +30,21 @@ export class HostError extends Schema.TaggedErrorClass<HostError>()("SecondBrain
   code: ErrorCode,
   detail: Schema.String,
   operation: Schema.optional(
-    Schema.Literals(["context", "mediaContext", "status", "setup", "capturePolicy", "capture", "captureFailed"]),
+    Schema.Literals([
+      "context",
+      "mediaContext",
+      "status",
+      "setup",
+      "captureState",
+      "capturePolicy",
+      "capture",
+      "captureFailed",
+    ]),
   ),
 }) {
   override get message() {
+    if (this.operation === "captureState")
+      return `${this.detail}. Automatic saving state is unconfirmed; inspect its current state before retrying. Existing saves and retained history were not cancelled or deleted.`
     if (this.operation === "setup")
       return `${this.detail}. Memory setup completion is unconfirmed; inspect the retained setup attempt before continuing.`
     if (this.operation === "captureFailed")

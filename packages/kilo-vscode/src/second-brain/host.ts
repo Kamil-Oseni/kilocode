@@ -593,7 +593,7 @@ export class BrainHost {
         live: true,
         state: {
           ...view.state,
-          capture: this.intake.snapshot(this.service.captureSnapshot()),
+          capture: { ...this.intake.snapshot(this.service.captureSnapshot()), enabled: this.intake.enabled() },
           control: this.control.snapshot(),
         },
       })
@@ -745,7 +745,7 @@ export class BrainHost {
     if (project.toLowerCase() !== path.resolve(request.project).toLowerCase())
       throw new Error("Authenticated trusted project required")
     const row = decode(request.command)
-    const guard = ["setup", "status", "context", "capturePolicy", "capture", "captureFailed"].includes(
+    const guard = ["setup", "captureState", "status", "context", "capturePolicy", "capture", "captureFailed"].includes(
       String(row.action),
     )
       ? personal(project, () => ({
@@ -755,6 +755,7 @@ export class BrainHost {
       : () => trusted(project)
     guard()
     if (row.action === "setup") return this.conversationSetup(row, project, request.sessionID, signal, guard)
+    if (row.action === "captureState") return this.captureState(row, project, signal, guard)
     if (["capturePolicy", "capture", "captureFailed"].includes(String(row.action)))
       return this.capture(request, project, signal, guard)
     if (row.action === "status") {
@@ -940,6 +941,93 @@ export class BrainHost {
       if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return undefined
       throw err
     })
+  }
+
+  private async captureState(row: Record<string, unknown>, project: string, signal: AbortSignal, guard: () => void) {
+    if (Object.keys(row).sort().join() !== "action,mode" || !["pause", "resume"].includes(String(row.mode)))
+      throw new Error("Exact Memory saving preference required")
+    const check = () => {
+      signal.throwIfAborted()
+      guard()
+      if (this.closing) throw new Error("Original Memory host closed")
+    }
+    check()
+    if (row.mode === "pause") {
+      const changed = await this.intake.pause(check)
+      check()
+      return {
+        action: "captureState" as const,
+        project,
+        configured: this.settings.version() !== undefined,
+        capture: this.intake.snapshot(this.service.captureSnapshot()).status,
+        enabled: this.intake.enabled(),
+        changed,
+        detail:
+          "Future automatic saving is paused. Any earlier save keeps its original status and will not be replayed.",
+      }
+    }
+    const binding = await this.service.captureSelection(AbortSignal.any([signal, AbortSignal.timeout(35000)]))
+    check()
+    const cfg = this.intake.saved(binding)
+    const state = this.intake.snapshot(binding)
+    if (!cfg || ["saving", "uncertain", "capacity", "unavailable"].includes(state.status) || binding.index !== "synced")
+      return {
+        action: "captureState" as const,
+        project,
+        configured: true,
+        capture: state.status,
+        enabled: this.intake.enabled(),
+        changed: false,
+        detail:
+          "Saving cannot resume until the existing setup and any earlier save are reviewed in Memory. Nothing was retried.",
+      }
+    if (cfg.enabled)
+      return {
+        action: "captureState" as const,
+        project,
+        configured: true,
+        capture: state.status,
+        enabled: true,
+        changed: false,
+        detail: "Automatic saving is already enabled.",
+      }
+    const approved = await vscode.window.showWarningMessage(
+      "Resume saving useful conversation and completed-action information with your existing Memory preferences? Sensitive information stays excluded.",
+      { modal: true },
+      "Resume automatic saving",
+    )
+    check()
+    if (approved !== "Resume automatic saving")
+      return {
+        action: "captureState" as const,
+        project,
+        configured: true,
+        capture: state.status,
+        enabled: false,
+        changed: false,
+        detail: "Automatic saving remains paused.",
+      }
+    const current = () => {
+      check()
+      const saved = this.intake.saved(binding)
+      if (
+        !this.service.captureCurrent(binding) ||
+        (!isDeepStrictEqual(saved, cfg) && !isDeepStrictEqual(saved, { ...cfg, enabled: true }))
+      )
+        throw new Error("Original Memory preference changed during review")
+    }
+    current()
+    await this.saveCapture({ ...cfg, enabled: true }, AbortSignal.any([signal, AbortSignal.timeout(35000)]), current)
+    check()
+    return {
+      action: "captureState" as const,
+      project,
+      configured: true,
+      capture: this.intake.snapshot(this.service.captureSnapshot()).status,
+      enabled: this.intake.enabled(),
+      changed: true,
+      detail: "Automatic saving is enabled for new conversations. Earlier saves were not retried.",
+    }
   }
 
   private async conversationSetup(
@@ -1188,7 +1276,7 @@ export class BrainHost {
         state: {
           ...state,
           control: this.control.snapshot(),
-          capture: this.intake.snapshot(this.service.captureSnapshot()),
+          capture: { ...this.intake.snapshot(this.service.captureSnapshot()), enabled: this.intake.enabled() },
         },
       })
     }

@@ -167,6 +167,32 @@ test("conversation setup explains only its original configured or cancelled rece
   }
 })
 
+test("conversational saving controls explain observed future state without resolving previous saves", () => {
+  for (const action of ["pause", "resume"] as const) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+    part.text = `${action} automatic memory saving.`
+    original.session.metadata[RayaChief.requestKey] = part.text
+    original.tool.state = {
+      ...original.tool.state,
+      input: { action },
+      output: JSON.stringify({
+        action: "captureState",
+        project: "/repo",
+        configured: true,
+        enabled: action === "resume",
+        capture: "saving",
+        changed: true,
+      }),
+    }
+    expect(settled(original.messages, original.session, uid)).toBe(true)
+    expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+    original.tool.state = { ...original.tool.state, input: { action: action === "pause" ? "resume" : "pause" } }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("explicit recall releases synthesis after the original read while preserving file and light restrictions", () => {
   for (const text of [
     "Recall my saved preferences for delivering Raya builds and choosing how much testing to do. Use my local notes and cite the source. Do not change files or lights.",

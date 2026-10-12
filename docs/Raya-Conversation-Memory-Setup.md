@@ -32,3 +32,9 @@ Focused backend, host-flow, question-builder and DOM checks pass. Extension host
 This source is not yet installed. Full CLI typechecking and the installed conversation journey remain pending. A `configured` receipt reports observed setup state and explicitly leaves conversational saving and recall unverified. A machine without a prepared runtime receives an honest `needs_attention` result; a generic runtime downloader/provisioner is not implemented by this change.
 
 Installed acceptance should exercise setup without technical filename entry, a newly saved preference and later source-backed recall, cancellation, correction, forgetting and pausing. Voice testing remains deferred at the user's request. No personal notes, grants, credentials, runtime services, models or physical lights were changed while developing this feature.
+
+## Conversational saving controls
+
+The next source change supports explicit pause and resume requests through the same Memory tool. Pause changes only the saved intake preference; it does not start a service, remove notes, clear grants, discard uncertainty or claim that earlier writes were cancelled. Resume reuses the admitted preferences and requires native approval after checking the actual current binding.
+
+Receipts and the settings view distinguish whether future saving is enabled from an earlier save's observed status. A paused future preference can therefore coexist with a running or uncertain original save. Setup reports these unfinished or capacity-limited states as needing attention rather than completed setup. Source checks pass; installation and actual conversational control acceptance remain pending.

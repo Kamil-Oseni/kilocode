@@ -153,15 +153,22 @@ export class SetupFlow {
         ...this.result(attempt, project, "choice", state),
         question: question(stage, state.root ?? prepared!.root),
       }
+    return this.finish(attempt, project, state)
+  }
+
+  private finish(attempt: Attempt, project: string, state: Snapshot) {
     attempt.closed = true
+    const blocked = ["saving", "uncertain", "capacity"].includes(state.capture)
     return this.result(
       attempt,
       project,
-      state.configured && state.index === "synced" ? "configured" : "needs_attention",
+      state.configured && state.index === "synced" && !blocked ? "configured" : "needs_attention",
       state,
-      state.index === "synced"
-        ? "Memory is connected. Conversational saving and recall still need verification."
-        : "Memory needs review in settings before setup can continue. No earlier work was retried.",
+      blocked
+        ? "Automatic saving needs attention in Memory. Earlier saves and their status are preserved."
+        : state.index === "synced"
+          ? "Memory is connected. Conversational saving and recall still need verification."
+          : "Memory needs review in settings before setup can continue. No earlier work was retried.",
     )
   }
 

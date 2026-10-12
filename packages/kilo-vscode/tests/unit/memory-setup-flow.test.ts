@@ -6,7 +6,7 @@ function fixture() {
     configured: false,
     root: "C:/Synthetic/SecondBrain",
     index: "unchecked" as "unchecked" | "approved" | "synced",
-    capture: "unavailable" as "unavailable" | "ready",
+    capture: "unavailable" as "unavailable" | "ready" | "saving" | "uncertain" | "capacity",
     recovery: false,
   }
   const candidate = { root: state.root, capture: false, identity: "original", fresh: false }
@@ -64,6 +64,21 @@ test("Memory setup uses stable Ask choices, completes each stage once and report
   expect(calls).toEqual(["connect", "notes", "index", "capture"])
   await expect(run({ stage: "continue", attempt, choice: "enable_capture" })).rejects.toThrow("expired or changed")
 })
+
+test.each(["saving", "uncertain", "capacity"] as const)(
+  "Memory setup reports retained %s capture state as needing attention",
+  async (capture) => {
+    const { state, run, calls } = fixture()
+    state.configured = true
+    state.index = "synced"
+    state.capture = capture
+    const result = await run({ stage: "inspect" })
+    expect(result.status).toBe("needs_attention")
+    expect(result.capture).toBe(capture)
+    expect(result.configured).toBe(true)
+    expect(calls).toEqual([])
+  },
+)
 
 test("Memory setup refuses changed conversation and prepared selection before admission", async () => {
   const { run, candidate, calls } = fixture()

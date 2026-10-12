@@ -7,16 +7,18 @@ import { SecondBrain, HostError } from "@/kilocode/second-brain/service"
 import { fit, reserve } from "@/kilocode/second-brain/context"
 import { requested, setup } from "@/kilocode/second-brain/setup"
 import { RayaChief } from "@/kilocode/chief"
+import { selected } from "@/kilocode/second-brain/capture-state"
 import { Question } from "@/question"
 import * as Tool from "@/tool/tool"
 
 const Params = Schema.Union([
   Status,
   Schema.Struct({ action: Schema.Literal("setup") }),
+  Schema.Struct({ action: Schema.Literals(["pause", "resume"]) }),
   Schema.Struct({ query: Recall.fields.query, budget: Schema.optional(Recall.fields.budget) }),
 ])
 
-function cancelled(signal: AbortSignal, operation: "context" | "status" | "setup" = "context") {
+function cancelled(signal: AbortSignal, operation: "context" | "status" | "setup" | "captureState" = "context") {
   return Effect.callback<never, HostError>((resume) => {
     const fail = () =>
       resume(Effect.fail(new HostError({ code: "cancelled", detail: "Memory read cancelled", operation })))
@@ -37,7 +39,7 @@ export const BrainRecallTool = Tool.define<
     const sessions = yield* Session.Service
     return {
       description:
-        "Use {action:'setup'} when the user asks to connect or set up personal Memory. Setup presents existing conversation option cards for missing choices and native masked credential/review controls; never ask for technical filenames, paths or secrets in chat. Report its actual configured, cancelled or needs_attention receipt; connection does not prove saving and recall. Read setup status with {action:'status'}, or retrieve approved notes with {query, budget?}. Do not re-ask for an already selected folder or authorized capture. Search and linked notes are unverified source candidates: cite supporting passages, preserve qualifiers, and say you do not know when none supports the question. Similarity and citation metadata alone are not facts. Reads do not edit notes or enable capture. Budget is capped by the current request allowance.",
+        "Use {action:'setup'} to connect personal Memory, or {action:'pause'} and {action:'resume'} only for explicit requests to pause or resume automatic saving. Resume retains native consent; neither command edits or deletes notes or cancels previous saves. Inspect enabled and capture separately: disabled future saving can coexist with a saving or uncertain original effect. Setup uses existing conversation option cards and native masked credential/review controls; never ask for technical filenames, paths or secrets in chat. Report actual receipts; connection does not prove saving and recall. Read setup status with {action:'status'}, or retrieve approved notes with {query, budget?}. Do not re-ask for a selected folder or authorized capture. Search and linked notes are unverified candidates: cite supporting passages, preserve qualifiers, and say you do not know when none supports the question. Reads do not edit notes or enable capture. Budget is capped by the current request allowance.",
       parameters: Params,
       execute: (args: typeof Params.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -46,11 +48,35 @@ export const BrainRecallTool = Tool.define<
           if (path.resolve(session.directory) !== path.resolve(inst.directory))
             return yield* Effect.die(new Error("Memory recall session directory changed"))
           yield* ctx.ask({
-            permission: "action" in args && args.action === "setup" ? "second_brain_setup" : "second_brain_recall",
+            permission:
+              "action" in args && args.action !== "status"
+                ? args.action === "setup"
+                  ? "second_brain_setup"
+                  : "second_brain_capture"
+                : "second_brain_recall",
             patterns: [inst.directory],
             always: [inst.directory],
             metadata: { query: "action" in args ? `Memory ${args.action}` : args.query },
           })
+          if ("action" in args && (args.action === "pause" || args.action === "resume")) {
+            const original = ctx.messages.findLast((row) => row.info.role === "user")
+            if (!original || selected(RayaChief.requestText(original.parts)) !== args.action)
+              return yield* Effect.die(new Error("An explicit original automatic-saving request is required"))
+            const result = yield* brain
+              .request({
+                sessionID: ctx.sessionID,
+                project: inst.directory,
+                command: { action: "captureState", mode: args.action },
+              })
+              .pipe(Effect.raceFirst(cancelled(ctx.abort, "captureState")), Effect.orDie)
+            if (result.action !== "captureState")
+              return yield* Effect.die(new Error("Automatic-saving receipt required"))
+            return {
+              title: "Automatic Memory saving",
+              output: JSON.stringify(result),
+              metadata: { count: 0, truncated: false, tokens: 0 },
+            }
+          }
           if ("action" in args && args.action === "setup") {
             const original = ctx.messages.findLast((row) => row.info.role === "user")
             if (!original || !requested(RayaChief.requestText(original.parts)))

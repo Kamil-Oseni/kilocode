@@ -4,6 +4,7 @@ import { RayaChief } from "../chief"
 import { Request, Result } from "./protocol"
 import { valid } from "./reply"
 import { requested } from "./setup"
+import { selected } from "./capture-state"
 
 export const acknowledgement =
   "This turn states a personal preference. Briefly acknowledge the user's actual preference in one sentence. Treat references to first-time setup as the preference being described; do not begin setup or ask configuration questions. Preserve the user's restrictions. Do not claim that anything was changed or saved: separately authorized automatic Memory saving runs after the reply and must confirm its own result."
@@ -76,7 +77,9 @@ export function settled(
   const request = RayaChief.requestText(current.parts)
   const state = status(request)
   const configuring = requested(request)
-  if (request !== RayaChief.request(session.metadata) || (!state && !configuring && !question(request))) return false
+  const mode = selected(request)
+  if (request !== RayaChief.request(session.metadata) || (!state && !configuring && !mode && !question(request)))
+    return false
   return messages.some(
     (row) =>
       row.info.role === "assistant" &&
@@ -95,8 +98,8 @@ export function settled(
           return false
         const input = part.state.input
         if (
-          state || configuring
-            ? input.action !== (configuring ? "setup" : "status") || Object.keys(input).length !== 1
+          state || configuring || mode
+            ? input.action !== (mode ?? (configuring ? "setup" : "status")) || Object.keys(input).length !== 1
             : Object.keys(input).some((key) => key !== "query" && key !== "budget")
         )
           return false
@@ -104,11 +107,13 @@ export function settled(
           id: part.callID,
           sessionID: session.id,
           project: session.directory,
-          command: configuring
-            ? { action: "setup", stage: "inspect" }
-            : state
-              ? input
-              : { ...input, action: "context", budget: input.budget ?? 6000 },
+          command: mode
+            ? { action: "captureState", mode }
+            : configuring
+              ? { action: "setup", stage: "inspect" }
+              : state
+                ? input
+                : { ...input, action: "context", budget: input.budget ?? 6000 },
         })
         if (Decode.isFailure(command) || Buffer.byteLength(part.state.output, "utf8") > 200000) return false
         const value = (() => {

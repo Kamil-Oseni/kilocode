@@ -151,11 +151,37 @@ export function SecondBrain() {
       <Show when={state().root}>{(root) => <p>Notes folder: {root()}</p>}</Show>
       <Show when={state().capture}>
         {(capture) => (
-          <p role="status">
-            {captures[capture().status]}
-            {capture().reason === "source_capacity" ? ". Review indexed notes; none were removed." : ""}
-            {capture().reason === "ledger_capacity" ? ". Review capture history; existing records are retained." : ""}
-          </p>
+          <>
+            <p role="status">
+              {capture().enabled === false
+                ? "Automatic saving paused for new conversations"
+                : captures[capture().status]}
+              {capture().enabled === false && capture().status !== "paused" ? `. ${captures[capture().status]}` : ""}
+              {capture().reason === "source_capacity" ? ". Review indexed notes; none were removed." : ""}
+              {capture().reason === "ledger_capacity" ? ". Review capture history; existing records are retained." : ""}
+            </p>
+            <Show
+              when={
+                state().configured &&
+                (capture().enabled === true ||
+                  capture().status === "paused" ||
+                  (capture().status === "ready" && capture().enabled !== false))
+              }
+            >
+              <Button
+                disabled={busy() || !server.isConnected()}
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent("raya:memory-saving", {
+                      detail: { action: capture().status === "paused" ? "resume" : "pause" },
+                    }),
+                  )
+                }
+              >
+                {capture().status === "paused" ? "Resume saving" : "Pause saving"}
+              </Button>
+            </Show>
+          </>
         )}
       </Show>
       <Show when={control()}>

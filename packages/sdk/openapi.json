@@ -82295,6 +82295,21 @@
           }
         ]
       },
+      "SecondBrainCaptureState": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["captureState"]
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["pause", "resume"]
+          }
+        },
+        "required": ["action", "mode"],
+        "additionalProperties": false
+      },
       "SecondBrainMediaRecall": {
         "type": "object",
         "properties": {
@@ -82345,6 +82360,9 @@
               },
               {
                 "$ref": "#/components/schemas/SecondBrainSetup"
+              },
+              {
+                "$ref": "#/components/schemas/SecondBrainCaptureState"
               },
               {
                 "type": "object",
@@ -98355,6 +98373,39 @@
         "required": ["action", "project", "attempt", "status", "configured", "index", "capture"],
         "additionalProperties": false
       },
+      "SecondBrainCaptureStateResult": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["captureState"]
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "capture": {
+            "type": "string",
+            "enum": ["unavailable", "paused", "ready", "saving", "uncertain", "capacity"]
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 1024
+          }
+        },
+        "required": ["action", "project", "configured", "enabled", "capture", "changed"],
+        "additionalProperties": false
+      },
       "SecondBrainMediaResult": {
         "type": "object",
         "properties": {
@@ -98647,6 +98698,9 @@
           },
           {
             "$ref": "#/components/schemas/SecondBrainSetupResult"
+          },
+          {
+            "$ref": "#/components/schemas/SecondBrainCaptureStateResult"
           },
           {
             "type": "object",

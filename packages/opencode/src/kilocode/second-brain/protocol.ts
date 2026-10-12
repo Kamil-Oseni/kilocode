@@ -45,6 +45,10 @@ export const Recall = Schema.Struct({
 }).annotate({ identifier: "SecondBrainRecall" })
 export type Recall = typeof Recall.Type
 export const Status = Schema.Struct({ action: Schema.Literal("status") }).annotate({ identifier: "SecondBrainStatus" })
+export const CaptureState = Schema.Struct({
+  action: Schema.Literal("captureState"),
+  mode: Schema.Literals(["pause", "resume"]),
+}).annotate({ identifier: "SecondBrainCaptureState" })
 export const Setup = Schema.Union([
   Schema.Struct({
     action: Schema.Literal("setup"),
@@ -68,7 +72,17 @@ export const Request = Schema.Struct({
   id: RequestID,
   sessionID: SessionID,
   project: Path,
-  command: Schema.Union([Command, Recall, Status, Setup, CapturePolicy, Capture, CaptureFailed, MediaRecall]),
+  command: Schema.Union([
+    Command,
+    Recall,
+    Status,
+    Setup,
+    CaptureState,
+    CapturePolicy,
+    Capture,
+    CaptureFailed,
+    MediaRecall,
+  ]),
 }).annotate({ identifier: "SecondBrainRequest" })
 export type Request = typeof Request.Type
 const Proposal = Schema.Struct({
@@ -154,11 +168,22 @@ export const SetupResult = Schema.Struct({
   ),
 }).annotate({ identifier: "SecondBrainSetupResult" })
 export type SetupResult = typeof SetupResult.Type
+export const CaptureStateResult = Schema.Struct({
+  action: Schema.Literal("captureState"),
+  project: Path,
+  configured: Schema.Boolean,
+  enabled: Schema.Boolean,
+  capture: StatusResult.fields.capture,
+  changed: Schema.Boolean,
+  detail: Schema.optional(Schema.String.check(Schema.isMaxLength(1024))),
+}).annotate({ identifier: "SecondBrainCaptureStateResult" })
+export type CaptureStateResult = typeof CaptureStateResult.Type
 export const Result = Schema.Union([
   ProposalResult,
   ContextResult,
   StatusResult,
   SetupResult,
+  CaptureStateResult,
   CapturePolicyResult,
   CaptureResult,
   CaptureFailedResult,

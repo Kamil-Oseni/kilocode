@@ -237,6 +237,48 @@ try {
   emit(current, { configured: true, status: "ready", results: [], root, control: { status: "synced" } })
   assert.equal(button("Continue setup with Raya"), undefined)
   window.removeEventListener("raya:setup-memory", continuation)
+  const saving = []
+  const manage = (event) => saving.push(event.detail.action)
+  window.addEventListener("raya:memory-saving", manage)
+  const captured = (status, enabled) =>
+    emit(current, {
+      configured: true,
+      status: "ready",
+      results: [],
+      control: { status: "synced" },
+      capture: { status, ...(enabled === undefined ? {} : { enabled }) },
+    })
+  captured("ready")
+  button("Pause saving").click()
+  assert.deepEqual(saving, ["pause"])
+  assert.match(node.textContent, /Automatic saving ready/)
+  assert.equal(button("Resume saving"), undefined)
+  captured("paused")
+  button("Resume saving").click()
+  assert.deepEqual(saving, ["pause", "resume"])
+  assert.match(node.textContent, /Automatic saving paused/)
+  window.dispatchEvent(new window.MessageEvent("message", { data: { type: "connectionState", state: "disconnected" } }))
+  assert.equal(button("Resume saving").disabled, true)
+  button("Resume saving").click()
+  assert.deepEqual(saving, ["pause", "resume"])
+  window.dispatchEvent(new window.MessageEvent("message", { data: { type: "connectionState", state: "connected" } }))
+  for (const status of ["saving", "uncertain", "capacity", "unavailable"]) {
+    captured(status)
+    assert.equal(button("Resume saving"), undefined)
+    assert.equal(button("Pause saving"), undefined)
+  }
+  captured("uncertain", true)
+  button("Pause saving").click()
+  assert.deepEqual(saving, ["pause", "resume", "pause"])
+  assert.match(node.textContent, /A previous save needs review/)
+  captured("uncertain", false)
+  assert.match(node.textContent, /Automatic saving paused for new conversations\. A previous save needs review/)
+  assert.equal(button("Resume saving"), undefined)
+  assert.equal(button("Pause saving"), undefined)
+  captured("saving", false)
+  assert.match(node.textContent, /Automatic saving paused for new conversations\. Saving to Memory/)
+  assert.equal(button("Resume saving"), undefined)
+  window.removeEventListener("raya:memory-saving", manage)
   const field = document.querySelector("input")
   field.value = "D:\\Raya\\Services\\Memory\\setup.json"
   field.dispatchEvent(new window.Event("input", { bubbles: true }))

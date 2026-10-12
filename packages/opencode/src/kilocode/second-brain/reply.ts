@@ -9,6 +9,11 @@ const restricted = new Set(["system", "archive", ".git", "health", "medical", "p
 export function valid(request: Request, value: Result) {
   if (!Schema.is(Result)(value) || request.command.action !== value.action || request.project !== value.project)
     return false
+  if (value.action === "captureState") {
+    if (request.command.action !== "captureState") return false
+    if (value.changed && request.command.mode === "resume" && !value.configured) return false
+    return !value.changed || value.enabled === (request.command.mode === "resume")
+  }
   if (value.action === "setup") {
     const command = request.command
     if (command.action !== "setup") return false
@@ -56,6 +61,7 @@ export function valid(request: Request, value: Result) {
     if (
       request.command.action === "context" ||
       request.command.action === "setup" ||
+      request.command.action === "captureState" ||
       request.command.action === "mediaContext" ||
       request.command.action === "capturePolicy" ||
       request.command.action === "capture" ||

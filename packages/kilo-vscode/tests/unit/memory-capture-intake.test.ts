@@ -10,6 +10,61 @@ import { fingerprint } from "../../src/second-brain/failed-repair"
 import { parse } from "../../src/second-brain/settings"
 import { metadata } from "../../src/second-brain/manifest"
 
+test("pausing future capture preserves original consent fields and an in-flight save ledger", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "raya-capture-pause-"))
+  const file = path.join(dir, "state.json")
+  const storage = {
+    get<T>(key: string): T | undefined {
+      return existsSync(file) ? JSON.parse(readFileSync(file, "utf8"))[key] : undefined
+    },
+    async update(key: string, value: unknown) {
+      const prior = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {}
+      await Bun.write(file, JSON.stringify({ ...prior, [key]: value }))
+    },
+  }
+  try {
+    const intake = new CaptureIntake(storage)
+    const binding = {
+      root: path.join(dir, "notes"),
+      release: "a".repeat(64),
+      owner: "owner",
+      generation: {},
+      index: "synced" as const,
+    }
+    const cfg = {
+      version: 1,
+      enabled: true,
+      root: binding.root,
+      release: binding.release,
+      zone: "America/Toronto",
+      model: "local-selected",
+      authorization: { source: "Original human preference", sha256: "b".repeat(64) },
+    }
+    await intake.save(cfg, binding)
+    const controller = new AbortController()
+    controller.abort()
+    await expect(intake.pause(() => controller.signal.throwIfAborted())).rejects.toThrow()
+    expect(intake.saved(binding)).toEqual(cfg)
+    const turn = { project: dir, sessionID: "original", messageID: "message", source_sha256: "c".repeat(64) }
+    expect(await intake.grant(turn, binding, () => {})).toBeDefined()
+    await intake.begin(turn)
+    const ledger = storage.get("raya.secondBrain.personalCapture.turns")
+    expect(await intake.pause(() => {})).toBe(true)
+    expect(intake.enabled()).toBe(false)
+    expect(intake.saved(binding)).toEqual({ ...cfg, enabled: false })
+    expect(intake.snapshot(binding).status).toBe("saving")
+    expect(storage.get("raya.secondBrain.personalCapture.turns")).toEqual(ledger)
+    expect(await intake.grant({ ...turn, messageID: "next" }, binding, () => {})).toBeUndefined()
+    expect(await intake.pause(() => {})).toBe(false)
+    intake.end(turn)
+    expect(intake.snapshot(binding).status).toBe("uncertain")
+    expect(storage.get("raya.secondBrain.personalCapture.turns")).toEqual(ledger)
+  } finally {
+    expect(path.dirname(dir)).toBe(tmpdir())
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("runtime consent migration preserves human authorization and refuses unrelated roots/releases", () => {
   const previous = parse({
     format: "raya.memory.setup",

@@ -50,6 +50,9 @@ test("last saved receipt follows confirmed publication order and excludes other 
     expect(intake.lastSaved(binding)).toBeUndefined()
     await intake.finish(second, "published", "d".repeat(64))
     expect(intake.lastSaved(binding)?.messageID).toBe("second")
+    const stale = storage.get("raya.secondBrain.personalCapture.confirmed")
+    await storage.update("raya.secondBrain.personalCapture.confirmed", undefined)
+    expect(intake.lastSaved(binding)?.messageID).toBe("second")
     await intake.finish(first, "published", "e".repeat(64))
     const receipt = intake.lastSaved(binding)!
     expect(receipt).toEqual({
@@ -61,6 +64,12 @@ test("last saved receipt follows confirmed publication order and excludes other 
     })
     expect(receipt.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(new CaptureIntake(storage).lastSaved(binding)).toEqual(receipt)
+    const original = storage.get("raya.secondBrain.personalCapture.confirmed")
+    await storage.update("raya.secondBrain.personalCapture.confirmed", stale)
+    expect(intake.lastSaved(binding)).toBeUndefined()
+    await storage.update("raya.secondBrain.personalCapture.confirmed", undefined)
+    expect(intake.lastSaved(binding)).toBeUndefined()
+    await storage.update("raya.secondBrain.personalCapture.confirmed", original)
     expect(intake.lastSaved()).toBeUndefined()
     expect(intake.lastSaved({ ...binding, root: path.join(dir, "other") })).toBeUndefined()
     expect(intake.lastSaved({ ...binding, release: "f".repeat(64) })).toBeUndefined()
@@ -68,13 +77,29 @@ test("last saved receipt follows confirmed publication order and excludes other 
     await intake.grant(skipped, binding, () => {})
     await intake.finish(skipped, "skipped")
     expect(intake.lastSaved(binding)).toEqual(receipt)
+    const failed = { ...first, messageID: "metadata-failed" }
+    await intake.grant(failed, binding, () => {})
+    const update = storage.update
+    storage.update = async (key, value) => {
+      if (key === "raya.secondBrain.personalCapture.confirmed") throw new Error("Synthetic metadata write failure")
+      return update(key, value)
+    }
+    await intake.finish(failed, "published", "f".repeat(64))
+    storage.update = update
+    expect(intake.lastSaved(binding)).toBeUndefined()
+    expect(intake.snapshot(binding).status).toBe("ready")
+    expect(
+      storage
+        .get<Array<{ messageID: string; phase: string }>>("raya.secondBrain.personalCapture.turns")!
+        .find((row) => row.messageID === failed.messageID)?.phase,
+    ).toBe("published")
     const uncertain = { ...first, messageID: "uncertain" }
     await intake.grant(uncertain, binding, () => {})
     await intake.finish(uncertain, "uncertain")
-    expect(intake.lastSaved(binding)).toEqual(receipt)
+    expect(intake.lastSaved(binding)).toBeUndefined()
     expect(intake.snapshot(binding).status).toBe("uncertain")
     await storage.update("raya.secondBrain.personalCapture.confirmed", { id: receipt.id, receipt: "f".repeat(64) })
-    expect(intake.lastSaved(binding)?.messageID).toBe("second")
+    expect(intake.lastSaved(binding)).toBeUndefined()
   } finally {
     expect(path.dirname(dir)).toBe(tmpdir())
     await rm(dir, { recursive: true, force: true })

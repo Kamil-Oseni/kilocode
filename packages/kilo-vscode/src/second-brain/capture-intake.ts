@@ -139,7 +139,7 @@ const record = z
   })
   .strict()
 const rows = z.array(record).max(10000)
-const completed = z.object({ id: z.string().uuid(), receipt: hash }).strict()
+const completed = z.object({ id: z.string().uuid(), receipt: hash, published: hash }).strict()
 export function records(input: unknown) {
   return rows.parse(input ?? [])
 }
@@ -185,6 +185,11 @@ const failures = z
   )
   .max(10000)
 type Record = z.infer<typeof record>
+function revision(published: readonly Record[]) {
+  const digest = createHash("sha256")
+  for (const row of [...published].sort((a, b) => a.id.localeCompare(b.id))) digest.update(JSON.stringify(row) + "\n")
+  return digest.digest("hex")
+}
 const sha = (value: string) => createHash("sha256").update(value).digest("hex")
 
 function identity(turn: Turn) {
@@ -449,9 +454,13 @@ export class CaptureIntake {
           hash.safeParse(row.receipt).success,
       )
     const parsed = completed.safeParse(this.storage.get(marker))
-    const latest = parsed.success
-      ? (published.find((row) => row.id === parsed.data.id && row.receipt === parsed.data.receipt) ?? published.at(-1))
-      : published.at(-1)
+    const digest = revision(published)
+    const latest =
+      parsed.success && parsed.data.published === digest
+        ? published.find((row) => row.id === parsed.data.id && row.receipt === parsed.data.receipt)
+        : published.length === 1
+          ? published[0]
+          : undefined
     if (!latest) return undefined
     return {
       id: latest.id,
@@ -462,8 +471,19 @@ export class CaptureIntake {
     }
   }
 
-  private async confirmed(row: Record) {
-    const next = completed.parse({ id: row.id, receipt: row.receipt })
+  private async confirmed(row: Record, saved: readonly Record[]) {
+    const published = saved.filter(
+      (entry) =>
+        entry.root === row.root &&
+        entry.release === row.release &&
+        entry.phase === "published" &&
+        hash.safeParse(entry.receipt).success,
+    )
+    const next = completed.parse({
+      id: row.id,
+      receipt: row.receipt,
+      published: revision(published),
+    })
     await this.storage.update(marker, next)
     if (!isDeepStrictEqual(this.storage.get(marker), next))
       throw new Error("Saved-entry completion metadata was not recorded")
@@ -847,7 +867,7 @@ export class CaptureIntake {
       await this.storage.update(ledger, next)
       if (!isDeepStrictEqual(this.storage.get(ledger), next)) throw new Error("Capture outcome persistence failed")
       if (phase === "published")
-        await this.confirmed(next.find((row) => row.id === id)!).catch(() => {
+        await this.confirmed(next.find((row) => row.id === id)!, next).catch(() => {
           console.warn("[Raya] Confirmed Memory publication has no recorded latest-entry metadata")
         })
       if (phase === "saving") this.active.add(id)

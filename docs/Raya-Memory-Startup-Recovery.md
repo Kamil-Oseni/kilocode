@@ -2,7 +2,15 @@
 
 ## Current profile checkpoint — October 12
 
-### Installed c7 connection and upgrade
+### Current installed 3a observation
+
+Everyday `7.4.23-snapshot+3a1500d26f.local.1791833486314` applied the supported native runtime upgrade and connected using fifteen reviewed service files. The control-bridge refusal described below is historical and fixed in this package. Index request `817aec363c66459c8fbd9267fb25c4d6` then became uncertain: the old historical source validator accepts only twelve/thirteen files and rejects this fifteen-file cohort before reservation publication. Original request outcome remains unknown; an empty request folder does not establish settlement.
+
+Source fixes `809e3acb1c` and `dd9888c1a0` add explicit uncertain-Sync quarantine and the exact corrected source cohort, while preserving old source/supervisor pairings. Focused checks passed; these fixes are not installed yet. A separate unused replacement was prepared with the supported fresh constructor. Normal closure of the owned Code window left the original processes and service ports absent, but produced no clean pair closure. Native replacement must preserve the old debt in its audit and must not replay the request.
+
+Prepared selector: `D:/Raya/Services/Memory/Managed/raya-memory-managed-ec734ff345644fc6b1f13257270c2f46/raya-memory-fresh-2f1f8c68602c40f3bb80e3179cac45eb/fresh-start.json`. Actual selected-image and process/listener absence evidence: `D:/Raya/Tools/Readiness-20261012/Memory-Uncertain-Sync-Replacement-Absence-ce03644d82ef4bd59795f6cb61174f48.json`, SHA-256 `1f15d7773063e1e83030c9f23e51185af1018e6f599b891ea9658529e8acfb3d`. This qualifies preparation, not installed recovery or historical family settlement. After the matching package is installed, use the supported fresh-start action; close its new idle pair normally, upgrade that closed pair to the corrected runtime, then start one new indexing request. Indexing and live conversation save/recall remain required.
+
+### Historical installed c7 connection and upgrade
 
 Installed `c7c8c07ce1` connected the original pair `ecb21c692efec5d01c3df8c7bd5153c0` on ports 53676/53677. Authenticated health returned ready, valid namespace, no unconfirmed retirement and index approved against the exact revision-11 policy. The UI eventually reported Memory connected; endpoint readiness preceded completion of the host's managed admission work.
 

@@ -39,7 +39,7 @@ The older source snapshots exclude credentials, binary media and derived indexes
 ## Raya extension and local services
 
 1. Save current profile/settings and note the installed version before changing it. Close the affected Raya window normally and allow its owned jobs to finish or cancel through supported controls.
-2. Use the supported extension install/rollback flow with a reviewed VSIX. Do not replace package-vault registries or SecretStorage manually. Current everyday release is `7.4.23-snapshot+f3a3aa4df9.local.1791823909482`. Its protected rollback package is `D:/RayaBackups/Everyday-routines-20261012-ce50c5684e5342139cbc317fd4804ad4/rollback.vsix`, which restores the preceding `1113d35b8b` release. The saved profile copies and copy receipt are in the same folder. Preserve newer profile data before any rollback; package rollback alone is not a profile restore. Historical candidate checks do not qualify every everyday workflow.
+2. Use the supported extension install/rollback flow with a reviewed VSIX. Consult [current readiness](Raya-Current-Readiness.md) for the installed version. Do not replace package-vault registries or SecretStorage manually. The protected `D:/RayaBackups/Everyday-worker-repairs-20261012-owner-a1694488e9d24dc0a15ca7bb69fe4f75/rollback.vsix` restores the earlier `f3a3aa4df9` release, not the current package. Its saved profile copies and copy receipt are in the same folder. Preserve newer profile data before any rollback; package rollback alone is not a profile restore. Historical candidate checks do not qualify every everyday workflow.
 3. Use the installed lifecycle owner to recover Speech, Memory and Retrieval. Inspect a busy or refused stop before retrying; do not kill every Python process. Confirm service health and a small real request after recovery.
 4. If files or dependencies are missing, recover from reviewed package/model manifests and the corresponding environments. Historical source copies alone do not include model weights, Python environments, access tokens or the complete installer. Re-enter credentials through the supported masked setup flow when required.
 
@@ -47,6 +47,6 @@ Detailed historical material is retained in [the October 6 recovery guide](D:/Ra
 
 ## Remaining recovery work
 
-- Select an off-PC destination and copy the chosen backups and separately protected emergency kit.
+- Off-PC destination: Kamil chose to decide later. Keep the local backups; do not upload or copy the emergency kit elsewhere until a destination is chosen.
 - Perform an isolated Home Assistant restore rehearsal during an agreed maintenance window.
 - Qualify installed extension rollback, local-service recovery and Memory recall on the release candidate. The integrity checks above do not replace those workflow tests.

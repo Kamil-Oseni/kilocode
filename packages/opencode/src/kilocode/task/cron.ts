@@ -20,6 +20,52 @@ export function upcoming(expr: string, from: number, zone?: string) {
   })
 }
 
+/** Select one latest elapsed occurrence; never expand an offline backlog into runs. */
+export function latest(expr: string, after: number, through: number, zone?: string) {
+  return Effect.gen(function* () {
+    if (![after, through].every((at) => Number.isFinite(at) && Math.abs(at) <= 8.64e15))
+      throw new Error("Invalid schedule reference time")
+    const parts = parse(expr)
+    const clock = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      calendar: "gregory",
+      numberingSystem: "latn",
+      hourCycle: "h23",
+      minute: "numeric",
+      hour: "numeric",
+      day: "numeric",
+      month: "numeric",
+      weekday: "short",
+    })
+    const minute =
+      parts[0].size < 60
+        ? new Intl.DateTimeFormat("en-US", { timeZone: zone, numberingSystem: "latn", minute: "numeric" })
+        : undefined
+    const end = Math.max(after, through - 146_099 * 86_400_000)
+    let count = 0
+    for (let at = Math.floor(through / 60_000) * 60_000; at > end; at -= 60_000) {
+      if (++count % 1024 === 0) yield* Effect.sleep(0)
+      if (at === Math.floor(through / 60_000) * 60_000 || at % 86_400_000 === 86_340_000) {
+        const day = Math.floor(at / 86_400_000) * 86_400_000
+        const possible = [-1, 0, 1].some((offset) => {
+          const date = new Date(day + offset * 86_400_000)
+          return (
+            parts[2].has(date.getUTCDate()) && parts[3].has(date.getUTCMonth() + 1) && parts[4].has(date.getUTCDay())
+          )
+        })
+        if (!possible) {
+          at = day
+          continue
+        }
+      }
+      if (minute && !parts[0].has(Number(minute.format(at)))) continue
+      const date = Object.fromEntries(clock.formatToParts(at).map((part) => [part.type, part.value]))
+      if (match(parts, date)) return at
+    }
+    return undefined
+  })
+}
+
 function* scan(expr: string, from: number, zone?: string) {
   if (!Number.isFinite(from) || Math.abs(from) > 8_640_000_000_000_000) {
     throw new Error("Invalid schedule reference time")

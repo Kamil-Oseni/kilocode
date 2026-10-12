@@ -13,12 +13,15 @@ const publish = Schema.Struct({
   agentID: name,
   version,
   expected: Schema.optional(timestamp),
+  defer: Schema.optional(Schema.Boolean),
+  skip: Schema.optional(name),
   occurrences: Schema.Array(Schema.Struct({ at: timestamp, observedAt: timestamp, tz: Schema.optional(name) })).check(
     Schema.isMinLength(1),
     Schema.isMaxLength(256),
   ),
 })
 type Publish = typeof publish.Type
+const selection = Schema.Struct({ id: name, agentID: name, version, expected: Schema.optional(timestamp) })
 const lease = Schema.Struct({ id: name, claimID: name, owner: name, until: timestamp, now: timestamp })
 type Lease = typeof lease.Type
 const transition = Schema.Struct({ id: name, claimID: name, sessionID: name, now: timestamp })
@@ -78,6 +81,24 @@ export namespace RayaTaskQueue {
                 message: "The scheduling cursor changed. Reload it before publishing occurrences.",
               })
             const ordered = [...input.occurrences].sort((a, b) => a.at - b.at)
+            if (input.defer && !input.skip) {
+              if (ordered.length !== 1)
+                return yield* new Conflict({ message: "Only one deferred occurrence may wait for a routine." })
+              const waiting = yield* tx
+                .select()
+                .from(Occurrence)
+                .where(
+                  and(
+                    eq(Occurrence.agent_id, input.agentID),
+                    eq(Occurrence.schedule_version, input.version),
+                    eq(Occurrence.state, "queued"),
+                  ),
+                )
+                .orderBy(asc(Occurrence.scheduled_at))
+                .limit(1)
+                .get()
+              if (waiting) return waiting.scheduled_at
+            }
             if (input.expected !== undefined && ordered[0].at <= input.expected)
               return yield* new Conflict({ message: "New occurrences must follow the stored scheduling cursor." })
             const now = Date.now()
@@ -93,13 +114,15 @@ export namespace RayaTaskQueue {
                   scheduled_at: item.at,
                   observed_at: item.observedAt,
                   timezone: item.tz,
-                  state: "queued",
+                  state: input.skip ? "skipped" : "queued",
+                  reason: input.skip ?? (input.defer ? "Waiting for previous work to finish." : undefined),
                   time_updated: now,
                 })
                 .onConflictDoNothing()
                 .run()
             }
             const through = ordered[ordered.length - 1].at
+            if (input.defer) return through
             yield* tx
               .insert(Cursor)
               .values({ agent_id: input.agentID, schedule_version: input.version, through, time_updated: now })
@@ -109,6 +132,46 @@ export namespace RayaTaskQueue {
               })
               .run()
             return through
+          }),
+        { behavior: "immediate" },
+      )
+    })
+    const promote = Effect.fn("RayaTaskQueue.promote")(function* (input: typeof selection.Type) {
+      yield* Schema.decodeUnknownEffect(selection)(input)
+      return yield* db.transaction(
+        (tx) =>
+          Effect.gen(function* () {
+            const row = yield* tx.select().from(Occurrence).where(eq(Occurrence.id, input.id)).get()
+            const current = yield* tx
+              .select()
+              .from(Cursor)
+              .where(and(eq(Cursor.agent_id, input.agentID), eq(Cursor.schedule_version, input.version)))
+              .get()
+            if (
+              !row ||
+              row.state !== "queued" ||
+              row.agent_id !== input.agentID ||
+              row.schedule_version !== input.version ||
+              current?.through !== input.expected ||
+              (current && current.through > row.scheduled_at)
+            )
+              return yield* new Conflict({ message: "The deferred occurrence or scheduling cursor changed." })
+            if (current?.through === row.scheduled_at) return row
+            const now = Date.now()
+            yield* tx
+              .insert(Cursor)
+              .values({
+                agent_id: input.agentID,
+                schedule_version: input.version,
+                through: row.scheduled_at,
+                time_updated: now,
+              })
+              .onConflictDoUpdate({
+                target: [Cursor.agent_id, Cursor.schedule_version],
+                set: { through: row.scheduled_at, time_updated: now },
+              })
+              .run()
+            return row
           }),
         { behavior: "immediate" },
       )
@@ -340,6 +403,7 @@ export namespace RayaTaskQueue {
     return {
       cursor,
       publish,
+      promote,
       pending,
       claim,
       heartbeat,

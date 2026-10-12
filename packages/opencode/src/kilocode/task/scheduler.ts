@@ -8,6 +8,7 @@ import { RayaTaskQueue } from "./queue"
 import { mutate } from "./mutation"
 import { removals } from "./removal"
 import { Context as ReviewContext, schedulerReview, type Journal, type Snapshot } from "./scheduler-review"
+import { latest } from "./cron"
 
 type Timer = Extract<RayaTask.Trigger, { kind: "timer" }>
 type Row = NonNullable<Effect.Success<ReturnType<ReturnType<typeof RayaTaskQueue.make>["get"]>>>
@@ -106,7 +107,8 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
     if (RayaTask.unzoned(item.schedule)) return undefined
     if (!item.enabled || (item.schedule.kind !== "once" && item.schedule.kind !== "cron")) return undefined
     const existing = yield* queue.pending(id, item.scheduleVersion ?? 1).pipe(Effect.orDie)
-    const at = existing.length ? undefined : yield* tasks.occurrence(item, from)
+    const policy = item.overlap !== undefined || item.missed !== undefined
+    const at = existing.length || policy ? undefined : yield* tasks.occurrence(item, from)
     return yield* mutate(
       input.storage,
       Effect.gen(function* () {
@@ -115,18 +117,48 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
         if (!fresh.enabled || (fresh.scheduleVersion ?? 1) !== (item.scheduleVersion ?? 1)) return undefined
         if (yield* queue.obsolete(id, fresh.scheduleVersion ?? 1).pipe(Effect.orDie)) return undefined
         const history = yield* tasks.runsFor(id)
-        if (history.some(RayaTask.pending) || (yield* queue.active(id).pipe(Effect.orDie)).length) return undefined
+        const active = yield* queue.active(id).pipe(Effect.orDie)
+        const busy = history.some(RayaTask.pending) || active.length > 0
+        const explicit = fresh.overlap !== undefined || fresh.missed !== undefined
+        if (busy && (!explicit || fresh.overlap === undefined)) return undefined
+        if (explicit) yield* tasks.launchable(id)
         const rows = yield* queue.pending(id, fresh.scheduleVersion ?? 1).pipe(Effect.orDie)
         for (const row of rows) {
           if (RayaTask.recorded(fresh, history, row.scheduled_at)) {
             yield* queue.skip(row.id, "Already consumed by recorded run history.").pipe(Effect.orDie)
             continue
           }
+          if (busy) return undefined
+          if (explicit) {
+            const cursor = yield* queue.cursor(id, fresh.scheduleVersion ?? 1).pipe(Effect.orDie)
+            yield* queue
+              .promote({ id: row.id, agentID: id, version: fresh.scheduleVersion ?? 1, expected: cursor?.through })
+              .pipe(Effect.orDie)
+          }
           return timer(row)
         }
-        if (at === undefined || RayaTask.recorded(fresh, history, at)) return undefined
         const cursor = yield* queue.cursor(id, fresh.scheduleVersion ?? 1).pipe(Effect.orDie)
-        if (cursor && cursor.through >= at) return undefined
+        const version = fresh.scheduleVersion ?? 1
+        const consumed = history
+          .filter((run) => (run.scheduleVersion ?? 1) === version && (!run.trigger || run.trigger.kind === "timer"))
+          .map((run) => (run.trigger?.kind === "timer" ? run.trigger.scheduledAt : run.at))
+        const origin = Math.max(cursor?.through ?? -8.64e15, fresh.scheduleUpdatedAt ?? fresh.createdAt, ...consumed)
+        const chosen = !explicit
+          ? at
+          : fresh.schedule.kind === "once"
+            ? fresh.schedule.at <= from && !RayaTask.recorded(fresh, history, fresh.schedule.at)
+              ? fresh.schedule.at
+              : undefined
+            : fresh.schedule.kind === "cron"
+              ? yield* latest(
+                  fresh.schedule.expr,
+                  fresh.missed === undefined ? Math.max(origin, from - 60_000) : origin,
+                  from,
+                  fresh.schedule.tz,
+                )
+              : undefined
+        if (chosen === undefined || RayaTask.recorded(fresh, history, chosen)) return undefined
+        if (cursor && cursor.through >= chosen) return undefined
         const tz =
           fresh.schedule.kind === "cron"
             ? (fresh.schedule.tz ?? new Intl.DateTimeFormat().resolvedOptions().timeZone)
@@ -136,11 +168,17 @@ export function scheduler(input: { database: Database.Interface; storage: Storag
             agentID: id,
             version: fresh.scheduleVersion ?? 1,
             expected: cursor?.through,
-            occurrences: [{ at, observedAt: from, tz }],
+            defer: busy,
+            ...(busy && fresh.overlap === "skip"
+              ? { skip: "Skipped because previous work is still running." }
+              : fresh.missed === "skip" && chosen < from - 60_000
+                ? { skip: "Skipped an occurrence missed while Raya was unavailable." }
+                : {}),
+            occurrences: [{ at: chosen, observedAt: from, tz }],
           })
           .pipe(Effect.orDie)
         const row = (yield* queue.pending(id, fresh.scheduleVersion ?? 1).pipe(Effect.orDie))[0]
-        return row ? timer(row) : undefined
+        return row && !busy ? timer(row) : undefined
       }),
     )
   })

@@ -1,4 +1,14 @@
-## Current new-PC readiness — October 11, 2026
+## Current new-PC readiness — October 12, 2026
+
+October 12, 2026 - Conversation Memory setup hotfix installed and loaded; human acceptance pending.
+
+Everyday Raya now runs `7.4.23-snapshot+22bdd474d1.local.1791780221506`. Official installation exits 0. Before normal app launch, the verified comparison preserves all **2828 saved settings, credential and history files**, checks **532 non-package payloads**, and confirms the unrelated extension registry is unchanged. Actual backend PID 8740 uses this installed version; Raya window 7276644 is maximized on display 2. The earlier installed d76 build preserved 2818 files, but its GUI exposed the disappearing setup action corrected here.
+
+The installed Memory panel now visibly offers **Continue setup with Raya**, while retaining the existing **Memory unavailable** and **saved Memory shutdown is unconfirmed** state. No setup action was clicked and no recovery authority was cleared. Next acceptance is the actual Memory setup journey and saving/recall; voice remains deferred. No model or microphone test ran. Home Assistant remains off; Eden and Claude are untouched. Later 69/0db work is not included.
+
+Host/webview types, lint, bundle and focused production DOM regression pass. Package qualification covers 535 ZIP entries/CRC, 303 staged payloads and 14061 equal before/after/current tracked files; its original 8d CLI with 7172 verified scoped inputs is reused, not freshly compiled for 22bd, and no full precompiler seal is claimed. VSIX SHA256 is `4a0f832bd0affd1d00ea2ffb0c02ad4af9f3e176b0a3ad644b8c3ebce16f04b6`. Evidence: `.tmp/new-pc/conversation-22bdd474d1-package-independent.json` and `.tmp/new-pc/conversation-22bdd474d1-installed-load.json`.
+
+Earlier package V1 admission refusal and V2 reserve cancellation remain failed. V3's artifact qualifies, but successful target exit 0 is separate from forced descendant cleanup and outer exit 1; helper exit 0, empty Job and joined readers are confirmed. Minimum free RAM was 5.33 GiB. Full CLI types still require 14 GiB admission. Readiness remains **48/100**, **38 unfinished requirements**; installed setup visibility does not prove human Memory or voice acceptance.
 
 October 11, 2026 - Delayed receipt ownership and fresh extension build qualify after music resource hold ends.
 

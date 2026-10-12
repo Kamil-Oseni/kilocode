@@ -35,6 +35,8 @@ MausBot's default overlap skip or single queued scheduled run is worth exposing 
 
 These are source changes until included in a qualified installed package. They do not establish whole-routine restart, missed-run or production UX acceptance.
 
+The first slice is now included in qualified everyday package `7.4.23-snapshot+1113d35b8b.local.1791820426652`. Five focused tests, full CLI types, host/webview production checks, Knip and independent binary/archive qualification pass; closed installation preserves saved settings/history. The new due-date labels are present in the production bundle. No new loaded-GUI, routine-run, missed-run or human UX acceptance is claimed; exact evidence is recorded in `Raya-Implementation-Progress.md`.
+
 ## Follow-up implementation
 
 Return one compact, updateable run receipt to the conversation that requested the job: Running, Needs your input, Completed or Failed, with its actual result and an Open run action. Then add report destination and explicit missed/overlap policy through existing Ask cards. Examples include job searches, an Eden daily brief, groceries, and project follow-ups; external messages/orders still follow their existing authorization rules.

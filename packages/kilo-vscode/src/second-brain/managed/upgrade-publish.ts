@@ -9,6 +9,7 @@ import { records, migrate } from "../capture-intake"
 import { descriptor, selection, type Descriptor } from "./descriptor"
 import { launch } from "./restart"
 import { review } from "./upgrade-review"
+import { transport } from "./upgrade-bridge"
 
 type Storage = { get<T>(key: string): T | undefined; update(key: string, value: unknown): PromiseLike<void> }
 type Entry = { setup: unknown; credential: string; managed: Descriptor; launch?: unknown }
@@ -123,7 +124,7 @@ async function admission(previous: Entry) {
   return absent({ pids: [], ports })
 }
 
-function catalog(input: unknown, proof: Awaited<ReturnType<typeof review>>) {
+async function catalog(input: unknown, proof: Awaited<ReturnType<typeof review>>) {
   if (input === undefined) return undefined
   check(input && typeof input === "object" && !Array.isArray(input), "Retained control selection required")
   const selected = input as Record<string, unknown>
@@ -140,10 +141,13 @@ function catalog(input: unknown, proof: Awaited<ReturnType<typeof review>>) {
       proof.original.every((item) => path.resolve(path.dirname(item.path)) === path.resolve(value.source)),
     "Original control release differs",
   )
-  // Original Python/bridge execution images stay selected; only the reviewed source directory/release changes.
+  // Keep the interpreter; paired upgrades carry the exact reviewed current transport image.
   return {
     root: selected.root,
-    catalog: parseCatalog({ ...value, source: proof.source, source_sha256: proof.next.setup.source_sha256 }),
+    catalog:
+      proof.version === 2
+        ? await transport(value, proof)
+        : parseCatalog({ ...value, source: proof.source, source_sha256: proof.next.setup.source_sha256 }),
   }
 }
 
@@ -224,7 +228,7 @@ async function preparation(storage: Storage, artifact: Descriptor["plan"], scope
     previous: original,
     next: [
       next,
-      catalog(value(original[1]), proof),
+      await catalog(value(original[1]), proof),
       migrate(value(original[2]), parse(selected.setup), proof.next.setup),
     ].map(slot),
     reviewSHA: proof.reviewSHA,

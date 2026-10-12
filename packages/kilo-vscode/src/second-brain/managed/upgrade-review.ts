@@ -184,7 +184,13 @@ export async function review(input: Descriptor["plan"], expected: Entry, cache?:
   const selected = await selection(next.managed, next.setup)
   const upgraded = "retrieval" in value ? value.retrieval : undefined
   const observed = upgraded
-    ? await activation(prior.managed, upgraded.previous, value.source, next.managed.namespaces)
+    ? await activation(
+        prior.managed,
+        upgraded.previous,
+        value.source,
+        next.managed.namespaces,
+        value.images.some((item) => item.path === path.join(value.source, "control.py")),
+      )
     : await observe(
         prior.managed,
         value.source,
@@ -196,7 +202,7 @@ export async function review(input: Descriptor["plan"], expected: Entry, cache?:
   check(typeof original.plan.source === "string", "Original source location required")
   const replacements = new Map(
     observed.images
-      .filter((item) => path.basename(item.path) !== "supervise.py")
+      .filter((item) => !["supervise.py", "control.py"].includes(path.basename(item.path)))
       .map((item) => {
         const name = path.relative(value.source, item.path)
         return [

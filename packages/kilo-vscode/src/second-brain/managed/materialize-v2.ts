@@ -3,7 +3,7 @@ import { mkdir, open } from "node:fs/promises"
 import { isDeepStrictEqual } from "node:util"
 import { check, sha } from "../control/frames"
 import { directory, image, normalize } from "../control/identity"
-import { release } from "../control/catalog-capture"
+import { release, bridge } from "../control/catalog-capture"
 import { setup as configure } from "../setup-v2"
 import type { Setup } from "../settings"
 import { current } from "./catalog"
@@ -33,6 +33,7 @@ async function packaged(extension: string) {
   const entries = [
     ...Object.entries(release).map(([name, digest]) => [name, path.join(base, "service", name), digest]),
     ...Object.entries(images).map(([name, digest]) => [name, path.join(base, name), digest]),
+    ["control.py", path.join(base, "control.py"), bridge],
     ["supervise.py", path.join(base, "supervise.py"), current],
   ]
   return Promise.all(
@@ -92,7 +93,7 @@ export async function activate(input: Descriptor, setup: Setup, extension: strin
   )
   const mapping = new Map(
     observed.images
-      .filter((row) => path.basename(row.path) !== "supervise.py")
+      .filter((row) => !["supervise.py", "control.py"].includes(path.basename(row.path)))
       .map((row) => {
         const name = path.relative(source, row.path).replace(/\\/g, "/")
         return [path.join(name.includes("/") ? prior.source : String(selected.plan.source), name), row] as const

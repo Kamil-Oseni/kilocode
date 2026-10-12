@@ -2,7 +2,7 @@ import path from "node:path"
 import { check, document, sha } from "../control/frames"
 import { command } from "../control/command"
 import { environment } from "../control/identity"
-import { release } from "../control/catalog-capture"
+import { release, bridge } from "../control/catalog-capture"
 import { current } from "./catalog"
 import { images, cohort } from "./reuse-catalog"
 import type { Descriptor } from "./descriptor"
@@ -95,7 +95,7 @@ type Observation = {
   refused?: string
 }
 
-function checked(value: Observation, source: string, fresh: boolean) {
+function checked(value: Observation, source: string, fresh: boolean, control: boolean) {
   check(
     !value.refused &&
       Array.isArray(value.prior) &&
@@ -103,7 +103,8 @@ function checked(value: Observation, source: string, fresh: boolean) {
       Array.isArray(value.retrieval) &&
       value.retrieval.length === 16 &&
       Array.isArray(value.images) &&
-      value.images.length === (source ? Object.keys(release).length + Object.keys(images).length + 1 : 0) &&
+      value.images.length ===
+        (source ? Object.keys(release).length + Object.keys(images).length + 1 + Number(control) : 0) &&
       Array.isArray(value.directories) &&
       value.directories.length === (source ? 3 : 0) &&
       Array.isArray(value.spaces) &&
@@ -128,7 +129,13 @@ function checked(value: Observation, source: string, fresh: boolean) {
 }
 
 /** Native original-image/ACL witnesses, without importing models or changing original plans. */
-export async function observe(cfg: Descriptor, prior: Retrieval, source = "", namespaces?: Descriptor["namespaces"]) {
+export async function observe(
+  cfg: Descriptor,
+  prior: Retrieval,
+  source = "",
+  namespaces?: Descriptor["namespaces"],
+  control = true,
+) {
   check(
     cfg.retrieval &&
       path.isAbsolute(prior.source) &&
@@ -148,7 +155,7 @@ export async function observe(cfg: Descriptor, prior: Retrieval, source = "", na
       cfg.plan.sha256,
       cfg.namespaces.memory.sid,
       source,
-      JSON.stringify({ ...release, "supervise.py": current, ...images }),
+      JSON.stringify({ ...release, "supervise.py": current, ...(control ? { "control.py": bridge } : {}), ...images }),
       namespaces ? JSON.stringify(namespaces) : "",
       cfg.retrieval.path,
       cfg.retrieval.sha256,
@@ -159,6 +166,6 @@ export async function observe(cfg: Descriptor, prior: Retrieval, source = "", na
   const raw = Buffer.from(result.stdout.trim())
   document(raw, 65536)
   const value = JSON.parse(raw.toString()) as Observation
-  checked(value, source, Boolean(namespaces))
+  checked(value, source, Boolean(namespaces), control)
   return { ...value, producer: result.receipt, programSHA: sha(script) }
 }

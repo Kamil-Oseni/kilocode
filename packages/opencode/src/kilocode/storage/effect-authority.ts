@@ -153,12 +153,14 @@ function keys(key: readonly string[], prior: unknown, next: unknown) {
         if (key[1] === "agent-runs" && Array.isArray(row)) continue
         throw fail()
       }
-      fields(row)
       if (key[1] === "routine-reports") {
         if (typeof row.id !== "string" || key[2] !== hash(row.id)) throw fail()
-        for (const field of ["sourceSessionID", "reportSessionID", "workerSessionID"])
-          if (row[field] !== undefined) add("session", row[field])
+        // Report references describe execution; publishing a card must not
+        // retire the worker, run or conversations it observes.
+        add("config", `routine-report:${key[2]}`)
+        continue
       }
+      fields(row)
       if (key[1] === "agent-starts" && object(row.organizationPolicy)) fields(row.organizationPolicy)
       if (["goal-child-reservations", "goal-charge-reservations"].includes(key[1] ?? "") && row.goalID !== undefined)
         add("session", row.goalID)

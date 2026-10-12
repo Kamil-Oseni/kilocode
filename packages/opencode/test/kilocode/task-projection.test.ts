@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { createHash } from "node:crypto"
 import path from "node:path"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -182,16 +183,45 @@ it.live("foreign destinations stay undelivered and policy edits advance the sche
         .insert(Scopes)
         .values({
           id: "a".repeat(64),
-          kind: "session",
-          principal: target.id,
+          kind: "config",
+          principal: `routine-report:${createHash("sha256").update("occurrence").digest("hex")}`,
           birth: "1",
           generation: "b".repeat(32),
           projection: "c".repeat(64),
           state: "active",
         })
         .run()
+      for (const [kind, principal, digit] of [
+        ["principal", agent.id, "d"],
+        ["run", "observed-run", "e"],
+        ["session", target.id, "f"],
+      ] as const) {
+        yield* database.db
+          .insert(Scopes)
+          .values({
+            id: digit.repeat(64),
+            kind,
+            principal,
+            birth: "1",
+            generation: digit.repeat(32),
+            projection: "c".repeat(64),
+            state: "active",
+          })
+          .run()
+      }
       yield* reports.publishDeferred({ agent, id: "occurrence", at: 2, summary: "Still waiting" })
-      expect((yield* database.db.select().from(Scopes).all())[0].state).toBe("revoking")
+      yield* reports.publish({
+        agent,
+        occurrenceID: "occurrence",
+        run: { id: "observed-run", agentID: agent.id, sessionID: target.id, at: 3, status: "running", revision: 1 },
+      })
+      const scopes = yield* database.db.select().from(Scopes).all()
+      expect(scopes.find((row) => row.kind === "config")?.state).toBe("revoking")
+      expect(scopes.filter((row) => row.kind !== "config").map((row) => row.state)).toEqual([
+        "active",
+        "active",
+        "active",
+      ])
       expect((yield* database.db.select().from(Revocations).all())[0].state).toBe("published")
     }).pipe(Effect.provide(state(directory)))
   }),

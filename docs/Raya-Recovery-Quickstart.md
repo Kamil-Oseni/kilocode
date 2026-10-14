@@ -24,6 +24,8 @@ The later Home Assistant `sleep-ceiling-off-c1dce02b-20261006.tar` was inventori
 
 ## Home Assistant
 
+The October 14 read-only startup review is saved in `D:/Raya/Tools/Readiness-20261014/PC-startup-sleep-readonly.json`. The enabled startup task runs 45 seconds after Windows login; it does not start the VM before login. Its last recorded run on October 7 returned zero. The launcher leaves an already running VM alone and resets a restored saved state to avoid a stale guest clock. This mitigation does not establish the original clock-stall cause. On the current Balanced plan, automatic sleep and hibernation are disabled on mains power; manual sleep remains possible. No startup task or power setting was changed during this review, and the VM remains intentionally off.
+
 1. If the current system works, save a fresh backup before replacing settings. Preserve the existing VM disk and select a maintenance time when changing lights will not disturb anyone.
 2. On a working installation, open **Settings → System → Backups**, select the intended backup and components, then **Restore**. For a fresh Home Assistant installation, use **Upload backup** on its welcome screen. Have the original login details and the emergency kit available if decryption is required. Wait for restoration and restart before logging in. See the [official restore instructions](https://www.home-assistant.io/common-tasks/general/#restoring-a-backup).
 3. Check that dashboards, Matter devices, scripts and schedules survived. Older copies may omit later modes and the ceiling-off Sleep change. Test lights only when requested and everyone affected is awake.

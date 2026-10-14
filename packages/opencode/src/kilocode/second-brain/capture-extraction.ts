@@ -16,7 +16,7 @@ function blocks(source: CaptureSource) {
           return [{ start, end: start + text.length }]
         })
       : []
-  const preferences = clauses.length >= 2 && clauses.length <= 4 ? clauses : []
+  const preferences = clauses.length >= 1 && clauses.length <= 4 ? clauses : []
   const sentences = preferences.length
     ? Array.from(source.user.text.matchAll(/[^.!?]+(?:[.!?]+|$)/g), (match) => match.index + match[0].length)
     : []
@@ -233,7 +233,7 @@ export function extracted(value: unknown, source: CaptureSource, acknowledgement
     // Check the original full suffix before assigning a namespace; no restricted key or text is hidden.
     entries([value], source)
     const original = entry.evidence.length === 1 ? rows[entry.evidence[0].ref] : undefined
-    // Retained compound preferences keep their exact original context beside the model summary.
+    // Retained explicit preferences keep their exact original context beside the model summary.
     // Excluded slots never reach this boundary; the same text and secret bounds apply to both.
     const next = original?.preference
       ? { ...value, text: `${value.text}\n\nOriginal user preference: ${original.text}` }

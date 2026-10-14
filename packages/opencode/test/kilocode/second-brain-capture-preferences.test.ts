@@ -47,23 +47,31 @@ test("acknowledged natural grocery originals accept valid extraction without ass
       tools: [],
     }
     const entry = { ...cards, key: "grocery_support", text, evidence: [{ ref: 0 }] }
-    const value = { entries: [entry] }
+    const slotted = text.startsWith("I prefer") || text.startsWith("For grocery shopping, I prefer")
+    const value = slotted
+      ? { entries: [], preferences: { preference_0: { status: "retained", entry } } }
+      : { entries: [entry] }
     expect((await asSchema(extraction(source, true)).validate!(value)).success).toBe(true)
     expect(entries(extracted(value, source, true), source)).toEqual([
       {
         category: "Preferences",
-        key: entry.key,
-        text,
+        key: slotted ? `p0_${entry.key}` : entry.key,
+        text: slotted ? `${text}\n\nOriginal user preference: ${text}` : text,
         origin: "user_statement",
         evidence: [{ id: source.user.id, start: 0, end: text.length }],
       },
     ])
-    expect(extracted({ entries: [] }, source, true)).toEqual([])
-    for (const entry of [
-      { ...value.entries[0], evidence: [{ ref: 1 }] },
-      { ...value.entries[0], origin: "assistant_interpretation", evidence: [{ ref: 1 }] },
+    const excluded = slotted
+      ? { entries: [], preferences: { preference_0: { status: "excluded", reason: "no_durable_fact" } } }
+      : { entries: [] }
+    expect(extracted(excluded, source, true)).toEqual([])
+    for (const candidate of [
+      { ...entry, evidence: [{ ref: 1 }] },
+      { ...entry, origin: "assistant_interpretation", evidence: [{ ref: 1 }] },
     ]) {
-      const invalid = { entries: [entry] }
+      const invalid = slotted
+        ? { entries: [], preferences: { preference_0: { status: "retained", entry: candidate } } }
+        : { entries: [candidate] }
       expect((await asSchema(extraction(source, true)).validate!(invalid)).success).toBe(false)
       expect(() => extracted(invalid, source, true)).toThrow("bounded entry schema")
     }
@@ -304,7 +312,7 @@ test("bounded clause segmentation preserves Unicode and leaves other extraction 
     "Likes 😀 icons.\n\nOriginal user preference: I like 😀 icons.",
     "Dislikes lengthy forms.\n\nOriginal user preference: I dislike lengthy forms.",
   ])
-  for (const text of [first, "I prefer quiet replies. ".repeat(5), "a".repeat(1001) + first + second]) {
+  for (const text of ["I prefer quiet replies. ".repeat(5), "a".repeat(1001) + first + second]) {
     const source = { ...original, user: { id: "msg_user", text } }
     expect(JSON.parse(prepared(source)).some((row: { slot?: string }) => row.slot)).toBe(false)
     expect(extracted({ entries: [] }, source)).toEqual([])
@@ -314,7 +322,7 @@ test("bounded clause segmentation preserves Unicode and leaves other extraction 
 test("general references admit only nonblank blocks of their own original origin", () => {
   const source = {
     ...original,
-    user: { id: "msg_user", text: first },
+    user: { id: "msg_user", text: "My setup uses conversational ask cards." },
     tools: [
       { id: "prt_completed", name: "read", status: "completed" as const, text: "Observed file contents." },
       { id: "prt_error", name: "read", status: "error" as const, text: "File unavailable." },

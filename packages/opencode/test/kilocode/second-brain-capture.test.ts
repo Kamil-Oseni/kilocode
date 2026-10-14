@@ -40,7 +40,7 @@ test("source references resolve original UTF-16 spans without splitting Unicode 
     expect(() => extracted({ entries: [{ ...entry, evidence }] }, original)).toThrow()
 })
 test("native extraction schema preserves every bound while rejecting excess output fields", async () => {
-  const original = source(messages(), sid, aid)!.source
+  const original = source(messages("My lighting preference is dim warm light."), sid, aid)!.source
   const schema = await asSchema(extraction(original)).jsonSchema
   expect(schema).toMatchObject({
     type: "object",
@@ -100,10 +100,48 @@ test("native extraction schema preserves every bound while rejecting excess outp
     ),
   ).toThrow("bounded entry schema")
 })
+test("one completed explicit preference requires a retained or excluded decision with original evidence", async () => {
+  const fact =
+    "I prefer turn-taking voice without automatic interruption: let me finish speaking, wait for Raya to finish its reply, then accept the next turn."
+  const original = source(messages(`${fact} Please just acknowledge this preference.`), sid, aid)!.source
+  const contract = asSchema(extraction(original, true))
+  expect((await contract.validate!({ entries: [] })).success).toBe(false)
+  expect(() => extracted({ entries: [] }, original, true)).toThrow("bounded entry schema")
+  const refs = JSON.parse(prepared(original, true))
+  expect(refs[0]).toMatchObject({ id: uid, text: fact, slot: "preference_0", origin: "user_statement" })
+  const entry = {
+    category: "Preferences",
+    key: "turn_taking",
+    text: "Prefers turn-taking voice without automatic interruption.",
+    origin: "user_statement",
+    evidence: [{ ref: 0 }],
+  }
+  const value = { entries: [], preferences: { preference_0: { status: "retained", entry } } }
+  expect((await contract.validate!(value)).success).toBe(true)
+  const retained = entries(extracted(value, original, true), original)
+  expect(retained[0].text).toBe(`${entry.text}\n\nOriginal user preference: ${fact}`)
+  expect(retained[0].evidence).toEqual([{ id: uid, start: 0, end: fact.length }])
+  const foreign = {
+    ...value,
+    preferences: { preference_0: { status: "retained", entry: { ...entry, evidence: [{ ref: refs.length - 1 }] } } },
+  }
+  expect((await contract.validate!(foreign)).success).toBe(false)
+  for (const reason of ["sensitive", "transient", "no_durable_fact"]) {
+    const excluded = { entries: [], preferences: { preference_0: { status: "excluded", reason } } }
+    expect((await contract.validate!(excluded)).success).toBe(true)
+    expect(extracted(excluded, original, true)).toEqual([])
+  }
+  for (const body of ["Hello Raya.", "Maybe quieter speech would help.", "Only for tonight, use quiet speech."]) {
+    const transient = source(messages(body), sid, aid)!.source
+    expect((await asSchema(extraction(transient, true)).validate!({ entries: [] })).success).toBe(true)
+    expect(extracted({ entries: [] }, transient, true)).toEqual([])
+  }
+})
+
 function text(id: MessageID, body: string): MessageV2.TextPart {
   return { id: PartID.make(`prt_${id}`), sessionID: sid, messageID: id, type: "text", text: body }
 }
-function messages(): MessageV2.WithParts[] {
+function messages(body = "I prefer dim warm lights."): MessageV2.WithParts[] {
   return [
     {
       info: {
@@ -114,7 +152,7 @@ function messages(): MessageV2.WithParts[] {
         agent: "ask",
         model: { providerID: ProviderV2.ID.make("local"), modelID: ModelV2.ID.make("qwen") },
       },
-      parts: [text(uid, "I prefer dim warm lights.")],
+      parts: [text(uid, body)],
     },
     {
       info: {

@@ -2,6 +2,18 @@
 
 ## Current profile checkpoint — October 14
 
+October 14, 2026 — cafeb installed with exact predecessor upgrade compatibility; native acceptance pending.
+
+Everyday Raya is **`7.4.23-snapshot+cafeb944ea.local.1791995801879`**, source **`cafeb944ea3eda1b43298bd88d02b4ead8a4f3c6`**. The narrow upgrade fix permits changing `capture.py` only from an exact admitted predecessor to the exact current complete cohort, preserving native identities, inventory, bridge and lineage checks. Exact preference-repeat handling and direct-query guidance remain installed. The portable fixture uses inert hash-checked original 90c bytes rather than Git history. New cafeb health, supported native upgrade, exact runtime-cohort activation and model/capture quality remain pending under the parent coordinator.
+
+Installed gates remain **2/9 (22.2%)**; full readiness is **unmeasured**, with historical **48/100 / 38 unfinished requirements** retained. F98's actual upgrade refused **“Exact previous capture release required”** because its selector omitted the changed capture module. Supported RecoverClosedPair retained the original closed 90c pair; no new service/model run or replay was admitted. The cafeb source fix and package are installed; that does not prove the new native upgrade succeeds.
+
+Fresh closed cafeb before/install/after preservation passes naturally at zero/no force/EOF joined/empty job: **3,234 saved files across four roots/topology**, **541 payloads excluding package.json** and unrelated registrations unchanged. Root/peer artifact receipts agree byte-for-byte at **4,244 bytes**, SHA-256 `0d7b926266e9f7bc3b3a7eaea5dea04abb15c7e936d4ae7c8fe4420030249615`. Separate post-install notes verification matches the protected post-capture inventory: **211 files / 1,369,861 bytes**. Preserve all 90c/f98 original trial failures and old acf unconfirmed operation unchanged; there is no cleanup or replay of saved notes/journals.
+
+Full artifact, refusal, source and preservation pins are in [Raya-Current-Readiness.md](Raya-Current-Readiness.md). Complete faithful clickable cited Memory answers and quality capture, General/Coder/Ask, two genuine Routine periods with active pause/resume/Stop and 65-second cold no-replay, actual loaded GUI, Windows postboot and populated same-candidate recovery remain open. Any next Routine check needs a separately bound cafeb descriptor; earlier candidate fixtures/failed observers retain their own scope. Voice remains deferred, second-PC migration canceled and cloud-worker reservations released.
+
+### Historical f98 checkpoint — superseded by installed cafeb
+
 October 14, 2026 — f98 installed with exact preference-repeat handling; new loaded acceptance pending.
 
 Everyday Raya is **`7.4.23-snapshot+f98f162b21.local.1791994064576`**, source **`f98f162b213b943e839e4818decdd80ca9ba8f84`**. The grouped update adds direct-query recall guidance and exact original-preference repeat handling. A proven repeat retains its new conversation provenance with **“No new preference is added”**; the reference is excluded from active preference retrieval. Changed wording, case, qualifiers, retired or uncertain matches remain eligible. Legacy capture receipt rendering and all historical exact cohorts remain supported. The new reader/capture/entry/supervisor source is installed; fresh f98 native health, exact cohort activation, answer quality and capture behaviour are not yet established. The parent owns loaded native/model checks.

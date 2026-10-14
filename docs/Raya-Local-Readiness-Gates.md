@@ -1,3 +1,27 @@
+October 14, 2026 — f98 installed with exact preference-repeat handling; new loaded acceptance pending.
+
+Everyday Raya is **`7.4.23-snapshot+f98f162b21.local.1791994064576`**, source **`f98f162b213b943e839e4818decdd80ca9ba8f84`**. The grouped update adds direct-query recall guidance and exact original-preference repeat handling. A proven repeat retains its new conversation provenance with **“No new preference is added”**; the reference is excluded from active preference retrieval. Changed wording, case, qualifiers, retired or uncertain matches remain eligible. Legacy capture receipt rendering and all historical exact cohorts remain supported. The new reader/capture/entry/supervisor source is installed; fresh f98 native health, exact cohort activation, answer quality and capture behaviour are not yet established. The parent owns loaded native/model checks.
+
+Installed gates remain **2/9 (22.2%)**; overall readiness is **unmeasured**, with historical **48/100 / 38 unfinished requirements** retained. Prior 90c recall completed but included unsupported wording/plain-text citations and slow repeated routing; its original automatic capture published an exact user preference while duplicating an older preference. Those results and failures retain their 90c scope. Old acf operation `f0d0b032-251e-5cbc-a51c-9a792f681579` remains unconfirmed/unchanged; no original trial is replayed or cleaned up.
+
+Fresh closed f98 installation preserves **4,080 saved files across four roots/topology**, all **538 non-package payloads** and unrelated registrations. Before/install/after owners exit naturally at zero/no force/EOF joined/empty job. Root/peer archive receipt agrees byte-for-byte at **4,244 bytes**, SHA-256 `7acd7be70e1207d1f01af12b7d7aba1b841e5b5dbdd31f67a03c9dc32a4eaa3d`. Separate post-install `D:/Raya/SecondBrain` verification matches the protected post-capture inventory: **211 files / 1,369,861 bytes**. Closed preservation and source checks establish no loaded restore or complete workflow acceptance.
+
+Full pins, original trial results and limitations are in [Raya-Current-Readiness.md](Raya-Current-Readiness.md). Complete cited Memory answers and quality capture, current General/Coder/Ask, two genuine Routine periods with active pause/resume/Stop and 65-second cold no-replay, actual Windows postboot and populated same-candidate loaded recovery remain open. Loaded GUI remains a separate requirement. Voice is deferred, second-PC migration canceled and cloud-worker reservations released. Old 7b33 Routine fixture/preparation and the failed 90c scheduled observer remain scoped to their original candidates; a fresh f98 descriptor is required before any next Routine acceptance.
+
+| Gate | Earned | Current evidence or remaining acceptance |
+|---|---|---|
+| Audited combined candidate | 1/1 | Exact installed f98 archive/CLI/payload qualification; root/peer receipts agree. Original outer compiler/package cleanup failures remain separate. |
+| Normal installation preservation | 1/1 | Fresh f98 closed before/install/after natural zero/no force/EOF/empty; 4,080 saved files/four roots, 538 non-package payloads and unrelated registrations unchanged. |
+| Installed local General/tool turn | 0/1 | Require current permitted tools, Ask, saved reply/model/draft and ordinary close/reopen. |
+| Strict installed Coder | 0/1 | Require actual scoped file work/tests with selected local model. |
+| Installed Voice and permitted HA flow | 0/1 | Human voice acceptance deferred by the user. |
+| Scheduled routines | 0/1 | Original failed observers and older preparations retain scope. Require fresh f98 binding and two genuine periods, active pause/resume, Stop and 65-second cold no-replay; actual loaded GUI separate. |
+| Configured Memory | 0/1 | New guidance/exact-repeat repair installed; previous 90c recall/capture partial results retained. Fresh f98 health/cohort activation, faithful clickable cited answers and quality capture remain pending; old acf operation unconfirmed/unchanged. |
+| Matching-version postboot/service recovery | 0/1 | Require actual Windows boot, saved selections/chat/drafts, intended reconnect and no unsolicited worker replay. |
+| Populated same-candidate reinstall recovery | 0/1 | Require current populated loaded-client/Memento, rollback and complete cold restore/no-replay; closed preservation is separate. |
+
+### Historical 90c checkpoint — superseded by installed f98
+
 October 14, 2026 — Current 90c scoped recall/capture acceptance checkpoint
 
 October 14, 2026 — Original 90c checkpoint recall completes; automatic capture publishes with duplication still unresolved.

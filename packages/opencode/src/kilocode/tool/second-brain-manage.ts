@@ -1,10 +1,16 @@
-import { Effect, Option } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { Session } from "@/session/session"
 import { Question } from "@/question"
 import { SecondBrain } from "@/kilocode/second-brain/service"
-import { Params, manage } from "@/kilocode/second-brain/management"
+import { Params as Management, manage } from "@/kilocode/second-brain/management"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import * as Tool from "@/tool/tool"
+
+export const Params = Schema.Struct({ action: Management.fields.action }).annotate({
+  parseOptions: { onExcessProperty: "error" },
+})
+export const schema = { ...ToolJsonSchema.fromSchema(Params), additionalProperties: false }
 
 function aborted(signal: AbortSignal) {
   return Effect.callback<never, Error>((resume) => {
@@ -27,8 +33,9 @@ export const BrainManageTool = Tool.define<
     const sessions = yield* Session.Service
     return {
       description:
-        "Remember, correct or forget a personal Memory only when the current user explicitly requests that change, including recording an outcome in their SecondBrain or Raya project memory. Prefer action alone: the host derives the fact and target from the original user request. Optional text and query must match those exact original spans; never paraphrase or summarize them. Workspace code memory uses kilo_memory_save instead. Never supply paths, hashes, approvals or settings. Host-owned conversation cards choose exact entries; native human review approves publication. Published and indexed are separate receipt states. Forget removes active recall, not backups. Never replay an unconfirmed operation; inspect its original receipt.",
+        "Remember, correct or forget a personal Memory only when the current user explicitly requests that change, including recording an outcome in their SecondBrain or Raya project memory. Supply only action. The host already has the exact original user text and derives the fact and target itself; do not copy, paraphrase or summarize them into tool arguments. Workspace code memory uses kilo_memory_save instead. Never supply text, query, paths, hashes, approvals or settings. Host-owned conversation cards choose exact entries; native human review approves publication. Published and indexed are separate receipt states. Forget removes active recall, not backups. Never replay an unconfirmed operation; inspect its original receipt.",
       parameters: Params,
+      jsonSchema: schema,
       execute: (args: typeof Params.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const project = (yield* InstanceState.context).directory

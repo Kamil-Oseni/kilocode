@@ -1,6 +1,6 @@
 import path from "node:path"
 import { check, child, document, object } from "../control/frames"
-import { selected, resident } from "../control/catalog-capture"
+import { release, selected, resident } from "../control/catalog-capture"
 import { normalize } from "../control/identity"
 import { current, supervisors, compatible } from "./catalog"
 import { images, fingerprint, cohort } from "./reuse-catalog"
@@ -79,6 +79,7 @@ function selection(
           ...prior.pins,
           "server.py": pins["server.py"],
           "index.py": pins["index.py"],
+          ...(expected === current && same(pins, release) ? { "capture.py": pins["capture.py"] } : {}),
           ...("management.py" in pins
             ? {
                 "entries.py": pins["entries.py"],

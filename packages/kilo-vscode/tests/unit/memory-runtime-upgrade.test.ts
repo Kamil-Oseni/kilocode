@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, spyOn, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
+import { createHash } from "node:crypto"
+import { gunzipSync } from "node:zlib"
 import { release, selected } from "../../src/second-brain/control/catalog-capture"
 import { project } from "../../src/second-brain/managed/upgrade"
 import * as frames from "../../src/second-brain/control/frames"
@@ -11,6 +13,12 @@ type Image = { path: string; bytes: number; sha256: string; identity: string[] }
 type Fixture = { raw: string; bulk: string; rows: Image[]; directory: { path: string; identity: string[] } }
 let root: string
 let fixture: Fixture
+let legacy: Fixture
+const warning = {
+  ...release,
+  "capture.py": "b059c9bb84a176c86e5ff7b7e35b1470cba30fdfec5fb7dcdef4d829298b0dfe",
+  "entries.py": "20b59cdc4a4ea3b5124ee81c0950ffbb6429ba05dcd6f0ac8d9d8656c2a13472",
+}
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "raya-upgrade-test-"))
@@ -64,6 +72,35 @@ print(json.dumps({'raw':json.dumps(plan,separators=(',',':')),'bulk':json.dumps(
   expect(code, error).toBe(0)
   expect(error).toBe("")
   fixture = JSON.parse(output) as Fixture
+  const folder = path.join(root, "warning")
+  await Promise.all([
+    mkdir(path.join(folder, "prior"), { recursive: true }),
+    mkdir(path.join(folder, "next"), { recursive: true }),
+  ])
+  for (const name of Object.keys(release)) {
+    const raw = await readFile(path.resolve("script/memory/service", name))
+    await writeFile(path.join(folder, "next", name), raw)
+    if (!["capture.py", "entries.py"].includes(name)) {
+      await writeFile(path.join(folder, "prior", name), raw)
+      continue
+    }
+    const bytes = gunzipSync(await readFile(path.resolve("tests/fixtures/memory-90c-predecessor", name + ".gz")))
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(warning[name as keyof typeof warning])
+    await writeFile(path.join(folder, "prior", name), bytes)
+  }
+  await writeFile(path.join(folder, "next", "supervise.py"), await readFile(path.resolve("script/memory/supervise.py")))
+  const retained = Bun.spawn(
+    ["D:/Raya/Services/Packaging/Python/3.12.14/python.exe", "-I", "-S", "-B", "-c", script, folder, JSON.stringify(warning)],
+    { stdout: "pipe", stderr: "pipe", windowsHide: true },
+  )
+  const [bytes, failure, status] = await Promise.all([
+    new Response(retained.stdout).text(),
+    new Response(retained.stderr).text(),
+    retained.exited,
+  ])
+  expect(status, failure).toBe(0)
+  expect(failure).toBe("")
+  legacy = JSON.parse(bytes) as Fixture
 })
 
 afterAll(async () => {
@@ -85,6 +122,36 @@ function run(raw = fixture.raw, rows = fixture.rows, pins = release, prior = rel
     { path: path.join(root, "prior"), pins: prior },
   )
 }
+
+test("upgrade projects the exact physical 90c warning cohort into the current preference cohort", () => {
+  const folder = path.join(root, "warning")
+  const run = (raw: string, prior = warning, pins = release) => project(
+    Buffer.from(raw),
+    path.join(folder, "next"),
+    pins,
+    new Map(legacy.rows.slice(0, -1).map((row) => [path.join(folder, "prior", path.basename(row.path)), row])),
+    legacy.rows.at(-1)!,
+    legacy.directory,
+    { path: path.join(folder, "prior"), pins: prior },
+  )
+  expect(selected(warning)).toEqual(warning)
+  const old = JSON.parse(legacy.raw)
+  for (const row of old.files) expect(row.sha256).toBe(warning[path.basename(row.path) as keyof typeof warning])
+  const output = run(legacy.raw).toString()
+  const plan = JSON.parse(output)
+  expect(plan.source_sha256).toEqual(release)
+  expect(plan.source).toBe(path.join(folder, "next"))
+  expect(output).toContain('"retained":{"identity":[18446744073709551615,1791503155482873601]}')
+  for (const row of legacy.rows) expect(output).toContain('"identity":[' + row.identity.join(",") + "]")
+  for (const pins of [
+    { ...warning, "capture.py": release["capture.py"] },
+    { ...warning, "entries.py": release["entries.py"] },
+    { ...warning, "capture.py": "f".repeat(64) },
+    { ...warning, "extra.py": "f".repeat(64) },
+  ]) expect(() => run(legacy.raw, pins)).toThrow("Exact previous capture release required")
+  expect(() => run(legacy.raw, warning, { ...release, "capture.py": warning["capture.py"] })).toThrow()
+  expect(() => run(legacy.raw.replace(warning["capture.py"], "f".repeat(64)))).toThrow()
+})
 
 test("upgrade projects actual native file identities without rounding unrelated plan tokens", () => {
   const output = run().toString()

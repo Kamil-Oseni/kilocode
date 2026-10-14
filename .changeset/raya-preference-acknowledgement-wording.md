@@ -3,4 +3,4 @@
 "raya": patch
 ---
 
-Acknowledge explicitly stated saved voice preferences without requesting a new Memory change or starting tool work.
+Acknowledge explicitly stated saved voice preferences without requesting a new Memory change or starting tool work, while retaining explicit requests to retrieve saved notes.

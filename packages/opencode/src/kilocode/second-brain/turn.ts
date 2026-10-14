@@ -44,11 +44,15 @@ export function acknowledged(
       request,
     )
   if (!match) return statement(request)
+  const stated = /^My (?:(?:saved|stated) )?(?:(?:voice|speech|reply) )?preference is\s+[^.!?;`:\s]/i.test(match[1])
   if (
-    !/\bI (?:prefer|like|dislike|want|would prefer|would like)\b/i.test(match[1]) &&
-    !/^My (?:(?:saved|stated) )?(?:(?:voice|speech|reply) )?preference is\s+[^.!?;`:\s]/i.test(match[1])
+    stated &&
+    /(?:^|[.;]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\b(?:you|Raya|SecondBrain) (?:(?:to|must|should|needs? to) )?)(?:recall|retrieve|remember|search|query|tell|remind)\b/i.test(
+      match[1],
+    )
   )
     return false
+  if (!/\bI (?:prefer|like|dislike|want|would prefer|would like)\b/i.test(match[1]) && !stated) return false
   return !/\bplease\b|(?:^|[.;]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\b(?:you|Raya|SecondBrain) (?:(?:to|must|should|needs? to) )?)(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|place|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|configure|control|apply|revert|undo|redo)\b/i.test(
     match[1],
   )

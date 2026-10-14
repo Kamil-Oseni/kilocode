@@ -837,6 +837,26 @@ test("saved-preference acknowledgement wording cannot suppress retrieval or mixe
   }
 })
 
+test("saved-preference acknowledgement preserves explicit retrieval tails even with later I-prefer wording", () => {
+  for (const text of [
+    "My saved voice preference is turn-taking. Recall my saved notes. Please acknowledge it in one sentence.",
+    "My saved voice preference is turn-taking and search my notes. Please acknowledge it in one sentence.",
+    ...["recall", "retrieve", "remember", "search", "query", "tell", "remind"].flatMap((action) => [
+      `My saved voice preference is turn-taking. ${action} my saved notes. Please acknowledge it.`,
+      `My saved voice preference is turn-taking and ${action} my saved notes. Please acknowledge it.`,
+      `My saved voice preference is turn-taking. I prefer brief replies and ${action} my saved notes. Please acknowledge it.`,
+      `My stated speech preference is brief replies; you should ${action} my notes. Please acknowledge that.`,
+    ]),
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("the installed preference statement can finish after status without treating status as saved-note evidence", () => {
   const original = fixture()
   const text =

@@ -15,7 +15,7 @@ Everyday Raya is **`7.4.23-snapshot+d0d354a8c5.local.1791971966337`**, built fro
 | Recovery | Closed installation preserved saved data; protected rollback copy verified | Live restore, full local-service recovery and actual Windows postboot acceptance |
 | Models, tools and context | Earlier model comparisons and targeted context fixes have evidence | Candidate-specific everyday General/Coder/tool acceptance; historical model trials do not qualify every current workflow |
 
-The full roadmap remains in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md) and [Raya-Local-Readiness-Gates.md](Raya-Local-Readiness-Gates.md). This page does not reduce that scope. The retained **48/100** and **38 unfinished requirements** are historical formal bookkeeping, not a measured completion percentage for this installation or an ETA.
+The full roadmap remains in [Raya-Implementation-Progress.md](Raya-Implementation-Progress.md) and [Raya-Local-Readiness-Gates.md](Raya-Local-Readiness-Gates.md). This page does not reduce that scope. The retained **48/100** and **38 unfinished requirements** are historical formal bookkeeping, not a measured completion percentage for this installation or an ETA. The current candidate earns **2/9 installed acceptance gates (22.2%)**: audited combined payload and normal installation preservation. The other seven gates remain unearned; overall implementation readiness is unmeasured.
 
 ## What was verified
 

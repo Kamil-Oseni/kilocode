@@ -1,3 +1,21 @@
+October 14, 2026 — current installed acceptance checkpoint
+
+The current candidate is `7.4.23-snapshot+d0d354a8c5.local.1791971966337`, from source `d0d354a8c59e7eb456672c7a1c3fbc60f2f95bd4`. Its nine-gate checklist is **2/9 (22.2%)**. This measures these installed acceptance gates only; overall implementation readiness is unmeasured, and the historical 48/100 estimate and 38 unfinished requirements are retained. Historical workflow passes do not transfer to this candidate.
+
+| Gate | Earned | Current evidence or remaining acceptance |
+|---|---|---|
+| Audited combined candidate | 1/1 | Complete archive and installed payload match; root and peer archive receipts agree at SHA-256 `5f4a7b7ec90b861c96b60ab7f9b8b79e2ebe3da1e9dc7578e9c6e03aee448fb4`. Compiler and package artifact success is separate from their failed outer descendant-cleanup lifecycles. |
+| Normal installation preservation | 1/1 | Fresh closed install preserves 4,126 saved files, topology, all 538 non-package payloads and unrelated registrations. Before/after preservation owners exit naturally without force. |
+| Installed local General/tool turn | 0/1 | Require current-candidate permitted tools, Ask, saved reply/model/draft and ordinary close/reopen. |
+| Strict installed Coder | 0/1 | Require actual scoped file work and tests with the selected local model; earlier candidate trials retain their original limitations. |
+| Installed Voice and permitted HA flow | 0/1 | Human voice acceptance is deferred by the user. Do not run microphone, audible or device checks without renewed instructions. |
+| Scheduled routines | 0/1 | Require two genuine scheduled periods, pause/Stop and cold no-replay on this candidate; private report pagination alone cannot earn this gate. |
+| Configured Memory | 0/1 | Supported native runtime upgrade is underway. Ordinary sourced recall, actual completed-turn capture, lifecycle and durable-debt acceptance remain required. Original failed and uncertain turns are retained without replay. |
+| Matching-version postboot/service recovery | 0/1 | Require actual Windows boot, saved selections/chat/drafts, intended service reconnect and no unsolicited worker replay. |
+| Populated same-candidate reinstall recovery | 0/1 | Current-candidate populated reinstall and cold restore/no-replay are prepared separately from everyday upgrade preservation. |
+
+Current receipts and constraints are in [Raya-Current-Readiness.md](Raya-Current-Readiness.md). Native Memory testing owns the model/resource slot; root holds heavy Git hooks and runtime checks until handback. Second-PC migration remains canceled and cloud-worker reservations remain released. The dated entries below are historical evidence.
+
 October 8, 2026 — local offline recovery now reuses the retained-file digest rather than allocating fresh stream chunks while hashing executable and staged-file identities. The same one-MiB buffer is reused; retained regular-file identity, exact byte count, EOF and final path/handle metadata checks apply. Existing native ownership, immutable image, namespace, recovery registry and retirement checks remain in place.
 
 Actual digest mutation/replacement, offline frame, negative registry and native guardian image/native/crash/parent/long tests pass **19 tests / 153 assertions**. Core and CLI typechecks, scoped lint/format, annotation and diff checks pass. Six fresh standalone Bun processes hash the same pinned301733888-byte installed executable with identical SHA256: predecessor peaks157532160–158052352 bytes, retained digest117002240–117723136 bytes, about39MiB less peak private memory in this operation. Benchmark `.tmp/new-pc/recovery-digest-benchmark-qualified-root.json`,6427bytes/SHA256 `ef807b3ad27ffff0ec9dded75204c271df034473d63c71012538b7c8218a7869`; source qualification `.tmp/new-pc/recovery-digest-source-qualified-root.json`,3453bytes/SHA256 `831c629744fcb9dd4a7b66f19799a2078cace796f48da539e2a5e21dd31a4b44`. This scoped benchmark does not prove the cause or resolution of the full backend shutdown peak. Matching build/delivery and complete installed lifecycle resource acceptance remain pending.

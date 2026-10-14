@@ -18,7 +18,7 @@ class Tests(unittest.TestCase):
         dependencies = python.parent.parent / 'Lib/site-packages'
         body = """import importlib.util,json,os,sys
 spec=importlib.util.spec_from_file_location('selected_supervisor',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-for sources in (module.CAPTURE, module.WARNING, module.DIVERSE, module.RECALL, module.RECOVERED, module.CLOSED):
+for sources in (module.CAPTURE, module.PREFERENCE, module.WARNING, module.DIVERSE, module.RECALL, module.RECOVERED, module.CLOSED):
     module.prepare({'kind':'memory','env':dict(os.environ),'dependencies':sys.argv[2],'source_sha256':sources})
 assert 'numpy' in sys.modules and 'tokenizers' in sys.modules
 assert not any(name in sys.modules for name in ('torch','transformers','scipy','sklearn'))
@@ -65,14 +65,14 @@ print(json.dumps({'counter':True,'model_stack':False}))
 
     def test_warning_successor_preserves_exact_diverse_reader(self):
         self.assertEqual(module.DIVERSE['index.py'], '008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e')
-        self.assertEqual(module.CAPTURE['index.py'], '0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73')
+        self.assertEqual(module.PREFERENCE['index.py'], '0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73')
         self.assertEqual(len(module.DIVERSE), 15)
         self.assertEqual(module.release('memory', module.DIVERSE), module.DIVERSE)
         self.assertEqual({name for name in module.WARNING if module.WARNING[name] != module.DIVERSE[name]}, {'index.py'})
 
     def test_preference_reference_successor_preserves_exact_warning_cohort(self):
         self.assertEqual(module.release('memory', module.WARNING), module.WARNING)
-        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.WARNING[name]},
+        self.assertEqual({name for name in module.PREFERENCE if module.PREFERENCE[name] != module.WARNING[name]},
                          {'capture.py', 'entries.py'})
         for name in ('capture.py', 'entries.py'):
             self.assertEqual(module.CAPTURE[name], hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest())
@@ -81,6 +81,16 @@ print(json.dumps({'counter':True,'model_stack':False}))
             with self.assertRaises(ValueError):
                 module.release('memory', mixed)
 
+
+    def test_inspection_successor_preserves_exact_preference_and_warning_cohorts(self):
+        self.assertEqual(module.release('memory', module.PREFERENCE), module.PREFERENCE)
+        self.assertEqual(module.PREFERENCE['index.py'], '0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73')
+        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.PREFERENCE[name]}, {'index.py'})
+        self.assertEqual(module.CAPTURE['index.py'], hashlib.sha256((HERE / 'service/index.py').read_bytes()).hexdigest())
+        for previous in (module.PREFERENCE, module.WARNING):
+            self.assertEqual(module.release('memory', previous), previous)
+        with self.assertRaises(ValueError):
+            module.release('memory', dict(module.CAPTURE, **{'capture.py': module.WARNING['capture.py']}))
 
 if __name__ == '__main__':
     unittest.main()

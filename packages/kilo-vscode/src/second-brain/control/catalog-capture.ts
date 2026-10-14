@@ -52,10 +52,14 @@ const warning = Object.freeze({
   ...diverse,
   "index.py": "0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73",
 })
-export const release = Object.freeze({
+const preference = Object.freeze({
   ...warning,
   "capture.py": "f480f49b22e834986cd0c6ef7cb3acf77b0c629011147b02a864ef4ff32135b2",
   "entries.py": "9d186fdabfcd608a679ffb4b8e169c035f50b37919fac0355d9d51d1318e7992",
+})
+export const release = Object.freeze({
+  ...preference,
+  "index.py": "5edf5865571b8072c1723fcca3290135af4c509751794803a68f1a27128a11be",
 })
 const previous = Object.freeze({
   ...historical,
@@ -65,13 +69,18 @@ const retained = Object.freeze({
   ...historical,
   "index.py": "8ae8274ff8f46f906efc9c6c5e2dbd2445315f27dc371bd07485fb71635f20f3",
 })
+function same(pins: Readonly<Record<string, unknown>>, cohort: Readonly<Record<string, string>>) {
+  return (
+    Object.keys(pins).length === Object.keys(cohort).length &&
+    Object.entries(cohort).every(([name, hash]) => pins[name] === hash)
+  )
+}
+
 export function selected(pins: Readonly<Record<string, unknown>>) {
   if (!("capture.py" in pins)) return legacy
   if ("entries.py" in pins || "management.py" in pins) {
-    if (
-      Object.keys(pins).length === Object.keys(warning).length &&
-      Object.entries(warning).every(([name, hash]) => pins[name] === hash)
-    ) return warning
+    if (same(pins, warning)) return warning
+    if (same(pins, preference)) return preference
     if (pins["historical.py"] === managed["historical.py"]) return managed
     return pins["index.py"] === recovered["index.py"]
       ? recovered
@@ -95,6 +104,7 @@ export function resident(pins: Readonly<Record<string, unknown>>) {
   const cohort = selected(pins)
   return (
     (cohort === release ||
+      cohort === preference ||
       cohort === warning ||
       cohort === diverse ||
       cohort === recalled ||
@@ -111,6 +121,7 @@ export const bridge = "0c75ad3254fb85a0a187a6dfd69ebf3774ceaeb322eaa793a4e7de1b4
 export function transport(pins: Readonly<Record<string, unknown>>) {
   const cohort = selected(pins)
   return cohort === release ||
+    cohort === preference ||
     cohort === warning ||
     cohort === diverse ||
     cohort === recalled ||

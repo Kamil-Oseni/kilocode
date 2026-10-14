@@ -129,6 +129,55 @@ test("paired descriptor requires explicit Retrieval ref and exact selected relea
   expect(() => paired(descriptor(single), value.memory, value.plan)).toThrow()
 })
 
+test("preserved cafeb descriptor admits only its exact upgraded source and supervisor", () => {
+  const value = plans("C:\\Synthetic\\raya-memory-managed-preference")
+  const source = path.join(value.cfg.root, "raya-memory-source-upgrade-" + "c".repeat(32))
+  const pins = { ...capture, "index.py": "0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73" }
+  const cfg = descriptor({
+    ...value.cfg,
+    supervisor: {
+      ...value.cfg.supervisor,
+      path: path.join(source, "supervise.py"),
+      sha256: "6d0d531c4495b37c30a808b935d8754566849e0d3eb7ca74f0f99b7453ab6c49",
+    },
+  })
+  const files = [
+    ...Object.entries(pins).map(([name, sha256]) => ({ path: path.join(source, name), sha256 })),
+    ...Object.entries(images).map(([name, sha256]) => ({ path: path.join(source, name), sha256 })),
+  ]
+  const memory = {
+    ...value.memory,
+    source,
+    source_sha256: pins,
+    files,
+    env: {
+      ...value.memory.env,
+      RAYA_MEMORY_RETRIEVAL_PROTOCOL: "raya.retrieval.request.settlement.v2",
+      RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256: fingerprint,
+    },
+  }
+  const reader = {
+    ...value.plan,
+    source,
+    source_sha256: images,
+    files,
+    retrieval_protocol: "raya.retrieval.request.settlement.v2",
+    env: { ...value.plan.env, RAYA_RETRIEVAL_RELEASE_SHA256: fingerprint },
+  }
+  expect(() => paired(cfg, memory, reader)).not.toThrow()
+  const modern = descriptor({ ...cfg, supervisor: { ...cfg.supervisor, sha256: current } })
+  expect(() => paired(modern, memory, reader)).toThrow()
+  const assets = files.map((item) =>
+    path.basename(item.path) === "index.py" ? { ...item, sha256: capture["index.py"] } : item,
+  )
+  const next = { ...memory, source_sha256: capture, files: assets }
+  const retrieval = { ...reader, files: assets }
+  expect(() => paired(modern, next, retrieval)).not.toThrow()
+  expect(() => paired(cfg, next, retrieval)).toThrow()
+  expect(() => paired(cfg, { ...memory, source: path.join(source, "nested") }, reader)).toThrow()
+  expect(() => paired(cfg, { ...memory, source_sha256: { ...pins, "capture.py": "f".repeat(64) } }, reader)).toThrow()
+})
+
 test("finite Retrieval pairing admits only the exact current or preserved original seven images", async () => {
   const value = plans("C:\\Synthetic\\raya-memory-managed-finite")
   paired(value.cfg, value.memory, value.plan)

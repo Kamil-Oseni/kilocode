@@ -10,6 +10,9 @@ from pathlib import Path
 import os
 import importlib.util
 import subprocess
+import gzip
+import tempfile
+import shutil
 import httpx
 from capture_recovery_test import Recovery
 from capture_recovery import review as original
@@ -17,6 +20,78 @@ from capture_revision import review, diagnostic
 
 
 class Revisions(Recovery):
+    def test_current_marker_reference_review_binds_original_predecessor_dependencies(self):
+        self.body['entries'][0]['text'] += '\n\nOriginal user preference: ' + self.body['source']['user']['text']
+        first, _ = self.later('exact-preference-first')
+        second, _ = self.later('exact-preference-repeat')
+        stamps = [json.loads((self.notes / 'System/Changes' / body['id'] / 'manifest.json').read_bytes())['observed_utc']
+                  for body in [first, second]]
+        self.assertNotEqual(stamps[0], stamps[1])
+        path = self.notes / 'Preferences/Raya.md'
+        self.assertIn('No new preference is added.', path.read_text())
+        before = self.inventory()
+        result = review(self.cfg)
+        self.assertEqual(len(result['chain']), 2)
+        expected = self.notes / 'System/Capture' / first['id'] / 'input.json'
+        self.assertIn(str(expected), [row['path'] for row in result['witnesses']])
+        self.assertEqual(self.inventory(), before)
+        marker = self.notes / 'System/Capture' / second['id'] / 'render.json'
+        raw = marker.read_bytes()
+        value = json.loads(raw)
+        value['input_sha256'] = '0' * 64
+        marker.write_bytes(json.dumps(value).encode())
+        with self.assertRaises(AssertionError):
+            review(self.cfg)
+        marker.write_bytes(raw)
+        marker.unlink()
+        with self.assertRaises(AssertionError):
+            review(self.cfg)
+        marker.write_bytes(raw)
+        self.assertEqual(review(self.cfg)['effect'], self.anchor)
+
+    def test_current_absent_marker_preserves_legacy_full_fact_rendering(self):
+        marker = self.notes / 'System/Capture' / self.body['id'] / 'render.json'
+        raw = marker.read_bytes()
+        marker.unlink()
+        before = self.inventory()
+        self.assertEqual(review(self.cfg)['effect'], self.anchor)
+        self.assertEqual(self.inventory(), before)
+        marker.write_bytes(raw)
+
+    def test_legacy_capture_renderer_reviews_real_duplicate_full_facts_without_git_history(self):
+        folder = Path(tempfile.mkdtemp(prefix='raya-revision-legacy-')).resolve()
+        try:
+            source = folder / 'service'
+            shutil.copytree(Path(self.server.__file__).parent, source, ignore=shutil.ignore_patterns('__pycache__'))
+            fixtures = Path(__file__).resolve().parents[2] / 'tests/fixtures/memory-90c-predecessor'
+            for name, sha in [('capture.py', 'b059c9bb84a176c86e5ff7b7e35b1470cba30fdfec5fb7dcdef4d829298b0dfe'),
+                              ('entries.py', '20b59cdc4a4ea3b5124ee81c0950ffbb6429ba05dcd6f0ac8d9d8656c2a13472')]:
+                raw = gzip.decompress((fixtures / (name + '.gz')).read_bytes())
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), sha)
+                (source / name).write_bytes(raw)
+            child = subprocess.run([sys.executable, '-B', str(Path(__file__).resolve()), '--prepare', '--source',
+                                    str(source), '--count', '2', '--preferences', 'true'],
+                                   capture_output=True, timeout=20)
+            self.assertEqual(child.returncode, 0, child.stderr.decode())
+            prepared = json.loads(child.stdout)
+            try:
+                cfg = prepared['cfg']
+                result = subprocess.run([sys.executable, '-I', '-S', '-B', str(Path(__file__).with_name('capture_revision.py')),
+                                         json.dumps(cfg)], capture_output=True, timeout=15)
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                self.assertEqual(len(json.loads(result.stdout)['chain']), 2)
+                note = Path(prepared['notes']) / 'Preferences/Raya.md'
+                self.assertEqual(note.read_text().count('Original user preference: I prefer warm lights.'), 2)
+                self.assertNotIn('No new preference is added.', note.read_text())
+            finally:
+                disposable = Path(prepared['root']).resolve()
+                self.assertEqual(disposable.parent, Path(tempfile.gettempdir()).resolve())
+                self.assertTrue(disposable.name.startswith('raya-namespace-test-'))
+                shutil.rmtree(disposable)
+        finally:
+            self.assertEqual(folder.parent, Path(tempfile.gettempdir()).resolve())
+            self.assertTrue(folder.name.startswith('raya-revision-legacy-'))
+            shutil.rmtree(folder)
     def test_actual_helper_failure_diagnostics_do_not_print_private_input(self):
         helper = Path(__file__).with_name('capture_revision.py')
         result = subprocess.run([sys.executable, '-I', '-S', '-B', str(helper), '{"private-note-secret":'], capture_output=True, timeout=15)
@@ -317,14 +392,17 @@ if __name__ == '__main__':
         args = sys.argv[2:]
         assert len(args) % 2 == 0
         options = dict(zip(args[::2], args[1::2]))
-        assert set(options) <= {'--source', '--count'}
+        assert set(options) <= {'--source', '--count', '--preferences'}
         if '--source' in options:
             fixture.source = Path(options['--source'])
         count = int(options.get('--count', '2'))
         assert 0 <= count <= 64
         fixture.setUp()
+        if '--preferences' in options:
+            assert options['--preferences'] == 'true'
+            fixture.body['entries'][0]['text'] += '\n\nOriginal user preference: ' + fixture.body['source']['user']['text']
         for number in range(count):
-            fixture.later('prepared-' + str(number), 'Areas' if number == 0 else 'Preferences')
+            fixture.later('prepared-' + str(number), 'Areas' if number == 0 and '--preferences' not in options else 'Preferences')
         fixture.server.POOL.shutdown(wait=True)
         fixture.server.STORAGE.shutdown(wait=True)
         fixture._cleanups.clear()

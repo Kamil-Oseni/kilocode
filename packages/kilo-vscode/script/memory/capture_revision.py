@@ -24,6 +24,7 @@ def review(cfg):
     source = Path(cfg['source']).resolve(strict=True)
     witnesses = {}
     identities = {}
+    absent = set()
 
     class Filetime(ctypes.Structure):
         _fields_ = [('low', w.DWORD), ('high', w.DWORD)]
@@ -99,6 +100,8 @@ def review(cfg):
         from notes import Store, safe, digest
         from policy import Policy
         from retirement import fingerprint
+        if cfg['pins']['capture.py'] == 'f480f49b22e834986cd0c6ef7cb3acf77b0c629011147b02a864ef4ff32135b2':
+            from entries import records as passages
     finally:
         sys.meta_path.remove(finder)
 
@@ -147,6 +150,17 @@ def review(cfg):
         raw = image(folder / 'input.json', 65536)
         body = json.loads(raw)
         assert validate(body) == raw and body['id'] == key and body['format'] == 'raya.memory.capture.v3'
+        legacy = cfg['pins']['capture.py'] == 'b059c9bb84a176c86e5ff7b7e35b1470cba30fdfec5fb7dcdef4d829298b0dfe'
+        assert legacy or cfg['pins']['capture.py'] == 'f480f49b22e834986cd0c6ef7cb3acf77b0c629011147b02a864ef4ff32135b2'
+        marker = folder / 'render.json'
+        safe(marker)
+        cohort = marker.exists()
+        assert not legacy or not cohort
+        if cohort:
+            assert json.loads(image(marker, 65536)) == dict(format='raya.memory.capture.render.v1',
+                                                          input_sha256=digest(raw), cohort='exact-preference-reference-v1')
+        else:
+            absent.add(str(marker))
         request = json.loads(image(folder / 'request.json', 65536))
         sources = [dict(path=str(folder / (origin + '.md')), sha256=digest(data), kind=origin, event_time=body['observed_utc']) for origin, data in snapshots(body)]
         state = states[key]
@@ -164,7 +178,34 @@ def review(cfg):
             old = None if entry['old_sha256'] is None else image(journal / ('before-' + str(index) + '.md'))
             new = image(journal / ('after-' + str(index) + '.md'))
             assert (None if old is None else digest(old)) == entry['old_sha256'] and digest(new) == entry['new_sha256']
-            prospective = render(body, entry['path'].split('/')[0], old)
+            if not legacy and cohort and entry['path'] == 'Preferences/Raya.md' and old is not None:
+                # The renderer reads prior provenance through its own implementation.
+                # Bind every possible active predecessor dependency to this review's
+                # native witness inventory and final rehash, including absences.
+                _, rows, retired, _ = passages(entry['path'], old.decode('utf-8'))
+                captures = {row['capture'] for row in rows if row['kind'] == 'capture' and row['entry'] not in retired}
+                for prior in captures:
+                    origin = store.system / 'Capture' / prior
+                    input = origin / 'input.json'
+                    safe(input)
+                    if not input.exists():
+                        absent.add(str(input))
+                        continue
+                    image(input, 65536)
+                    manifest = store.journal / prior / 'manifest.json'
+                    safe(manifest)
+                    if not manifest.exists():
+                        absent.add(str(manifest))
+                        continue
+                    record = json.loads(image(manifest, 65536))
+                    image(origin / 'request.json', 65536)
+                    for number, source in enumerate(record['sources']):
+                        image(store.journal / prior / ('source-' + str(number) + '.txt'), 65536)
+                    for number, change in enumerate(record['changes']):
+                        if change['path'] == 'Preferences/Raya.md':
+                            image(store.journal / prior / ('after-' + str(number) + '.md'))
+            prospective = (render(body, entry['path'].split('/')[0], old) if legacy else
+                           render(body, entry['path'].split('/')[0], old, store, cohort))
             matches = [row for row in request['changes'] if row['path'] == entry['path']]
             assert matches == [dict(path=entry['path'], expected=entry['old_sha256'], content=prospective)]
             assert (prospective + recorded(journal, state['observed_utc'], sources)).encode('utf-8') == new
@@ -308,6 +349,9 @@ def review(cfg):
     effectvalue = dict(format='raya.memory.committed-capture.review', version=1, capture=turn['id'], inputSHA=digest(raw), journalSHA=anchor['journalSHA'], policySHA=anchor['policySHA'], previousPolicySHA=previous, result=result, requestSettlement=False, replay=False, indexConfirmed=False)
     for ref in list(witnesses.values()):
         assert digest(image(ref['path'])) == ref['sha256']
+    for file in absent:
+        safe(Path(file))
+        assert not Path(file).exists()
     assert [item.name for item in members(store.journal)] == [item.name for item in names]
     assert ignore.exists() == (str(ignore) in witnesses)
     return dict(format='raya.memory.capture-revisions.v1', effect=effectvalue, policySHA=current, chain=list(reversed(used)), membership=[item.name for item in names], ignore_present=ignore.exists(), witnesses=list(witnesses.values()), requestSettlement=False, replay=False, indexConfirmed=False)

@@ -864,7 +864,7 @@ class Index:
                         self.leaves[self.db] = original
                         db = sqlite3.connect(self.db.as_uri() + '?mode=ro', uri=True, timeout=1)
                         with closing(db.close):
-                            db.set_progress_handler(lambda: (remaining() or 0), 1000)
+                            db.set_progress_handler(lambda: (remaining(), 0)[1], 1000)
                             meta = dict(db.execute('SELECT key,value FROM meta'))
                             files = json.dumps({path: note['hash'] for path, note in snapshot.items()}, sort_keys=True)
                             if meta.get('signature') != SIGNATURE + ':admission:' + sha or meta.get('files') != files:

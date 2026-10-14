@@ -7,7 +7,7 @@ import { check } from "./control/frames"
 import { command } from "./control/command"
 import { acceptance } from "./control/acceptance"
 
-const pin = "656dd795c5022a842f20f85fea313234ed7084252a5457eec021efd87cab599e"
+const pin = "472e0e4f95f6a599c252457aef8256cba1bae947922c9c3cc0079eecbdac9c86"
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const schema = z
   .object({

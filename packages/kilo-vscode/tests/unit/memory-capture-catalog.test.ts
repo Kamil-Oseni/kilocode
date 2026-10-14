@@ -14,6 +14,7 @@ const captured = selected({
 })
 const warning = {
   ...release,
+  "index.py": "0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73",
   "capture.py": "b059c9bb84a176c86e5ff7b7e35b1470cba30fdfec5fb7dcdef4d829298b0dfe",
   "entries.py": "20b59cdc4a4ea3b5124ee81c0950ffbb6429ba05dcd6f0ac8d9d8656c2a13472",
 }
@@ -36,6 +37,10 @@ test("preference reference successor preserves all exact fifteen-file predecesso
   const digest = "f3aed8eaa2bfcfac00608a4eed05258764745251f9378880f63ccac4e576d518"
   for (const [pins, supervisor] of [
     [release, current],
+    [
+      { ...release, "index.py": warning["index.py"] },
+      "6d0d531c4495b37c30a808b935d8754566849e0d3eb7ca74f0f99b7453ab6c49",
+    ],
     [warning, "fe3139b3ba5f75beb5229dfe049a38ba44031ce00b17169e8a53b0ceef694de2"],
     [diverse, digest],
     [recalled, reader],
@@ -49,6 +54,7 @@ test("preference reference successor preserves all exact fifteen-file predecesso
     expect(compatible(pins, supervisor)).toBe(true)
     for (const other of [
       current,
+      "6d0d531c4495b37c30a808b935d8754566849e0d3eb7ca74f0f99b7453ab6c49",
       "fe3139b3ba5f75beb5229dfe049a38ba44031ce00b17169e8a53b0ceef694de2",
       digest,
       reader,
@@ -56,7 +62,9 @@ test("preference reference successor preserves all exact fifteen-file predecesso
       prior,
     ].filter((value) => value !== supervisor))
       expect(compatible(pins, other)).toBe(false)
-    expect(compatible({ ...pins, "capture.py": release["capture.py"], "entries.py": warning["entries.py"] }, supervisor)).toBe(false)
+    expect(
+      compatible({ ...pins, "capture.py": release["capture.py"], "entries.py": warning["entries.py"] }, supervisor),
+    ).toBe(false)
     expect(compatible({ ...pins, "index.py": "f".repeat(64) }, supervisor)).toBe(false)
   }
   expect(JSON.stringify(previous)).toBe(original)

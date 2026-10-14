@@ -32,7 +32,8 @@ import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_chan
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
 import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - private background result publication
 import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/conversation" // kilocode_change - original greeting needs no workflow tools
-import { settled as recalled, acknowledged, acknowledgement } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
+import { settled as recalled, acknowledged, acknowledgement, refused } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
+import { instruction as decline } from "@/kilocode/second-brain/refusal" // kilocode_change - bounded local command repair or clarification only
 import { settled as mediaRecalled } from "@/kilocode/second-brain/media-turn" // kilocode_change - qualified original media-read synthesis only
 import { remember as captureRouting } from "@/kilocode/second-brain/capture-routing" // kilocode_change - retain original extraction route before successor metadata
 import * as ExecutionLineage from "@/kilocode/task/effect-lineage" // kilocode_change - explicit original queue runner handoff
@@ -920,7 +921,13 @@ export const layer = Layer.effect(
 
       // kilocode_change start - authenticate exact completion before mutating Auto metadata
       const continuation = input.resultNotice
-        ? yield* ResultContract.continuing(sessions, input.resultNotice, input.sessionID, input.parts, input.goalObjective)
+        ? yield* ResultContract.continuing(
+            sessions,
+            input.resultNotice,
+            input.sessionID,
+            input.parts,
+            input.goalObjective,
+          )
         : undefined // kilocode_change - authenticate original completion before changing Auto's phase
       // kilocode_change end
       const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
@@ -929,7 +936,8 @@ export const layer = Layer.effect(
       if (ag.name === "auto") {
         // raya_change start - preserve the exact request and reset Auto's enforced per-turn phase
         const objective =
-          continuation ?? (RayaChief.requestText(input.parts, input.goalObjective) || RayaChief.request(current.metadata) || "") // kilocode_change - raya_change: authenticated completion cannot replace original intent
+          continuation ??
+          (RayaChief.requestText(input.parts, input.goalObjective) || RayaChief.request(current.metadata) || "") // kilocode_change - raya_change: authenticated completion cannot replace original intent
         // raya_change end
         yield* sessions.setMetadata({
           sessionID: input.sessionID,
@@ -1906,6 +1914,7 @@ export const layer = Layer.effect(
           const mandatory = yield* GoalGate.required(resolved) // kilocode_change - require goal controls in owned specialist dispatches
           const conversation = agent.name === "auto" && acknowledged(msgs, current, lastUser.id)
           const chat = agent.name === "auto" && chatting(msgs, current, lastUser.id)
+          const refusal = !mandatory && agent.name === "auto" ? refused(msgs, current, lastUser.id) : undefined
           const original = chat ? RayaChief.request(current.metadata) : undefined
           yield* captureRouting(
             current,
@@ -1915,16 +1924,22 @@ export const layer = Layer.effect(
           ) // kilocode_change - durable original message-bound capture route
           const recovery = agent.name === "auto" && (yield* ResultContract.recovery(sessions, sessionID))
           const tools =
-            complete || conversation || chat
+            complete || conversation || chat || refusal?.mode === "clarify"
               ? {}
               : agent.name === "auto"
                 ? {
-                    ...RayaChief.tools(resolved, current.metadata, { session: sessionID, user: lastUser.id }),
-                    ...(recovery && resolved.task ? { task: resolved.task } : {}),
+                    ...RayaChief.tools(
+                      resolved,
+                      current.metadata,
+                      { session: sessionID, user: lastUser.id },
+                      refusal?.mode,
+                    ),
+                    ...(!refusal && recovery && resolved.task ? { task: resolved.task } : {}),
                   }
                 : resolved
           const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
           const direct =
+            refusal?.mode === "clarify" ||
             conversation ||
             chat ||
             (agent.name === "auto" &&
@@ -2008,6 +2023,7 @@ export const layer = Layer.effect(
             ...(skills ? [skills] : []),
             ...(conversation ? [acknowledgement] : []), // kilocode_change - preference replies acknowledge supplied facts without starting setup
             ...(chat ? [greeting] : []), // kilocode_change - original greeting replies without acquisition or saving claims
+            ...(refusal ? [decline(refusal)] : []), // kilocode_change - no replacement facts or Goal authority
           ]
           const format = lastUser.format ?? { type: "text" as const }
           if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -2022,6 +2038,24 @@ export const layer = Layer.effect(
             )
           )
             return yield* Effect.die(new Error("Original greeting changed before model dispatch"))
+          // kilocode_change end
+          // kilocode_change start - retained local refusal cannot release a successor user or changed route
+          if (refusal) {
+            if (yield* GoalGate.required(resolved))
+              return yield* Effect.die(new Error("Goal controls became required before Memory refusal dispatch"))
+            const latest = refused(
+              yield* sessions.messages({ sessionID }),
+              yield* sessions.get(sessionID).pipe(Effect.orDie),
+              lastUser.id,
+            )
+            if (
+              !latest ||
+              latest.mode !== refusal.mode ||
+              latest.count !== refusal.count ||
+              latest.source_sha256 !== refusal.source_sha256
+            )
+              return yield* Effect.die(new Error("Original Memory refusal changed before model dispatch"))
+          }
           // kilocode_change end
           const result = yield* handle.process({
             // kilocode_change start - keep Ask/Plan tool filtering hardened against session allows
@@ -2050,7 +2084,7 @@ export const layer = Layer.effect(
             // kilocode_change start
             // raya_change - require orchestration until goal handling deterministically releases synthesis
             toolChoice:
-              complete || conversation || chat
+              complete || conversation || chat || refusal?.mode === "clarify"
                 ? "none"
                 : mandatory || format.type === "json_schema"
                   ? "required"

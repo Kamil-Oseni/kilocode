@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test"
+import { Cause, Effect, Exit } from "effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { RayaChief } from "../../src/kilocode/chief"
-import { settled, acknowledged } from "../../src/kilocode/second-brain/turn"
+import { settled, acknowledged, refused } from "../../src/kilocode/second-brain/turn"
+import { command as checked, instruction } from "../../src/kilocode/second-brain/refusal"
+import type { Params } from "../../src/kilocode/second-brain/management"
 import { ollama, OllamaBridgeError } from "../../src/kilocode/provider/ollama-bridge"
 import { command as managed } from "../../src/kilocode/second-brain/management"
 import { current as projection } from "../../src/kilocode/second-brain/management-source"
@@ -88,6 +91,210 @@ function fixture() {
   }
   return { messages: [user, assistant], session, tool }
 }
+
+async function failure(original: ReturnType<typeof fixture>, args: typeof Params.Type, call = "call_original") {
+  const source = projection(original.messages, original.session, uid)
+  if (!source) throw new Error("Original projection required")
+  const metadata: Record<string, unknown> = {}
+  const exit = await Effect.runPromiseExit(
+    checked(source, args, {
+      callID: call,
+      metadata: (value) =>
+        Effect.sync(() => {
+          Object.assign(metadata, value.metadata)
+        }),
+    }),
+  )
+  if (!Exit.isFailure(exit)) throw new Error("Actual local refusal required")
+  const err = Cause.squash(exit.cause)
+  if (!(err instanceof Error)) throw new Error("Actual local error required")
+  return {
+    ...original.tool,
+    tool: "second_brain_manage",
+    callID: call,
+    state: { status: "error" as const, input: args, error: err.message, metadata, time: { start: 12, end: 13 } },
+  }
+}
+
+test("actual local producer reroutes unrelated intent without replacing the original request", async () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text") throw new Error("Original text required")
+  part.text = "Do something about tea."
+  original.session.metadata[RayaChief.requestKey] = part.text
+  original.messages[1].parts = [await failure(original, { action: "remember", text: "I prefer tea" })]
+  const state = refused(original.messages, original.session, uid)
+  expect(state?.mode).toBe("route")
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  expect(
+    RayaChief.tools(
+      { second_brain_manage: 1, chief_route: 2, task: 3, update_goal: 4 },
+      original.session.metadata,
+      { session: sid, user: uid },
+      state?.mode,
+    ),
+  ).toEqual({ chief_route: 2 })
+  expect(state && instruction(state)).toContain("SAME complete original user request")
+  for (const text of [
+    "Use Memory and install the speech engine.",
+    "What do you remember about my tea preference?",
+    "Write code that records my preference.",
+  ]) {
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    original.messages[1].parts = [await failure(original, { action: "remember" })]
+    expect(refused(original.messages, original.session, uid)?.mode).toBe("route")
+  }
+})
+
+test("unsupported explicitly personal change wording clarifies without tools or Goal completion", async () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text") throw new Error("Original text required")
+  for (const text of [
+    "Write this in my personal Memory: I prefer tea.",
+    "Add this to my SecondBrain: I prefer tea.",
+    "Remember.",
+    "Forget.",
+  ]) {
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    original.messages[1].parts = [await failure(original, { action: "remember" })]
+    const state = refused(original.messages, original.session, uid)
+    expect(state?.mode).toBe("clarify")
+    expect(
+      RayaChief.tools(
+        { second_brain_manage: 1, chief_route: 2, update_goal: 3 },
+        original.session.metadata,
+        { session: sid, user: uid },
+        state?.mode,
+      ),
+    ).toEqual({})
+    expect(state && instruction(state)).toContain("no Memory change was made")
+  }
+})
+
+test("different paraphrases of the same current fact get one repair then terminal clarification", async () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text") throw new Error("Original text required")
+  part.text = "Remember this: I prefer tea."
+  original.session.metadata[RayaChief.requestKey] = part.text
+  original.messages[1].parts = [await failure(original, { action: "remember", text: "I like tea" })]
+  const repair = refused(original.messages, original.session, uid)
+  expect(repair?.mode).toBe("repair")
+  expect(
+    RayaChief.tools(
+      { second_brain_manage: 1, second_brain_recall: 2, task: 3, update_goal: 4 },
+      original.session.metadata,
+      { session: sid, user: uid },
+      repair?.mode,
+    ),
+  ).toEqual({ second_brain_manage: 1 })
+  original.messages[1].parts.push(
+    await failure(original, { action: "remember", text: "Tea is my preference" }, "call_second"),
+  )
+  expect(refused(original.messages, original.session, uid)?.mode).toBe("clarify")
+  expect(
+    Effect.runSync(
+      checked(
+        projection(original.messages, original.session, uid)!,
+        { action: "remember" },
+        { callID: "call_repair", metadata: () => Effect.void },
+      ),
+    ).fact,
+  ).toEqual({ start: 15, end: 27 })
+})
+
+test("unknown, host, successful, foreign, stale and substituted errors never release a turn", async () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text") throw new Error("Original text required")
+  part.text = "Remember this: I prefer tea."
+  original.session.metadata[RayaChief.requestKey] = part.text
+  const tool = await failure(original, { action: "remember", text: "I like tea" })
+  original.messages[1].parts = [tool]
+  expect(refused(original.messages, { ...original.session, directory: "/foreign" }, uid)).toBeUndefined()
+  expect(refused(original.messages, original.session, uid)?.mode).toBe("repair")
+  for (const changed of [
+    { ...tool, state: { ...tool.state, metadata: {} } },
+    { ...tool, state: { ...tool.state, error: "Host response is uncertain" } },
+    { ...tool, callID: "call_substituted" },
+    { ...tool, messageID: MessageID.make("msg_foreign") },
+    { ...tool, state: { ...tool.state, input: { action: "remember", text: "I prefer tea" } } },
+  ]) {
+    original.messages[1].parts = [changed]
+    expect(refused(original.messages, original.session, uid)).toBeUndefined()
+  }
+  original.messages[1].parts = [tool, { ...original.tool, tool: "second_brain_manage" }]
+  expect(refused(original.messages, original.session, uid)).toBeUndefined()
+  original.messages[1].parts = [tool]
+  expect(refused(original.messages, { ...original.session, parentID: "parent" }, uid)).toBeUndefined()
+  expect(
+    refused(
+      original.messages,
+      { ...original.session, metadata: { ...original.session.metadata, rayaRoutine: {} } },
+      uid,
+    ),
+  ).toBeUndefined()
+  for (const phase of ["task", "verify", "done"])
+    expect(
+      refused(
+        original.messages,
+        { ...original.session, metadata: { ...original.session.metadata, [RayaChief.phaseKey]: phase } },
+        uid,
+      ),
+    ).toBeUndefined()
+  original.messages.push({
+    ...original.messages[0],
+    info: { ...original.messages[0].info, id: MessageID.make("msg_next") },
+  })
+  expect(refused(original.messages, original.session, uid)).toBeUndefined()
+})
+
+test("provider text remains refused under required acquisition and passes only explicit no-tool clarification", async () => {
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (part.type !== "text") throw new Error("Original text required")
+  part.text = "Write this in my personal Memory: I prefer tea."
+  original.session.metadata[RayaChief.requestKey] = part.text
+  original.messages[1].parts = [await failure(original, { action: "remember" })]
+  expect(refused(original.messages, original.session, uid)?.mode).toBe("clarify")
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      Response.json({
+        model: "fixture",
+        message: { role: "assistant", content: "Please send an explicit remember request. No Memory change was made." },
+        done: true,
+        done_reason: "stop",
+      }),
+  })
+  try {
+    const send = ollama({ localInference: true, localInferenceAPI: "ollama" }, globalThis.fetch)
+    const body = {
+      model: "fixture",
+      messages: [{ role: "user", content: part.text }],
+      tools: [{ type: "function", function: { name: "second_brain_manage", parameters: { type: "object" } } }],
+    }
+    const err = await send(`${server.url}v1/chat/completions`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, tool_choice: "required" }),
+    }).then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+    expect(err).toBeInstanceOf(OllamaBridgeError)
+    const response = await send(`${server.url}v1/chat/completions`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, tools: [], tool_choice: "none" }),
+    })
+    expect((await response.json()).choices[0].message.content).toContain("No Memory change was made")
+  } finally {
+    await server.stop()
+  }
+})
 
 test("personal management settles only its own observed receipt without claiming indexed publication", () => {
   const original = fixture()

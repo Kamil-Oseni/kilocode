@@ -83,7 +83,16 @@ export namespace RayaChief {
     available: Record<string, T>,
     metadata: Record<string, unknown> | undefined,
     dispatch?: { session: string; user: string },
+    refusal?: "repair" | "clarify" | "route",
   ) {
+    if (phase(metadata) === "route" && refusal)
+      return Object.fromEntries(
+        refusal === "route" && available.chief_route
+          ? [["chief_route", available.chief_route]]
+          : refusal === "repair" && available.second_brain_manage
+            ? [["second_brain_manage", available.second_brain_manage]]
+            : [],
+      ) as Record<string, T>
     // Read the actual goal before releasing synthesis or admitting more goal work.
     if (phase(metadata) === "verify")
       return Object.fromEntries(available.get_goal ? [["get_goal", available.get_goal]] : []) as Record<string, T>

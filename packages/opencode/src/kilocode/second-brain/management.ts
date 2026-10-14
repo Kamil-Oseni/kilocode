@@ -10,6 +10,7 @@ import { KiloQuestionTool } from "@/kilocode/tool/question"
 import type { SecondBrain } from "./service"
 import { Manage, type ManageResult } from "./management-protocol"
 import { current, valid, result } from "./management-source"
+import { command as checked } from "./refusal"
 
 const text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2000), Schema.isPattern(/\S/))
 export const Params = Schema.Struct({
@@ -104,7 +105,7 @@ export const manage = Effect.fn("SecondBrain.manage")(function* (input: {
     return source
   })
   const source = yield* load()
-  const original = command(source, input.args)
+  const original = yield* checked(source, input.args, input.ctx)
   const state: { attempt?: string; closed: boolean } = { closed: false }
   const send = Effect.fn("SecondBrain.manage.request")(function* (request: Manage, cleanup = false) {
     if (!cleanup && !isDeepStrictEqual(yield* load(), source)) throw new Error("Original user Memory source changed")

@@ -7,6 +7,20 @@ import { requested } from "./setup"
 import { selected } from "./capture-state"
 import { requested as managing, command as managed, Params } from "./management"
 import { current as projection } from "./management-source"
+import { current as refusal } from "./refusal"
+
+/** Local pre-dispatch command refusals cannot close goals or authorize replacement facts. */
+export function refused(
+  messages: readonly MessageV2.WithParts[],
+  session: { id: string; directory: string; parentID?: string; metadata?: Record<string, unknown> },
+  user: string,
+) {
+  if (session.parentID || session.metadata?.rayaRoutine !== undefined || RayaChief.phase(session.metadata) !== "route")
+    return undefined
+  const source = projection(messages, session, user)
+  if (!source || source.text !== RayaChief.request(session.metadata)) return undefined
+  return refusal(messages, source, session.directory)
+}
 
 export const acknowledgement =
   "This turn states a personal preference. Briefly acknowledge the user's actual preference in one sentence. Treat references to first-time setup as the preference being described; do not begin setup or ask configuration questions. Preserve the user's restrictions. Do not claim that anything was changed or saved: separately authorized automatic Memory saving runs after the reply and must confirm its own result."

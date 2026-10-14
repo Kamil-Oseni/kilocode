@@ -514,6 +514,142 @@ test("ordinary tell-me Memory requests settle only their original validated acqu
   }
 })
 
+test("literal query action matches the successful read projection without admitting other actions or excess keys", () => {
+  for (const row of [
+    { input: { action: "query", query: "local speech engine fallback" }, admitted: true },
+    { input: { action: "query", query: "local speech engine fallback", budget: 6000 }, admitted: true },
+    { input: { action: "status", query: "local speech engine fallback" }, admitted: false },
+    { input: { action: "setup", query: "local speech engine fallback" }, admitted: false },
+    { input: { action: "context", query: "local speech engine fallback" }, admitted: false },
+    { input: { action: "query", query: "local speech engine fallback", budget: "500" }, admitted: false },
+    { input: { action: "query", query: "local speech engine fallback", approve: true }, admitted: false },
+  ]) {
+    const original = fixture()
+    if (original.tool.state.status !== "completed") throw new Error("Completed read required")
+    original.tool.state = { ...original.tool.state, input: row.input }
+    expect(settled(original.messages, original.session, uid)).toBe(row.admitted)
+  }
+})
+
+test.skipIf(process.platform !== "win32")(
+  "Windows stored read directory admits only its exact independently resolved spelling",
+  () => {
+    const directory = "C:/Users/kamil/AppData/Local/Programs/Microsoft VS Code"
+    const project = "C:\\Users\\kamil\\AppData\\Local\\Programs\\Microsoft VS Code"
+    for (const row of [
+      { directory, project, admitted: true },
+      { directory: project, project, admitted: true },
+      { directory, project: "D:\\Users\\kamil\\AppData\\Local\\Programs\\Microsoft VS Code", admitted: false },
+      { directory, project: "C:\\Users\\kamil\\AppData\\Local\\Programs\\Other", admitted: false },
+      { directory, project: "C:\\users\\kamil\\AppData\\Local\\Programs\\Microsoft VS Code", admitted: false },
+      { directory: "Users/kamil/AppData/Local/Programs/Microsoft VS Code", project, admitted: false },
+      { directory, project, extra: true, admitted: false },
+    ]) {
+      const original = fixture()
+      original.session.directory = row.directory
+      if (original.tool.state.status !== "completed") throw new Error("Completed read required")
+      original.tool.state = {
+        ...original.tool.state,
+        input: { action: "query", query: "local speech engine fallback", ...("extra" in row ? { approve: true } : {}) },
+        output: JSON.stringify({ ...context, project: row.project }),
+      }
+      expect(settled(original.messages, original.session, uid)).toBe(row.admitted)
+    }
+  },
+)
+
+test("original checkpoint summary settles only its completed context after retained setup and argument failures", () => {
+  // Exact original request and cited checkpoint text from the immutable installed
+  // 7b failure; only fixture session/root paths are isolated here.
+  const text =
+    "Use my SecondBrain notes to summarize the dated project checkpoint for the 7b33 update on October 14, 2026. Tell me what was verified and mention the tool-call recovery recorded there. Cite the saved note. Do not save anything or change settings or devices."
+  const original = fixture()
+  const user = original.messages[0].parts[0]
+  if (user.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original read required")
+  user.text = text
+  original.session.metadata[RayaChief.requestKey] = text
+  original.tool.state = {
+    ...original.tool.state,
+    input: { action: "query", query: "7b33 update October 14 2026 checkpoint verified tool-call recovery" },
+    output: JSON.stringify({
+      ...context,
+      context: {
+        ...context.context,
+        tokens: 93,
+        sources: [
+          {
+            path: "/notes/Projects/Raya.md",
+            relative: "Projects/Raya.md",
+            line: 56,
+            end_line: 56,
+            heading: "Raya project checkpoint",
+            text: "On October 14, 2026, the 7b33 update installed with saved data preserved, reopened successfully, and reconnected the Memory service. Its fresh recall returned the saved voice, pace and turn-taking preferences after recovering from one invalid tool call. Keep this as a dated project observation, not a new personal preference. Do not change devices or settings",
+            source_sha256: "6e1b1e1e43a51418c40ee71afeb6c0edbfed05517bcc8bd600b9b62fe7890db3",
+            depth: 0,
+            tokens: 93,
+            truncated: false,
+          },
+        ],
+      },
+    }),
+  }
+  const errors: MessageV2.ToolPart[] = [
+    {
+      ...original.tool,
+      id: PartID.make("prt_setup_refused"),
+      callID: "call_setup_refused",
+      state: {
+        status: "error",
+        input: { action: "setup" },
+        error: "An explicit personal Memory setup request is required",
+        time: { start: 12, end: 13 },
+      },
+    },
+    {
+      ...original.tool,
+      id: PartID.make("prt_status"),
+      callID: "call_status",
+      state: { ...original.tool.state, input: { action: "status" }, output: status },
+    },
+    {
+      ...original.tool,
+      id: PartID.make("prt_invalid_query"),
+      callID: "call_invalid_query",
+      state: {
+        status: "error",
+        input: { query: "checkpoint", budget: "500" },
+        error: "Invalid arguments",
+        time: { start: 12, end: 13 },
+      },
+    },
+  ]
+  original.messages[1].parts = errors
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  original.messages[1].parts = [...errors, original.tool]
+  expect(settled(original.messages, original.session, uid)).toBe(true)
+  expect(settled(original.messages, { ...original.session, directory: "/foreign" }, uid)).toBe(false)
+  expect(settled(original.messages, { ...original.session, parentID: sid }, uid)).toBe(false)
+  expect(settled(original.messages, original.session, "foreign-user")).toBe(false)
+  expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+})
+
+test("checkpoint summaries do not release mixed actions or unsupported requests", () => {
+  for (const text of [
+    "Use my SecondBrain notes to summarize the dated project checkpoint for the latest update. Cite the saved note. Then install the update.",
+    "Use my SecondBrain notes to summarize the project checkpoint for the latest update then install it. Cite the saved note.",
+    "Use my SecondBrain notes to summarize the project checkpoint for the latest update. Tell me what was verified and change settings. Cite the saved note.",
+    "Use my SecondBrain notes to summarize the project checkpoint for the latest update. Cite the saved note. Save the result.",
+    "Use my SecondBrain notes to summarize the project checkpoint for the latest update. Cite the saved note. Do not save anything or change settings or devices. Then buy groceries.",
+  ]) {
+    const original = fixture()
+    const user = original.messages[0].parts[0]
+    if (user.type !== "text") throw new Error("Original user required")
+    user.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("tell-me recall retains mixed-action and original receipt refusals", () => {
   for (const text of [
     "Use my SecondBrain notes to tell me which voice I chose. Change the voice now.",

@@ -13,7 +13,7 @@ const captured = selected({
   "index.py": "3c106c8e45267ee808a3c2bd8dfacf85a4d3c1ca47e23785706d7663d6791f65",
 })
 
-test("diverse recall successor preserves all exact fifteen-file predecessor supervisor pairings", () => {
+test("warning recall successor preserves all exact fifteen-file predecessor supervisor pairings", () => {
   const previous = {
     ...release,
     "index.py": "b6bd48d00bca2565c8c6690691b7f9b1e2e7680abbd48058ab62b4a2770ef5cd",
@@ -27,8 +27,11 @@ test("diverse recall successor preserves all exact fifteen-file predecessor supe
   const prior = "f9b6762a5bb729c7d04fe5e20821fefa420ec2be1934986d73d47664b217071c"
   const recalled = { ...release, "index.py": "699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c" }
   const reader = "957a6b9ce25bdb1d7ce629fb72e8cac97c70cffe98877f9ca3ebb57a0adb63ac"
+  const diverse = { ...release, "index.py": "008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e" }
+  const digest = "f3aed8eaa2bfcfac00608a4eed05258764745251f9378880f63ccac4e576d518"
   for (const [pins, supervisor] of [
     [release, current],
+    [diverse, digest],
     [recalled, reader],
     [previous, retained],
     [managed, prior],
@@ -38,7 +41,7 @@ test("diverse recall successor preserves all exact fifteen-file predecessor supe
     expect(transport(pins)).toBe(bridge)
     expect(paired(supervisor)).toBe(true)
     expect(compatible(pins, supervisor)).toBe(true)
-    for (const other of [current, reader, retained, prior].filter((value) => value !== supervisor))
+    for (const other of [current, digest, reader, retained, prior].filter((value) => value !== supervisor))
       expect(compatible(pins, other)).toBe(false)
     expect(compatible({ ...pins, "index.py": "f".repeat(64) }, supervisor)).toBe(false)
   }
@@ -55,7 +58,8 @@ test("personal management catalog pins actual fifteen-file source and preserves 
     }),
   )
   expect(sha(await readFile(file))).toBe(bridge)
-  expect(supervisors).toContain(sha(await readFile(path.resolve("script/memory/supervise.py"))))
+  expect(sha(await readFile(path.resolve("script/memory/supervise.py")))).toBe(current)
+  expect(supervisors).toContain(current)
   const cfg = {
     format: "raya.memory.control.catalog",
     version: 2,

@@ -803,7 +803,12 @@ def retrieve(root, policy, seeds, query, budget, measure, check, *, depth=2, cou
         if image(root.joinpath(*name.split('/'))) != raw:
             raise ValueError('Memory revision changed during linked recall.')
         policy.verify(name, raw)
-    return {'sources': result, 'diagnostics': diagnostics, 'tokens': used,
+    # Keep every navigation attempt in the loop's budget. Only the emitted
+    # warnings collapse identical source/reason pairs after all source checks.
+    unique = {}
+    for row in diagnostics:
+        unique.setdefault((row['relative'], row['reason']), row)
+    return {'sources': result, 'diagnostics': list(unique.values()), 'tokens': used,
             'truncated': omitted or bool(queue) or any(row['truncated'] for row in result), 'capture_enabled': False}
 
 

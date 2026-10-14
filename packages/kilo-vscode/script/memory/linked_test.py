@@ -270,7 +270,50 @@ class Tests(unittest.TestCase):
         self.policy.files['index.md']['sha256'] = self.sha(text)
         value = self.recall(seeds=[])
         self.assertEqual([row['relative'] for row in value['sources']], ['INDEX.md'])
-        self.assertEqual(len(value['diagnostics']), 7)
+        self.assertEqual(value['diagnostics'], [
+            {'relative': 'INDEX.md', 'reason': 'Linked note escapes the memory root.'},
+            {'relative': 'INDEX.md', 'reason': 'Use a relative local Markdown link.'},
+            {'relative': 'missing.md', 'reason': 'Linked source is not approved or is excluded.'},
+            {'relative': 'System/private.md', 'reason': 'Linked source is not approved or is excluded.'},
+        ])
+
+    def test_repeated_link_diagnostics_keep_first_order_and_distinct_sources_and_reasons(self):
+        notes = {
+            'Projects/eden.md': '# Eden\nEden builds workplace tools.\n\n'
+                                '[Bad](https://example.com/a.md)\n[Bad again](C:/a.md)\n'
+                                '[Escape](../../secret.md)\n[Escape again](../../other.md)\n',
+            'INDEX.md': '# Memory\nA local summary.\n\n'
+                        '[Bad](https://example.com/a.md)\n[Bad again](C:/a.md)\n',
+        }
+        for name, text in notes.items():
+            self.notes[name] = text
+            (self.root / name).write_bytes(text.encode())
+            self.policy.files[name.casefold()]['sha256'] = self.sha(text)
+        value = self.recall()
+        self.assertEqual(value['diagnostics'], [
+            {'relative': 'Projects/eden.md', 'reason': 'Use a relative local Markdown link.'},
+            {'relative': 'Projects/eden.md', 'reason': 'Linked note escapes the memory root.'},
+            {'relative': 'INDEX.md', 'reason': 'Use a relative local Markdown link.'},
+        ])
+        self.assertEqual([row['relative'] for row in value['sources']], ['Projects/eden.md', 'INDEX.md'])
+        self.assertEqual(value['tokens'], sum(row['tokens'] for row in value['sources']))
+        self.assertFalse(value['capture_enabled'])
+        for row in value['sources']:
+            raw = (self.root / row['relative']).read_bytes()
+            self.assertEqual(row['source_sha256'], hashlib.sha256(raw).hexdigest())
+            self.assertEqual(row['text'], '\n'.join(raw.decode().splitlines()[row['line'] - 1:row['end_line']]))
+
+    def test_repeated_invalid_links_still_exhaust_original_navigation_budget_before_valid_tail(self):
+        text = '# Memory\nA local summary.\n\n' + '[Bad](https://example.com/a.md)\n' * 100
+        text += '[Unreached](People/next.md)\n'
+        (self.root / 'INDEX.md').write_bytes(text.encode())
+        self.policy.files['index.md']['sha256'] = self.sha(text)
+        value = self.recall(seeds=[], count=2)
+        self.assertNotIn('People/next.md', [row['relative'] for row in value['sources']])
+        self.assertEqual([row for row in value['diagnostics'] if row['reason'] == 'Use a relative local Markdown link.'],
+                         [{'relative': 'INDEX.md', 'reason': 'Use a relative local Markdown link.'}])
+        self.assertEqual([row for row in value['diagnostics'] if row['reason'] == 'Navigation attempt budget exhausted.'],
+                         [{'relative': 'INDEX.md', 'reason': 'Navigation attempt budget exhausted.'}])
 
     def test_links_do_not_bypass_policy_for_same_named_foreign_root(self):
         with tempfile.TemporaryDirectory() as foreign:

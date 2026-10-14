@@ -1,4 +1,5 @@
 import type { MessageV2 } from "@/session/message-v2"
+import path from "node:path"
 import { Result as Decode, Schema } from "effect"
 import { RayaChief } from "../chief"
 import { Request, Result } from "./protocol"
@@ -154,22 +155,12 @@ export function settled(
         if (
           state || configuring || mode
             ? input.action !== (mode ?? (configuring ? "setup" : "status")) || Object.keys(input).length !== 1
-            : Object.keys(input).some((key) => key !== "query" && key !== "budget")
+            : Object.keys(input).some(
+                (key) => key !== "query" && key !== "budget" && (key !== "action" || input.action !== "query"),
+              )
         )
           return false
-        const command = Schema.decodeUnknownResult(Request, { onExcessProperty: "error" })({
-          id: part.callID,
-          sessionID: session.id,
-          project: session.directory,
-          command: mode
-            ? { action: "captureState", mode }
-            : configuring
-              ? { action: "setup", stage: "inspect" }
-              : state
-                ? input
-                : { ...input, action: "context", budget: input.budget ?? 6000 },
-        })
-        if (Decode.isFailure(command) || Buffer.byteLength(part.state.output, "utf8") > 200000) return false
+        if (Buffer.byteLength(part.state.output, "utf8") > 200000) return false
         const value = (() => {
           try {
             return JSON.parse(part.state.output) as unknown
@@ -178,7 +169,31 @@ export function settled(
           }
         })()
         const decoded = Schema.decodeUnknownResult(Result, { onExcessProperty: "error" })(value)
-        return Decode.isSuccess(decoded) && valid(command.success, decoded.success)
+        if (Decode.isFailure(decoded)) return false
+        // Session storage can retain forward slashes while the actual read uses
+        // InstanceState's resolved directory. Never derive authority from the reply.
+        const project =
+          !state &&
+          !configuring &&
+          !mode &&
+          decoded.success.action === "context" &&
+          path.isAbsolute(session.directory) &&
+          path.resolve(session.directory) === decoded.success.project
+            ? path.resolve(session.directory)
+            : session.directory
+        const command = Schema.decodeUnknownResult(Request, { onExcessProperty: "error" })({
+          id: part.callID,
+          sessionID: session.id,
+          project,
+          command: mode
+            ? { action: "captureState", mode }
+            : configuring
+              ? { action: "setup", stage: "inspect" }
+              : state
+                ? input
+                : { ...input, action: "context", budget: input.budget ?? 6000 },
+        })
+        return Decode.isSuccess(command) && valid(command.success, decoded.success)
       }),
   )
 }
@@ -207,7 +222,21 @@ function personal(request: string) {
   )
 }
 
+/** A checkpoint summary reports saved facts, without requesting the actions it records. */
+function checkpoint(request: string) {
+  const text = request.replace(/\.\s*Do not save anything or change settings or devices\.?$/i, "")
+  const match =
+    /^(?:please )?(?:use|consult) (?:my |the )?(?:(?:saved|local) )?(?:SecondBrain|Memory) notes? to (?:summarize|recap) ((?:the |my |a )?(?:dated )?(?:project )?(?:checkpoint|outcome|status|history|preferences|decision)(?: (?:for|on|from|of) [^.!?;`]{1,160})?)\.\s*(?:Tell me what was verified(?: and mention the tool-call recovery recorded there)?\.\s*)?Cite (?:the saved |the |my )?(?:note|notes|sources)\.?$/i.exec(
+      text,
+    )
+  if (!match) return false
+  return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|send|purchase|buy|order|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|control|apply|revert|undo|redo|then|now|immediately)\b/i.test(
+    match[1],
+  )
+}
+
 function question(request: string) {
+  if (request.length <= 1000 && checkpoint(request)) return true
   const original = request
     .replace(
       /[.!?]\s*(?:do not|don't)\s+(?:change (?:anything|files|lights|(?:any )?settings)(?: or (?:files|lights|control (?:any )?devices))?|control (?:any )?devices)[.!]?$/i,

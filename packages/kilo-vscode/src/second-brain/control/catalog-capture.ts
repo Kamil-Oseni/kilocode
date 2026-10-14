@@ -44,9 +44,13 @@ const recalled = Object.freeze({
   ...recovered,
   "index.py": "699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c",
 })
-export const release = Object.freeze({
+const diverse = Object.freeze({
   ...recalled,
   "index.py": "008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e",
+})
+export const release = Object.freeze({
+  ...diverse,
+  "index.py": "0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73",
 })
 const previous = Object.freeze({
   ...historical,
@@ -64,7 +68,9 @@ export function selected(pins: Readonly<Record<string, unknown>>) {
       ? recovered
       : pins["index.py"] === recalled["index.py"]
         ? recalled
-        : release
+        : pins["index.py"] === diverse["index.py"]
+          ? diverse
+          : release
   }
   if (pins["server.py"] === captured["server.py"] && pins["index.py"] === captured["index.py"]) return captured
   if (pins["server.py"] === handoff["server.py"] && pins["index.py"] === handoff["index.py"]) return handoff
@@ -80,6 +86,7 @@ export function resident(pins: Readonly<Record<string, unknown>>) {
   const cohort = selected(pins)
   return (
     (cohort === release ||
+      cohort === diverse ||
       cohort === recalled ||
       cohort === recovered ||
       cohort === managed ||
@@ -93,7 +100,7 @@ export function resident(pins: Readonly<Record<string, unknown>>) {
 export const bridge = "0c75ad3254fb85a0a187a6dfd69ebf3774ceaeb322eaa793a4e7de1b40993c85"
 export function transport(pins: Readonly<Record<string, unknown>>) {
   const cohort = selected(pins)
-  return cohort === release || cohort === recalled || cohort === recovered || cohort === managed
+  return cohort === release || cohort === diverse || cohort === recalled || cohort === recovered || cohort === managed
     ? bridge
     : "a07325ca6e504cca3ce8714469423706d3e333c2399bfa451f41c896170b898c"
 }

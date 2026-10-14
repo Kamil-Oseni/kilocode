@@ -18,7 +18,7 @@ class Tests(unittest.TestCase):
         dependencies = python.parent.parent / 'Lib/site-packages'
         body = """import importlib.util,json,os,sys
 spec=importlib.util.spec_from_file_location('selected_supervisor',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-for sources in (module.CAPTURE, module.RECALL, module.RECOVERED, module.CLOSED):
+for sources in (module.CAPTURE, module.DIVERSE, module.RECALL, module.RECOVERED, module.CLOSED):
     module.prepare({'kind':'memory','env':dict(os.environ),'dependencies':sys.argv[2],'source_sha256':sources})
 assert 'numpy' in sys.modules and 'tokenizers' in sys.modules
 assert not any(name in sys.modules for name in ('torch','transformers','scipy','sklearn'))
@@ -61,6 +61,13 @@ print(json.dumps({'counter':True,'model_stack':False}))
         self.assertEqual(len(module.RECALL), 15)
         self.assertEqual(module.release('memory', module.RECALL), module.RECALL)
         self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.RECALL[name]}, {'index.py'})
+
+    def test_warning_successor_preserves_exact_diverse_reader(self):
+        self.assertEqual(module.DIVERSE['index.py'], '008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e')
+        self.assertEqual(module.CAPTURE['index.py'], '0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73')
+        self.assertEqual(len(module.DIVERSE), 15)
+        self.assertEqual(module.release('memory', module.DIVERSE), module.DIVERSE)
+        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.DIVERSE[name]}, {'index.py'})
 
 
 if __name__ == '__main__':

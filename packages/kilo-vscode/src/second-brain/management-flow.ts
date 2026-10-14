@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
+import { z } from "zod"
 import type {
   ManageSource,
   Manage,
@@ -48,6 +49,33 @@ type Input = {
   ): Promise<Publication>
 }
 const categories = ["Daily", "Preferences", "People", "Projects", "Areas", "Commitments", "Decisions"]
+// The wire decoder deliberately uses null prototypes. Validate the JSON shape
+// before comparing values; prototypes are not conversation provenance.
+const lineage = z
+  .object({
+    action: z.literal("preview"),
+    project: z.string(),
+    id: z.string(),
+    mode: z.enum(["remember", "correct", "forget"]),
+    source: z
+      .object({
+        sessionID: z.string(),
+        messageID: z.string(),
+        created_utc: z.string(),
+        text: z.string(),
+        source_sha256: z.string(),
+      })
+      .strict(),
+    expected_policy_sha256: z.string(),
+    fact: z.object({ start: z.number().int().nonnegative(), end: z.number().int().positive() }).strict().optional(),
+    candidate: z.string().optional(),
+    category: z.enum(["Daily", "Preferences", "People", "Projects", "Areas", "Commitments", "Decisions"]).optional(),
+  })
+  .strict()
+function proposal(value: unknown): Proposal {
+  const parsed = Proposal.parse(value)
+  return { ...parsed, management: lineage.parse(parsed.management) }
+}
 const base = (command: Command) => ({
   operation: command.operation,
   mode: command.mode,
@@ -176,20 +204,20 @@ export class ManagementFlow {
     const command = attempt.command
     const project = attempt.project
     if (!attempt.proposal) throw new Error("Original pending proposal required")
-    const proposal = Proposal.parse(
+    const planned = proposal(
       await this.input.execute({ action: "read", project, id: command.operation }, signal, check),
     )
     await authorize()
-    if (!isDeepStrictEqual(proposal, attempt.proposal) || proposal.status !== "pending")
+    if (!isDeepStrictEqual(planned, attempt.proposal) || planned.status !== "pending")
       throw new Error("Original personal Memory proposal changed")
-    if (!(await this.input.review(proposal, signal, check))) return await this.cancel(attempt, signal, check)
+    if (!(await this.input.review(planned, signal, check))) return await this.cancel(attempt, signal, check)
     await authorize()
-    const current = Proposal.parse(
+    const current = proposal(
       await this.input.execute({ action: "read", project, id: command.operation }, signal, check),
     )
     await authorize()
-    if (!isDeepStrictEqual(current, proposal)) throw new Error("Personal Memory proposal changed during native review")
-    const value = await this.input.publish(proposal, attempt.binding, signal, authorize)
+    if (!isDeepStrictEqual(current, planned)) throw new Error("Personal Memory proposal changed during native review")
+    const value = await this.input.publish(planned, attempt.binding, signal, authorize)
     attempt.closed = true
     attempt.result = this.receipt(
       attempt,
@@ -226,13 +254,13 @@ export class ManagementFlow {
       ...(attempt.candidate ? { candidate: attempt.candidate.id } : {}),
       ...(attempt.category ? { category: attempt.category } : {}),
     }
-    const proposal = Proposal.parse(await this.input.execute(preview, signal, check))
+    const planned = proposal(await this.input.execute(preview, signal, check))
     await authorize()
-    if (proposal.id !== command.operation || proposal.project !== project || proposal.status !== "pending")
+    if (planned.id !== command.operation || planned.project !== project || planned.status !== "pending")
       throw new Error("Original personal Memory preview differs")
-    if (!isDeepStrictEqual(proposal.management, preview))
+    if (!isDeepStrictEqual(planned.management, preview))
       throw new Error("Original conversation proposal provenance differs")
-    attempt.proposal = proposal
+    attempt.proposal = planned
     attempt.options.set(randomUUID(), { label: "Review exact changes", review: true })
     return this.choice(attempt, "Review this personal Memory change before publishing it?")
   }
@@ -241,7 +269,25 @@ export class ManagementFlow {
     const command = attempt.command
     if (command.mode === "remember" && !attempt.category) {
       const text = command.source.text.slice(command.fact!.start, command.fact!.end)
-      if (/\bprefer(?:ence|ences)?\b/i.test(text)) attempt.category = "Preferences"
+      const parts = text.split(/[.!?;\n]|\bbut\b/i)
+      const dated =
+        /\b(?:dated|date-stamped)\b|\b\d{4}-\d{2}-\d{2}\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b/i.test(
+          text,
+        )
+      const project = parts.some(
+        (part) =>
+          !/\b(?:not|no|never)\b[^.!?;\n]{0,60}\bproject\b/i.test(part) &&
+          /\bproject\b/i.test(part) &&
+          /\b(?:observation|setup|test outcome|checkpoint)\b/i.test(part),
+      )
+      const preference = parts.some(
+        (part) =>
+          !/\b(?:not|no|never)\b[^.!?;\n]{0,60}\bprefer(?:ence|ences)?\b/i.test(part) &&
+          /\b(?:I|we)\s+(?:really\s+)?prefer\b|\bmy\s+(?:personal\s+)?preferences?\s+(?:is|are)\b/i.test(part),
+      )
+      const observation = dated && project
+      if (observation && !preference) attempt.category = "Projects"
+      if (preference && !observation) attempt.category = "Preferences"
       if (!attempt.category) {
         for (const category of categories) attempt.options.set(randomUUID(), { label: category, category })
         return this.choice(attempt, "Which category should hold this exact personal memory?")
@@ -290,7 +336,7 @@ export class ManagementFlow {
 
   private async cancel(attempt: Attempt, signal: AbortSignal, check: () => void) {
     if (attempt.proposal) {
-      const proposal = Proposal.parse(
+      const planned = proposal(
         await this.input.execute(
           {
             action: "cancel",
@@ -302,7 +348,7 @@ export class ManagementFlow {
           check,
         ),
       )
-      if (proposal.status !== "cancelled") throw new Error("Original cancellation was not confirmed")
+      if (planned.status !== "cancelled") throw new Error("Original cancellation was not confirmed")
     }
     attempt.closed = true
     attempt.result = this.receipt(attempt, "cancelled")

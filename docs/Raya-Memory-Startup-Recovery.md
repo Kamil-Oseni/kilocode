@@ -2,7 +2,27 @@
 
 ## Current profile checkpoint — October 14
 
-### Current installed d0d observation
+### Current installed 9a observation
+
+Everyday `7.4.23-snapshot+9a040b982d.local.1791979047734` is installed. The official installer and closed comparison preserved 3,120 saved files across four roots, all 538 non-package payloads and unrelated registrations. The loaded backend matches the qualified CLI SHA-256 `28c0d43c17b9dd2474336357478b505fad7c4ac80d2870549d8e46a3e4bfed93`.
+
+Supported closed recovery used the genuine previous pair closure `7d439b783ed965aeb9359d040cb5a6efc55b61a2c52013d984bdd9327efadefc`. Supported runtime upgrade selected `e32843be88cd4f85a7fba95bd5cfb728`; the actual reader `008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e` and supervisor `f3aed8eaa2bfcfac00608a4eed05258764745251f9378880f63ccac4e576d518` match their reviewed references. Check service initially reported Memory connected, automatic saving ready and selected notes indexed.
+
+The subsequent ordinary recall failed. Original session `ses_ec5a87bb0ffedOYP355F02qh9x` has no final answer. Its upstream search `7d05ab522b4c4a939c6edea014a7cfc6`, epoch `0a0781098a4c2f908de44cca18287568`, has a genuine terminal/completed receipt, while the extension retained control uncertainty. The reader now returns separate passages from one note, but the installed extension decoder still rejects repeated note names. The build chat is repairing that consumer. Initial service health does not establish working conversation recall or saving.
+
+Do not retry this original turn, clear its debt or describe its upstream outcome as failed or cancelled. The existing **Recover an Interrupted Memory Read** command only accepts failed or cancelled upstream outcomes; it does not yet accept this completed read. Use the reviewed recovery path supplied with the corrected delivery. Preserve the original receipt and administrative audit separately from any new read. Historical request `817aec363c66459c8fbd9267fb25c4d6` remains a different unknown request with settlement false.
+
+Current evidence in `D:/Raya/Tools/Readiness-20261014/`:
+
+- `Memory-9a-native-runtime-connected.json`: actual selected runtime hashes and initial native health.
+- `Memory-9a-original-recall-failure.json`: original conversation, rejected tools and bridge error; SHA-256 `08a65f624fc3384c8fbe2fd804fa880e64f229df9b8938a03e50df3c0e252b85`.
+- `Memory-9a-original-read-boundary.json`: exact terminal/completed read, its epoch and retained uncertainty; SHA-256 `e4889e7e0c54b1bf925ed8ed3e6f45df9bb24f6fc56e6f43bab4eba6355833a0`.
+
+The latest local SecondBrain snapshot is `D:/RayaBackups/SecondBrain-20261014-69f0b2c74f48491d856b16d268087dc2`: all 192 files / 1,233,356 bytes matched, with unchanged source bytes during copying. This includes the earlier captured preference and its history. It is a file backup, not a live-service restore or off-PC copy. New manual-save and automatic-capture quality checks are held until the read boundary and supported recovery work. The earlier duplicate capture is retained without cleanup.
+
+Home Assistant's VM and all five lights remain off. Voice and microphone acceptance remain deferred. The observations below are historical and must not replace this checkpoint or authorize replay.
+
+### Historical installed d0d observation
 
 Everyday `7.4.23-snapshot+d0d354a8c5.local.1791971966337` is installed and its backend loaded. Installation preserved 4,126 saved files and 538 non-package payloads. Native recovery accepted the genuine prior shutdown receipt `e49fb84aac2eb3a4133ca7f4a744cd233d122f66c2f2de4c20b932aecde01a57`; supported runtime upgrade selected `e02522f7fc0c43b6bd984d1dc46d7515`, with index `699f9d…` and supervisor `957a6b…`. Selected references match their actual files. Memory connected, the existing ten-note index remained ready, and automatic-saving authorization remained enabled.
 

@@ -81,6 +81,7 @@ function ctx(
   } as unknown as QuestionContext["client"]
   const fake: QuestionContext = {
     client,
+    current: () => true,
     currentSessionId: "ses-root",
     trackedSessionIds: new Set(opts.tracked ?? ["ses-root"]),
     sessionDirectories: dirs,

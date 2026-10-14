@@ -10,6 +10,7 @@ import type { KiloClient, QuestionRequest } from "@kilocode/sdk/v2/client"
 
 export interface QuestionContext {
   readonly client: KiloClient | null
+  current(): boolean
   readonly currentSessionId: string | undefined
   readonly trackedSessionIds: Set<string>
   readonly sessionDirectories: ReadonlyMap<string, string>
@@ -45,6 +46,7 @@ function isNotFoundError(error: unknown): boolean {
 
 async function recover(ctx: QuestionContext, requestID: string): Promise<QuestionRoute> {
   const result = await fetchAndSendPendingQuestions(ctx, requestID)
+  if (!ctx.current()) return { kind: "failed" }
   if (!result) return { kind: "failed" }
   if (result.seen.has(requestID)) {
     const dir = ctx.getQuestionDirectory(requestID)
@@ -67,9 +69,10 @@ export async function fetchAndSendPendingQuestions(
   ctx: QuestionContext,
   omit?: string,
 ): Promise<QuestionRecovery | undefined> {
-  if (!ctx.client) return
+  if (!ctx.current() || !ctx.client) return
   try {
     for (;;) {
+      if (!ctx.current()) return
       const dirs = new Set<string>([
         ctx.getWorkspaceDirectory(),
         ...ctx.sessionDirectories.values(),
@@ -82,6 +85,7 @@ export async function fetchAndSendPendingQuestions(
       const pending: Array<{ question: QuestionRequest; dir: string }> = []
       for (const dir of dirs) {
         const { data, error } = await ctx.client.question.list({ directory: dir })
+        if (!ctx.current()) return
         if (error) {
           failed.add(dir)
           console.error(`[Raya] Provider: Failed to fetch pending questions for ${dir}:`, error)
@@ -98,6 +102,7 @@ export async function fetchAndSendPendingQuestions(
       }
       if (ctx.getQuestionRevision() !== revision) continue
       for (const item of pending) {
+        if (!ctx.current()) return
         ctx.recordQuestionDirectory(item.question.id, item.dir)
         // The omitted request is mid-reply; its card is still visible, so
         // reposting it would only churn the webview.
@@ -113,6 +118,7 @@ export async function fetchAndSendPendingQuestions(
           },
         })
       }
+      if (!ctx.current()) return
       ctx.pruneQuestionDirectories(seen, scanned)
       return { seen, complete: failed.size === 0 }
     }
@@ -128,6 +134,7 @@ export async function handleQuestionReply(
   answers: string[][],
   sessionID?: string,
 ): Promise<boolean> {
+  if (!ctx.current()) return false
   if (!ctx.client) {
     ctx.postMessage({ type: "questionError", requestID })
     return false
@@ -138,17 +145,22 @@ export async function handleQuestionReply(
 
   try {
     await ctx.client.question.reply({ requestID, answers, directory: dir }, { throwOnError: true })
+    if (!ctx.current()) return false
     ctx.clearQuestionDirectory(requestID)
     return true
   } catch (error) {
+    if (!ctx.current()) return false
     const route = isNotFoundError(error) ? await recover(ctx, requestID) : undefined
+    if (!ctx.current()) return false
     if (route?.kind === "stale") return false
     if (route?.kind === "retry" && route.dir !== dir) {
       try {
         await ctx.client.question.reply({ requestID, answers, directory: route.dir }, { throwOnError: true })
+        if (!ctx.current()) return false
         ctx.clearQuestionDirectory(requestID)
         return true
       } catch (retry) {
+        if (!ctx.current()) return false
         console.error("[Raya] Provider: Failed to reply to recovered question:", retry)
         ctx.postMessage({ type: "questionError", requestID })
         return false
@@ -166,6 +178,7 @@ export async function handleQuestionReject(
   requestID: string,
   sessionID?: string,
 ): Promise<boolean> {
+  if (!ctx.current()) return false
   if (!ctx.client) {
     ctx.postMessage({ type: "questionError", requestID })
     return false
@@ -176,17 +189,22 @@ export async function handleQuestionReject(
 
   try {
     await ctx.client.question.reject({ requestID, directory: dir }, { throwOnError: true })
+    if (!ctx.current()) return false
     ctx.clearQuestionDirectory(requestID)
     return true
   } catch (error) {
+    if (!ctx.current()) return false
     const route = isNotFoundError(error) ? await recover(ctx, requestID) : undefined
+    if (!ctx.current()) return false
     if (route?.kind === "stale") return false
     if (route?.kind === "retry" && route.dir !== dir) {
       try {
         await ctx.client.question.reject({ requestID, directory: route.dir }, { throwOnError: true })
+        if (!ctx.current()) return false
         ctx.clearQuestionDirectory(requestID)
         return true
       } catch (retry) {
+        if (!ctx.current()) return false
         console.error("[Raya] Provider: Failed to reject recovered question:", retry)
         ctx.postMessage({ type: "questionError", requestID })
         return false

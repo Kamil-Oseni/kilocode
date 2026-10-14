@@ -1649,12 +1649,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           break
         }
 
-        case "questionReply":
-          this.noteFollowup(message.answers, message.sessionID)
-          if (!(await handleQuestionReply(this.questionCtx, message.requestID, message.answers, message.sessionID))) {
-            this.pendingFollowup = null
-          }
+        case "questionReply": {
+          await this.replyQuestion(message)
           break
+        }
         case "questionReject":
           this.pendingFollowup = null
           await handleQuestionReject(this.questionCtx, message.requestID, message.sessionID)
@@ -4793,6 +4791,20 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
   private async resolveSession(sessionID?: string, draftID?: string, context?: string, contextDirectory?: string) {
     if (!this.client) return undefined
+    const client = this.client
+    const generation = this.connectionGeneration
+    const workspace = this.getContextDirectory()
+    const project = this.opts.projectQualifier?.()?.projectId
+    const current = () =>
+      this.client === client &&
+      this.connectionGeneration === generation &&
+      this.connectionState === "connected" &&
+      sameDirectory(this.getContextDirectory(), workspace) &&
+      this.opts.projectQualifier?.()?.projectId === project
+    const check = () => {
+      if (!current()) throw new Error("Session creation interrupted because the connection or workspace changed.")
+    }
+    check()
 
     // Agent Manager: consult the shared route service for an exact directory
     // before the legacy sessionDirectories/workspace-root resolution. When a
@@ -4822,7 +4834,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         workspaceDirectory: this.getRootDirectory(),
       })
 
-    const key = `${draftID ?? context ?? "new"}\0${dir}`
+    const key = `${draftID ?? context ?? "new"}\0${dir}\0${generation}\0${project ?? ""}`
     const now = Date.now()
     for (const [draft, session] of this.draftSessions) {
       if (session.expires <= now) this.draftSessions.delete(draft)
@@ -4840,13 +4852,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (pending) return pending
       if (draftID) this.creatingDrafts.add(draftID)
       const creation = (async () => {
-        const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, this.client!, dir)
-        const { data: session } = await this.client!.session.create(
+        const metadata = await sandboxSessionMetadata(this.connectionService.sandboxPreference, client, dir)
+        check()
+        const { data: session } = await client.session.create(
           { directory: dir, platform: this.opts.platform, metadata },
           { throwOnError: true },
         )
+        check()
         if (draftID && this.closedDrafts.delete(draftID)) {
-          await this.client!.session.delete({ sessionID: session.id, directory: dir }, { throwOnError: true })
+          await client.session.delete({ sessionID: session.id, directory: dir }, { throwOnError: true })
           return undefined
         }
         this.stopCurrentSessionProcesses(session.id)
@@ -4857,7 +4871,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.trackedSessionIds.add(session.id)
         this.postMessage({
           type: "sessionCreated",
-          projectId: this.opts.projectQualifier?.()?.projectId,
+          projectId: project,
           session: this.sessionToWebview(session),
           draftID,
         })
@@ -4865,8 +4879,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         if (draftID) this.draftSessions.set(key, { ...resolved, expires: Date.now() + 60_000 })
         return resolved
       })().finally(() => {
-        this.sessionCreations.delete(key)
-        if (draftID) this.creatingDrafts.delete(draftID)
+        if (this.sessionCreations.get(key) === creation) this.sessionCreations.delete(key)
+        if (draftID && ![...this.sessionCreations.keys()].some((item) => item.startsWith(`${draftID}\0`)))
+          this.creatingDrafts.delete(draftID)
       })
       this.sessionCreations.set(key, creation)
       return creation
@@ -6226,8 +6241,18 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private get questionCtx() {
+    const client = this.client
+    const generation = this.connectionGeneration
+    const directory = this.getContextDirectory()
+    const project = this.opts.projectQualifier?.()?.projectId
     return {
-      client: this.client,
+      client,
+      current: () =>
+        this.client === client &&
+        this.connectionGeneration === generation &&
+        this.connectionState === "connected" &&
+        sameDirectory(this.getContextDirectory(), directory) &&
+        this.opts.projectQualifier?.()?.projectId === project,
       currentSessionId: this.currentSession?.id,
       trackedSessionIds: this.trackedSessionIds,
       sessionDirectories: this.sessionDirectories,
@@ -6240,6 +6265,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       getQuestionRevision: () => this.connectionService.getQuestionRevision(),
       pruneQuestionDirectories: (active: Set<string>, dirs: Set<string>) =>
         this.connectionService.pruneQuestionDirectories(active, dirs),
+    }
+  }
+
+  private async replyQuestion(message: { requestID: string; answers: string[][]; sessionID?: string }) {
+    const ctx = this.questionCtx
+    this.noteFollowup(message.answers, message.sessionID)
+    const followup = this.pendingFollowup
+    if (
+      !(await handleQuestionReply(ctx, message.requestID, message.answers, message.sessionID)) &&
+      ctx.current() &&
+      this.pendingFollowup === followup
+    ) {
+      this.pendingFollowup = null
     }
   }
 

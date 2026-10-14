@@ -2,9 +2,29 @@
 
 ## Current profile checkpoint — October 14
 
-### Current installation and historical a93 service observation
+### Current installed d0d observation
 
-Everyday is now `7.4.23-snapshot+71f8010fae.local.1791969166365`. Fresh closed installation preserves all 3,025 saved profile files; its service pins match the corrected runtime below. The Memory owner is verifying the matching loaded client and one ordinary recall/capture. The observations below were made on a93 and retain that original scope.
+Everyday `7.4.23-snapshot+d0d354a8c5.local.1791971966337` is installed and its backend loaded. Installation preserved 4,126 saved files and 538 non-package payloads. Native recovery accepted the genuine prior shutdown receipt `e49fb84aac2eb3a4133ca7f4a744cd233d122f66c2f2de4c20b932aecde01a57`; supported runtime upgrade selected `e02522f7fc0c43b6bd984d1dc46d7515`, with index `699f9d…` and supervisor `957a6b…`. Selected references match their actual files. Memory connected, the existing ten-note index remained ready, and automatic-saving authorization remained enabled.
+
+The fresh ordinary conversation `ses_ec61ab138ffeci9ON9Mo5tX63G` completed two recall calls and a final reply without the bridge error. It cited the selected Nano voice, Onyx fallback and turn-taking preference. The returned notes also contained the saved pace, but the answer omitted that detail. This verifies completion of that recall workflow, not complete answer coverage or automatic capture.
+
+The subsequent explicit setup-observation save failed: `second_brain_manage` refused the original “Record this … in my Raya project memory” wording eleven times, then the turn ended with a bridge error. No accepted save, capture or new index is claimed. The original request remains evidence and must not be replayed unchanged. Parser/tool guidance is fixed in source `3a913bb220`, imported by the build chat as `67fa202e4c`; bounded refusal repair/clarification is being integrated separately. These follow-ups are not installed yet.
+
+Evidence in `D:/Raya/Tools/Readiness-20261014/`:
+
+- `Memory-d0d-native-upgrade-connected.json`: selected runtime references and connected/index-ready observation.
+- `Memory-d0d-original-recall-session.json`: original messages, tool results and final answer.
+- `Memory-d0d-original-capture-failure.json`: original refused save and terminal failure.
+
+For a later clean shutdown, use **Raya: Recover a Closed Memory Pair**, then **Check service**. Use **Raya: Update a Closed Memory Runtime** only when a newly installed package requires the supported source upgrade. Wait for the connection check to finish before trying another action. If a request is unfinished or uncertain, retain its receipt and use supported inspection/recovery; never edit profile databases, source pins or journals to clear it. “Automatic saving ready” describes configuration, not proof that a conversation was saved.
+
+Home Assistant remains intentionally powered off, with all five lights off. No recovery check authorizes changing lights or enabling voice.
+
+### Historical 71f installation
+
+The preceding 71f candidate preserved 3,025 saved files at installation. Its ordinary sourced recall later failed. Those observations remain version-scoped history; current d0d installation and live results are described above.
+
+### Historical installed a93 observation
 
 Everyday `7.4.23-snapshot+a93eb8de60.local.1791836884196` includes the exact fifteen-file source fix and supported uncertain-Sync quarantine. Native quarantine applied for request `817aec363c66459c8fbd9267fb25c4d6`: its old debt remains in the audit with settlement false, and the separate replacement setup is selected at port 50247. This is not original request completion. Evidence: `D:/Raya/Tools/Readiness-20261012/Memory-a93-Native-Quarantine-6fe3e78e87be4304a7b907c6ef9bfcf9.json`, SHA-256 `0d43acedf3d9bc4b7acb8bfae12eba1b7b91c4c6898fe3a33565a77620230552`.
 

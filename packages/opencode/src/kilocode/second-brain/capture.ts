@@ -1,6 +1,7 @@
 import { Cause, Effect } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import path from "node:path"
+import { createHash } from "node:crypto"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
@@ -10,10 +11,11 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { generate } from "../memory/dream-generation"
 import type { SecondBrain } from "./service"
-import { entries, identity } from "./capture-source"
+import { identity } from "./capture-source"
 import { load } from "./capture-turn"
 import { budget } from "./capture-budget"
-import { extraction, extracted, prepared } from "./capture-extraction"
+import { extraction, prepared } from "./capture-extraction"
+import { retain } from "./capture-decisions"
 import { CaptureRejected } from "./capture-errors"
 import { stage } from "./capture-phase"
 
@@ -68,17 +70,31 @@ export const capture = Effect.fn("SecondBrain.captureTurn")(function* (input: {
         },
         extraction(original.source, original.acknowledgement),
       )
-      const parsed = yield* Effect.try({
-        try: () =>
-          entries(extracted(JSON.parse(result.text), original.source, original.acknowledgement), original.source),
-        catch: (err) => err,
-      })
+      const value = yield* Effect.try({ try: () => JSON.parse(result.text) as unknown, catch: (err) => err })
       if (grant.expires <= Date.now()) throw new CaptureRejected("grant_expired")
       // Re-read the exact stored turn after model work; no successor or changed source can replace it.
       const current = yield* load(input.sessionID, input.messageID).pipe(
         Effect.provideService(Database.Service, input.database),
       )
       if (!current || current.source_sha256 !== original.source_sha256) throw new CaptureRejected("source_changed")
+      const parsed = yield* retain(
+        {
+          id,
+          grantSHA: createHash("sha256").update(grant.id).digest("hex"),
+          project: ctx.directory,
+          session: input.sessionID,
+          assistant: input.messageID,
+          user: original.source.user.id,
+          source_sha256: original.source_sha256,
+          model: grant.model,
+        },
+        value,
+        original.source,
+        original.observed_utc,
+        load(input.sessionID, input.messageID).pipe(Effect.provideService(Database.Service, input.database)),
+        grant.expires,
+        original.acknowledgement,
+      )
       return parsed
     }),
     (cause) => {

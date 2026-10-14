@@ -1,6 +1,9 @@
 import { expect } from "bun:test"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Git } from "@/git"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { MessageTable, PartTable } from "@opencode-ai/core/session/sql"
@@ -14,13 +17,29 @@ import { asSchema } from "ai"
 import { MessageID, PartID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
+import path from "node:path"
+import { createHash } from "node:crypto"
+import { retain } from "@/kilocode/second-brain/capture-decisions"
+import { identity } from "@/kilocode/second-brain/capture-source"
+import { stage } from "@/kilocode/second-brain/capture-phase"
+import { CaptureRejected } from "@/kilocode/second-brain/capture-errors"
 import { eq } from "drizzle-orm"
-import { Effect } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { seedProject } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([Session.node, SessionProjector.node, Database.node, Storage.node])),
+  LayerNode.compile(
+    LayerNode.group([
+      Session.node,
+      SessionProjector.node,
+      Database.node,
+      Storage.node,
+      FSUtil.node,
+      Git.node,
+      CrossSpawnSpawner.node,
+    ]),
+  ),
 )
 
 const fixture = Effect.gen(function* () {
@@ -336,3 +355,146 @@ it.instance("oversized original turn refuses before hydrating a truncated source
     expect(result._tag).toBe("Failure")
   }),
 )
+
+it.instance("stored FA29 stated preference keeps its exact fact separate from acknowledgement instructions", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture
+    const fact = "My stated voice preference is a turn-taking conversation without automatic interruption."
+    const request = "Please just acknowledge that in one sentence."
+    const text = `${fact} ${request}`
+    yield* f.db
+      .update(PartTable)
+      .set({ data: { type: "text", text } })
+      .where(eq(PartTable.message_id, f.user))
+      .pipe(Effect.orDie)
+    yield* f.db
+      .update(MessageTable)
+      .set({ data: { ...f.reply, agent: "auto" } })
+      .where(eq(MessageTable.id, f.assistant))
+      .pipe(Effect.orDie)
+    yield* f.sessions.setMetadata({
+      sessionID: f.session.id,
+      metadata: { [RayaChief.requestKey]: text, [RayaChief.phaseKey]: "route" },
+    })
+    const original = yield* load(f.session.id, f.assistant, yield* f.sessions.get(f.session.id))
+    if (!original) throw new Error("Stored original capture required")
+    expect(original.acknowledgement).toBe(true)
+    expect(original.source.user.text).toBe(text)
+    expect((yield* load(f.session.id, f.assistant))?.source_sha256).toBe(original.source_sha256)
+    const rows = Schema.decodeUnknownSync(
+      Schema.Array(
+        Schema.Struct({
+          ref: Schema.Int,
+          text: Schema.String,
+          slot: Schema.optional(Schema.String),
+          excluded: Schema.optional(Schema.String),
+        }),
+      ),
+    )(JSON.parse(prepared(original.source, original.acknowledgement)))
+    expect(rows.find((row) => row.slot)?.text).toBe(fact)
+    expect(rows.find((row) => row.text === request)?.excluded).toBe("acknowledgement_request")
+    const excluded = { entries: [], preferences: { preference_0: { status: "excluded", reason: "no_durable_fact" } } }
+    expect(extracted(excluded, original.source, original.acknowledgement)).toEqual([])
+    const value = {
+      entries: [],
+      preferences: {
+        preference_0: {
+          status: "retained",
+          entry: {
+            category: "Preferences",
+            key: "turn_taking",
+            text: "Prefers uninterrupted turn-taking.",
+            origin: "user_statement",
+            evidence: [{ ref: 0 }],
+          },
+        },
+      },
+    }
+    const result = extracted(value, original.source, original.acknowledgement)
+    expect(result[0].evidence).toEqual([{ id: f.user, start: 0, end: fact.length }])
+    expect(result[0].text).toBe(`Prefers uninterrupted turn-taking.\n\nOriginal user preference: ${fact}`)
+    expect((yield* load(f.session.id, f.assistant))?.source_sha256).toBe(original.source_sha256)
+  }),
+)
+
+for (const mode of ["source_changed", "grant_expired"] as const)
+  it.instance(`actual retained decision cannot dispatch after original ${mode}`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture
+      const original = yield* load(f.session.id, f.assistant)
+      if (!original) throw new Error("Actual stored source required")
+      const cfg = {
+        id: identity(f.session.directory, f.session.id, f.assistant),
+        grantSHA: createHash("sha256").update("private-grant-not-stored").digest("hex"),
+        project: f.session.directory,
+        session: f.session.id,
+        assistant: f.assistant,
+        user: f.user,
+        source_sha256: original.source_sha256,
+        model: "local/model+variant",
+      }
+      const value = {
+        entries: [],
+        preferences: {
+          preference_0: {
+            status: "retained",
+            entry: {
+              category: "Preferences",
+              key: "short",
+              text: "Prefers short replies.",
+              origin: "user_statement",
+              evidence: [{ ref: 0 }],
+            },
+          },
+        },
+      }
+      yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const current = Effect.gen(function* () {
+          // This real source observation runs only after immutable Storage.create.
+          expect(yield* storage.readBounded(["raya", "capture-decisions", cfg.id], 16384)).toMatchObject({
+            source_sha256: original.source_sha256,
+            scope: "preparation_observation_only",
+            publication: false,
+          })
+          if (mode === "source_changed")
+            yield* f.db
+              .update(PartTable)
+              .set({ data: { type: "text", text: "I prefer longer replies." } })
+              .where(eq(PartTable.message_id, f.user))
+              .pipe(Effect.orDie)
+          if (mode === "grant_expired") yield* Effect.sleep(5)
+          return yield* load(f.session.id, f.assistant)
+        })
+        const events: string[] = []
+        const result = yield* stage(
+          retain(
+            cfg,
+            value,
+            original.source,
+            original.observed_utc,
+            current,
+            Date.now() + (mode === "grant_expired" ? 1 : 30000),
+            original.acknowledgement,
+          ),
+          () => Effect.sync(() => events.push("captureFailed")),
+          () => Effect.sync(() => events.push("capture")),
+        ).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (!Exit.isFailure(result)) throw new Error("Original guard failure required")
+        const err = Cause.squash(result.cause)
+        expect(err).toBeInstanceOf(CaptureRejected)
+        expect(err instanceof CaptureRejected ? err.reason : undefined).toBe(mode)
+        expect(events).toEqual(["captureFailed"])
+        expect(yield* storage.readBounded(["raya", "capture-decisions", cfg.id], 16384)).toMatchObject({
+          source_sha256: original.source_sha256,
+          count: 1,
+          publication: false,
+          indexConfirmed: false,
+          replay: false,
+        })
+        const after = yield* load(f.session.id, f.assistant)
+        expect(after?.source_sha256 === original.source_sha256).toBe(mode !== "source_changed")
+      }).pipe(Effect.provide(Storage.layerWithDatabase(path.join(f.session.directory, "decision-storage"))))
+    }),
+  )

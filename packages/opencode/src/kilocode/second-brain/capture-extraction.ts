@@ -10,14 +10,25 @@ function blocks(source: CaptureSource) {
     source.user.text.length <= 1000
       ? Array.from(source.user.text.matchAll(/[^.!?]+(?:[.!?]+|$)/g)).flatMap((match) => {
           const text = match[0].trim()
-          if (!/^(?:For [^.!?`]{1,120}, )?I (?:also )?(?:prefer|like|dislike|would prefer) [^.!?`]+[.!?]?$/i.test(text))
+          const stated =
+            /^My (?:(?:saved|stated) )?(?:(?:voice|speech|reply) )?preference is\s+[^.!?;`:\s][^.!?`]*[.!]?$/i.test(
+              text,
+            ) &&
+            !/(?:^|[.;]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\b(?:you|Raya|SecondBrain) (?:(?:to|must|should|needs? to) )?)(?:recall|retrieve|remember|search|query|tell|remind|install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|place|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|control|apply|revert|undo|redo)\b/i.test(
+              text,
+            )
+          if (
+            !stated &&
+            !/^(?:For [^.!?`]{1,120}, )?I (?:also )?(?:prefer|like|dislike|would prefer) [^.!?`]+[.!?]?$/i.test(text)
+          )
             return []
           const start = match.index + match[0].indexOf(text)
           return [{ start, end: start + text.length }]
         })
       : []
   const preferences = clauses.length >= 1 && clauses.length <= 4 ? clauses : []
-  const acknowledgement = /^(?:please\s+)?(?:just\s+)?acknowledge(?:\s+(?:this|that|my)(?:\s+preference)?)?[.!?]?$/i
+  const acknowledgement =
+    /^(?:please\s+)?(?:just\s+)?acknowledge(?:\s+(?:(?:this|that|my)(?:\s+preference)?|it))?(?:\s+in one sentence)?[.!?]?$/i
   const requests =
     source.user.text.length <= 1000
       ? Array.from(source.user.text.matchAll(/[^.!?]+(?:[.!?]+|$)/g)).flatMap((match) => {
@@ -211,6 +222,20 @@ export function extraction(source: CaptureSource, acknowledgement = false) {
       }
     },
   })
+}
+
+/** Retain only validated named decisions, never extracted fact or model-authored text. */
+export function decisions(value: unknown, source: CaptureSource, acknowledgement = false) {
+  const parsed = decode(value, source, acknowledgement)
+  const slots = "preferences" in parsed && record(parsed.preferences) ? parsed.preferences : undefined
+  return blocks(source)
+    .filter((row) => row.preference)
+    .map((row) => {
+      if (!slots) throw new CaptureRejected("invalid_schema")
+      const slot = Schema.decodeUnknownSync(preference(row.ref))(slots[`preference_${row.ref}`])
+      const decision = { slot: `preference_${row.ref}`, ref: row.ref, status: slot.status }
+      return slot.status === "excluded" ? { ...decision, reason: slot.reason } : decision
+    })
 }
 
 export function extracted(value: unknown, source: CaptureSource, acknowledgement = false) {

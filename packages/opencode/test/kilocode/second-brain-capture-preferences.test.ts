@@ -6,7 +6,15 @@ import { entries } from "../../src/kilocode/second-brain/capture-source"
 
 function references(text: string) {
   return Schema.decodeUnknownSync(
-    Schema.Array(Schema.Struct({ ref: Schema.Int, text: Schema.String, excluded: Schema.optional(Schema.String) })),
+    Schema.Array(
+      Schema.Struct({
+        ref: Schema.Int,
+        text: Schema.String,
+        excluded: Schema.optional(Schema.String),
+        origin: Schema.optional(Schema.String),
+        slot: Schema.optional(Schema.String),
+      }),
+    ),
   )(JSON.parse(text))
 }
 
@@ -252,18 +260,25 @@ test("temporary command refs cannot publish duplicate preferences and other dura
     ...original,
     user: { ...original.user, text: `${original.user.text} My preference is quiet replies.` },
   }
-  const ref = (JSON.parse(prepared(third)) as { ref: number; text: string }[]).find((row) =>
-    row.text.includes("My preference is quiet"),
-  )!.ref
-  expect(
-    entries(
-      extracted(
-        { ...output, entries: [{ ...cards, key: "quiet", text: "Prefers quiet replies.", evidence: [{ ref }] }] },
-        third,
-      ),
-      third,
-    )[0].text,
-  ).toBe("Prefers quiet replies.")
+  const ref = references(prepared(third)).find((row) => row.text.includes("My preference is quiet"))!.ref
+  const quiet = { ...cards, key: "quiet", text: "Prefers quiet replies.", evidence: [{ ref }] }
+  const value = {
+    ...output,
+    preferences: { ...output.preferences, [`preference_${ref}`]: { status: "retained", entry: quiet } },
+  }
+  const retained = entries(extracted(value, third), third)
+  expect(retained).toHaveLength(3)
+  expect(retained[2]).toEqual({
+    ...quiet,
+    key: `p${ref}_quiet`,
+    text: "Prefers quiet replies.\n\nOriginal user preference: My preference is quiet replies.",
+    evidence: [{ id: third.user.id, start: original.user.text.length + 1, end: third.user.text.length }],
+  })
+  expect(third.user.text.slice(retained[2].evidence[0].start, retained[2].evidence[0].end)).toBe(
+    "My preference is quiet replies.",
+  )
+  expect(() => extracted({ ...output, entries: [quiet] }, third)).toThrow("bounded entry schema")
+  expect(() => extracted({ ...value, entries: [quiet] }, third)).toThrow("bounded entry schema")
 })
 
 test("original voice preference survives while acknowledgement-only references cannot create extra facts", async () => {
@@ -514,4 +529,108 @@ test("original-clause augmentation rejects original secrets and oversized comple
     },
   }
   expect(() => extracted(multibyte, original, true)).toThrow("bounded entry schema")
+})
+
+test("stated and saved voice acknowledgements require explicit original preference dispositions", async () => {
+  for (const [fact, request] of [
+    [
+      "My stated voice preference is a turn-taking conversation without automatic interruption.",
+      "Please just acknowledge that in one sentence.",
+    ],
+    [
+      "My saved voice preference is turn-taking without automatic interruption: I finish speaking, Raya finishes its reply, then I take the next turn.",
+      "Please acknowledge it in one sentence.",
+    ],
+    ["My speech preference is turn-taking without automatic interruption.", "Please acknowledge my preference."],
+    ["My reply preference is turn-taking without automatic interruption!", "Please acknowledge that in one sentence."],
+    ["My preference is turn-taking without automatic interruption.", "Please acknowledge it in one sentence."],
+  ]) {
+    const source = {
+      user: { id: "msg_user", text: `${fact} ${request}` },
+      assistant: { id: "msg_assistant", text: "Understood: you prefer turn-taking without automatic interruption." },
+      tools: [],
+    }
+    const rows = references(prepared(source, true))
+    const slot = rows.find((row) => row.slot)!
+    const ack = rows.find((row) => row.text === request)!
+    const reply = rows.find((row) => row.origin === "assistant_interpretation")!
+    expect(slot).toMatchObject({ ref: 0, slot: "preference_0", text: fact, origin: "user_statement" })
+    expect(ack.excluded).toBe("acknowledgement_request")
+    expect(reply.excluded).toBe("preference_acknowledgement")
+    const entry = { ...cards, key: "turn_taking", text: "Prefers turn-taking without automatic interruption." }
+    const value = { entries: [], preferences: { preference_0: { status: "retained", entry } } }
+    const validate = asSchema(extraction(source, true)).validate!
+    expect((await validate(value)).success).toBe(true)
+    const result = entries(extracted(value, source, true), source)
+    expect(result).toEqual([
+      {
+        ...entry,
+        key: "p0_turn_taking",
+        text: `${entry.text}\n\nOriginal user preference: ${fact}`,
+        evidence: [{ id: source.user.id, start: 0, end: fact.length }],
+      },
+    ])
+    expect(source.user.text.slice(result[0].evidence[0].start, result[0].evidence[0].end)).toBe(fact)
+    for (const reason of ["sensitive", "transient", "no_durable_fact"]) {
+      const excluded = { entries: [], preferences: { preference_0: { status: "excluded", reason } } }
+      expect((await validate(excluded)).success).toBe(true)
+      expect(extracted(excluded, source, true)).toEqual([])
+    }
+    for (const invalid of [
+      { entries: [] },
+      { ...value, preferences: {} },
+      { ...value, preferences: { ...value.preferences, preference_9: value.preferences.preference_0 } },
+      { entries: [entry], preferences: { preference_0: { status: "excluded", reason: "transient" } } },
+      ...[ack.ref, reply.ref].map((ref) => ({
+        ...value,
+        preferences: { preference_0: { status: "retained", entry: { ...entry, evidence: [{ ref }] } } },
+      })),
+      {
+        ...value,
+        preferences: { preference_0: { status: "retained", entry: { ...entry, origin: "assistant_interpretation" } } },
+      },
+    ]) {
+      expect((await validate(invalid)).success).toBe(false)
+      expect(() => extracted(invalid, source, true)).toThrow("bounded entry schema")
+    }
+  }
+})
+
+test("new My-preference slots require a fact and do not consume mixed imperative clauses", () => {
+  for (const text of [
+    "My stated voice preference is.",
+    "My stated voice preference is turn-taking?",
+    "My stated voice preference is turn-taking, is that correct?",
+    "My stated voice preference is what I saved? Please acknowledge it in one sentence.",
+    "My saved voice preference is .",
+    "Tell me what my saved voice preference is.",
+    "What is my stated voice preference?",
+    ...[
+      "recall",
+      "retrieve",
+      "remember",
+      "search",
+      "query",
+      "tell",
+      "remind",
+      "save",
+      "configure",
+      "change",
+      "control",
+    ].map((action) => `My stated voice preference is turn-taking and ${action} my saved notes.`),
+  ]) {
+    const source = { user: { id: "msg_user", text }, assistant: { id: "msg_assistant", text: "Observed." }, tools: [] }
+    expect(references(prepared(source, true)).some((row) => row.slot)).toBe(false)
+  }
+  const source = {
+    user: {
+      id: "msg_user",
+      text: "My stated voice preference is turn-taking. Please acknowledge it and search my notes.",
+    },
+    assistant: { id: "msg_assistant", text: "Observed." },
+    tools: [],
+  }
+  const rows = references(prepared(source, true))
+  expect(rows.find((row) => row.slot)?.text).toBe("My stated voice preference is turn-taking.")
+  expect(rows.find((row) => row.text.includes("Please acknowledge"))?.excluded).toBeUndefined()
 })

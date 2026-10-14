@@ -12,6 +12,7 @@ import { fresh, historical, linked } from "./managed/capture-upgrade"
 import { currentPolicy } from "./capture-revisions"
 import { review as refused } from "./capture-refusal"
 import { review as reserved } from "./capture-reserved"
+import { review as unpublished } from "./capture-unpublished"
 
 type Command = Extract<SecondBrainRequest["command"], { action: "capture" }>
 export type CaptureBinding = Readonly<{
@@ -330,6 +331,11 @@ export class CaptureIntake {
     if (
       selected.some((row) => {
         if (this.fenced.has(row.id)) return true
+        const disposition = this.storage.get<{ phase: string; completed: unknown }>(
+          `raya.secondBrain.captureUnpublished.${row.id}`,
+        )
+        if (disposition && (disposition.phase !== "applied" || !isDeepStrictEqual(disposition.completed, row)))
+          return true
         const failure = this.storage.get<{ phase: string; original: unknown }>(
           `raya.secondBrain.captureExtractionFailure.${row.id}`,
         )
@@ -738,6 +744,66 @@ export class CaptureIntake {
       await verify()
       if (!isDeepStrictEqual(this.storage.get(key), applied))
         throw new Error("Original reservation audit confirmation changed")
+      this.changed()
+      return applied
+    })
+  }
+
+  /** Native-only source-qualified disposition; no grant, body or original replay is created. */
+  async reviewUnpublished(input: unknown, extension: string, check: () => void) {
+    const guard = () => {
+      check()
+      if (this.active.size || Array.from(this.grants.values()).some((grant) => grant.expires > Date.now()))
+        throw new Error("Capture activity or a grant remains during unpublished review")
+    }
+    guard()
+    const proof = await unpublished(input, this.storage, extension)
+    guard()
+    return proof
+  }
+
+  disposition(input: unknown, extension: string, check: () => void, approved: Awaited<ReturnType<typeof unpublished>>) {
+    return this.serial(async () => {
+      const proof = await this.reviewUnpublished(input, extension, check)
+      const { observation, inventory, ...stable } = proof
+      const expected = Object.fromEntries(
+        Object.entries(approved).filter(([name]) => name !== "observation" && name !== "inventory"),
+      )
+      if (!isDeepStrictEqual(stable, expected)) throw new Error("Approved unpublished disposition changed")
+      const key = `raya.secondBrain.captureUnpublished.${proof.original.id}`
+      const retained = this.storage.get<{ phase: string; observation: unknown; inventory: unknown }>(key)
+      const prepared = {
+        ...stable,
+        observation: retained?.observation ?? observation,
+        inventory: retained?.inventory ?? inventory,
+        phase: "prepared",
+      }
+      const applied = { ...prepared, phase: "applied" }
+      if (retained !== undefined && !isDeepStrictEqual(retained, prepared) && !isDeepStrictEqual(retained, applied))
+        throw new Error("Original unpublished disposition audit differs")
+      if (retained === undefined) await this.storage.update(key, prepared)
+      check()
+      if (!isDeepStrictEqual(this.storage.get(key), retained ?? prepared)) throw new Error("Unpublished audit changed")
+      const verify = async () => {
+        const current = await this.reviewUnpublished(input, extension, check)
+        const value = Object.fromEntries(
+          Object.entries(current).filter(([name]) => name !== "observation" && name !== "inventory"),
+        )
+        if (!isDeepStrictEqual(value, stable)) throw new Error("Unpublished disposition witness changed")
+      }
+      await verify()
+      const saved = records(this.storage.get(ledger))
+      const next = saved.map((row) => (row.id === proof.original.id ? proof.completed : row))
+      await this.storage.update(ledger, next)
+      check()
+      if (!isDeepStrictEqual(records(this.storage.get(ledger)), next)) throw new Error("Unpublished ledger changed")
+      await verify()
+      check()
+      if (!isDeepStrictEqual(this.storage.get(key), retained ?? prepared)) throw new Error("Unpublished audit changed")
+      // Commit last: failed awaited proof checks retain the prepared fence.
+      // After commit, report only exact synchronous metadata readback.
+      await this.storage.update(key, applied)
+      if (!isDeepStrictEqual(this.storage.get(key), applied)) throw new Error("Unpublished confirmation changed")
       this.changed()
       return applied
     })

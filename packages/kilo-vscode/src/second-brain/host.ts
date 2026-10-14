@@ -693,6 +693,10 @@ export class BrainHost {
         if (args.length) throw new Error("Native capture refusal review accepts no command arguments")
         return this.reconcileRefusal()
       }),
+      vscode.commands.registerCommand("kilo-code.new.memory.reviewUnpublishedCapture", (...args: unknown[]) => {
+        if (args.length) throw new Error("Native unpublished review accepts no command arguments")
+        return this.reviewUnpublished()
+      }),
       vscode.commands.registerCommand("kilo-code.new.memory.abandonReservedCapture", (...args: unknown[]) => {
         if (args.length) throw new Error("Native reservation review accepts no command arguments")
         return this.abandonReservation()
@@ -1864,6 +1868,35 @@ export class BrainHost {
     } finally {
       disposeHistory(reviewed)
     }
+  }
+
+  private async reviewUnpublished() {
+    const check = () => {
+      if (!vscode.workspace.isTrusted || this.closing) throw new Error("Native unpublished review is unavailable")
+    }
+    check()
+    if (!this.service.reviewable()) throw new Error("Close Memory and reopen a quiet review host before this review")
+    const files = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      canSelectFolders: false,
+      filters: { "Original authorization disposition": ["json"] },
+      title: "Review an unpublished Memory attempt",
+    })
+    check()
+    if (!files?.[0] || files[0].scheme !== "file") return
+    const input = await metadata(files[0].fsPath, (value) => value)
+    if (!this.service.reviewable()) throw new Error("Memory activity started before unpublished review")
+    await this.service.configure(async () => {
+      const proof = await this.intake.reviewUnpublished(input, this.context.extensionPath, check)
+      const accepted = await vscode.window.showWarningMessage(
+        `Attempt ${proof.original.id} failed during authorization before HTTP capture could run. Retain its original uncertain record and diagnostic in an audit and mark it unpublished? No facts are saved and the original conversation remains fenced against replay. Native frame history is unavailable; an empty Changes directory is possible. This does not settle requests, confirm indexing or retire native families. Only distinct future turns may save after their ordinary authorization checks.`,
+        { modal: true },
+        "Retain unpublished attempt",
+      )
+      check()
+      if (accepted !== "Retain unpublished attempt") return
+      await this.intake.disposition(input, this.context.extensionPath, check, proof)
+    }, false)
   }
 
   private async reconcileRefusal() {

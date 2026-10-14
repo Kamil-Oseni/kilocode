@@ -135,6 +135,11 @@
         "category": "Raya"
       },
       {
+        "command": "kilo-code.new.memory.reviewUnpublishedCapture",
+        "title": "Review an Unpublished Memory Attempt",
+        "category": "Raya"
+      },
+      {
         "command": "kilo-code.new.memory.abandonReservedCapture",
         "title": "Review Interrupted Memory Extraction",
         "category": "Raya"

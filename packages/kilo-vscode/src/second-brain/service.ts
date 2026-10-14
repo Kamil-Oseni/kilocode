@@ -110,6 +110,10 @@ export class BrainService {
     await join([...this.pending, ...(this.operation ? [this.operation.settle()] : [])])
   }
 
+  reviewable() {
+    return !this.closed && !this.changing && this.pending.size === 0 && !this.operation && !this.managed
+  }
+
   configure(body: () => Promise<void>, retire = true): Promise<void> {
     if (this.closed || this.changing)
       return Promise.reject(new Failure("setup_changing", "Memory setup is unavailable", 0))

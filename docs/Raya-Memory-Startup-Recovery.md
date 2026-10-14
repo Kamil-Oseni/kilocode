@@ -2,7 +2,9 @@
 
 ## Current profile checkpoint — October 14
 
-### Current installed a93 observation
+### Current installation and historical a93 service observation
+
+Everyday is now `7.4.23-snapshot+71f8010fae.local.1791969166365`. Fresh closed installation preserves all 3,025 saved profile files; its service pins match the corrected runtime below. The Memory owner is verifying the matching loaded client and one ordinary recall/capture. The observations below were made on a93 and retain that original scope.
 
 Everyday `7.4.23-snapshot+a93eb8de60.local.1791836884196` includes the exact fifteen-file source fix and supported uncertain-Sync quarantine. Native quarantine applied for request `817aec363c66459c8fbd9267fb25c4d6`: its old debt remains in the audit with settlement false, and the separate replacement setup is selected at port 50247. This is not original request completion. Evidence: `D:/Raya/Tools/Readiness-20261012/Memory-a93-Native-Quarantine-6fe3e78e87be4304a7b907c6ef9bfcf9.json`, SHA-256 `0d43acedf3d9bc4b7acb8bfae12eba1b7b91c4c6898fe3a33565a77620230552`.
 

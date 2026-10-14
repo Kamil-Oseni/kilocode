@@ -7,6 +7,7 @@ import { review } from "../../src/second-brain/failed-archive"
 import { unpublished } from "../../src/second-brain/completed-archive"
 import { image } from "../../src/second-brain/control/identity"
 import { BrainSettings } from "../../src/second-brain/settings"
+import { fingerprint } from "../../src/second-brain/failed-repair"
 
 const source = process.env.RAYA_COMPLETED_ARCHIVE_FIXTURE
 const genuine = source ? test : test.skip
@@ -71,6 +72,44 @@ genuine("changed original debt, entry, terminal and closed receipts refuse compl
       const observation = await value.save(crypto.randomUUID() + ".json", changed)
       const input = await value.save(crypto.randomUUID() + ".json", { ...value.input, observation })
       await expect(review(input.path, value.state[key], value.state[debt])).rejects.toThrow()
+    }
+  } finally {
+    await value.cleanup()
+  }
+})
+
+genuine("deferred running entry uses its exact genuine closure without projecting or settling saved debt", async () => {
+  const value = await fixture()
+  try {
+    const witness = await Bun.file(value.input.observation.path).json()
+    const closure = await Bun.file(witness.closed.path).json()
+    const entry = { ...value.state[key], launch: { phase: "running", receipt: closure.original } }
+    const before = JSON.stringify({ entry, debt: value.state[debt] })
+    const observation = await value.save("running-observation.json", {
+      ...witness,
+      entry_sha256: fingerprint(entry),
+    })
+    const selection = await value.save("running-selection.json", { ...value.input, observation })
+    const result = await review(selection.path, entry, value.state[debt])
+    expect(result.outcome).toBe("completed")
+    expect(result.closed).toEqual(witness.closed)
+    expect(result.original).toEqual(closure.original)
+    expect(result.settlement).toBe(false)
+    expect(result.closure).toBe("unproven")
+    expect(result.downstream).toHaveLength(2)
+    expect(JSON.stringify({ entry, debt: value.state[debt] })).toBe(before)
+    for (const launch of [
+      { phase: "running", receipt: { ...closure.original, sha256: "a".repeat(64) } },
+      { phase: "running", receipt: witness.closed },
+      { phase: "uncertain", receipt: closure.original },
+    ]) {
+      const changed = { ...entry, launch }
+      const observation = await value.save(crypto.randomUUID() + ".json", {
+        ...witness,
+        entry_sha256: fingerprint(changed),
+      })
+      const selection = await value.save(crypto.randomUUID() + ".json", { ...value.input, observation })
+      await expect(review(selection.path, changed, value.state[debt])).rejects.toThrow()
     }
   } finally {
     await value.cleanup()

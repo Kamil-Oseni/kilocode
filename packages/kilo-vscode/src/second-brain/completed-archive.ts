@@ -32,15 +32,19 @@ function binding(witness: ReturnType<typeof object>, entry: unknown, pending: un
   const prior = object(saved.launch)
   const debt = journal(pending)
   const request = object(debt.request as Parameters<typeof object>[0])
-  const closed = receipt(prior.receipt)
+  const original = receipt(prior.receipt)
+  const closed = receipt(witness.closed)
   check(
     setup.version === 2 &&
       setup.protocol === "raya.memory.operation.v2" &&
       cfg.version === 2 &&
       resident(setup.source_sha256) &&
-      prior.phase === "closed" &&
       path.basename(closed.path) === "managed-closed.json" &&
-      isDeepStrictEqual(receipt(witness.closed), closed) &&
+      (prior.phase === "closed"
+        ? isDeepStrictEqual(original, closed)
+        : prior.phase === "running" &&
+          path.basename(original.path) === "managed-original.json" &&
+          normalize(closed.path) === normalize(path.join(path.dirname(original.path), "managed-closed.json"))) &&
       debt.version === 2 &&
       debt.protocol === setup.protocol &&
       debt.root === setup.root &&
@@ -51,7 +55,7 @@ function binding(witness: ReturnType<typeof object>, entry: unknown, pending: un
       request.selected_release_sha256 === fingerprint(setup.source_sha256),
     "Only unchanged completed handoff debt with its original closed pair may be quarantined",
   )
-  return { setup, cfg, closed, request }
+  return { setup, cfg, closed, request, prior }
 }
 
 /** Exact completed search quarantine; no HTTP, replay, cleanup or settlement authority. */
@@ -69,7 +73,7 @@ export async function inspect(file: string, entry: unknown, pending: unknown) {
       witness.entry_sha256 === fingerprint(entry),
     "Exact completed handoff observation required",
   )
-  const { setup, cfg, closed, request } = binding(witness, entry, pending)
+  const { setup, cfg, closed, request, prior } = binding(witness, entry, pending)
   await launch(cfg, setup, closed)
   const ended = await image(closed.path, 65536)
   check(
@@ -78,6 +82,10 @@ export async function inspect(file: string, entry: unknown, pending: unknown) {
   )
   const closure = object(document(ended.raw, 65536).value)
   const original = receipt(closure.original)
+  check(
+    prior.phase !== "running" || isDeepStrictEqual(original, receipt(prior.receipt)),
+    "Deferred original running pair differs from its genuine closure",
+  )
   const folder = path.dirname(original.path)
   check(
     normalize(cfg.namespaces.memory.root) === normalize(path.join(folder, "memory")) &&

@@ -28,6 +28,30 @@ exec(compile(ast.fix_missing_locations(CODE), str(SOURCE), 'exec'), globals())
 
 
 class Tests(unittest.TestCase):
+    def test_recall_keeps_voice_and_pace_before_the_best_matching_paragraph(self):
+        text = ('# Raya preferences\n\n'
+                'Current speech: Chatterbox-Nano reference C; Kokoro Onyx fallback.\n\n'
+                'Keep the selected speaking pace.\n\n'
+                'Voice should use Hey Raya activation and restrained reactions.\n\n'
+                + 'Unrelated setup history.\n' * 100)
+        row = passage('Preferences/Raya.md', text, 'Raya voice speaking pace interruptions speech engine choice', 700, len, lambda: None)
+        self.assertIn('Chatterbox-Nano reference C', row['text'])
+        self.assertIn('Kokoro Onyx fallback', row['text'])
+        self.assertIn('selected speaking pace', row['text'])
+        self.assertEqual(row['text'], '\n'.join(text.splitlines()[row['line'] - 1:row['end_line']]))
+        self.assertLessEqual(row['tokens'], 700)
+
+    def test_preceding_context_does_not_cross_a_section_boundary(self):
+        text = '# Old settings\n\nUse the old voice.\n\n## Current voice\n\nKeep the selected pace.\n\nRaya voice should be calm.\n'
+        row = passage('Preferences/Raya.md', text, 'Raya voice calm', 700, len, lambda: None)
+        self.assertIn('selected pace', row['text'])
+        self.assertNotIn('old voice', row['text'])
+
+    def test_preceding_context_does_not_cut_a_qualified_paragraph(self):
+        text = '# Preferences\n\n' + 'Historical detail. ' * 60 + '\nUnconfirmed old choice.\n\nRaya voice should be calm.\n'
+        row = passage('Preferences/Raya.md', text, 'Raya voice calm', 200, len, lambda: None)
+        self.assertEqual(row['text'], 'Raya voice should be calm.')
+
     def capture(self, key, text):
         return ('## Raya capture ' + key + '\n\nInterpretation of a recorded conversation; not independently verified.\n\n'
                 '### p0_cards\n\nOrigin: user_statement\nEvidence: [{"id":"original-user","start":0,"end":94}]\n\n' + text + '\n\n'

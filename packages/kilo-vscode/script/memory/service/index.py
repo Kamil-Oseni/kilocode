@@ -611,6 +611,24 @@ def passage(name, text, query, limit, measure, check):
     check()
     if measure(prefix + selected) > limit:
         return None
+    # Keep nearby earlier facts before spending the budget on trailing history.
+    # Add whole paragraphs within this section, preserving their qualifiers.
+    while start > 0 and start not in sections:
+        check()
+        previous = start - 1
+        while previous > 0 and not lines[previous].strip():
+            check()
+            previous -= 1
+        while previous > 0 and lines[previous - 1].strip() and previous not in sections:
+            check()
+            previous -= 1
+        if previous in sections:
+            break
+        candidate = '\n'.join(lines[previous:end])
+        if measure(prefix + candidate) > limit:
+            break
+        selected = candidate
+        start = previous
     while end < len(lines):
         check()
         candidate = '\n'.join(lines[start:end + 1])

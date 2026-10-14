@@ -49,7 +49,9 @@ test("preference reference successor preserves all exact fifteen-file predecesso
   ] as const) {
     expect(selected(pins)).toEqual(pins)
     expect(resident(pins)).toBe(true)
-    expect(transport(pins)).toBe(bridge)
+    expect(transport(pins)).toBe(
+      pins === release ? bridge : "0c75ad3254fb85a0a187a6dfd69ebf3774ceaeb322eaa793a4e7de1b40993c85",
+    )
     expect(paired(supervisor)).toBe(true)
     expect(compatible(pins, supervisor)).toBe(true)
     for (const other of [
@@ -68,6 +70,36 @@ test("preference reference successor preserves all exact fifteen-file predecesso
     expect(compatible({ ...pins, "index.py": "f".repeat(64) }, supervisor)).toBe(false)
   }
   expect(JSON.stringify(previous)).toBe(original)
+})
+
+test("native transport preserves the exact declared d6c predecessor while fresh current selection uses the fixed bridge", () => {
+  const original = "0c75ad3254fb85a0a187a6dfd69ebf3774ceaeb322eaa793a4e7de1b40993c85"
+  const cfg = {
+    format: "raya.memory.control.catalog",
+    version: 2,
+    python: "D:/Raya/Services/Packaging/Python/3.12.14/python.exe",
+    python_sha256: "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2",
+    source: path.resolve("script/memory/service"),
+    bridge: path.resolve("script/memory/control.py"),
+    bridge_sha256: bridge,
+    source_sha256: release,
+  }
+  expect(transport(release)).toBe(bridge)
+  expect(parseCatalog(cfg).bridge_sha256).toBe(bridge)
+  expect(parseCatalog({ ...cfg, bridge_sha256: original }).bridge_sha256).toBe(original)
+  expect(transport(release, original)).toBe(original)
+  for (const pins of [warning, { ...release, "index.py": warning["index.py"] }]) {
+    expect(transport(pins)).toBe(original)
+    expect(parseCatalog({ ...cfg, source_sha256: pins, bridge_sha256: original }).bridge_sha256).toBe(original)
+    expect(() => parseCatalog({ ...cfg, source_sha256: pins })).toThrow()
+  }
+  for (const pins of [
+    { ...release, "capture.py": warning["capture.py"] },
+    { ...release, "entries.py": warning["entries.py"] },
+    { ...release, "foreign.py": "f".repeat(64) },
+  ])
+    expect(() => parseCatalog({ ...cfg, source_sha256: pins, bridge_sha256: original })).toThrow()
+  expect(() => parseCatalog({ ...cfg, bridge_sha256: "f".repeat(64) })).toThrow()
 })
 
 test("personal management catalog pins actual fifteen-file source and preserves legacy transport", async () => {

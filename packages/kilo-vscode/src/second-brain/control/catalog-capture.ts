@@ -117,16 +117,17 @@ export function resident(pins: Readonly<Record<string, unknown>>) {
     Object.entries(cohort).every(([name, hash]) => pins[name] === hash)
   )
 }
-export const bridge = "0c75ad3254fb85a0a187a6dfd69ebf3774ceaeb322eaa793a4e7de1b40993c85"
-export function transport(pins: Readonly<Record<string, unknown>>) {
+export const bridge = "16006c57ae824450d5ecab9bd020e975d51ad417a849d457120e63dd6be1bdf0"
+const original = "0c75ad3254fb85a0a187a6dfd69ebf3774ceaeb322eaa793a4e7de1b40993c85"
+export function transport(pins: Readonly<Record<string, unknown>>, declared?: unknown) {
   const cohort = selected(pins)
-  return cohort === release ||
-    cohort === preference ||
+  if (cohort === release) return declared === original && same(pins, release) ? original : bridge
+  return cohort === preference ||
     cohort === warning ||
     cohort === diverse ||
     cohort === recalled ||
     cohort === recovered ||
     cohort === managed
-    ? bridge
+    ? original
     : "a07325ca6e504cca3ce8714469423706d3e333c2399bfa451f41c896170b898c"
 }

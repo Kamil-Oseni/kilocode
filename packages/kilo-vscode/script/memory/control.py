@@ -92,8 +92,10 @@ class Bridge:
             raise ValueError('Exact source hashes required.')
         self.check()
         self.modules = {}
-        modules = ('retirement', 'policy', 'admission', 'notes', 'host', *(['capture'] if 'capture.py' in self.pins else []),
-                   *(['entries', 'proposals', 'management'] if 'management.py' in self.pins else []))
+        modules = ('retirement', 'policy', 'admission', 'notes', 'host',
+                   *(['entries'] if 'management.py' in self.pins else []),
+                   *(['capture'] if 'capture.py' in self.pins else []),
+                   *(['proposals', 'management'] if 'management.py' in self.pins else []))
         for name in modules:
             if name in sys.modules:
                 raise ValueError('Unselected module already loaded.')

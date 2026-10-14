@@ -28,6 +28,7 @@ export class PersonalTodoReminderCoordinator implements vscode.Disposable {
   private active = false
   private pending = false
   private closed = false
+  private generation = 0
   private readonly unsubscribe: () => void
 
   constructor(
@@ -48,6 +49,7 @@ export class PersonalTodoReminderCoordinator implements vscode.Disposable {
 
   private changed(state: ConnectionState): void {
     if (this.closed) return
+    this.generation++
     if (state !== "connected") {
       this.pending = false
       this.timer?.dispose()
@@ -74,22 +76,29 @@ export class PersonalTodoReminderCoordinator implements vscode.Disposable {
 
   private async claim(): Promise<void> {
     const client = this.connection.getClient()
+    const generation = this.generation
+    const current = () =>
+      !this.closed &&
+      this.generation === generation &&
+      this.connection.getConnectionState() === "connected" &&
+      this.connection.getClient() === client
     const result = await client.raya.personalTodo.reminders()
-    await Promise.all((result.data ?? []).map((reminder) => this.present(reminder)))
+    if (!current()) return
+    await Promise.all((result.data ?? []).map((reminder) => this.present(reminder, client, current)))
   }
 
-  private async present(reminder: Reminder): Promise<void> {
+  private async present(reminder: Reminder, client: KiloClient, current: () => boolean): Promise<void> {
+    if (!current()) return
     const choice = this.dispatch(reminder)
     if (!choice) return
     void Promise.resolve(choice)
       .then(async (choice) => {
-        if (choice === ACTION) await Promise.resolve(this.ui.execute("raya.todosButtonClicked")).catch(() => undefined)
+        if (current() && choice === ACTION)
+          await Promise.resolve(this.ui.execute("raya.todosButtonClicked")).catch(() => undefined)
       })
       .catch(() => undefined)
-    if (this.closed || this.connection.getConnectionState() !== "connected") return
-    await this.connection
-      .getClient()
-      .raya.personalTodo.acknowledgeReminder({ deliveryID: reminder.deliveryID, claimID: reminder.claimID })
+    if (!current()) return
+    await client.raya.personalTodo.acknowledgeReminder({ deliveryID: reminder.deliveryID, claimID: reminder.claimID })
   }
 
   private dispatch(reminder: Reminder): Thenable<string | undefined> | undefined {

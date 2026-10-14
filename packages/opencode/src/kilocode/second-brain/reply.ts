@@ -87,13 +87,12 @@ export function valid(request: Request, value: Result) {
     )
   }
   if (request.command.action !== "context" || !path.isAbsolute(value.root)) return false
-  const names = new Set<string>()
+  const names = new Map<string, typeof value.context.sources>()
   for (const source of value.context.sources) {
     const parts = source.relative.split("/")
     const name = source.relative.toLowerCase()
     if (
       !name.endsWith(".md") ||
-      names.has(name) ||
       !path.isAbsolute(source.path) ||
       parts.some(
         (part) => !part || [".", ".."].includes(part) || /[\\<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part),
@@ -105,7 +104,19 @@ export function valid(request: Request, value: Result) {
       (source.truncated && !value.context.truncated)
     )
       return false
-    names.add(name)
+    const prior = names.get(name) ?? []
+    if (
+      prior.some(
+        (row) =>
+          row.relative !== source.relative ||
+          row.path !== source.path ||
+          row.source_sha256 !== source.source_sha256 ||
+          (source.line <= row.end_line && source.end_line >= row.line),
+      ) ||
+      prior.reduce((sum, row) => sum + row.tokens, source.tokens) > 2000
+    )
+      return false
+    names.set(name, [...prior, source])
   }
   return (
     value.context.tokens <= request.command.budget &&

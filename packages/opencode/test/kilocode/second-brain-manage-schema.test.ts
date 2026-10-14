@@ -14,7 +14,7 @@ test("model-facing personal management admits only an action and refuses discard
   expect(schema.required).toEqual(["action"])
   expect(schema.additionalProperties).toBe(false)
   const decode = Schema.decodeUnknownSync(Params)
-  for (const action of ["remember", "correct", "forget"]) expect(decode({ action })).toEqual({ action })
+  for (const action of ["remember", "correct", "forget"] as const) expect(decode({ action })).toEqual({ action })
   for (const input of [
     {},
     { action: "publish" },

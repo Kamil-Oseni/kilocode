@@ -17,9 +17,20 @@ function blocks(source: CaptureSource) {
         })
       : []
   const preferences = clauses.length >= 1 && clauses.length <= 4 ? clauses : []
-  const sentences = preferences.length
-    ? Array.from(source.user.text.matchAll(/[^.!?]+(?:[.!?]+|$)/g), (match) => match.index + match[0].length)
-    : []
+  const acknowledgement = /^(?:please\s+)?(?:just\s+)?acknowledge(?:\s+(?:this|that|my)(?:\s+preference)?)?[.!?]?$/i
+  const requests =
+    source.user.text.length <= 1000
+      ? Array.from(source.user.text.matchAll(/[^.!?]+(?:[.!?]+|$)/g)).flatMap((match) => {
+          const text = match[0].trim()
+          if (!acknowledgement.test(text)) return []
+          const start = match.index + match[0].indexOf(text)
+          return [{ start, end: start + text.length }]
+        })
+      : []
+  const sentences =
+    preferences.length || requests.length
+      ? Array.from(source.user.text.matchAll(/[^.!?]+(?:[.!?]+|$)/g), (match) => match.index + match[0].length)
+      : []
   const rows = [
     { ...source.user, origin: "user_statement" },
     { ...source.assistant, origin: "assistant_interpretation" },
@@ -28,7 +39,9 @@ function blocks(source: CaptureSource) {
     const spans = []
     for (let start = 0; start < row.text.length; ) {
       const cuts =
-        row.origin === "user_statement" ? [...sentences, ...preferences.flatMap((span) => [span.start, span.end])] : []
+        row.origin === "user_statement"
+          ? [...sentences, ...preferences.concat(requests).flatMap((span) => [span.start, span.end])]
+          : []
       const edge = Math.min(start + 1024, row.text.length, ...cuts.filter((cut) => cut > start))
       const end =
         edge < row.text.length && /[\uD800-\uDBFF]/.test(row.text[edge - 1]) && /[\uDC00-\uDFFF]/.test(row.text[edge])
@@ -38,8 +51,13 @@ function blocks(source: CaptureSource) {
         row.origin === "user_statement" && preferences.some((span) => span.start === start && span.end === end)
       const text = row.text.slice(start, end)
       const transient =
-        row.origin === "user_statement" &&
-        /^(?:do not|don't|please (?:do not|don't)) change lights or place orders[.!?]?$/i.test(text.trim())
+        row.origin !== "user_statement"
+          ? undefined
+          : acknowledgement.test(text.trim())
+            ? "acknowledgement_request"
+            : /^(?:do not|don't|please (?:do not|don't)) change lights or place orders[.!?]?$/i.test(text.trim())
+              ? "temporary_action_restriction"
+              : undefined
       spans.push({ ...row, text, start, end, preference, transient })
       start = end
     }
@@ -249,7 +267,7 @@ export function prepared(source: CaptureSource, acknowledgement = false) {
     blocks(source).map(({ start: _start, end: _end, preference, transient, ...row }) => ({
       ...row,
       ...(preference ? { slot: `preference_${row.ref}` } : {}),
-      ...(transient ? { excluded: "temporary_action_restriction" } : {}),
+      ...(transient ? { excluded: transient } : {}),
       ...(acknowledgement && row.origin === "assistant_interpretation"
         ? { excluded: "preference_acknowledgement" }
         : {}),

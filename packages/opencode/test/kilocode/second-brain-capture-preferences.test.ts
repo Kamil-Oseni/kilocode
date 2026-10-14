@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test"
 import { asSchema } from "ai"
+import { Schema } from "effect"
 import { extracted, extraction, prepared } from "../../src/kilocode/second-brain/capture-extraction"
 import { entries } from "../../src/kilocode/second-brain/capture-source"
+
+function references(text: string) {
+  return Schema.decodeUnknownSync(
+    Schema.Array(Schema.Struct({ ref: Schema.Int, text: Schema.String, excluded: Schema.optional(Schema.String) })),
+  )(JSON.parse(text))
+}
 
 const first = "For first-time Raya setup, I prefer concise conversational ask cards instead of lengthy forms."
 const second = "I also prefer the Memory tab to be for manually inspecting and adjusting settings."
@@ -257,6 +264,104 @@ test("temporary command refs cannot publish duplicate preferences and other dura
       third,
     )[0].text,
   ).toBe("Prefers quiet replies.")
+})
+
+test("original voice preference survives while acknowledgement-only references cannot create extra facts", async () => {
+  const text =
+    "I prefer turn-taking voice without automatic interruption: let me finish speaking, wait for Raya to finish its reply, then accept the next turn. Please just acknowledge this preference."
+  const source = {
+    ...original,
+    user: { id: "msg_user", text },
+    assistant: { id: "msg_assistant", text: "Understood." },
+  }
+  expect(text).toHaveLength(185)
+  const rows = references(prepared(source, true))
+  const request = rows.find((row) => row.text === "Please just acknowledge this preference.")!
+  expect(request.excluded).toBe("acknowledgement_request")
+  const entry = { ...cards, key: "turn_taking", text: "Prefers turn-taking voice without automatic interruption." }
+  const value = { entries: [], preferences: { preference_0: { status: "retained", entry } } }
+  const schema = asSchema(extraction(source, true))
+  expect(await schema.jsonSchema).toMatchObject({ properties: { entries: { maxItems: 0 } } })
+  expect((await schema.validate!(value)).success).toBe(true)
+  const parsed = entries(extracted(value, source, true), source)
+  expect(parsed).toHaveLength(1)
+  expect(parsed[0].evidence).toEqual([{ id: "msg_user", start: 0, end: 144 }])
+  expect(parsed[0].text).toBe(`${entry.text}\n\nOriginal user preference: ${text.slice(0, 144)}`)
+  for (const key of ["turn_taking_voice", "preference_acknowledgement"]) {
+    const invalid = { ...value, entries: [{ ...entry, key, evidence: [{ ref: request.ref }] }] }
+    expect((await schema.validate!(invalid)).success).toBe(false)
+    expect(() => extracted(invalid, source, true)).toThrow("bounded entry schema")
+  }
+  const invalid = {
+    ...value,
+    preferences: { preference_0: { status: "retained", entry: { ...entry, evidence: [{ ref: request.ref }] } } },
+  }
+  expect((await schema.validate!(invalid)).success).toBe(false)
+  expect(() => extracted(invalid, source, true)).toThrow("bounded entry schema")
+})
+
+test("pure acknowledgement requests admit zero facts through the actual capture schema", async () => {
+  for (const text of [
+    "Please just acknowledge this preference.",
+    "Acknowledge my preference.",
+    "Just acknowledge that.",
+  ]) {
+    const source = {
+      ...original,
+      user: { id: "msg_user", text },
+      assistant: { id: "msg_assistant", text: "Understood." },
+    }
+    const schema = asSchema(extraction(source, true))
+    expect(await schema.jsonSchema).toMatchObject({ properties: { entries: { maxItems: 0 } } })
+    expect(extracted({ entries: [] }, source, true)).toEqual([])
+    const invalid = { entries: [{ ...cards, evidence: [{ ref: 0 }] }] }
+    expect((await schema.validate!(invalid)).success).toBe(false)
+    expect(() => extracted(invalid, source, true)).toThrow("bounded entry schema")
+  }
+})
+
+test("acknowledgement segmentation preserves mixed durable facts and lasting acknowledgement preferences", async () => {
+  const source = {
+    ...original,
+    user: { id: "msg_user", text: "Please acknowledge this preference. My current project is Garden." },
+  }
+  const rows = references(prepared(source, true))
+  const project = rows.find((row) => row.text.includes("My current project"))!
+  const value = {
+    entries: [
+      {
+        ...cards,
+        category: "Projects",
+        key: "garden",
+        text: "Current project is Garden.",
+        evidence: [{ ref: project.ref }],
+      },
+    ],
+  }
+  expect((await asSchema(extraction(source, true)).validate!(value)).success).toBe(true)
+  const parsed = entries(extracted(value, source, true), source)
+  expect(source.user.text.slice(parsed[0].evidence[0].start, parsed[0].evidence[0].end)).toBe(
+    " My current project is Garden.",
+  )
+  const lasting = {
+    ...source,
+    user: { id: "msg_user", text: "I prefer brief acknowledgements instead of lengthy explanations." },
+  }
+  const preference = {
+    entries: [],
+    preferences: {
+      preference_0: {
+        status: "retained",
+        entry: { ...cards, text: "Prefers brief acknowledgements instead of lengthy explanations." },
+      },
+    },
+  }
+  expect((await asSchema(extraction(lasting, true)).validate!(preference)).success).toBe(true)
+  expect(entries(extracted(preference, lasting, true), lasting)[0].evidence).toEqual([
+    { id: "msg_user", start: 0, end: lasting.user.text.length },
+  ])
+  const imperative = { ...source, user: { id: "msg_user", text: "Remember my current project is Garden." } }
+  expect(extracted({ entries: [{ ...value.entries[0], evidence: [{ ref: 0 }] }] }, imperative, true)).toHaveLength(1)
 })
 
 test("host prefixes preserve complete bounded suffixes and secret restrictions", () => {

@@ -13,7 +13,7 @@ const captured = selected({
   "index.py": "3c106c8e45267ee808a3c2bd8dfacf85a4d3c1ca47e23785706d7663d6791f65",
 })
 
-test("linked recall successor preserves both exact fifteen-file predecessor supervisor pairings", () => {
+test("diverse recall successor preserves all exact fifteen-file predecessor supervisor pairings", () => {
   const previous = {
     ...release,
     "index.py": "b6bd48d00bca2565c8c6690691b7f9b1e2e7680abbd48058ab62b4a2770ef5cd",
@@ -25,8 +25,11 @@ test("linked recall successor preserves both exact fifteen-file predecessor supe
   }
   const retained = "e971a2f6678b9ede506ec656ca13fec8a1dedeea4239524bd39186c337fb2da7"
   const prior = "f9b6762a5bb729c7d04fe5e20821fefa420ec2be1934986d73d47664b217071c"
+  const recalled = { ...release, "index.py": "699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c" }
+  const reader = "957a6b9ce25bdb1d7ce629fb72e8cac97c70cffe98877f9ca3ebb57a0adb63ac"
   for (const [pins, supervisor] of [
     [release, current],
+    [recalled, reader],
     [previous, retained],
     [managed, prior],
   ] as const) {
@@ -35,7 +38,7 @@ test("linked recall successor preserves both exact fifteen-file predecessor supe
     expect(transport(pins)).toBe(bridge)
     expect(paired(supervisor)).toBe(true)
     expect(compatible(pins, supervisor)).toBe(true)
-    for (const other of [current, retained, prior].filter((value) => value !== supervisor))
+    for (const other of [current, reader, retained, prior].filter((value) => value !== supervisor))
       expect(compatible(pins, other)).toBe(false)
     expect(compatible({ ...pins, "index.py": "f".repeat(64) }, supervisor)).toBe(false)
   }

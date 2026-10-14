@@ -20,7 +20,9 @@ from entries import project as active
 # or service runtime. No implementation is copied into this test.
 SOURCE = HERE / 'service/index.py'
 TREE = ast.parse(SOURCE.read_bytes())
-NAMES = {'ordinary', 'image', 'address', 'links', 'capture_passage', 'passage', 'retrieve', 'headings', 'split', 'digest'}
+# Retain the legacy single-passage API tests and execute the new production
+# diverse-passages dependency used by retrieve; no replacement selection logic.
+NAMES = {'ordinary', 'image', 'address', 'links', 'capture_passage', 'passage', 'passages', 'retrieve', 'headings', 'split', 'digest'}
 CODE = ast.Module(body=[node for node in TREE.body if isinstance(node, ast.FunctionDef) and node.name in NAMES], type_ignores=[])
 # A conservative default only for isolated split tests; no tokenizer or model imports.
 tokens = len
@@ -137,6 +139,107 @@ class Tests(unittest.TestCase):
         self.assertTrue(value['truncated'])
         self.assertEqual(value['tokens'], sum(row['tokens'] for row in value['sources']))
         self.assertEqual(len(self.recall(count=1)['sources']), 1)
+
+    def facets(self):
+        name = 'Preferences/lights.md'
+        text = ('# Selected engine\n\nCurrent engine is Cedar; Birch remains the fallback.\n\n'
+                + 'Unrelated historical logistics.\n' * 100
+                + '\n## Cadence\n\nEngine cadence should stay measured.\nThis remains a recorded preference, not an independently verified setting.\n\n'
+                + 'Unrelated historical logistics.\n' * 100
+                + '\n## Cancellation\n\nEngine cancellation should stop playback promptly.\nDo not treat this behavior as the selected engine identity.\n')
+        (self.root / name).write_bytes(text.encode())
+        self.policy.files[name.casefold()]['sha256'] = self.sha(text)
+        return name, text, {'relative': name, 'sha256': self.sha(text)}
+
+    def test_actual_retrieve_keeps_distant_facets_in_disjoint_qualified_source_ranges(self):
+        name, text, seed = self.facets()
+        before = (self.root / name).read_bytes()
+        value = retrieve(self.root, self.policy, [seed, seed], 'engine cadence cancellation', 2500, len, lambda: None, depth=0)
+        rows = [row for row in value['sources'] if row['relative'] == name]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual({row['heading'] for row in rows}, {'Selected engine', 'Cadence', 'Cancellation'})
+        joined = '\n'.join(row['text'] for row in rows)
+        self.assertIn('Cedar; Birch', joined)
+        self.assertIn('not an independently verified setting', joined)
+        self.assertIn('Do not treat this behavior as the selected engine identity', joined)
+        self.assertNotIn('Unrelated historical logistics', joined)
+        self.assertLessEqual(sum(row['tokens'] for row in rows), 2000)
+        self.assertLessEqual(value['tokens'], 2500)
+        self.assertEqual(value['tokens'], sum(row['tokens'] for row in value['sources']))
+        for row in rows:
+            self.assertEqual(row['text'], '\n'.join(text.splitlines()[row['line'] - 1:row['end_line']]))
+            self.assertEqual(row['source_sha256'], self.sha(text))
+        ordered = sorted(rows, key=lambda row: row['line'])
+        self.assertTrue(all(left['end_line'] < right['line'] for left, right in zip(ordered, ordered[1:])))
+        self.assertTrue(value['truncated'])
+        self.assertFalse(value['capture_enabled'])
+        self.assertEqual(before, (self.root / name).read_bytes())
+
+    def test_diverse_passages_respect_total_rows_and_aggregate_note_budget(self):
+        name, text, seed = self.facets()
+        for count in (1, 2, 3, 12):
+            value = retrieve(self.root, self.policy, [seed], 'engine cadence cancellation', 2500, len, lambda: None, depth=0, count=count)
+            self.assertLessEqual(len(value['sources']), count)
+            self.assertLessEqual(sum(row['tokens'] for row in value['sources'] if row['relative'] == name), 2000)
+        value = retrieve(self.root, self.policy, [seed], 'engine cadence cancellation', 220, len, lambda: None, depth=0)
+        self.assertLessEqual(value['tokens'], 220)
+        self.assertTrue(value['truncated'])
+        for row in value['sources']:
+            if row['relative'] == name:
+                self.assertEqual(row['text'], '\n'.join(text.splitlines()[row['line'] - 1:row['end_line']]))
+
+    def test_fitting_new_capture_keeps_its_complete_record_and_distant_ordinary_facets(self):
+        name, text, seed = self.facets()
+        text = text[:text.index('## Cancellation')]
+        old = self.capture('00000000-0000-5000-8000-000000000004', 'Engine cancellation uses an older interpretation.')
+        latest = self.capture('00000000-0000-5000-8000-000000000005', 'Engine cancellation should stop promptly.\n\nThis is turn-taking behavior, not an engine identity.')
+        text += old + '\n' + latest
+        (self.root / name).write_bytes(text.encode())
+        self.policy.files[name.casefold()]['sha256'] = self.sha(text)
+        seed = {'relative': name, 'sha256': self.sha(text)}
+        value = retrieve(self.root, self.policy, [seed], 'engine cadence cancellation', 2500, len, lambda: None, depth=0)
+        rows = [row for row in value['sources'] if row['relative'] == name]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]['heading'], 'Raya capture 00000000-0000-5000-8000-000000000005')
+        self.assertEqual(rows[0]['text'], latest.rstrip('\n'))
+        self.assertIn('Interpretation of a recorded conversation; not independently verified.', rows[0]['text'])
+        joined = '\n'.join(row['text'] for row in rows)
+        self.assertIn('Cedar; Birch', joined)
+        self.assertIn('Engine cadence should stay measured', joined)
+        self.assertNotIn('older interpretation', joined)
+        self.assertLessEqual(sum(row['tokens'] for row in rows), 2000)
+        for row in rows:
+            self.assertEqual(row['source_sha256'], self.sha(text))
+            self.assertEqual(row['text'], '\n'.join(text.splitlines()[row['line'] - 1:row['end_line']]))
+        ordered = sorted(rows, key=lambda row: row['line'])
+        self.assertTrue(all(left['end_line'] < right['line'] for left, right in zip(ordered, ordered[1:])))
+        bounded = retrieve(self.root, self.policy, [seed], 'engine cadence cancellation', 2500, len, lambda: None, depth=0, count=1)
+        self.assertEqual(len(bounded['sources']), 1)
+        self.assertEqual(bounded['sources'][0]['text'], latest.rstrip('\n'))
+
+    def test_diverse_selection_preserves_atomic_capture_refusal_and_current_source_fences(self):
+        name, text, seed = self.facets()
+        def stale(value):
+            (self.root / name).write_text('changed after approved selection', encoding='utf-8')
+            return len(value)
+        with self.assertRaisesRegex(ValueError, 'revision changed'):
+            retrieve(self.root, self.policy, [seed], 'engine cadence cancellation', 2500, stale, lambda: None, depth=0)
+        (self.root / name).write_bytes(text.encode())
+        calls = 0
+        def cancel():
+            nonlocal calls
+            calls += 1
+            if calls > 25:
+                raise TimeoutError('cancelled during diverse selection')
+        with self.assertRaisesRegex(TimeoutError, 'cancelled'):
+            retrieve(self.root, self.policy, [seed], 'engine cadence cancellation', 2500, len, cancel, depth=0)
+        self.assertEqual((self.root / name).read_bytes(), text.encode())
+        captured = self.capture('00000000-0000-5000-8000-000000000003', 'Engine cadence cancellation preference.\n' + 'Additional attributed evidence. ' * 100)
+        (self.root / name).write_bytes(captured.encode())
+        self.policy.files[name.casefold()]['sha256'] = self.sha(captured)
+        value = retrieve(self.root, self.policy, [{'relative': name, 'sha256': self.sha(captured)}], 'engine cadence cancellation', 2500, len, lambda: None, depth=0)
+        self.assertFalse(any(row['relative'] == name for row in value['sources']))
+        self.assertTrue(value['truncated'])
 
     def test_stale_seed_is_diagnostic_and_not_returned(self):
         value = self.recall(seeds=[{'relative': 'Projects/eden.md', 'sha256': '0' * 64}], depth=0)

@@ -40,9 +40,13 @@ const recovered = Object.freeze({
   ...managed,
   "historical.py": "81c2d9bc84acb94d05d026ef22430a3de262270b968a9e093c22be107a6f7d10",
 })
-export const release = Object.freeze({
+const recalled = Object.freeze({
   ...recovered,
   "index.py": "699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c",
+})
+export const release = Object.freeze({
+  ...recalled,
+  "index.py": "008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e",
 })
 const previous = Object.freeze({
   ...historical,
@@ -56,7 +60,11 @@ export function selected(pins: Readonly<Record<string, unknown>>) {
   if (!("capture.py" in pins)) return legacy
   if ("entries.py" in pins || "management.py" in pins) {
     if (pins["historical.py"] === managed["historical.py"]) return managed
-    return pins["index.py"] === recovered["index.py"] ? recovered : release
+    return pins["index.py"] === recovered["index.py"]
+      ? recovered
+      : pins["index.py"] === recalled["index.py"]
+        ? recalled
+        : release
   }
   if (pins["server.py"] === captured["server.py"] && pins["index.py"] === captured["index.py"]) return captured
   if (pins["server.py"] === handoff["server.py"] && pins["index.py"] === handoff["index.py"]) return handoff
@@ -72,6 +80,7 @@ export function resident(pins: Readonly<Record<string, unknown>>) {
   const cohort = selected(pins)
   return (
     (cohort === release ||
+      cohort === recalled ||
       cohort === recovered ||
       cohort === managed ||
       cohort === captured ||
@@ -84,7 +93,7 @@ export function resident(pins: Readonly<Record<string, unknown>>) {
 export const bridge = "0c75ad3254fb85a0a187a6dfd69ebf3774ceaeb322eaa793a4e7de1b40993c85"
 export function transport(pins: Readonly<Record<string, unknown>>) {
   const cohort = selected(pins)
-  return cohort === release || cohort === recovered || cohort === managed
+  return cohort === release || cohort === recalled || cohort === recovered || cohort === managed
     ? bridge
     : "a07325ca6e504cca3ce8714469423706d3e333c2399bfa451f41c896170b898c"
 }

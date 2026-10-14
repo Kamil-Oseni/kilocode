@@ -18,7 +18,7 @@ class Tests(unittest.TestCase):
         dependencies = python.parent.parent / 'Lib/site-packages'
         body = """import importlib.util,json,os,sys
 spec=importlib.util.spec_from_file_location('selected_supervisor',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-for sources in (module.CAPTURE, module.RECOVERED, module.CLOSED):
+for sources in (module.CAPTURE, module.RECALL, module.RECOVERED, module.CLOSED):
     module.prepare({'kind':'memory','env':dict(os.environ),'dependencies':sys.argv[2],'source_sha256':sources})
 assert 'numpy' in sys.modules and 'tokenizers' in sys.modules
 assert not any(name in sys.modules for name in ('torch','transformers','scipy','sklearn'))
@@ -57,6 +57,10 @@ print(json.dumps({'counter':True,'model_stack':False}))
         self.assertEqual(len(module.RECOVERED), 15)
         self.assertEqual(module.release('memory', module.RECOVERED), module.RECOVERED)
         self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.RECOVERED[name]}, {'index.py'})
+        self.assertEqual(module.RECALL['index.py'], '699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c')
+        self.assertEqual(len(module.RECALL), 15)
+        self.assertEqual(module.release('memory', module.RECALL), module.RECALL)
+        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.RECALL[name]}, {'index.py'})
 
 
 if __name__ == '__main__':

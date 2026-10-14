@@ -643,6 +643,72 @@ def passage(name, text, query, limit, measure, check):
             'truncated': start != 0 or end != len(lines)}
 
 
+def passages(name, text, query, limit, measure, check, slots):
+    """Bounded diverse paragraphs, each with its own exact source interval."""
+    lines = active(name, text).removeprefix('\ufeff').splitlines()
+    sections = headings(lines, check)
+    terms = set(re.findall(r'\w+', query.casefold()))
+    captured, row = capture_passage(name, lines, sections, terms, limit, measure, check)
+    if captured and row is None:
+        return []
+    # When an ordinary paragraph wins, never borrow fragments of other capture
+    # records as extra facets: their attribution and facts remain atomic.
+    covered = set()
+    for start, heading in sections.items():
+        check()
+        if re.fullmatch(r'Raya capture [a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', heading) and re.match(r'^ {0,3}##[ \t]+', lines[start]):
+            end = next((index for index in sections if index > start and re.match(r'^ {0,3}#{1,2}(?:[ \t]+|$)', lines[index])), len(lines))
+            covered.update(range(start, end))
+    windows = []
+    start = 0
+    heading = ''
+    while start < len(lines):
+        check()
+        if start in sections:
+            heading = sections[start]
+        if start in covered or start in sections or not lines[start].strip():
+            start += 1
+            continue
+        end = start + 1
+        while end < len(lines) and lines[end].strip() and end not in sections and end not in covered:
+            check()
+            end += 1
+        value = '\n'.join(lines[start:end])
+        matches = terms.intersection(re.findall(r'\w+', value.casefold()))
+        if matches:
+            windows.append((start, end, heading, matches, value))
+        start = end
+    if not captured and len(windows) < 2:
+        row = passage(name, text, query, limit, measure, check)
+        return [row] if row is not None else []
+    # A fitting capture stays complete and first, but is not evidence for
+    # other distant facets. Supplement only ordinary paragraphs, never an
+    # older or partial capture record.
+    result = [row] if captured else []
+    used = row['tokens'] if captured else 0
+    matched = terms.intersection(re.findall(r'\w+', row['text'].casefold())) if captured else set()
+    fallback = False
+    while windows and len(result) < min(3, slots):
+        check()
+        chosen = max(windows, key=lambda item: (len(item[3] - matched), len(item[3]), -item[0]))
+        windows.remove(chosen)
+        start, end, heading, matches, value = chosen
+        extra = not (matches - matched)
+        if extra and fallback:
+            break
+        prefix = f'Source: {name}\nSection: {heading}\n'
+        size = measure(prefix + value)
+        check()
+        if size > limit - used:
+            continue
+        result.append({'line': start + 1, 'end_line': end, 'heading': heading,
+                       'text': value, 'tokens': size, 'truncated': start != 0 or end != len(lines)})
+        used += size
+        matched.update(matches)
+        fallback = fallback or extra
+    return result
+
+
 def retrieve(root, policy, seeds, query, budget, measure, check, *, depth=2, count=12, entry=2000):
     """Relevant seeds first, compact entry point next, then breadth-first links.
 
@@ -682,7 +748,7 @@ def retrieve(root, policy, seeds, query, budget, measure, check, *, depth=2, cou
     images = {}
     used = 0
     omitted = False
-    while queue and len(images) < count and used < budget:
+    while queue and len(images) < count and len(result) < count and used < budget:
         check()
         name, level, expected, compact = queue.pop(0)
         key = name.casefold()
@@ -705,11 +771,11 @@ def retrieve(root, policy, seeds, query, budget, measure, check, *, depth=2, cou
             diagnostics.append({'relative': name, 'reason': str(err)})
             continue
         images[selected] = raw
-        row = passage(selected, text, query, min(budget - used, entry if compact else 2000), measure, check)
-        if row is not None:
+        rows = passages(selected, text, query, min(budget - used, entry if compact else 2000), measure, check, count - len(result))
+        for row in rows:
             used += row['tokens']
             result.append(dict(row, relative=selected, path=str(path), source_sha256=sha, depth=level))
-        if row is None:
+        if not rows:
             omitted = True
             diagnostics.append({'relative': selected, 'reason': 'No passage fits the remaining token budget.'})
         if level >= depth:

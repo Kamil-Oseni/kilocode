@@ -27,7 +27,7 @@ export const BrainManageTool = Tool.define<
     const sessions = yield* Session.Service
     return {
       description:
-        "Remember, correct or forget a personal Memory only when the current user explicitly requests that change. Supply action and optionally exact original fact text or target query; never paths, hashes, approvals or settings. Host-owned conversation cards choose exact entries; native human review approves publication. Published and indexed are separate receipt states. Forget removes active recall, not backups. Never replay an unconfirmed operation; inspect its original receipt.",
+        "Remember, correct or forget a personal Memory only when the current user explicitly requests that change, including recording an outcome in their SecondBrain or Raya project memory. Prefer action alone: the host derives the fact and target from the original user request. Optional text and query must match those exact original spans; never paraphrase or summarize them. Workspace code memory uses kilo_memory_save instead. Never supply paths, hashes, approvals or settings. Host-owned conversation cards choose exact entries; native human review approves publication. Published and indexed are separate receipt states. Forget removes active recall, not backups. Never replay an unconfirmed operation; inspect its original receipt.",
       parameters: Params,
       execute: (args: typeof Params.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {

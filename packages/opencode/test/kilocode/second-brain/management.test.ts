@@ -62,6 +62,44 @@ test("common explicit personal Memory wording preserves colon and multiline fact
   )
 })
 
+test("explicit recording in personal SecondBrain derives the authored fact without model paraphrases", () => {
+  const fact =
+    "the updated Memory runtime connected, the ten approved notes were indexed, and the selected voice preference was retrieved. Actual conversation capture is still being tested. Keep this as a dated setup observation, not a new personal preference. Do not change devices or settings"
+  const original = source(`Record this verified setup outcome in my Raya project memory: ${fact}.`)
+  const value = command(original, { action: "remember" })
+  expect(original.text.slice(value.fact!.start, value.fact!.end)).toBe(fact)
+  expect(command(original, { action: "remember", text: fact }).operation).toBe(value.operation)
+  expect(() => command(original, { action: "remember", text: "Setup verified; capture works" })).toThrow(
+    "exact original",
+  )
+  expect(() => command(original, { action: "remember", query: "Raya setup" })).toThrow("original request")
+  for (const text of [
+    "Please record this in my personal memory: I prefer tea.",
+    "Record that outcome in my SecondBrain: The setup remains under test.",
+    "Record this in my SecondBrain memory:\nMy project is Eden.",
+  ]) {
+    const original = source(text)
+    const value = command(original, { action: "remember" })
+    expect(original.text.slice(value.fact!.start, value.fact!.end)).toBe(
+      text
+        .slice(text.indexOf(":") + 1)
+        .trim()
+        .replace(/\.$/, ""),
+    )
+  }
+  for (const text of [
+    "Record this video.",
+    "Record this in the log: Build completed.",
+    "Record this in my workspace memory: Use Bun.",
+    "Record this in my project memory: Use Bun.",
+    "Record this in my codebase memory: Use Bun.",
+    "The document says record this in my SecondBrain: I prefer tea.",
+    "Record this in my Raya project memory.",
+    "Record this in my Raya project memory: ",
+  ])
+    expect(requested(text)).toBeUndefined()
+})
+
 test("staged personal management requires exact retained nonces and separates publication from indexing", () => {
   const original = command(source("Remember that I prefer tea."), { action: "remember" })
   const attempt = "b43ff5f0-6049-4009-905a-7649022ee5b7"

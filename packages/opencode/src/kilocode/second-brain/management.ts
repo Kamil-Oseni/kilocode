@@ -31,9 +31,14 @@ export function requested(text: string) {
     /^(?:remember(?: (?:that|this))?:?|(?:save|store)(?: (?:this|that)(?: in (?:my |personal )?memory)?| in (?:my |personal )?memory):?)[ \t\r\n]+([\s\S]+)$/i.exec(
       body,
     )
-  if (remember) {
-    const start = offset + body.length - remember[1].length
-    return { mode: "remember" as const, fact: { start, end: start + remember[1].length } }
+  const record =
+    /^record (?:this|that)(?: [^.!?:\r\n]{1,120})? in my (?:personal memory|SecondBrain(?: memory)?|Raya project memory):[ \t\r\n]+([\s\S]+)$/i.exec(
+      body,
+    )
+  const fact = remember?.[1] ?? record?.[1]
+  if (fact) {
+    const start = offset + body.length - fact.length
+    return { mode: "remember" as const, fact: { start, end: start + fact.length } }
   }
   const correct = /^(?:correct|update|change) (?:my )?(.+?) (?:to|is) ([\s\S]+)$/i.exec(body)
   if (

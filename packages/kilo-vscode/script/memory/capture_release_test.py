@@ -18,7 +18,7 @@ class Tests(unittest.TestCase):
         dependencies = python.parent.parent / 'Lib/site-packages'
         body = """import importlib.util,json,os,sys
 spec=importlib.util.spec_from_file_location('selected_supervisor',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-for sources in (module.CAPTURE, module.CLOSED):
+for sources in (module.CAPTURE, module.RECOVERED, module.CLOSED):
     module.prepare({'kind':'memory','env':dict(os.environ),'dependencies':sys.argv[2],'source_sha256':sources})
 assert 'numpy' in sys.modules and 'tokenizers' in sys.modules
 assert not any(name in sys.modules for name in ('torch','transformers','scipy','sklearn'))
@@ -36,7 +36,7 @@ print(json.dumps({'counter':True,'model_stack':False}))
         self.assertEqual(module.release('memory', current), module.CAPTURE)
         self.assertEqual(module.release('memory', module.CLOSED), module.CLOSED)
         self.assertEqual({key for key in module.CAPTURE if module.CAPTURE[key] != module.CLOSED.get(key)},
-                         {'server.py', 'index.py', 'entries.py', 'management.py'})
+                         {'server.py', 'index.py', 'historical.py', 'entries.py', 'management.py'})
         self.assertEqual(module.CLOSED['index.py'], 'e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7')
         for prior in module.PREVIOUS:
             self.assertEqual(module.release('memory', prior), prior)
@@ -50,6 +50,13 @@ print(json.dumps({'counter':True,'model_stack':False}))
                         dict(current, **{'extra.py': 'f' * 64})]:
             with self.assertRaises(ValueError):
                 module.release('memory', changed)
+
+    def test_linked_successor_retains_prior_fifteen_file_reader_without_model_stack(self):
+        self.assertEqual(module.CAPTURE['index.py'], hashlib.sha256((HERE / 'service/index.py').read_bytes()).hexdigest())
+        self.assertEqual(module.RECOVERED['index.py'], 'b6bd48d00bca2565c8c6690691b7f9b1e2e7680abbd48058ab62b4a2770ef5cd')
+        self.assertEqual(len(module.RECOVERED), 15)
+        self.assertEqual(module.release('memory', module.RECOVERED), module.RECOVERED)
+        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.RECOVERED[name]}, {'index.py'})
 
 
 if __name__ == '__main__':

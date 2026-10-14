@@ -195,8 +195,16 @@ function personal(request: string) {
 
 function question(request: string) {
   const original = request
-    .replace(/[.!?]\s*(?:do not|don't)\s+change (?:anything|files|lights)(?: or (?:files|lights))?[.!]?$/i, "")
+    .replace(
+      /[.!?]\s*(?:do not|don't)\s+(?:change (?:anything|files|lights|(?:any )?settings)(?: or (?:files|lights|control (?:any )?devices))?|control (?:any )?devices)[.!]?$/i,
+      "",
+    )
     .replace(/^(?:please )?search (?:my |the )?saved (?:SecondBrain|Memory) notes?\s*:\s*/i, "")
+    .replace(
+      /^(?:please )?(?:use|consult) (?:my |the )?(?:(?:saved|local) )?(?:(?:SecondBrain|Memory)(?: notes?)?|notes?) to (?:tell me|explain)\s+/i,
+      "",
+    )
+    .replace(/^(?:please )?tell me (?=(?:what|which|who|when|where|how|did|do|does|have|has|is|are)\b)/i, "")
   // Only a single factual preference-purpose question may describe a list "to buy".
   // A second imperative or an urgency/action tail cannot be normalized into recall.
   const topic =
@@ -219,7 +227,12 @@ function question(request: string) {
   )
     return false
   if (!/\b(?:memory|remember|saved|notes?|preferences?)\b/i.test(request) && !personal(text)) return false
-  return !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|orders|place|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|set up)\b/i.test(
-    text,
+  return (
+    !/\b(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|orders|place|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|change|configure|set up)\b/i.test(
+      text,
+    ) &&
+    !/(?:^|[.!?;,]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\b(?:you|Raya|SecondBrain) (?:(?:to|must|should|needs? to) )?)(?:please )?(?:control|apply|revert|undo|redo)\b/i.test(
+      text,
+    )
   )
 }

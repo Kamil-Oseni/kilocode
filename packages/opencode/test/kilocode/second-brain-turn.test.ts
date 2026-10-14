@@ -271,6 +271,84 @@ test("natural personal recall does not release purchasing, trading, advice or co
   }
 })
 
+test("ordinary tell-me Memory requests settle only their original validated acquisition", () => {
+  // Exact authored request retained in Memory-71f-original-conversation-failure.json.
+  const failed =
+    "Use my SecondBrain notes to tell me which voice I chose for Raya and what I wanted for speaking pace and interruptions. Cite the notes you used. Do not change settings or control devices."
+  for (const text of [
+    failed,
+    "Please use my saved Memory notes to tell me what my preferred speaking pace was. Don't change any settings or control any devices.",
+    "Consult my local notes to explain which voice I chose. Cite my notes.",
+    "Tell me what my saved notes say about interruptions. Do not control devices.",
+    "Tell me which saved preferences apply to speaking pace.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text" || original.tool.state.status !== "completed") throw new Error("Original fixture required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled([original.messages[0]], original.session, uid)).toBe(false)
+    expect(settled(original.messages, original.session, uid)).toBe(true)
+    expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+    expect(settled(original.messages, { ...original.session, directory: "/foreign" }, uid)).toBe(false)
+    expect(settled(original.messages, original.session, "foreign-user")).toBe(false)
+    expect(
+      settled(
+        original.messages,
+        {
+          ...original.session,
+          metadata: { ...original.session.metadata, [RayaChief.requestKey]: "Different request" },
+        },
+        uid,
+      ),
+    ).toBe(false)
+    original.tool.state = { ...original.tool.state, output: "{}" }
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
+test("tell-me recall retains mixed-action and original receipt refusals", () => {
+  for (const text of [
+    "Use my SecondBrain notes to tell me which voice I chose. Change the voice now.",
+    "Use my SecondBrain notes to tell me which voice I chose, then control devices.",
+    "Use my SecondBrain notes to tell me which voice I chose. Apply those settings.",
+    "Tell me what my saved notes say about interruptions; please undo the current setup.",
+    "Use my notes to tell me which voice I chose, then Raya should control devices.",
+    "Tell me what my saved notes say, then delete them. Do not change settings or control devices.",
+    "Use my notes to tell me how to install the voice engine. Do not control devices.",
+    "Use my notes to tell me which voice I chose. Do not change settings, then send a message.",
+    "Use my notes to tell me which voice I chose. " + "x".repeat(1000),
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+  }
+  const original = fixture()
+  const part = original.messages[0].parts[0]
+  if (
+    part.type !== "text" ||
+    original.tool.state.status !== "completed" ||
+    original.messages[1].info.role !== "assistant"
+  )
+    throw new Error("Original completed read required")
+  part.text = "Use my SecondBrain notes to tell me which voice I chose. Do not change settings or control devices."
+  original.session.metadata[RayaChief.requestKey] = part.text
+  const completed = original.tool.state
+  original.tool.state = {
+    status: "error",
+    input: { query: "voice" },
+    error: "Original read failed",
+    time: { start: 12, end: 13 },
+  }
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+  original.tool.state = completed
+  original.messages[1].info = { ...original.messages[1].info, parentID: MessageID.make("msg_foreign_user") }
+  expect(settled(original.messages, original.session, uid)).toBe(false)
+})
+
 test("explicit recall releases synthesis after the original read while preserving file and light restrictions", () => {
   for (const text of [
     "Recall my saved preferences for delivering Raya builds and choosing how much testing to do. Use my local notes and cite the source. Do not change files or lights.",

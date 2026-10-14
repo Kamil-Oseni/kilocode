@@ -5,12 +5,41 @@ import { createHash } from "node:crypto"
 import { parseCatalog } from "../../src/second-brain/control/catalog"
 import { release, bridge, selected, resident, transport } from "../../src/second-brain/control/catalog-capture"
 import { release as legacy, bridge as prior } from "../../src/second-brain/control/catalog-v2"
-import { supervisors } from "../../src/second-brain/managed/catalog"
+import { compatible, current, paired, supervisors } from "../../src/second-brain/managed/catalog"
 
 const captured = selected({
   "capture.py": "b059c9bb84a176c86e5ff7b7e35b1470cba30fdfec5fb7dcdef4d829298b0dfe",
   "server.py": "ddcffa6ec22432f1622850aa36e04e48cfe8cad94db28648e1b6b8dd2fefcf1d",
   "index.py": "3c106c8e45267ee808a3c2bd8dfacf85a4d3c1ca47e23785706d7663d6791f65",
+})
+
+test("linked recall successor preserves both exact fifteen-file predecessor supervisor pairings", () => {
+  const previous = {
+    ...release,
+    "index.py": "b6bd48d00bca2565c8c6690691b7f9b1e2e7680abbd48058ab62b4a2770ef5cd",
+  }
+  const original = JSON.stringify(previous)
+  const managed = {
+    ...previous,
+    "historical.py": "2d97c96d13b906d8aadcae47a89704cb1b839f5e09da144ca28bd20a0af779bc",
+  }
+  const retained = "e971a2f6678b9ede506ec656ca13fec8a1dedeea4239524bd39186c337fb2da7"
+  const prior = "f9b6762a5bb729c7d04fe5e20821fefa420ec2be1934986d73d47664b217071c"
+  for (const [pins, supervisor] of [
+    [release, current],
+    [previous, retained],
+    [managed, prior],
+  ] as const) {
+    expect(selected(pins)).toEqual(pins)
+    expect(resident(pins)).toBe(true)
+    expect(transport(pins)).toBe(bridge)
+    expect(paired(supervisor)).toBe(true)
+    expect(compatible(pins, supervisor)).toBe(true)
+    for (const other of [current, retained, prior].filter((value) => value !== supervisor))
+      expect(compatible(pins, other)).toBe(false)
+    expect(compatible({ ...pins, "index.py": "f".repeat(64) }, supervisor)).toBe(false)
+  }
+  expect(JSON.stringify(previous)).toBe(original)
 })
 
 test("personal management catalog pins actual fifteen-file source and preserves legacy transport", async () => {
@@ -74,7 +103,7 @@ test("personal management release preserves complete resident capture cohorts", 
     Object.entries(release)
       .filter(([name, hash]) => previous[name as keyof typeof previous] !== hash)
       .map(([name]) => name),
-  ).toEqual(["server.py", "index.py", "entries.py", "management.py"])
+  ).toEqual(["server.py", "index.py", "historical.py", "entries.py", "management.py"])
   const cfg = {
     format: "raya.memory.control.catalog",
     version: 2,

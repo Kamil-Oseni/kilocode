@@ -1,12 +1,16 @@
 # Memory startup recovery
 
-## Current profile checkpoint — October 12
+## Current profile checkpoint — October 14
 
 ### Current installed a93 observation
 
 Everyday `7.4.23-snapshot+a93eb8de60.local.1791836884196` includes the exact fifteen-file source fix and supported uncertain-Sync quarantine. Native quarantine applied for request `817aec363c66459c8fbd9267fb25c4d6`: its old debt remains in the audit with settlement false, and the separate replacement setup is selected at port 50247. This is not original request completion. Evidence: `D:/Raya/Tools/Readiness-20261012/Memory-a93-Native-Quarantine-6fe3e78e87be4304a7b907c6ef9bfcf9.json`, SHA-256 `0d43acedf3d9bc4b7acb8bfae12eba1b7b91c4c6898fe3a33565a77620230552`.
 
-Replacement services have not started because free RAM is below the six-GiB live reserve. Preserve the user's applications. Once headroom permits, start the selected idle old-runtime pair, close it normally, recover its exact closed state and upgrade to the corrected runtime. Only then submit one new authorized indexing request and verify conversation save/recall. Consult [current readiness](Raya-Current-Readiness.md) for the latest resource and installation checkpoint.
+The replacement pair connected on October 14 and closed normally. Its genuine closure is `579c68433ce90253da0d795e083a8c06025035819714f3c5b8ad05da2589b457`. Native closed-pair recovery and runtime upgrade `f9a272c6193b4a7098426688d77985d9` applied; the selected plans, Python and corrected supervisor hashes match. The corrected pair connected, and one new revision-11 index of the ten approved notes completed. A real voice-preference search returned cited current notes, explicitly labeled similarity matches rather than a verified answer.
+
+Supported native activation now reports **Automatic saving ready**, preserving the existing human authorization, notes root, release, model and time zone. Actual completed-turn capture and conversation recall remain unverified. No historical request was replayed. Home Assistant lights are off and the VM is shut down by the user's October 14 request; do not restart it for acceptance checks.
+
+Separate evidence files are `D:/Raya/Tools/Readiness-20261014/Memory-a93-native-runtime-upgrade.json`, `Memory-a93-index-and-preference-search.json` and `Memory-a93-native-capture-ready.json` in the same directory. Preserve these observations separately from later acceptance results. The next installed check is one ordinary conversation recall and one genuine completed-turn capture after the build chat's coordinated package/install slot. Consult [current readiness](Raya-Current-Readiness.md) for the broader installation checkpoint.
 
 ### Historical installed 3a observation
 

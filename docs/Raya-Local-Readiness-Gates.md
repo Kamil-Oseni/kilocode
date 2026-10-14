@@ -1,3 +1,25 @@
+October 14, 2026 — 90c installed; fresh loaded acceptance pending.
+
+Everyday Raya is **`7.4.23-snapshot+90c612ae09.local.1791990506776`**, source **`90c612ae09f9611b0294d6d3681e25e2c04fa717`**. Checkpoint/alias guard and repeated-warning repair `db2b04cf96` is installed with qualified archive/CLI and fresh closed preservation: **3,218 saved files/four roots**, **538 non-package payloads** and unrelated registrations unchanged; before/install/after original owners exit naturally at zero/no force/EOF joined. Root/peer package receipt SHA-256 `677f30e45815962886e92496a07d5af4ee1173f5d2df5b4077ce2aef63679785`; after-preservation SHA-256 `3a63d4a5ee4e8137a40bdaee0e8c809a043c538dc1db6720339bb381db8241d0`.
+
+Installed gates remain **2/9 (22.2%)**; overall readiness is **unmeasured**, with historical **48/100 / 38 unfinished requirements** retained. On previous 7b33, saved-choice recall returned note evidence and a separate original manual save published/indexed operation `2f0c3bb0-d799-5753-a9ac-900250ec98aa`. A later checkpoint recall failed without a final answer despite two returned contexts. Old acf operation `f0d0b032-251e-5cbc-a51c-9a792f681579` remains unconfirmed/unchanged. No fresh 90c health, activation of the exact `0bd829a0…` / `fe3139b3…` cohort, complete cited answers or quality capture is earned yet. The parent coordinator owns those loaded checks; immutable source verification is separate from an accepted new conversation.
+
+Full artifact, source checks, original failures, installation and backup evidence are in [Raya-Current-Readiness.md](Raya-Current-Readiness.md). Voice is deferred, second-PC migration canceled and cloud-worker reservations released. Current-candidate General/Coder/Ask, two genuine Routine periods with active pause/resume/Stop and 65-second cold no-replay, actual Windows postboot and populated reinstall/loaded recovery remain open. The initialized 7b33 Routine fixture has no backend/model acceptance and requires a separate 90c successor before use.
+
+| Gate | Earned | Current evidence or remaining acceptance |
+|---|---|---|
+| Audited combined candidate | 1/1 | Exact installed 90c archive/CLI/payload qualification; root/peer receipt agrees. Compiler/package target zero remains separate from failed outer cleanup lifecycles. |
+| Normal installation preservation | 1/1 | Fresh closed 90c before/install/after natural zero/no force/EOF; 3,218 saved files/four roots, 538 non-package payloads and unrelated registrations unchanged. |
+| Installed local General/tool turn | 0/1 | Require current-candidate permitted tools, Ask, saved reply/model/draft and ordinary close/reopen. |
+| Strict installed Coder | 0/1 | Require actual scoped file work and tests with the selected local model. |
+| Installed Voice and permitted HA flow | 0/1 | Human voice acceptance remains deferred by the user. |
+| Scheduled routines | 0/1 | Retain failed V4 pause oracle and syntax-only corrected V5. Require a distinct current 90c binding and two genuine periods, active pause/resume, Stop and 65-second cold no-replay; actual loaded GUI remains separate. |
+| Configured Memory | 0/1 | Prior 7b recall/manual publication indexed, later checkpoint recall failed. Repair is installed, but fresh 90c health/exact cohort activation, complete cited answers and quality capture remain unverified; old acf operation stays unconfirmed/unchanged. |
+| Matching-version postboot/service recovery | 0/1 | Require actual Windows boot, saved selections/chat/drafts, intended reconnect and no unsolicited worker replay. |
+| Populated same-candidate reinstall recovery | 0/1 | Require current populated loaded-client/Memento, rollback and full cold restore/no-replay; closed installation preservation is separate. |
+
+### Historical 7b33 installation checkpoint — superseded by installed 90c
+
 October 14, 2026 — current installed acceptance checkpoint
 
 The current candidate is `7.4.23-snapshot+7b33d3a24f.local.1791986771740`, source `7b33d3a24f593eee2b8c2c89fb37a1e918c8920f`. Todo owner fix `923e3bdf5a`, citation guidance `ea5cf1c66a` and management fixes `fadd7a6f7c` are installed with fresh qualified CLI/package and closed preservation. Owned Code window **89788218** restored the original chat; backend **38604** matches the installed CLI hash. Parent native observation after one Check Service reports connected, automatic saving ready and notes indexed/search ready; immutable health receipt is pending. Parent owns the new original recall/save check; no quality result yet. Complete cited recall, manual publication and quality capture remain unverified. Installed gates remain **2/9 (22.2%)**; overall readiness is unmeasured, historical **48/100 / 38 unfinished requirements** retained.

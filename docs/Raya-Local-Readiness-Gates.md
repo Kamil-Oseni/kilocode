@@ -10,7 +10,7 @@ The current candidate is `7.4.23-snapshot+d0d354a8c5.local.1791971966337`, from 
 | Strict installed Coder | 0/1 | Require actual scoped file work and tests with the selected local model; earlier candidate trials retain their original limitations. |
 | Installed Voice and permitted HA flow | 0/1 | Human voice acceptance is deferred by the user. Do not run microphone, audible or device checks without renewed instructions. |
 | Scheduled routines | 0/1 | Require two genuine scheduled periods, pause/Stop and cold no-replay on this candidate; private report pagination alone cannot earn this gate. |
-| Configured Memory | 0/1 | Supported native runtime upgrade is underway. Ordinary sourced recall, actual completed-turn capture, lifecycle and durable-debt acceptance remain required. Original failed and uncertain turns are retained without replay. |
+| Configured Memory | 0/1 | Native upgrade and sourced recall completed, but saved pace was omitted and intent/current state blurred. Manual saving met eleven policy refusals; automatic acknowledgement skipped capture. Checked 6a80 successor fixes remain uninstalled. Complete cited answer coverage, actual completed-turn capture, lifecycle and durable-debt acceptance remain required; original failed/uncertain turns stay retained without replay. |
 | Matching-version postboot/service recovery | 0/1 | Require actual Windows boot, saved selections/chat/drafts, intended service reconnect and no unsolicited worker replay. |
 | Populated same-candidate reinstall recovery | 0/1 | Current-candidate populated reinstall and cold restore/no-replay are prepared separately from everyday upgrade preservation. |
 

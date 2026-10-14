@@ -1,18 +1,18 @@
 October 14, 2026 — current installed acceptance checkpoint
 
-The current candidate is `7.4.23-snapshot+d0d354a8c5.local.1791971966337`, from source `d0d354a8c59e7eb456672c7a1c3fbc60f2f95bd4`. Its nine-gate checklist is **2/9 (22.2%)**. This measures these installed acceptance gates only; overall implementation readiness is unmeasured, and the historical 48/100 estimate and 38 unfinished requirements are retained. Historical workflow passes do not transfer to this candidate.
+The current candidate is `7.4.23-snapshot+0231aec60f.local.1791975615969`, from source `0231aec60f50fdd24dcc4c3357c5c1430cdc4950` (implementation `6a80aea4a84b9ef224b09f54b844714b2961e6b0`). Its nine-gate checklist is **2/9 (22.2%)**. This measures these installed acceptance gates only; overall implementation readiness is unmeasured, and the historical 48/100 estimate and 38 unfinished requirements are retained. Historical workflow passes do not transfer to this candidate.
 
 | Gate | Earned | Current evidence or remaining acceptance |
 |---|---|---|
-| Audited combined candidate | 1/1 | Complete archive and installed payload match; root and peer archive receipts agree at SHA-256 `5f4a7b7ec90b861c96b60ab7f9b8b79e2ebe3da1e9dc7578e9c6e03aee448fb4`. Compiler and package artifact success is separate from their failed outer descendant-cleanup lifecycles. |
-| Normal installation preservation | 1/1 | Fresh closed install preserves 4,126 saved files, topology, all 538 non-package payloads and unrelated registrations. Before/after preservation owners exit naturally without force. |
+| Audited combined candidate | 1/1 | Complete archive and installed payload match; root and peer archive receipts agree at SHA-256 `297534af152cea20ac212a687dd36feaed6b2b1750f7d01526d3e90d989644f1`. Compiler and package artifact success is separate from their failed outer descendant-cleanup lifecycles. |
+| Normal installation preservation | 1/1 | Fresh closed install preserves 3,084 saved files across four roots/topology, all 538 non-package payloads and unrelated registrations. Before/after preservation owners exit naturally without force. |
 | Installed local General/tool turn | 0/1 | Require current-candidate permitted tools, Ask, saved reply/model/draft and ordinary close/reopen. |
 | Strict installed Coder | 0/1 | Require actual scoped file work and tests with the selected local model; earlier candidate trials retain their original limitations. |
 | Installed Voice and permitted HA flow | 0/1 | Human voice acceptance is deferred by the user. Do not run microphone, audible or device checks without renewed instructions. |
 | Scheduled routines | 0/1 | Require two genuine scheduled periods, pause/Stop and cold no-replay on this candidate; private report pagination alone cannot earn this gate. |
-| Configured Memory | 0/1 | Native upgrade and sourced recall completed, but saved pace was omitted and intent/current state blurred. Manual saving met eleven policy refusals; automatic acknowledgement skipped capture. Checked 6a80 successor fixes remain uninstalled. Complete cited answer coverage, actual completed-turn capture, lifecycle and durable-debt acceptance remain required; original failed/uncertain turns stay retained without replay. |
+| Configured Memory | 0/1 | Checked save/recall fixes are installed in 0231; native handback is sent for current recall/manual-save/capture checks. Prior d0d answer-quality limits, eleven manual-save refusals and automatic-capture skip stay historical. Complete cited answers, accepted manual saving/completed-turn capture, lifecycle and durable-debt acceptance remain required; failed/uncertain turns stay retained without replay. |
 | Matching-version postboot/service recovery | 0/1 | Require actual Windows boot, saved selections/chat/drafts, intended service reconnect and no unsolicited worker replay. |
-| Populated same-candidate reinstall recovery | 0/1 | Current-candidate populated reinstall and cold restore/no-replay are prepared separately from everyday upgrade preservation. |
+| Populated same-candidate reinstall recovery | 0/1 | Prior d0d isolated populated reinstall/cold proof remains limited; current-candidate loaded-client/Memento, rollback and full cold restore/no-replay acceptance remain separate from closed installation preservation. |
 
 Current receipts and constraints are in [Raya-Current-Readiness.md](Raya-Current-Readiness.md). Native Memory testing owns the model/resource slot; root holds heavy Git hooks and runtime checks until handback. Second-PC migration remains canceled and cloud-worker reservations remain released. The dated entries below are historical evidence.
 

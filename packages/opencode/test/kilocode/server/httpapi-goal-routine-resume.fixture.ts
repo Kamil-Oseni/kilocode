@@ -42,10 +42,10 @@ try {
       const snapshots = RayaTaskSnapshot.make({ storage })
       const reports = RayaRoutineReports.make({ storage, sessions })
       const source = yield* sessions.create({})
-      const create = (terminal: boolean) =>
+      const create = (terminal: boolean, legacy = false) =>
         Effect.gen(function* () {
           const agent = yield* tasks.create({
-            name: terminal ? "Provider-error worker" : "Pending worker",
+            name: legacy ? "Legacy active worker" : terminal ? "Provider-error worker" : "Pending worker",
             objective: "Retain the current verified assignment",
             enabled: true,
             schedule: { kind: "manual" },
@@ -69,7 +69,7 @@ try {
           )
           const reason =
             "Automatic continuation stopped after 3 provider errors. Resume the goal or send a message to continue."
-          if (terminal) yield* goals.update(session.id, { status: "blocked", reason })
+          if (terminal && !legacy) yield* goals.update(session.id, { status: "blocked", reason })
           if (!terminal) yield* goals.edit(session.id, { status: "paused", expectedIntent: goal.intent })
           const row = {
             id,
@@ -98,6 +98,7 @@ try {
           return { agent, row, goal: (yield* goals.get(session.id))! }
         })
       const terminal = yield* create(true)
+      const legacy = yield* create(true, true)
       const pending = yield* create(false)
       const ordinary = yield* sessions.create({})
       const goal = yield* goals.create(ordinary.id, "Retain an ordinary paused goal")
@@ -108,20 +109,20 @@ try {
       const malformed = yield* sessions.create({ metadata: { rayaRoutine: { version: "invalid" } } })
       const created = yield* goals.create(malformed.id, "Retain a session with malformed worker identity")
       yield* goals.edit(malformed.id, { status: "paused", expectedIntent: created.intent })
-      return { goals, sessions, tasks, snapshots, reports, terminal, pending, ordinary, mismatch, malformed }
+      return { goals, sessions, tasks, snapshots, reports, terminal, legacy, pending, ordinary, mismatch, malformed }
     }),
   )
-  const read = () =>
+  const read = (worker = seed.terminal) =>
     run(
       Effect.gen(function* () {
         return {
-          goal: yield* seed.goals.get(seed.terminal.row.sessionID),
-          runs: yield* seed.tasks.runsFor(seed.terminal.agent.id),
-          snapshot: yield* seed.snapshots.find(seed.terminal.row.id),
-          messages: yield* seed.sessions.messages({ sessionID: seed.terminal.row.sessionID }),
+          goal: yield* seed.goals.get(worker.row.sessionID),
+          runs: yield* seed.tasks.runsFor(worker.agent.id),
+          snapshot: yield* seed.snapshots.find(worker.row.id),
+          messages: yield* seed.sessions.messages({ sessionID: worker.row.sessionID }),
           card: yield* seed.reports
-            .list(seed.terminal.agent.sourceSessionID!)
-            .pipe(Effect.map((cards) => cards.filter((card) => card.id === seed.terminal.row.id))),
+            .list(worker.agent.sourceSessionID!)
+            .pipe(Effect.map((cards) => cards.filter((card) => card.id === worker.row.id))),
         }
       }),
     )
@@ -152,6 +153,81 @@ try {
   expect(unchanged.status).toBe(200)
   expect(await unchanged.json()).toEqual(saved)
   expect(await read()).toEqual(original)
+  const legacy = await read(seed.legacy)
+  expect(legacy.goal?.status).toBe("active")
+  const retained = `/session/${seed.legacy.row.sessionID}/goal`
+  const active = await (await request("GET", retained)).json()
+  for (const body of [
+    { objective: "Steer the terminal legacy run", expectedIntent: seed.legacy.goal.intent },
+    {
+      criteria: [{ id: "legacy", description: "Working result", verification: "Run checks", required: false }],
+      expectedIntent: seed.legacy.goal.intent,
+    },
+    { status: "active", expectedIntent: seed.legacy.goal.intent },
+  ]) {
+    expect((await request("PATCH", retained, body)).status).toBe(409)
+    expect(await read(seed.legacy)).toEqual(legacy)
+    expect(await (await request("GET", retained)).json()).toEqual(active)
+  }
+  const noop = await request("PATCH", retained, {
+    objective: seed.legacy.goal.objective,
+    expectedIntent: seed.legacy.goal.intent,
+  })
+  expect(noop.status).toBe(200)
+  expect(await noop.json()).toEqual(active)
+  expect(await read(seed.legacy)).toEqual(legacy)
+  const basis = legacy.goal
+  if (!basis?.intent) throw new Error("The actual legacy Goal did not retain its intent")
+  const marker = {
+    version: 1 as const,
+    dispatchID: "legacy-reviewed-dispatch",
+    messageID: MessageID.ascending(),
+    oldIntent: "legacy-original-intent",
+    intent: "legacy-blocked-intent",
+    source: "legacy-followup",
+    outcome: "error" as const,
+    execution: "b".repeat(64),
+    at: Date.now(),
+    reviewedAt: Date.now(),
+    reviewIntent: basis.intent,
+  }
+  await run(
+    Storage.Service.use((storage) =>
+      storage.replace(["raya", "goal", seed.legacy.row.sessionID], {
+        ...basis,
+        replyRecovery: marker,
+        dispatch: {
+          id: marker.dispatchID,
+          messageID: marker.messageID,
+          intent: marker.oldIntent,
+          phase: "finished",
+          queuedAt: marker.at,
+        },
+      }),
+    ),
+  )
+  await run(
+    seed.goals.edit(seed.legacy.row.sessionID, {
+      objective: "Later revised legacy direction",
+      expectedIntent: basis.intent,
+    }),
+  )
+  await run(
+    seed.goals.update(seed.legacy.row.sessionID, {
+      status: "blocked",
+      reason: "A later provider failure ended this run",
+    }),
+  )
+  const stale = await read(seed.legacy)
+  expect(stale.goal?.status).toBe("blocked")
+  expect(stale.goal?.replyRecovery?.reviewIntent).not.toBe(stale.goal?.intent)
+  for (const body of [
+    { status: "active", expectedIntent: stale.goal!.intent },
+    { objective: "Resume revised legacy work", expectedIntent: stale.goal!.intent },
+  ]) {
+    expect((await request("PATCH", retained, body)).status).toBe(409)
+    expect(await read(seed.legacy)).toEqual(stale)
+  }
   for (const id of [seed.mismatch.id, seed.malformed.id]) {
     const prior = await run(seed.goals.get(id))
     expect(
@@ -163,7 +239,14 @@ try {
     const paused = await run(seed.goals.get(id))
     const response = await request("PATCH", `/session/${id}/goal`, { status: "active", expectedIntent: paused!.intent })
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ status: "active", objective: paused!.objective })
+    const resumed = await response.json()
+    expect(resumed).toMatchObject({ status: "active", objective: paused!.objective })
+    const changed = await request("PATCH", `/session/${id}/goal`, {
+      objective: "Steer supported active work",
+      expectedIntent: resumed.intent,
+    })
+    expect(changed.status).toBe(200)
+    expect(await changed.json()).toMatchObject({ status: "active", objective: "Steer supported active work" })
   }
   expect(await run(seed.snapshots.find(seed.pending.row.id))).toMatchObject({
     runID: seed.pending.row.id,

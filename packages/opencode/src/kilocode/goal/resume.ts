@@ -13,7 +13,8 @@ export const allowed = Effect.fn("GoalResume.allowed")(function* (
   prior: RayaGoal.State,
   status: RayaGoal.State["status"],
 ) {
-  if (status !== "active" || prior.status === "active" || prior.replyRecovery) return true
+  // HTTP validates the first review before Goal.edit invokes this read-only predicate.
+  if (status !== "active" || (prior.replyRecovery && prior.replyRecovery.reviewedAt === undefined)) return true
   const session = yield* input.sessions.get(id)
   const raw = session.metadata?.rayaRoutine
   if (raw === undefined) return true

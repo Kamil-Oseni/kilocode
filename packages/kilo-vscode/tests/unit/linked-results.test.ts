@@ -81,3 +81,41 @@ test("empty exhausted context retains explicit truncation without fabricating a 
     context({ sources: [], diagnostics: [], tokens: 0, truncated: true, capture_enabled: false }, "C:/Memory", 1),
   ).toEqual({ sources: [], diagnostics: [], tokens: 0, truncated: true, capture_enabled: false })
 })
+
+test("disjoint same-note citations retain exact ranges in either order", () => {
+  const value = fixture()
+  value.sources = [9, 11, 243].map((line) => ({ ...value.sources[0], line, end_line: line, tokens: 22 }))
+  value.tokens = 66
+  for (const sources of [value.sources, value.sources.toReversed()]) {
+    const result = context({ ...value, sources }, "C:/Memory", 100)
+    expect(result.sources.map((row) => row.line)).toEqual(sources.map((row) => row.line))
+    expect(result.sources.map((row) => row.source_sha256)).toEqual(Array(3).fill("a".repeat(64)))
+  }
+})
+
+test("same-note citations reject overlap, aliases and conflicting revisions", () => {
+  const value = fixture()
+  const first = value.sources[0]
+  for (const patch of [
+    { line: 2, end_line: 3 },
+    { line: 1, end_line: 2 },
+    { source_sha256: "b".repeat(64) },
+    { path: "c:/Memory/Projects/Eden.md" },
+    { relative: "projects/Eden.md", path: "C:/Memory/projects/Eden.md" },
+  ]) {
+    const second = { ...first, line: 4, end_line: 5, ...patch }
+    expect(() => context({ ...value, sources: [first, second], tokens: 44 }, "C:/Memory", 100)).toThrow()
+  }
+})
+
+test("multiple passages share the existing note and global token budgets", () => {
+  const value = fixture()
+  const first = { ...value.sources[0], tokens: 1000 }
+  const second = { ...first, line: 4, end_line: 5 }
+  const bounded = { ...value, sources: [first, second], tokens: 2000 }
+  expect(context(bounded, "C:/Memory", 2000).tokens).toBe(2000)
+  expect(() => context(bounded, "C:/Memory", 1999)).toThrow()
+  expect(() =>
+    context({ ...bounded, sources: [first, { ...second, tokens: 1001 }], tokens: 2001 }, "C:/Memory", 3000),
+  ).toThrow()
+})

@@ -41,6 +41,23 @@ const normalize = (value: string) => value.replaceAll("\\", "/").replace(/\/+$/,
 const invalid = () =>
   new Failure("invalid_response", "Linked memory context does not match its bounded source contract.", 200)
 
+function append(names: Map<string, BrainContext["sources"]>, source: BrainContext["sources"][number]) {
+  const name = source.relative.toLowerCase()
+  const prior = names.get(name) ?? []
+  if (
+    prior.some(
+      (previous) =>
+        previous.relative !== source.relative ||
+        previous.path !== source.path ||
+        previous.source_sha256 !== source.source_sha256 ||
+        (source.line <= previous.end_line && source.end_line >= previous.line),
+    ) ||
+    prior.reduce((sum, previous) => sum + previous.tokens, source.tokens) > 2000
+  )
+    throw invalid()
+  names.set(name, [...prior, source])
+}
+
 /** Validate data and provenance separately from the original operation receipt. */
 export function context(value: unknown, root: string, budget: number): BrainContext {
   if (
@@ -56,7 +73,7 @@ export function context(value: unknown, root: string, budget: number): BrainCont
     value.diagnostics.length > 108
   )
     throw invalid()
-  const names = new Set<string>()
+  const names = new Map<string, BrainContext["sources"]>()
   const sources = value.sources.map((row: unknown) => {
     if (
       !fields(row, [
@@ -74,7 +91,6 @@ export function context(value: unknown, root: string, budget: number): BrainCont
       !relative(row.relative) ||
       !text(row.path, 8192) ||
       normalize(row.path) !== normalize(root) + "/" + row.relative.toLowerCase() ||
-      names.has(row.relative.toLowerCase()) ||
       !integer(row.line, 256000) ||
       row.line === 0 ||
       !integer(row.end_line, 256000) ||
@@ -90,8 +106,7 @@ export function context(value: unknown, root: string, budget: number): BrainCont
       typeof row.truncated !== "boolean"
     )
       throw invalid()
-    names.add(row.relative.toLowerCase())
-    return Object.freeze({
+    const source = Object.freeze({
       path: row.path,
       relative: row.relative,
       line: row.line,
@@ -103,6 +118,8 @@ export function context(value: unknown, root: string, budget: number): BrainCont
       tokens: row.tokens,
       truncated: row.truncated,
     })
+    append(names, source)
+    return source
   })
   const diagnostics = value.diagnostics.map((row: unknown) => {
     if (!fields(row, ["relative", "reason"]) || !text(row.relative, 4096) || !text(row.reason, 8192)) throw invalid()

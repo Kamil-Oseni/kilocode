@@ -19,7 +19,7 @@ import uuid
 from urllib.parse import unquote
 
 source = Path(sys.argv[1]).resolve(strict=True)
-for name in ('namespace', 'retirement', 'operations', 'policy'):
+for name in ('namespace', 'retirement', 'operations', 'policy', 'admission', 'notes', 'entries'):
     spec = importlib.util.spec_from_file_location(name, source / (name + '.py'))
     value = importlib.util.module_from_spec(spec)
     sys.modules[name] = value
@@ -27,10 +27,11 @@ for name in ('namespace', 'retirement', 'operations', 'policy'):
 from operations import Journal
 from policy import Policy
 from retirement import fingerprint, canonical
+from entries import project as active
 
 pins = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in source.glob('*.py')}
 tree = ast.parse((source / 'index.py').read_bytes())
-names = {'ordinary', 'image', 'address', 'links', 'passage', 'retrieve', 'headings'}
+names = {'ordinary', 'image', 'address', 'links', 'capture_passage', 'passage', 'passages', 'retrieve', 'headings'}
 code = ast.Module(body=[node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names], type_ignores=[])
 exec(compile(ast.fix_missing_locations(code), str(source / 'index.py'), 'exec'), globals())
 
@@ -48,12 +49,16 @@ with tempfile.TemporaryDirectory(prefix='raya-linked-wire-') as tmp:
     (notes / 'Projects').mkdir()
     texts = {'INDEX.md': '# Memory\n[Eden](Projects/Eden.md)\n',
              'Projects/Eden.md': '# Eden\nEden café 日本語 😀\n'}
+    diverse = '--diverse' in sys.argv
+    query = 'voice pace interruptions' if diverse else 'Eden'
+    if diverse:
+        texts['Projects/Eden.md'] = '# Voice\nVoice Nano café 日本語 😀; Onyx fallback.\n\n## Pace\nKeep the saved selected pace.\n\n## Interruptions\nInterruptions: prefer turn-taking.\n'
     policy = Policy({'format': 'raya-general-sources-v1', 'root': str(notes), 'enabled': True, 'revision': 1,
                      'files': [{'relative': name, 'sha256': hashlib.sha256(text.encode()).hexdigest(),
                                 'classification': 'general', 'review': 'approved'} for name, text in texts.items()]})
     for name, text in texts.items():
         (notes / name).write_bytes(text.encode())
-    context = retrieve(notes, policy, [], 'Eden', 1000, len, lambda: None)
+    context = retrieve(notes, policy, [], query, 1000, len, lambda: None)
     if '--publication' in sys.argv:
         # The trusted review callback is represented by an explicit fixture Apply;
         # this does not exercise native consent or source-policy publication.
@@ -97,8 +102,10 @@ with tempfile.TemporaryDirectory(prefix='raya-linked-wire-') as tmp:
     journal.namespace = Sink()
     journal.folder = folder
     journal.epoch = 'b' * 32
+    journal.protocol = 'raya.retrieval.retirement.v1'
+    journal.format = 'raya.memory.operation.v1'
     journal.release = fingerprint(pins)
-    body = {'query': 'Eden', 'top': 5, 'context_budget': 1000}
+    body = {'query': query, 'top': 5, 'context_budget': 1000}
     request = 'a' * 32
     pending = journal.reserve(request, 'search', body)
     terminal = journal.complete(pending, result, 'completed', [])

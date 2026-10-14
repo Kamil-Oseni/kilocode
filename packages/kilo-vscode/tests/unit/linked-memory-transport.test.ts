@@ -57,108 +57,130 @@ genuine(
 )
 
 genuine("real Python reader and Journal result traverse the original client with explicit budget", async () => {
-  const child = Bun.spawn(
-    [
-      python!,
-      "-I",
-      "-S",
-      "-B",
-      path.join(import.meta.dir, "fixtures/linked-memory-producer.py"),
-      path.join(import.meta.dir, "../../script/memory/service"),
-    ],
-    { windowsHide: true, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
-  )
-  const [code, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ])
-  expect(code).toBe(0)
-  expect(stderr).toBe("")
-  const fixture = JSON.parse(stdout)
-  const bytes = Buffer.from(fixture.response, "base64")
-  expect(parse(bytes, fixture.selected, "response").result).toBeDefined()
-  expect(() => parse(bytes, { ...fixture.selected, budget: undefined }, "response")).toThrow()
-  const changed = bytes.toString().replace('"heading":"Eden"', '"heading":"Other"')
-  expect(changed).not.toBe(bytes.toString())
-  expect(() => parse(Buffer.from(changed), fixture.selected, "response")).toThrow()
-  const posts: unknown[] = []
-  const before: unknown[] = []
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      if (request.headers.get("authorization") !== "Bearer private-fixture") return new Response(null, { status: 401 })
-      if (new URL(request.url).pathname === "/health")
-        return Response.json({
-          protocol: "raya.memory.operation.v1",
-          operation_protocol: "raya.memory.operation.v1",
-          owner_epoch: fixture.selected.epoch,
-          selected_release_sha256: fixture.selected.release,
-          root: fixture.root,
-          source_sha256: fixture.pins,
-          active: 0,
-          admission_required: true,
-          capture_enabled: false,
-          namespace_valid: true,
-          ready: true,
-          draining: false,
-          retirement_pending: false,
-          retirement_unconfirmed: false,
-        })
-      expect(before.length).toBe(1)
-      expect(request.headers.get("x-raya-memory-owner-epoch")).toBe(fixture.selected.epoch)
-      posts.push(await request.json())
-      return new Response(bytes, { headers: { "Content-Type": "application/json" } })
-    },
-  })
-  try {
-    const setup = {
-      format: "raya.memory.setup",
-      version: 2,
-      protocol: "raya.memory.operation.v1",
-      origin: `http://127.0.0.1:${server.port}`,
-      root: fixture.root,
-      source_sha256: fixture.pins,
-    }
-    const client = new ClientV2("private-fixture", setup)
-    const result = await client.context("Eden", 1000, {
-      id: fixture.selected.request,
-      before: async (request) => {
-        before.push(request)
+  for (const mode of [[], ["--diverse"]]) {
+    const child = Bun.spawn(
+      [
+        python!,
+        "-I",
+        "-S",
+        "-B",
+        path.join(import.meta.dir, "fixtures/linked-memory-producer.py"),
+        path.join(import.meta.dir, "../../script/memory/service"),
+        ...mode,
+      ],
+      { windowsHide: true, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+    )
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ])
+    expect(code).toBe(0)
+    expect(stderr).toBe("")
+    const fixture = JSON.parse(stdout)
+    const bytes = Buffer.from(fixture.response, "base64")
+    expect(parse(bytes, fixture.selected, "response").result).toBeDefined()
+    expect(() => parse(bytes, { ...fixture.selected, budget: undefined }, "response")).toThrow()
+    const heading = mode.length ? "Voice" : "Eden"
+    const changed = bytes.toString().replace(`"heading":"${heading}"`, '"heading":"Other"')
+    expect(changed).not.toBe(bytes.toString())
+    expect(() => parse(Buffer.from(changed), fixture.selected, "response")).toThrow()
+    const posts: unknown[] = []
+    const before: unknown[] = []
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        if (request.headers.get("authorization") !== "Bearer private-fixture")
+          return new Response(null, { status: 401 })
+        if (new URL(request.url).pathname === "/health")
+          return Response.json({
+            protocol: "raya.memory.operation.v1",
+            operation_protocol: "raya.memory.operation.v1",
+            owner_epoch: fixture.selected.epoch,
+            selected_release_sha256: fixture.selected.release,
+            root: fixture.root,
+            source_sha256: fixture.pins,
+            active: 0,
+            admission_required: true,
+            capture_enabled: false,
+            namespace_valid: true,
+            ready: true,
+            draining: false,
+            retirement_pending: false,
+            retirement_unconfirmed: false,
+          })
+        expect(before.length).toBe(1)
+        expect(request.headers.get("x-raya-memory-owner-epoch")).toBe(fixture.selected.epoch)
+        posts.push(await request.json())
+        return new Response(bytes, { headers: { "Content-Type": "application/json" } })
       },
     })
-    expect(result.sources.some((row) => row.text.includes("café 日本語 😀"))).toBe(true)
-    expect(result.tokens).toBeLessThanOrEqual(1000)
-    expect(result.capture_enabled).toBe(false)
-    expect(posts).toEqual([fixture.body])
-    expect(before.length).toBe(1)
-    const fresh = new ClientV2("private-fixture", setup)
-    await expect(
-      fresh.context("Eden", 0, {
-        id: "c".repeat(32),
-        before: async () => {
-          before.push("unexpected")
+    try {
+      const setup = {
+        format: "raya.memory.setup",
+        version: 2,
+        protocol: "raya.memory.operation.v1",
+        origin: `http://127.0.0.1:${server.port}`,
+        root: fixture.root,
+        source_sha256: fixture.pins,
+      }
+      const client = new ClientV2("private-fixture", setup)
+      const result = await client.context(fixture.body.query, 1000, {
+        id: fixture.selected.request,
+        before: async (request) => {
+          before.push(request)
         },
-      }),
-    ).rejects.toThrow()
-    expect(posts.length).toBe(1)
-    expect(before.length).toBe(1)
-    const older = new ClientV2("private-fixture", {
-      ...setup,
-      source_sha256: { ...fixture.pins, "server.py": "0".repeat(64) },
-    })
-    await expect(
-      older.context("Eden", 1000, {
-        id: "d".repeat(32),
-        before: async () => {
-          before.push("unexpected old release")
-        },
-      }),
-    ).rejects.toThrow("context-capable")
-    expect(posts.length).toBe(1)
-    expect(before.length).toBe(1)
-  } finally {
-    await server.stop(true)
+      })
+      expect(result.sources.some((row) => row.text.includes("café 日本語 😀"))).toBe(true)
+      expect(result.tokens).toBeLessThanOrEqual(1000)
+      expect(result.capture_enabled).toBe(false)
+      if (mode.length) {
+        const sources = result.sources.filter((row) => row.relative === "Projects/Eden.md")
+        expect(sources.map((row) => [row.line, row.end_line])).toEqual([
+          [2, 2],
+          [5, 5],
+          [8, 8],
+        ])
+        expect(sources.map((row) => row.text)).toEqual([
+          "Voice Nano café 日本語 😀; Onyx fallback.",
+          "Keep the saved selected pace.",
+          "Interruptions: prefer turn-taking.",
+        ])
+        expect(new Set(sources.map((row) => row.source_sha256)).size).toBe(1)
+        expect(context({ ...result, sources: result.sources.toReversed() }, fixture.root, 1000).sources).toEqual(
+          result.sources.toReversed(),
+        )
+      }
+      expect(posts).toEqual([fixture.body])
+      expect(before.length).toBe(1)
+      const fresh = new ClientV2("private-fixture", setup)
+      await expect(
+        fresh.context("Eden", 0, {
+          id: "c".repeat(32),
+          before: async () => {
+            before.push("unexpected")
+          },
+        }),
+      ).rejects.toThrow()
+      expect(posts.length).toBe(1)
+      expect(before.length).toBe(1)
+      const older = new ClientV2("private-fixture", {
+        ...setup,
+        source_sha256: { ...fixture.pins, "server.py": "0".repeat(64) },
+      })
+      await expect(
+        older.context("Eden", 1000, {
+          id: "d".repeat(32),
+          before: async () => {
+            before.push("unexpected old release")
+          },
+        }),
+      ).rejects.toThrow("context-capable")
+      expect(posts.length).toBe(1)
+      expect(before.length).toBe(1)
+    } finally {
+      await server.stop(true)
+    }
   }
 })

@@ -792,6 +792,51 @@ test("natural preference wording can acknowledge without acquisition or goal com
   }
 })
 
+test("the original 65db saved-voice acknowledgement and bounded pronouns stay tool-free", () => {
+  for (const text of [
+    "My saved voice preference is turn-taking without automatic interruption: I finish speaking, Raya finishes its reply, then I take the next turn. Please acknowledge it in one sentence.",
+    "My voice preference is turn-taking without automatic interruption. Please acknowledge it.",
+    "My stated speech preference is turn-taking. Please just acknowledge that in one sentence.",
+    "My saved reply preference is concise answers. Please acknowledge my preference in one sentence.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(acknowledged(original.messages, original.session, uid)).toBe(true)
+    expect(settled(original.messages, original.session, uid)).toBe(false)
+    expect(original.session.metadata[RayaChief.phaseKey]).toBe("route")
+    expect(acknowledged(original.messages, { ...original.session, parentID: "parent" }, uid)).toBe(false)
+    expect(acknowledged(original.messages, { ...original.session, id: "foreign" }, uid)).toBe(false)
+    original.session.metadata[RayaChief.requestKey] = "I prefer different facts."
+    expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
+test("saved-preference acknowledgement wording cannot suppress retrieval or mixed actions", () => {
+  for (const text of [
+    "What is my saved voice preference? Please acknowledge it in one sentence.",
+    "Tell me what my saved voice preference is. Please acknowledge it in one sentence.",
+    "My saved voice preference is. Please acknowledge it.",
+    "My saved voice preference is . Please acknowledge it.",
+    "My saved notes describe my voice preference. Please acknowledge it in one sentence.",
+    "My saved voice preference is turn-taking. Please acknowledge it in one sentence, then save a note.",
+    "My saved voice preference is turn-taking. Save this preference. Please acknowledge it in one sentence.",
+    "My saved voice preference is turn-taking and then configure voice. Please acknowledge it.",
+    "My saved voice preference is turn-taking. Please acknowledge it in one sentence and control the lights.",
+    "My saved voice preference is turn-taking. Please acknowledge it and tell me what my notes say.",
+    "Please acknowledge it in one sentence.",
+  ]) {
+    const original = fixture()
+    const part = original.messages[0].parts[0]
+    if (part.type !== "text") throw new Error("Original text required")
+    part.text = text
+    original.session.metadata[RayaChief.requestKey] = text
+    expect(acknowledged(original.messages, original.session, uid)).toBe(false)
+  }
+})
+
 test("the installed preference statement can finish after status without treating status as saved-note evidence", () => {
   const original = fixture()
   const text =

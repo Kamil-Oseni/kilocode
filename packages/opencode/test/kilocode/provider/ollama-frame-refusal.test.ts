@@ -25,6 +25,104 @@ const row = {
   eval_count: 3,
 }
 
+test("retained failed Memory history cannot advertise a tool outside the current required HTTP catalog", async () => {
+  // The original 65db trace retained only a sanitized unknown second name.
+  // This independent frame must not be mistaken for its missing raw frame.
+  const original = "Please acknowledge my supplied preference in one sentence."
+  const state = { name: "unknown_current_tool", requests: 0, published: false }
+  const inputs: Record<string, unknown>[] = []
+  const natives: Response[] = []
+  const args = { result: "narrative", access: "read", objective: original }
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      state.requests++
+      inputs.push(await req.json())
+      return new Response(
+        JSON.stringify({
+          ...row,
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{ function: { name: state.name, arguments: args } }],
+          },
+        }) + "\n",
+      )
+    },
+  })
+  try {
+    const input = {
+      model: "fixture",
+      stream: true,
+      tool_choice: "required",
+      tools: [{ type: "function", function: { name: "chief_route", parameters: { type: "object" } } }],
+      messages: [
+        { role: "user", content: original },
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              id: "old",
+              type: "function",
+              function: { name: "second_brain_manage", arguments: JSON.stringify({ action: "remember" }) },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "old", content: "No Memory change was requested from this wording." },
+      ],
+    }
+    const send = ollama({ localInference: true, localInferenceAPI: "ollama" }, async (input, init) => {
+      const response = await fetch(input, init)
+      natives.push(response)
+      return response
+    })
+    const err = await send(`${server.url}v1/chat/completions`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }).then(
+      (response) => {
+        state.published = true
+        return response
+      },
+      (err: unknown) => err,
+    )
+    if (!(err instanceof OllamaBridgeError)) throw new Error("Actual bridge refusal required")
+    expect(err.diagnostic).toMatchObject({
+      reason: "required-frame-refusal",
+      refusal: "tool-name",
+      calls: 1,
+      nameShape: "other-unadvertised",
+      advertisedCount: 1,
+      envelope: false,
+      frames: 1,
+      content: 0,
+    })
+    expect(err.isRetryable).toBe(false)
+    expect(err.message).not.toContain(state.name)
+    expect(state.published).toBe(false)
+    expect(natives[0].body?.locked).toBe(false)
+    expect(state.requests).toBe(1)
+    expect(inputs[0].tools).toEqual(input.tools)
+    // An advertised call still passes; refusing history-derived names does not
+    // grant semantic routing or execute any tool in this protocol test.
+    state.name = "chief_route"
+    const response = await send(`${server.url}v1/chat/completions`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    })
+    const text = await response.text()
+    expect(text).toContain('"name":"chief_route"')
+    expect(text).toContain("data: [DONE]")
+    expect(natives[1].body?.locked).toBe(false)
+    expect(state.requests).toBe(2)
+    expect(inputs[1].tools).toEqual(input.tools)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 function inspect(err: unknown) {
   if (!(err instanceof OllamaBridgeError)) throw new Error("Expected strict refusal")
   expect(err.isRetryable).toBe(false)

@@ -40,11 +40,15 @@ export function acknowledged(
   const request = RayaChief.requestText(current.parts)
   if (request !== RayaChief.request(session.metadata) || request.length > 1000) return false
   const match =
-    /^([^?!`]+?)\s+Please (?:just )?acknowledge (?:this|my|that) preference(?:[.;]\s*(?:do not|don't)\b[^.!?]*)?[.!]?$/i.exec(
+    /^([^?!`]+?)\s+Please (?:just )?acknowledge (?:(?:this|my|that) preference|it|that)(?: in one sentence)?(?:[.;]\s*(?:do not|don't)\b[^.!?]*)?[.!]?$/i.exec(
       request,
     )
   if (!match) return statement(request)
-  if (!/\b(?:I (?:prefer|like|dislike|want|would prefer|would like)|My preference is)\b/i.test(match[1])) return false
+  if (
+    !/\bI (?:prefer|like|dislike|want|would prefer|would like)\b/i.test(match[1]) &&
+    !/^My (?:(?:saved|stated) )?(?:(?:voice|speech|reply) )?preference is\s+[^.!?;`:\s]/i.test(match[1])
+  )
+    return false
   return !/\bplease\b|(?:^|[.;]\s*|\b(?:and|then|also|now)\s+(?:then\s+)?|\b(?:you|Raya|SecondBrain) (?:(?:to|must|should|needs? to) )?)(?:install|implement|fix|deploy|delete|forget|save|create|edit|update|send|purchase|buy|order|place|pay|checkout|transfer|book|make|call|contact|execute|run|build|commit|push|merge|schedule|start|stop|configure|control|apply|revert|undo|redo)\b/i.test(
     match[1],
   )

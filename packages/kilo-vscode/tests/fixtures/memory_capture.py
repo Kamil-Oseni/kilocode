@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -10,11 +11,134 @@ import unittest
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'script' / 'memory' / 'service'))
-from capture import publish
+from capture import publish, committed, render, snapshots, validate
 from notes import RecoveryNeeded, Store
+from entries import records, project
 
 
 class Tests(unittest.TestCase):
+    def preference(self, text='I prefer quiet replies.', suffix=''):
+        body = self.structured()
+        body['session'] = str(uuid.uuid4())
+        body['source']['user']['text'] = text
+        body['entries'] = [dict(category='Preferences', key='quiet', text='Prefers quiet replies.' +
+                                '\n\nOriginal user preference: ' + text + suffix, origin='user_statement',
+                                evidence=[dict(id=body['source']['user']['id'], start=0,
+                                               end=len(text.encode('utf-16-le')) // 2)])]
+        framed = [body['observed_utc'], body['source']['user']['id'], text, body['message'],
+                  body['source']['assistant']['text'],
+                  [[row['id'], row['name'], row['status'], row['text']] for row in body['source']['tools']]]
+        body['source_sha256'] = hashlib.sha256(json.dumps(framed, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+        digest = hashlib.sha256(json.dumps([body['project'], body['session'], body['message']],
+                                          ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+        body['id'] = str(uuid.UUID(hex=digest[:32], version=5))
+        return body
+
+    def test_repeated_preference_keeps_original_journal_without_repeating_fact(self):
+        first = self.preference()
+        publish(self.root, first)
+        path = self.root / 'Preferences/Raya.md'
+        original = path.read_text(encoding='utf-8')
+        second = self.preference()
+        result = publish(self.root, second)
+        text = path.read_text(encoding='utf-8')
+        self.assertEqual(result['status'], 'committed')
+        self.assertTrue(text.startswith(original))
+        self.assertEqual(text.count('Original user preference: I prefer quiet replies.'), 1)
+        self.assertIn('No new preference is added.', text)
+        self.assertIn('I prefer quiet replies.', (self.root / 'System/Capture' / second['id'] / 'input.json').read_text())
+        self.assertTrue(publish(self.root, second)['duplicate'])
+        _, rows, _, _ = records('Preferences/Raya.md', text)
+        repeated = next(row for row in rows if row.get('capture') == second['id'])
+        active = ''.join(project('Preferences/Raya.md', text))
+        self.assertNotIn('I prefer quiet replies.', repeated['excerpt'])
+        self.assertNotIn('No new preference is added.', active)
+        token = self.root / 'retrieval-token.txt'
+        token.write_text('disposable-capture-splitter-only', encoding='utf-8')
+        names = ('RAYA_MEMORY_RETRIEVAL_TOKEN_FILE', 'RAYA_MEMORY_RETRIEVAL_RELEASE_SHA256')
+        saved = {name: os.environ.get(name) for name in names}
+        try:
+            os.environ[names[0]] = str(token)
+            source = Path(__file__).resolve().parents[2] / 'script/memory/service/index.py'
+            os.environ[names[1]] = hashlib.sha256(source.read_bytes()).hexdigest()
+            from index import split
+            chunks = split('Preferences/Raya.md', dict(text=text, hash=hashlib.sha256(text.encode()).hexdigest()),
+                           measure=lambda value: (len(value.encode('utf-8')) + 3) // 4)
+        finally:
+            for name, value in saved.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+        self.assertNotIn('No new preference is added.', '\n'.join(chunk['text'] for chunk in chunks))
+        self.assertEqual(sum('Original user preference: I prefer quiet replies.' in chunk['text'] for chunk in chunks), 1)
+
+    def test_mixed_preference_capture_preserves_changed_qualifiers_case_and_other_entries(self):
+        publish(self.root, self.preference())
+        second = self.preference()
+        second['entries'].append(dict(category='Areas', key='groceries', text='We are out of eggs.',
+                                      origin='user_statement', evidence=second['entries'][0]['evidence']))
+        publish(self.root, second)
+        self.assertIn('We are out of eggs.', (self.root / 'Areas/Raya.md').read_text())
+        for clause in ['I prefer quiet replies at night.', 'I prefer Quiet replies.', 'I do not prefer quiet replies.']:
+            publish(self.root, self.preference(clause))
+            self.assertIn('Original user preference: ' + clause, (self.root / 'Preferences/Raya.md').read_text())
+
+    def test_retired_or_edited_preference_is_not_duplicate_authority(self):
+        first = self.preference()
+        publish(self.root, first)
+        path = self.root / 'Preferences/Raya.md'
+        text = path.read_text(encoding='utf-8')
+        _, rows, _, _ = records('Preferences/Raya.md', text)
+        row = next(row for row in rows if row.get('capture') == first['id'])
+        change = dict(id=str(uuid.uuid4()), target=row['entry'], entry_sha256=hashlib.sha256(row['raw']).hexdigest(), action='forget')
+        path.write_text(text + '\n<!-- raya.memory.supersession.v1 ' + json.dumps(change) + ' -->\n', encoding='utf-8', newline='')
+        second = self.preference()
+        publish(self.root, second)
+        self.assertNotIn('No new preference is added.', path.read_text())
+        # An altered active entry with an unchanged clause is not its original publication.
+        text = path.read_text(encoding='utf-8')
+        prefix, active = text.split('## Raya capture ' + second['id'], 1)
+        path.write_text(prefix + '## Raya capture ' + second['id'] + active.replace(
+            'Prefers quiet replies.', 'Changed interpretation.'), encoding='utf-8', newline='')
+        publish(self.root, self.preference())
+        self.assertNotIn('No new preference is added.', path.read_text())
+
+    def test_uncertain_or_nonexact_preference_match_is_retained(self):
+        publish(self.root, self.preference())
+        for suffix in [' Additional qualification.', '\nUncertain interpretation.']:
+            body = self.preference(suffix=suffix)
+            publish(self.root, body)
+            self.assertIn(body['entries'][0]['text'], (self.root / 'Preferences/Raya.md').read_text())
+
+    def test_historical_duplicate_full_fact_validates_in_original_render_cohort(self):
+        publish(self.root, self.preference())
+        body = self.preference()
+        store = Store(self.root)
+        folder = store.system / 'Capture' / body['id']
+        folder.mkdir()
+        raw = validate(body)
+        (folder / 'input.json').write_bytes(raw)
+        sources = []
+        for origin, snapshot in snapshots(body):
+            path = folder / (origin + '.md')
+            path.write_bytes(snapshot)
+            sources.append(dict(path=str(path), sha256=hashlib.sha256(snapshot).hexdigest(), kind=origin,
+                                event_time=body['observed_utc']))
+        name = 'Preferences/Raya.md'
+        old = store.current(store.target(name))
+        request = dict(id=body['id'], changes=[dict(path=name, expected=hashlib.sha256(old).hexdigest(),
+                                                  content=render(body, 'Preferences', old, store))], sources=sources)
+        (folder / 'request.json').write_bytes(json.dumps(request, sort_keys=True, ensure_ascii=False).encode())
+        store.apply(request)
+        signature = hashlib.sha256(raw).hexdigest()
+        self.assertEqual(committed(store, body['id'], signature)['status'], 'committed')
+        self.assertEqual((self.root / name).read_text().count('Original user preference: I prefer quiet replies.'), 2)
+        third = self.preference()
+        publish(self.root, third)
+        self.assertEqual((self.root / name).read_text().count('Original user preference: I prefer quiet replies.'), 2)
+        self.assertIn('No new preference is added.', (self.root / name).read_text())
+
     def structured(self):
         body = copy.deepcopy(self.body)
         body['format'] = 'raya.memory.capture.v3'

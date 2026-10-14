@@ -4,7 +4,8 @@ import { release, selected } from "../control/catalog-capture"
 
 export const interpreter = "b7a12c3af0b4db44191eec14ea095eba731b7328917f570806183093d19ddca2"
 export const supervisor = "55530325cc6e8836b49722e39f0b7f87d93c2fe30699d2f5373ff650beb50618"
-export const current = "fe3139b3ba5f75beb5229dfe049a38ba44031ce00b17169e8a53b0ceef694de2"
+export const current = "6d0d531c4495b37c30a808b935d8754566849e0d3eb7ca74f0f99b7453ab6c49"
+const warning = "fe3139b3ba5f75beb5229dfe049a38ba44031ce00b17169e8a53b0ceef694de2"
 const diverse = "f3aed8eaa2bfcfac00608a4eed05258764745251f9378880f63ccac4e576d518"
 const recalled = "957a6b9ce25bdb1d7ce629fb72e8cac97c70cffe98877f9ca3ebb57a0adb63ac"
 const retained = "e971a2f6678b9ede506ec656ca13fec8a1dedeea4239524bd39186c337fb2da7"
@@ -22,6 +23,7 @@ export const supervisors = [
   retained,
   recalled,
   diverse,
+  warning,
   current,
   "e2a86b4b0947b31c67e210b33538e3730727c44934f8856d038e27e84c1b2048",
   "baed8f707876f323d4dac18492ac35a2af304f91fcc7a60422013b5c368d45c2",
@@ -38,7 +40,9 @@ export function compatible(pins: Readonly<Record<string, unknown>>, digest: stri
     (pins["historical.py"] !== release["historical.py"]
       ? prior
       : pins["index.py"] === release["index.py"]
-        ? current
+        ? pins["capture.py"] === release["capture.py"]
+          ? current
+          : warning
         : pins["index.py"] === "008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e"
           ? diverse
           : pins["index.py"] === "699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c"
@@ -48,7 +52,7 @@ export function compatible(pins: Readonly<Record<string, unknown>>, digest: stri
 }
 
 export function paired(digest: string) {
-  return digest === current || digest === diverse || digest === recalled || digest === retained || digest === prior
+  return digest === current || digest === warning || digest === diverse || digest === recalled || digest === retained || digest === prior
 }
 
 const finite = Object.freeze({

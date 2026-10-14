@@ -150,7 +150,10 @@ def project(name, text):
     """Blank retired entries and bookkeeping without shifting original spans."""
     lines, rows, retired, changes = records(name, text)
     for row in rows:
-        if row['entry'] in retired:
+        repeated = row['kind'] == 'capture' and re.search(
+            r'\nRepeated original user preference; already retained in active entry [a-f0-9]{64}\. No new preference is added\.$',
+            row['excerpt']) is not None
+        if row['entry'] in retired or repeated:
             for number in range(row['start'], row['end']):
                 lines[number] = '\n' if lines[number].endswith('\n') else ''
     markers = {row['line'] for row in changes}

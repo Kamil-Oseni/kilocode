@@ -18,15 +18,16 @@ class Tests(unittest.TestCase):
         dependencies = python.parent.parent / 'Lib/site-packages'
         body = """import importlib.util,json,os,sys
 spec=importlib.util.spec_from_file_location('selected_supervisor',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-for sources in (module.CAPTURE, module.DIVERSE, module.RECALL, module.RECOVERED, module.CLOSED):
+for sources in (module.CAPTURE, module.WARNING, module.DIVERSE, module.RECALL, module.RECOVERED, module.CLOSED):
     module.prepare({'kind':'memory','env':dict(os.environ),'dependencies':sys.argv[2],'source_sha256':sources})
 assert 'numpy' in sys.modules and 'tokenizers' in sys.modules
 assert not any(name in sys.modules for name in ('torch','transformers','scipy','sklearn'))
 print(json.dumps({'counter':True,'model_stack':False}))
 """
         child = subprocess.run([str(python), '-B', '-c', body, str(HERE / 'supervise.py'), str(dependencies)],
-                               capture_output=True, text=True, timeout=15, check=True,
+                               capture_output=True, text=True, timeout=15,
                                creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(child.returncode, 0, child.stdout + child.stderr)
         self.assertEqual(child.stderr, '')
         self.assertEqual(json.loads(child.stdout), {'counter': True, 'model_stack': False})
 
@@ -36,7 +37,7 @@ print(json.dumps({'counter':True,'model_stack':False}))
         self.assertEqual(module.release('memory', current), module.CAPTURE)
         self.assertEqual(module.release('memory', module.CLOSED), module.CLOSED)
         self.assertEqual({key for key in module.CAPTURE if module.CAPTURE[key] != module.CLOSED.get(key)},
-                         {'server.py', 'index.py', 'historical.py', 'entries.py', 'management.py'})
+                         {'server.py', 'index.py', 'historical.py', 'capture.py', 'entries.py', 'management.py'})
         self.assertEqual(module.CLOSED['index.py'], 'e6f14470dbbe65d1ab6e0c2d0707253b2951bfa6ff529de6e7271c9ba376b5d7')
         for prior in module.PREVIOUS:
             self.assertEqual(module.release('memory', prior), prior)
@@ -56,18 +57,29 @@ print(json.dumps({'counter':True,'model_stack':False}))
         self.assertEqual(module.RECOVERED['index.py'], 'b6bd48d00bca2565c8c6690691b7f9b1e2e7680abbd48058ab62b4a2770ef5cd')
         self.assertEqual(len(module.RECOVERED), 15)
         self.assertEqual(module.release('memory', module.RECOVERED), module.RECOVERED)
-        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.RECOVERED[name]}, {'index.py'})
+        self.assertEqual({name for name in module.WARNING if module.WARNING[name] != module.RECOVERED[name]}, {'index.py'})
         self.assertEqual(module.RECALL['index.py'], '699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c')
         self.assertEqual(len(module.RECALL), 15)
         self.assertEqual(module.release('memory', module.RECALL), module.RECALL)
-        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.RECALL[name]}, {'index.py'})
+        self.assertEqual({name for name in module.WARNING if module.WARNING[name] != module.RECALL[name]}, {'index.py'})
 
     def test_warning_successor_preserves_exact_diverse_reader(self):
         self.assertEqual(module.DIVERSE['index.py'], '008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e')
         self.assertEqual(module.CAPTURE['index.py'], '0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73')
         self.assertEqual(len(module.DIVERSE), 15)
         self.assertEqual(module.release('memory', module.DIVERSE), module.DIVERSE)
-        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.DIVERSE[name]}, {'index.py'})
+        self.assertEqual({name for name in module.WARNING if module.WARNING[name] != module.DIVERSE[name]}, {'index.py'})
+
+    def test_preference_reference_successor_preserves_exact_warning_cohort(self):
+        self.assertEqual(module.release('memory', module.WARNING), module.WARNING)
+        self.assertEqual({name for name in module.CAPTURE if module.CAPTURE[name] != module.WARNING[name]},
+                         {'capture.py', 'entries.py'})
+        for name in ('capture.py', 'entries.py'):
+            self.assertEqual(module.CAPTURE[name], hashlib.sha256((HERE / 'service' / name).read_bytes()).hexdigest())
+        for name in ('capture.py', 'entries.py'):
+            mixed = dict(module.CAPTURE, **{name: module.WARNING[name]})
+            with self.assertRaises(ValueError):
+                module.release('memory', mixed)
 
 
 if __name__ == '__main__':

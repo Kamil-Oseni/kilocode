@@ -234,6 +234,7 @@ function source(cfg: Descriptor, plan: Record<string, unknown>, kind: string, re
   }
   const pins = [
     current,
+    "fe3139b3ba5f75beb5229dfe049a38ba44031ce00b17169e8a53b0ceef694de2",
     "f3aed8eaa2bfcfac00608a4eed05258764745251f9378880f63ccac4e576d518",
     "957a6b9ce25bdb1d7ce629fb72e8cac97c70cffe98877f9ca3ebb57a0adb63ac",
     "e971a2f6678b9ede506ec656ca13fec8a1dedeea4239524bd39186c337fb2da7",

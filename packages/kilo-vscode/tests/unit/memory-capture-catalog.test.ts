@@ -12,10 +12,15 @@ const captured = selected({
   "server.py": "ddcffa6ec22432f1622850aa36e04e48cfe8cad94db28648e1b6b8dd2fefcf1d",
   "index.py": "3c106c8e45267ee808a3c2bd8dfacf85a4d3c1ca47e23785706d7663d6791f65",
 })
+const warning = {
+  ...release,
+  "capture.py": "b059c9bb84a176c86e5ff7b7e35b1470cba30fdfec5fb7dcdef4d829298b0dfe",
+  "entries.py": "20b59cdc4a4ea3b5124ee81c0950ffbb6429ba05dcd6f0ac8d9d8656c2a13472",
+}
 
-test("warning recall successor preserves all exact fifteen-file predecessor supervisor pairings", () => {
+test("preference reference successor preserves all exact fifteen-file predecessor supervisor pairings", () => {
   const previous = {
-    ...release,
+    ...warning,
     "index.py": "b6bd48d00bca2565c8c6690691b7f9b1e2e7680abbd48058ab62b4a2770ef5cd",
   }
   const original = JSON.stringify(previous)
@@ -25,12 +30,13 @@ test("warning recall successor preserves all exact fifteen-file predecessor supe
   }
   const retained = "e971a2f6678b9ede506ec656ca13fec8a1dedeea4239524bd39186c337fb2da7"
   const prior = "f9b6762a5bb729c7d04fe5e20821fefa420ec2be1934986d73d47664b217071c"
-  const recalled = { ...release, "index.py": "699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c" }
+  const recalled = { ...warning, "index.py": "699f9d1af1083e9b751b5c08ed71077bafd9809fa1d32918d276e202770aa96c" }
   const reader = "957a6b9ce25bdb1d7ce629fb72e8cac97c70cffe98877f9ca3ebb57a0adb63ac"
-  const diverse = { ...release, "index.py": "008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e" }
+  const diverse = { ...warning, "index.py": "008f7051d51cdd7bd0edaa2802630ce87b09766be470d9b8f2b3dc494677889e" }
   const digest = "f3aed8eaa2bfcfac00608a4eed05258764745251f9378880f63ccac4e576d518"
   for (const [pins, supervisor] of [
     [release, current],
+    [warning, "fe3139b3ba5f75beb5229dfe049a38ba44031ce00b17169e8a53b0ceef694de2"],
     [diverse, digest],
     [recalled, reader],
     [previous, retained],
@@ -41,8 +47,16 @@ test("warning recall successor preserves all exact fifteen-file predecessor supe
     expect(transport(pins)).toBe(bridge)
     expect(paired(supervisor)).toBe(true)
     expect(compatible(pins, supervisor)).toBe(true)
-    for (const other of [current, digest, reader, retained, prior].filter((value) => value !== supervisor))
+    for (const other of [
+      current,
+      "fe3139b3ba5f75beb5229dfe049a38ba44031ce00b17169e8a53b0ceef694de2",
+      digest,
+      reader,
+      retained,
+      prior,
+    ].filter((value) => value !== supervisor))
       expect(compatible(pins, other)).toBe(false)
+    expect(compatible({ ...pins, "capture.py": release["capture.py"], "entries.py": warning["entries.py"] }, supervisor)).toBe(false)
     expect(compatible({ ...pins, "index.py": "f".repeat(64) }, supervisor)).toBe(false)
   }
   expect(JSON.stringify(previous)).toBe(original)
@@ -110,7 +124,7 @@ test("personal management release preserves complete resident capture cohorts", 
     Object.entries(release)
       .filter(([name, hash]) => previous[name as keyof typeof previous] !== hash)
       .map(([name]) => name),
-  ).toEqual(["server.py", "index.py", "historical.py", "entries.py", "management.py"])
+  ).toEqual(["server.py", "index.py", "historical.py", "capture.py", "entries.py", "management.py"])
   const cfg = {
     format: "raya.memory.control.catalog",
     version: 2,
@@ -156,4 +170,4 @@ test("actual supervisor accepts only the exact current or preserved legacy relea
   ])
   expect(code, output + error).toBe(0)
   expect(error).toContain("OK")
-})
+}, 20000)

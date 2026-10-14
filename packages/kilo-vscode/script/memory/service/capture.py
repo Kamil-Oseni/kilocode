@@ -19,6 +19,7 @@ from admission import Store as Admission, image
 from policy import Policy
 from retirement import canonical
 from notes import FOLDERS, RecoveryNeeded, Store, clean, digest, identity, safe, recorded
+from entries import records
 
 
 class CaptureCapacity(ValueError):
@@ -181,7 +182,84 @@ def targets(body):
             for category in {item['category'] for item in body['entries']}}
 
 
-def render(body, category, old):
+def clause(body, item):
+    """Only exact host-retained original clauses, never inferred similarity."""
+    if (body['format'] != 'raya.memory.capture.v3' or item['category'] != 'Preferences' or
+            item['origin'] != 'user_statement' or len(item['evidence']) != 1):
+        return None
+    span = item['evidence'][0]
+    user = body['source']['user']
+    if span['id'] != user['id']:
+        return None
+    text = user['text'].encode('utf-16-le')[span['start'] * 2:span['end'] * 2].decode('utf-16-le')
+    return text if item['text'].endswith('\n\nOriginal user preference: ' + text) else None
+
+
+def repeated(store, body, item, old):
+    text = clause(body, item)
+    if text is None or old is None:
+        return None
+    _, rows, retired, _ = records('Preferences/Raya.md', old.decode('utf-8'))
+    matches = [row for row in rows if row['kind'] == 'capture' and row['entry'] not in retired and
+               row['excerpt'].endswith('\n\nOriginal user preference: ' + text)]
+    # Uncertain or excessive matches retain the new preference normally.
+    if not matches or len(matches) > 8:
+        return None
+    proven = [provenance(store, row, text) for row in matches]
+    return proven[0] if all(proven is not None for proven in proven) else None
+
+
+def provenance(store, row, text):
+    folder = store.system / 'Capture' / row['capture']
+    path = folder / 'input.json'
+    safe(path)
+    if not path.exists():
+        return None
+    raw = image(path)
+    if len(raw) > 65536:
+        return None
+    original = json.loads(raw)
+    if validate(original) != raw or original['id'] != row['capture']:
+        raise ValueError('Prior preference capture input differs.')
+    prior = [entry for entry in original['entries'] if entry['key'] == row['key'] and clause(original, entry) == text]
+    if len(prior) != 1:
+        return None
+    manifest = store.journal / row['capture'] / 'manifest.json'
+    safe(manifest)
+    if not manifest.exists():
+        return None
+    state = store.state(row['capture'])
+    if state['status'] != 'committed':
+        return None
+    journal = store.journal / row['capture']
+    request = json.loads(image(folder / 'request.json'))
+    if state['request_sha256'] != digest(json.dumps(request, sort_keys=True, ensure_ascii=False).encode('utf-8')):
+        raise ValueError('Prior preference original request differs.')
+    # The original committed publication must contain this exact active entry.
+    changes = [(index, entry) for index, entry in enumerate(state['changes']) if entry['path'] == 'Preferences/Raya.md']
+    if len(changes) != 1:
+        return None
+    index, change = changes[0]
+    snapshot = image(journal / ('after-' + str(index) + '.md'))
+    if digest(snapshot) != change['new_sha256']:
+        raise ValueError('Prior preference publication snapshot differs.')
+    _, published, _, _ = records('Preferences/Raya.md', snapshot.decode('utf-8'))
+    if not any(entry['entry'] == row['entry'] and entry['raw'] == row['raw'] for entry in published):
+        return None
+    for index, source in enumerate(state['sources']):
+        if digest(image(journal / ('source-' + str(index) + '.txt'))) != source['sha256']:
+            raise ValueError('Prior preference source snapshot differs.')
+    expected = snapshots(original)
+    if [(entry['kind'], entry['sha256']) for entry in state['sources']] != [(origin, digest(raw)) for origin, raw in expected]:
+        raise ValueError('Prior preference original provenance differs.')
+    sources = [dict(path=str(folder / (origin + '.md')), sha256=digest(raw), kind=origin,
+                    event_time=original['observed_utc']) for origin, raw in expected]
+    if state['sources'] != sources or request.get('sources') != sources:
+        raise ValueError('Prior preference source request differs.')
+    return row['entry']
+
+
+def render(body, category, old, store, cohort=False):
     text = '' if old is None else old.decode('utf-8')
     text += '\n\n## Raya capture ' + body['id'] + '\n'
     text += '\nInterpretation of a recorded conversation; not independently verified.\n'
@@ -191,7 +269,9 @@ def render(body, category, old):
         text += '\n### ' + item['key'] + '\n\n'
         if body['format'] == 'raya.memory.capture.v3':
             text += 'Origin: ' + item['origin'] + '\nEvidence: ' + json.dumps(item['evidence'], sort_keys=True, ensure_ascii=False) + '\n\n'
-        text += item['text'] + '\n'
+        prior = repeated(store, body, item, old) if cohort and category == 'Preferences' else None
+        text += ('Repeated original user preference; already retained in active entry ' + prior +
+                 '. No new preference is added.' if prior is not None else item['text']) + '\n'
     return text
 
 
@@ -237,6 +317,12 @@ def committed(store, key, signature):
     body = json.loads(raw)
     if validate(body) != raw or body['id'] != key or body['format'] != 'raya.memory.capture.v3':
         raise ValueError('Original structured capture identity differs.')
+    marker = folder / 'render.json'
+    safe(marker)
+    cohort = marker.exists()
+    if cohort and json.loads(image(marker)) != dict(format='raya.memory.capture.render.v1',
+                                                   input_sha256=signature, cohort='exact-preference-reference-v1'):
+        raise ValueError('Original capture render cohort differs.')
     request = json.loads((folder / 'request.json').read_bytes())
     sources = [dict(path=str(folder / (origin + '.md')), sha256=digest(raw), kind=origin,
                     event_time=body['observed_utc']) for origin, raw in snapshots(body)]
@@ -272,7 +358,7 @@ def committed(store, key, signature):
                 raise ValueError('Original capture note snapshot differs.')
             if label == 'before':
                 old = path.read_bytes()
-        prospective = render(body, entry['path'].split('/')[0], old)
+        prospective = render(body, entry['path'].split('/')[0], old, store, cohort)
         matches = [row for row in request['changes'] if row['path'] == entry['path']]
         if len(matches) != 1 or matches[0] != dict(path=entry['path'], expected=entry['old_sha256'], content=prospective):
             raise ValueError('Original capture request differs from its source-bound content.')
@@ -373,10 +459,12 @@ def publish(root, body, observe=None, cancel=None, expected=None):
         for category in sorted({item['category'] for item in body['entries']}):
             name = 'Daily/' + body['day'] + '.md' if category == 'Daily' else category + '/Raya.md'
             old = store.current(store.target(name))
-            text = render(body, category, old)
+            text = render(body, category, old, store, True)
             changes.append({'path': name, 'expected': None if old is None else digest(old), 'content': text})
         folder.mkdir()
         immutable(folder / 'input.json', raw)
+        immutable(folder / 'render.json', canonical(dict(format='raya.memory.capture.render.v1',
+                  input_sha256=signature, cohort='exact-preference-reference-v1')))
         source = folder / 'source.md'
         snapshot = ('# Original completed turn\n\n' + json.dumps({name: body[name] for name in
                     ('project', 'session', 'message', 'observed_utc', 'day', 'zone')}, ensure_ascii=False) +

@@ -64,6 +64,10 @@ CAPTURE = dict(RECALL, **{'index.py': '008f7051d51cdd7bd0edaa2802630ce87b09766be
 DIVERSE = CAPTURE
 PREVIOUS.append(DIVERSE)
 CAPTURE = dict(DIVERSE, **{'index.py': '0bd829a079d6de51f1c8b6d80d3e466d8b093ed9e0b5862a6216db2566e1aa73'})
+WARNING = CAPTURE
+PREVIOUS.append(WARNING)
+CAPTURE = dict(WARNING, **{'capture.py': 'f480f49b22e834986cd0c6ef7cb3acf77b0c629011147b02a864ef4ff32135b2',
+                         'entries.py': '9d186fdabfcd608a679ffb4b8e169c035f50b37919fac0355d9d51d1318e7992'})
 
 def release(kind, pins, reuse=False):
     capture = next((value for value in PREVIOUS if pins == value), CAPTURE)
@@ -483,7 +487,7 @@ def prepare(plan):
     if plan['kind'] == 'memory':
         # NumPy native initialization must precede the blocking stdin reader.
         import numpy
-        if plan['source_sha256'] in (CAPTURE, DIVERSE, RECALL, RECOVERED, MANAGED, CLOSED):
+        if plan['source_sha256'] in (CAPTURE, WARNING, DIVERSE, RECALL, RECOVERED, MANAGED, CLOSED):
             import tokenizers
             return
         from transformers import AutoTokenizer

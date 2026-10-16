@@ -1,8 +1,18 @@
 # Raya current readiness
 
-Updated October 14, 2026 from the installed registry, current Git delivery, saved installation receipts and read-only runtime checks. This is the current handoff; dated trial details belong in the history.
+Updated October 16, 2026 from the installed registry, current Git delivery, saved installation receipts and read-only runtime checks. This is the current handoff; dated trial details belong in the history.
 
 ## Installed now
+
+October 16, 2026 — current state revalidated; lighter work continues.
+
+Installed Raya remains **`7.4.23-snapshot+fa29aadbd7.local.1792007374419`**, with the exact installed CLI still `a1806f1b4c4f493ff26f852cd54884aba7470ae0e982c902c3df5eff94e09931`. At this inventory, the source worktree was clean at **`a7833d0dd538a17b9f2fdcd4c4e198310ace28cf`**, containing the preference-slot and bounded decision-record fixes. Their **31 tests / 399 assertions** and scoped lint evidence retain their original scope; final full CLI types, packaging and installed verification remain pending under the user's **lighter-work-only** instruction. They were not rerun or promoted to installed acceptance.
+
+A fresh read-only inventory confirms **Home Assistant is running**. The coordinator reports the user requested it back on and is using the lights; **preserve the VM and lights**. This supersedes the dated October 14 off-state instructions below. Initial free RAM was **8.73 GiB**; availability fluctuates and must be checked before any admitted job. No user app, VM, light or model was changed. Original current-state proof `.tmp/new-pc/raya-current-state-20261016-v1.json`: **1,343 bytes**, SHA-256 `f51bd91a87926ad5eafc9f8a8967287b727ecae83cb606e7f63989c57c6e2ae4`.
+
+Installed workflow verification remains **2/9 (22.2%)**, Memory **0/1**. Overall stable readiness is **unmeasured**; **48/100** and **38 unfinished requirements** are retained historical figures, not a newly measured total. The next light source task is a joined draft/session regression using actual host receipt verification and pending-session promotion through the composer UI. Its implementation and eventual execution must distinguish real backend publication from a synthetic receipt; no new installed trial, original-input replay or acceptance claim is authorized by this preparation. Voice acceptance remains deferred, second-PC migration canceled, and cloud workers released.
+
+### October 14 installed observations and source history
 
 October 14, 2026 — FA29 installed; native Memory connection and fresh acknowledgement pass; automatic capture skipped without a recorded failure.
 

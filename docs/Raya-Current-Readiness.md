@@ -1,5 +1,15 @@
 # Raya current readiness
 
+## Current installed successor — October 19, 2026
+
+**`7.4.23-snapshot+5adb036775.local.1792399232326`**, clean producer `5adb036775a7420639eb4872b7f36b4016a1fe99`, is installed with explicit original-receipt Stop reporting, verified Memory source opening and accurate unchecked-connection labels. **29 focused tests / 194 assertions**, final CLI/extension types, SDK regeneration, scoped lint, bundle and Knip pass. Fresh CLI **307,880,960 bytes**, SHA-256 `bf66dd8c82305436ac8447df2a585b36684bb7a990dd7d4f5de2c53011ca85ff`. Archive **193,199,380 bytes**, SHA-256 `3080ab61e7866daa2e158e9fb001b9c526e948ddbb286b465027b1444538ab17`; root/peer receipts are byte-identical **5,056 bytes**, SHA-256 `690356115aa7148503185666aff055d2c91a8ef51f82863330d625338e4b1324`. **547 CRC entries / 305 staged payloads / 14,202 unchanged tracked producer files** verify. Compiler/snapshot original success and subsequent outer descendant cleanup remain distinct.
+
+Fresh closed preservation/install/after passes for **4,347 saved files**, **544 non-package installed payloads**, unrelated registrations and **222 notes / 1,429,920 bytes**. The new notes were backed up as well as inventoried. Evidence: `.tmp/new-pc/everyday-conversation-preservation-e6dd8bbafe834409a4c39ea41114b623/after-qualified.json`, SHA-256 `be4caa251a9ecf1ba60d95ef1be2be717b51731c46d083e20a95b08f6bfdaacf`; exact artifact and lifecycle evidence is at the top of [implementation progress](Raya-Implementation-Progress.md).
+
+Native reopen/Memory connection and existing-recall citation click remain with the coordinator; a fresh Routine plan is prepared but disabled. No loaded successor workflow acceptance is claimed yet. **2/9 (22.2%)** installed gates, Memory **0/1**, overall unmeasured; historical **48/100 / 38 unfinished** retained. HA off, lights untouched, Eden protected; voice deferred, migration canceled, cloud workers released.
+
+### Historical d064 checkpoint
+
 Latest October 19 checkpoint: the installed d064 private CLI Routine lifecycle trial has completed, including genuine timed periods and cold no-replay sampling, but exposed an incorrect failed-run label after successful original Stop cancellation. Fresh Memory capture/semantic recall passed narrowly; the source path was code rather than a clickable link. The combined successor source passes **26 frontend tests / 81 assertions**, **1 existing Memory DOM test / 2 assertions**, and **2 real HTTP/SQLite Stop tests / 111 assertions**, plus final CLI/extension types, regenerated SDK, scoped lint, bundle and Knip. It is not yet packaged or installed. See the current [implementation progress](Raya-Implementation-Progress.md) entry and `.tmp/new-pc/routine-d064-run-0a295c4bf7-qualified-v1.json`. Older preparation and next-action statements below retain their historical scope. Installed workflow readiness remains **2/9 (22.2%)**, Memory **0/1**, overall unmeasured.
 
 ## Current installed candidate — October 19, 2026

@@ -26,10 +26,10 @@ const original = {
   tools: [],
 }
 const cards = {
-  category: "Preferences",
+  category: "Preferences" as const,
   key: "ask_cards",
   text: "Prefers concise conversational ask cards instead of lengthy forms for first-time Raya setup.",
-  origin: "user_statement",
+  origin: "user_statement" as const,
   evidence: [{ ref: 0 }],
 }
 const memory = {

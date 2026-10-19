@@ -1,6 +1,6 @@
 # Raya current readiness
 
-Updated October 16, 2026 from the installed registry, current Git delivery, saved installation receipts and read-only runtime checks. This is the current handoff; dated trial details belong in the history.
+Updated October 19, 2026. The resumed source candidate passes corrected full CLI types, **31 tests / 399 assertions**, formatting and scoped type-aware lint (zero errors, three existing warnings). Evidence: `.tmp/new-pc/memory-capture-decisions-cli-types-20261019-v2.{json,log}` and `memory-capture-decisions-{format,tests,lint}-20261019-v1.{json,log}`. All original check owners completed zero/nonforced with joined streams and empty Jobs; typecheck minimum **8,439,767,040 bytes** exceeded the 6 GiB reserve. Earlier failures are retained. Fresh compiler/package qualification and preservation/install are next; installed FA29 is unchanged. Overall readiness is unmeasured; historical **48/100 / 38 unfinished** and installed workflows **2/9 (22.2%)**, Memory **0/1**, remain unchanged. Keep Home Assistant off and lights untouched, preserve Eden/user apps. Voice acceptance is deferred, second-PC migration canceled and cloud workers released. The October 16 blocker below is historical and has cleared.
 
 ## Installed now
 

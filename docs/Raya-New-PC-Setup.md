@@ -1,4 +1,8 @@
-## Current new-PC readiness — October 16, 2026
+## Current new-PC readiness — October 19, 2026
+
+Delivery has resumed under the existing packaging/install authorization. Corrected fixture literals now pass full CLI types, **31 tests / 399 assertions**, formatting and scoped type-aware lint (zero errors, three existing warnings). Fresh evidence is `.tmp/new-pc/memory-capture-decisions-cli-types-20261019-v2.{json,log}` and `memory-capture-decisions-{format,tests,lint}-20261019-v1.{json,log}`. Typecheck minimum free RAM **8,439,767,040 bytes** exceeded the 6 GiB reserve. Original owners completed naturally with joined streams and empty Jobs; the earlier failed run is preserved. Installed FA29 remains unchanged until fresh compiler/package qualification and preservation/install complete. Keep Home Assistant off, lights untouched and Eden/user apps available. Installed workflows **2/9 (22.2%)**, Memory **0/1**; overall readiness unmeasured, historical **48/100 / 38 unfinished** retained. Second-PC migration remains canceled and voice acceptance deferred.
+
+### Historical October 16 checkpoint
 
 October 16, 2026 — current state revalidated; lighter work continues.
 

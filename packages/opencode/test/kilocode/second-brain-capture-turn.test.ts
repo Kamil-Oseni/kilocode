@@ -362,11 +362,8 @@ it.instance("stored FA29 stated preference keeps its exact fact separate from ac
     const fact = "My stated voice preference is a turn-taking conversation without automatic interruption."
     const request = "Please just acknowledge that in one sentence."
     const text = `${fact} ${request}`
-    yield* f.db
-      .update(PartTable)
-      .set({ data: { type: "text", text } })
-      .where(eq(PartTable.message_id, f.user))
-      .pipe(Effect.orDie)
+    const data = { type: "text" as const, text }
+    yield* f.db.update(PartTable).set({ data }).where(eq(PartTable.message_id, f.user)).pipe(Effect.orDie)
     yield* f.db
       .update(MessageTable)
       .set({ data: { ...f.reply, agent: "auto" } })
@@ -457,12 +454,10 @@ for (const mode of ["source_changed", "grant_expired"] as const)
             scope: "preparation_observation_only",
             publication: false,
           })
-          if (mode === "source_changed")
-            yield* f.db
-              .update(PartTable)
-              .set({ data: { type: "text", text: "I prefer longer replies." } })
-              .where(eq(PartTable.message_id, f.user))
-              .pipe(Effect.orDie)
+          if (mode === "source_changed") {
+            const data = { type: "text" as const, text: "I prefer longer replies." }
+            yield* f.db.update(PartTable).set({ data }).where(eq(PartTable.message_id, f.user)).pipe(Effect.orDie)
+          }
           if (mode === "grant_expired") yield* Effect.sleep(5)
           return yield* load(f.session.id, f.assistant)
         })

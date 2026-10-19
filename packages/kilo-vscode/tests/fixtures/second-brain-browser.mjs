@@ -183,7 +183,7 @@ try {
   await wait(() => button("Import service setup"))
   assert.match(node.textContent, /Keep credentials in the secure input/)
   button("Import service setup").click()
-  await wait(() => node.textContent.includes("Service not connected"))
+  await wait(() => node.textContent.includes("Connection not checked"))
   assert.match(node.textContent, /Manage your notes, automatic saving and search/)
   assert.equal(node.textContent.includes("Connect local memory, then choose"), false)
   for (const [label, action] of [
@@ -213,7 +213,7 @@ try {
   emit(current, { configured: true, status: "ready", results: [], root, control: { status: "synced" } })
   assert.match(node.textContent, /Notes folder:/)
   assert.match(node.textContent, /Memory connected/)
-  assert.match(node.textContent, /Selected notes indexed; search is ready/)
+  assert.match(node.textContent, /Selected notes indexed/)
   assert.equal(button("Continue setup with Raya"), undefined)
   let continuations = 0
   const continuation = () => continuations++

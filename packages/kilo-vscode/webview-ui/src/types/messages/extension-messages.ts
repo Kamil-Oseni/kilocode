@@ -2064,7 +2064,7 @@ export interface FocusTimerResultMessage {
   operation: "get" | "start" | "pause" | "resume" | "reset"
   timer?: FocusTimerItem
   error?: {
-    kind: "offline" | "stale" | "error"
+    kind: "offline" | "stale" | "error" | "uncertain"
     message: string
     expected?: number
     actual?: number

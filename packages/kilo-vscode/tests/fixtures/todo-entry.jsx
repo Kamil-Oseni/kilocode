@@ -11,6 +11,8 @@ const state = params.get("state") ?? "populated"
 const timerState = params.get("timer") ?? "idle"
 const proposalState = params.get("proposal") ?? "none"
 const holdTimer = params.get("holdTimer") === "true"
+const holdRead = params.get("holdTimerRead") === "true"
+let reads = 0
 const messages = []
 let offline = state === "offline"
 let stale = state === "stale"
@@ -18,6 +20,8 @@ let editOffline = state === "edit-offline"
 let editError = state === "edit-error"
 let timerOffline = timerState === "offline"
 let timerStale = timerState === "stale"
+let lost = params.get("lostTimer") === "true"
+let unread = false
 let proposalOffline = proposalState === "offline"
 let proposalUncertain = proposalState === "uncertain"
 const proposalID = "proposal_11111111-1111-4111-8111-111111111111"
@@ -202,6 +206,29 @@ window.acquireVsCodeApi = () => ({
     }
     if (message.type === "focusTimerGet") {
       if (timerState === "loading") return
+      reads++
+      if (holdRead && reads === 2) {
+        const saved = structuredClone(timer)
+        window.__heldTimerRead = true
+        window.__releaseTimerRead = () => {
+          window.__heldTimerRead = false
+          emit({ type: "focusTimerResult", requestID: message.requestID, operation: "get", timer: saved })
+        }
+        return
+      }
+      if (unread) {
+        unread = false
+        emit({
+          type: "focusTimerResult",
+          requestID: message.requestID,
+          operation: "get",
+          error: {
+            kind: "offline",
+            message: "The authoritative timer read failed. Refresh before choosing another action.",
+          },
+        })
+        return
+      }
       if (timerOffline) {
         timerOffline = false
         emit({
@@ -258,6 +285,22 @@ window.acquireVsCodeApi = () => ({
               ? { ...timer, state: "running", runStartedAt: Date.now(), revision: timer.revision + 1 }
               : { ...timer, state: "idle", elapsedMs: 0, remainingMs: timer.durationMs, revision: timer.revision + 1 }
       saveTimer(next)
+      // External wire fault only: this fixture postimage is not a real backend receipt.
+      // The actual mounted TodoView must reconcile it by reading, never replay the action.
+      if (lost) {
+        lost = false
+        unread = true
+        emit({
+          type: "focusTimerResult",
+          requestID: message.requestID,
+          operation,
+          error: {
+            kind: "uncertain",
+            message: "The timer action may have been saved. Refresh its state before another action.",
+          },
+        })
+        return
+      }
       emit({ type: "focusTimerResult", requestID: message.requestID, operation, timer: next })
       return
     }

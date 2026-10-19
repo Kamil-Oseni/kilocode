@@ -4,7 +4,7 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Select } from "@kilocode/kilo-ui/select"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { TextField } from "@kilocode/kilo-ui/text-field"
-import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { Component, For, Show, batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import type { ExtensionMessage, FocusTimerItem, PersonalTodoItem, PersonalTodoProposalView } from "../../types/messages"
 import { TodoProposalCard, type TodoProposal, type TodoProposalIssue } from "./TodoProposalCard"
@@ -27,6 +27,12 @@ type Notice = { kind: "offline" | "stale" | "error"; message: string }
 type TimerIntent =
   | { operation: "start"; durationMs: number; todoID?: string }
   | { operation: "pause" | "resume" | "reset" }
+type TimerRequest = {
+  intent: TimerIntent | { operation: "get" }
+  purpose: "initial" | "expiry" | "refresh" | "action"
+  fence: number
+}
+type Failure = NonNullable<Extract<ExtensionMessage, { type: "focusTimerResult" }>["error"]>
 type ProposalIntent =
   | { operation: "list" }
   | { operation: "get"; proposalID: string; digest: string }
@@ -120,8 +126,12 @@ export const TodoView: Component<{
   const [timer, setTimer] = createSignal<FocusTimerItem>()
   const [timerLoading, setTimerLoading] = createSignal(true)
   const [timerPending, setTimerPending] = createSignal(false)
-  const [timerNotice, setTimerNotice] = createSignal<Notice>()
-  const [timerRecovery, setTimerRecovery] = createSignal<TimerIntent>()
+  const [timerNotice, setTimerNotice] = createSignal<Pick<Failure, "kind" | "message">>()
+  const [uncertain, setUncertain] = createSignal(false)
+  const locked = createMemo(() => timerPending() || uncertain())
+  let fence = 0
+  let action: string | undefined
+  let reading: string | undefined
   const [length, setLength] = createSignal(parts(durations[1].value))
   const [todo, setTodo] = createSignal<string>()
   const [now, setNow] = createSignal(Date.now())
@@ -134,7 +144,7 @@ export const TodoView: Component<{
   const [proposalRecovery, setProposalRecovery] = createSignal<Record<string, ProposalIntent | undefined>>({})
   const [settled, setSettled] = createSignal<ReadonlySet<string>>(new Set())
   const requests = new Map<string, Intent | { operation: "list" }>()
-  const timers = new Map<string, TimerIntent | { operation: "get" }>()
+  const timers = new Map<string, TimerRequest>()
   const proposalRequests = new Map<string, ProposalIntent>()
 
   const send = (intent: Intent | { operation: "list" }) => {
@@ -321,31 +331,68 @@ export const TodoView: Component<{
     failProposal(intent, message, item)
   }
 
-  const receiveTimer = (message: Extract<ExtensionMessage, { type: "focusTimerResult" }>) => {
-    const intent = timers.get(message.requestID)
-    if (!intent) return
-    timers.delete(message.requestID)
-    setTimerLoading(false)
-    setTimerPending(false)
-    if (message.error) {
-      if (message.error.latest) setTimer(message.error.latest)
-      const detail =
-        message.error.kind === "stale" && message.error.expected !== undefined && message.error.actual !== undefined
-          ? `${message.error.message} Saved version ${message.error.actual} replaced version ${message.error.expected}.`
-          : message.error.message
-      setTimerNotice({ kind: message.error.kind, message: detail })
-      setTimerRecovery(intent.operation === "get" ? undefined : intent)
-      return
+  const newer = (value: FocusTimerItem | undefined): value is FocusTimerItem => {
+    if (!value || value.version !== 1 || !["idle", "running", "paused", "completed"].includes(value.state)) return false
+    if (!Number.isSafeInteger(value.revision) || value.revision < 1) return false
+    if (![value.updatedAt, value.elapsedMs, value.remainingMs].every(Number.isFinite)) return false
+    if (value.elapsedMs < 0 || value.remainingMs < 0) return false
+    const saved = timer()
+    return (
+      !saved ||
+      value.revision > saved.revision ||
+      (value.revision === saved.revision && value.updatedAt >= saved.updatedAt)
+    )
+  }
+  const failTimer = (error: Failure, mutation: boolean) => {
+    if (newer(error.latest)) setTimer(error.latest)
+    if (mutation || !uncertain()) {
+      fence++
+      reading = undefined
+      setUncertain(true)
     }
-    if (message.timer) {
+    const detail =
+      error.kind === "stale" && error.expected !== undefined && error.actual !== undefined
+        ? `${error.message} Saved version ${error.actual} replaced version ${error.expected}.`
+        : error.message
+    setTimerNotice({ kind: error.kind, message: detail })
+  }
+  const receiveTimer = (message: Extract<ExtensionMessage, { type: "focusTimerResult" }>) =>
+    batch(() => {
+      const request = timers.get(message.requestID)
+      if (!request || message.operation !== request.intent.operation) return
+      timers.delete(message.requestID)
+      if (request.fence !== fence) return
+      if (request.intent.operation === "get") {
+        if (reading !== message.requestID || timerPending()) return
+        reading = undefined
+        if (uncertain() && request.purpose !== "refresh") return
+      } else {
+        if (action !== message.requestID) return
+        action = undefined
+        setTimerPending(false)
+      }
+      setTimerLoading(false)
+      if (message.error) {
+        failTimer(message.error, request.intent.operation !== "get")
+        return
+      }
+      if (!newer(message.timer)) {
+        failTimer(
+          {
+            kind: "uncertain",
+            message: "The saved timer state could not be verified. Refresh before choosing another action.",
+          },
+          request.intent.operation !== "get",
+        )
+        return
+      }
       setTimer(message.timer)
       setNow(Date.now())
       if (message.timer.durationMs) setLength(parts(message.timer.durationMs))
       setTodo(message.timer.todoID)
-    }
-    setTimerNotice()
-    setTimerRecovery()
-  }
+      if (request.purpose === "refresh") setUncertain(false)
+      setTimerNotice()
+    })
 
   const receiveTodo = (message: Extract<ExtensionMessage, { type: "personalTodoResult" }>) => {
     const intent = requests.get(message.requestID)
@@ -386,6 +433,22 @@ export const TodoView: Component<{
   }
 
   const receive = (message: ExtensionMessage) => {
+    if (message.type === "connectionState" && message.state !== "connected") {
+      batch(() => {
+        fence++
+        timers.clear()
+        action = undefined
+        reading = undefined
+        setTimerPending(false)
+        setTimerLoading(false)
+        setUncertain(true)
+        setTimerNotice({
+          kind: "offline",
+          message: "Reconnect and refresh the saved timer before choosing another action.",
+        })
+      })
+      return
+    }
     if (message.type === "focusTimerResult") return receiveTimer(message)
     if (message.type === "personalTodoProposalResult") return receiveProposal(message)
     if (message.type === "personalTodoResult") receiveTodo(message)
@@ -534,13 +597,25 @@ export const TodoView: Component<{
     setNotice()
     send(intent)
   }
-  const sendTimer = (intent: TimerIntent | { operation: "get" }) => {
-    const requestID = crypto.randomUUID()
-    timers.set(requestID, intent)
-    if (intent.operation !== "get") setTimerPending(true)
-    if (intent.operation === "get") vscode.postMessage({ type: "focusTimerGet", requestID })
+  const sendTimer = (intent: TimerIntent | { operation: "get" }, purpose: TimerRequest["purpose"] = "initial") => {
+    if (timerPending()) return
+    if (intent.operation === "get") {
+      if (reading || (uncertain() && purpose !== "refresh")) return
+      const requestID = crypto.randomUUID()
+      timers.set(requestID, { intent, purpose, fence })
+      reading = requestID
+      vscode.postMessage({ type: "focusTimerGet", requestID })
+      return
+    }
     const saved = timer()
-    if (intent.operation === "start" && saved)
+    if (uncertain() || !saved) return
+    const requestID = crypto.randomUUID()
+    fence++
+    reading = undefined
+    action = requestID
+    setTimerPending(true)
+    timers.set(requestID, { intent, purpose: "action", fence })
+    if (intent.operation === "start")
       vscode.postMessage({
         type: "focusTimerStart",
         requestID,
@@ -548,18 +623,15 @@ export const TodoView: Component<{
         durationMs: intent.durationMs,
         todoID: intent.todoID,
       })
-    if (intent.operation === "pause" && saved)
+    if (intent.operation === "pause")
       vscode.postMessage({ type: "focusTimerPause", requestID, revision: saved.revision })
-    if (intent.operation === "resume" && saved)
+    if (intent.operation === "resume")
       vscode.postMessage({ type: "focusTimerResume", requestID, revision: saved.revision })
-    if (intent.operation === "reset" && saved)
+    if (intent.operation === "reset")
       vscode.postMessage({ type: "focusTimerReset", requestID, revision: saved.revision })
   }
   const timerRetry = () => {
-    const intent = timerRecovery()
-    setTimerRecovery()
-    setTimerNotice()
-    sendTimer(intent ?? { operation: "get" })
+    sendTimer({ operation: "get" }, "refresh")
   }
   const remainingMs = createMemo(() => {
     const saved = timer()
@@ -569,9 +641,17 @@ export const TodoView: Component<{
   })
   createEffect(() => {
     const saved = timer()
-    if (!saved || saved.state !== "running" || remainingMs() > 0 || checkpoint() === saved.revision) return
+    if (
+      uncertain() ||
+      timerPending() ||
+      !saved ||
+      saved.state !== "running" ||
+      remainingMs() > 0 ||
+      checkpoint() === saved.revision
+    )
+      return
     setCheckpoint(saved.revision)
-    sendTimer({ operation: "get" })
+    sendTimer({ operation: "get" }, "expiry")
   })
   const duration = createMemo(() => {
     const value = length()
@@ -639,7 +719,7 @@ export const TodoView: Component<{
                 inputMode="numeric"
                 value={length()[part]}
                 onInput={(event) => setLength((value) => ({ ...value, [part]: event.currentTarget.value }))}
-                disabled={timerPending()}
+                disabled={locked()}
                 aria-label={`Focus ${part}`}
               />
             </label>
@@ -653,7 +733,7 @@ export const TodoView: Component<{
               type="button"
               data-active={duration() === item.value}
               onClick={() => setLength(parts(item.value))}
-              disabled={timerPending()}
+              disabled={locked()}
             >
               {item.label}
             </button>
@@ -673,7 +753,7 @@ export const TodoView: Component<{
         <div data-slot="focus-timer-notice" data-kind={current().kind} role="alert">
           <span>{current().message}</span>
           <Button variant="ghost" size="small" onClick={timerRetry}>
-            {current().kind === "stale" ? "Review and retry" : timerRecovery() ? "Try again" : "Refresh"}
+            Refresh
           </Button>
         </div>
       )}
@@ -718,7 +798,7 @@ export const TodoView: Component<{
               label={(item) => item.label}
               onSelect={(item) => setTodo(item?.id || undefined)}
               aria-label="Linked todo"
-              disabled={timerPending()}
+              disabled={locked()}
             />
           </label>
         </div>
@@ -727,7 +807,7 @@ export const TodoView: Component<{
         <Show when={timer()?.state === "idle" || timer()?.state === "completed"}>
           <Button
             size="small"
-            disabled={timerLoading() || timerPending() || !timer() || !duration()}
+            disabled={timerLoading() || locked() || !timer() || !duration()}
             onClick={() => {
               const ms = duration()
               if (ms) sendTimer({ operation: "start", durationMs: ms, todoID: todo() })
@@ -737,22 +817,17 @@ export const TodoView: Component<{
           </Button>
         </Show>
         <Show when={timer()?.state === "running"}>
-          <Button size="small" disabled={timerPending()} onClick={() => sendTimer({ operation: "pause" })}>
+          <Button size="small" disabled={locked()} onClick={() => sendTimer({ operation: "pause" })}>
             Pause
           </Button>
         </Show>
         <Show when={timer()?.state === "paused"}>
-          <Button size="small" disabled={timerPending()} onClick={() => sendTimer({ operation: "resume" })}>
+          <Button size="small" disabled={locked()} onClick={() => sendTimer({ operation: "resume" })}>
             Resume
           </Button>
         </Show>
         <Show when={timer() && timer()?.state !== "idle"}>
-          <Button
-            variant="ghost"
-            size="small"
-            disabled={timerPending()}
-            onClick={() => sendTimer({ operation: "reset" })}
-          >
+          <Button variant="ghost" size="small" disabled={locked()} onClick={() => sendTimer({ operation: "reset" })}>
             Reset
           </Button>
         </Show>

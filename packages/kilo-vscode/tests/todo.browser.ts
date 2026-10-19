@@ -477,7 +477,7 @@ test("recovers the timer after an offline authoritative read", async ({ page }) 
   await expect(page.getByRole("button", { name: "Pause" })).toBeEnabled()
 })
 
-test("reconciles a stale timer action and reloads the persisted backend state", async ({ page }) => {
+test("reconciles a stale timer action with a read before a fresh explicit action", async ({ page }) => {
   await page.goto("/?timer=stale")
   await page.getByRole("button", { name: "Focus timer", exact: true }).click()
   const pause = page.getByRole("button", { name: "Pause" })
@@ -488,7 +488,10 @@ test("reconciles a stale timer action and reloads the persisted backend state", 
   )
   const sent = async () => JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
   expect((await sent()).filter((message) => message.type === "focusTimerPause")).toMatchObject([{ revision: 2 }])
-  await page.getByRole("button", { name: "Review and retry" }).click()
+  await page.getByRole("button", { name: "Refresh", exact: true }).click()
+  await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
+  expect((await sent()).filter((message) => message.type === "focusTimerPause")).toMatchObject([{ revision: 2 }])
+  await pause.click()
   await expect(page.getByText("Paused", { exact: true })).toBeVisible()
   expect((await sent()).filter((message) => message.type === "focusTimerPause")).toMatchObject([
     { revision: 2 },
@@ -499,6 +502,87 @@ test("reconciles a stale timer action and reloads the persisted backend state", 
   await expect(page.getByText("Paused", { exact: true })).toBeVisible()
   await expect(page.getByLabel("Focus time remaining")).toHaveText(/\d\d:\d\d/)
   await audit(page)
+})
+
+test("quarantines an unknown timer action until a successful read and never replays its old intent", async ({
+  page,
+}) => {
+  // Synthetic wire fault against the actual TodoView, not backend-commit or native acceptance.
+  await page.clock.install()
+  await page.goto("/?timer=idle&lostTimer=true")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
+  const start = page.getByRole("button", { name: "Start focus", exact: true })
+  await start.click()
+  const sent = async () => JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  const mutations = async () =>
+    (await sent()).filter((message) => message.type.startsWith("focusTimer") && message.type !== "focusTimerGet")
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("raya-todo-fixture-timer")!))
+  expect(saved.state).toBe("running")
+  expect(saved.revision).toBe(3)
+  await expect(page.getByRole("alert")).toContainText("may have been saved")
+  await expect(start).toBeDisabled()
+  const refresh = page.getByRole("button", { name: "Refresh", exact: true })
+  await expect(refresh).toBeVisible()
+  expect(await mutations()).toHaveLength(1)
+  await page.evaluate(() => {
+    window.dispatchEvent(new MessageEvent("message", { data: { type: "connectionState", state: "disconnected" } }))
+    window.dispatchEvent(new MessageEvent("message", { data: { type: "connectionState", state: "connected" } }))
+  })
+  await page.clock.fastForward(61_000)
+  expect(await mutations()).toHaveLength(1)
+  await refresh.click()
+  await expect(page.getByRole("alert")).toContainText("authoritative timer read failed")
+  await expect(start).toBeDisabled()
+  expect(await mutations()).toHaveLength(1)
+  await refresh.click()
+  await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeEnabled()
+  expect(await mutations()).toHaveLength(1)
+  const reconciled = await page.evaluate(() => JSON.parse(localStorage.getItem("raya-todo-fixture-timer")!))
+  expect(reconciled).toEqual(saved)
+  await page.getByRole("button", { name: "Pause", exact: true }).click()
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible()
+  expect((await mutations()).map((message) => ({ type: message.type, revision: message.revision }))).toEqual([
+    { type: "focusTimerStart", revision: 2 },
+    { type: "focusTimerPause", revision: 3 },
+  ])
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("raya-todo-fixture-timer")!).startedAt)).toBe(
+    saved.startedAt,
+  )
+})
+
+test("an older expiry read cannot clear timer uncertainty or authorize another mutation", async ({ page }) => {
+  // Only fixture wire responses are held; no real timer, notification or backend is used.
+  await page.clock.install()
+  await page.goto("/?timer=running&lostTimer=true&holdTimerRead=true")
+  await page.getByRole("button", { name: "Focus timer", exact: true }).click()
+  await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
+  await page.clock.fastForward(1_200_001)
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { __heldTimerRead?: boolean }).__heldTimerRead))
+    .toBe(true)
+  await page.getByRole("button", { name: "Pause", exact: true }).click()
+  await expect(page.getByRole("alert")).toContainText("may have been saved")
+  await page.evaluate(() => (window as Window & { __releaseTimerRead: () => void }).__releaseTimerRead())
+  await expect(page.getByRole("alert")).toContainText("may have been saved")
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Reset", exact: true })).toBeDisabled()
+  const refresh = page.getByRole("button", { name: "Refresh", exact: true })
+  await refresh.click()
+  await expect(page.getByRole("alert")).toContainText("authoritative timer read failed")
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeDisabled()
+  await refresh.click()
+  await expect(page.getByText("Paused", { exact: true })).toBeVisible()
+  const sent = async () => JSON.parse((await page.locator("[data-messages]").textContent()) ?? "[]")
+  const mutations = async () =>
+    (await sent()).filter((message) => message.type.startsWith("focusTimer") && message.type !== "focusTimerGet")
+  expect((await mutations()).map((message) => message.type)).toEqual(["focusTimerPause"])
+  await page.getByRole("button", { name: "Resume", exact: true }).click()
+  await expect(page.getByText("Focusing", { exact: true })).toBeVisible()
+  expect((await mutations()).map((message) => ({ type: message.type, revision: message.revision }))).toEqual([
+    { type: "focusTimerPause", revision: 2 },
+    { type: "focusTimerResume", revision: 3 },
+  ])
 })
 
 test("starts, pauses, resumes and resets the timer from the keyboard", async ({ page }) => {

@@ -1889,9 +1889,18 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private async handleProductMessage(message: TypedWebviewMessage): Promise<boolean> {
+    const client = this.client
+    const directory = this.getWorkspaceDirectory()
+    const generation = this.connectionGeneration
     const input = {
-      client: this.client,
-      directory: this.getWorkspaceDirectory(),
+      client,
+      directory,
+      current: () =>
+        this.client === client &&
+        this.connectionGeneration === generation &&
+        this.connectionState === "connected" &&
+        this.isWebviewReady &&
+        sameDirectory(directory, this.getWorkspaceDirectory()),
       message: message as { type: string } & Record<string, unknown>,
       post: (reply: unknown) => this.postMessage(reply),
       host: {

@@ -135,12 +135,15 @@ export function RunReview(props: {
           <Show when={props.selected && !props.runs.some((run) => run.id === props.selected)}>
             <option value={props.selected}>Run without saved history · {props.selected}</option>
           </Show>
-          <For each={props.runs}>
-            {(run) => (
-              <option value={run.id}>
-                {new Date(run.at).toLocaleString()} · {run.status === "stopped" ? "Stopped" : run.status} · {run.id}
-              </option>
-            )}
+          <For each={props.runs.map((run) => run.id)}>
+            {(id) => {
+              const label = createMemo(() => {
+                const row = props.runs.find((run) => run.id === id)
+                if (!row) return id
+                return `${new Date(row.at).toLocaleString()} · ${row.status === "stopped" ? "Stopped" : row.status} · ${id}`
+              })
+              return <option value={id}>{label()}</option>
+            }}
           </For>
         </select>
       </label>

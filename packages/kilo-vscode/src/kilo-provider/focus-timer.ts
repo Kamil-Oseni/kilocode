@@ -69,16 +69,38 @@ async function latest(client: KiloClient, directory: string) {
   )
 }
 
+function interrupted(post: Post, message: Message) {
+  post({
+    type: "focusTimerResult",
+    requestID: message.requestID,
+    operation: operation(message.type),
+    error:
+      message.type === "focusTimerGet"
+        ? { kind: "error", message: "Raya could not load the focus timer. Refresh to try again." }
+        : {
+            kind: "uncertain",
+            message:
+              "The focus timer action may have been saved. Refresh the focus timer before trying another action.",
+          },
+  })
+}
+
 async function failed(input: {
   client: KiloClient
   directory: string
   message: Exclude<Message, { type: "focusTimerGet" }>
   result: Result
   post: Post
+  current?: () => boolean
 }) {
   const operation = action(input.message.type)
   const conflict = input.result.response.status === 409 ? stale(input.result.error) : undefined
   if (conflict) {
+    const timer = await latest(input.client, input.directory)
+    if (input.current?.() === false) {
+      interrupted(input.post, input.message)
+      return
+    }
     input.post({
       type: "focusTimerResult",
       requestID: input.message.requestID,
@@ -88,17 +110,12 @@ async function failed(input: {
         message: conflict.message,
         expected: conflict.expected,
         actual: conflict.actual,
-        latest: await latest(input.client, input.directory),
+        latest: timer,
       },
     })
     return
   }
-  input.post({
-    type: "focusTimerResult",
-    requestID: input.message.requestID,
-    operation,
-    error: { kind: "error", message: "Raya could not update the focus timer." },
-  })
+  interrupted(input.post, input.message)
 }
 
 export async function handleFocusTimerMessage(input: {
@@ -106,13 +123,12 @@ export async function handleFocusTimerMessage(input: {
   directory: string
   message: { type: string } & Record<string, unknown>
   post: Post
+  current?: () => boolean
 }): Promise<boolean> {
   if (
-    input.message.type !== "focusTimerGet" &&
-    input.message.type !== "focusTimerStart" &&
-    input.message.type !== "focusTimerPause" &&
-    input.message.type !== "focusTimerResume" &&
-    input.message.type !== "focusTimerReset"
+    !["focusTimerGet", "focusTimerStart", "focusTimerPause", "focusTimerResume", "focusTimerReset"].includes(
+      input.message.type,
+    )
   )
     return false
   const msg = parse(input.message)
@@ -125,12 +141,15 @@ export async function handleFocusTimerMessage(input: {
     })
     return true
   }
-  if (!input.client) {
+  if (!input.client || input.current?.() === false) {
     input.post({
       type: "focusTimerResult",
       requestID: msg.requestID,
       operation: operation(msg.type),
-      error: { kind: "offline", message: "Raya is offline. The saved focus timer is unchanged." },
+      error:
+        msg.type === "focusTimerGet"
+          ? { kind: "error", message: "Raya is offline. The focus timer could not be loaded." }
+          : { kind: "offline", message: "Raya is offline. This focus timer action was not sent." },
     })
     return true
   }
@@ -150,6 +169,10 @@ export async function handleFocusTimerMessage(input: {
             : msg.type === "focusTimerResume"
               ? await input.client.raya.focusTimer.resume({ directory: input.directory, revision: msg.revision })
               : await input.client.raya.focusTimer.reset({ directory: input.directory, revision: msg.revision })
+    if (input.current?.() === false) {
+      interrupted(input.post, msg)
+      return true
+    }
     if (result.data) {
       input.post({
         type: "focusTimerResult",
@@ -160,7 +183,14 @@ export async function handleFocusTimerMessage(input: {
       return true
     }
     if (msg.type !== "focusTimerGet") {
-      await failed({ client: input.client, directory: input.directory, message: msg, result, post: input.post })
+      await failed({
+        client: input.client,
+        directory: input.directory,
+        message: msg,
+        result,
+        post: input.post,
+        current: input.current,
+      })
       return true
     }
     input.post({
@@ -171,12 +201,7 @@ export async function handleFocusTimerMessage(input: {
     })
     return true
   } catch {
-    input.post({
-      type: "focusTimerResult",
-      requestID: msg.requestID,
-      operation: operation(msg.type),
-      error: { kind: "offline", message: "The connection was interrupted. The saved focus timer is unchanged." },
-    })
+    interrupted(input.post, msg)
     return true
   }
 }

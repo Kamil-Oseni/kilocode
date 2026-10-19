@@ -26,7 +26,7 @@ export namespace RayaRoutineReports {
     directory: Schema.String,
     revision: Codec.Version,
     runRevision: Schema.optional(Codec.Version),
-    status: Schema.Literals(["queued", "running", "complete", "blocked", "error"]),
+    status: Schema.Literals(["queued", "running", "complete", "blocked", "error", "stopped"]),
     at: Codec.Timestamp,
     summary: Schema.String.check(Schema.isMaxLength(8000)),
     delivery: Schema.Literals(["delivered", "unavailable"]),

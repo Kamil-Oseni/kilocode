@@ -8,6 +8,7 @@ const labels = {
   complete: "Run finished",
   blocked: "Needs attention",
   error: "Run failed",
+  stopped: "Stopped",
 } as const
 
 /** Displays durable report cards; loading and retained history belong to the host controller. */

@@ -47,6 +47,40 @@ function page(cursor: number, agentID = "worker") {
   }
 }
 
+test("an explicit stopped revision survives stale running history without rewriting legacy errors", () => {
+  const stopped = { id: "stopped", status: "stopped" as const, revision: 3 }
+  const legacy = { id: "legacy", status: "error" as const, revision: 1 }
+  expect(projectRuns([stopped, legacy], [{ ...stopped, status: "running" as const, revision: 2 }], true)).toEqual([
+    stopped,
+    legacy,
+  ])
+  expect(projectRuns([stopped], [{ ...stopped, status: "running" as const }], false)).toEqual([stopped])
+})
+
+test("an explicit stopped event refreshes the original worker's authoritative history", async () => {
+  const messages: Record<string, unknown>[] = []
+  const stopped = {
+    ...page(3),
+    runs: [{ ...page(3).runs[0]!, status: "stopped" }],
+    events: [{ ...event(3), status: "stopped" }],
+  }
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => Response.json(stopped) })
+  const client = createKiloClient({ baseUrl: server.url.toString() })
+  const reader = new RoutineEvents(
+    () => ({ client, directory: "workspace", generation: 1 }),
+    (msg) => messages.push(msg),
+  )
+  try {
+    await reader.hint(stopped.events[0])
+    const current = messages.find((msg) => msg.type === "routineRuns")
+    expect(current?.runs).toEqual(stopped.runs)
+    expect(current?.cursor).toBe(3)
+  } finally {
+    reader.dispose()
+    await server.stop(true)
+  }
+})
+
 test("terminal history limits retain older running and waiting identities", () => {
   const trace = {
     version: 1,

@@ -1,7 +1,7 @@
 type Run = {
   id: string
   revision?: number
-  status: "running" | "complete" | "blocked" | "error"
+  status: "running" | "complete" | "blocked" | "error" | "stopped"
   blockedReason?: string
 }
 

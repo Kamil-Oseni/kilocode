@@ -57,9 +57,9 @@ const testAllow: Record<string, { count: number; reason: string }> = {
   },
   "kilocode/plan-followup.test.ts": { count: 3, reason: "existing runtime integration test" },
   "kilocode/task-goal-stop-idle.test.ts": {
-    count: 2,
+    count: 3,
     reason:
-      "actual public Goal Stop joins the same production application graph's idle Routine execution and exact task history",
+      "actual public Goal Stop joins the production application graph's idle Routine execution and exact task history; explicit graph disposal closes its isolated disk database",
   },
   "kilocode/fixtures/source-goal-stop-seed.ts": {
     count: 2,

@@ -123,6 +123,17 @@ try {
     .find((button) => button.textContent?.includes("View worker conversation"))!
     .click()
   assert.deepEqual(opened.at(-1), [card.agentID, "worker-original"])
+  setItems([
+    { ...card, status: "stopped", revision: 4, workerSessionID: "worker-original", summary: "Stopped by you." },
+  ])
+  assert.equal(root.querySelectorAll("[data-report-id]").length, 1)
+  assert.equal(
+    root.querySelector('[data-report-id] [data-slot="routine-activity-heading"] span')?.textContent,
+    "Stopped",
+  )
+  assert.doesNotMatch(root.textContent!, /Run failed|Run finished/)
+  setItems([{ ...card, status: "error", revision: 5, summary: "Stopped by you." }])
+  assert.match(root.textContent!, /Run failed/, "Only the explicit stopped status changes the failure label")
   setError("Connection unavailable.")
   assert.match(root.textContent!, /Previously loaded reports remain visible/)
   assert.equal(root.querySelectorAll("[data-report-id]").length, 1)

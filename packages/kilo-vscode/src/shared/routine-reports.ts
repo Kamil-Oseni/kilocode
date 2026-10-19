@@ -21,7 +21,7 @@ const Card = z.object({
   directory: z.string(),
   revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   runRevision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
-  status: z.enum(["queued", "running", "complete", "blocked", "error"]),
+  status: z.enum(["queued", "running", "complete", "blocked", "error", "stopped"]),
   at: z.number().min(-8.64e15).max(8.64e15),
   summary: z.string().max(8000),
   delivery: z.enum(["delivered", "unavailable"]),

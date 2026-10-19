@@ -35,4 +35,13 @@ describe("routine run navigation", () => {
     expect(select([])).toBeUndefined()
     expect(action()).toBe("start")
   })
+
+  test("treats an explicitly stopped run as terminal while retaining other pending work", () => {
+    const stopped = { status: "stopped" as const, sessionID: "stopped-session" }
+    expect(select([stopped])).toBe(stopped)
+    expect(action(stopped)).toBe("start")
+    const waiting = { status: "blocked" as const, blockedReason: "waiting on you", sessionID: "waiting-session" }
+    expect(select([waiting, stopped])).toBe(waiting)
+    expect(action(select([waiting, stopped]))).toBe("open")
+  })
 })

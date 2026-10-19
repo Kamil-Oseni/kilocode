@@ -99,9 +99,18 @@ try {
   assert.notEqual(reopened.requestID, workspace.requestID)
   reply(reopened, { items: [card("destination", { status: "complete", revision: 3, summary: "Final report" })] })
   assert.equal(state.view.items()[0].summary, "Final report")
+  reply(reopened, { items: [card("destination", { status: "stopped", revision: 4, summary: "Stopped by you." })] })
+  assert.equal(state.view.items()[0].status, "stopped", "Retain the explicit terminal status from the backend")
+  assert.equal(state.view.error(), undefined)
+  reply(reopened, { items: [card("destination", { status: "error", revision: 5, summary: "Stopped by you." })] })
+  assert.equal(
+    state.view.items()[0].status,
+    "error",
+    "A summary cannot upgrade a historical failure into a verified stop",
+  )
   const rows = Array.from({ length: 200 }, (_, index) => card("destination", { id: `report-${index}` }))
   reply(reopened, { items: [...rows, card("destination", { id: "overflow" })] })
-  assert.equal(state.view.items()[0].summary, "Final report", "An oversized page cannot replace valid history")
+  assert.equal(state.view.items()[0].summary, "Stopped by you.", "An oversized page cannot replace valid history")
   reply(reopened, { items: rows, next: "opaque-next", bootstrap: { complete: false, scanned: 200, total: 501 } })
   assert.equal(state.view.items().length, 200)
   assert.equal(state.view.next(), "opaque-next")

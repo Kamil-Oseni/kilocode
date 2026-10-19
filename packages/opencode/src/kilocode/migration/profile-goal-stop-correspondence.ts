@@ -65,7 +65,13 @@ export function goalStop(file: string, text: string, content: Content) {
       !isDeepStrictEqual(Reflect.get(identity, "trigger"), pin.trigger)
     )
       return false
-    if (receipt.phase === "finished" && run.status !== "complete" && run.status !== "error") return false
+    if (receipt.phase === "finished" && run.status !== "complete" && run.status !== "error" && run.status !== "stopped")
+      return false
+    if (
+      run.status === "stopped" &&
+      (!run.stop || run.stop.intent !== receipt.intent || !isDeepStrictEqual(run.stop, receipt.task.stop))
+    )
+      return false
   }
   return true
 }

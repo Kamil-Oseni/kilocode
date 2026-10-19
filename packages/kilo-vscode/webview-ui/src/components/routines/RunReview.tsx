@@ -138,7 +138,7 @@ export function RunReview(props: {
           <For each={props.runs}>
             {(run) => (
               <option value={run.id}>
-                {new Date(run.at).toLocaleString()} · {run.status} · {run.id}
+                {new Date(run.at).toLocaleString()} · {run.status === "stopped" ? "Stopped" : run.status} · {run.id}
               </option>
             )}
           </For>
@@ -155,6 +155,9 @@ export function RunReview(props: {
         {(current) => (
           <div class="routines-result">
             <p class="routines-note">{reason(current())}</p>
+            <Show when={current().status === "stopped"}>
+              <p class="routines-note">Stopped</p>
+            </Show>
             <h3>Recorded result</h3>
             <Show
               when={current().outcome?.summary}

@@ -22,7 +22,7 @@ function changed(value: unknown): value is Event {
     event.stateRevision! > 0 &&
     typeof event.at === "number" &&
     Number.isFinite(event.at) &&
-    ["running", "complete", "blocked", "error"].includes(event.status ?? "")
+    ["running", "complete", "blocked", "error", "stopped"].includes(event.status ?? "")
   )
 }
 

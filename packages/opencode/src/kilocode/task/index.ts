@@ -1581,7 +1581,7 @@ export namespace RayaTask {
         return false
       const current = (yield* runsFor(expected.agentID)).find((run) => run.id === expected.id)
       if (!current || !isDeepStrictEqual(current, expected)) return false
-      if (current.status === "complete" || current.status === "error") return false
+      if (current.status === "complete" || current.status === "error" || current.status === "stopped") return false
       yield* record(next)
       return true
     })

@@ -8824,7 +8824,7 @@ export type EventRayaRoutineRunChanged = {
       agentID: string
       sessionID: string
       stateRevision: number
-      status: "running" | "complete" | "blocked" | "error"
+      status: "running" | "complete" | "blocked" | "error" | "stopped"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       trace?: {
         version: 1
@@ -9063,7 +9063,7 @@ export type EventRayaRoutineReportChanged = {
       directory: string
       revision: number
       runRevision?: number
-      status: "queued" | "running" | "complete" | "blocked" | "error"
+      status: "queued" | "running" | "complete" | "blocked" | "error" | "stopped"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       summary: string
       delivery: "delivered" | "unavailable"
@@ -14565,7 +14565,7 @@ export type EventRayaRoutineRunChanged1 = {
       agentID: string
       sessionID: string
       stateRevision: number
-      status: "running" | "complete" | "blocked" | "error"
+      status: "running" | "complete" | "blocked" | "error" | "stopped"
       at: number | "NaN" | "Infinity" | "-Infinity"
       trace?: {
         version: 1
@@ -14615,7 +14615,7 @@ export type EventRayaRoutineReportChanged1 = {
       directory: string
       revision: number
       runRevision?: number
-      status: "queued" | "running" | "complete" | "blocked" | "error"
+      status: "queued" | "running" | "complete" | "blocked" | "error" | "stopped"
       at: number | "NaN" | "Infinity" | "-Infinity"
       summary: string
       delivery: "delivered" | "unavailable"
@@ -25530,6 +25530,11 @@ export type KilocodeGoalStopResultResponses = {
     >
     task?: {
       version: 1
+      stop?: {
+        version: 1
+        intent: string
+        at: number
+      }
       sessionDigest: string
       runs: Array<{
         id: string
@@ -25631,6 +25636,11 @@ export type KilocodeGoalStopResponses = {
     >
     task?: {
       version: 1
+      stop?: {
+        version: 1
+        intent: string
+        at: number
+      }
       sessionDigest: string
       runs: Array<{
         id: string
@@ -26334,7 +26344,7 @@ export type KilocodeRoutineReportsResponses = {
     directory: string
     revision: number
     runRevision?: number
-    status: "queued" | "running" | "complete" | "blocked" | "error"
+    status: "queued" | "running" | "complete" | "blocked" | "error" | "stopped"
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     summary: string
     delivery: "delivered" | "unavailable"
@@ -26387,7 +26397,7 @@ export type KilocodeRoutineReportPageResponses = {
       directory: string
       revision: number
       runRevision?: number
-      status: "queued" | "running" | "complete" | "blocked" | "error"
+      status: "queued" | "running" | "complete" | "blocked" | "error" | "stopped"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       summary: string
       delivery: "delivered" | "unavailable"
@@ -26949,7 +26959,12 @@ export type KilocodeRoutineRunResponses = {
     agentID: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
-    status: "running" | "complete" | "blocked" | "error"
+    status: "running" | "complete" | "blocked" | "error" | "stopped"
+    stop?: {
+      version: 1
+      intent: string
+      at: number
+    }
     scheduleVersion?: number
     trigger?:
       | {
@@ -27081,7 +27096,12 @@ export type KilocodeRoutineRunsResponses = {
     agentID: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
-    status: "running" | "complete" | "blocked" | "error"
+    status: "running" | "complete" | "blocked" | "error" | "stopped"
+    stop?: {
+      version: 1
+      intent: string
+      at: number
+    }
     scheduleVersion?: number
     trigger?:
       | {
@@ -27174,7 +27194,12 @@ export type KilocodeRoutineEventsResponses = {
       agentID: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       sessionID: string
-      status: "running" | "complete" | "blocked" | "error"
+      status: "running" | "complete" | "blocked" | "error" | "stopped"
+      stop?: {
+        version: 1
+        intent: string
+        at: number
+      }
       scheduleVersion?: number
       trigger?:
         | {
@@ -27240,7 +27265,7 @@ export type KilocodeRoutineEventsResponses = {
       agentID: string
       sessionID: string
       stateRevision: number
-      status: "running" | "complete" | "blocked" | "error"
+      status: "running" | "complete" | "blocked" | "error" | "stopped"
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       trace?: {
         version: 1
@@ -27293,7 +27318,12 @@ export type KilocodeRoutineHistoriesResponses = {
         agentID: string
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         sessionID: string
-        status: "running" | "complete" | "blocked" | "error"
+        status: "running" | "complete" | "blocked" | "error" | "stopped"
+        stop?: {
+          version: 1
+          intent: string
+          at: number
+        }
         scheduleVersion?: number
         trigger?:
           | {
@@ -28037,7 +28067,12 @@ export type KilocodeRoutineEventResponses = {
     agentID: string
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
-    status: "running" | "complete" | "blocked" | "error"
+    status: "running" | "complete" | "blocked" | "error" | "stopped"
+    stop?: {
+      version: 1
+      intent: string
+      at: number
+    }
     scheduleVersion?: number
     trigger?:
       | {

@@ -4,6 +4,11 @@ import { Criteria } from "@/kilocode/goal/criteria"
 import { Trigger as TriggerSchema } from "./trigger"
 
 export namespace Codec {
+  export const Stop = Schema.Struct({
+    version: Schema.Literal(1),
+    intent: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+    at: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
+  })
   export const Role = Schema.Literals(["generalist", "coder", "designer", "accountant", "reviewer", "inbox", "briefer"])
   export type Role = typeof Role.Type
 
@@ -198,7 +203,8 @@ export namespace Codec {
     agentID: Schema.String,
     at: Schema.Number,
     sessionID: SessionID,
-    status: Schema.Literals(["running", "complete", "blocked", "error"]),
+    status: Schema.Literals(["running", "complete", "blocked", "error", "stopped"]),
+    stop: Schema.optional(Stop),
     scheduleVersion: Schema.optional(Version),
     trigger: Schema.optional(Trigger),
     goalCreatedAt: Schema.optional(Schema.Finite),
@@ -209,6 +215,11 @@ export namespace Codec {
     outcome: Schema.optional(Outcome),
     blockedReason: Schema.optional(Schema.String),
   }).check(
+    Schema.makeFilter((value) =>
+      (value.status === "stopped") !== (value.stop !== undefined)
+        ? "Stopped runs require their original Stop provenance."
+        : undefined,
+    ),
     Schema.makeFilter((value) =>
       value.trace && value.trace.goalCreatedAt !== value.goalCreatedAt
         ? "Routine identity snapshot belongs to a different goal."
@@ -230,7 +241,7 @@ export namespace Codec {
     agentID: Schema.String,
     sessionID: SessionID,
     stateRevision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-    status: Schema.Literals(["running", "complete", "blocked", "error"]),
+    status: Schema.Literals(["running", "complete", "blocked", "error", "stopped"]),
     at: Schema.Number,
     trace: Schema.optional(Trace),
   })

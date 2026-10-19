@@ -5,9 +5,11 @@ import { SessionID } from "@/session/schema"
 import { Observation } from "./stop-jobs"
 import { Operation } from "./stop-operation"
 import { Trigger } from "@/kilocode/task/trigger"
+import { Codec } from "@/kilocode/task/schema"
 
 export const TaskRetirement = Schema.Struct({
   version: Schema.Literal(1),
+  stop: Schema.optional(Codec.Stop),
   sessionDigest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
   runs: Schema.Array(
     Schema.Struct({

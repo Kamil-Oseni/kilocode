@@ -88,7 +88,7 @@ type Run = {
   at: number
   trigger?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse[number]["trigger"]
   sessionID: string
-  status: "running" | "complete" | "blocked" | "error"
+  status: "running" | "complete" | "blocked" | "error" | "stopped"
   revision?: number
   blockedReason?: string
   outcome?: import("@kilocode/sdk/v2/client").KilocodeRoutineRunsResponse[number]["outcome"]

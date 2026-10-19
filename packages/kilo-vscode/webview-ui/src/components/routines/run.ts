@@ -1,5 +1,5 @@
 type Run = {
-  status: "running" | "complete" | "blocked" | "error"
+  status: "running" | "complete" | "blocked" | "error" | "stopped"
   blockedReason?: string
 }
 

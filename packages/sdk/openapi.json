@@ -34633,6 +34633,27 @@
                           "type": "number",
                           "enum": [1]
                         },
+                        "stop": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "intent": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "at": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": ["version", "intent", "at"],
+                          "additionalProperties": false
+                        },
                         "sessionDigest": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
@@ -35121,6 +35142,27 @@
                         "version": {
                           "type": "number",
                           "enum": [1]
+                        },
+                        "stop": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "intent": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "at": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": ["version", "intent", "at"],
+                          "additionalProperties": false
                         },
                         "sessionDigest": {
                           "type": "string",
@@ -37720,7 +37762,7 @@
                       },
                       "status": {
                         "type": "string",
-                        "enum": ["queued", "running", "complete", "blocked", "error"]
+                        "enum": ["queued", "running", "complete", "blocked", "error", "stopped"]
                       },
                       "at": {
                         "anyOf": [
@@ -37945,7 +37987,7 @@
                           },
                           "status": {
                             "type": "string",
-                            "enum": ["queued", "running", "complete", "blocked", "error"]
+                            "enum": ["queued", "running", "complete", "blocked", "error", "stopped"]
                           },
                           "at": {
                             "anyOf": [
@@ -40281,7 +40323,28 @@
                     },
                     "status": {
                       "type": "string",
-                      "enum": ["running", "complete", "blocked", "error"]
+                      "enum": ["running", "complete", "blocked", "error", "stopped"]
+                    },
+                    "stop": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "intent": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "at": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["version", "intent", "at"],
+                      "additionalProperties": false
                     },
                     "scheduleVersion": {
                       "type": "integer",
@@ -40836,7 +40899,28 @@
                       },
                       "status": {
                         "type": "string",
-                        "enum": ["running", "complete", "blocked", "error"]
+                        "enum": ["running", "complete", "blocked", "error", "stopped"]
+                      },
+                      "stop": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "intent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "at": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["version", "intent", "at"],
+                        "additionalProperties": false
                       },
                       "scheduleVersion": {
                         "type": "integer",
@@ -41267,7 +41351,28 @@
                           },
                           "status": {
                             "type": "string",
-                            "enum": ["running", "complete", "blocked", "error"]
+                            "enum": ["running", "complete", "blocked", "error", "stopped"]
+                          },
+                          "stop": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "intent": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "at": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": ["version", "intent", "at"],
+                            "additionalProperties": false
                           },
                           "scheduleVersion": {
                             "type": "integer",
@@ -41622,7 +41727,7 @@
                           },
                           "status": {
                             "type": "string",
-                            "enum": ["running", "complete", "blocked", "error"]
+                            "enum": ["running", "complete", "blocked", "error", "stopped"]
                           },
                           "at": {
                             "anyOf": [
@@ -41842,7 +41947,28 @@
                                 },
                                 "status": {
                                   "type": "string",
-                                  "enum": ["running", "complete", "blocked", "error"]
+                                  "enum": ["running", "complete", "blocked", "error", "stopped"]
+                                },
+                                "stop": {
+                                  "type": "object",
+                                  "properties": {
+                                    "version": {
+                                      "type": "number",
+                                      "enum": [1]
+                                    },
+                                    "intent": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 256
+                                    },
+                                    "at": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": ["version", "intent", "at"],
+                                  "additionalProperties": false
                                 },
                                 "scheduleVersion": {
                                   "type": "integer",
@@ -44678,7 +44804,28 @@
                       },
                       "status": {
                         "type": "string",
-                        "enum": ["running", "complete", "blocked", "error"]
+                        "enum": ["running", "complete", "blocked", "error", "stopped"]
+                      },
+                      "stop": {
+                        "type": "object",
+                        "properties": {
+                          "version": {
+                            "type": "number",
+                            "enum": [1]
+                          },
+                          "intent": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "at": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["version", "intent", "at"],
+                        "additionalProperties": false
                       },
                       "scheduleVersion": {
                         "type": "integer",
@@ -105536,7 +105683,7 @@
                   },
                   "status": {
                     "type": "string",
-                    "enum": ["running", "complete", "blocked", "error"]
+                    "enum": ["running", "complete", "blocked", "error", "stopped"]
                   },
                   "at": {
                     "anyOf": [
@@ -106347,7 +106494,7 @@
                   },
                   "status": {
                     "type": "string",
-                    "enum": ["queued", "running", "complete", "blocked", "error"]
+                    "enum": ["queued", "running", "complete", "blocked", "error", "stopped"]
                   },
                   "at": {
                     "anyOf": [
@@ -123855,7 +124002,7 @@
                   },
                   "status": {
                     "type": "string",
-                    "enum": ["running", "complete", "blocked", "error"]
+                    "enum": ["running", "complete", "blocked", "error", "stopped"]
                   },
                   "at": {
                     "anyOf": [
@@ -124083,7 +124230,7 @@
                   },
                   "status": {
                     "type": "string",
-                    "enum": ["queued", "running", "complete", "blocked", "error"]
+                    "enum": ["queued", "running", "complete", "blocked", "error", "stopped"]
                   },
                   "at": {
                     "anyOf": [

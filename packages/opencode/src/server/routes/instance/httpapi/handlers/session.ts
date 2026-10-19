@@ -366,6 +366,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
               // kilocode_change end
               yield* events.publish(Session.Event.Error, {
                 sessionID: ctx.params.sessionID,
+                messageID: ctx.payload.messageID, // kilocode_change - settle only the original failed submission
                 error: receipt.error, // kilocode_change
               })
             })

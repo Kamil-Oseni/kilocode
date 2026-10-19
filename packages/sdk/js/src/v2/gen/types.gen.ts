@@ -3423,6 +3423,7 @@ export type GlobalEvent = {
         type: "session.error"
         properties: {
           sessionID?: string
+          messageID?: string
           error?:
             | ProviderAuthError
             | UnknownError
@@ -9905,6 +9906,7 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
+    messageID?: string
     error?:
       | ProviderAuthError
       | UnknownError
@@ -12728,6 +12730,7 @@ export type SessionError = {
   location?: LocationRef
   data: {
     sessionID?: string
+    messageID?: string
     error?:
       | ProviderAuthError
       | UnknownError
@@ -14102,6 +14105,7 @@ export type EventSessionError1 = {
   type: "session.error"
   properties: {
     sessionID?: string
+    messageID?: string
     error?:
       | ProviderAuthError
       | UnknownError

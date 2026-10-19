@@ -600,6 +600,7 @@ export interface SessionErrorMessage {
   type: "sessionError"
   eventID: string
   sessionID?: string
+  messageID?: string
   error?: { name: string; data?: Record<string, unknown> }
 }
 

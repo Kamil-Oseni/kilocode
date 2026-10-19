@@ -117,7 +117,6 @@ export namespace EffectFlock {
       const fs = yield* FSUtil.Service
       const lockRoot = path.join(global.state, "locks")
       const hostname = os.hostname()
-      const ensuredDirs = new Set<string>()
 
       // -- helpers (close over fs) --
 
@@ -185,9 +184,8 @@ export namespace EffectFlock {
       })
 
       const ensureDir = Effect.fnUntraced(function* (dir: string) {
-        if (ensuredDirs.has(dir)) return
+        // kilocode_change - an earlier acquisition does not prove the parent still exists.
         yield* fs.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
-        ensuredDirs.add(dir)
       })
 
       const isStale = Effect.fnUntraced(function* (lockDir: string, heartbeatPath: string, metaPath: string) {
@@ -213,6 +211,7 @@ export namespace EffectFlock {
       const tryAcquireLockDir = (lockDir: string, key: string, opts?: Owned) =>
         // kilocode_change end
         Effect.gen(function* () {
+          yield* RepositoryAdmission.check // kilocode_change - revalidate authentic pins on every retry.
           const token = randomUUID()
           const metaPath = path.join(lockDir, "meta.json")
           const heartbeatPath = path.join(lockDir, "heartbeat")
@@ -315,6 +314,7 @@ export namespace EffectFlock {
         // kilocode_change end
         opts ??= yield* RepositoryAdmission.cleanup // kilocode_change - inherit only the authentic accepted repository lifetime
         const lockDir = dir ?? lockRoot
+        yield* RepositoryAdmission.check // kilocode_change - never recreate an authentic namespace after its binding changed.
         yield* ensureDir(lockDir)
 
         const lockfile = path.join(lockDir, Hash.fast(key) + ".lock")
@@ -326,6 +326,7 @@ export namespace EffectFlock {
           (handle) => release(handle, opts),
           // kilocode_change end
         ) // kilocode_change
+        yield* RepositoryAdmission.check // kilocode_change - refuse a changed admission before exposing the protected body.
 
         // Heartbeat fiber — scoped, so it's interrupted before release runs
         // kilocode_change start

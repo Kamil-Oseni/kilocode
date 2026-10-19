@@ -151,6 +151,11 @@ export namespace RepositoryAdmission {
   export const cleanup = Effect.map(Current, (current) =>
     current?.admission ? { strict: true as const, failed } : undefined,
   )
+  export const check = Effect.flatMap(Current, (current) =>
+    current?.admission
+      ? Effect.tryPromise({ try: current.admission.validate, catch: (err) => err }).pipe(Effect.orDie)
+      : Effect.void,
+  )
   export const failed = (cause: Cause.Cause<unknown>) =>
     Effect.flatMap(Current, (current) =>
       Effect.sync(() => {
@@ -303,5 +308,9 @@ async function initialize(input: Input, publish: (roots: readonly string[]) => v
     if (errors.length === 1) throw errors[0]
     if (errors.length) throw new AggregateError(errors, "Repository lease release failed")
   }
-  return { admin, release }
+  const validate = async () => {
+    if (!active) throw new Error("Repository admission is released")
+    await check()
+  }
+  return { admin, validate, release }
 }

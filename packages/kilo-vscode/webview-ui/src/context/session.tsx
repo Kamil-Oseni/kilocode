@@ -524,6 +524,9 @@ export const SessionProvider: ParentComponent = (props) => {
       }),
     )
   }
+  const reject = (sid?: string, id?: string) => {
+    if (sid && id && pendingSubmissions.get(id) === sid) finishSubmission(id)
+  }
   const confirmSubmissions = (sid: string) => {
     for (const [id, scope] of pendingSubmissions) {
       if (scope !== sid) continue
@@ -1220,7 +1223,8 @@ export const SessionProvider: ParentComponent = (props) => {
         if (!message.error || message.error.name === "MessageAbortedError") break
         const sid = message.sessionID ?? currentSessionID()
         if (!sid) break
-        // Find the last user message in this session to use as parentID
+        reject(message.sessionID, message.messageID)
+        // Correlated failures belong to the original input; legacy events retain the display fallback.
         const msgs = store.messages[sid] ?? []
         const parent = [...msgs].reverse().find((m) => m.role === "user")
         const errorMsg: Message = {
@@ -1228,7 +1232,7 @@ export const SessionProvider: ParentComponent = (props) => {
           sessionID: sid,
           role: "assistant",
           createdAt: new Date().toISOString(),
-          parentID: parent?.id,
+          parentID: message.messageID ?? parent?.id,
           error: message.error,
           sessionErrorID: message.eventID,
         }

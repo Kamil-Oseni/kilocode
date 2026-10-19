@@ -701,6 +701,7 @@ export const Error = define({
   type: "session.error",
   schema: {
     sessionID: Schema.optional(SessionID),
+    messageID: optional(MessageID), // kilocode_change - retain original async submission failure identity
     error: Assistant.fields.error,
   },
 })

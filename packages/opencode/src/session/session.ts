@@ -400,6 +400,7 @@ export const Event = {
     type: "session.error",
     schema: {
       sessionID: Schema.optional(SessionID),
+      messageID: Schema.optional(MessageID), // kilocode_change - correlate original async submission failures
       // Reuses SessionV1.Assistant.fields.error (already Schema.optional) so
       // the derived schema keeps the same discriminated-union shape on the event stream.
       error: SessionV1.Assistant.fields.error,

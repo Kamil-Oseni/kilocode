@@ -87612,6 +87612,10 @@
                         "type": "string",
                         "pattern": "^ses"
                       },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg"
+                      },
                       "error": {
                         "anyOf": [
                           {
@@ -109822,6 +109826,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
               "error": {
                 "anyOf": [
                   {
@@ -118571,6 +118579,10 @@
                 "type": "string",
                 "pattern": "^ses"
               },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
               "error": {
                 "anyOf": [
                   {
@@ -122586,6 +122598,10 @@
               "sessionID": {
                 "type": "string",
                 "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
               },
               "error": {
                 "anyOf": [

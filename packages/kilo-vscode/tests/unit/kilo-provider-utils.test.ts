@@ -400,6 +400,24 @@ describe("mapSSEEventToWebviewMessage", () => {
     })
   })
 
+  it("retains the original async submission identity on a session failure", () => {
+    const event = {
+      id: "evt-intake",
+      type: "session.error" as const,
+      properties: {
+        sessionID: "sess-1",
+        messageID: "msg_original",
+        error: { name: "UnknownError" as const, data: { message: "Pre-intake failure" } },
+      },
+    }
+    expect(mapSSEEventToWebviewMessage(event, "sess-1")).toMatchObject({
+      type: "sessionError",
+      eventID: "evt-intake",
+      sessionID: "sess-1",
+      messageID: "msg_original",
+    })
+  })
+
   it("maps permission.asked to permissionRequest", () => {
     const event: EventPermissionAsked = {
       type: "permission.asked",

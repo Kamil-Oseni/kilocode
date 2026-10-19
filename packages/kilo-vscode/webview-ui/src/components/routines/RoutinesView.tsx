@@ -2740,6 +2740,17 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
 
               <div class="routines-submit">
                 <span class="routines-hint">{submitHint()}</span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={submitBlocked()}
+                  onClick={() => {
+                    setNotice("")
+                    forecast()
+                  }}
+                >
+                  Refresh schedule preview
+                </Button>
                 <Button type="submit" disabled={submitBlocked()}>
                   {caption()}
                 </Button>

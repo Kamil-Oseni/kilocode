@@ -67,7 +67,7 @@ const dispose = render(
           value: { locale: () => "en", setLocale: () => {}, userOverride: () => "", t: (key) => key },
           get children() {
             return createComponent(SessionContext.Provider, {
-              value: { agents: () => [] },
+              value: { agents: () => [], sessions: () => [], currentSessionID: () => undefined },
               get children() {
                 return createComponent(DialogProvider, {
                   get children() {
@@ -449,10 +449,17 @@ try {
   const next = sent.findLast((msg) => msg.type === "routineSnapshot")
   assert.equal(next.runID, "newer")
   assert.match(panel.textContent, /A different run's result/)
-  assert.match(panel.textContent, /Required: Verified at completion/)
+  assert.match(panel.textContent, /Required: Recorded completion claim; verification basis unavailable/)
   assert.match(panel.textContent, /Optional: Not verified/)
   assert.match(panel.textContent, /Verification method: Inspect extra/)
-  assert.match(panel.textContent, /historical checks, not a new verification or your acceptance/)
+  assert.match(
+    panel.textContent,
+    /Model assessments record the agent's claims; executable checks record their saved results/,
+  )
+  assert.match(
+    panel.textContent,
+    /do not verify the later final answer against your instructions or record your acceptance/,
+  )
   assert.match(panel.textContent, /Evidence <script>text<\/script>/)
   assert.equal(panel.querySelector("script"), null)
   button("Open conversation").click()
@@ -530,12 +537,73 @@ try {
   button("Edit schedule").click()
   assert.match(root.textContent, /Saving keeps it paused/)
   assert.equal(button("Save assignment").disabled, false)
+  {
+    // Inject only correlated host wire replies; exercise the actual unchanged-schedule editor.
+    const mutations = () =>
+      sent.filter((msg) => ["routineCreate", "routineUpdate", "routineScheduleUpdate"].includes(msg.type))
+    const before = mutations().length
+    button("Refresh schedule preview").click()
+    const first = sent.findLast((msg) => msg.type === "routineForecast")
+    assert.deepEqual(first.schedule, agent.schedule)
+    assert.equal(mutations().length, before, "Previewing an unchanged schedule must not save it")
+    emit({
+      type: "routineForecast",
+      requestID: first.requestID,
+      forecastID: "expired-original",
+      schedule: first.schedule,
+      occurrences: [],
+    })
+    button("Confirm changes").click()
+    const expired = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
+    assert.equal(expired.forecastID, "expired-original")
+    emit({
+      type: "routineScheduleUpdated",
+      requestID: expired.requestID,
+      agentID: agent.id,
+      error: "This schedule preview has expired. Preview it again before saving.",
+    })
+    assert.match(root.textContent, /preview has expired/)
+    assert.equal(mutations().length, before + 1, "An expired save must not be replayed")
+    button("Refresh schedule preview").click()
+    const second = sent.findLast((msg) => msg.type === "routineForecast")
+    assert.notEqual(second.requestID, first.requestID)
+    assert.deepEqual(second.schedule, first.schedule, "Refreshing must preserve the exact unchanged schedule")
+    emit({
+      type: "routineForecast",
+      requestID: first.requestID,
+      forecastID: "late-old-preview",
+      schedule: first.schedule,
+      occurrences: [],
+    })
+    assert.equal(button("Checking schedule").disabled, true)
+    emit({
+      type: "routineForecast",
+      requestID: second.requestID,
+      forecastID: "fresh-original",
+      schedule: second.schedule,
+      occurrences: [],
+    })
+    assert.equal(mutations().length, before + 1, "A fresh preview must still require explicit Save")
+    button("Confirm changes").click()
+    const saved = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
+    assert.equal(saved.forecastID, "fresh-original")
+    assert.equal(mutations().length, before + 2)
+    emit({ type: "routineScheduleUpdated", requestID: saved.requestID, agentID: agent.id })
+    button("Edit schedule").click()
+  }
   const time = root.querySelector('input[type="time"]')
   time.value = "10:00"
   time.dispatchEvent(new window.Event("input", { bubbles: true }))
   button("Review schedule").click()
   const first = sent.findLast((msg) => msg.type === "routineForecast")
-  assert.deepEqual(first.edit, { agentID: "routine", expectedSchedule: agent.schedule, expectedScheduleVersion: 4 })
+  assert.deepEqual(first.edit, {
+    agentID: "routine",
+    expectedSchedule: agent.schedule,
+    expectedScheduleVersion: 4,
+    expectedOverlap: "unset",
+    expectedMissed: "unset",
+    expectedReportSessionID: "unset",
+  })
   time.value = "11:00"
   time.dispatchEvent(new window.Event("input", { bubbles: true }))
   emit({
@@ -761,7 +829,7 @@ try {
   })
   assert.match(root.textContent, /Ready to save/)
   assert.match(root.textContent, /Timezone: America\/Toronto/)
-  assert.match(root.textContent, /Raya must be running at the scheduled time/)
+  assert.match(root.textContent, /Raya must be running and this PC awake at the scheduled time\./)
   button("Confirm changes").click()
   const zoned = sent.findLast((msg) => msg.type === "routineScheduleUpdate")
   assert.equal(zoned.forecastID, "zone-reviewed")

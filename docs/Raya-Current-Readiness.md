@@ -1,8 +1,20 @@
 # Raya current readiness
 
+## Current installed candidate — October 19, 2026
+
+**`7.4.23-snapshot+d0645467a7.local.1792394965654`** is installed in the everyday Code profile. Clean producer **`d0645467a7e8df5f1e8abd771744e931bffffd9c`** contains the preference-slot/bounded decision-record fix and corrected fixture literals. Full CLI types, **31 tests / 399 assertions**, scoped lint (zero errors / three existing warnings), formatting and guards pass. Fresh compiler and stock sequential host/webview types, lint and production bundle pass. Original compiler/snapshot targets exit zero; their outer owned descendant cleanup remains separately retained.
+
+Archive **193,195,768 bytes**, SHA-256 `296b81ac794e47f8debe1deded5b3e6282a7789d09800b254ca9c4443fe71123`; **547 CRC-checked unique entries / 305 staged payloads / 14,195 unchanged tracked producer files**. Root/peer artifact receipts `.tmp/new-pc/memory-preference-d0645467a7-vsix-low-memory-v2-{independent,peer}.json` are byte-identical **5,056 bytes**, SHA-256 `056b8476bdf8843e5ed30db11e1dab668ee24c4e38d6c29aa30a7cb1e034fd67`. CLI **307,863,040 bytes**, SHA-256 `14d0952b0a6b75e25f897c344b7d892a003ffd72da130b8865557de892e2e660`; native helper `a939b80ef421f2976af21f38c739eacc0fa6c21833482e9d2e5c9f89babc7e13`, PDB `a76ffd2df6ded8e709a6bd09bdc0aa871f5617b4922b6aaa426e890454ce2536`, recipe `30920c2fddefe0d4be0aa9a5eb4425a29ac498fcbd4346c237ee0342680b8e3d`. Service/control cohort is unchanged.
+
+Fresh closed before/install/after checks pass naturally zero/nonforced/EOF joined/empty Job. `.tmp/new-pc/everyday-conversation-preservation-e06e44c7c5a943fc8a9448c2c1212984`: before **939,210 bytes**, SHA-256 `e5c59c7c2accd0553dec9cc6d49b3f3fbdab1e4a0171cdd3b3b2e71aeaa48b21`; after **1,817 bytes**, SHA-256 `563e8a764a1a952dddfe94004604bff9534a7b373d43b08d0ebcf8719c833d53`. All **3,331 saved files** (**76 / 3,038 / 1 / 216**) and **544 installed non-package payloads** verify; unrelated registrations unchanged. Fresh pre/post notes match **211 files / 1,369,861 bytes**; beforemanifest `234f66eb21ecb684415530b0b71d0371f65cd60dd955975cd3e484307fdbd3db`. Existing FA29 rollback is retained in this fresh preservation folder.
+
+Native reopen and supported Memory connection verification are handed to the coordinator on display 2. Installation preservation does not prove loaded recovery, preference publication, faithful cited recall or Routine acceptance. Original 10481 disposition and FA29 skipped capture remain fenced without replay or retrofitted audit. Workflows **2/9 (22.2%)**, Memory **0/1**; overall readiness unmeasured, historical **48/100 / 38 unfinished** retained. HA stays off, lights untouched, Eden/user apps protected; voice deferred, migration canceled, cloud workers released. These documentation edits follow sealed producer qualification.
+
+## Earlier checkpoints
+
 Updated October 19, 2026. The resumed source candidate passes corrected full CLI types, **31 tests / 399 assertions**, formatting and scoped type-aware lint (zero errors, three existing warnings). Evidence: `.tmp/new-pc/memory-capture-decisions-cli-types-20261019-v2.{json,log}` and `memory-capture-decisions-{format,tests,lint}-20261019-v1.{json,log}`. All original check owners completed zero/nonforced with joined streams and empty Jobs; typecheck minimum **8,439,767,040 bytes** exceeded the 6 GiB reserve. Earlier failures are retained. Fresh compiler/package qualification and preservation/install are next; installed FA29 is unchanged. Overall readiness is unmeasured; historical **48/100 / 38 unfinished** and installed workflows **2/9 (22.2%)**, Memory **0/1**, remain unchanged. Keep Home Assistant off and lights untouched, preserve Eden/user apps. Voice acceptance is deferred, second-PC migration canceled and cloud workers released. The October 16 blocker below is historical and has cleared.
 
-## Installed now
+## Historical installed state — October 16
 
 October 16, 2026 — current state revalidated; lighter work continues.
 

@@ -60,7 +60,9 @@ export function inactive(source: z.output<typeof payload>, now: number, mapping:
     }
     if (item.path.startsWith("raya/agent-runs/")) {
       const history = Schema.decodeUnknownSync(RayaTask.History)(JSON.parse(item.value))
-      const runs = history.runs.filter((run) => run.status === "complete" || run.status === "error")
+      const runs = history.runs.filter(
+        (run) => run.status === "complete" || run.status === "error" || run.status === "stopped",
+      )
       return [
         {
           ...item,

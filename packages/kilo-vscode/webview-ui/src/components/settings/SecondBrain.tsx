@@ -34,7 +34,7 @@ const labels: Record<string, string> = {
 }
 
 const status: Record<BrainState["status"], string> = {
-  disconnected: "Service not connected",
+  disconnected: "Connection not checked",
   checking: "Connecting to Memory…",
   ready: "Memory connected",
   searching: "Searching your indexed notes…",
@@ -47,7 +47,7 @@ const indexing: Record<string, string> = {
   reviewing: "Reviewing selected notes",
   approved: "Notes approved; indexing required",
   syncing: "Indexing selected notes…",
-  synced: "Selected notes indexed; search is ready",
+  synced: "Selected notes indexed",
   policy_disabled: "Note access disabled",
   uncertain: "Indexing needs recovery",
 }

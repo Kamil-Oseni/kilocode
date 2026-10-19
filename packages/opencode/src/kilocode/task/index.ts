@@ -25,6 +25,8 @@ import { Create as OrganizationCreate, matchesDefinition } from "./organization"
 import type { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Log from "@opencode-ai/core/util/log"
+import type { RayaGoal } from "@/kilocode/goal"
+import { mutation } from "@/kilocode/goal/mutation"
 
 const log = Log.create({ service: "raya-task-schedule" })
 
@@ -1569,21 +1571,39 @@ export namespace RayaTask {
       return yield* record(input)
     })
 
-    const transition = Effect.fn("RayaTask.transition")(function* (expected: Run, next: Run) {
-      if (
-        expected.id !== next.id ||
-        expected.agentID !== next.agentID ||
-        expected.sessionID !== next.sessionID ||
-        (expected.scheduleVersion ?? 1) !== (next.scheduleVersion ?? 1) ||
-        !isDeepStrictEqual(expected.trigger, next.trigger) ||
-        expected.at !== next.at
+    const transition = Effect.fn("RayaTask.transition")(function* (expected: Run, next: Run, goal?: RayaGoal.State) {
+      const publish = Effect.gen(function* () {
+        if (
+          expected.id !== next.id ||
+          expected.agentID !== next.agentID ||
+          expected.sessionID !== next.sessionID ||
+          (expected.scheduleVersion ?? 1) !== (next.scheduleVersion ?? 1) ||
+          !isDeepStrictEqual(expected.trigger, next.trigger) ||
+          expected.at !== next.at
+        )
+          return false
+        const current = (yield* runsFor(expected.agentID)).find((run) => run.id === expected.id)
+        if (!current || !isDeepStrictEqual(current, expected)) return false
+        if (current.status === "complete" || current.status === "error" || current.status === "stopped") return false
+        yield* record(next)
+        return true
+      })
+      if (!goal) return yield* publish
+      // The outer Routine mutation owns the Run CAS. Take the original Goal's
+      // control lock inside it so a newer Goal cannot cross this publication.
+      // The lock covers both the comparison and the actual history write.
+      return yield* mutation(
+        deps.storage,
+        expected.sessionID,
+        Effect.gen(function* () {
+          const current = yield* deps.storage.read<unknown>(["raya", "goal", expected.sessionID]).pipe(
+            Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
+            Effect.orDie,
+          )
+          if (!isDeepStrictEqual(current, goal)) return false
+          return yield* publish
+        }),
       )
-        return false
-      const current = (yield* runsFor(expected.agentID)).find((run) => run.id === expected.id)
-      if (!current || !isDeepStrictEqual(current, expected)) return false
-      if (current.status === "complete" || current.status === "error" || current.status === "stopped") return false
-      yield* record(next)
-      return true
     })
 
     const evaluate = (agent: Agent, from: number, last?: Run) => {

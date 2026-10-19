@@ -17,6 +17,7 @@ import { GoalCriteriaEditor } from "./GoalCriteriaEditor"
 import { GoalDeliverables } from "./GoalDeliverables"
 import { GoalBudgetOverrides } from "./GoalBudgetOverrides"
 import { valid, equal } from "../../../../src/shared/goal-criteria"
+import { pending as recoverable, type GoalStop } from "../../../../src/shared/goal-stop"
 
 // raya_change start - self-redesign: presentational goal banner. Split from the
 // connected wrapper below so it renders from props alone (mock data in the dev
@@ -47,6 +48,10 @@ export interface GoalBannerProps {
   editError?: string
   confirmingStop?: boolean
   stopError?: string
+  retryStop?: boolean
+  refreshStop?: boolean
+  onRetryStop?: () => void
+  onRefreshStop?: () => void
   /** Design-preview only: statically render the hover, focus, or pressed state. */
   pv?: "hover" | "focus" | "active"
   onToggle?: () => void
@@ -324,6 +329,16 @@ export const GoalBannerView: Component<GoalBannerProps> = (props) => {
           {(text) => (
             <div class="goal-banner__notice">
               <span>{text()}</span>
+              <Show when={props.retryStop}>
+                <button type="button" disabled={props.disabled} onClick={() => props.onRetryStop?.()}>
+                  Retry stop finalization
+                </button>
+              </Show>
+              <Show when={props.refreshStop}>
+                <button type="button" disabled={props.disabled} onClick={() => props.onRefreshStop?.()}>
+                  Refresh stop result
+                </button>
+              </Show>
               <button
                 type="button"
                 class="goal-banner__notice-dismiss"
@@ -854,7 +869,10 @@ export const GoalBanner: Component = () => {
   const [editing, setEditing] = createSignal(false)
   const [stopping, setStopping] = createSignal(false)
   const [basis, setBasis] = createSignal<string>()
-  const [clearing, setClearing] = createSignal<{ requestID: string; intent: string }>()
+  const [clearing, setClearing] = createSignal<{ requestID: string; intent: string; retry?: true }>()
+  const [recovery, setRecovery] = createSignal<GoalStop>()
+  const [uncertain, setUncertain] = createSignal(false)
+  const [refreshing, setRefreshing] = createSignal(false)
   const [stopError, setStopError] = createSignal<string>()
   let deadline: ReturnType<typeof setTimeout> | undefined
   const resetStop = () => {
@@ -899,6 +917,9 @@ export const GoalBanner: Component = () => {
     setStopping(false)
     setBasis(undefined)
     setStopError(undefined)
+    setRecovery(undefined)
+    setUncertain(false)
+    setRefreshing(false)
     resetStop()
     reset()
     setFailure(undefined)
@@ -958,10 +979,16 @@ export const GoalBanner: Component = () => {
         message.error ?? "The goal changed while stopping was confirmed. Cancel and review the refreshed goal."
       setStopError(text)
       setNotice(text)
+      if (request.retry) {
+        setRecovery(undefined)
+        setUncertain(true)
+      }
     } else {
       setStopping(false)
       setBasis(undefined)
       setGoal(undefined)
+      setRecovery(undefined)
+      setUncertain(false)
       setNotice(
         (message.worker === "interrupted"
           ? "Goal tracking stopped and its worker was interrupted. External or background work may still finish."
@@ -977,8 +1004,20 @@ export const GoalBanner: Component = () => {
 
   onMount(() => {
     const off = vscode.onMessage((message) => {
+      if (message.type === "connectionState" && message.state !== "connected") {
+        setRecovery(undefined)
+        setRefreshing(false)
+        return
+      }
       if (message.type === "goalStopResult") {
-        if (message.sessionID === sid() && !goal() && !editing() && !stopping()) setNotice(message.notice)
+        if (message.sessionID === sid() && !goal() && !editing() && !stopping()) {
+          setNotice(message.notice)
+          if (!uncertain() || refreshing()) {
+            setRecovery(recoverable(message.stop) ? message.stop : undefined)
+            setUncertain(false)
+          }
+          setRefreshing(false)
+        }
         return
       }
       if (message.type === "goalStopped") {
@@ -996,6 +1035,11 @@ export const GoalBanner: Component = () => {
         return
       }
       setGoal(message.goal)
+      if (message.goal) {
+        setRecovery(undefined)
+        setUncertain(false)
+        setRefreshing(false)
+      }
       if (message.notice) setNotice(message.notice)
     })
     const show = (event: Event) => setNotice((event as CustomEvent<string>).detail)
@@ -1082,6 +1126,23 @@ export const GoalBanner: Component = () => {
     vscode.postMessage({ type: "goalStop", sessionID: id, requestID, expectedIntent: intent })
   }
 
+  const retry = () => {
+    const id = sid()
+    const saved = recovery()
+    if (!id || goal() || busy() || uncertain() || !recoverable(saved)) return
+    const requestID = crypto.randomUUID()
+    setClearing({ requestID, intent: saved.intent, retry: true })
+    setRecovery(undefined)
+    setNotice("Finalizing the original saved stop…")
+    deadline = setTimeout(() => {
+      if (clearing()?.requestID !== requestID) return
+      resetStop()
+      setUncertain(true)
+      setNotice("Stop finalization has not been confirmed and may still finish. Refresh the saved result.")
+    }, 15_000)
+    vscode.postMessage({ type: "goalStop", sessionID: id, requestID, expectedIntent: saved.intent, retry: true })
+  }
+
   return (
     <GoalBannerView
       sessionID={sid()}
@@ -1092,6 +1153,15 @@ export const GoalBanner: Component = () => {
       editing={editing()}
       disabled={busy()}
       stopError={stopError()}
+      retryStop={!goal() && !uncertain() && recoverable(recovery())}
+      refreshStop={!goal() && (!!recovery() || uncertain())}
+      onRetryStop={retry}
+      onRefreshStop={() => {
+        const id = sid()
+        if (!id || busy()) return
+        setRefreshing(true)
+        vscode.postMessage({ type: "goalGet", sessionID: id })
+      }}
       saving={!!pending() && pending()?.status === undefined}
       editError={failure()}
       confirmingStop={stopping()}

@@ -76,6 +76,7 @@ export interface GoalControlMessage {
 
 export interface GoalStopMessage {
   type: "goalStop"
+  retry?: true
   sessionID: string
   requestID: string
   expectedIntent: string

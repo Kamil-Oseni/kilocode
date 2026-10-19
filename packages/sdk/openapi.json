@@ -21769,6 +21769,28 @@
                               "enum": ["Infinity", "-Infinity", "NaN"]
                             }
                           ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "goalCreatedAt": {
+                              "type": "number"
+                            },
+                            "dispatchID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "intent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["status", "at", "criteria"],
@@ -21837,6 +21859,28 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "goalCreatedAt": {
+                                    "type": "number"
+                                  },
+                                  "dispatchID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "intent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["status", "at", "criteria"],
@@ -23945,6 +23989,28 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "goalCreatedAt": {
+                                    "type": "number"
+                                  },
+                                  "dispatchID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "intent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["status", "at", "criteria"],
@@ -24013,6 +24079,28 @@
                                           "enum": ["Infinity", "-Infinity", "NaN"]
                                         }
                                       ]
+                                    },
+                                    "source": {
+                                      "type": "object",
+                                      "properties": {
+                                        "goalCreatedAt": {
+                                          "type": "number"
+                                        },
+                                        "dispatchID": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "messageID": {
+                                          "type": "string",
+                                          "pattern": "^msg"
+                                        },
+                                        "intent": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["status", "at", "criteria"],
@@ -25995,6 +26083,28 @@
                               "enum": ["Infinity", "-Infinity", "NaN"]
                             }
                           ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "goalCreatedAt": {
+                              "type": "number"
+                            },
+                            "dispatchID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "intent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["status", "at", "criteria"],
@@ -26063,6 +26173,28 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "goalCreatedAt": {
+                                    "type": "number"
+                                  },
+                                  "dispatchID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "intent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["status", "at", "criteria"],
@@ -28171,6 +28303,28 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "goalCreatedAt": {
+                                    "type": "number"
+                                  },
+                                  "dispatchID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "intent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["status", "at", "criteria"],
@@ -28239,6 +28393,28 @@
                                           "enum": ["Infinity", "-Infinity", "NaN"]
                                         }
                                       ]
+                                    },
+                                    "source": {
+                                      "type": "object",
+                                      "properties": {
+                                        "goalCreatedAt": {
+                                          "type": "number"
+                                        },
+                                        "dispatchID": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "messageID": {
+                                          "type": "string",
+                                          "pattern": "^msg"
+                                        },
+                                        "intent": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["status", "at", "criteria"],
@@ -30139,6 +30315,28 @@
                               "enum": ["Infinity", "-Infinity", "NaN"]
                             }
                           ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "goalCreatedAt": {
+                              "type": "number"
+                            },
+                            "dispatchID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "intent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["status", "at", "criteria"],
@@ -30207,6 +30405,28 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "goalCreatedAt": {
+                                    "type": "number"
+                                  },
+                                  "dispatchID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "intent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["status", "at", "criteria"],
@@ -32315,6 +32535,28 @@
                                     "enum": ["Infinity", "-Infinity", "NaN"]
                                   }
                                 ]
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "goalCreatedAt": {
+                                    "type": "number"
+                                  },
+                                  "dispatchID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "intent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                "additionalProperties": false
                               }
                             },
                             "required": ["status", "at", "criteria"],
@@ -32383,6 +32625,28 @@
                                           "enum": ["Infinity", "-Infinity", "NaN"]
                                         }
                                       ]
+                                    },
+                                    "source": {
+                                      "type": "object",
+                                      "properties": {
+                                        "goalCreatedAt": {
+                                          "type": "number"
+                                        },
+                                        "dispatchID": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "messageID": {
+                                          "type": "string",
+                                          "pattern": "^msg"
+                                        },
+                                        "intent": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": ["goalCreatedAt", "dispatchID", "messageID", "intent"],
+                                      "additionalProperties": false
                                     }
                                   },
                                   "required": ["status", "at", "criteria"],
@@ -40554,6 +40818,70 @@
                         "summary": {
                           "type": "string"
                         },
+                        "report": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "sessionID": {
+                              "type": "string",
+                              "pattern": "^ses"
+                            },
+                            "messageID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "parentID": {
+                              "type": "string",
+                              "pattern": "^msg"
+                            },
+                            "at": {
+                              "type": "number"
+                            },
+                            "partIDs": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^prt"
+                              },
+                              "minItems": 1
+                            },
+                            "dispatchID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "goalCreatedAt": {
+                              "type": "number"
+                            },
+                            "goalIntent": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "acceptedIntent": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "sessionID",
+                            "messageID",
+                            "parentID",
+                            "at",
+                            "partIDs",
+                            "dispatchID",
+                            "goalCreatedAt",
+                            "goalIntent",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
                         "evidence": {
                           "type": "array",
                           "items": {
@@ -40605,6 +40933,10 @@
                                   },
                                   "passed": {
                                     "type": "boolean"
+                                  },
+                                  "basis": {
+                                    "type": "string",
+                                    "enum": ["model-audit", "command", "byte-equality"]
                                   },
                                   "evidence": {
                                     "type": "array",
@@ -41130,6 +41462,70 @@
                           "summary": {
                             "type": "string"
                           },
+                          "report": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "sessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "parentID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "at": {
+                                "type": "number"
+                              },
+                              "partIDs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^prt"
+                                },
+                                "minItems": 1
+                              },
+                              "dispatchID": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "goalCreatedAt": {
+                                "type": "number"
+                              },
+                              "goalIntent": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "acceptedIntent": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "sessionID",
+                              "messageID",
+                              "parentID",
+                              "at",
+                              "partIDs",
+                              "dispatchID",
+                              "goalCreatedAt",
+                              "goalIntent",
+                              "sha256"
+                            ],
+                            "additionalProperties": false
+                          },
                           "evidence": {
                             "type": "array",
                             "items": {
@@ -41181,6 +41577,10 @@
                                     },
                                     "passed": {
                                       "type": "boolean"
+                                    },
+                                    "basis": {
+                                      "type": "string",
+                                      "enum": ["model-audit", "command", "byte-equality"]
                                     },
                                     "evidence": {
                                       "type": "array",
@@ -41582,6 +41982,70 @@
                               "summary": {
                                 "type": "string"
                               },
+                              "report": {
+                                "type": "object",
+                                "properties": {
+                                  "version": {
+                                    "type": "number",
+                                    "enum": [1]
+                                  },
+                                  "sessionID": {
+                                    "type": "string",
+                                    "pattern": "^ses"
+                                  },
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "parentID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "at": {
+                                    "type": "number"
+                                  },
+                                  "partIDs": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "pattern": "^prt"
+                                    },
+                                    "minItems": 1
+                                  },
+                                  "dispatchID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "goalCreatedAt": {
+                                    "type": "number"
+                                  },
+                                  "goalIntent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "acceptedIntent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "version",
+                                  "sessionID",
+                                  "messageID",
+                                  "parentID",
+                                  "at",
+                                  "partIDs",
+                                  "dispatchID",
+                                  "goalCreatedAt",
+                                  "goalIntent",
+                                  "sha256"
+                                ],
+                                "additionalProperties": false
+                              },
                               "evidence": {
                                 "type": "array",
                                 "items": {
@@ -41633,6 +42097,10 @@
                                         },
                                         "passed": {
                                           "type": "boolean"
+                                        },
+                                        "basis": {
+                                          "type": "string",
+                                          "enum": ["model-audit", "command", "byte-equality"]
                                         },
                                         "evidence": {
                                           "type": "array",
@@ -42178,6 +42646,70 @@
                                     "summary": {
                                       "type": "string"
                                     },
+                                    "report": {
+                                      "type": "object",
+                                      "properties": {
+                                        "version": {
+                                          "type": "number",
+                                          "enum": [1]
+                                        },
+                                        "sessionID": {
+                                          "type": "string",
+                                          "pattern": "^ses"
+                                        },
+                                        "messageID": {
+                                          "type": "string",
+                                          "pattern": "^msg"
+                                        },
+                                        "parentID": {
+                                          "type": "string",
+                                          "pattern": "^msg"
+                                        },
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "partIDs": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "pattern": "^prt"
+                                          },
+                                          "minItems": 1
+                                        },
+                                        "dispatchID": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "goalCreatedAt": {
+                                          "type": "number"
+                                        },
+                                        "goalIntent": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "acceptedIntent": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "sha256": {
+                                          "type": "string",
+                                          "pattern": "^[a-f0-9]{64}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "version",
+                                        "sessionID",
+                                        "messageID",
+                                        "parentID",
+                                        "at",
+                                        "partIDs",
+                                        "dispatchID",
+                                        "goalCreatedAt",
+                                        "goalIntent",
+                                        "sha256"
+                                      ],
+                                      "additionalProperties": false
+                                    },
                                     "evidence": {
                                       "type": "array",
                                       "items": {
@@ -42229,6 +42761,10 @@
                                               },
                                               "passed": {
                                                 "type": "boolean"
+                                              },
+                                              "basis": {
+                                                "type": "string",
+                                                "enum": ["model-audit", "command", "byte-equality"]
                                               },
                                               "evidence": {
                                                 "type": "array",
@@ -45035,6 +45571,70 @@
                           "summary": {
                             "type": "string"
                           },
+                          "report": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "sessionID": {
+                                "type": "string",
+                                "pattern": "^ses"
+                              },
+                              "messageID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "parentID": {
+                                "type": "string",
+                                "pattern": "^msg"
+                              },
+                              "at": {
+                                "type": "number"
+                              },
+                              "partIDs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^prt"
+                                },
+                                "minItems": 1
+                              },
+                              "dispatchID": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "goalCreatedAt": {
+                                "type": "number"
+                              },
+                              "goalIntent": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "acceptedIntent": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "version",
+                              "sessionID",
+                              "messageID",
+                              "parentID",
+                              "at",
+                              "partIDs",
+                              "dispatchID",
+                              "goalCreatedAt",
+                              "goalIntent",
+                              "sha256"
+                            ],
+                            "additionalProperties": false
+                          },
                           "evidence": {
                             "type": "array",
                             "items": {
@@ -45086,6 +45686,10 @@
                                     },
                                     "passed": {
                                       "type": "boolean"
+                                    },
+                                    "basis": {
+                                      "type": "string",
+                                      "enum": ["model-audit", "command", "byte-equality"]
                                     },
                                     "evidence": {
                                       "type": "array",

@@ -1,7 +1,10 @@
-import { expect } from "bun:test"
+import { afterAll, expect } from "bun:test"
 import path from "node:path"
+import os from "node:os"
 import { createHash } from "node:crypto"
 import { Effect, Exit } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -26,8 +29,16 @@ import { artifacts } from "@/kilocode/self-heal/artifact"
 import { Build } from "@/kilocode/self-heal/build-input"
 import { Schema } from "effect"
 import { archive } from "./fixtures/self-heal-artifact"
+import { remove as cleanup } from "./cleanup"
+const db = path.join(os.tmpdir(), `raya-self-heal-completion-${process.pid}-${crypto.randomUUID()}.sqlite`)
+afterAll(async () => {
+  await Promise.all([db, `${db}-wal`, `${db}-shm`].map(cleanup))
+}, 30_000)
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node])),
+  AppNodeBuilder.build(
+    LayerNode.group([FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node, Database.node]),
+    [[Database.node, Database.layerFromPath(db)]],
+  ),
 )
 const model = {
   providerID: ProviderV2.ID.make("test"),
@@ -103,7 +114,7 @@ function transcript(input: {
 function instance<A, E, R>(directory: string, run: (storage: Storage.Interface) => Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     return yield* run(yield* Storage.Service)
-  }).pipe(Effect.provide(Storage.layerFromDir(directory)))
+  }).pipe(Effect.provide(Storage.layerWithDatabase(directory)))
 }
 function goals(storage: Storage.Interface, rows: MessageV2.WithParts[]) {
   return RayaGoal.make({

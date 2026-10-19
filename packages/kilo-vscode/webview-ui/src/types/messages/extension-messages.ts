@@ -202,6 +202,7 @@ export interface GoalStopResultMessage {
   type: "goalStopResult"
   sessionID: string
   notice: string
+  stop?: import("../../../../src/shared/goal-stop").GoalStop
 }
 
 export interface GoalEvidenceResultMessage {

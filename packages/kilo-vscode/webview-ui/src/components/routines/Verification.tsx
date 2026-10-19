@@ -12,8 +12,9 @@ export function Verification(props: { outcome: KilocodeRoutineRunsResponse[numbe
           <details>
             <summary>Recorded criterion outcomes</summary>
             <p class="routines-hint">
-              Saved when this run settled. These are historical checks, not a new verification or your acceptance. Open
-              the conversation to inspect the original evidence.
+              Saved when this run settled. Model assessments record the agent's claims; executable checks record their
+              saved results. These do not verify the later final answer against your instructions or record your
+              acceptance. Open the conversation to inspect the original evidence.
             </p>
             <ul>
               <For each={record().requirements}>
@@ -22,7 +23,15 @@ export function Verification(props: { outcome: KilocodeRoutineRunsResponse[numbe
                     <strong>{item.requirement}</strong>
                     <p>
                       {item.required ? "Required" : "Optional"}:{" "}
-                      {item.passed ? "Verified at completion" : "Not verified"}
+                      {!item.passed
+                        ? "Not verified"
+                        : item.basis === "command"
+                          ? "Saved command check passed"
+                          : item.basis === "byte-equality"
+                            ? "Saved byte-equality check passed"
+                            : item.basis === "model-audit"
+                              ? "Agent reported satisfied"
+                              : "Recorded completion claim; verification basis unavailable"}
                     </p>
                     <Show when={item.verification}>
                       <p>Verification method: {item.verification}</p>

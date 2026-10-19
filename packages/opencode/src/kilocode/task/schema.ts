@@ -132,6 +132,21 @@ export namespace Codec {
     kind: Schema.Literals(["code", "notify"]),
     reply: Schema.optional(Schema.Literal(true)),
     summary: Schema.String,
+    report: Schema.optional(
+      Schema.Struct({
+        version: Schema.Literal(1),
+        sessionID: SessionID,
+        messageID: MessageID,
+        parentID: MessageID,
+        at: Schema.Finite,
+        partIDs: Schema.Array(PartID).check(Schema.isMinLength(1)),
+        dispatchID: Schema.String.check(Schema.isMinLength(1)),
+        goalCreatedAt: Schema.Finite,
+        goalIntent: Schema.String.check(Schema.isMinLength(1)),
+        acceptedIntent: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+      }),
+    ),
     evidence: Schema.optional(Schema.Array(Schema.String)),
     verification: Schema.optional(
       Schema.Struct({
@@ -143,6 +158,7 @@ export namespace Codec {
             verification: Schema.optional(Schema.String),
             required: Schema.Boolean,
             passed: Schema.Boolean,
+            basis: Schema.optional(Schema.Literals(["model-audit", "command", "byte-equality"])),
             evidence: Schema.Array(Schema.String),
           }),
         ),
@@ -223,6 +239,14 @@ export namespace Codec {
     Schema.makeFilter((value) =>
       value.trace && value.trace.goalCreatedAt !== value.goalCreatedAt
         ? "Routine identity snapshot belongs to a different goal."
+        : undefined,
+    ),
+    Schema.makeFilter((value) =>
+      value.outcome?.report &&
+      (value.status !== "complete" ||
+        value.outcome.report.sessionID !== value.sessionID ||
+        value.outcome.report.goalCreatedAt !== value.goalCreatedAt)
+        ? "Routine final report belongs to a different completed run."
         : undefined,
     ),
   )

@@ -224,6 +224,7 @@ import { SPEECH_TO_TEXT_MODELS } from "./speech-to-text/models"
 import { stopSessionProcesses } from "./kilo-provider/background-process"
 import { sandboxDefault, sandboxSessionMetadata } from "./shared/sandbox-session"
 import { goalPrompt, parseGoalCommand, type GoalState } from "./shared/goal" // raya_change - Milestone A native goal mode
+import type { GoalStop } from "./shared/goal-stop"
 import { parseSelfHealCommand } from "./shared/self-heal"
 import { summary as selfHealSummary, inspect as inspectSelfHeal } from "./self-heal/summary"
 import { capture as captureSelfHeal } from "./self-heal/intake" // raya_change - global autonomous feedback repair
@@ -1944,12 +1945,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   ): Promise<boolean> {
     if (message.type === "goalEdit" || message.type === "goalStop") {
       const operation = message.type === "goalStop" ? stopGoal : editGoal
+      const client = this.client
+      const sessionID = typeof message.sessionID === "string" ? message.sessionID : undefined
+      const directory = this.getWorkspaceDirectory(sessionID)
+      const generation = this.connectionGeneration
+      const selected = this.currentSession?.id
+      const current = () =>
+        this.client === client &&
+        this.connectionGeneration === generation &&
+        this.currentSession?.id === selected &&
+        sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
       await operation({
-        client: this.client,
+        client,
+        current,
         authorize: (client) => this.connectionService.capabilities.command(client),
-        directory: this.getWorkspaceDirectory(typeof message.sessionID === "string" ? message.sessionID : undefined),
+        directory,
         message,
-        post: (reply) => this.postMessage(reply),
+        post: (reply) => {
+          if (current()) this.postMessage(reply)
+        },
       })
       return true
     }
@@ -5932,8 +5946,17 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         notice,
       })
       if (response.response.status === 404 && !notice) {
-        const saved = await stopResult(client, sessionID, directory)
-        if (saved && current()) this.postMessage({ type: "goalStopResult", sessionID, notice: saved })
+        const projection: { stop?: GoalStop } = {}
+        const saved = await stopResult(client, sessionID, directory, (stop) => {
+          projection.stop = stop
+        })
+        if (saved && current())
+          this.postMessage({
+            type: "goalStopResult",
+            sessionID,
+            notice: saved,
+            ...(projection.stop ? { stop: projection.stop } : {}),
+          })
       }
     } finally {
       if (this.goalReads.get(sessionID) === id) this.goalReads.delete(sessionID)

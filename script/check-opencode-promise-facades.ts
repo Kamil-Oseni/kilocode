@@ -29,6 +29,11 @@ const allow: Record<string, string> = {
 }
 
 const testAllow: Record<string, { count: number; reason: string }> = {
+  "kilocode/fixtures/task-stop-report-crash.ts": {
+    count: 4,
+    reason:
+      "three isolated processes exercise actual public Stop, an inbox-write crash and explicit same-intent recovery against the same production Storage/SQLite writer graph, then retire that application runtime",
+  },
   "kilocode/fixtures/input-submission.ts": {
     count: 2,
     reason:

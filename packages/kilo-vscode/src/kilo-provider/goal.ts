@@ -1,11 +1,16 @@
-import type { KiloClient, KilocodeGoalUpdateResponse } from "@kilocode/sdk/v2/client"
+import type {
+  KiloClient,
+  KilocodeGoalUpdateResponse,
+  KilocodeGoalStopResultResponse as Receipt,
+} from "@kilocode/sdk/v2/client"
 import type { GoalEditedMessage, GoalStoppedMessage } from "../../webview-ui/src/types/messages/extension-messages"
 import type { GoalBudget, GoalState } from "../shared/goal"
 import { valid, equal } from "../shared/goal-criteria"
+import { pending, type GoalStop } from "../shared/goal-stop"
 
 const identifier = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.length <= 256
-const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value)
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value)
 const retries = (value: unknown) =>
   value === undefined || (typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= 100)
 const duration = (value: unknown) =>
@@ -154,41 +159,149 @@ function background(value: unknown): string | undefined {
     : `No related background jobs were running at the stop check (${time}). External work was not checked.`
 }
 
+function generation(value: unknown, sessionID: string) {
+  if (!value || typeof value !== "object") return false
+  const run = value as Record<string, unknown>
+  return (
+    identifier(run.id) &&
+    identifier(run.agentID) &&
+    run.sessionID === sessionID &&
+    typeof run.at === "number" &&
+    Number.isSafeInteger(run.at) &&
+    run.at >= 0 &&
+    typeof run.scheduleVersion === "number" &&
+    Number.isSafeInteger(run.scheduleVersion) &&
+    run.scheduleVersion >= 1 &&
+    (run.executionDigest === undefined ||
+      (typeof run.executionDigest === "string" && /^[a-f0-9]{64}$/.test(run.executionDigest)))
+  )
+}
+
+function association(value: unknown, sessionID: string, intent: string) {
+  if (!value || typeof value !== "object") return false
+  const task = value as Record<string, unknown>
+  const stop = task.stop as Record<string, unknown> | undefined
+  if (
+    task.version !== 1 ||
+    typeof task.sessionDigest !== "string" ||
+    !/^[a-f0-9]{64}$/.test(task.sessionDigest) ||
+    !stop ||
+    stop.version !== 1 ||
+    stop.intent !== intent ||
+    !finite(stop.at) ||
+    Number(stop.at) < 0 ||
+    !Array.isArray(task.runs) ||
+    task.runs.length !== 1
+  )
+    return false
+  return generation(task.runs[0], sessionID)
+}
+
+function terminal(receipt: Receipt) {
+  return receipt.phase !== "finished" || (typeof receipt.interrupted === "boolean" && finite(receipt.finishedAt))
+}
+
+function saved(receipt: Receipt | undefined, sessionID: string): receipt is Receipt & { at: number } {
+  return (
+    !!receipt &&
+    receipt.sessionID === sessionID &&
+    identifier(receipt.intent) &&
+    finite(receipt.at) &&
+    Number.isFinite(new Date(receipt.at).getTime()) &&
+    ["requested", "cleared", "finished"].includes(receipt.phase) &&
+    terminal(receipt)
+  )
+}
+
+function outcome(stop: GoalStop) {
+  if (stop.phase === "requested") return "requested; tracking removal and the worker's outcome are unconfirmed."
+  if (stop.phase === "cleared")
+    return pending(stop)
+      ? "tracking removal and the cancellation result were saved; routine finalization has not been confirmed."
+      : "tracking stopped; the worker's outcome is unconfirmed."
+  return stop.interrupted
+    ? "tracking stopped and its worker was interrupted. External or background work may still finish."
+    : "tracking stopped; this request did not interrupt the parent worker."
+}
+
+function observation(receipt: Receipt) {
+  return [receipt.phase === "finished" ? background(receipt.background) : undefined, operations(receipt.operations)]
+    .filter(Boolean)
+    .join(" ")
+}
+
+function confirmed(
+  receipt: Receipt | undefined,
+  sessionID: string,
+  intent: string,
+  retry: boolean,
+): receipt is Receipt & { at: number } {
+  return (
+    !!receipt &&
+    receipt.sessionID === sessionID &&
+    receipt.intent === intent &&
+    finite(receipt.at) &&
+    ["cleared", "finished"].includes(receipt.phase) &&
+    (!retry || receipt.phase === "finished") &&
+    terminal(receipt)
+  )
+}
+
+function rejected(retry: boolean, status: number) {
+  if (retry)
+    return "The original stop finalization could not be verified. Refresh the saved result before reviewing another retry."
+  return status === 409
+    ? "The goal changed since you reviewed it. Cancel and review the refreshed goal before stopping it."
+    : "Could not confirm that goal tracking stopped. Cancel and review the refreshed goal before trying again."
+}
+
+async function preflight(
+  client: KiloClient,
+  sessionID: string,
+  directory: string | undefined,
+  intent: string,
+  retry: unknown,
+  current: () => boolean,
+) {
+  if (retry !== true) return "Refresh the saved stop result before retrying finalization."
+  const goal = await client.kilocode.goal.get({ sessionID, directory })
+  if (!current()) return
+  if (goal.response.status !== 404)
+    return "The absence of a current goal could not be confirmed. Refresh the saved stop result."
+  const result = await client.kilocode.goal.stopResult({ sessionID, directory })
+  if (!current()) return
+  const receipt = result.data
+  if (
+    result.error ||
+    !receipt ||
+    receipt.sessionID !== sessionID ||
+    receipt.intent !== intent ||
+    !pending({ ...receipt, retirement: association(receipt.task, sessionID, intent) })
+  )
+    return "The original saved cancellation result could not be verified. Refresh the saved stop result."
+}
+
 export async function stopResult(
   client: KiloClient,
   sessionID: string,
   directory?: string,
+  project?: (stop: GoalStop) => void,
 ): Promise<string | undefined> {
   try {
     const result = await client.kilocode.goal.stopResult({ sessionID, directory })
     if (result.response.status === 404) return
     const receipt = result.data
-    if (
-      result.error ||
-      !receipt ||
-      receipt.sessionID !== sessionID ||
-      !identifier(receipt.intent) ||
-      !finite(receipt.at) ||
-      !Number.isFinite(new Date(receipt.at).getTime()) ||
-      !["requested", "cleared", "finished"].includes(receipt.phase) ||
-      (receipt.phase === "finished" && (typeof receipt.interrupted !== "boolean" || !finite(receipt.finishedAt)))
-    )
-      return "The previous goal-stop result could not be verified."
-    const outcome =
-      receipt.phase === "requested"
-        ? "requested; tracking removal and the worker's outcome are unconfirmed."
-        : receipt.phase === "cleared"
-          ? "tracking stopped; the worker's outcome is unconfirmed."
-          : receipt.interrupted
-            ? "tracking stopped and its worker was interrupted. External or background work may still finish."
-            : "tracking stopped; this request did not interrupt the parent worker."
-    const detail = [
-      receipt.phase === "finished" ? background(receipt.background) : undefined,
-      operations(receipt.operations),
-    ]
-      .filter(Boolean)
-      .join(" ")
-    return `Last goal stop (${new Date(receipt.at).toLocaleString()}): ${outcome}${detail ? ` ${detail}` : ""}`
+    if (result.error || !saved(receipt, sessionID)) return "The previous goal-stop result could not be verified."
+    const stop: GoalStop = {
+      intent: receipt.intent,
+      at: receipt.at,
+      phase: receipt.phase,
+      ...(typeof receipt.interrupted === "boolean" ? { interrupted: receipt.interrupted } : {}),
+      ...(association(receipt.task, sessionID, receipt.intent) ? { retirement: true as const } : {}),
+    }
+    project?.(stop)
+    const detail = observation(receipt)
+    return `Last goal stop (${new Date(receipt.at).toLocaleString()}): ${outcome(stop)}${detail ? ` ${detail}` : ""}`
   } catch {
     return "The previous goal-stop result could not be loaded. Reconnect to check it."
   }
@@ -197,62 +310,71 @@ export async function stopResult(
 export async function stopGoal(input: {
   client: KiloClient | null | undefined
   directory?: string
-  message: { sessionID?: unknown; requestID?: unknown; expectedIntent?: unknown }
+  message: { sessionID?: unknown; requestID?: unknown; expectedIntent?: unknown; retry?: unknown }
+  current?: () => boolean
   post: (message: GoalStoppedMessage) => void
 }) {
   const message = input.message
+  const current = input.current ?? (() => true)
+  const post = (reply: GoalStoppedMessage) => {
+    if (current()) input.post(reply)
+  }
+  if (!current()) return
   if (!identifier(message.requestID) || !identifier(message.sessionID)) return
   const reply = { type: "goalStopped" as const, requestID: message.requestID, sessionID: message.sessionID }
   if (!identifier(message.expectedIntent)) {
-    input.post({ ...reply, error: "Review the goal before stopping it." })
+    post({ ...reply, error: "Review the goal before stopping it." })
     return
   }
   if (!input.client) {
-    input.post({ ...reply, error: "Raya is disconnected. Reconnect and review the goal before trying again." })
+    post({ ...reply, error: "Raya is disconnected. Reconnect and review the goal before trying again." })
     return
   }
   try {
+    if (message.retry !== undefined) {
+      const error = await preflight(
+        input.client,
+        message.sessionID,
+        input.directory,
+        message.expectedIntent,
+        message.retry,
+        current,
+      )
+      if (!current()) return
+      if (error) {
+        post({ ...reply, error })
+        return
+      }
+    }
+    if (!current()) return
     const result = await input.client.kilocode.goal.stop({
       sessionID: message.sessionID,
       directory: input.directory,
       expectedIntent: message.expectedIntent,
     })
+    if (!current()) return
     const receipt = result.data
-    if (
-      result.error ||
-      !receipt ||
-      receipt.sessionID !== message.sessionID ||
-      receipt.intent !== message.expectedIntent ||
-      !finite(receipt.at) ||
-      !["cleared", "finished"].includes(receipt.phase) ||
-      (receipt.phase === "finished" && (typeof receipt.interrupted !== "boolean" || !finite(receipt.finishedAt)))
-    ) {
-      input.post({
+    if (result.error || !confirmed(receipt, message.sessionID, message.expectedIntent, message.retry === true)) {
+      post({
         ...reply,
-        error:
-          result.response.status === 409
-            ? "The goal changed since you reviewed it. Cancel and review the refreshed goal before stopping it."
-            : "Could not confirm that goal tracking stopped. Cancel and review the refreshed goal before trying again.",
+        error: rejected(message.retry === true, result.response.status),
       })
       return
     }
-    const detail = [
-      receipt.phase === "finished" ? background(receipt.background) : undefined,
-      operations(receipt.operations),
-    ]
-      .filter(Boolean)
-      .join(" ")
-    input.post({
+    const detail = observation(receipt)
+    post({
       ...reply,
       cleared: true,
       worker: receipt.phase === "cleared" ? "unconfirmed" : receipt.interrupted ? "interrupted" : "preserved",
       ...(detail ? { background: detail } : {}),
     })
   } catch {
-    input.post({
+    post({
       ...reply,
       error:
-        "The connection failed before stopping was confirmed. Cancel and review the refreshed goal before trying again.",
+        message.retry === true
+          ? "The connection failed before stop finalization was confirmed. Refresh the saved result; the original request may still finish."
+          : "The connection failed before stopping was confirmed. Cancel and review the refreshed goal before trying again.",
     })
   }
 }

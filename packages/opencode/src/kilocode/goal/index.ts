@@ -13,6 +13,7 @@ import * as Planning from "./plan"
 import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { mutation } from "./mutation"
+import { capture, bound as reviewed } from "./review-source"
 import { gate } from "@/kilocode/session/input-gate"
 import type { SessionRunState } from "@/session/run-state"
 import type * as TaskWorker from "@/kilocode/session/task-worker"
@@ -1288,6 +1289,12 @@ export namespace RayaGoal {
       if (state.status !== "active" && state.status !== "blocked" && !(accepted && state.status === "paused")) {
         return yield* new AuditError({ message: `Only an active or blocked goal can be marked complete.` })
       }
+      if (accepted && state.routine && !reviewed(state))
+        return yield* new AuditError({
+          conflict: true,
+          message:
+            "This Routine review has no matching original output provenance. Resume it and prepare a fresh review before accepting completion.",
+        })
       const messages = yield* collect(deps.sessions, sessionID, state.createdAt, state.inputs)
       // raya_change start - accept the flattened audit (top-level `requirements`) that models emit
       // far more often than the nested `audit` object, and make the rejection actionable so a model
@@ -1373,8 +1380,15 @@ export namespace RayaGoal {
           ?.filter((item) => item.review && audit.requirements.some((req) => req.criterionID === item.id && req.passed))
           .map((item) => item.id) ?? []
       const pending = criteria.length > 0 && !accepted
+      const origin = pending && state.routine ? capture(state) : undefined
+      if (pending && state.routine && !origin)
+        return yield* new AuditError({
+          conflict: true,
+          message:
+            "This Routine cannot request review without its original authorized turn. Review its current Goal and prepare a fresh result.",
+        })
       const review = pending
-        ? { status: "pending" as const, at: now, criteria }
+        ? { status: "pending" as const, at: now, criteria, ...(origin ? { source: origin } : {}) }
         : accepted
           ? { ...state.review!, status: "accepted" as const, acceptedAt: now }
           : undefined

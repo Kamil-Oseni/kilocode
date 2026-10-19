@@ -23248,6 +23248,12 @@ export type KilocodeGoalGetResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       criteria: Array<string>
       acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      source?: {
+        goalCreatedAt: number
+        dispatchID: string
+        messageID: string
+        intent: string
+      }
     }
     revisions?: Array<{
       review?: {
@@ -23255,6 +23261,12 @@ export type KilocodeGoalGetResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         criteria: Array<string>
         acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source?: {
+          goalCreatedAt: number
+          dispatchID: string
+          messageID: string
+          intent: string
+        }
       }
       id: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -23622,6 +23634,12 @@ export type KilocodeGoalGetResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         criteria: Array<string>
         acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source?: {
+          goalCreatedAt: number
+          dispatchID: string
+          messageID: string
+          intent: string
+        }
       }
       revisions?: Array<{
         review?: {
@@ -23629,6 +23647,12 @@ export type KilocodeGoalGetResponses = {
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
           criteria: Array<string>
           acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          source?: {
+            goalCreatedAt: number
+            dispatchID: string
+            messageID: string
+            intent: string
+          }
         }
         id: string
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -24035,6 +24059,12 @@ export type KilocodeGoalUpdateResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       criteria: Array<string>
       acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      source?: {
+        goalCreatedAt: number
+        dispatchID: string
+        messageID: string
+        intent: string
+      }
     }
     revisions?: Array<{
       review?: {
@@ -24042,6 +24072,12 @@ export type KilocodeGoalUpdateResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         criteria: Array<string>
         acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source?: {
+          goalCreatedAt: number
+          dispatchID: string
+          messageID: string
+          intent: string
+        }
       }
       id: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -24409,6 +24445,12 @@ export type KilocodeGoalUpdateResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         criteria: Array<string>
         acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source?: {
+          goalCreatedAt: number
+          dispatchID: string
+          messageID: string
+          intent: string
+        }
       }
       revisions?: Array<{
         review?: {
@@ -24416,6 +24458,12 @@ export type KilocodeGoalUpdateResponses = {
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
           criteria: Array<string>
           acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          source?: {
+            goalCreatedAt: number
+            dispatchID: string
+            messageID: string
+            intent: string
+          }
         }
         id: string
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -24789,6 +24837,12 @@ export type KilocodeGoalCreateResponses = {
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       criteria: Array<string>
       acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      source?: {
+        goalCreatedAt: number
+        dispatchID: string
+        messageID: string
+        intent: string
+      }
     }
     revisions?: Array<{
       review?: {
@@ -24796,6 +24850,12 @@ export type KilocodeGoalCreateResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         criteria: Array<string>
         acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source?: {
+          goalCreatedAt: number
+          dispatchID: string
+          messageID: string
+          intent: string
+        }
       }
       id: string
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -25163,6 +25223,12 @@ export type KilocodeGoalCreateResponses = {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         criteria: Array<string>
         acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        source?: {
+          goalCreatedAt: number
+          dispatchID: string
+          messageID: string
+          intent: string
+        }
       }
       revisions?: Array<{
         review?: {
@@ -25170,6 +25236,12 @@ export type KilocodeGoalCreateResponses = {
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
           criteria: Array<string>
           acceptedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          source?: {
+            goalCreatedAt: number
+            dispatchID: string
+            messageID: string
+            intent: string
+          }
         }
         id: string
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -27007,6 +27079,19 @@ export type KilocodeRoutineRunResponses = {
       kind: "code" | "notify"
       reply?: true
       summary: string
+      report?: {
+        version: 1
+        sessionID: string
+        messageID: string
+        parentID: string
+        at: number
+        partIDs: Array<string>
+        dispatchID: string
+        goalCreatedAt: number
+        goalIntent: string
+        acceptedIntent?: string
+        sha256: string
+      }
       evidence?: Array<string>
       verification?: {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -27016,6 +27101,7 @@ export type KilocodeRoutineRunResponses = {
           verification?: string
           required: boolean
           passed: boolean
+          basis?: "model-audit" | "command" | "byte-equality"
           evidence: Array<string>
         }>
       }
@@ -27144,6 +27230,19 @@ export type KilocodeRoutineRunsResponses = {
       kind: "code" | "notify"
       reply?: true
       summary: string
+      report?: {
+        version: 1
+        sessionID: string
+        messageID: string
+        parentID: string
+        at: number
+        partIDs: Array<string>
+        dispatchID: string
+        goalCreatedAt: number
+        goalIntent: string
+        acceptedIntent?: string
+        sha256: string
+      }
       evidence?: Array<string>
       verification?: {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -27153,6 +27252,7 @@ export type KilocodeRoutineRunsResponses = {
           verification?: string
           required: boolean
           passed: boolean
+          basis?: "model-audit" | "command" | "byte-equality"
           evidence: Array<string>
         }>
       }
@@ -27242,6 +27342,19 @@ export type KilocodeRoutineEventsResponses = {
         kind: "code" | "notify"
         reply?: true
         summary: string
+        report?: {
+          version: 1
+          sessionID: string
+          messageID: string
+          parentID: string
+          at: number
+          partIDs: Array<string>
+          dispatchID: string
+          goalCreatedAt: number
+          goalIntent: string
+          acceptedIntent?: string
+          sha256: string
+        }
         evidence?: Array<string>
         verification?: {
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -27251,6 +27364,7 @@ export type KilocodeRoutineEventsResponses = {
             verification?: string
             required: boolean
             passed: boolean
+            basis?: "model-audit" | "command" | "byte-equality"
             evidence: Array<string>
           }>
         }
@@ -27366,6 +27480,19 @@ export type KilocodeRoutineHistoriesResponses = {
           kind: "code" | "notify"
           reply?: true
           summary: string
+          report?: {
+            version: 1
+            sessionID: string
+            messageID: string
+            parentID: string
+            at: number
+            partIDs: Array<string>
+            dispatchID: string
+            goalCreatedAt: number
+            goalIntent: string
+            acceptedIntent?: string
+            sha256: string
+          }
           evidence?: Array<string>
           verification?: {
             at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -27375,6 +27502,7 @@ export type KilocodeRoutineHistoriesResponses = {
               verification?: string
               required: boolean
               passed: boolean
+              basis?: "model-audit" | "command" | "byte-equality"
               evidence: Array<string>
             }>
           }
@@ -28115,6 +28243,19 @@ export type KilocodeRoutineEventResponses = {
       kind: "code" | "notify"
       reply?: true
       summary: string
+      report?: {
+        version: 1
+        sessionID: string
+        messageID: string
+        parentID: string
+        at: number
+        partIDs: Array<string>
+        dispatchID: string
+        goalCreatedAt: number
+        goalIntent: string
+        acceptedIntent?: string
+        sha256: string
+      }
       evidence?: Array<string>
       verification?: {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -28124,6 +28265,7 @@ export type KilocodeRoutineEventResponses = {
           verification?: string
           required: boolean
           passed: boolean
+          basis?: "model-audit" | "command" | "byte-equality"
           evidence: Array<string>
         }>
       }

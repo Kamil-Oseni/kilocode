@@ -6,7 +6,7 @@ import type { Bus } from "@/bus"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import type { Session } from "@/session/session"
 import type { Storage } from "@/storage/storage"
-import { SessionID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 import { EffectBridge } from "@/effect/bridge"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
@@ -56,6 +56,8 @@ import { TaskRetirement, receipts } from "@/kilocode/goal/stop-receipt"
 import { trace } from "./trace"
 import { RayaRoutineReports } from "./projection"
 import { RayaTaskWait } from "./wait-notice"
+import { final } from "./final-report"
+import { bound as reviewed } from "@/kilocode/goal/review-source"
 
 const WAIT = "waiting on you"
 
@@ -203,6 +205,12 @@ function open<A, E, R>(dir: string | undefined, effect: Effect.Effect<A, E, R>) 
 }
 
 export namespace RayaTaskRunner {
+  type Close = {
+    messageID?: MessageID
+    goalIntent?: string
+    parentID?: SessionID
+    reason: "completed" | "error" | "interrupted" | "superseded"
+  }
   type Review = {
     sessionID: SessionID
     requestID: string
@@ -234,7 +242,7 @@ export namespace RayaTaskRunner {
     stopMembers: (id: string, members: readonly string[]) => Effect.Effect<void, unknown>
     recoverStops: () => Effect.Effect<void, unknown>
     settle: (sessionID: SessionID) => Effect.Effect<void, RayaTask.GuardError>
-    observe: (sessionID: SessionID) => Effect.Effect<void, RayaTask.GuardError>
+    observe: (sessionID: SessionID, closed?: Close) => Effect.Effect<void, RayaTask.GuardError>
     stopGoal: <A, E, R>(
       body: (tasks: GoalStop) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | RayaTask.GuardError, R>
@@ -1698,7 +1706,7 @@ export namespace RayaTaskRunner {
       )
     })
 
-    const observe = Effect.fn("RayaTaskRunner.observe")(function* (sessionID: SessionID) {
+    const observe = Effect.fn("RayaTaskRunner.observe")(function* (sessionID: SessionID, closed?: Close) {
       if (yield* transfer.held().pipe(Effect.orDie)) return
       const session = yield* input.sessions.get(sessionID)
       const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
@@ -1715,10 +1723,50 @@ export namespace RayaTaskRunner {
       )
         return
       const goal = yield* goals.get(sessionID)
+      // Both subscribers receive TurnClose independently. Bind the original
+      // completed turn before this subscriber's settlement hint can retire it.
+      // Active Goal accounting remains owned by GoalContinuation.
+      const review =
+        goal &&
+        reviewed(goal) &&
+        ((goal.status === "paused" && goal.review?.status === "pending") ||
+          (goal.status === "complete" && goal.review?.status === "accepted")) &&
+        goal.review?.source?.intent === closed?.goalIntent
+      if (
+        closed?.reason === "completed" &&
+        !closed.parentID &&
+        closed.messageID &&
+        closed.goalIntent &&
+        goal &&
+        ((goal.status === "complete" && goal.intent === closed.goalIntent) || review) &&
+        goal.createdAt === run.goalCreatedAt &&
+        goal.routine?.agentID === run.agentID &&
+        goal.routine.runID === run.id &&
+        goal.routine.sessionID === sessionID &&
+        goal.dispatch?.intent === closed.goalIntent &&
+        goal.dispatch.phase === "started"
+      ) {
+        const saved = yield* snapshots.find(run.id).pipe(Effect.orDie)
+        const latest = (yield* tasks.runsFor(run.agentID)).find((row) => row.id === run.id)
+        const current = (yield* input.sessions.get(sessionID)).metadata?.rayaRoutine
+        if (
+          saved?.agentID === run.agentID &&
+          saved.sessionID === sessionID &&
+          saved.at === run.at &&
+          (saved.definition.scheduleVersion ?? 1) === (run.scheduleVersion ?? 1) &&
+          isDeepStrictEqual(run, latest) &&
+          isDeepStrictEqual(session.metadata?.rayaRoutine, current) &&
+          isDeepStrictEqual(goal, yield* goals.get(sessionID))
+        )
+          yield* goals
+            .finished(sessionID, closed.messageID)
+            .pipe(Effect.mapError((err) => new RayaTask.GuardError({ kind: "conflict", message: err.message })))
+      }
+      const current = yield* goals.get(sessionID)
       const rows = yield* input.sessions.messages({ sessionID })
-      const value = trace(run, goal, rows)
+      const value = trace(run, current, rows)
       if (isDeepStrictEqual(value, run.trace)) return
-      if (!isDeepStrictEqual(goal, yield* goals.get(sessionID))) return
+      if (!isDeepStrictEqual(current, yield* goals.get(sessionID))) return
       if (
         !isDeepStrictEqual(session.metadata?.rayaRoutine, (yield* input.sessions.get(sessionID)).metadata?.rayaRoutine)
       )
@@ -1928,9 +1976,17 @@ export namespace RayaTaskRunner {
           continue
         }
         const cost = msgs.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
+        const report =
+          !stop && status === "complete" && goal && saved?.sessionID === run.sessionID
+            ? final(run, goal, msgs)
+            : undefined
+        if (!stop && status === "complete" && !report) {
+          log.warn("Routine completion awaits its original final answer", { runID: run.id, sessionID })
+          continue
+        }
         const summary = stop
           ? "Stopped by the user. No unverified result was accepted."
-          : goal?.blockedReason?.trim() || goal?.reply?.body.trim() || goal?.audit?.summary?.trim() || ""
+          : (report?.summary ?? goal?.blockedReason?.trim() ?? "")
         const next = {
           ...run,
           status,
@@ -1945,6 +2001,7 @@ export namespace RayaTaskRunner {
             kind: kind(definition.role, definition.objective),
             reply: goal?.completion === "reply" && goal.status === "complete" ? true : undefined,
             summary,
+            ...(report ? { report: report.report } : {}),
             evidence: goal?.audit?.requirements.flatMap((req) => req.evidence.map((ev) => ev.summary)),
             verification: goal?.audit
               ? {
@@ -1957,6 +2014,7 @@ export namespace RayaTaskRunner {
                       verification: criterion?.verification,
                       required: criterion?.required !== false,
                       passed: req.passed,
+                      basis: criterion?.check?.kind ?? "model-audit",
                       evidence: req.evidence.map((ev) => ev.summary),
                     }
                   }),
@@ -2012,7 +2070,7 @@ export namespace RayaTaskRunner {
                 message: "The original routine Stop is still settling. Review its retained receipt before continuing.",
               })
             })
-          : yield* tasks.transition(run, next)
+          : yield* tasks.transition(run, next, report ? goal : undefined)
         withheld(changed ? "transition-committed" : "transition-conflict")
         if (changed && status !== "stopped" && definition.memoryScope === "role" && summary) {
           yield* tasks.learn(item.id, run.id, summary)
@@ -3031,6 +3089,7 @@ export namespace RayaTaskRunner {
       yield* Effect.acquireRelease(
         input.bus.subscribeCallback(KiloSession.Event.TurnClose, (event) => {
           if (admission.snapshot().closed) return
+          if (event.properties.parentID) return
           if (event.properties.reason === "superseded") return
           const sid = event.properties.sessionID
           admission.dispatch(
@@ -3041,7 +3100,7 @@ export namespace RayaTaskRunner {
                 if (!goal || goal.completion !== "reply" || goal.status !== "active") break
                 yield* Effect.sleep(Duration.millis(delay))
               }
-              yield* owned.events.observe(sid)
+              yield* owned.events.observe(sid, event.properties)
               yield* owned.events.settle(sid)
             }).pipe(
               (body) => admission.observe(body, known),

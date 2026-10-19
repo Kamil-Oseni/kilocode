@@ -114,6 +114,14 @@ export namespace Codec {
     at: Schema.Number,
     criteria: Schema.Array(Schema.String),
     acceptedAt: Schema.optional(Schema.Number),
+    source: Schema.optional(
+      Schema.Struct({
+        goalCreatedAt: Schema.Finite,
+        dispatchID: Schema.String.check(Schema.isMinLength(1)),
+        messageID: MessageID,
+        intent: Schema.String.check(Schema.isMinLength(1)),
+      }),
+    ),
   })
 
   export const ChargeLimit = Schema.Struct({

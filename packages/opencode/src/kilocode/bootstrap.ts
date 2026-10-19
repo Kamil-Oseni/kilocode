@@ -33,6 +33,7 @@ import { Config } from "@/config/config" // raya_change - Milestone I goal conti
 import { recoverPending } from "@/kilocode/tool/apply-patch-transaction"
 import { InstanceState } from "@/effect/instance-state"
 import { PtyArchive } from "@/kilocode/pty/archive"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 
 const log = Log.create({ service: "kilocode-bootstrap" })
 
@@ -245,6 +246,7 @@ export namespace KilocodeBootstrap {
         Database.node,
         PtyArchive.node,
         Config.node, // raya_change - Milestone I routing settings
+        FSUtil.node,
       ],
     }),
   )

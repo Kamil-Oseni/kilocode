@@ -11,7 +11,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Exit, Layer, Schema } from "effect"
 import { Bus } from "@/bus"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { RayaGoal } from "@/kilocode/goal"
@@ -64,7 +64,7 @@ const ref = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("
 // Real Session/Storage/SQLite and the production runner; only the already-accepted
 // audit is seeded. These tests do not assert that a prose audit proves its claims.
 const seed = Effect.fn("FinalReportTest.seed")(function* (
-  opts: { final?: boolean; answer?: string; timer?: boolean; cron?: boolean } = {},
+  opts: { final?: boolean; answer?: string; timer?: boolean; cron?: boolean; unobserved?: boolean } = {},
 ) {
   const storage = yield* Storage.Service
   const database = yield* Database.Service
@@ -154,18 +154,20 @@ const seed = Effect.fn("FinalReportTest.seed")(function* (
   })
   if (trigger.kind === "timer")
     expect(yield* queue.link({ id: trigger.id, claimID: id, sessionID: chat.id, now: scheduled })).toBe(true)
-  const user = yield* sessions.updateMessage({
-    id: MessageID.ascending(),
-    sessionID: chat.id,
-    role: "user",
-    agent: "build",
-    model: ref,
-    time: { created: Date.now() },
-  })
+  const prior = opts.unobserved
+    ? undefined
+    : yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: chat.id,
+        role: "user",
+        agent: "build",
+        model: ref,
+        time: { created: Date.now() },
+      })
   const created = yield* goals.create(
     chat.id,
     agent.objective,
-    user.id,
+    prior?.id,
     undefined,
     undefined,
     undefined,
@@ -177,6 +179,25 @@ const seed = Effect.fn("FinalReportTest.seed")(function* (
       sessionID: chat.id,
     },
   )
+  // Match native startup: arm first, then publish and bind the actual original input.
+  const user =
+    prior ??
+    (yield* sessions.updateMessage({
+      id: MessageID.ascending(),
+      sessionID: chat.id,
+      role: "user",
+      agent: "build",
+      model: ref,
+      time: { created: Date.now() },
+    }))
+  if (opts.unobserved)
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      sessionID: chat.id,
+      messageID: user.id,
+      type: "text",
+      text: agent.objective,
+    })
   const active = yield* goals.initial(chat.id, created.intent!, "final-report-fixture")
   if (!active?.dispatch) throw new Error("The actual original Goal dispatch was not admitted")
   const inspected = source
@@ -288,26 +309,28 @@ const seed = Effect.fn("FinalReportTest.seed")(function* (
     scheduleVersion: agent.scheduleVersion ?? 1,
     trigger,
     goalCreatedAt: created.createdAt,
-    trace: {
-      version: 1,
-      goalCreatedAt: created.createdAt,
-      turns: [
-        {
-          turnID: user.id,
-          messages: [
-            ...(inspected
-              ? [
-                  {
-                    messageID: inspected.message.id,
-                    actions: [{ actionID: inspected.part.id, status: "completed" as const }],
-                  },
-                ]
-              : []),
-            { messageID: answer.id, actions: [] },
+    trace: opts.unobserved
+      ? undefined
+      : {
+          version: 1,
+          goalCreatedAt: created.createdAt,
+          turns: [
+            {
+              turnID: user.id,
+              messages: [
+                ...(inspected
+                  ? [
+                      {
+                        messageID: inspected.message.id,
+                        actions: [{ actionID: inspected.part.id, status: "completed" as const }],
+                      },
+                    ]
+                  : []),
+                { messageID: answer.id, actions: [] },
+              ],
+            },
           ],
         },
-      ],
-    },
   })
   yield* RayaTaskSnapshot.make({ storage }).save({
     version: 2,
@@ -522,6 +545,110 @@ it.instance(
     }),
 )
 
+for (const quoted of [false, true]) {
+  it.instance(
+    `a completed original turn before observation ${quoted ? "rejects quoted" : "accepts exact"} frozen final bytes and persists its trace`,
+    () =>
+      Effect.gen(function* () {
+        const answer = quoted ? `"${text}"` : text
+        const ctx = yield* seed({ final: true, answer, unobserved: true })
+        const inspected = ctx.inspected
+        if (!inspected) throw new Error("The original full Read is required")
+        expect(ctx.run.trace).toBeUndefined()
+        expect((yield* ctx.runner.tasks.runsFor(ctx.agent.id))[0]?.trace).toBeUndefined()
+        expect(ctx.goal.inputs).toEqual([ctx.user.id])
+        expect(ctx.user.time.created).toBeGreaterThanOrEqual(ctx.goal.createdAt)
+        expect(ctx.goal.dispatch).toMatchObject({
+          phase: "finished",
+          assistantID: ctx.answer.id,
+          messageID: ctx.user.id,
+        })
+        // No observe, subscriber replay, model invocation or reconstructed fixture trace precedes settlement.
+        yield* ctx.runner.settle(ctx.chat.id)
+        const row = (yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)
+        expect(row?.outcome?.delivery?.status).toBe(quoted ? "mismatch" : "passed")
+        expect(row?.outcome?.delivery?.reason).toBe(quoted ? "final-mismatch" : "verified")
+        expect(row?.status).toBe(quoted ? "blocked" : "complete")
+        expect(row?.outcome?.summary).toBe(answer)
+        expect(row?.outcome?.delivery?.source).toMatchObject({
+          messageID: inspected.message.id,
+          partID: inspected.part.id,
+        })
+        expect(Schema.is(Codec.Trace)(row?.trace)).toBe(true)
+        expect(row?.trace).toEqual({
+          version: 1,
+          goalCreatedAt: ctx.goal.createdAt,
+          turns: [
+            {
+              turnID: ctx.user.id,
+              messages: [
+                {
+                  messageID: inspected.message.id,
+                  actions: [{ actionID: inspected.part.id, status: "completed" }],
+                },
+                { messageID: ctx.answer.id, actions: [] },
+              ],
+            },
+          ],
+        })
+        const reopened = RayaTaskRunner.make(ctx)
+        expect((yield* reopened.tasks.runsFor(ctx.agent.id)).find((item) => item.id === ctx.run.id)?.trace).toEqual(
+          row?.trace,
+        )
+        expect(yield* reopened.tasks.recall(ctx.agent.id)).toBe(quoted ? "" : text)
+      }),
+  )
+}
+
+for (const defect of ["saved-trace", "new-goal", "inputs"] as const) {
+  it.instance(`settlement cannot launder ${defect} associations while deriving a missing final-delivery trace`, () =>
+    Effect.gen(function* () {
+      const ctx = yield* seed({ final: true, unobserved: true })
+      const memory = yield* ctx.runner.tasks.recall(ctx.agent.id)
+      if (defect === "saved-trace") {
+        const saved = (yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)
+        if (!saved) throw new Error("The original persisted run is required")
+        expect(saved.trace).toBeUndefined()
+        const foreign = yield* ctx.sessions.create({ title: "Foreign trace source" })
+        const user = yield* ctx.sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: foreign.id,
+          role: "user",
+          agent: "build",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        const trace = {
+          version: 1 as const,
+          goalCreatedAt: ctx.goal.createdAt,
+          turns: [{ turnID: user.id, messages: [] }],
+        }
+        expect(Schema.is(Codec.Trace)(trace)).toBe(true)
+        expect(yield* ctx.runner.tasks.transition(saved, { ...saved, trace })).toBe(true)
+        expect((yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)?.trace).toEqual(
+          trace,
+        )
+      }
+      if (defect === "new-goal")
+        yield* ctx.storage.replace(["raya", "goal", ctx.chat.id], {
+          ...ctx.goal,
+          createdAt: ctx.goal.createdAt + 1,
+          intent: crypto.randomUUID(),
+        })
+      if (defect === "inputs")
+        yield* ctx.storage.replace(["raya", "goal", ctx.chat.id], { ...ctx.goal, inputs: [MessageID.ascending()] })
+      const original = (yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)
+      yield* ctx.runner.settle(ctx.chat.id)
+      const row = (yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)
+      expect(row?.outcome?.delivery?.status).not.toBe("passed")
+      expect(row?.status).not.toBe("complete")
+      expect(row?.trace).toEqual(original?.trace)
+      expect(yield* ctx.runner.tasks.recall(ctx.agent.id)).toBe(memory)
+      if (defect !== "inputs") expect(row).toEqual(original)
+    }),
+  )
+}
+
 it.instance("an exact frozen final output completes and learns only the actual original answer", () =>
   Effect.gen(function* () {
     const ctx = yield* seed({ final: true })
@@ -694,6 +821,115 @@ it.instance(
       expect(yield* ctx.sessions.messages({ sessionID: ctx.chat.id })).toEqual(messages)
     }),
 )
+
+for (const variant of ["original", "goal", "dispatch"] as const) {
+  const replacement = variant !== "original"
+  it.instance(
+    `TurnClose bookkeeping ${variant === "dispatch" ? "refuses a changed dispatch identity after" : replacement ? "refuses a replaced Goal after" : "joins"} the same original finalization winning its real CAS`,
+    () =>
+      Effect.gen(function* () {
+        const ctx = yield* seed({ final: true, unobserved: true })
+        yield* ctx.storage.replace(["raya", "goal", ctx.chat.id], {
+          ...ctx.goal,
+          dispatch: {
+            ...ctx.goal.dispatch!,
+            phase: "started",
+            assistantID: undefined,
+            finishedAt: undefined,
+            outcome: undefined,
+          },
+        })
+        const original = (yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)
+        if (!original) throw new Error("The original persisted run is required")
+        const execution = RayaTaskExecution.make(ctx.storage)
+        yield* execution.enter(original, Effect.void)
+        const owner = yield* execution.receipt(original)
+        expect(owner?.state).toBe("idle")
+        const events = yield* ctx.runner.tasks.eventsFor(ctx.agent.id)
+        const messages = yield* ctx.sessions.messages({ sessionID: ctx.chat.id })
+        const memory = yield* ctx.runner.tasks.recall(ctx.agent.id)
+        const state: { held: boolean; winner?: RayaGoal.State; replacement?: RayaGoal.State } = { held: false }
+        const runner = RayaTaskRunner.make({
+          storage: ctx.storage,
+          database: ctx.database,
+          sessions: {
+            create: ctx.sessions.create,
+            get: ctx.sessions.get,
+            children: ctx.sessions.children,
+            messages: (input) =>
+              Effect.gen(function* () {
+                if (!state.held && input.sessionID === ctx.chat.id) {
+                  yield* Effect.gen(function* () {
+                    state.held = true
+                    // The losing production finished() has read its Goal but has not acquired the save lock.
+                    // Commit the independent real finished() first; no CAS or finalization logic is injected.
+                    state.winner = yield* ctx.goals.finished(ctx.chat.id, ctx.answer.id)
+                    if (!state.winner) throw new Error("The independent original finalization must commit")
+                    if (variant === "goal")
+                      state.replacement = yield* ctx.goals.create(ctx.chat.id, "A genuinely new owner assignment")
+                    if (variant === "dispatch") {
+                      const changed = {
+                        ...state.winner,
+                        revision: crypto.randomUUID(),
+                        dispatch: { ...state.winner.dispatch!, id: crypto.randomUUID() },
+                      }
+                      expect(Schema.is(RayaGoal.State)(changed)).toBe(true)
+                      yield* ctx.storage.replace(["raya", "goal", ctx.chat.id], changed)
+                      state.replacement = yield* ctx.goals.get(ctx.chat.id)
+                      expect(state.replacement?.dispatch?.id).not.toBe(state.winner.dispatch?.id)
+                      expect(state.replacement?.dispatch?.assistantID).toBe(ctx.answer.id)
+                      expect(state.replacement?.dispatch?.messageID).toBe(ctx.user.id)
+                    }
+                  }).pipe(Effect.orDie)
+                }
+                return yield* ctx.sessions.messages(input)
+              }),
+          },
+        })
+        const observed = yield* runner
+          .observe(ctx.chat.id, {
+            reason: "completed",
+            messageID: ctx.answer.id,
+            goalIntent: ctx.goal.intent,
+          })
+          .pipe(Effect.exit)
+        expect(state.held).toBe(true)
+        expect(state.winner?.dispatch).toMatchObject({
+          phase: "finished",
+          assistantID: ctx.answer.id,
+          messageID: ctx.user.id,
+          outcome: "completed",
+        })
+        expect(state.winner?.revision).not.toBe(ctx.goal.revision)
+        expect(Exit.isFailure(observed)).toBe(replacement)
+        if (replacement) {
+          if (variant === "goal") expect(state.replacement?.intent).not.toBe(ctx.goal.intent)
+          if (variant === "dispatch") expect(state.replacement?.intent).toBe(ctx.goal.intent)
+          expect(yield* ctx.goals.get(ctx.chat.id)).toEqual(state.replacement)
+          if (variant === "goal") yield* runner.settle(ctx.chat.id)
+          expect((yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)).toEqual(original)
+          expect(yield* ctx.runner.tasks.eventsFor(ctx.agent.id)).toEqual(events)
+          expect(yield* execution.receipt(original)).toEqual(owner)
+          expect(yield* ctx.runner.tasks.recall(ctx.agent.id)).toBe(memory)
+          const report = yield* ctx.storage
+            .read(["raya", "routine-reports", createHash("sha256").update(ctx.run.id).digest("hex")])
+            .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
+          expect(report).toBeUndefined()
+        }
+        if (!replacement) {
+          expect(yield* ctx.goals.get(ctx.chat.id)).toEqual(state.winner)
+          const traced = (yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)
+          expect(Schema.is(Codec.Trace)(traced?.trace)).toBe(true)
+          yield* runner.settle(ctx.chat.id)
+          const settled = (yield* ctx.runner.tasks.runsFor(ctx.agent.id)).find((row) => row.id === ctx.run.id)
+          expect(settled?.status).toBe("complete")
+          expect(settled?.outcome?.delivery?.status).toBe("passed")
+          expect(settled?.outcome?.report?.messageID).toBe(ctx.answer.id)
+        }
+        expect(yield* ctx.sessions.messages({ sessionID: ctx.chat.id })).toEqual(messages)
+      }),
+  )
+}
 
 for (const defect of ["child", "intent", "message", "new-goal"] as const) {
   it.instance(`TurnClose bookkeeping refuses a ${defect} event and cannot finish another original dispatch`, () =>

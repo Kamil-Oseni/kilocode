@@ -1782,9 +1782,32 @@ export namespace RayaTaskRunner {
           isDeepStrictEqual(session.metadata?.rayaRoutine, current) &&
           isDeepStrictEqual(goal, yield* goals.get(sessionID))
         )
-          yield* goals
-            .finished(sessionID, closed.messageID)
-            .pipe(Effect.mapError((err) => new RayaTask.GuardError({ kind: "conflict", message: err.message })))
+          yield* goals.finished(sessionID, closed.messageID).pipe(
+            Effect.catch((err) =>
+              Effect.gen(function* () {
+                const current = yield* goals.get(sessionID)
+                if (
+                  !current ||
+                  current.dispatch?.phase !== "finished" ||
+                  !isDeepStrictEqual(current.dispatch, {
+                    ...goal.dispatch,
+                    phase: "finished",
+                    finishedAt: current.dispatch.finishedAt,
+                    assistantID: closed.messageID,
+                    outcome: "completed",
+                  }) ||
+                  !isDeepStrictEqual({ ...current, revision: goal.revision, dispatch: goal.dispatch }, goal)
+                )
+                  return yield* Effect.fail(err)
+                // Another callback may have closed this exact original dispatch.
+                // Validate its persisted answer without repeating the winning write.
+                const finished = yield* goals.finished(sessionID, closed.messageID!, "completed", true)
+                if (!finished || !isDeepStrictEqual(finished, current)) return yield* Effect.fail(err)
+                return finished
+              }),
+            ),
+            Effect.mapError((err) => new RayaTask.GuardError({ kind: "conflict", message: err.message })),
+          )
       }
       const current = yield* goals.get(sessionID)
       const rows = yield* input.sessions.messages({ sessionID })
@@ -2010,9 +2033,15 @@ export namespace RayaTaskRunner {
           continue
         }
         const cost = msgs.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
+        // Settlement may precede TurnClose observation. Rebuild missing bookkeeping
+        // only from this original Goal and its persisted messages; retain any saved trace.
+        const record =
+          !stop && status === "complete" && definition.output?.final && goal && !run.trace
+            ? { ...run, trace: trace(run, goal, msgs) }
+            : run
         const report =
           !stop && status === "complete" && goal && saved?.sessionID === run.sessionID
-            ? final(run, goal, msgs, !!definition.output?.final, !!definition.output?.final)
+            ? final(record, goal, msgs, !!definition.output?.final, !!definition.output?.final)
             : undefined
         if (!stop && status === "complete" && !report) {
           log.warn("Routine completion awaits its original final answer", { runID: run.id, sessionID })
@@ -2020,7 +2049,7 @@ export namespace RayaTaskRunner {
         }
         const delivery =
           report && goal && definition.output?.final
-            ? yield* verify(definition.output.final, run, goal, msgs, report)
+            ? yield* verify(definition.output.final, record, goal, msgs, report)
             : undefined
         const rejected = delivery !== undefined && delivery.status !== "passed"
         const summary = stop
@@ -2030,7 +2059,7 @@ export namespace RayaTaskRunner {
           ...run,
           status: rejected ? "blocked" : status,
           ...(stop ? { stop } : {}),
-          trace: stop || goal?.createdAt === run.goalCreatedAt ? run.trace : undefined,
+          trace: stop || goal?.createdAt === run.goalCreatedAt ? record.trace : undefined,
           blockedReason: rejected
             ? "The original final answer did not pass its approved file check. Review the saved result before starting more work; it was not retried."
             : stop

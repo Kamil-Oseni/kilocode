@@ -721,6 +721,11 @@ export class BrainHost {
     this.observer.dispose()
   }
 
+  async sourceRoot() {
+    const state = await this.service.status()
+    return state.configured && state.status === "ready" ? state.root : undefined
+  }
+
   async accept(message: Record<string, unknown>, post: (value: BrainResponse) => void) {
     if (message.type !== "secondBrain") return false
     if (typeof message.id !== "string") return true

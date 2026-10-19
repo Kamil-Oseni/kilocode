@@ -42,6 +42,7 @@ import { notebookUri } from "./services/autocomplete/continuedev/core/autocomple
 import { buildWebviewHtml, getWebviewFontSize, isCursorHost } from "./utils"
 import { saveImage } from "./kilo-provider/save-image"
 import { handleEditorAction, openAttachment } from "./kilo-provider/editor-actions"
+import { reference as memoryReference, source as memorySource } from "./kilo-provider/memory-source"
 import { exportTranscript } from "./kilo-provider/export-transcript"
 import {
   TelemetryProxy,
@@ -1382,6 +1383,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       ) {
         return
       }
+      if (await this.handleMemorySource(message)) return
       if (this.handleEditorOpenMessage(message)) return
       if (await this.handleSessionControl(message)) return
       if (await this.handleAgentManagerSettingsMessage(message)) return
@@ -2551,6 +2553,59 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return
     }
     this.releaseChildSession(message.sessionID)
+  }
+
+  private async handleMemorySource(message: TypedWebviewMessage): Promise<boolean> {
+    if (message.type !== "openMemorySource") return false
+    if (!memoryReference(message)) return true
+    if (
+      !this.client ||
+      !this.brain ||
+      this.connectionState !== "connected" ||
+      !this.trackedSessionIds.has(message.sessionID)
+    ) {
+      this.postMessage({
+        type: "error",
+        sessionID: message.sessionID,
+        message: "Reconnect Raya and open this source from its original conversation.",
+      })
+      return true
+    }
+    const client = this.client
+    const brain = this.brain
+    const generation = this.connectionGeneration
+    const directory = this.getWorkspaceDirectory(message.sessionID)
+    const current = () =>
+      this.client === client &&
+      this.connectionGeneration === generation &&
+      this.connectionState === "connected" &&
+      this.trackedSessionIds.has(message.sessionID) &&
+      this.routeSessionDirectory(message.sessionID) !== null &&
+      sameDirectory(directory, this.getWorkspaceDirectory(message.sessionID))
+    try {
+      const root = await brain.sourceRoot()
+      if (!root || !current()) throw new Error("The original Memory selection is unavailable.")
+      const result = await client.session.message(
+        { sessionID: message.sessionID, messageID: message.messageID, directory },
+        { throwOnError: true },
+      )
+      const selected = await memorySource({ message: result.data, ref: message, root, directory, current })
+      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(selected.file))
+      const retained = await brain.sourceRoot()
+      if (!current() || retained !== root || document.isDirty || document.getText() !== selected.text)
+        throw new Error("The note or conversation changed before it could be opened. Retrieve it again.")
+      const at = new vscode.Position(selected.line - 1, 0)
+      await vscode.window.showTextDocument(document, { preview: true, selection: new vscode.Range(at, at) })
+    } catch (err) {
+      console.warn("[Raya] Memory citation could not open", err)
+      if (current())
+        this.postMessage({
+          type: "error",
+          sessionID: message.sessionID,
+          message: failure(err, "Could not open this Memory source. Retrieve it again."),
+        })
+    }
+    return true
   }
 
   private handleEditorOpenMessage(message: Parameters<typeof handleEditorAction>[0]): boolean {

@@ -2148,6 +2148,7 @@ export interface FocusTimerActionMessage {
 }
 
 export type WebviewMessage =
+  | import("../../../../src/shared/memory-source").MemorySourceRequest
   | AgentReportsRead
   | BrainRequest
   | RestoreRequest

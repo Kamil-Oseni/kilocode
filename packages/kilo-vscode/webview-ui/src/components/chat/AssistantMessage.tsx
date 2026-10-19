@@ -45,6 +45,7 @@ import { MemoryProvenance } from "./MemoryProvenance"
 import { ChiefActivity, ChiefReceipt } from "./ChiefActivity"
 import { MessageTime } from "./MessageTime"
 import { SavedMemory } from "./SavedMemory"
+import { MemorySources } from "./MemorySources"
 import { chiefActivity, chiefReceipt, type ChiefPart } from "./chief-activity"
 
 type PlanStep = { id: string; description: string; status?: string }
@@ -579,6 +580,7 @@ export const AssistantMessage: Component<AssistantMessageProps> = (props) => {
           </Show>
         )}
       </For>
+      <For each={parts()}>{(part) => <MemorySources part={part} />}</For>
       <Show when={!props.parts || props.parts.at(-1)?.id === data.store.part?.[props.message.id]?.at(-1)?.id}>
         <SavedMemory sessionID={props.message.sessionID} messageID={props.message.id} />
       </Show>

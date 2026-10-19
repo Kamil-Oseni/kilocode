@@ -1,3 +1,23 @@
+## Current installed gates — October 19, 2026
+
+Installed candidate **`7.4.23-snapshot+d0645467a7.local.1792394965654`**, producer `d0645467a7e8df5f1e8abd771744e931bffffd9c`. Current installation, archive/CLI pins and preservation receipts are recorded in [current readiness](Raya-Current-Readiness.md). The table below supersedes every historical candidate table later in this file. **2/9 (22.2%)** installed gates are verified; **Memory 0/1**. Overall readiness is unmeasured; **48/100 / 38 unfinished implementation requirements** remain historical and are not equivalent to this nine-gate checklist.
+
+| Gate | Earned | Current evidence or remaining acceptance |
+|---|---|---|
+| Audited combined candidate | 1/1 | Fresh d064 compiler and stock sequential production checks; root/peer archive receipts byte-identical, 547 CRC entries / 305 staged payloads / 14,195 unchanged tracked producer files. Original compiler/snapshot target zero and outer descendant cleanup remain distinct. |
+| Normal installation preservation | 1/1 | Fresh closed before/install/after natural zero/nonforced/EOF joined/empty Job; 3,331 saved files, 544 installed non-package payloads and unrelated registrations preserved. Fresh 211-note inventory unchanged. |
+| Installed local General/tool turn | 0/1 | Require current local General/Ask, permitted tools, saved reply/model/draft and ordinary close/reopen; older candidate proofs retain their scope. |
+| Strict installed Coder | 0/1 | Require actual scoped implementation changes and real verification with selected current local Coder; preserve tests and unrelated files. |
+| Installed Voice and permitted HA flow | 0/1 | Human voice acceptance remains deferred; HA stays off and lights untouched under current instructions. |
+| Scheduled routines | 0/1 | Fresh d064 binding, two genuine periods, durable report identities, active pause/resume, Stop and 65-second cold no-replay; loaded GUI is also required. Preserve original failed observers; permit only verified finalization of the same paused dispatch during bookkeeping settlement. |
+| Configured Memory | 0/1 | D064 supported native recovery/current bridge/one Check service now report connected, saving ready and indexed/search ready; exact proof and ownership limits are in current readiness. Require a distinct fresh capture with bounded decisions and verified publication/exclusion/index outcomes, plus faithful clickable cited recall. Original 10481 is already dispositioned skipped/applied/failed_before_publication; do not repeat that review. FA29 skipped capture remains unchanged without replay or retrofitted audit. |
+| Matching-version postboot/service recovery | 0/1 | Require actual Windows boot, saved selections/chat/drafts, intended service reconnection and no unsolicited worker replay. |
+| Populated same-candidate reinstall recovery | 0/1 | Require populated loaded-client/Memento, rollback and complete cold restore/no-replay; closed installation byte preservation is separate. |
+
+The full implementation's unfinished requirements also include durable data/local restore and the existing architecture and ownership requirements; passing nine installed gates alone does not prove all 38 finished. Second-PC migration is canceled and cloud workers released. Keep the 6 GiB live reserve, Eden/user apps available, HA off and lights untouched. Optional composer fixture work is preserved separately and does not block the current delivery.
+
+### Historical October 16 checkpoint
+
 October 16, 2026 — current state revalidated; lighter work continues.
 
 Installed Raya remains **`7.4.23-snapshot+fa29aadbd7.local.1792007374419`**, with the exact installed CLI still `a1806f1b4c4f493ff26f852cd54884aba7470ae0e982c902c3df5eff94e09931`. At this inventory, the source worktree was clean at **`a7833d0dd538a17b9f2fdcd4c4e198310ace28cf`**, containing the preference-slot and bounded decision-record fixes. Their **31 tests / 399 assertions** and scoped lint evidence retain their original scope; final full CLI types, packaging and installed verification remain pending. The user has now explicitly authorized **packaging and installation when RAM permits**, releasing the earlier lighter-work-only hold. They were not rerun or promoted to installed acceptance.

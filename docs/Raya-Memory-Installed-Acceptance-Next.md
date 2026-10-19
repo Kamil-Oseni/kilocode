@@ -1,6 +1,10 @@
 # Next installed Memory acceptance
 
-## Current handoff — October 10
+## Current handoff — October 19
+
+Use [current readiness](Raya-Current-Readiness.md) and [current installed gates](Raya-Local-Readiness-Gates.md) for the d064 installation and next checks. The authorized coordinator owns the display-2 native reopen, genuine closed-pair recovery, equivalent current bridge selection and one Check service. Then verify one distinct fresh preference turn, bounded decisions, actual publication/exclusion/index outcomes and faithful clickable cited recall. Preserve all original operations: 10481 was already dispositioned; do not repeat its review, replay FA29's skipped turn or retrofit audit records. Closed installation preservation is complete; the full Memory workflow remains **0/1**, installed workflows **2/9 (22.2%)**, overall readiness unmeasured. Human voice acceptance is deferred; HA stays off/lights untouched and Eden protected. Old Gemma, archive, candidate and human-test directions below are historical and do not authorize their replay.
+
+## Historical handoff — October 10
 
 Use [Raya current readiness](Raya-Current-Readiness.md) for the current private installation and VM state. Private a569 is installed and closed, awaiting its human turn-taking check. The user deliberately powered Home Assistant off to free RAM for Figma; leave it off. Older candidate names, running processes, resource readings and VM observations below are historical evidence, not current state.
 

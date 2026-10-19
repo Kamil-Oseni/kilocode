@@ -1,3 +1,7 @@
+October 19, 2026 — Conversation refresh source qualification; installed gate scope unchanged.
+
+The open Routine conversation repair passes **118 unit tests / 425 assertions plus 7 mounted browser cases**, full extension types/lint/Knip/production bundle and affected guards. Source index `.tmp/new-pc/routine-conversation-source-full-qualified-v1.json` is **24,072 bytes**, SHA-256 `88b2e2ce0d9c7a0bdbf0f3f9ff84a6acbe80105dcd3d55bd122fe14f1fc0af34`. Delivery and installed acceptance remain pending. A genuine populated native host archive trial was refused because its temporary broker overlapped the protected source profile; it creates no archive and earns no recovery credit. Its original evidence is preserved and a fresh-only corrected launcher is prepared. Installed readiness stays **2/9 (22.2%)**, Memory **0/1**, overall **unmeasured**; the wider implementation remains active. See the current progress entries for exact scope and remaining requirements.
+
 October 19, 2026 — Current gate scope and delivery pointer.
 
 Everyday Raya is now **`7.4.23-snapshot+cb37b598f0.local.1792421277513`**. The latest delivery and original-result evidence is recorded in [Current Readiness](Raya-Current-Readiness.md) and [Implementation Progress](Raya-Implementation-Progress.md). The older candidate-specific entries below retain their historical scope; their use of “current” refers to their own dated checkpoint.

@@ -3432,10 +3432,24 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       sessionDirectories: this.sessionDirectories,
       worktreeDirectories: this.opts.worktreeDirectories,
       workspaceDirectory: directory,
+      openSessions: () =>
+        [...new Set([...(this.contextSessionID ? [this.contextSessionID] : []), ...this.openSessionIds])].map((id) => ({
+          id,
+          directory: this.getWorkspaceDirectory(id),
+        })),
+      getSession: client
+        ? async (id, dir) => {
+            const response = await client.session.get({ sessionID: id, directory: dir }, { throwOnError: false })
+            if (response.response.status === 404) return undefined
+            if (response.error || !response.data) throw response.error ?? new Error("Session lookup unavailable")
+            return response.data
+          }
+        : undefined,
       isCurrent: () =>
         revision === this.sessionRefreshRevision &&
         generation === this.connectionGeneration &&
         client === this.client &&
+        this.connectionState === "connected" &&
         sameDirectory(directory, this.getWorkspaceDirectory()),
       postMessage: (msg: unknown) => this.postMessage(msg),
     }

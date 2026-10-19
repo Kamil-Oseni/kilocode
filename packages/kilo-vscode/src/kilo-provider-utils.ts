@@ -239,8 +239,52 @@ export interface SessionRefreshContext {
   sessionDirectories: Map<string, string>
   worktreeDirectories?: () => string[]
   workspaceDirectory: string
+  openSessions?: () => { id: string; directory: string }[]
+  getSession?: (id: string, directory: string) => Promise<Session | undefined>
   isCurrent?: () => boolean
   postMessage(message: unknown): void
+}
+
+async function retained(
+  ctx: SessionRefreshContext,
+  listed: ReadonlySet<string>,
+  opened: readonly { id: string; directory: string }[],
+  excluded: Map<string, string>,
+) {
+  const get = ctx.getSession
+  const open = ctx.openSessions
+  if (!get || !open) return []
+  if (ctx.isCurrent && !ctx.isCurrent()) return []
+  const selected = opened.filter((row) => !listed.has(row.id))
+  if (selected.length > 64) throw new Error("Too many open conversations to refresh safely")
+  const current = (row: { id: string; directory: string }) =>
+    (!ctx.isCurrent || ctx.isCurrent()) &&
+    open().some((item) => item.id === row.id && sameDirectory(item.directory, row.directory))
+  const rows = await Promise.all(
+    selected.map(async (row) => {
+      if (!current(row)) return []
+      try {
+        const session = await get(row.id, row.directory)
+        if (!current(row)) return []
+        if (
+          !session ||
+          session.id !== row.id ||
+          !sameDirectory(session.directory, row.directory) ||
+          session.time.archived !== undefined
+        ) {
+          excluded.set(row.id, row.directory)
+          return []
+        }
+        if (session.metadata?.rayaRoutine === undefined || session.metadata.rayaRoutine === null) return []
+        return [row.id]
+      } catch (err) {
+        if (!current(row)) return []
+        // An unknown lookup outcome cannot turn a filtered list into a deletion.
+        throw err
+      }
+    }),
+  )
+  return rows.flat().filter((id) => selected.some((row) => row.id === id && current(row)))
 }
 
 /**
@@ -261,6 +305,9 @@ export async function loadSessions(ctx: SessionRefreshContext): Promise<string |
   // Keep the read pending until a current response succeeds. Transport failure
   // during a backend replacement must remain eligible for reconnect recovery.
   ctx.pendingSessionRefresh = true
+
+  // Freeze each explicitly opened identity's route before the catalog read yields.
+  const opened = ctx.openSessions?.() ?? []
 
   const sessions = await list(ctx.workspaceDirectory)
   const projectID = sessions[0]?.projectID
@@ -284,15 +331,28 @@ export async function loadSessions(ctx: SessionRefreshContext): Promise<string |
     }
   }
 
+  const excluded = new Map<string, string>()
+  const kept = await retained(ctx, seen, opened, excluded)
   if (ctx.isCurrent && !ctx.isCurrent()) return
+  if (
+    ctx
+      .openSessions?.()
+      .some(
+        (row) =>
+          !seen.has(row.id) &&
+          !opened.some((item) => item.id === row.id && sameDirectory(item.directory, row.directory)),
+      )
+  )
+    return
   ctx.pendingSessionRefresh = false
 
   // Sessions whose worktree directories failed to list — the webview must
   // not delete these during reconciliation since the absence is transient.
-  const preserve: string[] = []
+  const preserve: string[] = [...kept]
   if (failed.size) {
     for (const [sid, dir] of ctx.sessionDirectories) {
-      if (failed.has(dir)) preserve.push(sid)
+      const rejected = excluded.get(sid)
+      if (failed.has(dir) && (!rejected || !sameDirectory(dir, rejected))) preserve.push(sid)
     }
   }
 

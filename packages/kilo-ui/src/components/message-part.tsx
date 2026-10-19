@@ -976,7 +976,7 @@ export function UserMessageDisplay(props: {
                 </button>
               </Show>
               <GrowBox animate={!!props.animate} open={!!props.queued}>
-                <div data-slot="user-message-queued-indicator">
+                <div data-slot="user-message-queued-indicator" aria-hidden={!props.queued}>
                   <TextShimmer text={i18n.t("ui.message.queued")} />
                   <Edit />
                   <Delete />

@@ -117,6 +117,8 @@ test("mounted terminal parent reconciles stale queue while retaining newer pendi
     const final = { ...assistant, finish: "stop", time: { created: 2, completed: 4 } }
     await page.evaluate((message) => window.__deliver({ type: "messageCreated", message }), final)
     await expect.poll(() => page.evaluate(() => window.__session.queuedMessages())).toEqual(["msg_3"])
+    expect(await page.locator('[data-message="msg_1"]').ariaSnapshot()).not.toContain("Queued")
+    expect(await page.locator('[data-message="msg_3"]').ariaSnapshot()).toContain("Queued")
     await page.evaluate(() => window.__deliver({ type: "sessionStatus", sessionID: "ses_queue", status: "idle" }))
     expect(await page.evaluate(() => window.__session.queuedMessages())).toEqual(["msg_3"])
     await page.evaluate(
@@ -131,6 +133,10 @@ test("mounted terminal parent reconciles stale queue while retaining newer pendi
         .evaluate((node) => node.parentElement.parentElement.style.height),
     ).toBe("0px")
     await expect(page.locator('[data-message="msg_3"] [data-slot="user-message-text"][data-queued]')).toHaveCount(1)
+    // Closed animation content remains mounted. Its stale status must also
+    // leave the browser accessibility tree, while real queued work stays exposed.
+    expect(await page.locator('[data-message="msg_1"]').ariaSnapshot()).not.toContain("Queued")
+    expect(await page.locator('[data-message="msg_3"]').ariaSnapshot()).toContain("Queued")
     const open = { ...assistant, finish: undefined }
     await page.evaluate(
       (messages) => window.__deliver({ type: "messagesLoaded", sessionID: "ses_queue", messages }),
@@ -147,6 +153,8 @@ test("mounted terminal parent reconciles stale queue while retaining newer pendi
     await expect.poll(() => page.evaluate(() => window.__session.queuedMessages())).toEqual(["msg_3"])
     await expect(page.locator('[data-message="msg_1"] [data-slot="user-message-text"][data-queued]')).toHaveCount(0)
     await expect(page.locator('[data-message="msg_3"] [data-slot="user-message-text"][data-queued]')).toHaveCount(1)
+    expect(await page.locator('[data-message="msg_1"]').ariaSnapshot()).not.toContain("Queued")
+    expect(await page.locator('[data-message="msg_3"]').ariaSnapshot()).toContain("Queued")
     expect(errors).toEqual([])
   } finally {
     await browser.close()

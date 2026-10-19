@@ -385,17 +385,20 @@ it.live(
         const turns = yield* Queue.unbounded<RayaTask.Run>()
         const rows = new Map<SessionID, Session.Info>()
         let created = 0
+        let denied: SessionID | undefined
         let fail = true
         const runner = RayaTaskRunner.make({
           database,
           storage,
-          halt: (id) => (id.endsWith("fail") && fail ? Effect.die(new Error("halt failed")) : Effect.void),
+          halt: (id) => (id === denied && fail ? Effect.die(new Error("halt failed")) : Effect.void),
           sessions: {
             create: (opts) =>
               Effect.sync(() => {
+                if (!opts?.id) throw new Error("Missing runner-selected session identity")
                 created++
+                if (created === 2) denied = opts.id
                 const row = {
-                  ...session(SessionID.make(created === 1 ? "ses_stop_ok" : "ses_stop_fail")),
+                  ...session(opts.id),
                   metadata: opts?.metadata,
                   permission: opts?.permission?.map((rule) => ({ ...rule })),
                   agent: opts?.agent,

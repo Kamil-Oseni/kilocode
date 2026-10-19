@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { Deferred, Effect, Exit, Schema } from "effect"
+import { Deferred, Effect, Exit, Option, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
 import { SessionID } from "@/session/schema"
 import { GlobalBus } from "@/bus/global"
@@ -40,7 +40,10 @@ type Permit = { record: typeof Record.Type }
 const active = new Set<string>()
 const busy = new Set<string>()
 const closing = new Set<string>()
-const joining = new Map<string, Deferred.Deferred<void>>()
+const joining = new Map<string, { record: typeof Record.Type; done: Deferred.Deferred<void> }>()
+// Original body completion remains local to its exact generation until owner
+// release/review. Interrupted bodies retain their durable active uncertainty.
+const completed = new Map<string, typeof Record.Type>()
 const recovering = new Set<string>()
 const hash = (id: string) => createHash("sha256").update(id).digest("hex")
 const key = (id: string) => ["raya", "agent-executions", hash(id)]
@@ -215,6 +218,7 @@ export namespace RayaTaskExecution {
               ),
             ),
           )
+          completed.delete(current.token)
         }),
         "Routine execution release",
       )
@@ -245,7 +249,8 @@ export namespace RayaTaskExecution {
         )
           return yield* new RayaTask.GuardError({ message: "This routine's continuing execution is already active." })
         const joined = Deferred.makeUnsafe<void>()
-        joining.set(permit.record.token, joined)
+        joining.set(permit.record.token, { record: saved.record, done: joined })
+        completed.delete(permit.record.token)
         busy.add(permit.record.token)
         const work = Effect.withFiber((fiber) => {
           saved.fiber = fiber
@@ -289,6 +294,8 @@ export namespace RayaTaskExecution {
               ),
               Effect.onExit((settled) =>
                 Effect.gen(function* () {
+                  if (Exit.isSuccess(settled) && (Exit.isFailure(exit) || active.has(permit.record.token)))
+                    completed.set(permit.record.token, saved.record)
                   if (!Exit.isSuccess(exit) || !Exit.isSuccess(settled)) {
                     busy.delete(permit.record.token)
                     return
@@ -322,7 +329,7 @@ export namespace RayaTaskExecution {
           ),
           Effect.ensuring(
             Effect.gen(function* () {
-              if (joining.get(permit.record.token) === joined) joining.delete(permit.record.token)
+              if (joining.get(permit.record.token)?.done === joined) joining.delete(permit.record.token)
               yield* Deferred.succeed(joined, undefined)
             }),
           ),
@@ -366,9 +373,21 @@ export namespace RayaTaskExecution {
       const found = durable()
       if (!found.birth || !same(current.owner, { ...found, birth: found.birth })) return
       const joined = joining.get(current.token)
+      if (
+        joined &&
+        (joined.record.runID !== current.runID ||
+          joined.record.agentID !== current.agentID ||
+          joined.record.sessionID !== current.sessionID ||
+          joined.record.token !== current.token ||
+          joined.record.createdAt !== current.createdAt ||
+          !same(joined.record.owner, current.owner))
+      )
+        return yield* new RayaTask.GuardError({
+          message: "This routine's original execution handoff identity changed before completion.",
+        })
       const settled = Effect.gen(function* () {
         if (!joined) return
-        yield* Deferred.await(joined)
+        yield* Deferred.await(joined.done)
         if ((yield* load(current.runID))?.token === current.token)
           yield* new RayaTask.GuardError({
             message: "This routine's execution retirement needs recovery review.",
@@ -390,7 +409,7 @@ export namespace RayaTaskExecution {
         return
       }
       const retired = Deferred.makeUnsafe<void>()
-      joining.set(current.token, retired)
+      joining.set(current.token, { record: current, done: retired })
       active.delete(current.token)
       yield* release({ record: current }).pipe(
         Effect.onExit(() =>
@@ -402,7 +421,7 @@ export namespace RayaTaskExecution {
         ),
         Effect.ensuring(
           Effect.gen(function* () {
-            if (joining.get(current.token) === retired) joining.delete(current.token)
+            if (joining.get(current.token)?.done === retired) joining.delete(current.token)
             yield* Deferred.succeed(retired, undefined)
           }),
         ),
@@ -455,6 +474,49 @@ export namespace RayaTaskExecution {
           )
         }),
         "Routine idle notification",
+      )
+    })
+
+    /** Join only this process's original body; saved active state alone is never proof. */
+    const join = Effect.fn("RayaTaskExecution.join")(function* (
+      run: { id: string; agentID: string; sessionID: string },
+      token: string,
+    ) {
+      const current = yield* receipt(run)
+      const found = durable()
+      if (
+        !current ||
+        current.token !== token ||
+        (current.state !== "active" && current.state !== "idle") ||
+        !found.birth ||
+        !same(current.owner, { ...found, birth: found.birth })
+      )
+        return false
+      const matches = (record: typeof Record.Type) =>
+        record.token === current.token &&
+        record.runID === current.runID &&
+        record.agentID === current.agentID &&
+        record.sessionID === current.sessionID &&
+        record.createdAt === current.createdAt &&
+        same(record.owner, current.owner)
+      const pending = joining.get(token)
+      const prior = completed.get(token)
+      if (pending && !matches(pending.record)) return false
+      if (!pending && (!prior || !matches(prior))) return false
+      if (
+        pending &&
+        Option.isNone(yield* Deferred.await(pending.done).pipe(Effect.timeoutOption("5 seconds"), Effect.interruptible))
+      )
+        return false
+      const latest = yield* receipt(run)
+      if (busy.has(token) || recovering.has(token)) return false
+      if (!latest) return false
+      const proof = completed.get(token)
+      return (
+        matches(latest) &&
+        !!proof &&
+        matches(proof) &&
+        ((latest.state === "idle" && active.has(token)) || latest.state === "active")
       )
     })
 
@@ -542,6 +604,7 @@ export namespace RayaTaskExecution {
           )
           active.delete(token)
           closing.delete(token)
+          completed.delete(token)
         }),
         "Routine execution review",
       )
@@ -601,6 +664,7 @@ export namespace RayaTaskExecution {
         active.delete(result.prior)
         busy.delete(result.prior)
         closing.delete(result.prior)
+        completed.delete(result.prior)
       }
       return { record: result.record } satisfies Permit
     })
@@ -635,6 +699,20 @@ export namespace RayaTaskExecution {
       )
     const defer = (permit: Permit) => Effect.sync(() => recovering.delete(permit.record.token))
 
-    return { acquire, authorized, retained, receipt, idle, reviewed, review, enter, finish, terminal, recover, defer }
+    return {
+      acquire,
+      authorized,
+      retained,
+      receipt,
+      idle,
+      join,
+      reviewed,
+      review,
+      enter,
+      finish,
+      terminal,
+      recover,
+      defer,
+    }
   }
 }

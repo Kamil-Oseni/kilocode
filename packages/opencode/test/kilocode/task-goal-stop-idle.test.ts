@@ -60,6 +60,158 @@ afterAll(async () => {
   console.info("GOAL_STOP_FIXTURE_RETIREMENT", "disk-cleanup-complete")
 }, 30_000)
 
+test("public Goal Stop joins the original active provider cancellation before retiring its routine", async () => {
+  const entered = Promise.withResolvers<void>()
+  const cancelled = Promise.withResolvers<void>()
+  const state = { calls: 0 }
+  const line = (delta: object, finish?: string) =>
+    `data: ${JSON.stringify({ id: "stop-fixture", object: "chat.completion.chunk", choices: [{ delta, finish_reason: finish ?? null }] })}\n\n`
+  const endpoint = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    idleTimeout: 0,
+    async fetch(req) {
+      const body = await req.text()
+      if (body.includes("Generate a title for this conversation"))
+        return new Response(line({ content: "Private Stop" }) + line({}, "stop") + "data: [DONE]\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        })
+      state.calls++
+      req.signal.addEventListener("abort", () => cancelled.resolve(), { once: true })
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(line({ role: "assistant" })))
+            entered.resolve()
+          },
+          cancel() {
+            cancelled.resolve()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  await using dir = await tmpdir({
+    config: {
+      formatter: false,
+      lsp: false,
+      snapshot: false,
+      model: "test/stop-fixture",
+      small_model: "test/stop-fixture",
+      enabled_providers: ["test"],
+      permission: { "*": "deny" },
+      provider: {
+        test: {
+          npm: "@ai-sdk/openai-compatible",
+          env: [],
+          options: { apiKey: "private-synthetic", baseURL: `http://127.0.0.1:${endpoint.port}/v1` },
+          models: {
+            "stop-fixture": { name: "Stop fixture", tool_call: true, limit: { context: 32768, output: 1024 } },
+          },
+        },
+      },
+    },
+  })
+  const app = Server.Default().app
+  const headers = { "content-type": "application/json", "x-kilo-directory": dir.path }
+  const request = (route: string, body: object, method = "POST") =>
+    app.request(route, { method, headers, body: JSON.stringify(body) })
+  const run = <A, E>(
+    body: Effect.Effect<A, E, Database.Service | Storage.Service | Session.Service | Global.Service>,
+  ) => AppRuntime.runPromise(InstanceStore.Service.use((store) => store.provide({ directory: dir.path }, body)))
+  const owned: { id?: string; row?: { id: string; agentID: string; sessionID: string } } = {}
+  try {
+    const response = await request("/kilocode/agent", {
+      name: "Active Stop fixture",
+      objective: "Wait for explicit user Stop without accepting any result",
+      dir: dir.path,
+      role: "briefer",
+      access: "brief",
+      tools: ["get_goal"],
+      schedule: { kind: "manual" },
+      enabled: true,
+      model: { providerID: "test", id: "stop-fixture" },
+    })
+    expect(response.status).toBe(200)
+    const agent = await response.json()
+    owned.id = agent.id
+    const accepted = await request(`/kilocode/agent/${agent.id}/run`, {})
+    expect(accepted.status).toBe(200)
+    const row = await accepted.json()
+    owned.row = row
+    await Promise.race([
+      entered.promise,
+      Bun.sleep(10_000).then(() => {
+        throw new Error("Original provider did not enter")
+      }),
+    ])
+    const seed = await run(
+      Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        const sessions = yield* Session.Service
+        const execution = RayaTaskExecution.make(storage)
+        const goal = yield* RayaGoal.make({ storage, sessions }).get(SessionID.make(row.sessionID))
+        const owner = yield* execution.receipt(row)
+        return { execution, goal, owner }
+      }),
+    )
+    expect(seed.owner?.state).toBe("active")
+    expect(seed.goal?.dispatch?.phase).toBe("started")
+    const stopped = await request(`/session/${row.sessionID}/goal/stop`, { expectedIntent: seed.goal!.intent })
+    expect(stopped.status).toBe(200)
+    const receipt = await stopped.json()
+    expect(receipt).toMatchObject({
+      phase: "finished",
+      interrupted: true,
+      intent: seed.goal!.intent,
+      task: { stop: { version: 1, intent: seed.goal!.intent }, runs: [{ id: row.id, sessionID: row.sessionID }] },
+    })
+    await Promise.race([
+      cancelled.promise,
+      Bun.sleep(5000).then(() => {
+        throw new Error("Original provider was not cancelled")
+      }),
+    ])
+    expect(state.calls).toBe(1)
+    const history = await app.request(`/kilocode/agent/${agent.id}/runs`, { headers })
+    expect(history.status).toBe(200)
+    expect(await history.json()).toContainEqual(
+      expect.objectContaining({
+        id: row.id,
+        status: "stopped",
+        stop: receipt.task.stop,
+        outcome: expect.objectContaining({ summary: "Stopped by the user. No unverified result was accepted." }),
+      }),
+    )
+    expect(await run(seed.execution.receipt(row))).toBeUndefined()
+    expect((await app.request(`/session/${row.sessionID}/goal`, { headers })).status).toBe(404)
+  } finally {
+    try {
+      if (owned.row) {
+        const row = owned.row
+        const intent = await run(
+          Effect.gen(function* () {
+            const storage = yield* Storage.Service
+            const sessions = yield* Session.Service
+            const goals = RayaGoal.make({ storage, sessions })
+            const id = SessionID.make(row.sessionID)
+            const goal = yield* goals.get(id)
+            const receipt = yield* goals.stopResult(id)
+            return goal?.intent ?? (receipt?.phase !== "finished" ? receipt?.intent : undefined)
+          }),
+        )
+        if (intent)
+          expect((await request(`/session/${row.sessionID}/goal/stop`, { expectedIntent: intent })).status).toBe(200)
+        await run(Storage.Service.use((storage) => RayaTaskExecution.make(storage).finish(row)))
+      }
+      if (owned.id) expect((await request(`/kilocode/agent/${owned.id}`, { enabled: false }, "PATCH")).status).toBe(200)
+    } finally {
+      await endpoint.stop(true)
+    }
+  }
+}, 30_000)
+
 for (const fault of [false, true])
   test.skipIf(fault && process.platform !== "win32")(
     `public Goal Stop ${fault ? "retries a real execution-file release failure using its durable original pin" : "retires an established idle manual run without accepting a result or touching another run"}`,
@@ -315,6 +467,122 @@ for (const fault of [false, true])
         expect(await run(seed.execution.receipt(selected.row))).toBeUndefined()
         expect(await run(seed.execution.receipt(seed.other.row))).toEqual(other)
         if (!fault) {
+          const handed = await run(seed.create("Original body handoff"))
+          const entered = Promise.withResolvers<void>()
+          const release = Promise.withResolvers<void>()
+          const body = run(
+            seed.execution
+              .enter(
+                handed.row,
+                Effect.fail(new Error("Controlled original body interruption")).pipe(
+                  Effect.onExit(() =>
+                    Effect.promise(() => {
+                      entered.resolve()
+                      return release.promise
+                    }),
+                  ),
+                ),
+              )
+              .pipe(Effect.exit),
+          )
+          try {
+            await entered.promise
+            const owner = await run(seed.execution.receipt(handed.row))
+            if (!owner) throw new Error("Original held execution receipt missing")
+            expect(owner.state).toBe("active")
+            const copied = await run(seed.create("Copied idle while original body is held"))
+            const current = await run(seed.execution.receipt(copied.row))
+            if (!current) throw new Error("Copied idle execution receipt missing")
+            const key = ["raya", "agent-executions", createHash("sha256").update(copied.row.id).digest("hex")]
+            await run(seed.storage.replace(key, { ...current, token: owner.token, state: "idle" }))
+            // Another row cannot borrow even the genuine original body's
+            // currently pending Deferred, regardless of its saved state.
+            expect(await run(seed.execution.join(copied.row, owner.token))).toBe(false)
+            const denied = await run(
+              seed.execution.finish(copied.row).pipe(Effect.exit, Effect.timeoutOption("1 second")),
+            )
+            expect(denied._tag).toBe("Some")
+            if (denied._tag !== "Some") throw new Error("Copied execution finish waited on another original body")
+            expect(denied.value._tag).toBe("Failure")
+            expect(await run(seed.execution.receipt(handed.row))).toEqual(owner)
+            expect(await run(seed.execution.receipt(copied.row))).toEqual({
+              ...current,
+              token: owner.token,
+              state: "idle",
+            })
+            await run(seed.storage.replace(key, current))
+            // Timeout must leave the actual held body and its exact owner intact.
+            expect(await run(seed.execution.join(handed.row, owner.token))).toBe(false)
+            expect(await run(seed.execution.receipt(handed.row))).toEqual(owner)
+            const observation = { done: false }
+            const pending = Promise.resolve(
+              request(`/session/${handed.row.sessionID}/goal/stop`, {
+                expectedIntent: handed.goal.intent!,
+              }),
+            ).then((response) => {
+              observation.done = true
+              return response
+            })
+            const deadline = Date.now() + 5000
+            while ((await run(seed.goals.stopResult(handed.row.sessionID)))?.interrupted === undefined) {
+              if (Date.now() >= deadline) throw new Error("Stop did not reach its original body handoff")
+              await Bun.sleep(10)
+            }
+            expect(observation.done).toBe(false)
+            expect((await run(seed.runner.tasks.runsFor(handed.agent.id))).at(-1)?.status).toBe("running")
+            release.resolve()
+            expect((await body)._tag).toBe("Failure")
+            const response = await pending
+            expect(response.status).toBe(200)
+            const receipt = await response.json()
+            expect(receipt).toMatchObject({
+              phase: "finished",
+              interrupted: false,
+              task: { stop: { intent: handed.goal.intent } },
+            })
+            expect(await run(seed.execution.receipt(handed.row))).toBeUndefined()
+            // The failed body remains active in its immutable review; no idle is invented.
+            expect(
+              await run(seed.execution.reviewed(handed.row, createHash("sha256").update(owner.token).digest("hex"))),
+            ).toEqual(owner)
+          } finally {
+            release.resolve()
+            await body
+          }
+          const ended = await run(seed.create("Completed before original join"))
+          expect(
+            (
+              await run(
+                seed.execution.enter(ended.row, Effect.fail(new Error("Original ended body"))).pipe(Effect.exit),
+              )
+            )._tag,
+          ).toBe("Failure")
+          const owner = await run(seed.execution.receipt(ended.row))
+          if (!owner) throw new Error("Original completed execution receipt missing")
+          expect(owner.state).toBe("active")
+          expect(await run(seed.execution.join(ended.row, owner.token))).toBe(true)
+          expect(await run(seed.execution.join(ended.row, crypto.randomUUID()))).toBe(false)
+          const copied = await run(seed.create("No local body proof"))
+          const current = await run(seed.execution.receipt(copied.row))
+          if (!current) throw new Error("Copied execution receipt missing")
+          const key = ["raya", "agent-executions", createHash("sha256").update(copied.row.id).digest("hex")]
+          await run(seed.storage.replace(key, { ...current, token: owner.token, state: "active" }))
+          expect(await run(seed.execution.join(copied.row, owner.token))).toBe(false)
+          await run(seed.storage.replace(key, current))
+          // A successful body may have reached idle before join reads its entry.
+          expect(await run(seed.execution.join(copied.row, current.token))).toBe(true)
+          const foreign = ["raya", "agent-executions", createHash("sha256").update(ended.row.id).digest("hex")]
+          await run(
+            seed.storage.replace(foreign, {
+              ...owner,
+              owner: { ...owner.owner, birth: owner.owner.birth + "-foreign" },
+            }),
+          )
+          expect(await run(seed.execution.join(ended.row, owner.token))).toBe(false)
+          await run(seed.storage.replace(foreign, owner))
+          expect(
+            (await request(`/session/${ended.row.sessionID}/goal/stop`, { expectedIntent: ended.goal.intent! })).status,
+          ).toBe(200)
           const orphan = await run(seed.create("Missing Goal"))
           try {
             const pin = await run(seed.runner.stopGoal((tasks) => tasks.prepare(orphan.row.sessionID)))

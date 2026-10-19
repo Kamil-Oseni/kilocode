@@ -2082,7 +2082,30 @@ export namespace RayaTaskRunner {
         if (rows.at(-1)?.id !== run.id) return yield* refuse()
         const receipt = yield* execution.receipt(prior)
         if (receipt && generation(receipt) !== run.executionDigest) return yield* refuse()
-        if (pin.stop && receipt && receipt.state !== "idle") return yield* refuse()
+        if (pin.stop && receipt && receipt.state !== "idle") {
+          // Session cancellation can finish before the outer routine body and
+          // its finalizers. Join only this exact local original generation;
+          // interruption may retain active state, which user review archives
+          // unchanged rather than inventing an idle execution receipt.
+          if (!(yield* execution.join(prior, receipt.token))) return yield* refuse()
+          if (yield* goals.get(sessionID)) return yield* refuse()
+          const record = yield* receipts(input.storage).read(sessionID, pin.stop.intent)
+          if (
+            (yield* tasks.runsFor(run.agentID)).at(-1)?.id !== run.id ||
+            createHash("sha256")
+              .update(JSON.stringify((yield* input.sessions.get(sessionID)).metadata?.rayaRoutine ?? null))
+              .digest("hex") !== pin.sessionDigest ||
+            record?.phase !== "cleared" ||
+            record.interrupted === undefined ||
+            !isDeepStrictEqual(record.task, pin)
+          )
+            return yield* refuse()
+          const current = yield* execution.receipt(prior)
+          if (current) {
+            if (generation(current) !== run.executionDigest) return yield* refuse()
+            yield* execution.review(prior, current.token)
+          }
+        }
         if (!pin.stop && prior.status === "blocked" && prior.blockedReason === WAIT) {
           if (
             !(yield* tasks.transition(prior, {

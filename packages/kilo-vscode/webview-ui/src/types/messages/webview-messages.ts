@@ -166,6 +166,11 @@ export interface RoutineUpdateMessage {
   expectedBudget?: number | "unset"
 }
 
+export interface RoutineFinalPickMessage {
+  type: "routineFinalPick"
+  requestID: string
+}
+
 export interface RoutineOutputUpdateMessage {
   type: "routineOutputUpdate"
   requestID: string
@@ -2189,6 +2194,7 @@ export type WebviewMessage =
   | RoutineAccessUpdateMessage
   | RoutineAuthorityServicesRequestMessage
   | RoutineOutputUpdateMessage
+  | RoutineFinalPickMessage
   | RoutineRunMessage
   | RoutineRunsMessage
   | RoutineSnapshotRequestMessage

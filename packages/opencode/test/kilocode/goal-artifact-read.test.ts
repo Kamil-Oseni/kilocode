@@ -10,7 +10,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { KiloReadObject } from "@/kilocode/tool/read-object"
 import * as Artifact from "@/kilocode/goal/artifact"
-import { facts, read } from "@/kilocode/goal/read-artifact"
+import { facts, read, whole } from "@/kilocode/goal/read-artifact"
 import { ReadTool } from "@/tool/read"
 import { Agent } from "@/agent/agent"
 import { Instruction } from "@/session/instruction"
@@ -109,6 +109,7 @@ tool.instance(
       }
       const result = yield* reader.execute({ filePath: file, limit: 1 }, ctx)
       expect(result.metadata.truncated).toBe(true)
+      expect((result.metadata as Record<string, unknown>).rayaReadContent).toBeUndefined()
       expect(result.output).not.toContain("<file-content-json")
       expect(result.metadata.display).toMatchObject({ lineStart: 1, lineEnd: 1 })
       expect(yield* Artifact.current(result.metadata.rayaRevision)).toBe(true)
@@ -117,15 +118,29 @@ tool.instance(
       const fresh = yield* reader.execute({ filePath: file }, ctx)
       expect(yield* Artifact.current(fresh.metadata.rayaRevision)).toBe(true)
       expect(fresh.output).toContain("<file-content-json")
+      expect((fresh.metadata as Record<string, unknown>).rayaReadContent).toMatchObject({
+        version: 1,
+        complete: true,
+        encoding: "UTF-8",
+        path: file,
+        canonical: yield* fs.realPath(file),
+        bytes: Buffer.byteLength("first\nsecond\nchanged\n"),
+        sha256: createHash("sha256").update("first\nsecond\nchanged\n").digest("hex"),
+      })
+      expect(yield* whole(fresh.metadata)).toMatchObject({ complete: true, path: file })
+      expect(yield* whole(result.metadata)).toBeUndefined()
       const range = yield* reader.execute({ filePath: file, offset: 2 }, ctx)
       expect(range.output).not.toContain("<file-content-json")
+      expect((range.metadata as Record<string, unknown>).rayaReadContent).toBeUndefined()
+      expect(yield* whole(range.metadata)).toBeUndefined()
       const directory = yield* reader.execute({ filePath: instance.directory }, ctx)
       expect(directory.metadata.rayaRevision).toBeUndefined()
       expect(directory.output).not.toContain("<file-format")
-      for (const text of ["x".repeat(3000), "x\n".repeat(4097), "<".repeat(1500)]) {
+      for (const text of ["x".repeat(3000), "x\n".repeat(4097)]) {
         yield* fs.writeFileString(file, text)
         const clipped = yield* reader.execute({ filePath: file }, ctx)
         expect(clipped.output).not.toContain("<file-content-json")
+        expect((clipped.metadata as Record<string, unknown>).rayaReadContent).toBeUndefined()
       }
       const notebook = path.join(instance.directory, "notebook.ipynb")
       yield* fs.writeFileString(
@@ -142,6 +157,54 @@ tool.instance(
         .execute({ filePath: file }, { ...ctx, ask: () => Effect.die(new Error("read denied")) })
         .pipe(Effect.exit)
       expect(Exit.isFailure(denied)).toBe(true)
+    }),
+  30_000,
+)
+
+tool.instance(
+  "real complete Reads support 8192 raw UTF-8 bytes independently of bounded JSON escaping",
+  () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const fs = yield* FSUtil.Service
+      const file = path.join(instance.directory, "escaped.txt")
+      const reader = yield* (yield* ReadTool).init()
+      const ctx = {
+        sessionID: SessionID.make("ses_escaped_read"),
+        messageID: MessageID.make("msg_escaped_read"),
+        callID: "escaped-read",
+        agent: "code",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const prefix = "\ufeff" + ('"\\\t<é '.repeat(32) + "\r\n").repeat(32)
+      const text = prefix + '"'.repeat(8192 - Buffer.byteLength(prefix))
+      expect(Buffer.byteLength(text)).toBe(8192)
+      expect(Buffer.byteLength(JSON.stringify(text).replace(/</g, "\\u003c"))).toBeGreaterThan(8192)
+      for (const source of ["", "\ufeff", " \t\r\n", text]) {
+        yield* fs.writeFileString(file, source)
+        const result = yield* reader.execute({ filePath: file }, ctx)
+        const content = result.output.match(/<file-content-json[^>]*>\n(.*?)\n<\/file-content-json>/s)
+        expect(content).not.toBeNull()
+        expect(JSON.parse(content![1])).toBe(source)
+        expect(Buffer.byteLength(content![1])).toBeLessThanOrEqual(8192 * 6 + 2)
+        expect(yield* whole(result.metadata)).toMatchObject({
+          complete: true,
+          bytes: Buffer.byteLength(source),
+          sha256: createHash("sha256").update(source).digest("hex"),
+        })
+      }
+      const partial = yield* reader.execute({ filePath: file, limit: 1 }, ctx)
+      expect(partial.output).not.toContain("<file-content-json")
+      expect(yield* whole(partial.metadata)).toBeUndefined()
+      for (const source of [text + '"', "x".repeat(8192), "\n".repeat(8192)]) {
+        yield* fs.writeFileString(file, source)
+        const result = yield* reader.execute({ filePath: file }, ctx)
+        expect(result.output).not.toContain("<file-content-json")
+        expect(yield* whole(result.metadata)).toBeUndefined()
+      }
     }),
   30_000,
 )

@@ -16,6 +16,16 @@ const Format = Schema.Struct({
   sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
 })
 
+const Content = Schema.Struct({
+  version: Schema.Literal(1),
+  complete: Schema.Literal(true),
+  encoding: Schema.Literal("UTF-8"),
+  path: Schema.String.check(Schema.isMaxLength(4096)),
+  canonical: Schema.String.check(Schema.isMaxLength(4096)),
+  bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8192)),
+  sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+})
+
 /** Bounded host-scanned facts, bound to the still-current captured file revision. */
 export const facts = (metadata: Record<string, unknown>) =>
   Effect.gen(function* () {
@@ -33,6 +43,25 @@ export const facts = (metadata: Record<string, unknown>) =>
     )
       return undefined
     return format.value
+  })
+
+/** Full text displayed by the authorized Read, not merely a full-file digest. */
+export const whole = (metadata: Record<string, unknown>) =>
+  Effect.gen(function* () {
+    const content = Schema.decodeUnknownOption(Content)(metadata.rayaReadContent)
+    if (Option.isNone(content)) return undefined
+    const format = yield* facts(metadata)
+    const revision = Artifact.entries(metadata.rayaRevision)[0]
+    if (
+      !format ||
+      revision?.status !== "captured" ||
+      revision.path !== content.value.path ||
+      revision.canonical !== content.value.canonical ||
+      format.bytes !== content.value.bytes ||
+      format.sha256 !== content.value.sha256
+    )
+      return undefined
+    return content.value
   })
 
 export const read = <A extends { metadata: object; output?: string }, E, R>(
@@ -120,7 +149,8 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
       display.display.truncated === false &&
       (display.display.text === lines || display.display.text === lines?.replace(/^\ufeff/, ""))
     const encoded = complete ? JSON.stringify(text).replace(/</g, "\\u003c") : undefined
-    const content = encoded !== undefined && Buffer.byteLength(encoded, "utf8") <= 8192 ? encoded : undefined
+    // Every approved raw UTF-8 byte may need a six-byte JSON escape, plus quotes.
+    const content = encoded !== undefined && Buffer.byteLength(encoded, "utf8") <= 8192 * 6 + 2 ? encoded : undefined
     const output =
       revision.status === "captured" && format && display.display?.type === "file" && typeof result.output === "string"
         ? {
@@ -133,6 +163,23 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
       metadata: {
         ...result.metadata,
         rayaRevision: revision,
+        rayaReadContent:
+          revision.status === "captured" &&
+          format &&
+          format.bytes === revision.bytes &&
+          display.display?.type === "file" &&
+          content !== undefined &&
+          typeof result.output === "string"
+            ? {
+                version: 1 as const,
+                complete: true as const,
+                encoding: "UTF-8" as const,
+                path: revision.path,
+                canonical: revision.canonical,
+                bytes: revision.bytes,
+                sha256: revision.sha256,
+              }
+            : undefined,
         rayaReadFormat:
           revision.status === "captured" &&
           format &&

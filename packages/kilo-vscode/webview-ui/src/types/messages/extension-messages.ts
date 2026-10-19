@@ -273,6 +273,14 @@ export interface RoutineRunsLoadedMessage {
   runs?: unknown[]
 }
 
+export interface RoutineFinalPickedMessage {
+  type: "routineFinalPicked"
+  requestID: string
+  final?: import("../../../../src/shared/routine-output").Final
+  cancelled?: boolean
+  error?: string
+}
+
 export interface RoutineOutputUpdatedMessage {
   type: "routineOutputUpdated"
   requestID: string
@@ -2122,6 +2130,7 @@ export type ExtensionMessage =
   | RoutineAccessUpdatedMessage
   | RoutineAuthorityServicesMessage
   | RoutineOutputUpdatedMessage
+  | RoutineFinalPickedMessage
   | RoutineArchiveMessage
   | RoutineStartedMessage
   | RoutineInboxMessage

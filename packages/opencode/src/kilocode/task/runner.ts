@@ -57,9 +57,11 @@ import { trace } from "./trace"
 import { RayaRoutineReports } from "./projection"
 import { RayaTaskWait } from "./wait-notice"
 import { final } from "./final-report"
+import { verify } from "./final-output"
 import { bound as reviewed } from "@/kilocode/goal/review-source"
 
 const WAIT = "waiting on you"
+const failed = (run: RayaTask.Run) => !!run.outcome?.delivery && run.outcome.delivery.status !== "passed"
 
 function historical(value: string) {
   const escaped = value
@@ -616,6 +618,10 @@ export namespace RayaTaskRunner {
               .join("\n\n"),
           "Report evidence for each criterion by its ID in the update_goal completion audit: include exactly one requirement per saved criterion, set criterionID to its ID and preserve its description as the requirement text. Preserve any final-response format specified in the worker's objective after accepted completion; do not replace that response with a report about the audit. Do not claim completion when a required criterion is unmet or unverified. If verification requires a person's judgment, request that review. This output contract does not grant permission to send external messages or modify files.",
         )
+        if (item.output.final)
+          chunks.push(
+            `Final answer check: return only the exact UTF-8 contents of ${JSON.stringify(item.output.final.path)}. The owner approved ${item.output.final.bytes} bytes with SHA-256 ${item.output.final.sha256}. Read the entire approved file using an authorized Read. Preserve every character, BOM and newline; add no prose or formatting. The work audit does not verify this later answer. A changed or unavailable file requires review, not an invented replacement. This check grants no additional file access.`,
+          )
       }
       if (item.dir?.trim() && !item.paths) {
         chunks.push(`Write new files only in ${item.dir.trim()}. You may read from anywhere else.`)
@@ -655,6 +661,12 @@ export namespace RayaTaskRunner {
           message: "Review this older routine's workspace access before starting another run.",
         })
       if (item.dir?.trim()) yield* workspace()
+      const last = (yield* tasks.runsFor(id)).at(-1)
+      if ((trigger?.kind === "timer" || trigger?.kind === "event") && last && failed(last))
+        return yield* new RayaTask.GuardError({
+          message:
+            "Automatic runs are on hold after the final answer check failed. Review the original result before starting a new manual run.",
+        })
       if (trigger?.kind === "timer") {
         if (!schedule)
           return yield* new RayaTask.GuardError({
@@ -685,9 +697,12 @@ export namespace RayaTaskRunner {
           if (record.phase !== "session-created" || !record.sessionID) return false
           const history = yield* tasks.runsFor(id)
           const run = history.find((entry) => entry.id === record.id && entry.sessionID === record.sessionID)
-          if (run?.status !== "complete") return false
+          if (!run || (run.status !== "complete" && !failed(run))) return false
           const goal = yield* goals.get(record.sessionID)
-          return goal?.status === "complete"
+          if (goal?.status !== "complete") return false
+          if (!failed(run)) return true
+          const snapshot = yield* snapshots.find(run.id)
+          return !!snapshot && (yield* bound(run, goal, snapshot))
         }),
       )
     })
@@ -710,7 +725,14 @@ export namespace RayaTaskRunner {
       ) =>
         Effect.gen(function* () {
           yield* transfer.check()
-          for (const run of yield* tasks.runsFor(id)) {
+          const history = yield* tasks.runsFor(id)
+          const last = history.at(-1)
+          if (opts?.delegationID && last && failed(last))
+            return yield* new RayaTask.GuardError({
+              message:
+                "This worker's final answer check needs review before it can receive more automatic assignments.",
+            })
+          for (const run of history) {
             const goal = yield* goals.get(run.sessionID)
             if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined)
               return yield* new RayaTask.GuardError({
@@ -1063,6 +1085,8 @@ export namespace RayaTaskRunner {
       const waiting = yield* inbox.pending(id)
       if (!waiting) return undefined
       const history = yield* tasks.runsFor(id)
+      const last = history.at(-1)
+      if (last && failed(last)) return undefined
       const active = history.findLast(RayaTask.pending)
       if (active && !(active.status === "blocked" && active.blockedReason === WAIT)) return undefined
       const run = yield* ask(id, waiting.body, { defer: true })
@@ -1820,6 +1844,7 @@ export namespace RayaTaskRunner {
           | "no-pending-run"
           | "original-stop"
           | "done-recovery"
+          | "done-delivery-changed"
           | "run-recovery"
           | "goal-changed"
           | "transition-conflict"
@@ -1897,14 +1922,23 @@ export namespace RayaTaskRunner {
             )
               yield* Effect.die(new Error("Saved startup snapshot does not match run history."))
             const definition = saved?.definition ?? item
-            if (done.status !== "stopped" && definition.memoryScope === "role" && done.outcome?.summary)
+            if (failed(done) && (!goal || !saved || !(yield* bound(done, goal, saved)))) {
+              withheld("done-delivery-changed")
+              continue
+            }
+            if (
+              !failed(done) &&
+              done.status !== "stopped" &&
+              definition.memoryScope === "role" &&
+              done.outcome?.summary
+            )
               yield* tasks.learn(item.id, done.id, done.outcome.summary)
             if (schedule && (done.status === "complete" || done.status === "blocked" || done.status === "stopped"))
               yield* schedule.settle(done)
             if (reservations && done.outcome)
               yield* reservations.settle(done.id, done.sessionID, done.outcome.cost).pipe(Effect.orDie)
             yield* retain(done)
-            yield* close(done, !!exact || done.status === "stopped")
+            yield* close(done, !!exact || done.status === "stopped" || failed(done))
             yield* execution.finish(done)
           }
           continue
@@ -1978,30 +2012,38 @@ export namespace RayaTaskRunner {
         const cost = msgs.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
         const report =
           !stop && status === "complete" && goal && saved?.sessionID === run.sessionID
-            ? final(run, goal, msgs)
+            ? final(run, goal, msgs, !!definition.output?.final, !!definition.output?.final)
             : undefined
         if (!stop && status === "complete" && !report) {
           log.warn("Routine completion awaits its original final answer", { runID: run.id, sessionID })
           continue
         }
+        const delivery =
+          report && goal && definition.output?.final
+            ? yield* verify(definition.output.final, run, goal, msgs, report)
+            : undefined
+        const rejected = delivery !== undefined && delivery.status !== "passed"
         const summary = stop
           ? "Stopped by the user. No unverified result was accepted."
           : (report?.summary ?? goal?.blockedReason?.trim() ?? "")
         const next = {
           ...run,
-          status,
+          status: rejected ? "blocked" : status,
           ...(stop ? { stop } : {}),
           trace: stop || goal?.createdAt === run.goalCreatedAt ? run.trace : undefined,
-          blockedReason: stop
-            ? undefined
-            : goal
-              ? goal.blockedReason
-              : "No saved goal is available to verify this run's result. Review its conversation and saved instructions before starting more work.",
+          blockedReason: rejected
+            ? "The original final answer did not pass its approved file check. Review the saved result before starting more work; it was not retried."
+            : stop
+              ? undefined
+              : goal
+                ? goal.blockedReason
+                : "No saved goal is available to verify this run's result. Review its conversation and saved instructions before starting more work.",
           outcome: {
             kind: kind(definition.role, definition.objective),
             reply: goal?.completion === "reply" && goal.status === "complete" ? true : undefined,
             summary,
             ...(report ? { report: report.report } : {}),
+            ...(delivery ? { delivery } : {}),
             evidence: goal?.audit?.requirements.flatMap((req) => req.evidence.map((ev) => ev.summary)),
             verification: goal?.audit
               ? {
@@ -2072,7 +2114,7 @@ export namespace RayaTaskRunner {
             })
           : yield* tasks.transition(run, next, report ? goal : undefined)
         withheld(changed ? "transition-committed" : "transition-conflict")
-        if (changed && status !== "stopped" && definition.memoryScope === "role" && summary) {
+        if (changed && !rejected && status !== "stopped" && definition.memoryScope === "role" && summary) {
           yield* tasks.learn(item.id, run.id, summary)
         }
         const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
@@ -2092,9 +2134,9 @@ export namespace RayaTaskRunner {
           )
             yield* schedule.settle(latest)
           yield* retain(latest)
-          yield* close(latest, !!exact || status === "stopped")
+          yield* close(latest, !!exact || status === "stopped" || failed(latest))
           yield* execution.finish(latest)
-          if (!exact && status !== "stopped") yield* dispatch(item.id)
+          if (!exact && status !== "stopped" && !failed(latest)) yield* dispatch(item.id)
         }
       }
     })
@@ -2362,6 +2404,36 @@ export namespace RayaTaskRunner {
         yield* settle(run.sessionID, run)
       })
 
+    const bound = Effect.fn("RayaTaskRunner.deliveryBound")(function* (
+      run: RayaTask.Run,
+      goal: RayaGoal.State,
+      snapshot: typeof RayaTaskSnapshot.Info.Type,
+    ) {
+      const delivery = run.outcome?.delivery
+      if (
+        !failed(run) ||
+        goal.status !== "complete" ||
+        !delivery ||
+        snapshot.runID !== run.id ||
+        snapshot.sessionID !== run.sessionID ||
+        snapshot.agentID !== run.agentID ||
+        snapshot.at !== run.at ||
+        (snapshot.definition.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1) ||
+        !isDeepStrictEqual(delivery.contract, snapshot.definition.output?.final)
+      )
+        return false
+      const report = final(run, goal, yield* input.sessions.messages({ sessionID: run.sessionID }), true, true)
+      return (
+        !!report &&
+        isDeepStrictEqual(report.report, run.outcome?.report) &&
+        report.summary === run.outcome?.summary &&
+        delivery.final.bytes === Buffer.byteLength(report.summary, "utf8") &&
+        delivery.final.messageID === report.report.messageID &&
+        delivery.final.sha256 === report.report.sha256 &&
+        isDeepStrictEqual(goal, yield* goals.get(run.sessionID))
+      )
+    })
+
     const terminal = Effect.fn("RayaTaskRunner.terminal")(function* (run: RayaTask.Run) {
       yield* transfer.check()
       const goal = yield* goals.get(run.sessionID)
@@ -2369,7 +2441,7 @@ export namespace RayaTaskRunner {
       if (!(yield* execution.retained(run))) return { state: "skip" as const, run }
       if (!run.outcome || (run.status !== "complete" && run.status !== "blocked") || RayaTask.pending(run))
         return { state: "blocked" as const, run }
-      if (!goal || goal.status !== run.status) return { state: "blocked" as const, run }
+      if (!goal || (goal.status !== run.status && !failed(run))) return { state: "blocked" as const, run }
       const snapshot = yield* snapshots.find(run.id).pipe(Effect.orElseSucceed(() => undefined))
       if (
         !snapshot ||
@@ -2379,6 +2451,7 @@ export namespace RayaTaskRunner {
         (snapshot.definition.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1)
       )
         return { state: "blocked" as const, run }
+      if (failed(run) && !(yield* bound(run, goal, snapshot))) return { state: "blocked" as const, run }
       const session = yield* input.sessions.get(run.sessionID).pipe(Effect.orElseSucceed(() => undefined))
       const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session?.metadata?.rayaRoutine).pipe(
         Effect.orElseSucceed(() => undefined),
@@ -2685,7 +2758,13 @@ export namespace RayaTaskRunner {
         }
         if (
           (run.status === "complete" && goal?.status === "complete") ||
-          (run.status === "blocked" && goal?.status === "blocked")
+          (run.status === "blocked" && goal?.status === "blocked") ||
+          (goal?.status === "complete" &&
+            failed(run) &&
+            (yield* Effect.gen(function* () {
+              const snapshot = yield* snapshots.find(run.id)
+              return !!snapshot && (yield* bound(run, goal, snapshot))
+            })))
         )
           yield* schedule.settle(run)
       }
@@ -2740,6 +2819,8 @@ export namespace RayaTaskRunner {
       }).pipe(Effect.scoped)
       if (!restored) return
       yield* reconcile(item.id)
+      const settled = (yield* tasks.runsFor(item.id)).at(-1)
+      if (settled && failed(settled)) return
       const recovering = yield* Effect.forEach(yield* tasks.runsFor(item.id), (run) => goals.get(run.sessionID))
       if (recovering.some((goal) => goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined)) return
       const stranded = inbox ? yield* inbox.stranded(item.id) : undefined
@@ -2831,6 +2912,8 @@ export namespace RayaTaskRunner {
                   yield* schedule.pulse(item.id)
                 }
                 if (!item.enabled || (item.schedule.kind !== "once" && item.schedule.kind !== "cron")) return undefined
+                const last = (yield* tasks.runsFor(item.id)).at(-1)
+                if (last && failed(last)) return undefined
                 if (!schedule) return yield* Effect.die(new Error("The routine occurrence database is unavailable."))
                 const selected = yield* schedule.prepare(item.id, from)
                 if (selected) yield* fire(item.id, { kind: "timer", selected })
@@ -2900,6 +2983,13 @@ export namespace RayaTaskRunner {
                   .join("\n"),
               }
             }
+            const last = (yield* tasks.runsFor(item.id)).at(-1)
+            if (last && failed(last))
+              return {
+                ...item,
+                nextRun: undefined,
+                note: "Automatic runs are on hold: the final answer check needs review. Open the original run before choosing a new manual run.",
+              }
             const execution = yield* inspect(input.storage, item.id)
             if (execution)
               return {

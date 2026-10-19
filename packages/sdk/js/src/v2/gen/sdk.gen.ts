@@ -10815,6 +10815,12 @@ export class Routine extends HeyApiClient {
           description: string
           verification: string
         }>
+        final?: {
+          kind: "file"
+          path: string
+          bytes: number
+          sha256: string
+        }
       }
       sourceSessionID?: string
       reportSessionID?: string
@@ -11117,6 +11123,12 @@ export class Routine extends HeyApiClient {
           description: string
           verification: string
         }>
+        final?: {
+          kind: "file"
+          path: string
+          bytes: number
+          sha256: string
+        }
       }
       sourceSessionID?: string
       reportSessionID?: string
@@ -11182,6 +11194,12 @@ export class Routine extends HeyApiClient {
               description: string
               verification: string
             }>
+            final?: {
+              kind: "file"
+              path: string
+              bytes: number
+              sha256: string
+            }
           }
         | "unset"
       expectedBudget?: number | "unset"

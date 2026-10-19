@@ -26155,6 +26155,12 @@ export type KilocodeRoutineListResponses = {
         description: string
         verification: string
       }>
+      final?: {
+        kind: "file"
+        path: string
+        bytes: number
+        sha256: string
+      }
     }
     sourceSessionID?: string
     reportSessionID?: string
@@ -26235,6 +26241,12 @@ export type KilocodeRoutineCreateData = {
         description: string
         verification: string
       }>
+      final?: {
+        kind: "file"
+        path: string
+        bytes: number
+        sha256: string
+      }
     }
     sourceSessionID?: string
     reportSessionID?: string
@@ -26316,6 +26328,12 @@ export type KilocodeRoutineCreateResponses = {
         description: string
         verification: string
       }>
+      final?: {
+        kind: "file"
+        path: string
+        bytes: number
+        sha256: string
+      }
     }
     sourceSessionID?: string
     reportSessionID?: string
@@ -26573,6 +26591,12 @@ export type KilocodeRoutineArchiveResponses = {
             description: string
             verification: string
           }>
+          final?: {
+            kind: "file"
+            path: string
+            bytes: number
+            sha256: string
+          }
         }
         sourceSessionID?: string
         reportSessionID?: string
@@ -26690,6 +26714,12 @@ export type KilocodeRoutineUpdateData = {
         description: string
         verification: string
       }>
+      final?: {
+        kind: "file"
+        path: string
+        bytes: number
+        sha256: string
+      }
     }
     sourceSessionID?: string
     reportSessionID?: string
@@ -26755,6 +26785,12 @@ export type KilocodeRoutineUpdateData = {
             description: string
             verification: string
           }>
+          final?: {
+            kind: "file"
+            path: string
+            bytes: number
+            sha256: string
+          }
         }
       | "unset"
     expectedBudget?: number | "unset"
@@ -26820,6 +26856,12 @@ export type KilocodeRoutineUpdateResponses = {
         description: string
         verification: string
       }>
+      final?: {
+        kind: "file"
+        path: string
+        bytes: number
+        sha256: string
+      }
     }
     sourceSessionID?: string
     reportSessionID?: string
@@ -26933,6 +26975,12 @@ export type KilocodeRoutineAuthorityResponses = {
         description: string
         verification: string
       }>
+      final?: {
+        kind: "file"
+        path: string
+        bytes: number
+        sha256: string
+      }
     }
     sourceSessionID?: string
     reportSessionID?: string
@@ -27093,6 +27141,32 @@ export type KilocodeRoutineRunResponses = {
         sha256: string
       }
       evidence?: Array<string>
+      delivery?: {
+        version: 1
+        status: "passed" | "mismatch" | "unavailable"
+        reason: string
+        at: number
+        contract: {
+          kind: "file"
+          path: string
+          bytes: number
+          sha256: string
+        }
+        source?: {
+          messageID: string
+          partID: string
+          callID: string
+          path: string
+          canonical: string
+          bytes: number
+          sha256: string
+        }
+        final: {
+          messageID: string
+          sha256: string
+          bytes: number
+        }
+      }
       verification?: {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         requirements: Array<{
@@ -27244,6 +27318,32 @@ export type KilocodeRoutineRunsResponses = {
         sha256: string
       }
       evidence?: Array<string>
+      delivery?: {
+        version: 1
+        status: "passed" | "mismatch" | "unavailable"
+        reason: string
+        at: number
+        contract: {
+          kind: "file"
+          path: string
+          bytes: number
+          sha256: string
+        }
+        source?: {
+          messageID: string
+          partID: string
+          callID: string
+          path: string
+          canonical: string
+          bytes: number
+          sha256: string
+        }
+        final: {
+          messageID: string
+          sha256: string
+          bytes: number
+        }
+      }
       verification?: {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         requirements: Array<{
@@ -27356,6 +27456,32 @@ export type KilocodeRoutineEventsResponses = {
           sha256: string
         }
         evidence?: Array<string>
+        delivery?: {
+          version: 1
+          status: "passed" | "mismatch" | "unavailable"
+          reason: string
+          at: number
+          contract: {
+            kind: "file"
+            path: string
+            bytes: number
+            sha256: string
+          }
+          source?: {
+            messageID: string
+            partID: string
+            callID: string
+            path: string
+            canonical: string
+            bytes: number
+            sha256: string
+          }
+          final: {
+            messageID: string
+            sha256: string
+            bytes: number
+          }
+        }
         verification?: {
           at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
           requirements: Array<{
@@ -27494,6 +27620,32 @@ export type KilocodeRoutineHistoriesResponses = {
             sha256: string
           }
           evidence?: Array<string>
+          delivery?: {
+            version: 1
+            status: "passed" | "mismatch" | "unavailable"
+            reason: string
+            at: number
+            contract: {
+              kind: "file"
+              path: string
+              bytes: number
+              sha256: string
+            }
+            source?: {
+              messageID: string
+              partID: string
+              callID: string
+              path: string
+              canonical: string
+              bytes: number
+              sha256: string
+            }
+            final: {
+              messageID: string
+              sha256: string
+              bytes: number
+            }
+          }
           verification?: {
             at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
             requirements: Array<{
@@ -27568,6 +27720,12 @@ export type KilocodeRoutineSnapshotResponses = {
           description: string
           verification: string
         }>
+        final?: {
+          kind: "file"
+          path: string
+          bytes: number
+          sha256: string
+        }
       }
       sourceSessionID?: string
       reportSessionID?: string
@@ -28257,6 +28415,32 @@ export type KilocodeRoutineEventResponses = {
         sha256: string
       }
       evidence?: Array<string>
+      delivery?: {
+        version: 1
+        status: "passed" | "mismatch" | "unavailable"
+        reason: string
+        at: number
+        contract: {
+          kind: "file"
+          path: string
+          bytes: number
+          sha256: string
+        }
+        source?: {
+          messageID: string
+          partID: string
+          callID: string
+          path: string
+          canonical: string
+          bytes: number
+          sha256: string
+        }
+        final: {
+          messageID: string
+          sha256: string
+          bytes: number
+        }
+      }
       verification?: {
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         requirements: Array<{

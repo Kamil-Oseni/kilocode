@@ -7,6 +7,7 @@ import { routineFailure } from "../../utils/routine-recovery"
 import { OutputEditor } from "./OutputEditor"
 
 export function OutputReview(props: { item: { id: string; name: string; output?: Output }; onClose: () => void }) {
+  const [choosing, setChoosing] = createSignal(false)
   const vscode = useVSCode()
   const id = createUniqueId()
   const [expected, setExpected] = createSignal<Output | "unset">(
@@ -71,7 +72,7 @@ export function OutputReview(props: { item: { id: string; name: string; output?:
     unsub()
   })
   const save = () => {
-    if (!valid() || request() || error() || saved()) return
+    if (!valid() || request() || error() || saved() || choosing()) return
     const requestID = crypto.randomUUID()
     setRequest(requestID)
     timer = setTimeout(() => {
@@ -104,7 +105,12 @@ export function OutputReview(props: { item: { id: string; name: string; output?:
         Changes apply to future runs. Existing runs keep their saved requirements. Saving does not enable the routine or
         start work.
       </p>
-      <OutputEditor value={draft()} onChange={setDraft} disabled={!!request() || !!error() || saved()} />
+      <OutputEditor
+        value={draft()}
+        onChange={setDraft}
+        onPending={setChoosing}
+        disabled={!!request() || !!error() || saved()}
+      />
       <Show when={error()}>
         <p role="alert" class="routines-error">
           {error()}
@@ -135,6 +141,15 @@ export function OutputReview(props: { item: { id: string; name: string; output?:
                 return (
                   <div data-routine-comparison>
                     <p>{saved.description}</p>
+                    <Show when={saved.final}>
+                      {(final) => (
+                        <div>
+                          <p>Exact final-answer file: {final().path}</p>
+                          <p>Bytes: {final().bytes}</p>
+                          <p>SHA-256: {final().sha256}</p>
+                        </div>
+                      )}
+                    </Show>
                     <ul>
                       <For each={saved.criteria}>
                         {(criterion) => (
@@ -169,7 +184,7 @@ export function OutputReview(props: { item: { id: string; name: string; output?:
       <Show when={saved()}>
         <p role="status">Output requirements saved. The routine list is refreshing.</p>
       </Show>
-      <Button size="small" disabled={!valid() || !!request() || !!error() || saved()} onClick={save}>
+      <Button size="small" disabled={!valid() || !!request() || !!error() || saved() || choosing()} onClick={save}>
         {request() ? "Saving requirements" : "Save requirements"}
       </Button>
       <Button size="small" variant="ghost" onClick={props.onClose}>

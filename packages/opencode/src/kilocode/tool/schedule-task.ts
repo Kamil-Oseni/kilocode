@@ -92,6 +92,13 @@ export function scheduleTaskTool(input: {
       parameters: Parameters,
       execute: (params: typeof Parameters.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          if (params.output.final)
+            return {
+              title: "Agent not created",
+              output:
+                "Create the routine without an exact final-answer file, then open Routines → Output review and choose the file yourself before saving that requirement.",
+              metadata: {},
+            }
           const parsed = yield* Effect.try({
             try: () => resolve(params),
             catch: (err) => (err instanceof Error ? err : new Error(String(err))),

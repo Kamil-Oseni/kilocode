@@ -4,6 +4,36 @@ import type { KilocodeRoutineRunsResponse } from "@kilocode/sdk/v2/client"
 export function Verification(props: { outcome: KilocodeRoutineRunsResponse[number]["outcome"] }) {
   return (
     <Show when={props.outcome}>
+      <Show when={props.outcome?.delivery}>
+        {(delivery) => (
+          <details open>
+            <summary>
+              Final answer: {delivery().status === "passed" ? "Exact file check passed" : "Needs review"}
+            </summary>
+            <p class="routines-hint">
+              Checked the original delivered UTF-8 bytes separately from the earlier work audit. This does not record
+              your acceptance or judge other claims in the answer.
+            </p>
+            <p>Approved file: {delivery().contract.path}</p>
+            <p>
+              Expected: {delivery().contract.bytes} bytes, SHA-256 {delivery().contract.sha256}
+            </p>
+            <Show
+              when={delivery().reason === "final-missing"}
+              fallback={
+                <p>
+                  Delivered: {delivery().final.bytes} bytes, SHA-256 {delivery().final.sha256}
+                </p>
+              }
+            >
+              <p>No original final text was delivered.</p>
+            </Show>
+            <Show when={delivery().status !== "passed"}>
+              <p>The check did not pass ({delivery().reason}). The original turn is preserved and was not retried.</p>
+            </Show>
+          </details>
+        )}
+      </Show>
       <Show
         when={props.outcome?.verification}
         fallback={<p class="routines-hint">Criterion outcomes were not recorded for this result.</p>}

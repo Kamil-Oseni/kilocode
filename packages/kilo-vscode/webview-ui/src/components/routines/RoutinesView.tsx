@@ -916,6 +916,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [busy, setBusy] = createSignal<Record<string, true>>({})
   const [picked, setPicked] = createSignal<Record<string, true>>({})
   const [saving, setSaving] = createSignal(false)
+  const [choosing, setChoosing] = createSignal(false)
   const [loaded, setLoaded] = createSignal(false)
   const [refreshing, setRefreshing] = createSignal(false)
   const [freshness, setFreshness] = createSignal("Waiting to refresh routines.")
@@ -1579,7 +1580,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     confirmed()
       ? "The schedule is checked. You can assign this routine now."
       : "Review shows the exact schedule before anything is saved."
-  const submitBlocked = () => saving() || previewing()
+  const submitBlocked = () => saving() || previewing() || choosing()
   const settings = () => !!editing() || setup() === "review"
   const policies = () => !!editing() || setup() === "schedule" || setup() === "review"
   const target = () => report() ?? "default"
@@ -1668,6 +1669,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const create = () => {
+    if (choosing()) return
     const issue = basicError(objective(), dir(), !!editing())
     if (issue) {
       setError(issue)
@@ -2628,7 +2630,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                   </label>
                 </Show>
                 <Show when={!editing()}>
-                  <OutputEditor value={output()} onChange={setOutput} disabled={saving()} />
+                  <OutputEditor value={output()} onChange={setOutput} onPending={setChoosing} disabled={saving()} />
                 </Show>
                 <div class="routines-field">
                   <span>Agent</span>

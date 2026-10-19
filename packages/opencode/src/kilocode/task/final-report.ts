@@ -5,7 +5,13 @@ import type { RayaTask } from "."
 import { bound as reviewed } from "@/kilocode/goal/review-source"
 
 /** Bind saved output to the original completed turn; this does not verify its claims. */
-export function final(run: RayaTask.Run, goal: RayaGoal.State, rows: readonly SessionV1.WithParts[]) {
+export function final(
+  run: RayaTask.Run,
+  goal: RayaGoal.State,
+  rows: readonly SessionV1.WithParts[],
+  blank = false,
+  missing = false,
+) {
   const dispatch = goal.dispatch
   const accepted = goal.review?.status === "accepted" && reviewed(goal)
   if (
@@ -57,7 +63,7 @@ export function final(run: RayaTask.Run, goal: RayaGoal.State, rows: readonly Se
   const parts = answer.parts.filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
   if (parts.some((part) => part.sessionID !== run.sessionID || part.messageID !== answer.info.id)) return undefined
   const summary = parts.map((part) => (part.type === "text" ? part.text : "")).join("")
-  if (!summary.trim()) return undefined
+  if (parts.length ? !blank && !summary.trim() : !missing) return undefined
   return {
     summary,
     report: {

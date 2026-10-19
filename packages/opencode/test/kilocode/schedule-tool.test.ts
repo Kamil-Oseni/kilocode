@@ -87,6 +87,13 @@ const report = {
   criteria: [{ id: "evidence", description: "Show the evidence", verification: "Cite the source" }],
 }
 
+const physical = Effect.fn("ScheduleTest.physical")(function* (database: Database.Interface, directory: string) {
+  const rows = yield* database.db.all<{ name: string; file: string }>("PRAGMA database_list")
+  const file = rows.find((row) => row.name === "main")?.file
+  expect(file && path.isAbsolute(file)).toBe(true)
+  expect(file && path.normalize(file)).toBe(path.join(directory, "queue.sqlite"))
+})
+
 function assignment(name: string, objective = "Work") {
   return {
     name,
@@ -116,6 +123,7 @@ it.live(
             children: () => Effect.succeed([]),
           },
         }
+        yield* physical(input.database, directory)
         const tool = yield* (yield* scheduleTaskTool(input)).init()
         const requests: Parameters<Tool.Context["ask"]>[0][] = []
         const ctx: Tool.Context = {
@@ -139,6 +147,36 @@ it.live(
               })
             }).pipe(Effect.orDie),
         }
+        const proposed = yield* tool
+          .execute(
+            {
+              ...assignment("Unapproved file"),
+              output: {
+                ...report,
+                final: { kind: "file", path: path.join(directory, "answer.txt"), bytes: 0, sha256: "a".repeat(64) },
+              },
+              runNow: true,
+            },
+            { ...ctx, callID: "unapproved-file", ask: () => Effect.die("a proposed file must not request permission") },
+          )
+          .pipe(
+            Effect.provideService(
+              Question.Service,
+              Question.Service.of({
+                ask: () => Effect.die("a proposed file must not request confirmation"),
+                reply: () => Effect.void,
+                reject: () => Effect.void,
+                list: () => Effect.succeed([]),
+                dismissAll: () => Effect.void,
+              }),
+            ),
+          )
+        expect(proposed.title).toBe("Agent not created")
+        expect(proposed.output).toContain("Routines → Output review")
+        expect(requests).toEqual([])
+        expect(yield* RayaTask.make(input).list()).toEqual([])
+        expect(yield* input.storage.list(["raya", "routine-confirmations"])).toEqual([])
+        expect(yield* input.storage.list(["raya", "agent-claims"])).toEqual([])
         for (const params of [
           { ...assignment("Editing"), access: "full" as const },
           { ...assignment("Records"), capabilities: ["money"] },
@@ -189,9 +227,8 @@ it.live(
         expect(yield* permission.list()).toEqual([])
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            Storage.layerFromDir(path.join(directory, "storage")),
-            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          Storage.layerWithDatabase(path.join(directory, "storage")).pipe(
+            Layer.provideMerge(Layer.fresh(Database.layerFromPath(path.join(directory, "queue.sqlite")))),
           ),
         ),
       ),
@@ -213,6 +250,7 @@ it.live(
             children: () => Effect.succeed([]),
           },
         }
+        yield* physical(input.database, directory)
         const tool = yield* (yield* scheduleTaskTool(input)).init()
         const ctx: Tool.Context = {
           sessionID: SessionID.make("ses_schedule_confirm"),
@@ -297,9 +335,8 @@ it.live(
         expect(Exit.isFailure(shifted)).toBe(true)
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            Storage.layerFromDir(path.join(directory, "storage")),
-            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          Storage.layerWithDatabase(path.join(directory, "storage")).pipe(
+            Layer.provideMerge(Layer.fresh(Database.layerFromPath(path.join(directory, "queue.sqlite")))),
           ),
         ),
       ),
@@ -322,6 +359,7 @@ it.live(
             children: () => Effect.succeed([]),
           },
         }
+        yield* physical(input.database, directory)
         const info = yield* scheduleTaskTool(input)
         const tool = yield* info.init()
         const ctx = {
@@ -472,9 +510,8 @@ it.live(
         expect((yield* RayaTask.make(input).list()).length).toBe(count + 3)
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            Storage.layerFromDir(path.join(directory, "storage")),
-            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          Storage.layerWithDatabase(path.join(directory, "storage")).pipe(
+            Layer.provideMerge(Layer.fresh(Database.layerFromPath(path.join(directory, "queue.sqlite")))),
           ),
         ),
       ),

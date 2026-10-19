@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { Trigger as TriggerSchema } from "./trigger"
+import path from "node:path"
 
 export namespace Codec {
   export const Stop = Schema.Struct({
@@ -48,10 +49,25 @@ export namespace Codec {
   )
 
   const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
+  export const Final = Schema.Struct({
+    kind: Schema.Literal("file"),
+    path: Schema.String.check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(4096),
+      Schema.makeFilter((value) =>
+        path.isAbsolute(value) && !/[\x00-\x1f\x7f]/.test(value)
+          ? undefined
+          : "Final output requires an absolute file path without control characters.",
+      ),
+    ),
+    bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8192)),
+    sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  })
   export const Output = Schema.Struct({
     destination: Schema.Literal("conversation"),
     description: Text,
     criteria: Criteria,
+    final: Schema.optional(Final),
   })
   export type Output = typeof Output.Type
 
@@ -139,7 +155,7 @@ export namespace Codec {
         messageID: MessageID,
         parentID: MessageID,
         at: Schema.Finite,
-        partIDs: Schema.Array(PartID).check(Schema.isMinLength(1)),
+        partIDs: Schema.Array(PartID),
         dispatchID: Schema.String.check(Schema.isMinLength(1)),
         goalCreatedAt: Schema.Finite,
         goalIntent: Schema.String.check(Schema.isMinLength(1)),
@@ -148,6 +164,31 @@ export namespace Codec {
       }),
     ),
     evidence: Schema.optional(Schema.Array(Schema.String)),
+    delivery: Schema.optional(
+      Schema.Struct({
+        version: Schema.Literal(1),
+        status: Schema.Literals(["passed", "mismatch", "unavailable"]),
+        reason: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+        at: Schema.Finite,
+        contract: Final,
+        source: Schema.optional(
+          Schema.Struct({
+            messageID: MessageID,
+            partID: PartID,
+            callID: Schema.String,
+            path: Schema.String,
+            canonical: Schema.String,
+            bytes: Schema.Int,
+            sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+          }),
+        ),
+        final: Schema.Struct({
+          messageID: MessageID,
+          sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+          bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        }),
+      }),
+    ),
     verification: Schema.optional(
       Schema.Struct({
         at: Schema.Number,
@@ -243,12 +284,37 @@ export namespace Codec {
     ),
     Schema.makeFilter((value) =>
       value.outcome?.report &&
-      (value.status !== "complete" ||
+      ((value.status !== "complete" &&
+        !(value.status === "blocked" && value.outcome.delivery?.status !== "passed" && value.outcome.delivery)) ||
         value.outcome.report.sessionID !== value.sessionID ||
         value.outcome.report.goalCreatedAt !== value.goalCreatedAt)
         ? "Routine final report belongs to a different completed run."
         : undefined,
     ),
+    Schema.makeFilter((value) => {
+      const delivery = value.outcome?.delivery
+      if (
+        value.outcome?.report?.partIDs.length === 0 &&
+        !(
+          value.status === "blocked" &&
+          delivery?.status === "unavailable" &&
+          delivery.reason === "final-missing" &&
+          delivery.final.bytes === 0 &&
+          value.outcome.summary === ""
+        )
+      )
+        return "A missing final answer requires its explicit unavailable delivery record."
+      if (!delivery) return undefined
+      const report = value.outcome?.report
+      if (
+        !report ||
+        report.messageID !== delivery.final.messageID ||
+        report.sha256 !== delivery.final.sha256 ||
+        (delivery.status === "passed" ? value.status !== "complete" || !delivery.source : value.status !== "blocked")
+      )
+        return "Routine final delivery does not match its original report and result."
+      return undefined
+    }),
   )
   export type Run = typeof Run.Type
 

@@ -84,6 +84,7 @@ import { slimInfo, slimPart, slimParts } from "./kilo-provider/slim-metadata"
 import { handleRoutineMessage as dispatchRoutine, reason } from "./kilo-provider/routines"
 import { recovery } from "./shared/routine-error"
 import { encode as encodeRoutineFile, MAX_ROUTINE_FILE_BYTES } from "./kilo-provider/routine-files"
+import { choose as chooseRoutineFinal } from "./kilo-provider/routine-final"
 import { RoutineRefresh } from "./kilo-provider/routine-refresh"
 import { RoutineEvents } from "./kilo-provider/routine-events"
 import { RoutineReporting, reports } from "./kilo-provider/routine-reporting"
@@ -2055,6 +2056,32 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const current = () =>
       this.client === client && this.getWorkspaceDirectory() === directory && this.connectionGeneration === generation
     try {
+      if (routine.type === "routineFinalPick") {
+        const view = this.webview
+        await chooseRoutineFinal({
+          requestID: routine.requestID,
+          current: () =>
+            current() &&
+            !!client &&
+            this.webview === view &&
+            this.isWebviewReady &&
+            this.connectionState === "connected",
+          pick: async () => {
+            const uris = await vscode.window.showOpenDialog({
+              canSelectFiles: true,
+              canSelectFolders: false,
+              canSelectMany: false,
+              openLabel: "Review final-answer file",
+              title: "Choose the exact final-answer revision",
+            })
+            if (!uris?.length) return undefined
+            if (uris.length !== 1 || uris[0].scheme !== "file") throw new Error("Choose one local UTF-8 file.")
+            return uris[0].fsPath
+          },
+          post: (msg) => this.postMessage(msg),
+        })
+        return true
+      }
       if (routine.type === "routineInboxUnmount") {
         this.routineDrafts.unmount(routine.paneID, routine.agentID)
         return true

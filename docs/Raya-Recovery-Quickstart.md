@@ -1,6 +1,8 @@
 # Raya recovery quickstart
 
-Updated October 14, 2026. Use this when recovery is needed. Home Assistant's VM is intentionally powered off at the latest read-only check; do not restart it or change lights without a new request. A deliberately stopped VM is not a fault to repair. Consult the October 14 checkpoint in [the current checklist](D:/Raya/TODO.md) for the installed version and acceptance scope; older dated readiness sections are historical.
+Updated October 19, 2026. Use this when recovery is needed. Home Assistant's VM is intentionally saved/off; do not restart it or change lights without a new request. A deliberately stopped VM is not a fault to repair. Current Raya is `7.4.23-snapshot+5adb036775.local.1792399232326`. Consult [the current checklist](D:/Raya/TODO.md) for acceptance scope; older dated sections are historical.
+
+The latest protected notes copy is [the October 19 backup](D:/RayaBackups/SecondBrain-20261019-5adb-e57065f00d69472e8a98cb378d7c4075/Files): 222 files and 1,429,920 bytes, verified against the immutable preinstallation manifest. [Its receipt](D:/RayaBackups/SecondBrain-20261019-5adb-e57065f00d69472e8a98cb378d7c4075/proof.json) records the exact scope. A subsequent [offline restore check](D:/Raya/Tools/Readiness-20261019/SecondBrain-offline-restore.json) restored all 222 files into a separate protected temporary folder: every size and SHA-256 matched, with no extra files. This proves file restoration only, not live-service recovery or off-PC protection. The fresh four-root profile preservation and D064 rollback installer remain in `C:/Users/kamil/.codex/worktrees/raya-local-services/raya/.tmp/new-pc/everyday-conversation-preservation-e6dd8bbafe834409a4c39ea41114b623`; retain this folder until its needed contents have a durable replacement. Populated rollback remains unverified.
 
 ## What is verified
 
@@ -8,6 +10,7 @@ Fresh read-only checks are saved in [Recovery-Verification-20261010.json](D:/Ray
 
 | Saved copy | Verification result | Limit |
 |---|---|---|
+| SecondBrain `SecondBrain-20261019-5adb-e57065f00d69472e8a98cb378d7c4075/Files` | All 222 files, 1,429,920 bytes, match the preinstallation manifest; a separate protected offline restore matched every member | Includes retained provenance; no live service/index restore, off-PC protection or replay |
 | Home Assistant `full-backup-8753177b-20261003.tar` | Size and SHA-256 match receipt; outer file members readable | Metadata says partial despite the filename; no live restore |
 | Home Assistant `automatic-29abd8c0-20261004.tar` | Size and SHA-256 match receipt; outer file members readable | No live restore |
 | SecondBrain `SecondBrain-Sources-20261009-2596-grocery/Files` | All 143 manifest files match size and SHA-256 | Historical source snapshot, not a current index or complete service backup |
@@ -48,6 +51,10 @@ The later post-save snapshot manifest SHA-256 is `7fdac9bc9b77c1ce1df36f7f44442f
 The newer post-capture manifest SHA-256 is `c810ce486cdf09b78b3ac529ccb81ac46741a384ef5c68777a4b94d7453a6f20`. It retains capture `b44eb907-b165-503d-96cf-1e480c1c880e`, its committed change, and the matching Gemma index. That original saved the genuine preference span and excluded the acknowledgement request, but duplicated an existing preference. Preserve this history; the snapshot does not establish deduplication quality or authorize replay. This was another stable file copy while managed services remained running, not a coordinated service backup.
 
 ## Raya extension and local services
+
+The October 19 5adb installation preserved the four recorded profile roots and all 222 notes. Supported closed-pair recovery, the equivalent current-extension control catalog and one Check service restored Memory connected / Automatic saving ready / Selected notes indexed. Opening the existing recall's first source button showed the correct `D:/Raya/SecondBrain/Preferences/Raya.md` at line 291. No new query or capture input was sent for this check. Evidence is `D:/Raya/Tools/Readiness-20261019/Memory-5adb-native-1792399818806/proof.json`.
+
+For this exact version, the reviewed catalog is `D:/Raya/Tools/Readiness-20261019/Memory-5adb-control-catalog.json`. A later version needs its matching catalog. Review the genuine current closure rather than copying a historical receipt, and preserve existing uncertain requests without replay. Restoring a connection is separate from restoring lost data. The observations below retain their dated scope.
 
 Use [the current checklist](D:/Raya/TODO.md) for the installed version rather than treating a historical recovery receipt as the current release. The October 14 `837b60e2f5` installation preserved 3,272 saved files. Supported closed-pair recovery, followed by **Import control setup**, selected the corrected bridge in the installed package while retaining the existing Python and service files. One **Check service** then showed Memory connected and selected notes indexed. Evidence is saved in `D:/Raya/Tools/Readiness-20261014/Memory-837b-installed-loaded.json` and `Memory-837b-fixed-bridge-connected.json`. The earlier 90c checkpoint recall remains historical and does not prove recall on every later package.
 

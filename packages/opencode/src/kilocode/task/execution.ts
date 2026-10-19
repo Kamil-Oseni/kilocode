@@ -10,6 +10,9 @@ import { read } from "./storage-read"
 import { mutate } from "./mutation"
 import * as lineage from "./effect-lineage"
 import { isDeepStrictEqual } from "node:util"
+import * as Log from "@opencode-ai/core/util/log"
+
+const log = Log.create({ service: "raya-task-execution" })
 
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))
 const Owner = Schema.Struct({
@@ -482,16 +485,30 @@ export namespace RayaTaskExecution {
       run: { id: string; agentID: string; sessionID: string },
       token: string,
     ) {
+      const refuse = (
+        stage:
+          | "entry-missing"
+          | "entry-token"
+          | "entry-state"
+          | "entry-owner"
+          | "pending-identity"
+          | "completion-missing"
+          | "timeout"
+          | "still-working"
+          | "latest-missing"
+          | "latest-identity"
+          | "completion-identity"
+          | "latest-state",
+      ) => {
+        log.warn("Routine Stop execution handoff refused", { stage })
+        return false
+      }
       const current = yield* receipt(run)
       const found = durable()
-      if (
-        !current ||
-        current.token !== token ||
-        (current.state !== "active" && current.state !== "idle") ||
-        !found.birth ||
-        !same(current.owner, { ...found, birth: found.birth })
-      )
-        return false
+      if (!current) return refuse("entry-missing")
+      if (current.token !== token) return refuse("entry-token")
+      if (current.state !== "active" && current.state !== "idle") return refuse("entry-state")
+      if (!found.birth || !same(current.owner, { ...found, birth: found.birth })) return refuse("entry-owner")
       const matches = (record: typeof Record.Type) =>
         record.token === current.token &&
         record.runID === current.runID &&
@@ -501,23 +518,21 @@ export namespace RayaTaskExecution {
         same(record.owner, current.owner)
       const pending = joining.get(token)
       const prior = completed.get(token)
-      if (pending && !matches(pending.record)) return false
-      if (!pending && (!prior || !matches(prior))) return false
+      if (pending && !matches(pending.record)) return refuse("pending-identity")
+      if (!pending && (!prior || !matches(prior))) return refuse("completion-missing")
       if (
         pending &&
         Option.isNone(yield* Deferred.await(pending.done).pipe(Effect.timeoutOption("5 seconds"), Effect.interruptible))
       )
-        return false
+        return refuse("timeout")
       const latest = yield* receipt(run)
-      if (busy.has(token) || recovering.has(token)) return false
-      if (!latest) return false
+      if (busy.has(token) || recovering.has(token)) return refuse("still-working")
+      if (!latest) return refuse("latest-missing")
       const proof = completed.get(token)
-      return (
-        matches(latest) &&
-        !!proof &&
-        matches(proof) &&
-        ((latest.state === "idle" && active.has(token)) || latest.state === "active")
-      )
+      if (!matches(latest)) return refuse("latest-identity")
+      if (!proof || !matches(proof)) return refuse("completion-identity")
+      if ((latest.state === "idle" && active.has(token)) || latest.state === "active") return true
+      return refuse("latest-state")
     })
 
     const reviewed = Effect.fn("RayaTaskExecution.reviewed")(function* (

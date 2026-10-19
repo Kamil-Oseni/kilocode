@@ -1762,12 +1762,33 @@ export namespace RayaTaskRunner {
     const settle = Effect.fn("RayaTaskRunner.settle")(function* (
       sessionID: SessionID,
       exact?: RayaTask.Run,
-      stop?: NonNullable<RayaTask.Run["stop"]>,
+      authority?: typeof TaskRetirement.Type,
     ) {
-      if (yield* transfer.held().pipe(Effect.orDie)) return
+      const stop = authority?.stop
+      const withheld = (
+        stage:
+          | "transfer-held"
+          | "reply-recovery"
+          | "no-pending-run"
+          | "original-stop"
+          | "done-recovery"
+          | "run-recovery"
+          | "goal-changed"
+          | "transition-conflict"
+          | "transition-committed",
+      ) => {
+        if (stop) log.warn("Routine Stop settlement observation", { stage })
+      }
+      if (yield* transfer.held().pipe(Effect.orDie)) {
+        withheld("transfer-held")
+        return
+      }
       const recovery = (yield* goals.get(sessionID))?.replyRecovery
       // Review needs the original execution receipt; blocked is not a verified terminal outcome here.
-      if (recovery && recovery.reviewedAt === undefined) return
+      if (recovery && recovery.reviewedAt === undefined) {
+        withheld("reply-recovery")
+        return
+      }
       const items = yield* tasks.list()
       for (const item of items) {
         if (exact && item.id !== exact.agentID) continue
@@ -1804,15 +1825,21 @@ export namespace RayaTaskRunner {
             (entry.status === "running" || (stop && entry.status === "blocked" && entry.blockedReason === WAIT)),
         )
         if (!run) {
+          withheld("no-pending-run")
           const done = history.findLast((entry) => matches(entry) && entry.status !== "running")
           if (done) {
             if (
               done.status === "stopped" &&
               ((stop && !isDeepStrictEqual(stop, done.stop)) || !(yield* original(done, !!stop)))
-            )
+            ) {
+              withheld("original-stop")
               continue
+            }
             const goal = yield* goals.get(sessionID)
-            if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
+            if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) {
+              withheld("done-recovery")
+              continue
+            }
             const saved = yield* snapshots.find(done.id).pipe(Effect.orDie)
             if (
               saved &&
@@ -1835,7 +1862,10 @@ export namespace RayaTaskRunner {
           continue
         }
         const goal = yield* goals.get(sessionID)
-        if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
+        if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) {
+          withheld("run-recovery")
+          continue
+        }
         if (stop && goal)
           yield* new RayaTask.GuardError({
             kind: "conflict",
@@ -1893,12 +1923,15 @@ export namespace RayaTaskRunner {
         const definition = saved?.definition ?? item
         const msgs = yield* input.sessions.messages({ sessionID })
         // Message lookup may yield to a new goal/control state. Never publish its predecessor's outcome.
-        if (!isDeepStrictEqual(goal, yield* goals.get(sessionID))) continue
+        if (!isDeepStrictEqual(goal, yield* goals.get(sessionID))) {
+          withheld("goal-changed")
+          continue
+        }
         const cost = msgs.reduce((sum, row) => sum + (row.info.role === "assistant" ? row.info.cost : 0), 0)
         const summary = stop
           ? "Stopped by the user. No unverified result was accepted."
           : goal?.blockedReason?.trim() || goal?.reply?.body.trim() || goal?.audit?.summary?.trim() || ""
-        const changed = yield* tasks.transition(run, {
+        const next = {
           ...run,
           status,
           ...(stop ? { stop } : {}),
@@ -1931,13 +1964,64 @@ export namespace RayaTaskRunner {
               : undefined,
             cost,
           },
-        })
+        } satisfies RayaTask.Run
+        const changed = stop
+          ? yield* Effect.gen(function* () {
+              let current = run
+              for (let attempt = 0; attempt < 3; attempt++) {
+                // Reconcile only TurnClose trace/revision bookkeeping from the
+                // same original run. Every control/assignment field stays fixed.
+                if (yield* goals.get(sessionID))
+                  return yield* new RayaTask.GuardError({
+                    kind: "conflict",
+                    message: "This session has a new goal. Its previous routine Stop needs review.",
+                  })
+                const receipt = yield* receipts(input.storage).read(sessionID, stop.intent)
+                const history = yield* tasks.runsFor(item.id)
+                if (
+                  receipt?.phase !== "cleared" ||
+                  receipt.interrupted === undefined ||
+                  !isDeepStrictEqual(receipt.task, authority) ||
+                  history.at(-1)?.id !== run.id ||
+                  !(yield* original({ ...current, status: "stopped", stop }, true))
+                )
+                  return yield* new RayaTask.GuardError({
+                    kind: "conflict",
+                    message: "The original routine Stop evidence changed before settlement.",
+                  })
+                if (yield* tasks.transition(current, { ...next, trace: current.trace, revision: current.revision }))
+                  return true
+                withheld("transition-conflict")
+                const latest = (yield* tasks.runsFor(item.id)).find((row) => row.id === run.id)
+                if (
+                  !latest ||
+                  !isDeepStrictEqual(
+                    { ...latest, trace: undefined, revision: undefined },
+                    { ...run, trace: undefined, revision: undefined },
+                  )
+                )
+                  return yield* new RayaTask.GuardError({
+                    kind: "conflict",
+                    message:
+                      "This routine changed while its original Stop was settling. Review its current run before continuing.",
+                  })
+                current = latest
+              }
+              return yield* new RayaTask.GuardError({
+                kind: "conflict",
+                message: "The original routine Stop is still settling. Review its retained receipt before continuing.",
+              })
+            })
+          : yield* tasks.transition(run, next)
+        withheld(changed ? "transition-committed" : "transition-conflict")
         if (changed && status !== "stopped" && definition.memoryScope === "role" && summary) {
           yield* tasks.learn(item.id, run.id, summary)
         }
-        if (reservations) yield* reservations.settle(run.id, run.sessionID, cost).pipe(Effect.orDie)
         const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
         if (latest) {
+          // A failed CAS never grants terminal side effects over pending work.
+          if (RayaTask.pending(latest)) continue
+          if (reservations) yield* reservations.settle(run.id, run.sessionID, cost).pipe(Effect.orDie)
           if (latest.status === "stopped" && !(yield* original(latest, !!stop)))
             yield* new RayaTask.GuardError({
               kind: "conflict",
@@ -2023,14 +2107,41 @@ export namespace RayaTaskRunner {
       value: TaskRetirement,
       finished: boolean,
     ) {
-      const refuse = () =>
-        new RayaTask.GuardError({
+      const refuse = (
+        stage:
+          | "pin"
+          | "goal-present"
+          | "stop-receipt"
+          | "session-digest"
+          | "session-schema"
+          | "session-provenance"
+          | "run-session"
+          | "run-identity"
+          | "stop-provenance"
+          | "finished-pending"
+          | "last-run"
+          | "generation"
+          | "handoff"
+          | "handoff-goal"
+          | "handoff-original"
+          | "handoff-generation"
+          | "handoff-review"
+          | "legacy-transition"
+          | "pending-final"
+          | "retained-state"
+          | "retained-review"
+          | "retained-owner"
+          | "remaining",
+      ) => {
+        log.warn("Routine Stop retirement refused", { stage })
+        return new RayaTask.GuardError({
           kind: "conflict",
           message: "This routine changed while its goal was stopping. Review its current run before continuing.",
         })
-      const pin = yield* Schema.decodeUnknownEffect(TaskRetirement)(value).pipe(Effect.mapError(refuse))
+      }
+      const pin = yield* Schema.decodeUnknownEffect(TaskRetirement)(value).pipe(Effect.mapError(() => refuse("pin")))
       if (!finished) {
-        if (yield* goals.get(sessionID)) return yield* refuse()
+        if (yield* goals.get(sessionID)) return yield* refuse("goal-present")
         if (pin.stop) {
           const receipt = yield* receipts(input.storage).read(sessionID, pin.stop.intent)
           if (
@@ -2039,7 +2150,7 @@ export namespace RayaTaskRunner {
             receipt.interrupted === undefined ||
             !isDeepStrictEqual(receipt.task, pin)
           )
-            return yield* refuse()
+            return yield* refuse("stop-receipt")
         }
         const session = yield* input.sessions.get(sessionID)
         if (
@@ -2047,10 +2158,10 @@ export namespace RayaTaskRunner {
             .update(JSON.stringify(session.metadata?.rayaRoutine ?? null))
             .digest("hex") !== pin.sessionDigest
         )
-          return yield* refuse()
+          return yield* refuse("session-digest")
         for (const run of pin.runs) {
           const record = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
-            Effect.mapError(refuse),
+            Effect.mapError(() => refuse("session-schema")),
           )
           if (
             record.agentID !== run.agentID ||
@@ -2058,11 +2169,11 @@ export namespace RayaTaskRunner {
             record.scheduleVersion !== run.scheduleVersion ||
             !isDeepStrictEqual(record.trigger, run.trigger)
           )
-            return yield* refuse()
+            return yield* refuse("session-provenance")
         }
       }
       for (const run of pin.runs) {
-        if (run.sessionID !== sessionID) return yield* refuse()
+        if (run.sessionID !== sessionID) return yield* refuse("run-session")
         const rows = yield* tasks.runsFor(run.agentID)
         const prior = rows.find((row) => row.id === run.id)
         if (
@@ -2073,22 +2184,23 @@ export namespace RayaTaskRunner {
           (prior.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1) ||
           !isDeepStrictEqual(prior.trigger, run.trigger)
         )
-          return yield* refuse()
-        if (prior.status === "stopped" && !isDeepStrictEqual(prior.stop, pin.stop)) return yield* refuse()
+          return yield* refuse("run-identity")
+        if (prior.status === "stopped" && !isDeepStrictEqual(prior.stop, pin.stop))
+          return yield* refuse("stop-provenance")
         if (finished) {
-          if (RayaTask.pending(prior) || (yield* execution.retained(prior))) return yield* refuse()
+          if (RayaTask.pending(prior) || (yield* execution.retained(prior))) return yield* refuse("finished-pending")
           continue
         }
-        if (rows.at(-1)?.id !== run.id) return yield* refuse()
+        if (rows.at(-1)?.id !== run.id) return yield* refuse("last-run")
         const receipt = yield* execution.receipt(prior)
-        if (receipt && generation(receipt) !== run.executionDigest) return yield* refuse()
+        if (receipt && generation(receipt) !== run.executionDigest) return yield* refuse("generation")
         if (pin.stop && receipt && receipt.state !== "idle") {
           // Session cancellation can finish before the outer routine body and
           // its finalizers. Join only this exact local original generation;
           // interruption may retain active state, which user review archives
           // unchanged rather than inventing an idle execution receipt.
-          if (!(yield* execution.join(prior, receipt.token))) return yield* refuse()
-          if (yield* goals.get(sessionID)) return yield* refuse()
+          if (!(yield* execution.join(prior, receipt.token))) return yield* refuse("handoff")
+          if (yield* goals.get(sessionID)) return yield* refuse("handoff-goal")
           const record = yield* receipts(input.storage).read(sessionID, pin.stop.intent)
           if (
             (yield* tasks.runsFor(run.agentID)).at(-1)?.id !== run.id ||
@@ -2099,11 +2211,11 @@ export namespace RayaTaskRunner {
             record.interrupted === undefined ||
             !isDeepStrictEqual(record.task, pin)
           )
-            return yield* refuse()
+            return yield* refuse("handoff-original")
           const current = yield* execution.receipt(prior)
           if (current) {
-            if (generation(current) !== run.executionDigest) return yield* refuse()
-            yield* execution.review(prior, current.token)
+            if (generation(current) !== run.executionDigest) return yield* refuse("handoff-generation")
+            yield* execution.review(prior, current.token).pipe(Effect.mapError(() => refuse("handoff-review")))
           }
         }
         if (!pin.stop && prior.status === "blocked" && prior.blockedReason === WAIT) {
@@ -2114,24 +2226,24 @@ export namespace RayaTaskRunner {
               blockedReason: "Stopped after the user reviewed this goal. No unverified result was accepted.",
             }))
           )
-            return yield* refuse()
+            return yield* refuse("legacy-transition")
         }
-        yield* settle(sessionID, prior, pin.stop)
+        yield* settle(sessionID, prior, pin)
         const final = (yield* tasks.runsFor(run.agentID)).find((row) => row.id === run.id)
-        if (!final || RayaTask.pending(final)) return yield* refuse()
+        if (!final || RayaTask.pending(final)) return yield* refuse("pending-final")
         if (yield* execution.retained(run)) {
           const receipt = yield* execution.receipt(final)
           if (!receipt || receipt.state !== "idle" || generation(receipt) !== run.executionDigest)
-            return yield* refuse()
-          yield* execution.review(final, receipt.token)
+            return yield* refuse("retained-state")
+          yield* execution.review(final, receipt.token).pipe(Effect.mapError(() => refuse("retained-review")))
         }
-        if (yield* execution.retained(run)) return yield* refuse()
+        if (yield* execution.retained(run)) return yield* refuse("retained-owner")
       }
       if (!finished) {
         const remaining = (yield* Effect.forEach(yield* tasks.list(), (item) => tasks.runsFor(item.id)))
           .flat()
           .some((run) => run.sessionID === sessionID && RayaTask.pending(run))
-        if (remaining) return yield* refuse()
+        if (remaining) return yield* refuse("remaining")
       }
       return undefined
     })

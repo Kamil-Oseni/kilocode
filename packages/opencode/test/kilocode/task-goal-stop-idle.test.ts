@@ -60,157 +60,299 @@ afterAll(async () => {
   console.info("GOAL_STOP_FIXTURE_RETIREMENT", "disk-cleanup-complete")
 }, 30_000)
 
-test("public Goal Stop joins the original active provider cancellation before retiring its routine", async () => {
-  const entered = Promise.withResolvers<void>()
-  const cancelled = Promise.withResolvers<void>()
-  const state = { calls: 0 }
-  const line = (delta: object, finish?: string) =>
-    `data: ${JSON.stringify({ id: "stop-fixture", object: "chat.completion.chunk", choices: [{ delta, finish_reason: finish ?? null }] })}\n\n`
-  const endpoint = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    idleTimeout: 0,
-    async fetch(req) {
-      const body = await req.text()
-      if (body.includes("Generate a title for this conversation"))
-        return new Response(line({ content: "Private Stop" }) + line({}, "stop") + "data: [DONE]\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        })
-      state.calls++
-      req.signal.addEventListener("abort", () => cancelled.resolve(), { once: true })
-      return new Response(
-        new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode(line({ role: "assistant" })))
-            entered.resolve()
-          },
-          cancel() {
-            cancelled.resolve()
-          },
-        }),
-        { headers: { "content-type": "text/event-stream" } },
-      )
-    },
-  })
-  await using dir = await tmpdir({
-    config: {
-      formatter: false,
-      lsp: false,
-      snapshot: false,
-      model: "test/stop-fixture",
-      small_model: "test/stop-fixture",
-      enabled_providers: ["test"],
-      permission: { "*": "deny" },
-      provider: {
-        test: {
-          npm: "@ai-sdk/openai-compatible",
-          env: [],
-          options: { apiKey: "private-synthetic", baseURL: `http://127.0.0.1:${endpoint.port}/v1` },
-          models: {
-            "stop-fixture": { name: "Stop fixture", tool_call: true, limit: { context: 32768, output: 1024 } },
+for (const paused of [false, true])
+  test(`public Goal Stop joins the original ${paused ? "paused/resumed native" : "active SDK"} provider cancellation before retiring its routine`, async () => {
+    const entered = Promise.withResolvers<void>()
+    const cancelled = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const resumed = Promise.withResolvers<void>()
+    const state = { calls: 0, resuming: false }
+    const requests: { path: string; format: unknown }[] = []
+    const line = (delta: object, finish?: string) =>
+      `data: ${JSON.stringify({ id: "stop-fixture", object: "chat.completion.chunk", choices: [{ delta, finish_reason: finish ?? null }] })}\n\n`
+    const endpoint = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      idleTimeout: 0,
+      async fetch(req) {
+        const body = await req.text()
+        if (body.includes("Generate a title for this conversation"))
+          return new Response(line({ content: "Private Stop" }) + line({}, "stop") + "data: [DONE]\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          })
+        state.calls++
+        if (paused) {
+          const wire = JSON.parse(body)
+          const route = new URL(req.url).pathname
+          const active = state.resuming
+          requests.push({ path: route, format: wire.format })
+          expect(route).toBe("/api/chat")
+          const result = (content: { kind: string; content?: string; name?: string; arguments?: object }) =>
+            [
+              {
+                model: wire.model,
+                message: {
+                  role: "assistant",
+                  content: wire.format ? JSON.stringify(content) : (content.content ?? JSON.stringify(content)),
+                },
+                done: false,
+              },
+              { model: wire.model, done: true, done_reason: "stop", prompt_eval_count: 8, eval_count: 3 },
+            ]
+              .map((row) => JSON.stringify(row))
+              .join("\n") + "\n"
+          if (!active && state.calls > 1)
+            return new Response(result({ kind: "text", content: "Original paused turn finished." }))
+          const stream = { closed: false }
+          if (active) {
+            // This provider config does not request an envelope. Only the real
+            // live Goal gate can supply the private native-runtime cue/format.
+            expect(wire.format).toBeObject()
+            req.signal.addEventListener("abort", () => cancelled.resolve(), { once: true })
+          }
+          return new Response(
+            new ReadableStream({
+              async start(controller) {
+                if (active) {
+                  resumed.resolve()
+                  return
+                }
+                entered.resolve()
+                await release.promise
+                if (stream.closed) return
+                controller.enqueue(new TextEncoder().encode(result({ kind: "tool", name: "get_goal", arguments: {} })))
+                controller.close()
+              },
+              cancel() {
+                stream.closed = true
+                if (active) cancelled.resolve()
+              },
+            }),
+          )
+        }
+        req.signal.addEventListener("abort", () => cancelled.resolve(), { once: true })
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(line({ role: "assistant" })))
+              entered.resolve()
+            },
+            cancel() {
+              cancelled.resolve()
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+    })
+    await using dir = await tmpdir({
+      config: {
+        formatter: false,
+        lsp: false,
+        snapshot: false,
+        model: "test/stop-fixture",
+        small_model: "test/stop-fixture",
+        enabled_providers: ["test"],
+        permission: { "*": "deny" },
+        provider: {
+          test: {
+            npm: "@ai-sdk/openai-compatible",
+            env: [],
+            options: {
+              apiKey: "private-synthetic",
+              baseURL: `http://127.0.0.1:${endpoint.port}/v1`,
+              ...(paused ? { localInference: true, localInferenceAPI: "ollama" as const } : {}),
+            },
+            models: {
+              "stop-fixture": { name: "Stop fixture", tool_call: true, limit: { context: 32768, output: 1024 } },
+            },
           },
         },
       },
-    },
-  })
-  const app = Server.Default().app
-  const headers = { "content-type": "application/json", "x-kilo-directory": dir.path }
-  const request = (route: string, body: object, method = "POST") =>
-    app.request(route, { method, headers, body: JSON.stringify(body) })
-  const run = <A, E>(
-    body: Effect.Effect<A, E, Database.Service | Storage.Service | Session.Service | Global.Service>,
-  ) => AppRuntime.runPromise(InstanceStore.Service.use((store) => store.provide({ directory: dir.path }, body)))
-  const owned: { id?: string; row?: { id: string; agentID: string; sessionID: string } } = {}
-  try {
-    const response = await request("/kilocode/agent", {
-      name: "Active Stop fixture",
-      objective: "Wait for explicit user Stop without accepting any result",
-      dir: dir.path,
-      role: "briefer",
-      access: "brief",
-      tools: ["get_goal"],
-      schedule: { kind: "manual" },
-      enabled: true,
-      model: { providerID: "test", id: "stop-fixture" },
     })
-    expect(response.status).toBe(200)
-    const agent = await response.json()
-    owned.id = agent.id
-    const accepted = await request(`/kilocode/agent/${agent.id}/run`, {})
-    expect(accepted.status).toBe(200)
-    const row = await accepted.json()
-    owned.row = row
-    await Promise.race([
-      entered.promise,
-      Bun.sleep(10_000).then(() => {
-        throw new Error("Original provider did not enter")
-      }),
-    ])
-    const seed = await run(
-      Effect.gen(function* () {
-        const storage = yield* Storage.Service
-        const sessions = yield* Session.Service
-        const execution = RayaTaskExecution.make(storage)
-        const goal = yield* RayaGoal.make({ storage, sessions }).get(SessionID.make(row.sessionID))
-        const owner = yield* execution.receipt(row)
-        return { execution, goal, owner }
-      }),
-    )
-    expect(seed.owner?.state).toBe("active")
-    expect(seed.goal?.dispatch?.phase).toBe("started")
-    const stopped = await request(`/session/${row.sessionID}/goal/stop`, { expectedIntent: seed.goal!.intent })
-    expect(stopped.status).toBe(200)
-    const receipt = await stopped.json()
-    expect(receipt).toMatchObject({
-      phase: "finished",
-      interrupted: true,
-      intent: seed.goal!.intent,
-      task: { stop: { version: 1, intent: seed.goal!.intent }, runs: [{ id: row.id, sessionID: row.sessionID }] },
-    })
-    await Promise.race([
-      cancelled.promise,
-      Bun.sleep(5000).then(() => {
-        throw new Error("Original provider was not cancelled")
-      }),
-    ])
-    expect(state.calls).toBe(1)
-    const history = await app.request(`/kilocode/agent/${agent.id}/runs`, { headers })
-    expect(history.status).toBe(200)
-    expect(await history.json()).toContainEqual(
-      expect.objectContaining({
-        id: row.id,
-        status: "stopped",
-        stop: receipt.task.stop,
-        outcome: expect.objectContaining({ summary: "Stopped by the user. No unverified result was accepted." }),
-      }),
-    )
-    expect(await run(seed.execution.receipt(row))).toBeUndefined()
-    expect((await app.request(`/session/${row.sessionID}/goal`, { headers })).status).toBe(404)
-  } finally {
+    const app = Server.Default().app
+    const headers = { "content-type": "application/json", "x-kilo-directory": dir.path }
+    const request = (route: string, body: object, method = "POST") =>
+      app.request(route, { method, headers, body: JSON.stringify(body) })
+    const run = <A, E>(
+      body: Effect.Effect<A, E, Database.Service | Storage.Service | Session.Service | Global.Service>,
+    ) => AppRuntime.runPromise(InstanceStore.Service.use((store) => store.provide({ directory: dir.path }, body)))
+    const owned: { id?: string; row?: { id: string; agentID: string; sessionID: string } } = {}
     try {
-      if (owned.row) {
-        const row = owned.row
-        const intent = await run(
-          Effect.gen(function* () {
-            const storage = yield* Storage.Service
-            const sessions = yield* Session.Service
-            const goals = RayaGoal.make({ storage, sessions })
-            const id = SessionID.make(row.sessionID)
-            const goal = yield* goals.get(id)
-            const receipt = yield* goals.stopResult(id)
-            return goal?.intent ?? (receipt?.phase !== "finished" ? receipt?.intent : undefined)
-          }),
-        )
-        if (intent)
-          expect((await request(`/session/${row.sessionID}/goal/stop`, { expectedIntent: intent })).status).toBe(200)
-        await run(Storage.Service.use((storage) => RayaTaskExecution.make(storage).finish(row)))
-      }
-      if (owned.id) expect((await request(`/kilocode/agent/${owned.id}`, { enabled: false }, "PATCH")).status).toBe(200)
+      const response = await request("/kilocode/agent", {
+        name: "Active Stop fixture",
+        objective: "Wait for explicit user Stop without accepting any result",
+        dir: dir.path,
+        role: "briefer",
+        access: "brief",
+        tools: ["get_goal"],
+        schedule: { kind: "manual" },
+        enabled: true,
+        model: { providerID: "test", id: "stop-fixture" },
+        ...(paused
+          ? {
+              output: {
+                destination: "conversation",
+                description: "Retain original Stop control",
+                criteria: [
+                  {
+                    id: "verified",
+                    description: "Do not accept an unverified result",
+                    verification: "Explicit test evidence",
+                  },
+                ],
+              },
+            }
+          : {}),
+      })
+      expect(response.status).toBe(200)
+      const agent = await response.json()
+      owned.id = agent.id
+      const accepted = await request(`/kilocode/agent/${agent.id}/run`, {})
+      expect(accepted.status).toBe(200)
+      const row = await accepted.json()
+      owned.row = row
+      await Promise.race([
+        entered.promise,
+        Bun.sleep(10_000).then(() => {
+          throw new Error("Original provider did not enter")
+        }),
+      ])
+      const seed = await run(
+        Effect.gen(function* () {
+          const storage = yield* Storage.Service
+          const sessions = yield* Session.Service
+          const execution = RayaTaskExecution.make(storage)
+          const goal = yield* RayaGoal.make({ storage, sessions }).get(SessionID.make(row.sessionID))
+          const owner = yield* execution.receipt(row)
+          return { execution, goal, owner }
+        }),
+      )
+      expect(seed.owner?.state).toBe("active")
+      expect(seed.goal?.dispatch?.phase).toBe("started")
+      const goal = paused
+        ? await (async () => {
+            if (!seed.goal?.intent || !seed.goal.dispatch) throw new Error("Original active Goal dispatch missing")
+            const control = await request(
+              `/session/${row.sessionID}/goal`,
+              { status: "paused", expectedIntent: seed.goal.intent },
+              "PATCH",
+            )
+            expect(control.status).toBe(200)
+            const original = await control.json()
+            expect(original.status).toBe("paused")
+            expect(original.dispatch.id).toBe(seed.goal.dispatch.id)
+            release.resolve()
+            const deadline = Date.now() + 10_000
+            const saved = await (async () => {
+              while (true) {
+                const response = await app.request(`/session/${row.sessionID}/goal`, { headers })
+                expect(response.status).toBe(200)
+                const current = await response.json()
+                expect(current.status).toBe("paused")
+                expect(current.intent).toBe(original.intent)
+                expect(current.dispatch.id).toBe(original.dispatch.id)
+                expect(current.dispatch.messageID).toBe(original.dispatch.messageID)
+                if (current.dispatch.phase === "finished") return current
+                if (Date.now() >= deadline) throw new Error("Original paused dispatch did not finalize")
+                await Bun.sleep(20)
+              }
+            })()
+            const transcript = await app.request(`/session/${row.sessionID}/message`, { headers })
+            const messages = await transcript.json()
+            const final = messages.at(-1)
+            expect(final.info.parentID).toBe(original.dispatch.messageID)
+            expect(final.info.id).toBe(saved.dispatch.assistantID)
+            expect(final.info.finish).toBe("stop")
+            expect(final.info.error).toBeUndefined()
+            // Match the actual installed trial's settled paused interval, rather
+            // than canceling the initial request or bypassing the public resume.
+            const quiet = Date.now() + 3000
+            while (Date.now() < quiet) {
+              expect(await (await app.request(`/session/${row.sessionID}/goal`, { headers })).json()).toEqual(saved)
+              await Bun.sleep(100)
+            }
+            state.resuming = true
+            const response = await request(
+              `/session/${row.sessionID}/goal`,
+              { status: "active", expectedIntent: saved.intent },
+              "PATCH",
+            )
+            expect(response.status).toBe(200)
+            const active = await response.json()
+            await Promise.race([
+              resumed.promise,
+              Bun.sleep(10_000).then(() => {
+                throw new Error("Resumed native provider did not enter")
+              }),
+            ])
+            const current = await (await app.request(`/session/${row.sessionID}/goal`, { headers })).json()
+            expect(current.status).toBe("active")
+            expect(current.intent).toBe(active.intent)
+            expect(current.dispatch.phase).toBe("started")
+            expect(current.dispatch.id).not.toBe(original.dispatch.id)
+            expect(current.dispatch.messageID).not.toBe(original.dispatch.messageID)
+            expect(current.routine.runID).toBe(row.id)
+            expect(requests.at(-1)?.format).toBeObject()
+            return current
+          })()
+        : seed.goal
+      if (!goal?.intent) throw new Error("Original Stop intent missing")
+      const stopped = await request(`/session/${row.sessionID}/goal/stop`, { expectedIntent: goal.intent })
+      expect(stopped.status).toBe(200)
+      const receipt = await stopped.json()
+      expect(receipt).toMatchObject({
+        phase: "finished",
+        interrupted: true,
+        intent: goal.intent,
+        task: { stop: { version: 1, intent: goal.intent }, runs: [{ id: row.id, sessionID: row.sessionID }] },
+      })
+      await Promise.race([
+        cancelled.promise,
+        Bun.sleep(5000).then(() => {
+          throw new Error("Original provider was not cancelled")
+        }),
+      ])
+      expect(paused ? state.calls >= 2 && state.calls <= 3 : state.calls === 1).toBe(true)
+      const history = await app.request(`/kilocode/agent/${agent.id}/runs`, { headers })
+      expect(history.status).toBe(200)
+      expect(await history.json()).toContainEqual(
+        expect.objectContaining({
+          id: row.id,
+          status: "stopped",
+          stop: receipt.task.stop,
+          outcome: expect.objectContaining({ summary: "Stopped by the user. No unverified result was accepted." }),
+        }),
+      )
+      expect(await run(seed.execution.receipt(row))).toBeUndefined()
+      expect((await app.request(`/session/${row.sessionID}/goal`, { headers })).status).toBe(404)
     } finally {
-      await endpoint.stop(true)
+      release.resolve()
+      try {
+        if (owned.row) {
+          const row = owned.row
+          const intent = await run(
+            Effect.gen(function* () {
+              const storage = yield* Storage.Service
+              const sessions = yield* Session.Service
+              const goals = RayaGoal.make({ storage, sessions })
+              const id = SessionID.make(row.sessionID)
+              const goal = yield* goals.get(id)
+              const receipt = yield* goals.stopResult(id)
+              return goal?.intent ?? (receipt?.phase !== "finished" ? receipt?.intent : undefined)
+            }),
+          )
+          if (intent)
+            expect((await request(`/session/${row.sessionID}/goal/stop`, { expectedIntent: intent })).status).toBe(200)
+          await run(Storage.Service.use((storage) => RayaTaskExecution.make(storage).finish(row)))
+        }
+        if (owned.id)
+          expect((await request(`/kilocode/agent/${owned.id}`, { enabled: false }, "PATCH")).status).toBe(200)
+      } finally {
+        await endpoint.stop(true)
+      }
     }
-  }
-}, 30_000)
+  }, 30_000)
 
 for (const fault of [false, true])
   test.skipIf(fault && process.platform !== "win32")(
@@ -632,6 +774,91 @@ for (const fault of [false, true])
             expect(missing.blockedReason).toContain("No saved goal")
           } finally {
             await run(seed.execution.finish(orphan.row))
+          }
+          {
+            const drift = await run(seed.create("Semantic change during original Stop", true))
+            const entered = Promise.withResolvers<void>()
+            const release = Promise.withResolvers<void>()
+            const guarded = RayaTaskRunner.make({
+              database: seed.database,
+              storage: seed.storage,
+              sessions: {
+                create: seed.sessions.create,
+                get: seed.sessions.get,
+                children: seed.sessions.children,
+                // Delay the actual lookup result; never replace its data or CAS logic.
+                messages: (args) =>
+                  seed.sessions.messages(args).pipe(
+                    Effect.tap(() =>
+                      Effect.promise(async () => {
+                        entered.resolve()
+                        await release.promise
+                      }),
+                    ),
+                  ),
+              },
+            })
+            const pin = await run(guarded.stopGoal((tasks) => tasks.prepare(drift.row.sessionID)))
+            if (!pin.stop || drift.row.trigger.kind !== "timer")
+              throw new Error("Actual scheduled original Stop authority required")
+            await run(seed.goals.clear(drift.row.sessionID, drift.goal.intent!))
+            const receipt = await run(
+              receipts(seed.storage).save({
+                sessionID: drift.row.sessionID,
+                intent: drift.goal.intent!,
+                phase: "cleared",
+                at: Date.now(),
+                interrupted: false,
+                task: pin,
+              }),
+            )
+            const owner = await run(seed.execution.receipt(drift.row))
+            expect(owner?.state).toBe("idle")
+            const reports = await app.request(`/kilocode/agent-reports?sessionID=${drift.target.id}`, { headers })
+            expect(reports.status).toBe(200)
+            const before = await reports.json()
+            const pending = run(
+              guarded.stopGoal((tasks) => tasks.finish(drift.row.sessionID, pin, false)).pipe(Effect.exit),
+            )
+            try {
+              await Promise.race([
+                entered.promise,
+                Bun.sleep(5000).then(() => {
+                  throw new Error("Actual Stop settlement did not reach its message lookup")
+                }),
+              ])
+              const current = (await run(seed.runner.tasks.runsFor(drift.agent.id)))[0]
+              expect(current.status).toBe("running")
+              expect(
+                await run(
+                  seed.runner.tasks.transition(current, {
+                    ...current,
+                    blockedReason: "A concurrent semantic change must remain unaccepted.",
+                  }),
+                ),
+              ).toBe(true)
+              const changed = (await run(seed.runner.tasks.runsFor(drift.agent.id)))[0]
+              release.resolve()
+              const result = await pending
+              expect(result._tag).toBe("Failure")
+              expect(await run(seed.runner.tasks.runsFor(drift.agent.id))).toEqual([changed])
+              expect(changed.status).toBe("running")
+              expect(changed.stop).toBeUndefined()
+              expect(changed.outcome).toBeUndefined()
+              expect(posted(changed)).toBeUndefined()
+              expect(await run(seed.execution.receipt(drift.row))).toEqual(owner)
+              expect(await run(seed.goals.get(drift.row.sessionID))).toBeUndefined()
+              expect(await run(receipts(seed.storage).read(drift.row.sessionID, drift.goal.intent!))).toEqual(receipt)
+              expect((await run(seed.queue.get(drift.row.trigger.id)))?.state).toBe("linked")
+              const after = await app.request(`/kilocode/agent-reports?sessionID=${drift.target.id}`, { headers })
+              expect(after.status).toBe(200)
+              expect(await after.json()).toEqual(before)
+            } finally {
+              release.resolve()
+              await pending
+              await run(seed.execution.finish(drift.row))
+              await run(seed.runner.tasks.update(drift.agent.id, { enabled: false }))
+            }
           }
           const timer = await run(seed.create("Scheduled Stop", true))
           try {

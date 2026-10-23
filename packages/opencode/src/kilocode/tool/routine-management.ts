@@ -198,7 +198,10 @@ const CreateSubordinate = Schema.Struct({
 })
 const DelegateWork = Schema.Struct({
   organizationID: Organization.fields.id,
-  expectedRevision: Organization.fields.revision,
+  expectedRevision: Organization.fields.revision.annotate({
+    description:
+      "Exact current organization revision returned by inspect_team. Copy it unchanged; do not increment it.",
+  }),
   recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
   objective: Text,
   expected: Schema.optional(Text),
@@ -211,7 +214,10 @@ const DelegateWork = Schema.Struct({
 })
 const AssignOrganizationWork = Schema.Struct({
   organizationID: Organization.fields.id,
-  expectedRevision: Organization.fields.revision,
+  expectedRevision: Organization.fields.revision.annotate({
+    description:
+      "Exact current organization revision returned by inspect_routines. Copy it unchanged; do not increment it.",
+  }),
   senderID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
   recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
   objective: Text,
@@ -1005,7 +1011,11 @@ export function routineManagementTools(input: {
           const organization = yield* organizations.get(params.organizationID)
           if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
           if (organization.revision !== params.expectedRevision)
-            return yield* Effect.fail(new Error("This organization changed. Reload it before delegating work."))
+            return yield* Effect.fail(
+              new Error(
+                `Organization revision mismatch: provided ${params.expectedRevision}, current ${organization.revision}. Run inspect_team again and copy its current revision unchanged before delegating work; do not increment it.`,
+              ),
+            )
           if (!organization.members.some((item) => item.agentID === sender.id))
             return yield* Effect.fail(new Error("The current worker is not an active member of this organization."))
           if (!organization.members.some((item) => item.agentID === params.recipientID))
@@ -1115,7 +1125,9 @@ export function routineManagementTools(input: {
           if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
           if (organization.revision !== params.expectedRevision)
             return yield* Effect.fail(
-              new Error("This organization changed. Inspect Routines again before assigning work."),
+              new Error(
+                `Organization revision mismatch: provided ${params.expectedRevision}, current ${organization.revision}. Run inspect_routines again and copy its current revision unchanged before assigning work; do not increment it.`,
+              ),
             )
           const sender = yield* tasks.get(params.senderID)
           const recipient = yield* tasks.get(params.recipientID)

@@ -11,6 +11,7 @@ type Message = { type: "requestVariants" } | { type: "persistVariant"; key: stri
 interface Options {
   selections: Accessor<Record<string, string>>
   set: (key: string, value: string) => void
+  replace: (values: Record<string, string>) => void
   selected: (sessionID?: string) => ModelSelection | null
   session: Accessor<string | undefined>
   agent: (sessionID?: string) => string
@@ -66,6 +67,12 @@ export function createSessionVariants(options: Options) {
   const load = () => {
     const unsub = options.listen((message) => {
       if (message.type !== "variantsLoaded") return
+      if (message.replace) {
+        const saved = Object.entries(message.variants).filter(([key]) => !key.startsWith("session/"))
+        const local = Object.entries(options.selections()).filter(([key]) => key.startsWith("session/"))
+        options.replace(Object.fromEntries([...saved, ...local]))
+        return
+      }
       for (const [key, value] of Object.entries(message.variants)) {
         if (key.startsWith("session/")) continue
         options.set(key, value)

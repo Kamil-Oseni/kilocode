@@ -6,6 +6,7 @@ import { host } from "./profile-host"
 import { assertWorking, inventory, lookup, type Working } from "./profile-image"
 import { read } from "./profile-file"
 import { bindHost } from "./profile-host-correspondence"
+import { read as decode } from "@opencode-ai/core/kilocode/profile-models"
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex")
@@ -82,9 +83,9 @@ export async function bindHostModel(token: Working, proof: VerifiedCapsule, inpu
         throw new Error("Host model staged bytes differ")
       const decoded = (() => {
         try {
-          return models.safeParse(JSON.parse(body.value))
+          return models.safeParse(decode(JSON.parse(body.value)))
         } catch (err) {
-          if (err instanceof SyntaxError) return undefined
+          if (err instanceof Error) return undefined
           throw err
         }
       })()

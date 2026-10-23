@@ -171,6 +171,7 @@ export class DurableDrafts {
       content: snapshot(record.content),
       loaded: record.loaded,
       stored: !!record.entry?.content,
+      locked: !!record.held || !!record.seal || !!record.moving || !!record.reading,
       error: record.error,
       revision: record.revision,
     }

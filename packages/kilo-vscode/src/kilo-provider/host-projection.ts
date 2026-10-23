@@ -2,6 +2,7 @@ import z from "zod"
 import path from "node:path"
 import { PayloadSchema, type Payload } from "@opencode-ai/core/kilocode/source-capsule"
 import { preferences } from "@opencode-ai/core/kilocode/profile-preferences"
+import { project as bindings } from "@opencode-ai/core/kilocode/profile-models"
 
 const root = z.object({ kind: z.literal("json"), path: z.string() }).strict()
 const safe = z.unknown().transform((value) => preferences.parse(value))
@@ -71,17 +72,7 @@ export function project(rows: readonly { generation: string; role: "view" | "age
         id: item.generation,
         revision: item.revision,
         root: item.roots[0],
-        models: item.preferences
-          ? {
-              selected: item.preferences.config.model,
-              recent: item.preferences.modelState.recent,
-              favorite: item.preferences.modelState.favorite,
-              agents: item.preferences.modelState.models,
-              ...(item.preferences.modelState.variants === undefined
-                ? {}
-                : { variants: item.preferences.modelState.variants }),
-            }
-          : undefined,
+        models: item.preferences ? bindings(item.preferences.modelState) : undefined,
       })),
       contexts: [],
     }

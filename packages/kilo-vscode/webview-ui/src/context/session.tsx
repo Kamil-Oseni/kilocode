@@ -692,6 +692,7 @@ export const SessionProvider: ParentComponent = (props) => {
   const variants = createSessionVariants({
     selections: () => store.variantSelections,
     set: (key, value) => setStore("variantSelections", key, value),
+    replace: (values) => setStore("variantSelections", reconcile(values)),
     selected,
     session: currentSessionID,
     agent: agentForScope,

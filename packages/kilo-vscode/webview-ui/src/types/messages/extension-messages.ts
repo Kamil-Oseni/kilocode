@@ -1583,6 +1583,7 @@ export interface AgentManagerMultiVersionProgressMessage {
 export interface VariantsLoadedMessage {
   type: "variantsLoaded"
   variants: Record<string, string>
+  replace?: boolean
 }
 
 export interface RecentsLoadedMessage {

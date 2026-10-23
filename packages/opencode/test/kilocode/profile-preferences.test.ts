@@ -2,6 +2,67 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { preferences, sanitize } from "../../src/kilocode/migration/profile-preferences"
+import { createSessionVariants } from "../../../kilo-vscode/webview-ui/src/context/session-variants"
+
+test("actual picker mode keys preserve independent variants and explicit model defaults", () => {
+  const local: Record<string, string> = {}
+  const saved: Record<string, string> = { "local/org/model": "low" }
+  const scope = { agent: "ask" }
+  const picker = createSessionVariants({
+    selections: () => local,
+    set: (key, value) => {
+      local[key] = value
+    },
+    replace: (values) => {
+      Object.assign(local, values)
+    },
+    selected: () => ({ providerID: "local", modelID: "org/model" }),
+    session: () => undefined,
+    agent: () => scope.agent,
+    find: () => ({ variants: { low: {}, high: {} } }),
+    post: (message) => {
+      if (message.type === "persistVariant") saved[message.key] = message.value
+    },
+    listen: () => () => undefined,
+  })
+  picker.select("high")
+  scope.agent = "code"
+  picker.select(undefined)
+  expect(saved).toEqual({
+    "local/org/model": "low",
+    "agent/ask/local/org/model": "high",
+    "agent/code/local/org/model": "",
+  })
+  const result = sanitize(
+    {},
+    {
+      extensionState: {
+        variantSelections: {
+          ...saved,
+          "session/old/local/org/model": "high",
+        },
+      },
+    },
+  )
+  expect(result.extensionState.variants).toEqual([
+    { providerID: "local", modelID: "org/model", agent: "ask", variant: "high" },
+    { providerID: "local", modelID: "org/model", agent: "code", variant: "" },
+    { providerID: "local", modelID: "org/model", variant: "low" },
+  ])
+  expect(preferences.parse(JSON.parse(JSON.stringify(result)))).toEqual(result)
+  expect(() =>
+    preferences.parse({
+      ...result,
+      extensionState: {
+        ...result.extensionState,
+        variants: [...result.extensionState.variants!, result.extensionState.variants![0]!],
+      },
+    }),
+  ).toThrow()
+  for (const key of ["agent//local/model", "agent/code/local/../model", "agent/code/local/https://private"]) {
+    expect(() => sanitize({}, { extensionState: { variantSelections: { [key]: "high" } } })).toThrow()
+  }
+})
 
 test("persisted canonical model variants remain independent inactive intent with legacy codec compatibility", () => {
   const output = sanitize(
@@ -50,6 +111,33 @@ test("persisted canonical model variants remain independent inactive intent with
       },
     ),
   ).toThrow()
+})
+
+test("CLI provider names retain canonical keys that resemble extension scopes", () => {
+  const result = sanitize(
+    {},
+    {
+      modelState: {
+        variant: {
+          "agent/ask/local/model": "high",
+          "session/org/model": "low",
+        },
+      },
+    },
+  )
+  expect(result.modelState.variants).toEqual([
+    { providerID: "agent", modelID: "ask/local/model", variant: "high" },
+    { providerID: "session", modelID: "org/model", variant: "low" },
+  ])
+  expect(() =>
+    preferences.parse({
+      ...result,
+      modelState: {
+        ...result.modelState,
+        variants: [{ providerID: "local", modelID: "model", agent: "ask", variant: "high" }],
+      },
+    }),
+  ).toThrow("mode scopes")
 })
 
 test("actual config parser preserves safe model defaults while excluding provider and execution authority", () => {

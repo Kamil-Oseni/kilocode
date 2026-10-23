@@ -26030,6 +26030,141 @@ export type KilocodeProfileRestoreReviewResponses = {
    */
   200: {
     state: "absent" | "held" | "released"
+    choices?:
+      | {
+          version: 1
+          state: "absent"
+        }
+      | {
+          version: 1
+          state: "unavailable"
+          error: "Saved model choices are unavailable. Repair the saved evidence before applying choices."
+        }
+      | {
+          version: 1
+          state: "ready"
+          revision: string
+          sources: Array<
+            | {
+                kind: "profile"
+                preferences: {
+                  format: "raya.profile-preferences"
+                  version: 1
+                  reviewOnly: true
+                  activation: "held"
+                  config: {
+                    model?: {
+                      providerID: string
+                      modelID: string
+                    }
+                    smallModel?: {
+                      providerID: string
+                      modelID: string
+                    }
+                    defaultAgent?: string
+                  }
+                  modelState: {
+                    models: Array<{
+                      agent: string
+                      providerID: string
+                      modelID: string
+                    }>
+                    recent: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    favorite: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    variants?: Array<{
+                      providerID: string
+                      modelID: string
+                      variant: string | ""
+                    }>
+                  }
+                  extensionState: {
+                    recentModels: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    favoriteModels: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    variants?: Array<{
+                      agent?: string
+                      providerID: string
+                      modelID: string
+                      variant: string | ""
+                    }>
+                    expanded?: boolean
+                  }
+                }
+              }
+            | {
+                kind: "host"
+                id: string
+                role: "view" | "agent-manager"
+                revision: number
+                models: {
+                  selected?: {
+                    providerID: string
+                    modelID: string
+                  }
+                  recent: Array<{
+                    providerID: string
+                    modelID: string
+                  }>
+                  favorite: Array<{
+                    providerID: string
+                    modelID: string
+                  }>
+                  agents: Array<{
+                    agent: string
+                    providerID: string
+                    modelID: string
+                  }>
+                  variants?: Array<{
+                    agent?: string
+                    providerID: string
+                    modelID: string
+                    variant: string | ""
+                  }>
+                  expanded?: boolean
+                }
+                owners: Array<{
+                  id: string
+                  revision: number
+                  models?: {
+                    selected?: {
+                      providerID: string
+                      modelID: string
+                    }
+                    recent: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    favorite: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    agents: Array<{
+                      agent: string
+                      providerID: string
+                      modelID: string
+                    }>
+                    variants?: Array<{
+                      providerID: string
+                      modelID: string
+                      variant: string | ""
+                    }>
+                    expanded?: boolean
+                  }
+                }>
+              }
+          >
+        }
     id?: string
     revision?: string
     review?: {
@@ -26094,6 +26229,141 @@ export type KilocodeProfileRestoreApproveResponses = {
    */
   200: {
     state: "absent" | "held" | "released"
+    choices?:
+      | {
+          version: 1
+          state: "absent"
+        }
+      | {
+          version: 1
+          state: "unavailable"
+          error: "Saved model choices are unavailable. Repair the saved evidence before applying choices."
+        }
+      | {
+          version: 1
+          state: "ready"
+          revision: string
+          sources: Array<
+            | {
+                kind: "profile"
+                preferences: {
+                  format: "raya.profile-preferences"
+                  version: 1
+                  reviewOnly: true
+                  activation: "held"
+                  config: {
+                    model?: {
+                      providerID: string
+                      modelID: string
+                    }
+                    smallModel?: {
+                      providerID: string
+                      modelID: string
+                    }
+                    defaultAgent?: string
+                  }
+                  modelState: {
+                    models: Array<{
+                      agent: string
+                      providerID: string
+                      modelID: string
+                    }>
+                    recent: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    favorite: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    variants?: Array<{
+                      providerID: string
+                      modelID: string
+                      variant: string | ""
+                    }>
+                  }
+                  extensionState: {
+                    recentModels: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    favoriteModels: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    variants?: Array<{
+                      agent?: string
+                      providerID: string
+                      modelID: string
+                      variant: string | ""
+                    }>
+                    expanded?: boolean
+                  }
+                }
+              }
+            | {
+                kind: "host"
+                id: string
+                role: "view" | "agent-manager"
+                revision: number
+                models: {
+                  selected?: {
+                    providerID: string
+                    modelID: string
+                  }
+                  recent: Array<{
+                    providerID: string
+                    modelID: string
+                  }>
+                  favorite: Array<{
+                    providerID: string
+                    modelID: string
+                  }>
+                  agents: Array<{
+                    agent: string
+                    providerID: string
+                    modelID: string
+                  }>
+                  variants?: Array<{
+                    agent?: string
+                    providerID: string
+                    modelID: string
+                    variant: string | ""
+                  }>
+                  expanded?: boolean
+                }
+                owners: Array<{
+                  id: string
+                  revision: number
+                  models?: {
+                    selected?: {
+                      providerID: string
+                      modelID: string
+                    }
+                    recent: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    favorite: Array<{
+                      providerID: string
+                      modelID: string
+                    }>
+                    agents: Array<{
+                      agent: string
+                      providerID: string
+                      modelID: string
+                    }>
+                    variants?: Array<{
+                      providerID: string
+                      modelID: string
+                      variant: string | ""
+                    }>
+                    expanded?: boolean
+                  }
+                }>
+              }
+          >
+        }
     id?: string
     revision?: string
     review?: {

@@ -9,6 +9,58 @@ import { preparation, retirement } from "@opencode-ai/core/kilocode/source-offli
 import { registry } from "@opencode-ai/core/kilocode/source-offline"
 import { check, checked, staged } from "../../src/kilocode/migration/source-stage"
 
+test("fixed offline selection discovery and recovery guards retain exact categories without exposing source details", () => {
+  const rows = [
+    ["Offline native platform unsupported", "RAYA_SOURCE_OFFLINE_PLATFORM_UNSUPPORTED"],
+    ["Offline selection account invalid", "RAYA_SOURCE_SELECTION_ACCOUNT_INVALID"],
+    ["Offline selection legacy observations differ", "RAYA_SOURCE_SELECTION_LEGACY_OBSERVATIONS_DIFFER"],
+    ["Offline selection legacy registry changed", "RAYA_SOURCE_SELECTION_LEGACY_REGISTRY_CHANGED"],
+    [
+      "Offline selection requires an existing canonical account AppData directory",
+      "RAYA_SOURCE_SELECTION_ACCOUNT_DIRECTORY_REFUSED",
+    ],
+    ["Offline selection account registry aliases another namespace", "RAYA_SOURCE_SELECTION_ACCOUNT_ALIAS_REFUSED"],
+    ["Offline selection original ancestor changed", "RAYA_SOURCE_SELECTION_ANCESTOR_CHANGED"],
+    ["Offline selection account registry changed", "RAYA_SOURCE_SELECTION_REGISTRY_CHANGED"],
+    ["Offline selection image lifetime refused", "RAYA_SOURCE_SELECTION_IMAGE_LIFETIME_REFUSED"],
+    ["Offline selection original image registry differs", "RAYA_SOURCE_SELECTION_IMAGE_REGISTRY_CHANGED"],
+    ["Offline selection held registry is absent", "RAYA_SOURCE_SELECTION_HELD_REGISTRY_ABSENT"],
+    ["Offline discovery native refusal", "RAYA_SOURCE_DISCOVERY_NATIVE_REFUSED"],
+    ["Offline discovery inputs differ", "RAYA_SOURCE_DISCOVERY_INPUTS_DIFFER"],
+    ["Offline recovery native failure", "RAYA_SOURCE_RECOVERY_NATIVE_FAILED"],
+    ["Offline recovery registry changed", "RAYA_SOURCE_RECOVERY_REGISTRY_CHANGED"],
+    ["Offline recovery registry exceeded bound", "RAYA_SOURCE_RECOVERY_REGISTRY_CAPACITY"],
+    ["Offline recovery registry contains unknown entry", "RAYA_SOURCE_RECOVERY_REGISTRY_ENTRY_REFUSED"],
+    ["Offline control frame exceeded bound", "RAYA_SOURCE_OFFLINE_FRAME_CAPACITY"],
+    ["Offline response exceeded bound", "RAYA_SOURCE_OFFLINE_RESPONSE_CAPACITY"],
+    ["Offline image is not live", "RAYA_SOURCE_IMAGE_NOT_LIVE"],
+    ["Offline image is expired or bound to different roots", "RAYA_SOURCE_IMAGE_BINDING_EXPIRED"],
+    ["Offline timestamp inventory protocol differs", "RAYA_SOURCE_IMAGE_TIMESTAMP_PROTOCOL_DIFFERS"],
+    ["Offline directory inventory protocol differs", "RAYA_SOURCE_IMAGE_DIRECTORY_PROTOCOL_DIFFERS"],
+    ["Offline retirement identity or failures differ", "RAYA_SOURCE_IMAGE_RETIREMENT_DIFFERS"],
+    ["Offline image/rollback refused", "RAYA_SOURCE_IMAGE_ROLLBACK_REFUSED"],
+    ["Offline image callback outcome is unavailable", "RAYA_SOURCE_IMAGE_OUTCOME_UNAVAILABLE"],
+  ] as const
+  for (const [message, code] of rows) {
+    const cause = new Error(message)
+    const inner = staged(cause, "capture-offline-selection")
+    const error = staged(inner, "capture-planning")
+    expect(error.cause).toBe(inner)
+    expect(inner.cause).toBe(cause)
+    const result = failure(error)
+    expect(result.errors.map((item) => item.code)).toEqual([
+      "RAYA_SOURCE_CAPTURE_PLANNING_REFUSED",
+      "RAYA_SOURCE_CAPTURE_OFFLINE_SELECTION_REFUSED",
+      code,
+    ])
+    expect(JSON.stringify(result)).not.toContain(message)
+    const unknown = message + ": PRIVATE_SOURCE_PATH_PASSWORD"
+    const refused = failure(new Error(unknown))
+    expect(refused.errors[0].code).toBeUndefined()
+    expect(JSON.stringify(refused)).not.toContain("PRIVATE_")
+  }
+})
+
 test("actual correspondence stage wrappers retain causes while publishing only fixed categories", async () => {
   const secret = "PRIVATE_CORRESPONDENCE_PATH_PASSWORD_AND_VALUE"
   const original = new Error(secret)

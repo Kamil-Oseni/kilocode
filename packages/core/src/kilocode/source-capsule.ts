@@ -29,10 +29,14 @@ const models = z
     recent: z.array(model).max(128),
     favorite: z.array(model).max(128),
     agents: z.array(model.extend({ agent: identifier })).max(128),
-    variants: preferences.shape.modelState.shape.variants,
+    variants: preferences.shape.extensionState.shape.variants,
     expanded: z.boolean().optional(),
   })
   .strict()
+const plain = preferences.shape.modelState.shape.variants.unwrap().element.omit({ agent: true })
+const owner = models.extend({
+  variants: preferences.shape.modelState.shape.variants.pipe(z.array(plain).optional()),
+})
 export const PayloadSchema = z
   .object({
     format: z.literal("raya.host-capsule"),
@@ -46,7 +50,7 @@ export const PayloadSchema = z
             revision,
             models,
             owners: z
-              .array(z.object({ id: uuid, revision, root: root.optional(), models: models.optional() }).strict())
+              .array(z.object({ id: uuid, revision, root: root.optional(), models: owner.optional() }).strict())
               .max(256),
             contexts: z
               .array(z.object({ id: uuid, project: identifier.optional(), path: file, root: root.optional() }).strict())

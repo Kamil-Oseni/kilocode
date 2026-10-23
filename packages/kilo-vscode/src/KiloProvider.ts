@@ -132,6 +132,7 @@ import { childDirectory, steerChild, type ChildSteerMessage } from "./kilo-provi
 import * as ModelState from "./kilo-provider/model-state"
 import { handleModelUsageMessage } from "./kilo-provider/model-usage"
 import { hostPublications } from "./kilo-provider/host-publications"
+import { restoreChoices } from "./kilo-provider/restore-choices"
 import { Hosts } from "./kilo-provider/host-capture"
 import { handleForkSession } from "./kilo-provider/fork-session"
 import { openConfig } from "./kilo-provider/open-config"
@@ -402,6 +403,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private capturePreparing = false
 
   private webview: vscode.Webview | null = null
+  private page = 0
   private composerView?: vscode.Disposable
   private readonly voiceOrigin = new VoiceOrigin()
   private readonly voicePage = new VoiceOrigin()
@@ -1275,6 +1277,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private renew(webview: vscode.Webview): void {
+    this.page++
     this.speech?.drop()
     this.voiceCurrent = this.voicePage.bind(webview)
     void this.speech
@@ -1283,6 +1286,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private setupWebviewMessageHandler(webview: vscode.Webview): void {
+    this.page++
     this.speech?.drop()
     this.composer.detach()
     const current = this.voiceOrigin.bind(webview)
@@ -2055,7 +2059,30 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const generation = this.connectionGeneration
     const current = () =>
       this.client === client && this.getWorkspaceDirectory() === directory && this.connectionGeneration === generation
+    const view = this.webview
+    const page = this.page
+    const choices = () =>
+      current() &&
+      !!client &&
+      this.webview === view &&
+      this.page === page &&
+      this.isWebviewReady &&
+      this.connectionState === "connected"
     try {
+      if (
+        await restoreChoices({
+          message,
+          client,
+          directory,
+          context: this.extensionContext,
+          current: choices,
+          source: () => this.client === client && this.connectionGeneration === generation,
+          post: (msg) => {
+            if (choices()) this.postMessage(msg)
+          },
+        })
+      )
+        return true
       if (routine.type === "routineFinalPick") {
         const view = this.webview
         await chooseRoutineFinal({

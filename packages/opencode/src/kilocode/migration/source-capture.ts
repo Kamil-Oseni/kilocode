@@ -19,7 +19,7 @@ import { identity } from "./profile-workspaces"
 import { planSelfHeal } from "./profile-self-heal"
 import { capture as captureConfig } from "./profile-config"
 import { assertCoverage } from "./source-image-coverage"
-import { staged, type Phase } from "./source-stage"
+import { joined, staged, type Phase } from "./source-stage"
 
 const key = (file: string) => (process.platform === "win32" ? file.toLowerCase() : file)
 
@@ -93,13 +93,22 @@ export async function capture(token: object) {
     roots.push(root)
   }
   const selected = Object.freeze({ ...profile, roots: Object.freeze([...roots]), globals: namespaces.globals })
-  const image = await stage("capture-planning", () => offline({ helper: pipe.server }))
+  const image = await stage("capture-planning", () =>
+    stage("capture-offline-selection", () => offline({ helper: pipe.server })),
+  )
   const planned = await stage("capture-planning", () =>
-    image.withImage({ roots: selected.roots, policy: closure.policy }, (image) =>
-      withWorking(image, selected, async (working) => {
-        const [workspaces, selfHeal] = await Promise.all([workspaceScopes(working), planSelfHeal(working, scopes)])
-        return { workspaces, selfHeal }
-      }),
+    stage("capture-held-image", () =>
+      image.withImage({ roots: selected.roots, policy: closure.policy }, (image) =>
+        stage("capture-working-copy", () =>
+          withWorking(image, selected, async (working) => {
+            const [workspaces, selfHeal] = await joined(
+              stage("capture-workspaces", () => workspaceScopes(working)),
+              stage("capture-self-heal", () => planSelfHeal(working, scopes)),
+            )
+            return { workspaces, selfHeal }
+          }),
+        ),
+      ),
     ),
   )
   const workspaces = [

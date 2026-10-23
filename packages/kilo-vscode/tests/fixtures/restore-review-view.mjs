@@ -164,6 +164,24 @@ await emit({
 })
 assert.equal(root.querySelector("section"), null)
 dispose()
+dispose = mount()
+await tick()
+const previous = sent.filter((message) => message.type === "restoreChoicesGet").length
+await emit({
+  type: "restoreReviewResult",
+  requestID: reads().at(-1).requestID,
+  summary: { ...saved, choices: { version: 1, state: "absent" } },
+})
+assert.equal(sent.filter((message) => message.type === "restoreChoicesGet").length, previous + 1)
+assert(
+  root.querySelector('[aria-label="Saved model choices"]'),
+  "Saved choices are mounted only for a reviewed imported hold",
+)
+assert.equal(
+  sent.some((message) => message.type === "restoreChoicesApply"),
+  false,
+)
+dispose()
 assert.equal(approve().length, 1)
 console.log(
   JSON.stringify({

@@ -13,11 +13,12 @@ const model = z
   .refine((value) => !value.includes("://") && !value.split("/").some((part) => !part || part === ".."))
 const selection = z.object({ providerID: identifier, modelID: model }).strict()
 const picks = z.array(selection).max(1000)
+const variant = z.union([identifier, z.literal("")])
 const variants = z
-  .array(selection.extend({ variant: identifier }))
+  .array(selection.extend({ variant, agent: identifier.optional() }))
   .max(128)
   .superRefine((value, ctx) => {
-    const keys = value.map((item) => `${item.providerID}/${item.modelID}`)
+    const keys = value.map((item) => JSON.stringify([item.agent ?? null, item.providerID, item.modelID]))
     if (new Set(keys).size !== keys.length)
       ctx.addIssue({ code: "custom", message: "Duplicate model variant preference" })
   })
@@ -26,7 +27,11 @@ const state = z
     models: z.array(selection.extend({ agent: identifier })).max(1000),
     recent: picks,
     favorite: picks,
-    variants: variants.optional(),
+    variants: variants
+      .refine((rows) => rows.every((row) => row.agent === undefined), {
+        message: "CLI variant preferences cannot contain mode scopes",
+      })
+      .optional(),
   })
   .strict()
 
@@ -90,20 +95,33 @@ function configured(value: unknown) {
   return selection.parse({ providerID: value.slice(0, index), modelID: value.slice(index + 1) })
 }
 
-/** Only canonical provider/model keys name variant intent; other storage fields remain outside this projection. */
-function choices(value: unknown) {
+/** Persisted model and mode choices are inactive intent; live session overrides stay outside this projection. */
+function choices(value: unknown, modes = false) {
   if (value === undefined) return undefined
   const data = record(value)
   const keys = Object.getOwnPropertyNames(data)
   if (keys.length > 1000) throw new Error("Too many model variant preferences")
   return variants.parse(
     keys.sort().flatMap((key) => {
-      const index = key.indexOf("/")
+      if (modes && key.startsWith("session/")) return []
+      const parts = key.split("/")
+      const scoped = modes && parts[0] === "agent" && parts.length >= 4
+      const agent = scoped ? identifier.parse(parts[1]) : undefined
+      const name = scoped ? parts.slice(2).join("/") : key
+      const index = name.indexOf("/")
       if (index < 1) return []
-      const parsed = selection.safeParse({ providerID: key.slice(0, index), modelID: key.slice(index + 1) })
+      const parsed = selection.safeParse({ providerID: name.slice(0, index), modelID: name.slice(index + 1) })
       if (!parsed.success) throw new Error("Invalid model variant preference key")
       const selected = field(data, key)
-      return selected === undefined ? [] : [{ ...parsed.data, variant: identifier.parse(selected) }]
+      return selected === undefined
+        ? []
+        : [
+            {
+              ...parsed.data,
+              variant: variant.parse(selected),
+              ...(agent === undefined ? {} : { agent }),
+            },
+          ]
     }),
   )
 }
@@ -142,7 +160,7 @@ export function sanitize(config: unknown, client: unknown) {
       favoriteModels: list(field(vscode, "favoriteModels")),
       ...(field(vscode, "variantSelections") === undefined
         ? {}
-        : { variants: choices(field(vscode, "variantSelections")) }),
+        : { variants: choices(field(vscode, "variantSelections"), true) }),
       ...(field(vscode, "modelSelectorExpanded") === undefined
         ? {}
         : { expanded: z.boolean().parse(field(vscode, "modelSelectorExpanded")) }),

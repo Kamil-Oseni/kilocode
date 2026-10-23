@@ -10,7 +10,8 @@ import { HostCapture, hostPayload } from "../../../kilo-vscode/src/kilo-provider
 import { capsule, stage, verifyCapsule, type VerifiedCapsule } from "@opencode-ai/core/kilocode/source-capsule"
 import type { Ticket } from "@opencode-ai/core/kilocode/source-launch"
 import { withImage } from "@opencode-ai/core/kilocode/source-offline"
-import { preferences } from "@opencode-ai/core/kilocode/profile-preferences"
+import { preferences, sanitize } from "@opencode-ai/core/kilocode/profile-preferences"
+import { read as bindings } from "@opencode-ai/core/kilocode/profile-models"
 import { select } from "../../src/kilocode/migration/profile-selection"
 import { held } from "../../src/kilocode/migration/profile-host"
 import { lookup, withWorking, type Working } from "../../src/kilocode/migration/profile-image"
@@ -22,6 +23,12 @@ import {
 } from "../../src/kilocode/migration/profile-host-correspondence"
 import { payload, seal, unseal } from "../../src/kilocode/migration/profile-bundle"
 import { collectDisposition } from "../../src/kilocode/migration/profile-disposition"
+import {
+  bindHostModel,
+  hostModelGroups,
+  validateHostModel,
+  type HostModelClaim,
+} from "../../src/kilocode/migration/profile-host-model-correspondence"
 
 const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex")
 
@@ -36,6 +43,19 @@ test.skipIf(process.platform !== "win32")(
     db.exec("CREATE TABLE evidence(value TEXT)")
     db.close()
     const file = path.join(data, "models.json")
+    const model = path.join(data, "model.json")
+    const generation = randomUUID()
+    const raw = {
+      model: {
+        auto: { providerID: "local", modelID: "general" },
+        ask: { providerID: "local", modelID: "ask" },
+        build: { providerID: "local", modelID: "coder" },
+      },
+      recent: [{ providerID: "local", modelID: "ask" }],
+      favorite: [],
+      variant: { "local/ask": "", "local/coder": "high" },
+      unrelated: "private-model-raw-only",
+    }
     const choice = preferences.parse({
       format: "raya.profile-preferences",
       version: 1,
@@ -54,13 +74,25 @@ test.skipIf(process.platform !== "win32")(
     const job = hosts.run(async () => {
       await gate
       await writeFile(file, JSON.stringify(choice))
+      await writeFile(model, JSON.stringify(raw))
     })
     hosts.register(owner, "view", {
       prepare: async () => () => undefined,
       close: async () => {
         const choices = preferences.parse(JSON.parse(await readFile(file, "utf8")))
         await writeFile(path.join(data, "controller-closed"), "joined")
-        return { revision: 2, models: [], preferences: { preferences: choices } }
+        return {
+          revision: 2,
+          models: [
+            {
+              generation,
+              revision: 1,
+              roots: [{ kind: "json", path: model }],
+              preferences: sanitize({}, { modelState: JSON.parse(await readFile(model, "utf8")) }),
+            },
+          ],
+          preferences: { preferences: choices },
+        }
       },
     })
     const closure = hosts.capture(createKiloClient({ baseUrl: "http://127.0.0.1:1" }), Date.now() + 15000)
@@ -135,7 +167,14 @@ test.skipIf(process.platform !== "win32")(
     const expected = { id, source, data }
     const initial = await verifyCapsule(descriptor, expected, authorize)
     const selected = await select({ database, storage: path.join(data, "storage") }, policy)
-    const selection = { ...selected, roots: [...selected.roots, { kind: "json" as const, path: descriptor.file }] }
+    const selection = {
+      ...selected,
+      roots: [
+        ...selected.roots,
+        { kind: "json" as const, path: model },
+        { kind: "json" as const, path: descriptor.file },
+      ],
+    }
     const executable = path.join(root, "raya-process-host.exe")
     await copyFile(path.resolve(import.meta.dir, "../../../core/native/kilocode/bin/raya-process-host.exe"), executable)
     const input = {
@@ -144,7 +183,7 @@ test.skipIf(process.platform !== "win32")(
       helper: { executable, digest: hash(await readFile(executable)) },
       registry: path.join(root, "registry"),
     }
-    const saved: { token?: Working; claim?: HostClaim; proof?: VerifiedCapsule } = {}
+    const saved: { token?: Working; claim?: HostClaim; proof?: VerifiedCapsule; models?: HostModelClaim } = {}
     await withImage(input, (image) =>
       withWorking(image, selection, async (token) => {
         const proof = await verifyCapsule(
@@ -157,6 +196,17 @@ test.skipIf(process.platform !== "win32")(
         assert.throws(() => bindHost(token, initial, merged), /current staged/)
         assert.throws(() => bindHost(token, JSON.parse(JSON.stringify(proof)), merged), /provenance/)
         const claim = bindHost(token, proof, merged)
+        const models = await bindHostModel(token, proof, merged)
+        saved.models = models
+        const entries = hostModelGroups(token, models)
+        expect(entries).toHaveLength(1)
+        expect(entries[0].source).toBe(model)
+        expect(entries[0].rawBytesPreserved).toBe(false)
+        expect(merged!.hosts[0].owners[0].models).toEqual(bindings(raw))
+        expect(JSON.stringify(merged)).not.toContain(raw.unrelated)
+        assert.throws(() => validateHostModel({ ...entries[0], owner: randomUUID() }, merged), /owner projection/)
+        assert.throws(() => hostModelGroups(token, { ...models }), /absent or foreign/)
+        await assert.rejects(bindHostModel(token, initial, merged), /current staged/)
         saved.claim = claim
         const groups = hostGroups(token, claim)
         expect(groups).toHaveLength(1)
@@ -226,13 +276,27 @@ test.skipIf(process.platform !== "win32")(
         forged.host!.hosts[0].revision++
         assert.throws(() => payload.parse(forged), /Host correspondence/)
         expect(capsule(proof).payload).toEqual(current)
+        await assert.rejects(
+          writeFile(lookup(token, model), JSON.stringify({ ...raw, variant: { "local/ask": "changed" } })),
+          (err: unknown) => err instanceof Error && "code" in err && (err.code === "EPERM" || err.code === "EACCES"),
+        )
+        expect(hostModelGroups(token, await bindHostModel(token, proof, merged))).toEqual(entries)
       }),
     )
     assert.throws(() => hostGroups(saved.token!, saved.claim!), /expired/)
+    assert.throws(() => hostModelGroups(saved.token!, saved.models!), /expired/)
+    await writeFile(model, JSON.stringify({ ...raw, variant: { "local/ask": "changed" } }))
     await withImage(input, (image) =>
       withWorking(image, selection, async (token) => {
         assert.throws(() => hostGroups(token, saved.claim!), /another image/)
+        assert.throws(() => hostModelGroups(token, saved.models!), /absent or foreign/)
         assert.throws(() => bindHost(token, saved.proof!, merged), /current staged/)
+        const proof = await verifyCapsule(
+          descriptor,
+          { ...expected, readPath: lookup(token, descriptor.file) },
+          authorize,
+        )
+        expect(hostModelGroups(token, await bindHostModel(token, proof, merged))).toEqual([])
       }),
     )
     expect(hash(await readFile(descriptor.file))).toBe(descriptor.digest)

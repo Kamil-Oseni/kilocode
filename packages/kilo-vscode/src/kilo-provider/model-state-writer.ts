@@ -15,6 +15,9 @@ let retirement: Promise<void> | undefined
 const same = (left: string, right: string) =>
   process.platform === "win32" ? left.toLowerCase() === right.toLowerCase() : left === right
 
+class Refused extends Error {}
+type Guard = { current: () => boolean; match: (data: Record<string, unknown>) => boolean; accepted: boolean }
+
 class Writer {
   readonly generation = randomUUID()
   private revision = 0
@@ -39,14 +42,15 @@ class Writer {
       ) ?? Promise.resolve()
   }
 
-  private check() {
+  private check(guard?: Guard) {
+    if (guard && !guard.current()) throw new Refused("Model preference request changed before publication")
     if (!this.current()) throw new Error("Model preference source generation changed")
   }
 
-  private async target() {
-    this.check()
+  private async target(guard?: Guard) {
+    this.check(guard)
     const response = await this.client.path.get()
-    this.check()
+    this.check(guard)
     const state = response.data?.state
     if (!state || !path.isAbsolute(state)) throw new Error("Model preference source path is unavailable")
     const file = canonical(path.join(state, "model.json"))
@@ -58,15 +62,37 @@ class Writer {
     return file
   }
 
-  run(change?: (data: Record<string, unknown>) => Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async load(file: string) {
+    if (!same(canonical(file), file)) throw new Error("Model preference physical path changed")
+    const info = await lstat(file).catch((err: unknown) => {
+      if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return
+      throw err
+    })
+    if (info && (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1))
+      throw new Error("Model preference file identity is unsafe")
+    const text = await readFile(file, "utf8").catch((err: unknown) => {
+      if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return "{}"
+      throw err
+    })
+    const data: unknown = JSON.parse(text)
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Model preference data is invalid")
+    return data as Record<string, unknown>
+  }
+
+  run(
+    change?: (data: Record<string, unknown>) => Record<string, unknown>,
+    guard?: Guard,
+  ): Promise<Record<string, unknown>> {
     if (this.closed) return Promise.reject(new Error("Model preference writer is retired"))
-    const job = this.tail.then(async () => {
-      const file = await this.target()
+    const operation = this.tail.then(async () => {
+      const file = await this.target(guard)
       const lease = await acquireProfileRoot({ kind: "json", path: file })
       this.root = lease.root
       const errors: unknown[] = []
       let lock: Awaited<ReturnType<typeof Flock.acquire>> | undefined
       let value: Record<string, unknown> = {}
+      let previous: Record<string, unknown> = {}
+      let refused = false
       try {
         if (!same(file, lease.root.path)) throw new Error("Model preference physical root changed during admission")
         lock = await Flock.acquire(`raya.model-state:${process.platform === "win32" ? file.toLowerCase() : file}`, {
@@ -74,29 +100,21 @@ class Writer {
           timeoutMs: 5000,
           recover: "dead",
         })
-        this.check()
-        if (!same(canonical(file), file)) throw new Error("Model preference physical path changed")
-        const info = await lstat(file).catch((err: unknown) => {
-          if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return
-          throw err
-        })
-        if (info && (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1))
-          throw new Error("Model preference file identity is unsafe")
-        const text = await readFile(file, "utf8").catch((err: unknown) => {
-          if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return "{}"
-          throw err
-        })
-        const data: unknown = JSON.parse(text)
-        if (!data || typeof data !== "object" || Array.isArray(data))
-          throw new Error("Model preference data is invalid")
-        value = data as Record<string, unknown>
-        this.check()
-        if (change) {
+        this.check(guard)
+        value = await this.load(file)
+        previous = structuredClone(value)
+        this.check(guard)
+        if (change && (!guard || guard.match(value))) {
           value = change(value)
-          await this.publish(file, value)
+          await this.publish(file, value, guard)
+          if (guard) guard.accepted = true
         }
       } catch (err) {
-        errors.push(err)
+        if (err instanceof Refused) {
+          value = previous
+          refused = true
+        }
+        if (!(err instanceof Refused)) errors.push(err)
       }
       try {
         await lock?.release()
@@ -109,9 +127,14 @@ class Writer {
         errors.push(err)
       }
       if (errors.length) throw new AggregateError(errors, "Model preference publication failed")
+      if (refused) return value
       this.data = structuredClone(value)
       this.revision++
       return value
+    })
+    const job = operation.catch((err: unknown) => {
+      if (err instanceof Refused) return structuredClone(this.data ?? {})
+      throw err
     })
     this.tail = job.then(
       () => undefined,
@@ -122,7 +145,24 @@ class Writer {
     return job
   }
 
-  private async publish(file: string, value: Record<string, unknown>) {
+  /** Expected-value refusal is a known no-write outcome, not a failed publication. */
+  async guarded(
+    current: () => boolean,
+    match: (data: Record<string, unknown>) => boolean,
+    change: (data: Record<string, unknown>) => Record<string, unknown>,
+  ) {
+    const guard = { current, match, accepted: false }
+    const data = await this.run(change, guard)
+    return { accepted: guard.accepted, data }
+  }
+
+  /** A stale read is a known no-write refusal, while source/read failures remain sticky. */
+  read(current: () => boolean) {
+    return this.run(undefined, { current, match: () => true, accepted: false })
+  }
+
+  private async publish(file: string, value: Record<string, unknown>, guard?: Guard) {
+    this.check(guard)
     const temp = `${file}.${randomUUID()}.tmp`
     await mkdir(path.dirname(file), { recursive: true })
     const handle = await open(temp, "wx", 0o600)
@@ -140,7 +180,7 @@ class Writer {
     }
     if (!errors.length) {
       try {
-        this.check()
+        this.check(guard)
         if (!same(canonical(file), file)) throw new Error("Model preference physical path changed before publication")
         await rename(temp, file)
       } catch (err) {
@@ -153,6 +193,7 @@ class Writer {
     } catch (err) {
       errors.push(err)
     }
+    if (errors.length === 1 && errors[0] instanceof Refused) throw errors[0]
     throw new AggregateError(errors, "Atomic model preference publication failed")
   }
 

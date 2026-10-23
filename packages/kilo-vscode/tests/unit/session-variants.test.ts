@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { createSessionVariants } from "../../webview-ui/src/context/session-variants"
 import type { ExtensionMessage, ModelSelection } from "../../webview-ui/src/types/messages"
+import { createStore, reconcile } from "solid-js/store"
 
 const model: ModelSelection = { providerID: "anthropic", modelID: "claude-sonnet-4" }
 
@@ -13,6 +14,10 @@ function setup(session?: string) {
     selections: () => selections,
     set: (key, value) => {
       selections[key] = value
+    },
+    replace: (values) => {
+      for (const key of Object.keys(selections)) delete selections[key]
+      Object.assign(selections, values)
     },
     selected: () => model,
     session: () => session,
@@ -32,6 +37,57 @@ function setup(session?: string) {
 }
 
 describe("session variants", () => {
+  it("replaces restored picker variants in the actual store while retaining current session overrides", () => {
+    const [state, set] = createStore({
+      variants: {
+        "agent/code/anthropic/claude-sonnet-4": "low",
+        "agent/ask/anthropic/claude-sonnet-4": "high",
+        "anthropic/claude-sonnet-4": "high",
+        "session/current/anthropic/claude-sonnet-4": "high",
+      } as Record<string, string>,
+    })
+    const sent: { type: string }[] = []
+    let receive: ((message: ExtensionMessage) => void) | undefined
+    const variants = createSessionVariants({
+      selections: () => state.variants,
+      set: (key, value) => set("variants", key, value),
+      replace: (values) => set("variants", reconcile(values)),
+      selected: () => model,
+      session: () => undefined,
+      agent: () => "code",
+      find: () => ({ variants: { low: {}, high: {} } }),
+      post: (message) => sent.push(message),
+      listen: (handler) => {
+        receive = handler
+        return () => {
+          receive = undefined
+        }
+      },
+    })
+    const close = variants.load()
+    receive?.({
+      type: "variantsLoaded",
+      replace: true,
+      variants: {
+        "agent/code/anthropic/claude-sonnet-4": "",
+        "anthropic/claude-sonnet-4": "high",
+        "session/old/anthropic/claude-sonnet-4": "low",
+      },
+    })
+    expect({ ...state.variants }).toEqual({
+      "agent/code/anthropic/claude-sonnet-4": "",
+      "anthropic/claude-sonnet-4": "high",
+      "session/current/anthropic/claude-sonnet-4": "high",
+    })
+    expect(variants.current()).toBeUndefined()
+    expect(variants.current("current")).toBe("high")
+    receive?.({ type: "variantsLoaded", replace: true, variants: {} })
+    expect({ ...state.variants }).toEqual({ "session/current/anthropic/claude-sonnet-4": "high" })
+    expect(variants.current()).toBeUndefined()
+    expect(sent).toEqual([{ type: "requestVariants" }])
+    close()
+  })
+
   it("subscribes before requesting persisted variants and returns cleanup", () => {
     const state = setup()
     const unsub = state.variants.load()

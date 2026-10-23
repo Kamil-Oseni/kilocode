@@ -6,6 +6,7 @@ import type { Storage } from "@/storage/storage"
 import { RayaTask } from "@/kilocode/task"
 import { hold } from "@/kilocode/task/hold"
 import { ReviewSchema } from "./profile-restore-review-schema"
+import { Choices, choices } from "./destination-choices"
 
 const text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096))
 const id = Schema.String.check(Schema.isUUID())
@@ -20,6 +21,7 @@ export const Approval = Schema.Struct({
 }).annotate(strict)
 export const Summary = Schema.Struct({
   state: Schema.Literals(["absent", "held", "released"]),
+  choices: Schema.optional(Choices),
   id: Schema.optional(id),
   revision: Schema.optional(Schema.String),
   review: Schema.optional(
@@ -120,7 +122,15 @@ export function destinationReview(input: {
       const revision = createHash("sha256")
         .update(JSON.stringify({ id: current.id, workspaces, workers, evidence: saved }))
         .digest("hex")
+      const inventory = yield* Effect.promise(() => choices(input.data, current.id))
+      const latest = yield* gate.get()
+      if (!latest || latest.id !== current.id || latest.state !== current.state)
+        return yield* invalid(
+          "conflict",
+          "The transferred profile changed while reading saved choices. Reload its review.",
+        )
       return {
+        choices: inventory,
         state: current.state,
         id: current.id,
         revision,

@@ -3,6 +3,15 @@ import { Checkbox } from "@kilocode/kilo-ui/checkbox"
 import { For, Show, createSignal, onCleanup, onMount } from "solid-js"
 import { useVSCode } from "../../context/vscode"
 import { Review, type Review as Summary } from "../../../../src/shared/restore-review"
+import { RestoredChoices } from "./RestoredChoices"
+
+function ChoicesPanel(props: { value?: Summary }) {
+  return (
+    <Show when={props.value?.id && props.value?.choices}>
+      {(value) => <RestoredChoices id={props.value!.id!} revision={JSON.stringify(value())} />}
+    </Show>
+  )
+}
 
 export function RestoreReview() {
   const vscode = useVSCode()
@@ -75,74 +84,77 @@ export function RestoreReview() {
     unsubscribe()
   })
   return (
-    <Show when={error() || (summary() && summary()?.state !== "absent")}>
-      <section class="routines-restore-review" aria-label="Transferred profile review">
-        <h3>Transferred profile</h3>
-        <Show when={error()}>
-          <p class="routines-error" role="alert">
-            {error()}
-          </p>
-        </Show>
-        <Show when={summary()?.state === "held"}>
-          <p>Review the folders and paused workers on this computer. Old runs remain paused and will not replay.</p>
-          <details>
-            <summary>Mapped folders ({summary()?.workspaces.length ?? 0})</summary>
-            <ul>
-              <For each={summary()?.workspaces}>
-                {(item) => (
-                  <li>
-                    <span>{item.source}</span>
-                    <span>→ {item.destination}</span>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </details>
-          <details>
-            <summary>Transferred workers ({summary()?.workers.length ?? 0})</summary>
-            <ul>
-              <For each={summary()?.workers}>
-                {(worker) => (
-                  <li>
-                    {worker.name} — {worker.enabled ? "Enabled: pause before reviewing" : "Paused"}
-                  </li>
-                )}
-              </For>
-            </ul>
-          </details>
-          <Checkbox checked={folders()} disabled={!!request()} onChange={setFolders}>
-            I reviewed the mapped folders and paused workers.
-          </Checkbox>
-          <Checkbox checked={credentials()} disabled={!!request()} onChange={setCredentials}>
-            I understand that credentials must be reconnected before starting workers.
-          </Checkbox>
-          <Button
-            onClick={approve}
-            disabled={
-              !!request() || !folders() || !credentials() || summary()?.workers.some((worker) => worker.enabled)
-            }
-          >
-            Review this profile
-          </Button>
-        </Show>
-        <Show when={summary()?.state === "released"}>
-          <p>This profile has been reviewed. Enable each worker when you are ready. Old runs will not replay.</p>
-        </Show>
-        <div class="routines-restore-actions">
-          <Button variant="ghost" size="small" disabled={!!request()} onClick={reload}>
-            Reload review
-          </Button>
-          <Show when={summary()?.state !== "absent" && summary()?.reconnectCredentials}>
+    <>
+      <Show when={error() || (summary() && summary()?.state !== "absent")}>
+        <section class="routines-restore-review" aria-label="Transferred profile review">
+          <h3>Transferred profile</h3>
+          <Show when={error()}>
+            <p class="routines-error" role="alert">
+              {error()}
+            </p>
+          </Show>
+          <Show when={summary()?.state === "held"}>
+            <p>Review the folders and paused workers on this computer. Old runs remain paused and will not replay.</p>
+            <details>
+              <summary>Mapped folders ({summary()?.workspaces.length ?? 0})</summary>
+              <ul>
+                <For each={summary()?.workspaces}>
+                  {(item) => (
+                    <li>
+                      <span>{item.source}</span>
+                      <span>→ {item.destination}</span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </details>
+            <details>
+              <summary>Transferred workers ({summary()?.workers.length ?? 0})</summary>
+              <ul>
+                <For each={summary()?.workers}>
+                  {(worker) => (
+                    <li>
+                      {worker.name} — {worker.enabled ? "Enabled: pause before reviewing" : "Paused"}
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </details>
+            <Checkbox checked={folders()} disabled={!!request()} onChange={setFolders}>
+              I reviewed the mapped folders and paused workers.
+            </Checkbox>
+            <Checkbox checked={credentials()} disabled={!!request()} onChange={setCredentials}>
+              I understand that credentials must be reconnected before starting workers.
+            </Checkbox>
             <Button
-              variant="ghost"
-              size="small"
-              onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "providers" })}
+              onClick={approve}
+              disabled={
+                !!request() || !folders() || !credentials() || summary()?.workers.some((worker) => worker.enabled)
+              }
             >
-              Reconnect credentials
+              Review this profile
             </Button>
           </Show>
-        </div>
-      </section>
-    </Show>
+          <Show when={summary()?.state === "released"}>
+            <p>This profile has been reviewed. Enable each worker when you are ready. Old runs will not replay.</p>
+          </Show>
+          <div class="routines-restore-actions">
+            <Button variant="ghost" size="small" disabled={!!request()} onClick={reload}>
+              Reload review
+            </Button>
+            <Show when={summary()?.state !== "absent" && summary()?.reconnectCredentials}>
+              <Button
+                variant="ghost"
+                size="small"
+                onClick={() => vscode.postMessage({ type: "openSettingsPanel", tab: "providers" })}
+              >
+                Reconnect credentials
+              </Button>
+            </Show>
+          </div>
+        </section>
+      </Show>
+      <ChoicesPanel value={summary()} />
+    </>
   )
 }

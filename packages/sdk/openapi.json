@@ -36451,6 +36451,669 @@
                       "type": "string",
                       "enum": ["absent", "held", "released"]
                     },
+                    "choices": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": ["absent"]
+                            }
+                          },
+                          "required": ["version", "state"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": ["unavailable"]
+                            },
+                            "error": {
+                              "type": "string",
+                              "enum": [
+                                "Saved model choices are unavailable. Repair the saved evidence before applying choices."
+                              ]
+                            }
+                          },
+                          "required": ["version", "state", "error"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": ["ready"]
+                            },
+                            "revision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sources": {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["profile"]
+                                      },
+                                      "preferences": {
+                                        "type": "object",
+                                        "properties": {
+                                          "format": {
+                                            "type": "string",
+                                            "enum": ["raya.profile-preferences"]
+                                          },
+                                          "version": {
+                                            "type": "number",
+                                            "enum": [1]
+                                          },
+                                          "reviewOnly": {
+                                            "type": "boolean",
+                                            "enum": [true]
+                                          },
+                                          "activation": {
+                                            "type": "string",
+                                            "enum": ["held"]
+                                          },
+                                          "config": {
+                                            "type": "object",
+                                            "properties": {
+                                              "model": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "providerID": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 512
+                                                  },
+                                                  "modelID": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 512
+                                                  }
+                                                },
+                                                "required": ["providerID", "modelID"],
+                                                "additionalProperties": false
+                                              },
+                                              "smallModel": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "providerID": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 512
+                                                  },
+                                                  "modelID": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 512
+                                                  }
+                                                },
+                                                "required": ["providerID", "modelID"],
+                                                "additionalProperties": false
+                                              },
+                                              "defaultAgent": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 512
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          "modelState": {
+                                            "type": "object",
+                                            "properties": {
+                                              "models": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "agent": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["agent", "providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "recent": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "favorite": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "variants": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "variant": {
+                                                      "anyOf": [
+                                                        {
+                                                          "type": "string",
+                                                          "minLength": 1,
+                                                          "maxLength": 512
+                                                        },
+                                                        {
+                                                          "type": "string",
+                                                          "enum": [""]
+                                                        }
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID", "variant"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 128
+                                              }
+                                            },
+                                            "required": ["models", "recent", "favorite"],
+                                            "additionalProperties": false
+                                          },
+                                          "extensionState": {
+                                            "type": "object",
+                                            "properties": {
+                                              "recentModels": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "favoriteModels": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "variants": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "agent": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "variant": {
+                                                      "anyOf": [
+                                                        {
+                                                          "type": "string",
+                                                          "minLength": 1,
+                                                          "maxLength": 512
+                                                        },
+                                                        {
+                                                          "type": "string",
+                                                          "enum": [""]
+                                                        }
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID", "variant"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 128
+                                              },
+                                              "expanded": {
+                                                "type": "boolean"
+                                              }
+                                            },
+                                            "required": ["recentModels", "favoriteModels"],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "format",
+                                          "version",
+                                          "reviewOnly",
+                                          "activation",
+                                          "config",
+                                          "modelState",
+                                          "extensionState"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": ["kind", "preferences"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["host"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                                        "format": "uuid"
+                                      },
+                                      "role": {
+                                        "type": "string",
+                                        "enum": ["view", "agent-manager"]
+                                      },
+                                      "revision": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "models": {
+                                        "type": "object",
+                                        "properties": {
+                                          "selected": {
+                                            "type": "object",
+                                            "properties": {
+                                              "providerID": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 512
+                                              },
+                                              "modelID": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 512
+                                              }
+                                            },
+                                            "required": ["providerID", "modelID"],
+                                            "additionalProperties": false
+                                          },
+                                          "recent": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "providerID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "modelID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                }
+                                              },
+                                              "required": ["providerID", "modelID"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 1000
+                                          },
+                                          "favorite": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "providerID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "modelID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                }
+                                              },
+                                              "required": ["providerID", "modelID"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 1000
+                                          },
+                                          "agents": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "agent": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "providerID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "modelID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                }
+                                              },
+                                              "required": ["agent", "providerID", "modelID"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 1000
+                                          },
+                                          "variants": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "agent": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "providerID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "modelID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "variant": {
+                                                  "anyOf": [
+                                                    {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    {
+                                                      "type": "string",
+                                                      "enum": [""]
+                                                    }
+                                                  ]
+                                                }
+                                              },
+                                              "required": ["providerID", "modelID", "variant"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 128
+                                          },
+                                          "expanded": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "required": ["recent", "favorite", "agents"],
+                                        "additionalProperties": false
+                                      },
+                                      "owners": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                                              "format": "uuid"
+                                            },
+                                            "revision": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "models": {
+                                              "type": "object",
+                                              "properties": {
+                                                "selected": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "recent": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "providerID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "modelID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      }
+                                                    },
+                                                    "required": ["providerID", "modelID"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 1000
+                                                },
+                                                "favorite": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "providerID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "modelID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      }
+                                                    },
+                                                    "required": ["providerID", "modelID"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 1000
+                                                },
+                                                "agents": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "agent": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "providerID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "modelID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      }
+                                                    },
+                                                    "required": ["agent", "providerID", "modelID"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 1000
+                                                },
+                                                "variants": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "providerID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "modelID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "variant": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "maxLength": 512
+                                                          },
+                                                          {
+                                                            "type": "string",
+                                                            "enum": [""]
+                                                          }
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": ["providerID", "modelID", "variant"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 128
+                                                },
+                                                "expanded": {
+                                                  "type": "boolean"
+                                                }
+                                              },
+                                              "required": ["recent", "favorite", "agents"],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["id", "revision"],
+                                          "additionalProperties": false
+                                        },
+                                        "maxItems": 256
+                                      }
+                                    },
+                                    "required": ["kind", "id", "role", "revision", "models", "owners"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "maxItems": 65
+                            }
+                          },
+                          "required": ["version", "state", "revision", "sources"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "id": {
                       "type": "string",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
@@ -36605,6 +37268,669 @@
                     "state": {
                       "type": "string",
                       "enum": ["absent", "held", "released"]
+                    },
+                    "choices": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": ["absent"]
+                            }
+                          },
+                          "required": ["version", "state"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": ["unavailable"]
+                            },
+                            "error": {
+                              "type": "string",
+                              "enum": [
+                                "Saved model choices are unavailable. Repair the saved evidence before applying choices."
+                              ]
+                            }
+                          },
+                          "required": ["version", "state", "error"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": ["ready"]
+                            },
+                            "revision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sources": {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["profile"]
+                                      },
+                                      "preferences": {
+                                        "type": "object",
+                                        "properties": {
+                                          "format": {
+                                            "type": "string",
+                                            "enum": ["raya.profile-preferences"]
+                                          },
+                                          "version": {
+                                            "type": "number",
+                                            "enum": [1]
+                                          },
+                                          "reviewOnly": {
+                                            "type": "boolean",
+                                            "enum": [true]
+                                          },
+                                          "activation": {
+                                            "type": "string",
+                                            "enum": ["held"]
+                                          },
+                                          "config": {
+                                            "type": "object",
+                                            "properties": {
+                                              "model": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "providerID": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 512
+                                                  },
+                                                  "modelID": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 512
+                                                  }
+                                                },
+                                                "required": ["providerID", "modelID"],
+                                                "additionalProperties": false
+                                              },
+                                              "smallModel": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "providerID": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 512
+                                                  },
+                                                  "modelID": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 512
+                                                  }
+                                                },
+                                                "required": ["providerID", "modelID"],
+                                                "additionalProperties": false
+                                              },
+                                              "defaultAgent": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 512
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          "modelState": {
+                                            "type": "object",
+                                            "properties": {
+                                              "models": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "agent": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["agent", "providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "recent": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "favorite": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "variants": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "variant": {
+                                                      "anyOf": [
+                                                        {
+                                                          "type": "string",
+                                                          "minLength": 1,
+                                                          "maxLength": 512
+                                                        },
+                                                        {
+                                                          "type": "string",
+                                                          "enum": [""]
+                                                        }
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID", "variant"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 128
+                                              }
+                                            },
+                                            "required": ["models", "recent", "favorite"],
+                                            "additionalProperties": false
+                                          },
+                                          "extensionState": {
+                                            "type": "object",
+                                            "properties": {
+                                              "recentModels": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "favoriteModels": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 1000
+                                              },
+                                              "variants": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "agent": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "variant": {
+                                                      "anyOf": [
+                                                        {
+                                                          "type": "string",
+                                                          "minLength": 1,
+                                                          "maxLength": 512
+                                                        },
+                                                        {
+                                                          "type": "string",
+                                                          "enum": [""]
+                                                        }
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID", "variant"],
+                                                  "additionalProperties": false
+                                                },
+                                                "maxItems": 128
+                                              },
+                                              "expanded": {
+                                                "type": "boolean"
+                                              }
+                                            },
+                                            "required": ["recentModels", "favoriteModels"],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "format",
+                                          "version",
+                                          "reviewOnly",
+                                          "activation",
+                                          "config",
+                                          "modelState",
+                                          "extensionState"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": ["kind", "preferences"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["host"]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                                        "format": "uuid"
+                                      },
+                                      "role": {
+                                        "type": "string",
+                                        "enum": ["view", "agent-manager"]
+                                      },
+                                      "revision": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "models": {
+                                        "type": "object",
+                                        "properties": {
+                                          "selected": {
+                                            "type": "object",
+                                            "properties": {
+                                              "providerID": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 512
+                                              },
+                                              "modelID": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 512
+                                              }
+                                            },
+                                            "required": ["providerID", "modelID"],
+                                            "additionalProperties": false
+                                          },
+                                          "recent": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "providerID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "modelID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                }
+                                              },
+                                              "required": ["providerID", "modelID"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 1000
+                                          },
+                                          "favorite": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "providerID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "modelID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                }
+                                              },
+                                              "required": ["providerID", "modelID"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 1000
+                                          },
+                                          "agents": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "agent": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "providerID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "modelID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                }
+                                              },
+                                              "required": ["agent", "providerID", "modelID"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 1000
+                                          },
+                                          "variants": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "agent": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "providerID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "modelID": {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 512
+                                                },
+                                                "variant": {
+                                                  "anyOf": [
+                                                    {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    {
+                                                      "type": "string",
+                                                      "enum": [""]
+                                                    }
+                                                  ]
+                                                }
+                                              },
+                                              "required": ["providerID", "modelID", "variant"],
+                                              "additionalProperties": false
+                                            },
+                                            "maxItems": 128
+                                          },
+                                          "expanded": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "required": ["recent", "favorite", "agents"],
+                                        "additionalProperties": false
+                                      },
+                                      "owners": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                                              "format": "uuid"
+                                            },
+                                            "revision": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 9007199254740991
+                                            },
+                                            "models": {
+                                              "type": "object",
+                                              "properties": {
+                                                "selected": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "providerID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    },
+                                                    "modelID": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 512
+                                                    }
+                                                  },
+                                                  "required": ["providerID", "modelID"],
+                                                  "additionalProperties": false
+                                                },
+                                                "recent": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "providerID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "modelID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      }
+                                                    },
+                                                    "required": ["providerID", "modelID"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 1000
+                                                },
+                                                "favorite": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "providerID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "modelID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      }
+                                                    },
+                                                    "required": ["providerID", "modelID"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 1000
+                                                },
+                                                "agents": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "agent": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "providerID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "modelID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      }
+                                                    },
+                                                    "required": ["agent", "providerID", "modelID"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 1000
+                                                },
+                                                "variants": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "providerID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "modelID": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 512
+                                                      },
+                                                      "variant": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "string",
+                                                            "minLength": 1,
+                                                            "maxLength": 512
+                                                          },
+                                                          {
+                                                            "type": "string",
+                                                            "enum": [""]
+                                                          }
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": ["providerID", "modelID", "variant"],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "maxItems": 128
+                                                },
+                                                "expanded": {
+                                                  "type": "boolean"
+                                                }
+                                              },
+                                              "required": ["recent", "favorite", "agents"],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": ["id", "revision"],
+                                          "additionalProperties": false
+                                        },
+                                        "maxItems": 256
+                                      }
+                                    },
+                                    "required": ["kind", "id", "role", "revision", "models", "owners"],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "maxItems": 65
+                            }
+                          },
+                          "required": ["version", "state", "revision", "sources"],
+                          "additionalProperties": false
+                        }
+                      ]
                     },
                     "id": {
                       "type": "string",
@@ -36847,6 +38173,31 @@
                             },
                             "minItems": 1,
                             "maxItems": 20
+                          },
+                          "final": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["file"]
+                              },
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 8192
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": ["kind", "path", "bytes", "sha256"],
+                            "additionalProperties": false
                           }
                         },
                         "required": ["destination", "description", "criteria"],
@@ -37308,6 +38659,31 @@
                           },
                           "minItems": 1,
                           "maxItems": 20
+                        },
+                        "final": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["file"]
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 8192
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": ["kind", "path", "bytes", "sha256"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["destination", "description", "criteria"],
@@ -37732,6 +39108,31 @@
                         },
                         "minItems": 1,
                         "maxItems": 20
+                      },
+                      "final": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["file"]
+                          },
+                          "path": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 8192
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": ["kind", "path", "bytes", "sha256"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["destination", "description", "criteria"],
@@ -38596,6 +39997,31 @@
                                     },
                                     "minItems": 1,
                                     "maxItems": 20
+                                  },
+                                  "final": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["file"]
+                                      },
+                                      "path": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 4096
+                                      },
+                                      "bytes": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 8192
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": ["kind", "path", "bytes", "sha256"],
+                                    "additionalProperties": false
                                   }
                                 },
                                 "required": ["destination", "description", "criteria"],
@@ -39078,6 +40504,31 @@
                           },
                           "minItems": 1,
                           "maxItems": 20
+                        },
+                        "final": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["file"]
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 8192
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": ["kind", "path", "bytes", "sha256"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["destination", "description", "criteria"],
@@ -39512,6 +40963,31 @@
                         },
                         "minItems": 1,
                         "maxItems": 20
+                      },
+                      "final": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["file"]
+                          },
+                          "path": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 8192
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": ["kind", "path", "bytes", "sha256"],
+                        "additionalProperties": false
                       }
                     },
                     "required": ["destination", "description", "criteria"],
@@ -39822,6 +41298,31 @@
                             },
                             "minItems": 1,
                             "maxItems": 20
+                          },
+                          "final": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["file"]
+                              },
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 8192
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": ["kind", "path", "bytes", "sha256"],
+                            "additionalProperties": false
                           }
                         },
                         "required": ["destination", "description", "criteria"],
@@ -40105,6 +41606,31 @@
                           },
                           "minItems": 1,
                           "maxItems": 20
+                        },
+                        "final": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["file"]
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 8192
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": ["kind", "path", "bytes", "sha256"],
+                          "additionalProperties": false
                         }
                       },
                       "required": ["destination", "description", "criteria"],
@@ -40845,8 +42371,7 @@
                               "items": {
                                 "type": "string",
                                 "pattern": "^prt"
-                              },
-                              "minItems": 1
+                              }
                             },
                             "dispatchID": {
                               "type": "string",
@@ -40887,6 +42412,104 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "delivery": {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "number",
+                              "enum": [1]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["passed", "mismatch", "unavailable"]
+                            },
+                            "reason": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "at": {
+                              "type": "number"
+                            },
+                            "contract": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["file"]
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4096
+                                },
+                                "bytes": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 8192
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": ["kind", "path", "bytes", "sha256"],
+                              "additionalProperties": false
+                            },
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "messageID": {
+                                  "type": "string",
+                                  "pattern": "^msg"
+                                },
+                                "partID": {
+                                  "type": "string",
+                                  "pattern": "^prt"
+                                },
+                                "callID": {
+                                  "type": "string"
+                                },
+                                "path": {
+                                  "type": "string"
+                                },
+                                "canonical": {
+                                  "type": "string"
+                                },
+                                "bytes": {
+                                  "type": "integer"
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": ["messageID", "partID", "callID", "path", "canonical", "bytes", "sha256"],
+                              "additionalProperties": false
+                            },
+                            "final": {
+                              "type": "object",
+                              "properties": {
+                                "messageID": {
+                                  "type": "string",
+                                  "pattern": "^msg"
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "bytes": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["messageID", "sha256", "bytes"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["version", "status", "reason", "at", "contract", "final"],
+                          "additionalProperties": false
                         },
                         "verification": {
                           "type": "object",
@@ -41489,8 +43112,7 @@
                                 "items": {
                                   "type": "string",
                                   "pattern": "^prt"
-                                },
-                                "minItems": 1
+                                }
                               },
                               "dispatchID": {
                                 "type": "string",
@@ -41531,6 +43153,104 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "delivery": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": ["passed", "mismatch", "unavailable"]
+                              },
+                              "reason": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "at": {
+                                "type": "number"
+                              },
+                              "contract": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["file"]
+                                  },
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                  },
+                                  "bytes": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 8192
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": ["kind", "path", "bytes", "sha256"],
+                                "additionalProperties": false
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "partID": {
+                                    "type": "string",
+                                    "pattern": "^prt"
+                                  },
+                                  "callID": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "canonical": {
+                                    "type": "string"
+                                  },
+                                  "bytes": {
+                                    "type": "integer"
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": ["messageID", "partID", "callID", "path", "canonical", "bytes", "sha256"],
+                                "additionalProperties": false
+                              },
+                              "final": {
+                                "type": "object",
+                                "properties": {
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "bytes": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": ["messageID", "sha256", "bytes"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": ["version", "status", "reason", "at", "contract", "final"],
+                            "additionalProperties": false
                           },
                           "verification": {
                             "type": "object",
@@ -42009,8 +43729,7 @@
                                     "items": {
                                       "type": "string",
                                       "pattern": "^prt"
-                                    },
-                                    "minItems": 1
+                                    }
                                   },
                                   "dispatchID": {
                                     "type": "string",
@@ -42051,6 +43770,112 @@
                                 "items": {
                                   "type": "string"
                                 }
+                              },
+                              "delivery": {
+                                "type": "object",
+                                "properties": {
+                                  "version": {
+                                    "type": "number",
+                                    "enum": [1]
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": ["passed", "mismatch", "unavailable"]
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 256
+                                  },
+                                  "at": {
+                                    "type": "number"
+                                  },
+                                  "contract": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": ["file"]
+                                      },
+                                      "path": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 4096
+                                      },
+                                      "bytes": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 8192
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": ["kind", "path", "bytes", "sha256"],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "messageID": {
+                                        "type": "string",
+                                        "pattern": "^msg"
+                                      },
+                                      "partID": {
+                                        "type": "string",
+                                        "pattern": "^prt"
+                                      },
+                                      "callID": {
+                                        "type": "string"
+                                      },
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "canonical": {
+                                        "type": "string"
+                                      },
+                                      "bytes": {
+                                        "type": "integer"
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "messageID",
+                                      "partID",
+                                      "callID",
+                                      "path",
+                                      "canonical",
+                                      "bytes",
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "final": {
+                                    "type": "object",
+                                    "properties": {
+                                      "messageID": {
+                                        "type": "string",
+                                        "pattern": "^msg"
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "bytes": {
+                                        "type": "integer",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "required": ["messageID", "sha256", "bytes"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["version", "status", "reason", "at", "contract", "final"],
+                                "additionalProperties": false
                               },
                               "verification": {
                                 "type": "object",
@@ -42673,8 +44498,7 @@
                                           "items": {
                                             "type": "string",
                                             "pattern": "^prt"
-                                          },
-                                          "minItems": 1
+                                          }
                                         },
                                         "dispatchID": {
                                           "type": "string",
@@ -42715,6 +44539,112 @@
                                       "items": {
                                         "type": "string"
                                       }
+                                    },
+                                    "delivery": {
+                                      "type": "object",
+                                      "properties": {
+                                        "version": {
+                                          "type": "number",
+                                          "enum": [1]
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": ["passed", "mismatch", "unavailable"]
+                                        },
+                                        "reason": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 256
+                                        },
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "contract": {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "enum": ["file"]
+                                            },
+                                            "path": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 4096
+                                            },
+                                            "bytes": {
+                                              "type": "integer",
+                                              "minimum": 0,
+                                              "maximum": 8192
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            }
+                                          },
+                                          "required": ["kind", "path", "bytes", "sha256"],
+                                          "additionalProperties": false
+                                        },
+                                        "source": {
+                                          "type": "object",
+                                          "properties": {
+                                            "messageID": {
+                                              "type": "string",
+                                              "pattern": "^msg"
+                                            },
+                                            "partID": {
+                                              "type": "string",
+                                              "pattern": "^prt"
+                                            },
+                                            "callID": {
+                                              "type": "string"
+                                            },
+                                            "path": {
+                                              "type": "string"
+                                            },
+                                            "canonical": {
+                                              "type": "string"
+                                            },
+                                            "bytes": {
+                                              "type": "integer"
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            }
+                                          },
+                                          "required": [
+                                            "messageID",
+                                            "partID",
+                                            "callID",
+                                            "path",
+                                            "canonical",
+                                            "bytes",
+                                            "sha256"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "final": {
+                                          "type": "object",
+                                          "properties": {
+                                            "messageID": {
+                                              "type": "string",
+                                              "pattern": "^msg"
+                                            },
+                                            "sha256": {
+                                              "type": "string",
+                                              "pattern": "^[a-f0-9]{64}$"
+                                            },
+                                            "bytes": {
+                                              "type": "integer",
+                                              "minimum": 0
+                                            }
+                                          },
+                                          "required": ["messageID", "sha256", "bytes"],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": ["version", "status", "reason", "at", "contract", "final"],
+                                      "additionalProperties": false
                                     },
                                     "verification": {
                                       "type": "object",
@@ -42976,6 +44906,31 @@
                               },
                               "minItems": 1,
                               "maxItems": 20
+                            },
+                            "final": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["file"]
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4096
+                                },
+                                "bytes": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 8192
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": ["kind", "path", "bytes", "sha256"],
+                              "additionalProperties": false
                             }
                           },
                           "required": ["destination", "description", "criteria"],
@@ -45598,8 +47553,7 @@
                                 "items": {
                                   "type": "string",
                                   "pattern": "^prt"
-                                },
-                                "minItems": 1
+                                }
                               },
                               "dispatchID": {
                                 "type": "string",
@@ -45640,6 +47594,104 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "delivery": {
+                            "type": "object",
+                            "properties": {
+                              "version": {
+                                "type": "number",
+                                "enum": [1]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": ["passed", "mismatch", "unavailable"]
+                              },
+                              "reason": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "at": {
+                                "type": "number"
+                              },
+                              "contract": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["file"]
+                                  },
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                  },
+                                  "bytes": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 8192
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": ["kind", "path", "bytes", "sha256"],
+                                "additionalProperties": false
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "partID": {
+                                    "type": "string",
+                                    "pattern": "^prt"
+                                  },
+                                  "callID": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "canonical": {
+                                    "type": "string"
+                                  },
+                                  "bytes": {
+                                    "type": "integer"
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": ["messageID", "partID", "callID", "path", "canonical", "bytes", "sha256"],
+                                "additionalProperties": false
+                              },
+                              "final": {
+                                "type": "object",
+                                "properties": {
+                                  "messageID": {
+                                    "type": "string",
+                                    "pattern": "^msg"
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "bytes": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": ["messageID", "sha256", "bytes"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": ["version", "status", "reason", "at", "contract", "final"],
+                            "additionalProperties": false
                           },
                           "verification": {
                             "type": "object",

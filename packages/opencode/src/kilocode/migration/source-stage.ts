@@ -19,6 +19,11 @@ const phases = Object.freeze({
   "capture-namespaces": "RAYA_SOURCE_CAPTURE_NAMESPACES_REFUSED",
   "capture-artifacts": "RAYA_SOURCE_CAPTURE_ARTIFACTS_REFUSED",
   "capture-planning": "RAYA_SOURCE_CAPTURE_PLANNING_REFUSED",
+  "capture-offline-selection": "RAYA_SOURCE_CAPTURE_OFFLINE_SELECTION_REFUSED",
+  "capture-held-image": "RAYA_SOURCE_CAPTURE_HELD_IMAGE_REFUSED",
+  "capture-working-copy": "RAYA_SOURCE_CAPTURE_WORKING_COPY_REFUSED",
+  "capture-workspaces": "RAYA_SOURCE_CAPTURE_WORKSPACES_REFUSED",
+  "capture-self-heal": "RAYA_SOURCE_CAPTURE_SELF_HEAL_REFUSED",
   "capture-metadata": "RAYA_SOURCE_CAPTURE_METADATA_REFUSED",
   "capture-payload": "RAYA_SOURCE_CAPTURE_PAYLOAD_REFUSED",
   "capture-config": "RAYA_SOURCE_CAPTURE_CONFIG_REFUSED",
@@ -63,4 +68,15 @@ export async function checked<T>(phase: Phase, action: () => Promise<T>): Promis
   } catch (cause) {
     throw staged(cause, phase)
   }
+}
+
+/** A held reader cannot retire its context until every admitted sibling has joined. */
+export async function joined<A, B>(left: Promise<A>, right: Promise<B>): Promise<[A, B]> {
+  const results = await Promise.allSettled([left, right])
+  const errors = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+  if (errors.length === 1) throw errors[0]
+  if (errors.length) throw new AggregateError(errors, "Source readers refused")
+  if (results[0].status !== "fulfilled" || results[1].status !== "fulfilled")
+    throw new Error("Source readers did not join")
+  return [results[0].value, results[1].value]
 }

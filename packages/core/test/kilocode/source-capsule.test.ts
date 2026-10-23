@@ -64,6 +64,7 @@ test("signed capsule preserves safe historical owner metadata and verifies origi
     variants: [{ providerID: "local", modelID: "model-a", variant: "high" }],
     expanded: false,
   }
+  const scoped = { agent: "build", providerID: "local", modelID: "model-a", variant: "" }
   const payload = PayloadSchema.parse({
     format: "raya.host-capsule",
     version: 1,
@@ -72,7 +73,7 @@ test("signed capsule preserves safe historical owner metadata and verifies origi
         id: randomUUID(),
         role: "view",
         revision: 2,
-        models,
+        models: { ...models, variants: [...models.variants, scoped] },
         owners: [
           {
             id: randomUUID(),
@@ -85,6 +86,32 @@ test("signed capsule preserves safe historical owner metadata and verifies origi
       },
     ],
   })
+  expect(payload.hosts[0].models.variants).toEqual([...models.variants, scoped])
+  for (const variant of [scoped, { ...models.variants[0], agent: undefined }]) {
+    expect(
+      PayloadSchema.safeParse({
+        ...payload,
+        hosts: [
+          {
+            ...payload.hosts[0],
+            owners: [{ ...payload.hosts[0].owners[0], models: { ...models, variants: [variant] } }],
+          },
+        ],
+      }).success,
+    ).toBe(false)
+  }
+  const legacy = PayloadSchema.parse({
+    ...payload,
+    hosts: [
+      {
+        ...payload.hosts[0],
+        models: { recent: [], favorite: [], agents: [] },
+        owners: [{ ...payload.hosts[0].owners[0], models: { recent: [], favorite: [], agents: [] } }],
+      },
+    ],
+  })
+  expect(legacy.hosts[0].models.variants).toBeUndefined()
+  expect(legacy.hosts[0].owners[0].models?.variants).toBeUndefined()
   const descriptor = await stage(ticket, { id, source, data, payload })
   const authorize = async () => ({
     policy,

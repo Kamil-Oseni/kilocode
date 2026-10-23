@@ -53,6 +53,43 @@ export class HostPublications {
     return job
   }
 
+  /** A serialized group CAS; refusal before update never poisons retirement. */
+  guarded(current: () => boolean, expected: () => boolean, patch: Partial<Record<Key, unknown>>) {
+    if (this.closed) return Promise.resolve({ accepted: false })
+    const data = structuredClone(patch)
+    if (Object.keys(data).some((key) => !keys.has(key)))
+      return Promise.reject(new Error("Raya host preference key does not participate"))
+    const job = this.tail.then(async () => {
+      if (!current() || !expected()) return { accepted: false }
+      for (const [key, value] of Object.entries(data)) {
+        // A replacement during a native Thenable is uncertain; retain prior writes.
+        if (!current()) throw new Error("Raya host preference request changed during publication")
+        await this.store.update(key, structuredClone(value))
+        this.revision++
+      }
+      return { accepted: true }
+    })
+    this.tail = job.then(
+      () => undefined,
+      (err) => {
+        this.errors.push(err)
+      },
+    )
+    return job
+  }
+
+  read<T>(body: () => T): Promise<T> {
+    if (this.closed) return Promise.reject(new Error("Raya host preference publication is retired"))
+    const job = this.tail.then(body)
+    this.tail = job.then(
+      () => undefined,
+      (err) => {
+        this.errors.push(err)
+      },
+    )
+    return job
+  }
+
   /** Terminal for this realized controller only; never establishes cross-window or full-profile closure. */
   retire(): Promise<void> {
     if (this.retirement) return this.retirement

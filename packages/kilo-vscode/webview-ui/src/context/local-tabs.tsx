@@ -34,6 +34,8 @@ import {
   promotePendingDraftDiscard,
 } from "../utils/draft-store"
 import { moveTab, reorderTabs } from "../utils/tab-order"
+import { pendingOrigins } from "../utils/pending-origins"
+import type { DraftTarget } from "../../../src/shared/composer-drafts-messages"
 import { durableDrafts } from "../utils/durable-drafts"
 
 interface LocalTabsState extends Record<string, unknown> {
@@ -45,6 +47,10 @@ interface LocalTabsValue {
   ids: Accessor<string[]>
   active: Accessor<string | undefined>
   pending: Accessor<string | undefined>
+  draft: Accessor<DraftTarget | undefined>
+  origins: Accessor<Array<{ id: string; target: DraftTarget; label: string }>>
+  choose: (id: string) => boolean
+  source: (id: string, sessionID: string) => DraftTarget | undefined
   add: (id?: string) => string
   open: (id: string) => void
   promote: (draft: string, id: string) => boolean
@@ -70,6 +76,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   const pending = () => `${PENDING_TAB_PREFIX}${crypto.randomUUID()}`
   const init = restoreTabs(saved?.sidebarSessionTabIDs, saved?.sidebarActiveSessionTabID, pending, isPendingTab, true)
   const durable = durableDrafts(vscode)
+  const origins = pendingOrigins(durable)
   const [catalog, setCatalog] = createSignal(0)
   const unsubscribe = durable.subscribe(() => setCatalog((value) => value + 1))
   onCleanup(unsubscribe)
@@ -103,6 +110,9 @@ export const LocalTabsProvider: ParentComponent = (props) => {
     discovery = owner
     void Promise.all([durable.list("sidebar:new-task"), durable.list("sidebar:fallback")])
       .then((groups) => {
+        if (durable.owner("sidebar:new-task") !== owner) return
+        origins.record(groups.flat())
+        setCatalog((value) => value + 1)
         const pending = groups
           .flat()
           .flatMap((entry) =>
@@ -116,6 +126,28 @@ export const LocalTabsProvider: ParentComponent = (props) => {
       .catch(() => {
         if (discovery === owner) discovery = undefined
       })
+  })
+  const draft = () => {
+    catalog()
+    return origins.target(active())
+  }
+  const choices = () => {
+    catalog()
+    const id = active()
+    return id ? origins.choices(id) : []
+  }
+  const choose = (value: string) => {
+    const id = active()
+    const target = draft()
+    if (!id || session.submitting() || isPendingSend(id) || (target && durable.view(target).locked)) return false
+    if (!origins.choose(id, value)) return false
+    setCatalog((value) => value + 1)
+    return true
+  }
+  createEffect(() => {
+    catalog()
+    const remaining = origins.pending()
+    setIds((current) => [...new Set([...current, ...remaining])])
   })
   const activePending = createMemo(() => {
     const id = active()
@@ -135,6 +167,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
 
   const promote = (draft: string, id: string) => {
     if (active() !== draft || !isPendingTab(draft) || session.currentSessionID() !== id) return false
+    origins.created(draft, id)
     apply(replacePendingTab(current(), draft, id))
     return true
   }
@@ -223,6 +256,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
       }
       if (message.type === "sessionCreated") {
         if (message.draftID && promotePendingDraftDiscard(message.draftID, message.session.id)) return
+        if (message.draftID) origins.created(message.draftID, message.session.id)
         const next = tabsForCreatedSession(current(), message.session.id, message.draftID, message.activate)
         if (!next) return
         fresh.add(message.session.id)
@@ -263,6 +297,10 @@ export const LocalTabsProvider: ParentComponent = (props) => {
         ids,
         active,
         pending: activePending,
+        draft,
+        origins: choices,
+        choose,
+        source: origins.source,
         add,
         open,
         promote,

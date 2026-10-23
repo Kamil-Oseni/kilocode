@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -17,6 +17,8 @@ await Effect.runPromise(
   Effect.gen(function* () {
     const storage = yield* Storage.Service
     const database = yield* Database.Service
+    const rows = yield* database.db.all<{ name: string; file: string }>("PRAGMA database_list")
+    assert.equal(path.normalize(rows.find((row) => row.name === "main")?.file ?? ""), path.normalize(file))
     const voice = yield* make({
       storage,
       database,
@@ -35,8 +37,11 @@ await Effect.runPromise(
     )
   }).pipe(
     Effect.scoped,
-    Effect.provide(Database.layerFromPath(file)),
-    Effect.provide(Storage.layerFromDir(path.join(Global.Path.data, "storage"))),
+    Effect.provide(
+      Storage.layerWithDatabase(path.join(Global.Path.data, "storage")).pipe(
+        Layer.provideMerge(Layer.fresh(Database.layerFromPath(file))),
+      ),
+    ),
     Effect.provide(LayerNode.compile(LayerNode.group([FSUtil.node, Git.node, CrossSpawnSpawner.node]))),
   ),
 )

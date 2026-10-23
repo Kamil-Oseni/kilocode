@@ -17,6 +17,7 @@ import {
   untrack,
   type Component,
 } from "solid-js"
+import { Select } from "@kilocode/kilo-ui/select"
 import { Button } from "@kilocode/kilo-ui/button"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
@@ -93,6 +94,7 @@ import {
   finishPendingSend,
   imageDrafts,
   isPendingDraftDiscarded,
+  isPendingSend,
   isSessionDraftDiscarded,
   reviewDrafts,
   savePromptDraft,
@@ -294,7 +296,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let uploadRef: HTMLInputElement | undefined // raya_change - explicit file attachment picker
   let slashDropdownRef: HTMLDivElement | undefined
 
-  const boxKey = () => props.boxId ?? "prompt:default"
+  const original = () => tabs?.draft()
+  const unresolved = () => (tabs?.origins().length ?? 0) > 0 && !original()
+  const boxKey = () => original()?.box ?? props.boxId ?? "prompt:default"
   createEffect(() => {
     if (boxKey().startsWith("agent-manager:")) return
     durable.context(boxKey(), server.workspaceDirectory() || "unassigned-root")
@@ -304,8 +308,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     sessionDraftKey(session.currentSessionID()) ??
     pendingDraftKey(props.pendingSessionID ?? session.draftSessionID()) ??
     pendingDraftKey(vacant)!
-  const draftKey = () => scopeDraftKey(boxKey(), rawKey())
+  const draftKey = () => original()?.key ?? scopeDraftKey(boxKey(), rawKey())
   const identity = (): DraftTarget => {
+    const source = original()
+    if (source) return { ...source }
     const current = session.currentSessionID()
     const sessionID = current?.startsWith("cloud:") ? undefined : current
     const pendingID = current?.startsWith("cloud:")
@@ -327,12 +333,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const scope = createMemo(
     () => {
       draftStatus()
-      return { key: draftKey(), owner: durable.view(identity()).owner, context: durable.partition(boxKey()) }
+      return {
+        key: draftKey(),
+        owner: durable.view(identity()).owner,
+        context: durable.partition(boxKey()),
+        unresolved: unresolved(),
+      }
     },
     undefined,
     {
       equals: (left, right) =>
-        left?.key === right?.key && left?.owner === right?.owner && left?.context === right?.context,
+        left?.key === right?.key &&
+        left?.owner === right?.owner &&
+        left?.context === right?.context &&
+        left?.unresolved === right?.unresolved,
     },
   )
   const speechScope = createMemo(
@@ -477,6 +491,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
   const choicesReady = () => {
     draftStatus()
+    if (unresolved()) return false
     return !!durable.owner(boxKey()) && durable.view(identity()).loaded
   }
   const discardDraft = async () => {
@@ -669,6 +684,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   createEffect(
     on(scope, (value, previous) => {
       projected = undefined
+      if (unresolved()) {
+        setText("")
+        setReviewComments([])
+        imageAttach.replace([])
+        setHydrating(true)
+        if (textareaRef) textareaRef.value = ""
+        return
+      }
+      if (original()) restored.delete(JSON.stringify([value.owner, value.key]))
       const key = value.key
       const prev = previous?.owner === value.owner ? previous?.key : undefined
       setHydrating(true)
@@ -706,6 +730,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
   createEffect(() => {
     draftStatus()
+    if (unresolved()) return
     const target = identity()
     const state = durable.view(target)
     if (!state.loaded) return
@@ -937,7 +962,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const isBusy = () =>
     isPromptBusy(session.status(), !!props.suggesting?.(), !!props.questioning?.(), session.submitting())
-  const isDisabled = () => !server.isConnected()
+  const isDisabled = () => !server.isConnected() || unresolved()
   const canUseSpeech = () =>
     (!!voice.settings().sttEndpoint && voice.settings().hasSttKey) ||
     canUseSpeechToText(config(), provider.authStates()) // raya_change - configured STT takes precedence
@@ -1190,15 +1215,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (message.type === "sessionCreated") {
       if (message.draftID && session.promoteCreation?.(message.draftID, message.session.id) === false) return
-      if (message.draftID) durable.created(message.draftID, message.session.id, boxKey())
+      const source = message.draftID ? tabs?.source(message.draftID, message.session.id) : undefined
+      const box = source?.box ?? boxKey()
+      if (message.draftID) durable.created(message.draftID, message.session.id, box)
       const raw = createdDraftKey(message.draftID, sandboxRequest(undefined) !== undefined)
       if (raw) {
-        const source = scopeDraftKey(boxKey(), raw)
-        const target = scopeDraftKey(boxKey(), sessionDraftKey(message.session.id))
-        if (source === draftKey()) saveDraft(source, text(), reviewComments(), imageAttach.images())
+        const from = source?.key ?? scopeDraftKey(box, raw)
+        const target = scopeDraftKey(box, sessionDraftKey(message.session.id))
+        if (from === draftKey()) saveDraft(from, text(), reviewComments(), imageAttach.images())
         movePromptDraft(
           { text: drafts, comments: reviewDrafts, images: imageDrafts, scrolls: scrollDrafts },
-          source,
+          from,
           target,
         )
       }
@@ -1953,6 +1980,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   // raya_change start - Milestone A keeps /goal parsing outside the already-complex send pipeline
   const handleSend = async (current?: () => boolean) => {
+    if (isDisabled()) return
     const draft = text().trim()
     if (runGoalCommand(draft)) return
     await sendDraft(draft, current)
@@ -1968,6 +1996,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onDragLeave={imageAttach.handleDragLeave}
       onDrop={imageAttach.handleDrop}
     >
+      <Show when={(tabs?.origins().length ?? 0) > 1 || unresolved()}>
+        <Card variant="info">
+          <p>
+            More than one saved composer shares this draft tab. Choose the original composer to restore its exact draft.
+          </p>
+          <Select
+            options={tabs?.origins() ?? []}
+            current={tabs
+              ?.origins()
+              .find((row) => row.target.key === original()?.key && row.target.box === original()?.box)}
+            value={(row) => row.id}
+            label={(row) => row.label}
+            placeholder="Choose an original saved composer"
+            triggerProps={{ "aria-label": "Original saved composer" }}
+            disabled={session.submitting() || isPendingSend(sid() ?? "") || durable.view(identity()).locked}
+            onSelect={(row) => {
+              if (row) tabs?.choose(row.id)
+            }}
+          />
+        </Card>
+      </Show>
       <NativeVoiceControls end={toggleVoice} />
       <NativeVoiceRecovery />
       <Show when={recovery.blocked()}>

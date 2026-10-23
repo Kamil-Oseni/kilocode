@@ -20,6 +20,7 @@ import { validateMemory } from "../../src/kilocode/migration/profile-memory-corr
 import { validateComposer } from "../../src/kilocode/migration/profile-composer-correspondence"
 import { DraftSchemas } from "../../src/kilocode/session/composer-codec"
 import { MemoryPaths } from "@kilocode/kilo-memory/paths"
+import { read as bindings } from "@opencode-ai/core/kilocode/profile-models"
 
 test.skipIf(process.platform !== "win32")(
   "actual export producer joins exact private receiver, immutable image and signed encrypted payload",
@@ -161,8 +162,15 @@ test.skipIf(process.platform !== "win32")(
     const head = await git("rev-parse", "HEAD")
     const state = path.join(root, "state", "historical-model.json")
     const model = { providerID: "qwen-local", modelID: "qwen3-raya-32k" }
-    const models = { selected: model, recent: [model], favorite: [model], agents: [{ ...model, agent: "build" }] }
-    await writeFile(state, JSON.stringify(models))
+    const raw = {
+      model: { auto: model, ask: model, build: model },
+      recent: [model],
+      favorite: [model],
+      variant: { "qwen-local/qwen3-raya-32k": "high" },
+      retained: "PRIVATE_RAW_MODEL_FIELD",
+    }
+    const models = bindings(raw)
+    await writeFile(state, JSON.stringify(raw))
     const contexts = new ProjectContexts({
       workspaceRoot: () => primary,
       registry: { list: () => [], get: () => undefined },
@@ -659,7 +667,8 @@ test.skipIf(process.platform !== "win32")(
       expect(bundle.host!.hosts[0].contexts[0].root?.path).toBe(absent)
       expect(await Bun.file(absent).exists()).toBe(false)
       expect(() => owner.addSession("late-after-capture", null)).toThrow("retired")
-      expect(JSON.parse(await readFile(state, "utf8"))).toEqual(models)
+      expect(JSON.parse(await readFile(state, "utf8"))).toEqual(raw)
+      expect(JSON.stringify(bundle.host)).not.toContain(raw.retained)
       await assert.rejects(unseal(await Bun.file(output).text(), password + "wrong"))
       const database = new Database(file, { readonly: true })
       try {

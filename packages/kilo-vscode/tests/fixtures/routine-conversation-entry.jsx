@@ -1,6 +1,7 @@
 import "@kilocode/kilo-ui/styles"
 import "../../webview-ui/src/styles/eden.css"
 import "../../webview-ui/src/styles/chat.css"
+import { beginPendingSend, finishPendingSend } from "../../webview-ui/src/utils/draft-store"
 import App from "../../webview-ui/src/App"
 import { render } from "solid-js/web"
 
@@ -51,12 +52,183 @@ const catalog = async (mode = "valid") => {
   if (response.status === 204) return
   emit(await response.json())
 }
+// External restored-content wire only: the actual App, LocalTabs and PromptInput own discovery and hydration.
+const draftBox = new URLSearchParams(location.search).get("draftBox")
+const same = new URLSearchParams(location.search).has("sameMode")
+const draftID = "sidebar-pending:restored-original"
+const draft = draftBox
+  ? {
+      identity: {
+        workspace: directory,
+        projectID: "project",
+        box: draftBox,
+        key: `${draftBox}:pending:${draftID}`,
+        pendingID: draftID,
+      },
+      token: { generation: crypto.randomUUID(), revision: 1 },
+      content: {
+        text: "  Restored unsent draft — café 日本語.  ",
+        comments: [],
+        images: [],
+        scroll: 0,
+        selection: { start: 0, end: 0 },
+        agent: "auto",
+      },
+      mutation: "original-unsent",
+      digest: "",
+    }
+  : undefined
+const entries =
+  draftBox === "collision"
+    ? ["sidebar:new-task", "sidebar:fallback"].map((box, index) => ({
+        ...structuredClone(draft),
+        identity: { ...draft.identity, box, key: `${box}:pending:${draftID}` },
+        content: {
+          ...draft.content,
+          text: index ? "  Fallback draft — 二番 😀.  " : "  Primary draft — 一番 café.  ",
+          agent: index && !same ? "plan" : "auto",
+          model: { providerID: "local", modelID: index ? "second" : "first" },
+          variant: index ? "high" : "low",
+        },
+      }))
+    : draft
+      ? [draft]
+      : []
+const digest = Promise.all(
+  entries.map(async (entry) => {
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(entry.content)))
+    entry.digest = [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+  }),
+)
+window.restoredDraft = {
+  entry: draft,
+  entries,
+  messages,
+  hold: () => beginPendingSend(draftID),
+  release: () => finishPendingSend(draftID),
+}
+const composers = (message) => {
+  if (!draft) return false
+  if (message.type === "composerDraftPane") {
+    if (message.active)
+      queueMicrotask(() =>
+        emit({
+          type: "composerDraftState",
+          epoch: message.epoch,
+          generation: 1,
+          connected: true,
+          owners: [
+            { box: "sidebar:new-task", owner: profile },
+            { box: "sidebar:fallback", owner: profile },
+          ],
+        }),
+      )
+    return true
+  }
+  if (
+    ![
+      "composerDraftList",
+      "composerDraftLoad",
+      "composerDraftSave",
+      "composerDraftClear",
+      "composerDraftPromote",
+    ].includes(message.type)
+  )
+    return false
+  void digest.then(() => {
+    const base = {
+      type: "composerDraftResult",
+      operation: message.type,
+      requestID: message.requestID,
+      epoch: message.epoch,
+      generation: message.generation,
+      owner: message.owner,
+    }
+    if (message.type === "composerDraftList")
+      return emit({
+        ...base,
+        entries: entries.filter((entry) => entry.identity.box === message.box).map((entry) => structuredClone(entry)),
+      })
+    if (message.type === "composerDraftLoad") {
+      const selected = entries.find(
+        (entry) =>
+          message.identity.box === entry.identity.box &&
+          message.identity.key === entry.identity.key &&
+          message.identity.pendingID === entry.identity.pendingID,
+      )
+      return emit({ ...base, entry: selected ? structuredClone(selected) : null })
+    }
+    if (message.type === "composerDraftClear") {
+      const selected = entries.find(
+        (entry) =>
+          message.identity.box === entry.identity.box &&
+          message.identity.key === entry.identity.key &&
+          message.identity.pendingID === entry.identity.pendingID,
+      )
+      if (!selected || JSON.stringify(message.expected) !== JSON.stringify(selected.token))
+        return emit({ ...base, error: "conflict" })
+      selected.content = null
+      selected.token = { ...selected.token, revision: selected.token.revision + 1 }
+      selected.mutation = message.mutation
+      void crypto.subtle.digest("SHA-256", new TextEncoder().encode("null")).then((hash) => {
+        selected.digest = [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+        emit({ ...base, entry: structuredClone(selected) })
+      })
+      return
+    }
+    emit({ ...base, error: "unavailable" })
+  })
+  return true
+}
 window.acquireVsCodeApi = () => ({
   getState: () => undefined,
   setState: () => {},
   postMessage(message) {
     messages.push(message)
     document.body.dataset.posts = JSON.stringify(messages)
+    if (composers(message)) return
+    if (draftBox === "collision" && message.type === "requestAgents")
+      queueMicrotask(() =>
+        emit({
+          type: "agentsLoaded",
+          agents: [
+            { name: "auto", displayName: "General", mode: "primary" },
+            { name: "plan", displayName: "Ask", mode: "primary" },
+          ],
+          allAgents: [],
+          defaultAgent: "auto",
+        }),
+      )
+    if (draftBox === "collision" && message.type === "requestProviders")
+      queueMicrotask(() =>
+        emit({
+          type: "providersLoaded",
+          generation: 0,
+          providers: {
+            local: {
+              id: "local",
+              name: "Local",
+              env: [],
+              models: Object.fromEntries(
+                ["first", "second"].map((id) => [
+                  id,
+                  {
+                    id,
+                    name: `Original ${id} model`,
+                    limit: { context: 8192, output: 2048 },
+                    variants: { low: {}, high: {} },
+                  },
+                ]),
+              ),
+            },
+          },
+          connected: ["local"],
+          defaults: { local: "first" },
+          defaultSelection: { providerID: "local", modelID: "first" },
+          authMethods: {},
+          authStates: {},
+        }),
+      )
     if (message.type === "sidebar.openSessions") {
       opened = message.sessionIDs
       document.body.dataset.opened = JSON.stringify(opened)

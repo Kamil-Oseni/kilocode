@@ -56,6 +56,20 @@ export namespace RayaChief {
   export function routine(request: string | undefined) {
     if (!request) return false
     if (/\b(routines?|organi[sz]ations?)\b/i.test(request)) return true
+    const kickoff =
+      /\b(?:start|run|launch|delegate|assign|send|kick off)\s+(?:[\w-]+\s+){0,8}(?:job|workflow|work)\s+(?:through|via|by|to)\s+/i.exec(
+        request,
+      )
+    if (kickoff) {
+      const route = request.slice(kickoff.index + kickoff[0].length)
+      if (
+        /^(?:(?:my|our|the)\s+)?(?:saved|existing|configured)\s+(?:[\w-]+\s+){0,3}(?:worker|team|agent)\b/i.test(
+          route,
+        ) ||
+        /^[A-Z][\w-]*(?:\s+[A-Z][\w-]*)?(?=[.,:;!?]|\s+(?:to|for|with|using|and)\b|$)/.test(route)
+      )
+        return true
+    }
     if (
       /\b(?:create|build|start|set up|organize|assemble)\s+(?:(?:a|an|new|small|specialist|my)\s+){0,3}teams?\b(?!\s+(?:page|dashboard|view|component|screen)\b)/i.test(
         request,

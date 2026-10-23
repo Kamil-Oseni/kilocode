@@ -10,6 +10,32 @@ type Fixture = {
 
 const fixtures = data as Fixture[]
 
+it("keeps tracked-work assignment tools available for explicit saved-worker kickoff requests", () => {
+  const tools = {
+    chief_route: { id: "route" },
+    inspect_routines: { id: "inspect" },
+    assign_organization_work: { id: "assign" },
+  }
+  for (const request of [
+    "Start one Website Pilot job through Dispatch: research the three supplied prospects, have Builder make the Eric concept, then Sales save three tailored UNSENT drafts. Use a fresh job folder. Nothing should be sent or published. Verify the actual files and handoffs.",
+    "Launch a customer outreach workflow through my saved sales worker.",
+    "Delegate this invoice work to the existing accounting team.",
+  ]) {
+    const available = RayaChief.tools(tools, { [RayaChief.requestKey]: request })
+    expect(available.inspect_routines).toBe(tools.inspect_routines)
+    expect(available.assign_organization_work).toBe(tools.assign_organization_work)
+  }
+  for (const request of [
+    "Build a team dashboard for my workers",
+    "Create a team page for our website",
+    "Spawn an agent to review this pull request",
+    "Run a background task to debug this worker",
+    "Start a workflow editor component for my app",
+    "Run the test job through the dashboard",
+  ])
+    expect(RayaChief.tools(tools, { [RayaChief.requestKey]: request })).toEqual({ chief_route: tools.chief_route })
+})
+
 it("offers goal creation only after routing without an open goal or absent capability", () => {
   const tools = { create_goal: { id: "create" }, get_goal: { id: "get" } }
   expect(RayaChief.tools(tools, { [RayaChief.phaseKey]: "task" }).create_goal).toBe(tools.create_goal)

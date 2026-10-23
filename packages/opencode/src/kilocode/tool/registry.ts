@@ -260,6 +260,7 @@ export namespace KiloToolRegistry {
           contactOwner: routines?.contactOwner,
           createOrganization: routines?.create,
           createSubordinate: routines?.createSubordinate,
+          assignOrganizationWork: routines?.assignOrganizationWork,
           delegateWork: routines?.delegateWork,
           updateRoutine: routines?.updateRoutine,
           updateOrganization: routines?.updateOrganization,
@@ -304,6 +305,7 @@ export namespace KiloToolRegistry {
         contactOwner: routines?.contactOwner,
         createOrganization: routines?.create,
         createSubordinate: routines?.createSubordinate,
+        assignOrganizationWork: routines?.assignOrganizationWork,
         delegateWork: routines?.delegateWork,
         updateRoutine: routines?.updateRoutine,
         updateOrganization: routines?.updateOrganization,
@@ -357,6 +359,7 @@ export namespace KiloToolRegistry {
       contactOwner?: Tool.Info
       createOrganization?: Tool.Info
       createSubordinate?: Tool.Info
+      assignOrganizationWork?: Tool.Info
       delegateWork?: Tool.Info
       updateRoutine?: Tool.Info
       updateOrganization?: Tool.Info
@@ -415,6 +418,9 @@ export namespace KiloToolRegistry {
       const contactOwner = tools.contactOwner ? yield* Tool.init(tools.contactOwner) : undefined
       const createOrganization = tools.createOrganization ? yield* Tool.init(tools.createOrganization) : undefined
       const createSubordinate = tools.createSubordinate ? yield* Tool.init(tools.createSubordinate) : undefined
+      const assignOrganizationWork = tools.assignOrganizationWork
+        ? yield* Tool.init(tools.assignOrganizationWork)
+        : undefined
       const delegateWork = tools.delegateWork ? yield* Tool.init(tools.delegateWork) : undefined
       const updateRoutine = tools.updateRoutine ? yield* Tool.init(tools.updateRoutine) : undefined
       const updateOrganization = tools.updateOrganization ? yield* Tool.init(tools.updateOrganization) : undefined
@@ -468,6 +474,7 @@ export namespace KiloToolRegistry {
         contactOwner,
         createOrganization,
         createSubordinate,
+        assignOrganizationWork,
         delegateWork,
         updateRoutine,
         updateOrganization,
@@ -583,6 +590,7 @@ export namespace KiloToolRegistry {
       contactOwner?: Tool.Def
       createOrganization?: Tool.Def
       createSubordinate?: Tool.Def
+      assignOrganizationWork?: Tool.Def
       delegateWork?: Tool.Def
       updateRoutine?: Tool.Def
       updateOrganization?: Tool.Def
@@ -638,6 +646,7 @@ export namespace KiloToolRegistry {
       ...(tools.contactOwner ? [tools.contactOwner] : []),
       ...(tools.createOrganization ? [tools.createOrganization] : []),
       ...(tools.createSubordinate ? [tools.createSubordinate] : []),
+      ...(tools.assignOrganizationWork ? [tools.assignOrganizationWork] : []),
       ...(tools.delegateWork ? [tools.delegateWork] : []),
       ...(tools.updateRoutine ? [tools.updateRoutine] : []),
       ...(tools.updateOrganization ? [tools.updateOrganization] : []),

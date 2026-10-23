@@ -114,6 +114,7 @@ export const RayaRoutineDelegationTable = sqliteTable(
     workspace: text(),
     objective: text().notNull(),
     expected: text(),
+    criteria: text(),
     context: text(),
     deadline: integer(),
     budget: integer(),

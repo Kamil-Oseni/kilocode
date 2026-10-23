@@ -21,6 +21,7 @@ import {
   type Snapshot,
 } from "./delegation-review"
 import { mutate } from "./mutation"
+import { Criteria } from "@/kilocode/goal/criteria"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const body = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000))
@@ -56,6 +57,7 @@ export const Request = Schema.Struct({
   ),
   objective: body,
   expected: Schema.optional(body),
+  criteria: Schema.optional(Criteria),
   context: Schema.optional(body),
   deadline: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
@@ -83,6 +85,7 @@ export const Record = Schema.Struct({
   workspace: Schema.optional(Schema.String),
   objective: body,
   expected: Schema.optional(body),
+  criteria: Request.fields.criteria,
   context: Schema.optional(body),
   deadline: Request.fields.deadline,
   budget: Request.fields.budget,
@@ -174,6 +177,13 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
       : undefined,
     `Request objective:\n${request.objective}`,
     request.expected ? `Expected result:\n${request.expected}` : undefined,
+    request.criteria
+      ? [
+          "Required acceptance criteria for this request only:",
+          ...request.criteria.map((item) => `[${item.id}] ${item.description}\nVerification: ${item.verification}`),
+          "Complete the actual work, then use update_goal with one evidence-backed audited requirement per saved criterion. A written reply alone does not complete this request. Do not apply unrelated standing-job criteria.",
+        ].join("\n\n")
+      : undefined,
     request.context ? `Permitted context:\n${request.context}` : undefined,
     request.deadline !== undefined ? `Deadline: ${new Date(request.deadline).toISOString()}` : undefined,
     request.budget !== undefined ? `Maximum model cost: $${request.budget}` : undefined,
@@ -205,6 +215,7 @@ function decode(row: typeof Delegation.$inferSelect): Record {
     ...(row.organization_revision !== null ? { organizationRevision: row.organization_revision } : {}),
     ...(row.workspace ? { workspace: row.workspace } : {}),
     ...(row.expected ? { expected: row.expected } : {}),
+    ...(row.criteria ? { criteria: Schema.decodeUnknownSync(Criteria)(JSON.parse(row.criteria)) } : {}),
     ...(row.context ? { context: row.context } : {}),
     ...(row.deadline !== null ? { deadline: row.deadline } : {}),
     ...(row.budget !== null ? { budget: row.budget } : {}),
@@ -223,6 +234,7 @@ function same(saved: Record, value: Request) {
     saved.recipientID === value.recipientID &&
     saved.objective === value.objective &&
     saved.expected === value.expected &&
+    isDeepStrictEqual(saved.criteria, value.criteria) &&
     saved.context === value.context &&
     saved.parentID === value.parentID &&
     saved.parentRunID === value.parentRunID &&
@@ -442,6 +454,8 @@ export namespace RayaTaskDelegation {
           () => new Invalid({ message: "Delegation requests need a stable source and a non-empty objective." }),
         ),
       )
+      if (value.criteria && new Set(value.criteria.map((item) => item.id)).size !== value.criteria.length)
+        return yield* new Invalid({ message: "Delegated work criterion IDs must be unique." })
       if (value.senderID !== sender.id || value.recipientID !== recipient.id)
         return yield* new Invalid({ message: "Delegation identities must match the requesting and receiving workers." })
       if (value.senderID === value.recipientID)
@@ -668,6 +682,7 @@ export namespace RayaTaskDelegation {
                 workspace: workspace ?? null,
                 objective: value.objective,
                 expected: value.expected ?? null,
+                criteria: value.criteria ? JSON.stringify(value.criteria) : null,
                 context: value.context ?? null,
                 deadline: value.deadline ?? null,
                 budget: value.budget ?? null,
@@ -779,6 +794,7 @@ export namespace RayaTaskDelegation {
             workspace: row.workspace,
             objective: row.objective,
             expected: row.expected,
+            criteria: row.criteria,
             context: row.context,
             deadline: row.deadline,
             budget: row.budget,

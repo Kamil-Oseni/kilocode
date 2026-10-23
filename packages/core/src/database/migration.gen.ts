@@ -65,5 +65,6 @@ export const migrations = (
     import("./migration/20261010030507_kilocode-routine-effect"), // kilocode_change
     import("./migration/20261010121955_kilocode-background-result-recovery"), // kilocode_change
     import("./migration/20261010235900_kilocode-routine-revocation-v1"), // kilocode_change
+    import("./migration/20261023034737_kilocode-routine-delegation-criteria"), // kilocode_change
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

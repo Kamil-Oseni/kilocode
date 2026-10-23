@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Effect, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
+import { Criteria } from "@/kilocode/goal/criteria"
 
 const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8_000))
 const Time = Schema.Int.check(Schema.isBetween({ minimum: -8.64e15, maximum: 8.64e15 }))
@@ -21,6 +22,7 @@ export const Snapshot = Schema.Struct({
   workspace: Schema.optional(Schema.String),
   objective: Name,
   expected: Schema.optional(Name),
+  criteria: Schema.optional(Criteria),
   context: Schema.optional(Name),
   deadline: Schema.optional(Time),
   budget: Schema.optional(Schema.Number),

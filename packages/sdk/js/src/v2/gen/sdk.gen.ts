@@ -10532,6 +10532,11 @@ export class Delegate extends HeyApiClient {
       organizationRevision?: number
       objective?: string
       expected?: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
       context?: string
       deadline?: number
       budget?: number
@@ -10561,6 +10566,7 @@ export class Delegate extends HeyApiClient {
             { in: "body", key: "organizationRevision" },
             { in: "body", key: "objective" },
             { in: "body", key: "expected" },
+            { in: "body", key: "criteria" },
             { in: "body", key: "context" },
             { in: "body", key: "deadline" },
             { in: "body", key: "budget" },

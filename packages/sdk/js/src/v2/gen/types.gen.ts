@@ -28942,6 +28942,11 @@ export type KilocodeRoutineDelegateCreateData = {
     organizationRevision?: number
     objective: string
     expected?: string
+    criteria?: Array<{
+      id: string
+      description: string
+      verification: string
+    }>
     context?: string
     deadline?: number
     budget?: number
@@ -28997,6 +29002,11 @@ export type KilocodeRoutineDelegateCreateResponses = {
     workspace?: string
     objective: string
     expected?: string
+    criteria?: Array<{
+      id: string
+      description: string
+      verification: string
+    }>
     context?: string
     deadline?: number
     budget?: number
@@ -29063,6 +29073,11 @@ export type KilocodeRoutineDelegateGetResponses = {
     workspace?: string
     objective: string
     expected?: string
+    criteria?: Array<{
+      id: string
+      description: string
+      verification: string
+    }>
     context?: string
     deadline?: number
     budget?: number
@@ -29131,6 +29146,11 @@ export type KilocodeRoutineDelegateChainResponses = {
       workspace?: string
       objective: string
       expected?: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
       context?: string
       deadline?: number
       budget?: number
@@ -29162,6 +29182,11 @@ export type KilocodeRoutineDelegateChainResponses = {
       workspace?: string
       objective: string
       expected?: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
       context?: string
       deadline?: number
       budget?: number
@@ -29193,6 +29218,11 @@ export type KilocodeRoutineDelegateChainResponses = {
       workspace?: string
       objective: string
       expected?: string
+      criteria?: Array<{
+        id: string
+        description: string
+        verification: string
+      }>
       context?: string
       deadline?: number
       budget?: number
@@ -29261,6 +29291,11 @@ export type KilocodeRoutineDelegateCancelResponses = {
     workspace?: string
     objective: string
     expected?: string
+    criteria?: Array<{
+      id: string
+      description: string
+      verification: string
+    }>
     context?: string
     deadline?: number
     budget?: number

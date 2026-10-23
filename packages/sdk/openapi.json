@@ -47585,6 +47585,32 @@
                       "pattern": "\\S",
                       "maxLength": 8000
                     },
+                    "criteria": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+                          },
+                          "description": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4000
+                          },
+                          "verification": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": ["id", "description", "verification"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 20
+                    },
                     "context": {
                       "type": "string",
                       "pattern": "\\S",
@@ -47795,6 +47821,32 @@
                     "pattern": "\\S",
                     "maxLength": 8000
                   },
+                  "criteria": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+                        },
+                        "description": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 4000
+                        },
+                        "verification": {
+                          "type": "string",
+                          "pattern": "\\S",
+                          "maxLength": 4000
+                        }
+                      },
+                      "required": ["id", "description", "verification"],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 20
+                  },
                   "context": {
                     "type": "string",
                     "pattern": "\\S",
@@ -47954,6 +48006,32 @@
                       "type": "string",
                       "pattern": "\\S",
                       "maxLength": 8000
+                    },
+                    "criteria": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+                          },
+                          "description": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4000
+                          },
+                          "verification": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": ["id", "description", "verification"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 20
                     },
                     "context": {
                       "type": "string",
@@ -48218,6 +48296,32 @@
                           "pattern": "\\S",
                           "maxLength": 8000
                         },
+                        "criteria": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+                              },
+                              "description": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 4000
+                              },
+                              "verification": {
+                                "type": "string",
+                                "pattern": "\\S",
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": ["id", "description", "verification"],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 20
+                        },
                         "context": {
                           "type": "string",
                           "pattern": "\\S",
@@ -48394,6 +48498,32 @@
                             "type": "string",
                             "pattern": "\\S",
                             "maxLength": 8000
+                          },
+                          "criteria": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 4000
+                                },
+                                "verification": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": ["id", "description", "verification"],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 20
                           },
                           "context": {
                             "type": "string",
@@ -48572,6 +48702,32 @@
                             "type": "string",
                             "pattern": "\\S",
                             "maxLength": 8000
+                          },
+                          "criteria": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 4000
+                                },
+                                "verification": {
+                                  "type": "string",
+                                  "pattern": "\\S",
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": ["id", "description", "verification"],
+                              "additionalProperties": false
+                            },
+                            "minItems": 1,
+                            "maxItems": 20
                           },
                           "context": {
                             "type": "string",
@@ -48837,6 +48993,32 @@
                       "type": "string",
                       "pattern": "\\S",
                       "maxLength": 8000
+                    },
+                    "criteria": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"
+                          },
+                          "description": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4000
+                          },
+                          "verification": {
+                            "type": "string",
+                            "pattern": "\\S",
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": ["id", "description", "verification"],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 20
                     },
                     "context": {
                       "type": "string",

@@ -308,6 +308,7 @@ export default {
           \`workspace\` text,
           \`objective\` text NOT NULL,
           \`expected\` text,
+          \`criteria\` text,
           \`context\` text,
           \`deadline\` integer,
           \`budget\` integer,

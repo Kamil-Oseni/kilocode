@@ -9,6 +9,7 @@ import type { Storage } from "@/storage/storage"
 import { MessageID, SessionID } from "@/session/schema"
 import { EffectBridge } from "@/effect/bridge"
 import { RayaGoal } from "@/kilocode/goal"
+import type { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
 import { KiloSession } from "@/kilocode/session"
 import { PlanArtifact } from "@/kilocode/plan-artifact"
@@ -719,6 +720,7 @@ export namespace RayaTaskRunner {
           guard?: Effect.Effect<Organization | undefined, RayaTask.GuardError>
           runID?: string
           delegationID?: string
+          criteria?: Criteria
           budget?: RayaGoal.Budget
           bind?: { source: string; sessionID: SessionID }
         },
@@ -842,9 +844,9 @@ export namespace RayaTaskRunner {
                     undefined,
                     undefined,
                     undefined,
-                    note ? undefined : item.output?.criteria,
+                    opts?.criteria ?? (note ? undefined : item.output?.criteria),
                     opts?.budget ?? (item.budget ? { modelCost: item.budget } : undefined),
-                    opts?.follow || opts?.delegationID ? "reply" : undefined,
+                    !opts?.criteria && (opts?.follow || opts?.delegationID) ? "reply" : undefined,
                     { agentID: item.id, runID: owner.id, sessionID: created.id },
                   )
                   const run: RayaTask.Run = {
@@ -1311,6 +1313,8 @@ export namespace RayaTaskRunner {
         if (
           prior.status !== "running" ||
           goal?.status !== "active" ||
+          !isDeepStrictEqual(goal.criteria, taken.criteria) ||
+          goal.completion !== (taken.criteria ? undefined : "reply") ||
           goal.replyRecovery ||
           (goal.dispatch && goal.dispatch.phase !== "queued") ||
           (yield* execution.receipt(prior))
@@ -1343,6 +1347,7 @@ export namespace RayaTaskRunner {
         organizationRevision: taken.organizationRevision,
         objective: taken.objective,
         expected: taken.expected,
+        criteria: taken.criteria,
         context: taken.context,
         deadline: taken.deadline,
         budget: taken.budget,
@@ -1354,6 +1359,7 @@ export namespace RayaTaskRunner {
         view: ceiling(sender, recipient),
         runID: taken.childRunID,
         delegationID: taken.id,
+        criteria: taken.criteria,
         budget: taken.budget === undefined ? undefined : { modelCost: taken.budget },
         guard: Effect.gen(function* () {
           const organization = taken.organizationID

@@ -8,6 +8,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -1308,7 +1309,7 @@ it.live(
               sessionID: ctx.sessionID,
               role: "user",
               agent: "auto",
-              model: { providerID: ProviderV2.ID.make("fixture"), modelID: "fixture" },
+              model: { providerID: ProviderV2.ID.make("fixture"), modelID: ModelV2.ID.make("fixture") },
               time: { created: 1 },
             },
             parts: [
@@ -1329,7 +1330,7 @@ it.live(
               parentID: user,
               agent: "auto",
               mode: "auto",
-              modelID: "fixture",
+              modelID: ModelV2.ID.make("fixture"),
               providerID: ProviderV2.ID.make("fixture"),
               path: { cwd: directory, root: directory },
               cost: 0,

@@ -65,7 +65,7 @@ The stopped installed-faf6 trial used the public normal-profile chat `ses_e87e89
 
 Additional committed source fixes (`11afe815e1`, `f25e312ca6`) advertise nonempty child criteria with file handoffs, recognize the saved named arrow chain, and enforce the owner's explicit budget omission even when kickoff matching fails. They are installed in f25. The existing focused schema case passed locally (one case, 49 assertions); combined CLI typing passed and scoped lint has zero errors (16 existing warnings). CLI compilation reached target exit 0; its wrapper then cleaned owned residual descendants after the exact original target exited. The route/budget focused cases passed in the peer source worktree. The installed practical run invented a model-cost cap despite the omitted-budget instruction; this is a known admission defect corrected by the installed source change, not approved spending.
 
-Known unrelated check failure: the existing Promise-facade guard flags `packages/opencode/test/kilocode/server/httpapi-destination-review.test.ts` at lines 50 and 77. That fixture is unchanged by this work; this is not an all-checks-pass claim.
+The destination-review integration test now has an explicit two-reference application-runtime boundary classification; the Promise-facade guard passes without changing production runtime rules.
 
 ## Earlier short chat failure
 
@@ -94,3 +94,9 @@ The October 5 direct owner request authorizes safe merge and push so main is cur
 `check-architecture.ts` still fails at 12 pre-existing sites. Eleven flagged files and the checker/allowlist are identical to origin/main; the remaining bootstrap diff only adds the FSUtil dependency and leaves its two flagged InstanceState constructors unchanged. These baseline violations are not silently waived or reported as passing. The CI boundary classification changes no installed runtime, so the verified fb887daee3 package remains installed.
 
 The bounded pre-push privacy review scanned 29,091 added lines and 811 newly reachable text blobs, including compressed source fixtures. No actual credentials, private note bodies, database dumps or temporary capture artifacts were found. Tracked project documentation retains local paths and opaque diagnostic/session IDs as operational evidence.
+
+## Git push remains blocked by local dependency links
+
+The atomic push changed no remote refs: the pre-push typecheck stopped because package-local compiler junctions point to missing paths in the main checkout. The existing root compiler exactly matches catalog `7.0.0-dev.20260316.1`; calling it directly in http-recorder passes. Five affected worktree packages are http-recorder, kilo-gateway, kilo-indexing, plugin and schema. Automatic approval rejected removal/recreation of their broken junctions with `blocked by policy`; the denied action was not retried by another tool or agent. Hooks were not disabled, and main-checkout files were not modified.
+
+A local human-run repair is prepared at `.tmp/new-pc/repair-worktree-compiler-links.ps1`. Default check-only execution passed and verified exactly those five broken junctions, regular worktree parent directories and the exact compiler version. `-Apply` is intentionally left for the user; it records original link targets and changes only those worktree links. After repair, retry the unchanged pre-push hook and safe atomic push. Installed fb887daee3 remains usable; no source or installed-runtime regression was found in this dependency failure.

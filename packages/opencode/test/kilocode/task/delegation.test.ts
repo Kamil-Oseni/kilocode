@@ -352,7 +352,12 @@ test("delegation persists verified artifact identity and rejects a changed repla
         callID: "call_write_close",
       }
       const value = request("dlg_artifact", chief.id, books.id, { artifacts: [artifact] })
-      const admitted = yield* store.admit(value, chief, books)
+      const raced = yield* Effect.all([store.admit(value, chief, books), store.admit(value, chief, books)], {
+        concurrency: "unbounded",
+      })
+      expect(raced.filter((item) => item.created)).toHaveLength(1)
+      expect(raced[0].record.id).toBe(raced[1].record.id)
+      const admitted = raced[0]
       expect(admitted.record.artifacts).toEqual([artifact])
       expect((yield* store.get(admitted.record.id)).artifacts).toEqual([artifact])
       expect((yield* store.admit(value, chief, books)).created).toBe(false)

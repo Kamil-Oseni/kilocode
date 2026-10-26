@@ -182,6 +182,7 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
           "Required acceptance criteria for this request only:",
           ...request.criteria.map((item) => `[${item.id}] ${item.description}\nVerification: ${item.verification}`),
           "Complete the actual work, then use update_goal with one evidence-backed audited requirement per saved criterion. A written reply alone does not complete this request. Do not apply unrelated standing-job criteria.",
+          "For each follow-on deliverable delegated to another worker, supply nonempty criteria scoped to that child's output and verification, plus any required exact input artifacts. A simple question may omit criteria. A queued assignment or a child's promise is not evidence of completed downstream work.",
         ].join("\n\n")
       : undefined,
     request.context ? `Permitted context:\n${request.context}` : undefined,
@@ -537,10 +538,21 @@ export namespace RayaTaskDelegation {
       organization?: { id: string; name: string; revision: number; budget?: number },
       allocation?: { limit: number; spent: number },
     ) {
-      const row = yield* db
+      const saved = yield* db
         .transaction(
           (tx) =>
             Effect.gen(function* () {
+              const prior = yield* tx
+                .select()
+                .from(Delegation)
+                .where(eq(Delegation.source, value.source))
+                .get()
+                .pipe(Effect.orDie)
+              if (prior) {
+                if (!same(decode(prior), value))
+                  return yield* new Conflict({ message: "This delegation source already has a different request." })
+                return { row: prior, created: false }
+              }
               if (value.parentID) {
                 const size = yield* tx
                   .get<{ count: number }>(
@@ -698,14 +710,14 @@ export namespace RayaTaskDelegation {
                 time_updated: now,
               }
               yield* tx.insert(Delegation).values(saved).run().pipe(Effect.orDie)
-              return saved
+              return { row: saved, created: true }
             }),
           { behavior: "immediate" },
         )
         .pipe(Effect.catchTag("SqlError", Effect.die))
-      const record = decode(row)
+      const record = decode(saved.row)
       yield* publish(admission(record, sender, recipient))
-      return { record, created: true }
+      return { record, created: saved.created }
     })
     const accepted = Effect.fn("RayaTaskDelegation.accepted")(function* (
       recipientID: string,

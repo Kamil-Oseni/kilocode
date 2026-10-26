@@ -4,6 +4,58 @@ import { RayaChief } from "../chief"
 export const instruction =
   "The requested organization work was saved and assigned. Acknowledge its observed saved state briefly. Assignment is not completion of the worker's job: do not claim that deliverables are finished, verified, sent or published. Do not assign the same work again or poll merely to finish this chat turn."
 
+/** Inspect the saved team before choosing its workers or asking about its existing brief. */
+export function inspected(
+  messages: readonly MessageV2.WithParts[],
+  session: { id: string; parentID?: string; metadata?: Record<string, unknown> },
+  user: string,
+) {
+  if (session.parentID || session.metadata?.rayaRoutine !== undefined || RayaChief.phase(session.metadata) !== "route")
+    return false
+  const current = messages.findLast((row) => row.info.role === "user")
+  if (
+    !current ||
+    current.info.role !== "user" ||
+    current.info.agent !== "auto" ||
+    current.info.id !== user ||
+    current.info.sessionID !== session.id
+  )
+    return false
+  const request = RayaChief.requestText(current.parts)
+  if (request !== RayaChief.request(session.metadata) || !RayaChief.routine(request)) return false
+  return messages.some(
+    (row) =>
+      row.info.role === "assistant" &&
+      row.info.parentID === user &&
+      row.info.sessionID === session.id &&
+      !row.info.error &&
+      !row.info.summary &&
+      row.parts.some((part) => {
+        if (
+          part.type !== "tool" ||
+          part.tool !== "inspect_routines" ||
+          part.messageID !== row.info.id ||
+          part.sessionID !== session.id ||
+          part.state.status !== "completed" ||
+          part.state.title !== "Saved routines"
+        )
+          return false
+        const result = part.state.metadata
+        return (
+          result !== null &&
+          typeof result === "object" &&
+          !Array.isArray(result) &&
+          typeof result.routineCount === "number" &&
+          Number.isSafeInteger(result.routineCount) &&
+          result.routineCount >= 0 &&
+          typeof result.organizationCount === "number" &&
+          Number.isSafeInteger(result.organizationCount) &&
+          result.organizationCount >= 0
+        )
+      }),
+  )
+}
+
 /** Release only the current root request after its actual saved work assignment. */
 export function assigned(
   messages: readonly MessageV2.WithParts[],
@@ -44,11 +96,16 @@ export function assigned(
   const part = parts.findLast(
     (part) =>
       part.type === "tool" &&
-      ["schedule_task", "create_organization", "update_routine", "update_organization", "assign_organization_work"].includes(
-        part.tool,
-      ),
+      [
+        "schedule_task",
+        "create_organization",
+        "update_routine",
+        "update_organization",
+        "assign_organization_work",
+      ].includes(part.tool),
   )
-  if (part?.type !== "tool" || part.tool !== "assign_organization_work" || part.state.status !== "completed") return false
+  if (part?.type !== "tool" || part.tool !== "assign_organization_work" || part.state.status !== "completed")
+    return false
   const result = part.state.metadata
   const input = part.state.input
   return (

@@ -150,6 +150,38 @@ it.live("implicit non-Kilo Auto retains the exact parent model, variant and auth
   ),
 )
 
+it.live("Routine kickoff retains the chosen compatible model and variant over the configured Auto model", () =>
+  provideTmpdirInstance(
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const prompt = yield* SessionPrompt.Service
+        const chat = yield* sessions.create({ title: "Routine model choice", agent: "auto" })
+        const text = "Inspect routines and assign this job to the saved Website Pilot organization."
+        const result = yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "auto",
+          model: ref,
+          variant: "careful",
+          noReply: true,
+          parts: [{ type: "text", text }],
+        })
+        expect(result.info.role).toBe("user")
+        if (result.info.role !== "user") throw new Error("Expected the original user intake")
+        expect(result.info.model).toEqual({ ...ref, variant: "careful" })
+        const saved = yield* sessions.get(chat.id)
+        expect(RayaChief.parent(saved.metadata)).toEqual({ ...ref, variant: "careful" })
+        expect(RayaChief.request(saved.metadata)).toBe(text)
+        const messages = yield* sessions.messages({ sessionID: chat.id })
+        expect(messages).toHaveLength(1)
+        expect(messages[0].info).toEqual(result.info)
+        expect(messages[0].parts.some((part) => part.type === "text" && part.text === text)).toBe(true)
+        expect(yield* sessions.children(chat.id)).toEqual([])
+      }),
+    { config: { ...config, small_model: "selection/bad", agent: { auto: { model: "selection/bad" } } } },
+  ),
+)
+
 for (const choice of [
   { modelID: ModelV2.ID.make("bad"), reason: "unsupported" },
   { modelID: ModelV2.ID.make("good"), variant: "missing", reason: "variant" },

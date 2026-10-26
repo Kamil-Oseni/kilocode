@@ -841,7 +841,11 @@ export const layer = Layer.effect(
     const select = (input: PromptInput, agent: Agent.Info, requested: Parameters<typeof RayaToolModel.dispatch>[2]) =>
       RayaToolModel.dispatch(
         provider,
-        agent.model ? { ...agent.model, variant: agent.variant } : undefined,
+        RayaChief.routine(RayaChief.requestText(input.parts, input.goalObjective))
+          ? requested
+          : agent.model
+            ? { ...agent.model, variant: agent.variant }
+            : undefined,
         requested,
         input.variant,
       ).pipe(
@@ -879,7 +883,7 @@ export const layer = Layer.effect(
         throw error
       }
       // kilocode_change start
-      // raya_change start - Auto's own turn uses the cheap Chief model while preserving the user's model for its child
+      // raya_change start - direct Routines retain the chosen model; specialist coordination may use the cheap Chief
       const requested = input.model ?? (yield* currentModel(input.sessionID))
       // kilocode_change start - refuse unsafe Auto selection before persisting a message or changing routing metadata
       const selection = ag.name === "auto" ? yield* select(input, ag, requested) : undefined

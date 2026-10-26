@@ -27,7 +27,7 @@ import { inspection } from "@opencode-ai/core/kilocode/evidence-inspection"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import * as Accounting from "./accounting"
 import { collect } from "./evidence-scope"
-import { required as handoff } from "./handoff"
+import { required as handoff, artifacts as handoffArtifacts } from "./handoff"
 import { verification, identity as sourceIdentity } from "@/kilocode/self-heal/verification"
 import type { Database } from "@opencode-ai/core/database/database"
 import * as DelegationAccounting from "./delegation-accounting"
@@ -1607,6 +1607,18 @@ export namespace RayaGoal {
         )
           return yield* new AuditError({
             message: `Requirement needs an accepted delegate_work handoff receipt: ${requirement.requirement}. File evidence and its summary do not prove delegation. Eligible evidence: ${menu}.`,
+          })
+        if (
+          handoffArtifacts(criterion?.description ?? requirement.requirement, criterion?.verification ?? "") &&
+          !cited.some(
+            (part) =>
+              part.tool === "delegate_work" &&
+              Array.isArray(part.state.input.artifacts) &&
+              part.state.input.artifacts.length > 0,
+          )
+        )
+          return yield* new AuditError({
+            message: `Requirement needs an accepted delegate_work receipt with actual file artifacts: ${requirement.requirement}. A summary does not prove a file handoff. Eligible evidence: ${menu}.`,
           })
         // raya_change start - Milestone G smoke-gated goals require genuine host smoke evidence
         if (

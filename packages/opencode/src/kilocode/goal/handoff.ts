@@ -16,3 +16,13 @@ export function required(description: string, verification: string) {
         )),
   )
 }
+
+export function artifacts(description: string, verification: string) {
+  if (!required(description, verification)) return false
+  return [description, verification].some((text) =>
+    [...text.matchAll(/\b(?:actual|verified|produced)\s+(?:[\w.-]+\s+){0,4}(?:files?|artifacts?)\b/gi)].some(
+      (match) =>
+        !/\b(?:no|not|never|without|don't|cannot|can't|avoid)\s+(?:\w+\s+){0,2}$/i.test(text.slice(0, match.index)),
+    ),
+  )
+}

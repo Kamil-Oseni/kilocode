@@ -45,7 +45,7 @@ it.live(
         const sessions = yield* Session.Service
         const store = yield* Storage.Service
         const goals = RayaGoal.make({ storage: store, sessions })
-        for (const mode of ["rejected", "accepted", "ordinary", "negated", "guidance"]) {
+        for (const mode of ["rejected", "missing", "accepted", "optional", "ordinary", "negated", "guidance"]) {
           const chat = yield* sessions.create({ title: "Private handoff evidence regression" })
           const goal = yield* goals.create(chat.id, "Save the research and satisfy the saved criterion")
           yield* Effect.addFinalizer(() => goals.clear(chat.id))
@@ -56,7 +56,9 @@ it.live(
                 ? "Save research without delegation."
                 : mode === "guidance"
                   ? "Write delegation guidance."
-                  : "Accept delegation to Builder only if delegate_work shows the actual saved research artifact."
+                  : mode === "optional"
+                    ? "Accept delegation to Builder."
+                    : "Accept delegation to Builder only if delegate_work shows the actual saved research artifact."
           const verification =
             mode === "negated"
               ? "Read the file; do not delegate."
@@ -64,7 +66,9 @@ it.live(
                 ? "Verify the saved file."
                 : mode === "guidance"
                   ? "Read the saved document explaining delegation."
-                  : "Delegate_work receipt contains both criterion IDs, job folder context and actual research.md artifact."
+                  : mode === "optional"
+                    ? "Verify an accepted delegate_work receipt, without actual file artifacts."
+                    : "Delegate_work receipt contains both criterion IDs, job folder context and actual research.md artifact."
           yield* goals.edit(chat.id, {
             expectedIntent: goal.intent,
             criteria: [{ id: "result", description, verification }],
@@ -112,7 +116,7 @@ it.live(
               time: { start: Date.now(), end: Date.now() },
             },
           })
-          if (mode === "rejected" || mode === "accepted")
+          if (["rejected", "missing", "accepted", "optional"].includes(mode))
             yield* sessions.updatePart({
               id: PartID.ascending(),
               sessionID: chat.id,
@@ -122,7 +126,10 @@ it.live(
               callID: `delegate-${mode}`,
               state: {
                 status: "completed",
-                input: { deadline: mode === "rejected" ? 0 : undefined },
+                input: {
+                  deadline: mode === "rejected" ? 0 : undefined,
+                  ...(mode === "accepted" ? { artifacts: [file] } : {}),
+                },
                 output: mode === "rejected" ? "This delegation deadline has already passed." : "Delegation accepted",
                 title: "Handoff",
                 metadata:
@@ -150,8 +157,13 @@ it.live(
                         callID: write.callID,
                         summary: "Wrote research and accepted delegate_work handoff to Builder.",
                       },
-                      ...(mode === "accepted"
-                        ? [{ callID: "delegate-accepted", summary: "Host recorded an accepted handoff." }]
+                      ...(["accepted", "missing", "optional"].includes(mode)
+                        ? [
+                            {
+                              callID: `delegate-${mode}`,
+                              summary: "Host recorded an accepted handoff with the research file.",
+                            },
+                          ]
                         : []),
                     ],
                   },
@@ -159,11 +171,11 @@ it.live(
               },
             })
             .pipe(Effect.result)
-          if (mode === "rejected") {
+          if (mode === "rejected" || mode === "missing") {
             expect(result._tag).toBe("Failure")
             expect((yield* goals.get(chat.id))?.status).toBe("active")
             expect((yield* goals.get(chat.id))?.auditAttempt?.reason).toContain(
-              "accepted delegate_work handoff receipt",
+              mode === "rejected" ? "accepted delegate_work handoff receipt" : "actual file artifacts",
             )
             continue
           }
@@ -173,4 +185,5 @@ it.live(
         }
       }),
     ),
+  15000,
 )

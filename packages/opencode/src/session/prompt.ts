@@ -2,6 +2,8 @@ import * as GoalMessage from "@/kilocode/goal/message" // kilocode_change
 import * as GoalTurn from "@/kilocode/goal/turn" // kilocode_change
 import * as GoalGate from "@/kilocode/goal/tool-gate" // kilocode_change - final synthesis for the original dispatch
 import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
+import * as RoutineModel from "@/kilocode/task/model" // kilocode_change
+import { Storage } from "@/storage/storage" // kilocode_change
 import { BackgroundJob } from "@/background/job" // kilocode_change
 import * as Outcome from "@/kilocode/background/outcome" // kilocode_change - original background completion journal
 import { Service as OutcomeService } from "@opencode-ai/core/kilocode/background-outcome" // kilocode_change
@@ -177,6 +179,7 @@ export const layer = Layer.effect(
     const remind = yield* GoalTurn.compaction // kilocode_change - reuse scoped goal storage for compaction reminders
     const bind = yield* GoalTurn.binding // kilocode_change
     const sessions = yield* Session.Service
+    const storage = yield* Storage.Service // kilocode_change - immutable routine model selection
     const agents = yield* Agent.Service
     const provider = yield* Provider.Service
     const processor = yield* SessionProcessor.Service
@@ -874,7 +877,8 @@ export const layer = Layer.effect(
     // kilocode_change end
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-      const agentName = input.agent ?? (yield* sessions.get(input.sessionID).pipe(Effect.orDie)).agent // kilocode_change
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie) // kilocode_change
+      const agentName = input.agent ?? session.agent // kilocode_change
       const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -885,16 +889,18 @@ export const layer = Layer.effect(
       }
       // kilocode_change start
       // raya_change start - direct Routines retain the chosen model; specialist coordination may use the cheap Chief
-      const requested = input.model ?? (yield* currentModel(input.sessionID))
+      const pinned = yield* RoutineModel.selection(storage, session).pipe(Effect.orDie) // kilocode_change - explicit worker models survive specialist defaults
+      if (pinned) yield* resume(input.sessionID, { ...pinned, variant: input.variant ?? pinned.variant }) // kilocode_change
+      const requested = pinned ?? input.model ?? (yield* currentModel(input.sessionID))
       // kilocode_change start - refuse unsafe Auto selection before persisting a message or changing routing metadata
-      const selection = ag.name === "auto" ? yield* select(input, ag, requested) : undefined
-      const model = selection?.model ?? input.model ?? ag.model ?? requested
+      const selection = !pinned && ag.name === "auto" ? yield* select(input, ag, requested) : undefined
+      const model = pinned ?? selection?.model ?? input.model ?? ag.model ?? requested
       // kilocode_change end
       // raya_change end
       // kilocode_change end
       // kilocode_change start - retain the source session variant across Agent Manager's model-less fork handoff
-      const stored = !input.model && !ag.model ? model : undefined
-      const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
+      const stored = pinned ?? (!input.model && !ag.model ? model : undefined)
+      const same = !pinned && ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
           ? yield* provider
@@ -1521,7 +1527,9 @@ export const layer = Layer.effect(
         // kilocode_change start - reject incompatible Auto choices before recovery can alter prior messages
         const name = input.agent ?? session.agent
         const agent = name ? yield* agents.get(name) : yield* agents.defaultInfo()
-        if (agent?.name === "auto") yield* select(input, agent, input.model ?? (yield* currentModel(input.sessionID)))
+        const pinned = yield* RoutineModel.selection(storage, session).pipe(Effect.orDie)
+        if (!pinned && agent?.name === "auto")
+          yield* select(input, agent, input.model ?? (yield* currentModel(input.sessionID)))
         // kilocode_change end
         yield* revert.cleanup(session)
         // kilocode_change start - recover interrupted Kilo turns before accepting a follow-up
@@ -1747,7 +1755,14 @@ export const layer = Layer.effect(
           // kilocode_change end
         }
 
-        if (lastUser.agent === "auto") yield* resume(sessionID, lastUser.model) // kilocode_change - exact choice before any resumed dispatch
+        // kilocode_change start - refuse stale role-selected models before any worker provider call
+        const pinned = yield* RoutineModel.selection(storage, session).pipe(Effect.orDie)
+        if (pinned && (pinned.providerID !== lastUser.model.providerID || pinned.modelID !== lastUser.model.modelID))
+          return yield* Effect.die(
+            new NamedError.Unknown({ message: "Routine model changed from its saved startup selection." }),
+          )
+        if (pinned || lastUser.agent === "auto") yield* resume(sessionID, lastUser.model)
+        // kilocode_change end
         step++
         if (step === 1)
           // kilocode_change start - log auto-title failures instead of silently ignoring them; a
@@ -3010,6 +3025,7 @@ export const node = LayerNode.make({
   deps: [
     SessionStatus.node,
     Session.node,
+    Storage.node, // kilocode_change - immutable routine startup model
     Agent.node,
     Provider.node,
     SessionProcessor.node,

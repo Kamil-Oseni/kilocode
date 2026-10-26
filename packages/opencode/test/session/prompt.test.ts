@@ -68,6 +68,11 @@ import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+// kilocode_change start - exercise routine model selection against its immutable startup record
+import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { Storage } from "@/storage/storage"
+import { database, storage } from "../kilocode/fixtures/effect-profile"
+// kilocode_change end
 import { MemoryService } from "@kilocode/kilo-memory/effect/service"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -212,6 +217,7 @@ const testLLMServerNode = LayerNode.make({ service: TestLLMServer, layer: TestLL
 const promptRoot = LayerNode.group([
   SessionPrompt.node,
   Session.node,
+  Storage.node,
   SessionProjector.node,
   MessageV2.node,
   Snapshot.node,
@@ -250,7 +256,7 @@ const promptRoot = LayerNode.group([
   memoryNode,
 ])
 
-function makePrompt(input?: { processor?: "blocking" }) {
+function makePrompt(input?: { processor?: "blocking"; profile?: boolean }) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
@@ -265,6 +271,12 @@ function makePrompt(input?: { processor?: "blocking" }) {
       [AgentSvc.node, fastAgents],
     ])
   }
+  if (input?.profile)
+    return LayerNode.compile(promptRoot, [
+      ...replacements,
+      [Database.node, database],
+      [Storage.node, storage],
+    ])
   return LayerNode.compile(promptRoot, replacements)
 }
 
@@ -3232,6 +3244,139 @@ noLLMServer.instance(
     }),
   { config: cfg },
 )
+
+// kilocode_change start - an immutable routine model must not inherit a conflicting role default
+testEffect(makePrompt({ profile: true })).instance(
+  "preserves a routine model over coder defaults without changing ordinary coder selection",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const snapshots = RayaTaskSnapshot.make({ storage: yield* Storage.Service })
+      const model = { id: ref.modelID, providerID: ref.providerID, variant: "high" }
+      const definition = {
+        id: "worker_model",
+        name: "Builder",
+        role: "coder",
+        objective: "Build the saved concept",
+        capabilities: [],
+        memoryScope: "session" as const,
+        model: { id: ref.modelID, providerID: ref.providerID },
+        schedule: { kind: "manual" as const },
+        scheduleVersion: 1,
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+      }
+      for (const mode of [undefined, "coder"]) {
+        const identity = {
+          version: 1,
+          agentID: definition.id,
+          runID: mode ? "run_mode" : "run_model",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        }
+        const routine = yield* sessions.create({ agent: "coder", model, metadata: { rayaRoutine: identity } })
+        yield* snapshots.save({
+          version: 2,
+          runID: identity.runID,
+          agentID: definition.id,
+          sessionID: routine.id,
+          at: 1,
+          definition: { ...definition, ...(mode ? { mode } : {}) },
+          objective: definition.objective,
+        })
+        const handoff = yield* prompt.prompt({
+          sessionID: routine.id,
+          noReply: true,
+          ...(mode ? {} : { variant: "high" }),
+          parts: [{ type: "text", text: "Continue the saved worker assignment", synthetic: true }],
+        })
+        if (handoff.info.role !== "user") throw new Error("expected user message")
+        expect(handoff.info.agent).toBe("coder")
+        expect(handoff.info.model).toEqual({
+          providerID: ref.providerID,
+          modelID: mode ? ModelV2.ID.make("role-model") : ref.modelID,
+          variant: mode ? "xhigh" : "high",
+        })
+        expect((yield* sessions.get(routine.id)).model).toEqual({
+          providerID: ref.providerID,
+          id: mode ? ModelV2.ID.make("role-model") : ref.modelID,
+          variant: mode ? "xhigh" : "high",
+        })
+      }
+      for (const missing of [true, false]) {
+        const identity = {
+          version: 1,
+          agentID: definition.id,
+          runID: missing ? "run_missing" : "run_mismatched",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        }
+        const routine = yield* sessions.create({ agent: "coder", model, metadata: { rayaRoutine: identity } })
+        if (!missing)
+          yield* snapshots.save({
+            version: 2,
+            runID: identity.runID,
+            agentID: definition.id,
+            sessionID: SessionID.make("ses_wrong_owner"),
+            at: 1,
+            definition,
+            objective: definition.objective,
+          })
+        const refused = yield* prompt
+          .prompt({
+            sessionID: routine.id,
+            noReply: true,
+            parts: [{ type: "text", text: "Refuse an unverified routine model", synthetic: true }],
+          })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(refused)).toBe(true)
+        expect(yield* sessions.messages({ sessionID: routine.id })).toHaveLength(0)
+        expect((yield* sessions.get(routine.id)).model).toEqual(model)
+      }
+
+      const ordinary = yield* sessions.create({ agent: "coder", model })
+      const message = yield* prompt.prompt({
+        sessionID: ordinary.id,
+        noReply: true,
+        parts: [{ type: "text", text: "A normal coding request" }],
+      })
+      if (message.info.role !== "user") throw new Error("expected user message")
+      expect(message.info.model).toEqual({
+        providerID: ref.providerID,
+        modelID: ModelV2.ID.make("role-model"),
+        variant: "xhigh",
+      })
+      expect((yield* sessions.get(ordinary.id)).model).toEqual({
+        providerID: ref.providerID,
+        id: ModelV2.ID.make("role-model"),
+        variant: "xhigh",
+      })
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": { ...cfg.provider.test.models["test-model"], variants: { high: {} } },
+            "role-model": {
+              ...cfg.provider.test.models["test-model"],
+              id: "role-model",
+              name: "Role model",
+              variants: { xhigh: {} },
+            },
+          },
+        },
+      },
+      agent: { coder: { model: "test/role-model", variant: "xhigh" } },
+    },
+  },
+)
+// kilocode_change end
 
 noLLMServer.instance(
   "applies agent variant only when using agent model",

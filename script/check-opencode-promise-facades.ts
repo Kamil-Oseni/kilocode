@@ -127,6 +127,11 @@ const testAllow: Record<string, { count: number; reason: string }> = {
     reason:
       "isolated production organization HTTP lifecycle verifies its selected physical SQLite database and retires its application runtime owner",
   },
+  "kilocode/server/httpapi-destination-review.test.ts": {
+    count: 2,
+    reason:
+      "isolated production destination review exercises the routed application graph and disposes its realized application runtime during joined owner cleanup",
+  },
   "kilocode/server/httpapi-goal-routine-resume.fixture.ts": {
     count: 3,
     reason:

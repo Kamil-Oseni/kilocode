@@ -1198,7 +1198,9 @@ it.live(
         expect(bounded.properties?.deadline).toMatchObject({ type: "integer", minimum: 1, maximum: deadline })
         expect(bounded.additionalProperties).toBe(false)
         expect(bounded.required).toContain("artifacts")
+        expect(bounded.required).toContain("criteria")
         expect(bounded.properties?.artifacts).toMatchObject({ minItems: 1 })
+        expect(bounded.properties?.criteria).toMatchObject({ type: "array", minItems: 1 })
         const invalid = yield* delegate
           .execute({ ...params, deadline: 0 }, context("delegate-zero-deadline"))
           .pipe(Effect.exit)

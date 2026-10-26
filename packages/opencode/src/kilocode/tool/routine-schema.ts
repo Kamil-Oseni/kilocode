@@ -30,6 +30,7 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
   const properties = { ...schema.properties }
   delete properties.deadline
   const artifacts = properties.artifacts
+  const criteria = properties.criteria
   const result: JSONSchema7 = {
     ...schema,
     additionalProperties: false,
@@ -37,7 +38,7 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
       ...new Set([
         ...(schema.required ?? []).filter((key) => key !== "deadline"),
         ...(deadline === undefined ? [] : ["deadline"]),
-        ...(files ? ["artifacts"] : []),
+        ...(files ? ["artifacts", "criteria"] : []),
       ]),
     ],
     properties: {
@@ -45,6 +46,7 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
       ...(files
         ? {
             artifacts: { ...(artifacts && typeof artifacts === "object" ? artifacts : {}), type: "array", minItems: 1 },
+            criteria: { ...(criteria && typeof criteria === "object" ? criteria : {}), type: "array", minItems: 1 },
           }
         : {}),
       ...(deadline !== undefined

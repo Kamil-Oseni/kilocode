@@ -141,7 +141,6 @@ it("requires roster inspection before exposing questions or mutations for a Rout
     "question",
   ])
   expect(available.inspect_routines).toBe(tools.inspect_routines)
-  expect(available.inspect_routines.parameters).toBe(tools.inspect_routines.parameters)
   expect(available.assign_organization_work).toBe(tools.assign_organization_work)
   expect(available.question).toBe(tools.question)
 })

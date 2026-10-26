@@ -315,8 +315,8 @@ export const layer = Layer.effect(
         m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
       const idx = input.history.findIndex(real)
       if (idx === -1) return
-      if (input.history.filter(real).length !== 1) return
 
+      // kilocode_change - retry an unchanged default title on later turns using only the first request
       const context = input.history.slice(0, idx + 1)
       const firstUser = context[idx]
       if (!firstUser || firstUser.info.role !== "user") return

@@ -127,6 +127,7 @@ const hooks = {
   titleStreamEntered: false,
   failSetTitle: false,
   setTitleCalls: [] as { sessionID: string; title: string }[],
+  requests: [] as string[],
 }
 
 const memory = LayerNode.make({ service: MemoryService.Service, layer: MemoryService.layer, deps: [] })
@@ -190,7 +191,9 @@ const installHooks = Effect.fn("test.installTitleHooks")(function* () {
   const mutableSession = sessions as { setTitle: Session.Interface["setTitle"] }
 
   mutableLLM.stream = (input) => {
-    if (input.agent.name !== "title" || !hooks.stallTitle) return stream(input)
+    if (input.agent.name !== "title") return stream(input)
+    hooks.requests.push(JSON.stringify(input.messages))
+    if (!hooks.stallTitle) return stream(input)
     hooks.titleStreamEntered = true
     const gate = hooks.stallTitle
     return Stream.unwrap(
@@ -269,6 +272,7 @@ function resetHooks() {
   hooks.titleStreamEntered = false
   hooks.failSetTitle = false
   hooks.setTitleCalls = []
+  hooks.requests = []
   clearRenameMarks()
 }
 
@@ -345,7 +349,7 @@ it.instance(
 )
 
 it.instance(
-  "ensureTitle clears auto-title mark when setTitle fails",
+  "ensureTitle clears a failed mark and retries the first request on a later turn",
   () =>
     Effect.gen(function* () {
       resetHooks()
@@ -389,6 +393,33 @@ it.instance(
       for (const call of hooks.setTitleCalls) {
         expect(consumeAutoTitle(chat.id, call.title)).toBe(false)
       }
+
+      hooks.failSetTitle = false
+      const count = hooks.setTitleCalls.length
+      const release = yield* Deferred.make<void>()
+      yield* llm.hold("second assistant reply", deferredAsPromise(release))
+      const retry = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "a different follow-up request" }],
+        })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.sync(() => (hooks.setTitleCalls.length > count ? true : undefined)),
+        "ensureTitle did not retry the default title on the second turn",
+        "15 seconds",
+      )
+      expect(hooks.requests.at(-1)).toContain("hello for title fail")
+      expect(hooks.requests.at(-1)).not.toContain("a different follow-up request")
+      yield* pollWithTimeout(
+        sessions.get(chat.id).pipe(Effect.map((value) => (!Session.isDefaultTitle(value.title) ? true : undefined))),
+        "retried title was not saved",
+        "5 seconds",
+      )
+      yield* Deferred.succeed(release, undefined).pipe(Effect.ignore)
+      yield* Fiber.join(retry)
     }),
   30_000,
 )

@@ -27,6 +27,7 @@ import { inspection } from "@opencode-ai/core/kilocode/evidence-inspection"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import * as Accounting from "./accounting"
 import { collect } from "./evidence-scope"
+import { required as handoff } from "./handoff"
 import { verification, identity as sourceIdentity } from "@/kilocode/self-heal/verification"
 import type { Database } from "@opencode-ai/core/database/database"
 import * as DelegationAccounting from "./delegation-accounting"
@@ -1599,6 +1600,14 @@ export namespace RayaGoal {
             record: { version: 1, digest: digest(part), at: Date.now() },
           })
         }
+        const criterion = criteria?.find((item) => item.id === requirement.criterionID)
+        if (
+          handoff(criterion?.description ?? requirement.requirement, criterion?.verification ?? "") &&
+          !cited.some((part) => part.tool === "delegate_work")
+        )
+          return yield* new AuditError({
+            message: `Requirement needs an accepted delegate_work handoff receipt: ${requirement.requirement}. File evidence and its summary do not prove delegation. Eligible evidence: ${menu}.`,
+          })
         // raya_change start - Milestone G smoke-gated goals require genuine host smoke evidence
         if (
           (needsSmoke(objective) ||

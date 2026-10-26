@@ -1536,6 +1536,7 @@ export namespace RayaTaskRunner {
         yield* sync(stopped)
       }
       const listed = [row, ...kids]
+      const failures: Cause.Cause<unknown>[] = []
       for (const item of listed) {
         if (item.state === "completed" || item.state === "failed") continue
         const dropped = yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.")
@@ -1548,10 +1549,12 @@ export namespace RayaTaskRunner {
         const halted = yield* Effect.exit(open(worker.dir, input.halt(item.sessionID)))
         if (Exit.isFailure(halted)) {
           log.error("delegated session stop failed", { err: Cause.squash(halted.cause) })
+          failures.push(halted.cause)
           continue
         }
         if (dropped) yield* execution.finish(dropped)
       }
+      if (failures.length) return yield* Effect.failCause(failures[0])
       if (strict) return record
       const seen = new Set<string>()
       for (const item of listed) {

@@ -174,6 +174,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const status = yield* SessionStatus.Service
     const goals = yield* GoalTurn.observer // kilocode_change
+    const remind = yield* GoalTurn.compaction // kilocode_change - reuse scoped goal storage for compaction reminders
     const bind = yield* GoalTurn.binding // kilocode_change
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
@@ -1917,6 +1918,7 @@ export const layer = Layer.effect(
           const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
           const complete = yield* GoalGate.closed(resolved) // kilocode_change - current original dispatch only
           const mandatory = yield* GoalGate.required(resolved) // kilocode_change - require goal controls in owned specialist dispatches
+          const reminder = yield* remind(session, msgs.find((row) => row.info.id === lastUser.id)?.parts ?? []) // kilocode_change - restore routine work direction after compaction
           const conversation = agent.name === "auto" && acknowledged(msgs, current, lastUser.id)
           const assignment = agent.name === "auto" && assigned(msgs, current, lastUser.id)
           const chat = agent.name === "auto" && chatting(msgs, current, lastUser.id)
@@ -2075,7 +2077,7 @@ export const layer = Layer.effect(
             // kilocode_change end
             sessionID,
             parentSessionID: session.parentID,
-            system,
+            system: reminder ? [...system, reminder] : system, // kilocode_change - ephemeral reminder preserves saved compaction lineage
             messages: [
               ...modelMsgs,
               ...(isLastStep

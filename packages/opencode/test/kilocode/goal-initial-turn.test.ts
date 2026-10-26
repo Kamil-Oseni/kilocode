@@ -3,6 +3,7 @@ import { Deferred, Effect, Fiber } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Database } from "@opencode-ai/core/database/database"
 import { Git } from "@/git"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -10,14 +11,15 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { Storage } from "@/storage/storage"
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
-import { MessageID } from "@/session/schema"
+import { MessageID, PartID } from "@/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { ToolRegistry } from "@/tool/registry"
 import { RayaGoal } from "@/kilocode/goal"
-import { binding } from "@/kilocode/goal/turn"
+import { binding, compaction } from "@/kilocode/goal/turn"
 import * as TaskWorker from "@/kilocode/session/task-worker"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { database, storage as stored } from "./fixtures/effect-profile"
 
 const it = testEffect(
   LayerNode.compile(
@@ -33,6 +35,98 @@ const it = testEffect(
       Git.node,
     ]),
   ),
+)
+
+const scoped = testEffect(
+  LayerNode.compile(
+    LayerNode.group([Session.node, SessionProjector.node, Storage.node, FSUtil.node, Git.node, CrossSpawnSpawner.node]),
+    [
+      [Database.node, database],
+      [Storage.node, stored],
+    ],
+  ),
+)
+
+scoped.live(
+  "compaction restores only the current routine's active work goal despite a different dispatch parent",
+  () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const goals = RayaGoal.make({ storage, sessions })
+        const resume = yield* compaction
+        const identity = {
+          version: 1,
+          agentID: "researcher",
+          runID: "run-original",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        }
+        const session = yield* sessions.create({ metadata: { rayaRoutine: identity } })
+        yield* Effect.addFinalizer(() => goals.clear(session.id))
+        const routine = { agentID: identity.agentID, runID: identity.runID, sessionID: session.id }
+        yield* goals.create(
+          session.id,
+          "Write research and hand off verified files",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { modelCost: 100 },
+          undefined,
+          routine,
+        )
+        const queued = yield* goals.continued(session.id)
+        if (!queued?.dispatch) throw new Error("Expected an original goal dispatch")
+        const current = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "code",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+        })
+        const part = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: current.id,
+          sessionID: session.id,
+          type: "text",
+          text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+          synthetic: true,
+          metadata: { compaction_continue: true },
+        })
+        expect(current.id).not.toBe(queued.dispatch.messageID)
+        const before = yield* goals.get(session.id)
+        expect(yield* resume(yield* sessions.get(session.id), [part])).toContain("call it before further work")
+        expect(yield* goals.get(session.id)).toEqual(before)
+        expect(yield* resume(session, [{ ...part, synthetic: false }])).toBeUndefined()
+        expect(yield* resume(session, [{ ...part, metadata: {} }])).toBeUndefined()
+        yield* sessions.setMetadata({
+          sessionID: session.id,
+          metadata: { rayaRoutine: { ...identity, runID: "run-other" } },
+        })
+        expect(yield* resume(yield* sessions.get(session.id), [part])).toBeUndefined()
+        yield* sessions.setMetadata({ sessionID: session.id, metadata: { rayaRoutine: identity } })
+        yield* goals.control(session.id, "paused")
+        expect(yield* resume(yield* sessions.get(session.id), [part])).toBeUndefined()
+        yield* goals.clear(session.id)
+        expect(yield* resume(yield* sessions.get(session.id), [part])).toBeUndefined()
+        yield* goals.create(
+          session.id,
+          "Answer a question",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          "reply",
+          routine,
+        )
+        expect(yield* resume(yield* sessions.get(session.id), [part])).toBeUndefined()
+      }),
+    ),
+  30_000,
 )
 
 it.live(

@@ -8,6 +8,8 @@ import { RayaGoal } from "."
 import { Execution } from "@/kilocode/effect/observation"
 import { ResultContract } from "@/kilocode/chief/result-contract"
 import { gate } from "@/kilocode/session/input-gate"
+import type { SessionV1 } from "@opencode-ai/core/v1/session"
+import { record } from "@/kilocode/task/continuation"
 
 const log = Log.create({ service: "raya-goal-turn" })
 
@@ -34,6 +36,46 @@ export const observer = Effect.gen(function* () {
 })
 
 export const node = Storage.node
+
+/** Restore work direction after compaction without changing saved dispatch lineage or tool authority. */
+export const compaction = Effect.gen(function* () {
+  const storage = yield* Storage.Service
+  return Effect.fn("RayaGoal.compactionReminder")(function* (
+    session: Pick<Session.Info, "id" | "metadata">,
+    parts: SessionV1.WithParts["parts"],
+  ) {
+    if (!parts.some((part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true))
+      return undefined
+    const identity = yield* Schema.decodeUnknownEffect(record)(session.metadata?.rayaRoutine).pipe(
+      Effect.orElseSucceed(() => undefined),
+    )
+    if (!identity) return undefined
+    const goal = yield* storage.read<unknown>(["raya", "goal", session.id]).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(RayaGoal.State)),
+      Effect.catchIf(
+        (err) => Storage.NotFoundError.isInstance(err),
+        () => Effect.succeed(undefined),
+      ),
+      Effect.catchCause((cause) =>
+        Cause.hasInterrupts(cause)
+          ? Effect.interrupt
+          : Effect.sync(() => {
+              log.warn("Could not restore the routine's goal reminder after compaction.", { sessionID: session.id })
+              return undefined
+            }),
+      ),
+    )
+    if (
+      goal?.status !== "active" ||
+      goal.completion === "reply" ||
+      goal.routine?.sessionID !== session.id ||
+      goal.routine.agentID !== identity.agentID ||
+      goal.routine.runID !== identity.runID
+    )
+      return undefined
+    return "This routine resumed after conversation compaction with an active saved goal. If this resumed turn has not yet called get_goal, call it before further work. Restore its current objective, criteria and budget, then perform the next concrete unmet action. Repair rejected handoff arguments using their actual errors and saved limits. A status summary alone does not complete the work. Preserve all existing permissions and do not repeat a successful action merely because history was compacted."
+  })
+})
 
 export const associate = Effect.fn("RayaGoal.associate")(
   function* (

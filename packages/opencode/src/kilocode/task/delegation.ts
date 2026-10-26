@@ -463,7 +463,9 @@ export namespace RayaTaskDelegation {
         return yield* new Invalid({ message: "A worker cannot delegate to itself." })
       const workspace = scope(sender, recipient)
       if (value.deadline !== undefined && value.deadline <= Date.now())
-        return yield* new Invalid({ message: "This delegation deadline has already passed." })
+        return yield* new Invalid({
+          message: `This delegation deadline has already passed. Received ${value.deadline}; current Unix time is ${Date.now()} milliseconds. Use an absolute future Unix timestamp in milliseconds, not a duration. Omit deadline when none was requested.`,
+        })
       const prior = yield* lookup(value.source)
       if (prior) {
         if (!same(prior, value))

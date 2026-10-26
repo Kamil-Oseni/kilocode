@@ -3,6 +3,7 @@ import { kickoff, forward } from "@/kilocode/task/request"
 
 test("handoff criteria recognize affirmative work and preserve explicit prohibitions", () => {
   for (const text of [
+    "Call delegate_work with the actual saved file.",
     "Save research then hand off to Builder.",
     "Verify the accepted delegation and its file receipts.",
     "A successful handoff is required.",

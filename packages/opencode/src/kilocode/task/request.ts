@@ -1,6 +1,6 @@
 /** Recognize an affirmative handoff requirement without treating prohibitions as requested work. */
 export function forward(text: string) {
-  return [...text.matchAll(/\b(?:hand(?:ing)?[\s-]?offs?|delegat(?:e[sd]?|ing|ion))\b/gi)].some(
+  return [...text.matchAll(/\b(?:hand(?:ing)?[\s-]?offs?|delegat(?:e[sd]?(?:_work)?|ing|ion))\b/gi)].some(
     (match) =>
       !/\b(?:no|not|never|without|don't|cannot|can't|avoid)\s+(?:\w+\s+){0,2}$/i.test(text.slice(0, match.index)),
   )

@@ -1166,7 +1166,6 @@ it.live(
           expected: "Return the deployed source and verification",
           context: "Use the approved design in the current request",
           deadline,
-          budget: 500,
           artifacts: [file],
         }
         const assigned = yield* delegate.execute(params, context("delegate-build"))
@@ -1179,6 +1178,7 @@ it.live(
             recipientID: coder.id,
             parentID: incoming.record.id,
             parentRunID: runID,
+            budget: 1000,
           },
         })
         const id = "delegationID" in assigned.metadata ? assigned.metadata.delegationID : undefined
@@ -1194,7 +1194,7 @@ it.live(
           expected: params.expected,
           context: params.context,
           deadline: params.deadline,
-          budget: params.budget,
+          budget: 1000,
           artifacts: [
             {
               path: file,

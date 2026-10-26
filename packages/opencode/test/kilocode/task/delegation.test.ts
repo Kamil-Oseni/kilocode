@@ -459,6 +459,53 @@ test("one work tree cannot grow beyond its durable request limit", async () => {
   )
 })
 
+test("bounded children inherit only remaining commitments and replay the saved budget", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = RayaTaskDelegation.make(yield* Database.Service)
+      const chief = agent("chief", "generalist")
+      const books = agent("books", "accountant")
+      const legal = agent("legal", "reviewer")
+      const sales = agent("sales", "seller")
+      const ops = agent("ops", "operator")
+      const parent = yield* store.admit(request("inherit_parent", chief.id, books.id, { budget: 20 }), chief, books)
+      const link = { parentID: parent.record.id, parentRunID: "inherit_run" }
+      const allocation = { limit: 10, spent: 1.25 }
+      yield* store.admit(
+        request("inherit_explicit", books.id, legal.id, { ...link, budget: 4 }),
+        books,
+        legal,
+        false,
+        allocation,
+      )
+      const input = request("inherit_omitted", books.id, sales.id, link)
+      const inherited = yield* store.admit(input, books, sales, false, allocation)
+      expect(inherited.record.budget).toBe(4)
+      expect(inherited.created).toBe(true)
+      const replay = yield* store.admit(input, books, sales, false, { limit: 10, spent: 2.5 })
+      expect(replay.created).toBe(false)
+      expect(replay.record.budget).toBe(4)
+      for (const changed of [{ ...input, budget: 3 }, { ...input, objective: "Different work" }]) {
+        const refusal = yield* store.admit(changed, books, sales, false, allocation).pipe(Effect.flip)
+        expect(refusal.message).toContain("different request")
+      }
+      const exhausted = yield* store
+        .admit(request("inherit_too_small", books.id, ops.id, link), books, ops, false, allocation)
+        .pipe(Effect.flip)
+      expect(exhausted.message).toContain("minimum supported child budget")
+      expect(yield* store.byRun("inherit_run")).toHaveLength(2)
+      const remaining = yield* store.admit(
+        request("inherit_parent_only", books.id, ops.id, { parentID: parent.record.id }),
+        books,
+        ops,
+      )
+      expect(remaining.record.budget).toBe(12)
+      const unbounded = yield* store.admit(request("inherit_no_authority", chief.id, ops.id), chief, ops)
+      expect(unbounded.record.budget).toBeUndefined()
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("delegation admits once, refuses loops, and queues without duplicating a busy worker", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -551,13 +598,16 @@ test("delegation admits once, refuses loops, and queues without duplicating a bu
         .admit(
           request("dlg_missing_budget", books.id, extra.id, {
             parentID: bounded.record.id,
+            parentRunID: "bounded_run",
             deadline: bounded.record.deadline,
           }),
           books,
           extra,
+          false,
+          { limit: 0.9, spent: 0 },
         )
         .pipe(Effect.flip)
-      expect(unbounded.message).toContain("bounded model-cost budget")
+      expect(unbounded.message).toContain("minimum supported child budget")
       const costly = yield* store
         .admit(
           request("dlg_costly_child", books.id, extra.id, {

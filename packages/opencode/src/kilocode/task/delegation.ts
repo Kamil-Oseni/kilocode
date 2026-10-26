@@ -242,7 +242,8 @@ function same(saved: Record, value: Request) {
     saved.organizationID === value.organizationID &&
     saved.organizationRevision === value.organizationRevision &&
     saved.deadline === value.deadline &&
-    saved.budget === value.budget &&
+    (saved.budget === value.budget ||
+      (value.budget === undefined && !!(value.parentID || value.parentRunID) && saved.budget !== undefined)) &&
     isDeepStrictEqual(saved.artifacts, value.artifacts)
   )
 }
@@ -501,8 +502,6 @@ export namespace RayaTaskDelegation {
         return yield* new Invalid({ message: "A delegated follow-on must keep its parent deadline." })
       if (parent?.deadline !== undefined && value.deadline !== undefined && value.deadline > parent.deadline)
         return yield* new Invalid({ message: "A delegated follow-on cannot extend its parent deadline." })
-      if (parent?.budget !== undefined && value.budget === undefined)
-        return yield* new Invalid({ message: "A delegated follow-on must keep a bounded model-cost budget." })
       if (parent?.budget !== undefined && value.budget !== undefined && value.budget > parent.budget)
         return yield* new Invalid({ message: "A delegated follow-on cannot exceed its parent model-cost budget." })
       const depth = lineage.length + 1
@@ -515,8 +514,6 @@ export namespace RayaTaskDelegation {
       const count = yield* outstanding(value.senderID, value.parentID)
       if (count >= FAN)
         return yield* new Invalid({ message: "This worker already has too many outstanding delegated requests." })
-      if (allocation && value.budget === undefined)
-        return yield* new Invalid({ message: "Delegated work from this bounded run requires a model-cost budget." })
       if (allocation && !value.parentRunID)
         return yield* new Invalid({ message: "Bounded delegated work requires its parent run identity." })
       if (gone)
@@ -611,6 +608,54 @@ export namespace RayaTaskDelegation {
                   }
                   return total
                 })
+              const limits: { amount: number; message: string }[] = []
+              if (value.parentID) {
+                const parent = yield* tx
+                  .select({ budget: Delegation.budget })
+                  .from(Delegation)
+                  .where(eq(Delegation.id, value.parentID))
+                  .get()
+                  .pipe(Effect.orDie)
+                if (!parent) return yield* new Invalid({ message: "The parent delegation request was not found." })
+                if (parent.budget !== null) {
+                  const siblings = yield* tx
+                    .select()
+                    .from(Delegation)
+                    .where(eq(Delegation.parent_id, value.parentID))
+                    .all()
+                    .pipe(Effect.orDie)
+                  const allocated = yield* committed(siblings)
+                  limits.push({
+                    amount: parent.budget - allocated,
+                    message: "This delegated follow-on exceeds the parent's remaining delegated-work budget.",
+                  })
+                }
+              }
+              if (allocation) {
+                const siblings = yield* (
+                  value.parentID
+                    ? tx.select().from(Delegation).where(eq(Delegation.parent_id, value.parentID))
+                    : tx.select().from(Delegation).where(eq(Delegation.parent_run_id, value.parentRunID!))
+                )
+                  .all()
+                  .pipe(Effect.orDie)
+                const reserved = yield* committed(siblings)
+                limits.push({
+                  amount: allocation.limit - allocation.spent - reserved,
+                  message: "This request exceeds the run's remaining model-cost budget.",
+                })
+              }
+              const budget =
+                value.budget ??
+                (limits.length ? Math.floor(Math.min(1_000_000, ...limits.map((limit) => limit.amount))) : undefined)
+              if (budget !== undefined && (!Number.isSafeInteger(budget) || budget < 1))
+                return yield* new Invalid({
+                  message: "The remaining allowance cannot fund the minimum supported child budget of 1.",
+                })
+              for (const limit of limits) {
+                if (budget !== undefined && budget > limit.amount)
+                  return yield* new Invalid({ message: limit.message })
+              }
               if (organization) {
                 const owner = yield* tx
                   .select({
@@ -627,7 +672,7 @@ export namespace RayaTaskDelegation {
                     message: "This organization changed. Reload it before delegating work.",
                   })
                 if (!value.parentID && owner.budget !== null) {
-                  if (value.budget === undefined)
+                  if (budget === undefined)
                     return yield* new Invalid({
                       message: "Work in this organization requires a model-cost budget.",
                     })
@@ -640,47 +685,11 @@ export namespace RayaTaskDelegation {
                   const spent = yield* direct(tx, organization.id).pipe(Effect.orDie)
                   const coordinated = yield* coordinatorCost(tx, organization.id).pipe(Effect.orDie)
                   const held = yield* standing(tx, organization.id).pipe(Effect.orDie)
-                  if (commitment(rows) + spent + coordinated + held.committed + value.budget > owner.budget)
+                  if (commitment(rows) + spent + coordinated + held.committed + budget > owner.budget)
                     return yield* new Invalid({
                       message: "This request exceeds the organization's remaining model-cost budget.",
                     })
                 }
-              }
-              if (value.parentID && value.budget !== undefined) {
-                const parent = yield* tx
-                  .select({ budget: Delegation.budget })
-                  .from(Delegation)
-                  .where(eq(Delegation.id, value.parentID))
-                  .get()
-                  .pipe(Effect.orDie)
-                if (!parent) return yield* new Invalid({ message: "The parent delegation request was not found." })
-                if (parent.budget !== null) {
-                  const siblings = yield* tx
-                    .select()
-                    .from(Delegation)
-                    .where(eq(Delegation.parent_id, value.parentID))
-                    .all()
-                    .pipe(Effect.orDie)
-                  const allocated = yield* committed(siblings)
-                  if (value.budget > parent.budget - allocated)
-                    return yield* new Invalid({
-                      message: "This delegated follow-on exceeds the parent's remaining delegated-work budget.",
-                    })
-                }
-              }
-              if (allocation && value.budget !== undefined) {
-                const siblings = yield* (
-                  value.parentID
-                    ? tx.select().from(Delegation).where(eq(Delegation.parent_id, value.parentID))
-                    : tx.select().from(Delegation).where(eq(Delegation.parent_run_id, value.parentRunID!))
-                )
-                  .all()
-                  .pipe(Effect.orDie)
-                const reserved = yield* committed(siblings)
-                if (allocation.spent + reserved + value.budget > allocation.limit)
-                  return yield* new Invalid({
-                    message: "This request exceeds the run's remaining model-cost budget.",
-                  })
               }
               const now = Date.now()
               const saved = {
@@ -699,7 +708,7 @@ export namespace RayaTaskDelegation {
                 criteria: value.criteria ? JSON.stringify(value.criteria) : null,
                 context: value.context ?? null,
                 deadline: value.deadline ?? null,
-                budget: value.budget ?? null,
+                budget: budget ?? null,
                 depth,
                 state,
                 child_run_id: null,

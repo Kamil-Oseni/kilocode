@@ -29,6 +29,7 @@ import { confirm } from "./routine-confirmation"
 import { SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { Criteria } from "@/kilocode/goal/criteria"
+import { RayaGoal } from "@/kilocode/goal"
 import * as ToolJsonSchema from "@/tool/json-schema"
 import { kickoff, forward, omits } from "@/kilocode/task/request"
 
@@ -223,7 +224,7 @@ const DelegateWork = Schema.Struct({
   }),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))).annotate({
     description:
-      "Maximum model cost for this child request. Required when the incoming request or current run has a model-cost budget. Inspect the current request bound; account for spending and earlier child allocations. Do not invent a budget or automatically copy the full parent cap.",
+      "Optional maximum model cost for this child request. Omit to inherit the remaining authorized parent/run allowance; Raya subtracts spending and prior child commitments before saving it. An explicit amount cannot exceed those remaining bounds. Never invent a new limit.",
   }),
   artifacts: Schema.optional(ArtifactPaths).annotate({
     description:
@@ -1101,6 +1102,12 @@ export function routineManagementTools(input: {
             artifacts,
           }
           const record = yield* runner.delegate(request)
+          const inherited = params.budget === undefined && record.budget !== undefined
+          const goal = inherited ? yield* RayaGoal.make(input).get(ctx.sessionID) : undefined
+          const limits = [incoming?.budget, goal?.budget?.modelCost].filter((value) => value !== undefined)
+          const bounded =
+            !inherited ||
+            (limits.length > 0 && Schema.is(Budget)(record.budget) && record.budget <= Math.min(...limits))
           if (
             record.source !== source ||
             record.senderID !== sender.id ||
@@ -1114,7 +1121,8 @@ export function routineManagementTools(input: {
             !isDeepStrictEqual(record.criteria, params.criteria) ||
             record.context !== params.context?.trim() ||
             record.deadline !== params.deadline ||
-            record.budget !== params.budget ||
+            (!inherited && record.budget !== params.budget) ||
+            !bounded ||
             !isDeepStrictEqual(record.artifacts, artifacts)
           )
             return yield* Effect.fail(new Error("The saved delegation does not match this request."))
@@ -1122,7 +1130,7 @@ export function routineManagementTools(input: {
           const reason = record.reason ? ` ${record.reason}` : ""
           return {
             title: "Work delegation saved",
-            output: `Assigned the request to ${recipient.name}. Saved state: ${record.state}.${reason}${record.artifacts?.length ? ` Saved ${record.artifacts.length} verified file handoff${record.artifacts.length === 1 ? "" : "s"}.` : ""}`,
+            output: `Assigned the request to ${recipient.name}. Saved state: ${record.state}.${reason}${inherited ? ` Inherited remaining model-cost allowance: $${record.budget}.` : ""}${record.artifacts?.length ? ` Saved ${record.artifacts.length} verified file handoff${record.artifacts.length === 1 ? "" : "s"}.` : ""}`,
             metadata: {
               requestStatus: record.state === "failed" || record.state === "cancelled" ? "unresolved" : "complete",
               view: "routines",
@@ -1134,6 +1142,7 @@ export function routineManagementTools(input: {
               recipientID: record.recipientID,
               parentID: record.parentID,
               parentRunID: record.parentRunID,
+              ...(record.budget !== undefined ? { budget: record.budget } : {}),
             },
           }
         }).pipe(

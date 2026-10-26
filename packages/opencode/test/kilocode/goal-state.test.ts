@@ -147,6 +147,54 @@ function setup(
 }
 
 describe("RayaGoal", () => {
+  guide.live("completion rejects failed worker handoffs while preserving accepted assignment evidence", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      return yield* Effect.gen(function* () {
+        const storage = yield* Storage.Service
+        for (const state of ["unresolved", "failed", "cancelled", "queued", "accepted", "running"]) {
+          const id = SessionID.make(`ses_handoff_evidence_${crypto.randomUUID()}`)
+          const rows: MessageV2.WithParts[] = []
+          const goals = setup(storage, () => rows)
+          yield* Effect.addFinalizer(() => goals.clear(id))
+          yield* goals.create(id, "Verify the child assignment was accepted, not its completed deliverables.")
+          const valid = ["queued", "accepted", "running"].includes(state)
+          const data = transcript({
+            sessionID: id,
+            tool: "delegate_work",
+            metadata: { requestStatus: valid ? "complete" : "unresolved", delegationID: "rdl_saved", state },
+          })
+          rows.push(...data.rows)
+          const result = yield* goals
+            .update(id, {
+              status: "complete",
+              audit: {
+                requirements: [
+                  {
+                    requirement: "Verify accepted child assignment",
+                    passed: true,
+                    evidence: [{ callID: data.part!.callID, summary: "Accepted assignment receipt" }],
+                  },
+                ],
+              },
+            })
+            .pipe(Effect.exit)
+          expect(Exit.isSuccess(result)).toBe(valid)
+          expect((yield* goals.get(id))?.status).toBe(valid ? "complete" : "active")
+        }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.fresh(
+            Storage.layerWithDatabase(path.join(dir, "storage")).pipe(
+              Layer.provide(Database.layerFromPath(path.join(dir, "authority.sqlite"))),
+            ),
+          ),
+        ),
+      )
+    }),
+  )
+
   guide.instance("goal evidence pages retain older audit references while prioritizing fresh results", () =>
     Effect.gen(function* () {
       const storage = yield* Storage.Service

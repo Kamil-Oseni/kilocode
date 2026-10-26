@@ -217,7 +217,7 @@ const DelegateWork = Schema.Struct({
   }),
   context: Schema.optional(Text),
   deadline: Schema.optional(
-    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(8.64e15)),
   ).annotate({
     description:
       "Absolute future Unix timestamp in milliseconds, not a duration. Preserve the incoming deadline when present. Otherwise omit unless the owner supplied one; never invent a timestamp or use zero.",
@@ -252,7 +252,7 @@ const AssignOrganizationWork = Schema.Struct({
   }),
   context: Schema.optional(Text),
   deadline: Schema.optional(
-    Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(8.64e15)),
   ).annotate({ description: "Omit unless the user supplied a deadline. Never invent a timestamp." }),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))).annotate({
     description:
@@ -1067,6 +1067,12 @@ export function routineManagementTools(input: {
               (incoming.state !== "running" && incoming.state !== "needs_input"))
           )
             return yield* Effect.fail(new Error("The current delegated request no longer matches this worker run."))
+          if (params.deadline !== undefined && incoming?.deadline === undefined)
+            return yield* Effect.fail(
+              new Error(
+                "This owning request has no deadline. Omit the deadline field; only the owner can authorize one through the original work assignment.",
+              ),
+            )
           if (incoming?.criteria && params.artifacts?.length && !params.criteria)
             return yield* Effect.fail(
               new Error(

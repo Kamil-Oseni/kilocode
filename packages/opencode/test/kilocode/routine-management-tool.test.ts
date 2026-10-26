@@ -27,6 +27,7 @@ import { make as coordinator } from "@/kilocode/task/coordinator"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
+import { TaskSchema } from "@/kilocode/tool/task-schema"
 import * as Permission from "@/permission"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Session } from "@/session/session"
@@ -1168,6 +1169,23 @@ it.live(
           deadline,
           artifacts: [file],
         }
+        const schema = ToolJsonSchema.fromTool(available)
+        expect(schema.properties?.deadline).toMatchObject({ exclusiveMinimum: 0 })
+        const bounded = yield* TaskSchema.prepare(
+          "delegate_work",
+          schema,
+          sessionID,
+          context("bounded-schema").messageID,
+          "designer",
+        ).pipe(Effect.provideService(Session.Service, workerSessions as never))
+        expect(bounded.properties?.deadline).toMatchObject({ type: "integer", minimum: 1, maximum: deadline })
+        expect(bounded.additionalProperties).toBe(false)
+        const invalid = yield* delegate
+          .execute({ ...params, deadline: 0 }, context("delegate-zero-deadline"))
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(invalid)).toBe(true)
+        expect(yield* errands.byRun(runID)).toHaveLength(0)
+        expect(yield* errands.queued(coder.id)).toEqual([])
         const assigned = yield* delegate.execute(params, context("delegate-build"))
         expect(assigned).toMatchObject({
           title: "Work delegation saved",
@@ -1207,6 +1225,41 @@ it.live(
         })
         expect(yield* delegate.execute(params, context("delegate-build"))).toEqual(assigned)
         expect(yield* errands.byRun(runID)).toHaveLength(1)
+
+        const manual = SessionID.make("ses_manual_without_deadline")
+        const run = "run_manual_without_deadline"
+        yield* tasks.record({
+          id: run,
+          agentID: chief.id,
+          at: Date.now(),
+          sessionID: manual,
+          status: "running",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        })
+        const unbound = {
+          ...workerSessions,
+          get: () => Effect.succeed({ ...routineSession(chief.id, run), id: manual }),
+        }
+        const hidden = yield* TaskSchema.prepare(
+          "delegate_work",
+          schema,
+          manual,
+          context("unbounded-schema").messageID,
+          "generalist",
+        ).pipe(Effect.provideService(Session.Service, unbound as never))
+        expect(hidden.properties?.deadline).toBeUndefined()
+        expect(hidden.additionalProperties).toBe(false)
+        const unauthorized = yield* (
+          yield* routineManagementTools({ database, storage, sessions: unbound }).delegateWork
+        ).init()
+        const denied = yield* unauthorized.execute(
+          { ...params, recipientID: designer.id },
+          { ...context("delegate-unrequested-deadline"), sessionID: manual },
+        )
+        expect(denied.metadata.requestStatus).toBe("unresolved")
+        expect(denied.output).toContain("owning request has no deadline")
+        expect(yield* errands.byRun(run)).toHaveLength(0)
 
         const missing = yield* delegate.execute(
           { ...params, objective: "Use a missing receipt", artifacts: [path.join(directory, "not-created.md")] },

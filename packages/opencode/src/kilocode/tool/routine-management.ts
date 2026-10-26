@@ -29,6 +29,7 @@ import { confirm } from "./routine-confirmation"
 import { SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { Criteria } from "@/kilocode/goal/criteria"
+import { kickoff } from "@/kilocode/task/request"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -203,7 +204,9 @@ const DelegateWork = Schema.Struct({
     description:
       "Exact current organization revision returned by inspect_team. Copy it unchanged; do not increment it.",
   }),
-  recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)).annotate({
+    description: "Copy the recipient member's agentID from inspect_team exactly. Never use its display name.",
+  }),
   objective: Text,
   expected: Schema.optional(Text),
   criteria: Schema.optional(Criteria).annotate({
@@ -213,9 +216,14 @@ const DelegateWork = Schema.Struct({
   context: Schema.optional(Text),
   deadline: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
-  ),
+  ).annotate({
+    description: "Optional future Unix timestamp in milliseconds. Omit when no deadline was requested; never use zero.",
+  }),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
-  artifacts: Schema.optional(ArtifactPaths),
+  artifacts: Schema.optional(ArtifactPaths).annotate({
+    description:
+      "Exact absolute files already created or changed in this worker run. Never supply directories or future outputs.",
+  }),
 })
 const AssignOrganizationWork = Schema.Struct({
   organizationID: Organization.fields.id,
@@ -998,7 +1006,7 @@ export function routineManagementTools(input: {
     "delegate_work",
     Effect.succeed({
       description:
-        "Assign one bounded follow-on request to an existing worker through the current organization. One work tree supports up to eight sequential requests and 64 saved requests total. Include request-specific criteria when work needs verified deliverables; omit them for a simple question. Include artifacts when the recipient must use exact files created or changed in this worker run; Raya verifies their current bytes and saves their SHA-256 identities. Use ask_options before calling if the responsible worker, outcome, expected result, context, deadline, or budget is ambiguous. The recipient must be on an exact saved outgoing delegation route. This tool saves and starts the request when possible; it never returns a worker result that has not arrived.",
+        "Assign one bounded follow-on request to an existing worker through the current organization. One work tree supports up to eight sequential requests and 64 saved requests total. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Include artifacts when the recipient must use exact files created or changed in this worker run; Raya verifies their current bytes and saves their SHA-256 identities. Use ask_options before calling if the responsible worker, outcome, expected result, context, deadline, or budget is ambiguous. The recipient must be on an exact saved outgoing delegation route. This tool saves and starts the request when possible; it never returns a worker result that has not arrived.",
       parameters: DelegateWork,
       execute: (params: typeof DelegateWork.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -1046,6 +1054,12 @@ export function routineManagementTools(input: {
               (incoming.state !== "running" && incoming.state !== "needs_input"))
           )
             return yield* Effect.fail(new Error("The current delegated request no longer matches this worker run."))
+          if (incoming?.criteria && params.artifacts?.length && !params.criteria)
+            return yield* Effect.fail(
+              new Error(
+                "Handing off produced files from an audited job requires child-specific acceptance criteria. Describe and verify the recipient's actual deliverables; do not copy unrelated parent criteria.",
+              ),
+            )
           if (incoming) {
             const tree = yield* errands.tree(incoming.id)
             const ancestry = new Set(tree.above.flatMap((item) => [item.senderID, item.recipientID]))
@@ -1126,12 +1140,37 @@ export function routineManagementTools(input: {
     "assign_organization_work",
     Effect.succeed({
       description:
-        "Assign tracked work from the main chat to an existing organization. First call inspect_routines. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria when work needs verified deliverables; omit them for a simple question. Do not ask the user for internal IDs or organization revisions.",
+        "Assign tracked work from the main chat to an existing organization. First call inspect_routines. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
       parameters: AssignOrganizationWork,
       execute: (params: typeof AssignOrganizationWork.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
           if (!ctx.callID)
             return yield* Effect.fail(new Error("Organization work assignment requires a stable tool call."))
+          const messages = yield* input.sessions.messages({ sessionID: ctx.sessionID })
+          const assistant = messages.find(
+            (message) => message.info.id === ctx.messageID && message.info.role === "assistant",
+          )
+          const user = messages.findLast(
+            (message) => message.info.role === "user" && message.info.sessionID === ctx.sessionID,
+          )
+          if (assistant?.info.role === "assistant" && assistant.info.parentID !== user?.info.id)
+            return yield* Effect.fail(
+              new Error("The current organization assignment no longer matches its user request."),
+            )
+          const request = user?.parts
+            .flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : []))
+            .join("\n")
+          const start = kickoff(request)
+          if (start && (!assistant || assistant.info.sessionID !== ctx.sessionID))
+            return yield* Effect.fail(
+              new Error("Starting saved-team work requires its current assistant and user request."),
+            )
+          if (!params.criteria && start)
+            return yield* Effect.fail(
+              new Error(
+                "Starting saved-team work requires request-specific acceptance criteria. Include verifiable criteria for this recipient's actual deliverables and handoff; a planning reply must not complete the job.",
+              ),
+            )
           const organization = yield* organizations.get(params.organizationID)
           if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
           if (organization.revision !== params.expectedRevision)
@@ -1158,7 +1197,11 @@ export function routineManagementTools(input: {
               ),
             )
           const source = `organization-chat:${digest(
-            JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, organization.id]),
+            JSON.stringify(
+              start && user
+                ? [ctx.sessionID, user.info.id, organization.id]
+                : [ctx.sessionID, ctx.messageID, ctx.callID, organization.id],
+            ),
           ).slice(0, 48)}`
           const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
           yield* ctx.ask({

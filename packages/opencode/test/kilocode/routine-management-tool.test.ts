@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import path from "node:path"
 import { hostname } from "node:os"
-import { Effect, Exit, Layer } from "effect"
+import { Effect, Exit, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
@@ -10,6 +10,7 @@ import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaContactOutbox } from "@/kilocode/contact/outbox"
@@ -1253,6 +1254,10 @@ it.live(
       Effect.gen(function* () {
         const storage = yield* Storage.Service
         const database = yield* Database.Service
+        const physical = yield* database.db.all<{ name: string; file: string }>("PRAGMA database_list")
+        expect(path.normalize(physical.find((row) => row.name === "main")?.file ?? "")).toBe(
+          path.join(directory, "queue.sqlite"),
+        )
         const tasks = RayaTask.make({ storage, database })
         const sender = yield* tasks.create({
           name: "Chief of Staff",
@@ -1293,6 +1298,79 @@ it.live(
           scheduleVersion: 1,
           trigger: { kind: "manual" },
         })
+        const ctx = context("assign-kickoff-without-criteria")
+        const user = MessageID.make("msg_kickoff_original_user")
+        const pair = [
+          Schema.decodeUnknownSync(SessionV1.WithParts)({
+            info: {
+              id: user,
+              sessionID: ctx.sessionID,
+              role: "user",
+              agent: "auto",
+              model: { providerID: "fixture", modelID: "fixture" },
+              time: { created: 1 },
+            },
+            parts: [
+              {
+                id: "prt_kickoff_original_text",
+                sessionID: ctx.sessionID,
+                messageID: user,
+                type: "text",
+                text: "Run a job through our saved Research Team to write a verified research report.",
+              },
+            ],
+          }),
+          Schema.decodeUnknownSync(SessionV1.WithParts)({
+            info: {
+              id: ctx.messageID,
+              sessionID: ctx.sessionID,
+              role: "assistant",
+              parentID: user,
+              agent: "auto",
+              mode: "auto",
+              modelID: "fixture",
+              providerID: "fixture",
+              path: { cwd: directory, root: directory },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: 2 },
+            },
+            parts: [],
+          }),
+        ]
+        const calls = { approvals: 0 }
+        const kickoff = yield* (yield* routineManagementTools({
+          database,
+          storage,
+          sessions: { ...sessions, messages: () => Effect.succeed(pair) },
+        }).assignOrganizationWork).init()
+        const history = yield* tasks.runsFor(recipient.id)
+        const roster = yield* tasks.list()
+        const errands = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
+        expect(yield* errands.queued(recipient.id)).toEqual([])
+        const refused = yield* kickoff.execute(
+          {
+            organizationID: organization.id,
+            expectedRevision: organization.revision,
+            senderID: sender.id,
+            recipientID: recipient.id,
+            objective: "Write the verified research report.",
+          },
+          {
+            ...ctx,
+            ask: () =>
+              Effect.sync(() => {
+                calls.approvals++
+              }),
+          },
+        )
+        expect(refused.title).toBe("Organization work needs review")
+        expect(refused.output).toContain("requires request-specific acceptance criteria")
+        expect(refused.metadata.requestStatus).toBe("unresolved")
+        expect(calls.approvals).toBe(0)
+        expect(yield* errands.queued(recipient.id)).toEqual([])
+        expect(yield* tasks.runsFor(recipient.id)).toEqual(history)
+        expect(yield* tasks.list()).toEqual(roster)
         const tools = routineManagementTools({ database, storage, sessions })
         const assign = yield* (yield* tools.assignOrganizationWork).init()
         expect(KiloToolRegistry.available({ ...assign, id: "assign_organization_work" }, agent("primary"))).toBe(true)
@@ -1344,9 +1422,8 @@ it.live(
         expect(denied.output).toContain("not authorized")
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            Storage.layerFromDir(path.join(directory, "storage")),
-            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          Storage.layerWithDatabase(path.join(directory, "storage")).pipe(
+            Layer.provideMerge(Layer.fresh(Database.layerFromPath(path.join(directory, "queue.sqlite")))),
           ),
         ),
       ),

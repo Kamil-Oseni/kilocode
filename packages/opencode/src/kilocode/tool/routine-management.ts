@@ -218,12 +218,16 @@ const DelegateWork = Schema.Struct({
   deadline: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
   ).annotate({
-    description: "Optional future Unix timestamp in milliseconds. Omit when no deadline was requested; never use zero.",
+    description:
+      "Absolute future Unix timestamp in milliseconds, not a duration. Preserve the incoming deadline when present. Otherwise omit unless the owner supplied one; never invent a timestamp or use zero.",
   }),
-  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))).annotate({
+    description:
+      "Maximum model cost for this child request. Required when the incoming request or current run has a model-cost budget. Inspect the current request bound; account for spending and earlier child allocations. Do not invent a budget or automatically copy the full parent cap.",
+  }),
   artifacts: Schema.optional(ArtifactPaths).annotate({
     description:
-      "Exact absolute files already created or changed in this worker run. Never supply directories or future outputs.",
+      "Exact absolute files already created or changed in this worker run that the recipient must consume. Copy paths from successful file receipts. Mentioning paths in objective or context does not capture a verified file handoff. Never supply directories or future outputs.",
   }),
 })
 const AssignOrganizationWork = Schema.Struct({
@@ -1340,6 +1344,8 @@ export function routineManagementTools(input: {
                       organizationID: incoming.organizationID,
                       objective: incoming.objective,
                       state: incoming.state,
+                      ...(incoming.budget !== undefined ? { budget: incoming.budget } : {}),
+                      ...(incoming.deadline !== undefined ? { deadline: incoming.deadline } : {}),
                     },
                   }
                 : {}),

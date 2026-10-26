@@ -1020,6 +1020,7 @@ it.live(
           ],
         })
         const errands = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
+        const deadline = Date.now() + 86_400_000
         const incoming = yield* errands.admit(
           {
             source: "test:design-request",
@@ -1028,6 +1029,8 @@ it.live(
             organizationID: organization.id,
             organizationRevision: organization.revision,
             objective: "Design the approved client site",
+            budget: 1000,
+            deadline,
           },
           chief,
           designer,
@@ -1134,7 +1137,7 @@ it.live(
               ],
             },
           ],
-          currentRequest: { id: incoming.record.id, senderID: chief.id, state: "running" },
+          currentRequest: { id: incoming.record.id, senderID: chief.id, state: "running", budget: 1000, deadline },
         })
         const info = yield* tools.delegateWork
         const delegate = yield* info.init()
@@ -1162,7 +1165,7 @@ it.live(
           objective: "Build the approved landing page",
           expected: "Return the deployed source and verification",
           context: "Use the approved design in the current request",
-          deadline: Date.now() + 86_400_000,
+          deadline,
           budget: 500,
           artifacts: [file],
         }
@@ -1237,12 +1240,11 @@ it.live(
           context("delegate-stale"),
         )
         expect(stale.title).toBe("Work delegation needs review")
-        expect(stale.output).toContain("organization changed")
+        expect(stale.output).toContain("Organization revision mismatch")
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(
-            Storage.layerFromDir(path.join(directory, "storage")),
-            Database.layerFromPath(path.join(directory, "queue.sqlite")),
+          Storage.layerWithDatabase(path.join(directory, "storage")).pipe(
+            Layer.provideMerge(Layer.fresh(Database.layerFromPath(path.join(directory, "queue.sqlite")))),
           ),
         ),
       ),

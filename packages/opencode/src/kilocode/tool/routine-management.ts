@@ -1172,20 +1172,23 @@ export function routineManagementTools(input: {
               objective: params.objective,
             },
           })
-          const record = yield* runner.delegate({
-            source,
-            senderID: sender.id,
-            recipientID: recipient.id,
-            organizationID: organization.id,
-            organizationRevision: organization.revision,
-            objective: params.objective.trim(),
-            expected: params.expected?.trim(),
-            criteria: params.criteria,
-            context: params.context?.trim(),
-            deadline: params.deadline,
-            budget: params.budget,
-            artifacts,
-          })
+          const record = yield* runner.delegate(
+            {
+              source,
+              senderID: sender.id,
+              recipientID: recipient.id,
+              organizationID: organization.id,
+              organizationRevision: organization.revision,
+              objective: params.objective.trim(),
+              expected: params.expected?.trim(),
+              criteria: params.criteria,
+              context: params.context?.trim(),
+              deadline: params.deadline,
+              budget: params.budget,
+              artifacts,
+            },
+            { reportSessionID: ctx.sessionID },
+          )
           if (!isDeepStrictEqual(record.criteria, params.criteria))
             return yield* Effect.fail(new Error("The saved work criteria do not match this request."))
           const reason = record.reason ? ` ${record.reason}` : ""

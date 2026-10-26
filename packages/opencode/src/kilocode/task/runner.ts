@@ -56,6 +56,7 @@ import { scheduler as admission } from "./admission"
 import { TaskRetirement, receipts } from "@/kilocode/goal/stop-receipt"
 import { trace } from "./trace"
 import { RayaRoutineReports } from "./projection"
+import { make as reportOrigin } from "./report-origin"
 import { RayaTaskWait } from "./wait-notice"
 import { final } from "./final-report"
 import { verify } from "./final-output"
@@ -240,7 +241,10 @@ export namespace RayaTaskRunner {
     dispatch: (id: string) => Effect.Effect<Note | undefined, RayaTask.GuardError | RayaTask.NotFoundError>
     resume: (sessionID: SessionID) => Effect.Effect<void, unknown>
     reviewReply: (sessionID: SessionID, intent: string) => Effect.Effect<void, unknown>
-    delegate: (input: Ask) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
+    delegate: (
+      input: Ask,
+      opts?: { reportSessionID: SessionID },
+    ) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
     stop: (id: string) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid>
     stopMembers: (id: string, members: readonly string[]) => Effect.Effect<void, unknown>
     recoverStops: () => Effect.Effect<void, unknown>
@@ -279,6 +283,7 @@ export namespace RayaTaskRunner {
     const execution = RayaTaskExecution.make(input.storage)
     const snapshots = RayaTaskSnapshot.make(input)
     const reports = RayaRoutineReports.make(input)
+    const origins = reportOrigin(input.storage)
     const goals = RayaGoal.make(input)
     const reservations = input.database ? reservation(input.database) : undefined
     const schedule = input.database ? scheduler({ ...input, database: input.database }) : undefined
@@ -769,13 +774,17 @@ export namespace RayaTaskRunner {
                   }
                   const objective = policy(note ?? (yield* seed(item)), admitted.organization)
                   const sid = SessionID.descending()
+                  const origin =
+                    opts?.delegationID && errands
+                      ? yield* origins.resolve((yield* errands.chain(opts.delegationID)).map((item) => item.source))
+                      : undefined
                   yield* snapshots.save({
                     version: 2,
                     runID: owner.id,
                     sessionID: sid,
                     agentID: item.id,
                     at: owner.at,
-                    definition: item,
+                    definition: origin ? { ...item, sourceSessionID: origin, reportSessionID: origin } : item,
                     objective,
                     ...(admitted.organization?.policy
                       ? {
@@ -1448,7 +1457,10 @@ export namespace RayaTaskRunner {
         return
       })
 
-    const delegate = Effect.fn("RayaTaskRunner.delegate")(function* (input: Ask) {
+    const delegate = Effect.fn("RayaTaskRunner.delegate")(function* (
+      input: Ask,
+      opts?: { reportSessionID: SessionID },
+    ) {
       yield* transfer.check()
       if (!errands)
         return yield* new RayaTask.GuardError({
@@ -1474,6 +1486,14 @@ export namespace RayaTaskRunner {
         ? { limit: goal.budget.modelCost, spent: goal.usage.cost ?? 0 }
         : undefined
       yield* lapse(Date.now())
+      if (opts) {
+        if (input.parentID || input.parentRunID)
+          return yield* new RayaTask.GuardError({
+            message: "Follow-on work inherits its original report conversation.",
+          })
+        if (!(yield* origins.save(input.source, opts.reportSessionID)))
+          return yield* new RayaTask.GuardError({ message: "This assignment already has another report conversation." })
+      }
       const admitted = yield* errands.admit(input, sender, recipient, found.gone, allocation)
       if (parent && goal?.budget?.modelCost !== undefined)
         yield* sync(admitted.record).pipe(
@@ -1544,7 +1564,10 @@ export namespace RayaTaskRunner {
           if (dropped) yield* execution.finish(dropped)
           continue
         }
-        if (!input.halt) continue
+        if (!input.halt) {
+          failures.push(Cause.fail(new Error("Routine stopping services are unavailable.")))
+          continue
+        }
         const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
         const halted = yield* Effect.exit(open(worker.dir, input.halt(item.sessionID)))
         if (Exit.isFailure(halted)) {
@@ -1554,7 +1577,11 @@ export namespace RayaTaskRunner {
         }
         if (dropped) yield* execution.finish(dropped)
       }
-      if (failures.length) return yield* Effect.failCause(failures[0])
+      if (failures.length)
+        return yield* new RayaTask.GuardError({
+          kind: "unavailable",
+          message: "A worker session could not be stopped. Retry Stop before starting more work.",
+        })
       if (strict) return record
       const seen = new Set<string>()
       for (const item of listed) {

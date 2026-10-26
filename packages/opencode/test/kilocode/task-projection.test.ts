@@ -10,6 +10,7 @@ import type { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
 import { RayaRoutineReports } from "@/kilocode/task/projection"
+import { make as reportOrigin } from "@/kilocode/task/report-origin"
 import { testEffect } from "../lib/effect"
 import { tmpdirScoped } from "../fixture/fixture"
 import { Git } from "@/git"
@@ -34,6 +35,28 @@ const info = (id: string, directory: string): Session.Info => ({
   version: "1",
   time: { created: 1, updated: 1 },
 })
+
+it.live("assignment report origins survive reopening and reject destination changes", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const caller = SessionID.make("ses_requesting_conversation")
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const origins = reportOrigin(storage)
+      expect(yield* origins.save("organization-chat:root", caller)).toBe(true)
+      expect(yield* origins.save("organization-chat:root", caller)).toBe(true)
+      expect(yield* origins.save("organization-chat:root", SessionID.make("ses_other"))).toBe(false)
+      expect(yield* origins.save("organization-chat:separate", SessionID.make("ses_separate"))).toBe(true)
+    }).pipe(Effect.provide(state(directory)))
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const origins = reportOrigin(storage)
+      expect(yield* origins.resolve(["organization-chat:root", "delegate:builder", "delegate:sales"])).toBe(caller)
+      expect(yield* origins.resolve(["organization-chat:separate"])).toBe(SessionID.make("ses_separate"))
+      expect(yield* origins.resolve(["legacy-assignment"])).toBeUndefined()
+    }).pipe(Effect.provide(state(directory)))
+  }),
+)
 
 it.live("routine cards survive reopening, upgrade queued occurrences and keep their destination", () =>
   Effect.gen(function* () {

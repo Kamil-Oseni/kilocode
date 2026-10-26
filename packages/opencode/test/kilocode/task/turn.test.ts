@@ -84,7 +84,13 @@ test("only the current successful organization assignment releases its acknowled
     callID: "later-failure",
     state: { ...part.state, status: "error", error: "failed" },
   })
+  expect(assigned(messages, session, user)).toBe(true)
+  part.state.metadata.requestStatus = "unresolved"
   expect(assigned(messages, session, user)).toBe(false)
+  part.state.metadata.requestStatus = "complete"
+  messages[1].parts.push({ ...part, callID: "pending", state: { status: "pending", input, raw: "" } })
+  expect(assigned(messages, session, user)).toBe(false)
+  messages[1].parts.pop()
   expect(inspected(messages, session, user)).toBe(false)
   const inspection = {
     ...part,

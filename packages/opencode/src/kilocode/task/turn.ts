@@ -93,34 +93,25 @@ export function assigned(
       : [],
   )
   if (parts.some((part) => part.type === "tool" && ["pending", "running"].includes(part.state.status))) return false
-  const part = parts.findLast(
-    (part) =>
-      part.type === "tool" &&
-      [
-        "schedule_task",
-        "create_organization",
-        "update_routine",
-        "update_organization",
-        "assign_organization_work",
-      ].includes(part.tool),
-  )
-  if (part?.type !== "tool" || part.tool !== "assign_organization_work" || part.state.status !== "completed")
-    return false
-  const result = part.state.metadata
-  const input = part.state.input
-  return (
-    result.requestStatus === "complete" &&
-    typeof result.delegationID === "string" &&
-    result.delegationID.trim().length > 0 &&
-    typeof result.organizationID === "string" &&
-    result.organizationID === input.organizationID &&
-    Number.isSafeInteger(result.organizationRevision) &&
-    result.organizationRevision === input.expectedRevision &&
-    typeof result.senderID === "string" &&
-    result.senderID === input.senderID &&
-    typeof result.recipientID === "string" &&
-    result.recipientID === input.recipientID &&
-    typeof result.state === "string" &&
-    ["queued", "accepted", "running", "needs_input", "completed"].includes(result.state)
-  )
+  return parts.some((part) => {
+    if (part.type !== "tool" || part.tool !== "assign_organization_work" || part.state.status !== "completed")
+      return false
+    const result = part.state.metadata
+    const input = part.state.input
+    return (
+      result.requestStatus === "complete" &&
+      typeof result.delegationID === "string" &&
+      result.delegationID.trim().length > 0 &&
+      typeof result.organizationID === "string" &&
+      result.organizationID === input.organizationID &&
+      Number.isSafeInteger(result.organizationRevision) &&
+      result.organizationRevision === input.expectedRevision &&
+      typeof result.senderID === "string" &&
+      result.senderID === input.senderID &&
+      typeof result.recipientID === "string" &&
+      result.recipientID === input.recipientID &&
+      typeof result.state === "string" &&
+      ["queued", "accepted", "running", "needs_input", "completed"].includes(result.state)
+    )
+  })
 }

@@ -1,5 +1,21 @@
 import { expect, test } from "bun:test"
-import { kickoff } from "@/kilocode/task/request"
+import { kickoff, forward } from "@/kilocode/task/request"
+
+test("handoff criteria recognize affirmative work and preserve explicit prohibitions", () => {
+  for (const text of [
+    "Save research then hand off to Builder.",
+    "Verify the accepted delegation and its file receipts.",
+    "A successful handoff is required.",
+  ])
+    expect(forward(text)).toBe(true)
+  for (const text of [
+    "Do not delegate this question.",
+    "No handoff is needed.",
+    "Save the research without handing off.",
+    "Read the full report.",
+  ])
+    expect(forward(text)).toBe(false)
+})
 
 test("saved job kickoff stays distinct from creating or managing workers", () => {
   expect(

@@ -1369,6 +1369,27 @@ it.live(
         expect(refused.title).toBe("Organization work needs review")
         expect(refused.output).toContain("requires request-specific acceptance criteria")
         expect(refused.metadata.requestStatus).toBe("unresolved")
+        const incomplete = yield* kickoff.execute(
+          {
+            organizationID: organization.id,
+            expectedRevision: organization.revision,
+            senderID: sender.id,
+            recipientID: recipient.id,
+            objective: "Save the research report, then hand off to Builder.",
+            criteria: [
+              { id: "research", description: "Save the research report.", verification: "Read the full saved file." },
+            ],
+          },
+          {
+            ...ctx,
+            ask: () =>
+              Effect.sync(() => {
+                calls.approvals++
+              }),
+          },
+        )
+        expect(incomplete.metadata.requestStatus).toBe("unresolved")
+        expect(incomplete.output).toContain("criterion verifying the accepted handoff")
         expect(calls.approvals).toBe(0)
         expect(yield* errands.queued(recipient.id)).toEqual([])
         expect(yield* tasks.runsFor(recipient.id)).toEqual(history)

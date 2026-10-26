@@ -29,7 +29,7 @@ import { confirm } from "./routine-confirmation"
 import { SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { Criteria } from "@/kilocode/goal/criteria"
-import { kickoff } from "@/kilocode/task/request"
+import { kickoff, forward } from "@/kilocode/task/request"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -211,7 +211,7 @@ const DelegateWork = Schema.Struct({
   expected: Schema.optional(Text),
   criteria: Schema.optional(Criteria).annotate({
     description:
-      "Acceptance criteria for this specific work request. Include for deliverables requiring verified work; each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
+      "Acceptance criteria for every requested deliverable and handoff in this work request. A required handoff needs its own criterion verifying accepted delegation with the actual files. Each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
   }),
   context: Schema.optional(Text),
   deadline: Schema.optional(
@@ -242,7 +242,7 @@ const AssignOrganizationWork = Schema.Struct({
   expected: Schema.optional(Text),
   criteria: Schema.optional(Criteria).annotate({
     description:
-      "Acceptance criteria for this specific work request. Include for deliverables requiring verified work; each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
+      "Acceptance criteria for every requested deliverable and handoff in this work request. A required handoff needs its own criterion verifying accepted delegation with the actual files. Each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
   }),
   context: Schema.optional(Text),
   deadline: Schema.optional(
@@ -1177,6 +1177,16 @@ export function routineManagementTools(input: {
             return yield* Effect.fail(
               new Error(
                 "Starting saved-team work requires request-specific acceptance criteria. Include verifiable criteria for this recipient's actual deliverables and handoff; a planning reply must not complete the job.",
+              ),
+            )
+          if (
+            start &&
+            forward(`${params.objective}\n${params.expected ?? ""}`) &&
+            !params.criteria?.some((item) => forward(`${item.description}\n${item.verification}`))
+          )
+            return yield* Effect.fail(
+              new Error(
+                "This job explicitly requires a handoff. Add a request-specific criterion verifying the accepted handoff and its actual file evidence; completing only the research or other intermediate output must not complete this assignment.",
               ),
             )
           const organization = yield* organizations.get(params.organizationID)

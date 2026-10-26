@@ -45,7 +45,16 @@ it.live(
         const sessions = yield* Session.Service
         const store = yield* Storage.Service
         const goals = RayaGoal.make({ storage: store, sessions })
-        for (const mode of ["rejected", "missing", "accepted", "optional", "ordinary", "negated", "guidance"]) {
+        for (const mode of [
+          "rejected",
+          "missing",
+          "observed",
+          "accepted",
+          "optional",
+          "ordinary",
+          "negated",
+          "guidance",
+        ]) {
           const chat = yield* sessions.create({ title: "Private handoff evidence regression" })
           const goal = yield* goals.create(chat.id, "Save the research and satisfy the saved criterion")
           yield* Effect.addFinalizer(() => goals.clear(chat.id))
@@ -58,7 +67,9 @@ it.live(
                   ? "Write delegation guidance."
                   : mode === "optional"
                     ? "Accept delegation to Builder."
-                    : "Accept delegation to Builder only if delegate_work shows the actual saved research artifact."
+                    : mode === "observed"
+                      ? "Accept Builder's delegation receipt containing ONLY the written research.md file in this same job directory."
+                      : "Accept delegation to Builder only if delegate_work shows the actual saved research artifact."
           const verification =
             mode === "negated"
               ? "Read the file; do not delegate."
@@ -68,7 +79,9 @@ it.live(
                   ? "Read the saved document explaining delegation."
                   : mode === "optional"
                     ? "Verify an accepted delegate_work receipt, without actual file artifacts."
-                    : "Delegate_work receipt contains both criterion IDs, job folder context and actual research.md artifact."
+                    : mode === "observed"
+                      ? "Verify the child tool call from Builder cites the current research.md read with actual MD bytes and hash evidence."
+                      : "Delegate_work receipt contains both criterion IDs, job folder context and actual research.md artifact."
           yield* goals.edit(chat.id, {
             expectedIntent: goal.intent,
             criteria: [{ id: "result", description, verification }],
@@ -116,7 +129,7 @@ it.live(
               time: { start: Date.now(), end: Date.now() },
             },
           })
-          if (["rejected", "missing", "accepted", "optional"].includes(mode))
+          if (["rejected", "missing", "observed", "accepted", "optional"].includes(mode))
             yield* sessions.updatePart({
               id: PartID.ascending(),
               sessionID: chat.id,
@@ -157,7 +170,7 @@ it.live(
                         callID: write.callID,
                         summary: "Wrote research and accepted delegate_work handoff to Builder.",
                       },
-                      ...(["accepted", "missing", "optional"].includes(mode)
+                      ...(["accepted", "missing", "observed", "optional"].includes(mode)
                         ? [
                             {
                               callID: `delegate-${mode}`,
@@ -171,7 +184,7 @@ it.live(
               },
             })
             .pipe(Effect.result)
-          if (mode === "rejected" || mode === "missing") {
+          if (["rejected", "missing", "observed"].includes(mode)) {
             expect(result._tag).toBe("Failure")
             expect((yield* goals.get(chat.id))?.status).toBe("active")
             expect((yield* goals.get(chat.id))?.auditAttempt?.reason).toContain(

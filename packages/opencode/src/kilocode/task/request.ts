@@ -1,3 +1,18 @@
+import { Effect } from "effect"
+
+/** Carry exact owner context without repeated copies or silent truncation. */
+export function preserve(...values: (string | undefined)[]) {
+  const parts = [...new Set(values.filter((value): value is string => !!value?.trim()))]
+  const text = parts.filter((value) => !parts.some((other) => other !== value && other.includes(value))).join("\n\n")
+  return text.length > 4000
+    ? Effect.fail(
+        new Error(
+          "The combined owner context exceeds the 4000-character context limit. Omit or shorten only the additional stage context; the original owner request cannot be truncated.",
+        ),
+      )
+    : Effect.succeed(text || undefined)
+}
+
 /** Honor explicit budget-field omission without interpreting an absent budget as permission to spend. */
 export function omits(request: string | undefined) {
   if (!request) return false

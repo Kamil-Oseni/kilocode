@@ -31,7 +31,7 @@ import * as Artifact from "@/kilocode/goal/artifact"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoal } from "@/kilocode/goal"
 import * as ToolJsonSchema from "@/tool/json-schema"
-import { kickoff, forward, omits } from "@/kilocode/task/request"
+import { kickoff, forward, omits, preserve } from "@/kilocode/task/request"
 import * as Handoff from "@/kilocode/goal/handoff"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
@@ -1100,6 +1100,7 @@ export function routineManagementTools(input: {
           const source = `delegate:${digest(
             JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, sender.id, organization.id]),
           ).slice(0, 48)}`
+          const context = yield* preserve(incoming?.context, incoming?.context ? params.context : params.context?.trim())
           const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
           const request = {
             source,
@@ -1112,7 +1113,7 @@ export function routineManagementTools(input: {
             objective: params.objective.trim(),
             expected: params.expected?.trim(),
             criteria: params.criteria,
-            context: params.context?.trim(),
+            context,
             deadline: params.deadline,
             budget: params.budget,
             artifacts,
@@ -1135,7 +1136,7 @@ export function routineManagementTools(input: {
             record.objective !== params.objective.trim() ||
             record.expected !== params.expected?.trim() ||
             !isDeepStrictEqual(record.criteria, params.criteria) ||
-            record.context !== params.context?.trim() ||
+            record.context !== context ||
             record.deadline !== params.deadline ||
             (!inherited && record.budget !== params.budget) ||
             !bounded ||
@@ -1225,6 +1226,18 @@ export function routineManagementTools(input: {
                 "This job explicitly requires a handoff. Add a request-specific criterion verifying the accepted handoff and its actual file evidence; completing only the research or other intermediate output must not complete this assignment.",
               ),
             )
+          const owner =
+            assistant?.info.role === "assistant" &&
+            assistant.info.sessionID === ctx.sessionID &&
+            assistant.info.parentID === user?.info.id
+              ? request
+              : undefined
+          const context = yield* preserve(
+            owner ? params.context : params.context?.trim(),
+            owner
+              ? `Original owner request (context only; current-stage scope and permission limits still apply):\n${owner}`
+              : undefined,
+          )
           const organization = yield* organizations.get(params.organizationID)
           if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
           if (organization.revision !== params.expectedRevision)
@@ -1278,7 +1291,7 @@ export function routineManagementTools(input: {
               objective: params.objective.trim(),
               expected: params.expected?.trim(),
               criteria: params.criteria,
-              context: params.context?.trim(),
+              context,
               deadline: params.deadline,
               budget: params.budget,
             },

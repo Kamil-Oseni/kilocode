@@ -1022,6 +1022,8 @@ it.live(
         })
         const errands = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
         const deadline = Date.now() + 86_400_000
+        const owner =
+          'Build ONE unofficial Eric concept, then Sales saves THREE UNSENT drafts.\nKeep this owner wording: "one per prospect"; no sends.'
         const incoming = yield* errands.admit(
           {
             source: "test:design-request",
@@ -1030,6 +1032,7 @@ it.live(
             organizationID: organization.id,
             organizationRevision: organization.revision,
             objective: "Design the approved client site",
+            context: owner,
             criteria: [
               {
                 id: "design-handoff",
@@ -1234,7 +1237,6 @@ it.live(
           organizationRevision: organization.revision,
           objective: params.objective,
           expected: params.expected,
-          context: params.context,
           deadline: params.deadline,
           budget: 1000,
           artifacts: [
@@ -1247,7 +1249,21 @@ it.live(
           ],
           state: "queued",
         })
+        const saved = yield* errands.get(id)
+        expect(saved.context).toContain(owner)
+        expect(saved.context).toContain(params.context)
         expect(yield* delegate.execute(params, context("delegate-build"))).toEqual(assigned)
+        expect(yield* delegate.execute({ ...params, context: saved.context }, context("delegate-build"))).toEqual(
+          assigned,
+        )
+        expect((yield* errands.get(id)).context).toBe(saved.context)
+        expect(yield* errands.byRun(runID)).toHaveLength(1)
+        const oversized = yield* delegate.execute(
+          { ...params, context: "x".repeat(3990) },
+          context("delegate-oversized-owner-context"),
+        )
+        expect(oversized.metadata.requestStatus).toBe("unresolved")
+        expect(oversized.output).toContain("4000")
         expect(yield* errands.byRun(runID)).toHaveLength(1)
 
         const manual = SessionID.make("ses_manual_without_deadline")
@@ -1274,9 +1290,8 @@ it.live(
         ).pipe(Effect.provideService(Session.Service, unbound as never))
         expect(hidden.properties?.deadline).toBeUndefined()
         expect(hidden.additionalProperties).toBe(false)
-        const unauthorized = yield* (
-          yield* routineManagementTools({ database, storage, sessions: unbound }).delegateWork
-        ).init()
+        const unauthorized = yield* (yield* routineManagementTools({ database, storage, sessions: unbound })
+          .delegateWork).init()
         const denied = yield* unauthorized.execute(
           { ...params, recipientID: designer.id },
           { ...context("delegate-unrequested-deadline"), sessionID: manual },
@@ -1284,6 +1299,18 @@ it.live(
         expect(denied.metadata.requestStatus).toBe("unresolved")
         expect(denied.output).toContain("owning request has no deadline")
         expect(yield* errands.byRun(run)).toHaveLength(0)
+        const question = yield* unauthorized.execute(
+          {
+            organizationID: organization.id,
+            expectedRevision: organization.revision,
+            recipientID: designer.id,
+            objective: "Which layout should we discuss?",
+            context: "A simple design question.",
+          },
+          { ...context("delegate-simple-question"), sessionID: manual },
+        )
+        expect(question.metadata.requestStatus).toBe("complete")
+        expect((yield* errands.byRun(run))[0]?.context).toBe("A simple design question.")
 
         const missing = yield* delegate.execute(
           { ...params, objective: "Use a missing receipt", artifacts: [path.join(directory, "not-created.md")] },
@@ -1382,6 +1409,8 @@ it.live(
         })
         const ctx = context("assign-kickoff-without-criteria")
         const user = MessageID.make("msg_kickoff_original_user")
+        const owner =
+          'Run a job through our saved Research Team to write a verified research report.\nPreserve "THREE UNSENT drafts, one per prospect". Omit budget and deadline keys for this kickoff.'
         const pair: SessionV1.WithParts[] = [
           {
             info: {
@@ -1398,7 +1427,7 @@ it.live(
                 sessionID: ctx.sessionID,
                 messageID: user,
                 type: "text",
-                text: "Run a job through our saved Research Team to write a verified research report. Omit budget and deadline keys for this kickoff.",
+                text: owner,
               },
             ],
           },
@@ -1496,6 +1525,40 @@ it.live(
         expect(yield* errands.queued(recipient.id)).toEqual([])
         expect(yield* tasks.runsFor(recipient.id)).toEqual(history)
         expect(yield* tasks.list()).toEqual(roster)
+        const params = {
+          organizationID: organization.id,
+          expectedRevision: organization.revision,
+          senderID: sender.id,
+          recipientID: recipient.id,
+          objective: "Write the verified research report.",
+          criteria: [
+            { id: "research", description: "Save the research report.", verification: "Read the full saved file." },
+          ],
+          context: "Use the saved prospect seed.",
+        }
+        const oversized = yield* kickoff.execute(
+          { ...params, context: "x".repeat(3990) },
+          {
+            ...ctx,
+            ask: () =>
+              Effect.sync(() => {
+                calls.approvals++
+              }),
+          },
+        )
+        expect(oversized.metadata.requestStatus).toBe("unresolved")
+        expect(oversized.output).toContain("4000")
+        expect(calls.approvals).toBe(0)
+        expect(yield* errands.queued(recipient.id)).toEqual([])
+        const started = yield* kickoff.execute(params, ctx)
+        expect(started.metadata.requestStatus).toBe("complete")
+        if (!("delegationID" in started.metadata)) throw new Error("Owner request assignment has no delegation ID")
+        const preserved = yield* errands.get(String(started.metadata.delegationID))
+        expect(preserved.context).toContain(owner)
+        expect(preserved.context).toContain(params.context)
+        expect(yield* kickoff.execute({ ...params, context: preserved.context }, ctx)).toEqual(started)
+        expect((yield* errands.get(preserved.id)).context).toBe(preserved.context)
+        expect(yield* errands.queued(recipient.id)).toHaveLength(1)
         const tools = routineManagementTools({ database, storage, sessions })
         const assign = yield* (yield* tools.assignOrganizationWork).init()
         const schema = ToolJsonSchema.fromTool({ ...assign, id: "assign_organization_work" })

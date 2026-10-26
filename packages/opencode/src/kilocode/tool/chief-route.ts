@@ -123,13 +123,21 @@ export const ChiefRouteTool = Tool.define<
                   const dispatch = yield* sessions.messages({ sessionID: ctx.sessionID })
                   if (dispatch.findLast((item) => item.info.role === "user")?.info.id !== user)
                     throw new Error("Auto routing requires the current original user dispatch")
-                  if (params.workflow === "home_assistant") {
+                  const authored = RayaChief.request(session.metadata)
+                  const conversation =
+                    params.result === "narrative" && params.access === "read" && authored && RayaChief.direct(authored)
+                  if (params.workflow === "home_assistant" && !conversation) {
                     if (params.result !== "narrative")
                       throw new Refusal("chief-result-class", "Home Assistant requires a narrative result contract")
                     if (params.access !== "read")
                       throw new Refusal(
                         "chief-work-class",
                         "Home Assistant cannot perform file edits or desktop actions. Route this work through specialist.",
+                      )
+                    if (!authored || !HomeAssistant.requested(authored))
+                      throw new Refusal(
+                        "chief-work-class",
+                        "The original request does not ask for Home Assistant device work. Route its actual request through specialist instead.",
                       )
                     const messages = yield* sessions.messages({ sessionID: ctx.sessionID })
                     const latest = messages.findLast((item) => item.info.role === "user")

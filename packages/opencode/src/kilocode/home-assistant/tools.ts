@@ -20,6 +20,16 @@ export namespace HomeAssistant {
   export const auto =
     "For a new Auto request, first call chief_route with workflow:home_assistant only when the complete request needs Home Assistant light inspection or control; otherwise use its default specialist workflow. Device tools are unavailable until that exact request is selected. After Home Assistant selection, use its registered tools directly in this primary chat; do not delegate device actions. If no device tools are available, report that limitation. Honor approval and configured device/mode allowlists. Send a mutation once, never retry an uncertain action, and report target readback truthfully."
 
+  /** Model-selected routing cannot introduce device work absent from the owner's request. */
+  export function requested(request: string) {
+    return (
+      /\b(?:home assistant|lights?|lighting|lamps?|bulbs?|moods?|scenes?|rgb|leds?)\b/i.test(request) &&
+      /\b(?:turn|set|dim|brighten|switch|fade|start|stop|save|create|show|list|check|inspect|read|what|which|are|is|how|make|activate)\b/i.test(
+        request,
+      )
+    )
+  }
+
   export function selected(
     metadata: Record<string, unknown> | undefined,
     dispatch: { session: string; user: string } | undefined,

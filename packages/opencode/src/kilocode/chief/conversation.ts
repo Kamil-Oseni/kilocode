@@ -67,3 +67,32 @@ export function greeting(request: string) {
         restriction.test(row),
     )
 }
+
+/** A supplied chat fact can be acknowledged without saving it or acquiring outside information. */
+export function acknowledgement(request: string) {
+  if (Buffer.byteLength(request, "utf8") > 1024) return false
+  const rows = request
+    .trim()
+    .replace(/[.!]$/, "")
+    .split(/[.;!]\s*/)
+  if (!rows.length || rows.length > 5) return false
+  const fact =
+    /^(?:(?:remember that )?my (?:project )?(?:nickname|name) (?:in this chat|here) is ([\p{L}\p{N}][\p{L}\p{N} '-]{0,79})|(?:please )?call me ([\p{L}\p{N}][\p{L}\p{N} '-]{0,79}) (?:in this chat|here))$/iu
+  if (!rows.some((row) => fact.test(row))) return false
+  return rows.every((row) => {
+    const name = fact.exec(row)
+    if (name)
+      return !/\b(?:and|then|also|please|read|write|edit|open|turn|save|store|remember|memory|preference)\b/i.test(
+        name[1] ?? name[2],
+      )
+    return (
+      /^this is an ordinary conversation$/i.test(row) ||
+      /^(?:please )?(?:acknowledge(?: (?:the|that|my) (?:nickname|name))?|reply in one short sentence acknowledging (?:the|that|my) (?:nickname|name))$/i.test(
+        row,
+      ) ||
+      /^(?:please )?(?:do not|don't) (?:(?:use|call) (?:any )?tools(?: or start workers)?|start workers|save (?:this|it)(?: as (?:a )?(?:preference|memory))?)$/i.test(
+        row,
+      )
+    )
+  })
+}

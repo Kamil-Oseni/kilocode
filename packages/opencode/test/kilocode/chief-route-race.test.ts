@@ -21,6 +21,7 @@ import { MessageID, PartID } from "@/session/schema"
 import { ChiefRouteTool } from "@/kilocode/tool/chief-route"
 import type { DefWithoutID } from "@/tool/tool"
 import { RayaChief } from "@/kilocode/chief"
+import { HomeAssistant } from "@/kilocode/home-assistant/tools"
 import { RayaGoal } from "@/kilocode/goal"
 import { goalTools } from "@/kilocode/tool/goal"
 import { Storage } from "@/storage/storage"
@@ -126,6 +127,78 @@ const asked = Effect.fn(function* () {
   return queue
 })
 const ambiguous = "Help me decide what to do with this project"
+
+it.live(
+  "chat-only acknowledgement rejects model-invented device routing while real device requests remain scoped",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const request =
+            "This is an ordinary conversation. Remember that my project nickname in this chat is Copper Finch. Reply in one short sentence acknowledging the nickname. Do not use tools or start workers."
+          const input = yield* dispatch(dir, request)
+          const tool = yield* (yield* ChiefRouteTool).init()
+          const result = yield* tool.execute(
+            { result: "narrative", access: "read", objective: request, workflow: "home_assistant" },
+            input.ctx,
+          )
+          const saved = yield* sessions.get(input.chat.id)
+          expect(result.metadata.decision?.direct).toBe(true)
+          expect(result.metadata.decision?.request).toBe(request)
+          expect(RayaChief.phase(saved.metadata)).toBe("done")
+          expect(HomeAssistant.selected(saved.metadata, { session: input.chat.id, user: input.user.id })).toBe(false)
+          expect(yield* sessions.children(input.chat.id)).toEqual([])
+          expect(RayaChief.direct(request + " Read the current repository file.")).toBe(false)
+          for (const phrase of [
+            "Call me Copper Finch in this chat",
+            "My nickname here is Copper Finch; please acknowledge",
+            "Please call me Silver Wren here. Don't save this as a preference.",
+          ])
+            expect(RayaChief.direct(phrase)).toBe(true)
+          for (const phrase of [
+            "Call me Copper Finch in this chat; read the repository file",
+            "My nickname here is Copper Finch; turn off the lights",
+            "My nickname here is Copper Finch; save this to memory",
+            "My nickname here is Copper Finch and write the file",
+          ])
+            expect(RayaChief.direct(phrase)).toBe(false)
+          const device = yield* dispatch(dir, "Turn the office light off.")
+          const accepted = yield* tool.execute(
+            {
+              result: "narrative",
+              access: "read",
+              objective: "Turn the office light off.",
+              workflow: "home_assistant",
+            },
+            device.ctx,
+          )
+          expect(accepted.metadata.workflow).toBe("home_assistant")
+          expect(
+            HomeAssistant.selected((yield* sessions.get(device.chat.id)).metadata, {
+              session: device.chat.id,
+              user: device.user.id,
+            }),
+          ).toBe(true)
+          const foreign = yield* dispatch(dir, "Inspect the repository files.")
+          const refused = yield* tool
+            .execute(
+              { result: "narrative", access: "read", objective: "Turn the light off.", workflow: "home_assistant" },
+              foreign.ctx,
+            )
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(refused)).toBe(true)
+          expect(
+            HomeAssistant.selected((yield* sessions.get(foreign.chat.id)).metadata, {
+              session: foreign.chat.id,
+              user: foreign.user.id,
+            }),
+          ).toBe(false)
+          expect(yield* sessions.children(foreign.chat.id)).toEqual([])
+        }),
+      { config: cfg },
+    ),
+)
 
 it.live("Chief acquisition needs no instance and initialization uses its private instance", () =>
   Effect.gen(function* () {

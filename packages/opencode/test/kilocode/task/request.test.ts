@@ -51,6 +51,9 @@ test("saved job kickoff stays distinct from creating or managing workers", () =>
     "Use my existing team to research three prospects",
     "Have the saved Sales worker prepare an unsent draft",
     "Do not create new workers. Start this job through Dispatch.",
+    "Run one manual Website Pilot job through our saved Dispatch -> Researcher -> Builder -> Sales team. Start only Researcher; the workers should hand off their own finished files to the next worker.",
+    "Run one Website Pilot job through my existing Dispatch → Researcher → Builder → Sales team.",
+    "Start this job through the configured Dispatch using the saved workers.",
   ])
     expect(kickoff(request)).toBe(true)
   for (const request of [
@@ -62,6 +65,9 @@ test("saved job kickoff stays distinct from creating or managing workers", () =>
     "Start a new team dashboard",
     "Explain how saved teams work",
     "Run the build job through the command line",
+    "Run the build job through our saved command line",
+    "Update the existing workers and run one job through our saved Dispatch -> Researcher -> Builder -> Sales team.",
+    "Create a new team and run one job through our saved Dispatch → Researcher → Builder → Sales team.",
   ])
     expect(kickoff(request)).toBe(false)
 })

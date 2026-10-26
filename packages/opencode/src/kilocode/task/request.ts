@@ -49,9 +49,12 @@ export function kickoff(request: string | undefined) {
     )
   if (match) {
     const route = request.slice(match.index + match[0].length)
+    const named = route.replace(/^(?:(?:my|our|the)\s+)?(?:(?:saved|existing|configured)\s+){0,2}/i, "")
     if (
       /^(?:(?:my|our|the)\s+)?(?:saved|existing|configured)\s+(?:[\w-]+\s+){0,3}(?:worker|team|agent)\b/i.test(route) ||
-      /^[A-Z][\w-]*(?:\s+[A-Z][\w-]*)?(?=[.,:;!?]|\s+(?:to|for|with|using|and)\b|$)/.test(route)
+      /^[A-Z][\w-]*(?:\s+[A-Z][\w-]*)?(?:\s*(?:->|→)\s*[A-Z][\w-]*(?:\s+[A-Z][\w-]*)?){0,5}(?:\s+team)?(?=[.,:;!?]|\s+(?:to|for|with|using|and)\b|$)/.test(
+        named,
+      )
     )
       return true
   }

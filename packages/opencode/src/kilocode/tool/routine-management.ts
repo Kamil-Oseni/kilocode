@@ -1204,7 +1204,7 @@ export function routineManagementTools(input: {
             return yield* Effect.fail(
               new Error("Starting saved-team work requires its current assistant and user request."),
             )
-          if (start && params.budget !== undefined && omits(request))
+          if (params.budget !== undefined && omits(request))
             return yield* Effect.fail(
               new Error(
                 "This request explicitly says to omit budget. Remove the budget field instead of inventing a cap. Saved worker and organization limits still apply.",

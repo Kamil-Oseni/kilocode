@@ -1412,7 +1412,7 @@ it.live(
         const ctx = context("assign-kickoff-without-criteria")
         const user = MessageID.make("msg_kickoff_original_user")
         const owner =
-          'Run a job through our saved Research Team to write a verified research report.\nPreserve "THREE UNSENT drafts, one per prospect". Omit budget and deadline keys for this kickoff.'
+          'Run one manual Website Pilot job through our saved Dispatch -> Researcher -> Builder -> Sales team to write a verified research report.\nPreserve "THREE UNSENT drafts, one per prospect". Omit budget and deadline keys for this kickoff.'
         const pair: SessionV1.WithParts[] = [
           {
             info: {
@@ -1619,6 +1619,56 @@ it.live(
         )
         expect(denied.title).toBe("Organization work needs review")
         expect(denied.output).toContain("not authorized")
+        for (const text of [
+          "Ask Researcher whether the saved sources are dated. Omit budget.",
+          "Ask Researcher whether the saved sources are dated. Use a model-cost budget of $2.",
+        ]) {
+          const question = yield* (yield* routineManagementTools({
+            database,
+            storage,
+            sessions: {
+              ...sessions,
+              messages: () =>
+                Effect.succeed(
+                  pair.map((row) =>
+                    row.info.role === "user"
+                      ? {
+                          ...row,
+                          parts: row.parts.map((part) => (part.type === "text" ? { ...part, text } : part)),
+                        }
+                      : row,
+                  ),
+                ),
+            },
+          }).assignOrganizationWork).init()
+          const result = yield* question.execute(
+            {
+              organizationID: organization.id,
+              expectedRevision: organization.revision,
+              senderID: sender.id,
+              recipientID: recipient.id,
+              objective: "Report whether the saved sources are dated.",
+              budget: 2,
+            },
+            {
+              ...ctx,
+              callID: text,
+              ask: () =>
+                Effect.sync(() => {
+                  calls.approvals++
+                }),
+            },
+          )
+          if (text.includes("Omit budget")) {
+            expect(result.metadata.requestStatus).toBe("unresolved")
+            expect(result.output).toContain("explicitly says to omit budget")
+            expect(calls.approvals).toBe(0)
+            continue
+          }
+          expect(result.metadata.requestStatus).toBe("complete")
+          if (!("delegationID" in result.metadata)) throw new Error("Supplied budget assignment has no delegation ID")
+          expect((yield* errands.get(String(result.metadata.delegationID))).budget).toBe(2)
+        }
       }).pipe(
         Effect.provide(
           Storage.layerWithDatabase(path.join(directory, "storage")).pipe(

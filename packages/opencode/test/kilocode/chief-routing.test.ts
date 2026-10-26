@@ -99,7 +99,54 @@ type Fixture = {
 
 const fixtures = data as Fixture[]
 
-it("keeps tracked-work assignment tools available for explicit saved-worker kickoff requests", () => {
+it("requires roster inspection before exposing questions or mutations for a Routine request", () => {
+  const tools = {
+    chief_route: { id: "route" },
+    chief_plan: { id: "plan" },
+    chief_inspect: { id: "inspect-chief" },
+    chief_review: { id: "review" },
+    chief_synthesize: { id: "synthesize" },
+    task: { id: "task" },
+    read: { id: "read" },
+    edit: { id: "edit" },
+    ask_options: { id: "ask" },
+    question: { id: "question" },
+    schedule_task: { id: "schedule" },
+    inspect_routines: { id: "inspect", parameters: { section: { enum: ["workers", "organizations"] } } },
+    create_organization: { id: "create" },
+    update_routine: { id: "routine" },
+    update_organization: { id: "organization" },
+    assign_organization_work: { id: "assign" },
+  }
+  const metadata = {
+    [RayaChief.requestKey]:
+      "Start one Website Pilot job through Dispatch: research the three supplied prospects, have Builder make the Eric concept, then Sales save three tailored UNSENT drafts. Use a fresh job folder. Nothing should be sent or published. Verify the actual files and handoffs.",
+  }
+  expect(RayaChief.tools(tools, metadata)).toEqual({ inspect_routines: tools.inspect_routines })
+  expect(RayaChief.tools(tools, metadata, { session: "ses_current", user: "msg_current", inspected: false })).toEqual({
+    inspect_routines: tools.inspect_routines,
+  })
+  expect(
+    RayaChief.tools({ question: tools.question, assign_organization_work: tools.assign_organization_work }, metadata),
+  ).toEqual({})
+  const available = RayaChief.tools(tools, metadata, { session: "ses_current", user: "msg_current", inspected: true })
+  expect(Object.keys(available)).toEqual([
+    "schedule_task",
+    "inspect_routines",
+    "create_organization",
+    "update_routine",
+    "update_organization",
+    "assign_organization_work",
+    "ask_options",
+    "question",
+  ])
+  expect(available.inspect_routines).toBe(tools.inspect_routines)
+  expect(available.inspect_routines.parameters).toBe(tools.inspect_routines.parameters)
+  expect(available.assign_organization_work).toBe(tools.assign_organization_work)
+  expect(available.question).toBe(tools.question)
+})
+
+it("keeps tracked-work assignment tools available after inspection for explicit saved-worker kickoff requests", () => {
   const tools = {
     chief_route: { id: "route" },
     inspect_routines: { id: "inspect" },
@@ -110,7 +157,11 @@ it("keeps tracked-work assignment tools available for explicit saved-worker kick
     "Launch a customer outreach workflow through my saved sales worker.",
     "Delegate this invoice work to the existing accounting team.",
   ]) {
-    const available = RayaChief.tools(tools, { [RayaChief.requestKey]: request })
+    const available = RayaChief.tools(
+      tools,
+      { [RayaChief.requestKey]: request },
+      { session: "ses_current", user: "msg_current", inspected: true },
+    )
     expect(available.inspect_routines).toBe(tools.inspect_routines)
     expect(available.assign_organization_work).toBe(tools.assign_organization_work)
     expect(available.chief_route).toBeUndefined()
@@ -496,10 +547,14 @@ describe("Raya Chief routing", () => {
     ]
     expect(
       Object.keys(
-        RayaChief.tools(routines, {
-          [RayaChief.requestKey]:
-            "Create a small organization for testing persistence. Ask me the required setup questions one at a time before creating anything.",
-        }),
+        RayaChief.tools(
+          routines,
+          {
+            [RayaChief.requestKey]:
+              "Create a small organization for testing persistence. Ask me the required setup questions one at a time before creating anything.",
+          },
+          { session: "ses_current", user: "msg_current", inspected: true },
+        ),
       ),
     ).toEqual(expected)
     for (const request of [
@@ -510,7 +565,15 @@ describe("Raya Chief routing", () => {
       "Create agents to help me learn violin",
       "I want an agent to handle invoices when I ask",
     ])
-      expect(Object.keys(RayaChief.tools(routines, { [RayaChief.requestKey]: request }))).toEqual(expected)
+      expect(
+        Object.keys(
+          RayaChief.tools(
+            routines,
+            { [RayaChief.requestKey]: request },
+            { session: "ses_current", user: "msg_current", inspected: true },
+          ),
+        ),
+      ).toEqual(expected)
     expect(
       Object.keys(RayaChief.tools(routines, { [RayaChief.requestKey]: "Build a team dashboard for my workers" })),
     ).toEqual(["chief_route"])

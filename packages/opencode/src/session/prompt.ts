@@ -31,7 +31,7 @@ import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_chang
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
 import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - private background result publication
-import { assigned, instruction as assignmentInstruction } from "@/kilocode/task/turn" // kilocode_change - acknowledge saved worker assignments without repeating them
+import { assigned, inspected, instruction as assignmentInstruction } from "@/kilocode/task/turn" // kilocode_change - inspect saved workers before assignment and acknowledge without repeating it
 import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/conversation" // kilocode_change - original greeting needs no workflow tools
 import { settled as recalled, acknowledged, acknowledgement, refused } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
 import { instruction as decline } from "@/kilocode/second-brain/refusal" // kilocode_change - bounded local command repair or clarification only
@@ -1933,7 +1933,7 @@ export const layer = Layer.effect(
                     ...RayaChief.tools(
                       resolved,
                       current.metadata,
-                      { session: sessionID, user: lastUser.id },
+                      { session: sessionID, user: lastUser.id, inspected: inspected(msgs, current, lastUser.id) },
                       refusal?.mode,
                     ),
                     ...(!refusal && recovery && resolved.task ? { task: resolved.task } : {}),

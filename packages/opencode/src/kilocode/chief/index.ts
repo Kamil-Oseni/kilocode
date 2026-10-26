@@ -120,7 +120,7 @@ export namespace RayaChief {
   export function tools<T>(
     available: Record<string, T>,
     metadata: Record<string, unknown> | undefined,
-    dispatch?: { session: string; user: string },
+    dispatch?: { session: string; user: string; inspected?: boolean },
     refusal?: "repair" | "clarify" | "route",
   ) {
     if (phase(metadata) === "route" && refusal)
@@ -135,6 +135,10 @@ export namespace RayaChief {
     if (phase(metadata) === "verify")
       return Object.fromEntries(available.get_goal ? [["get_goal", available.get_goal]] : []) as Record<string, T>
     if (phase(metadata) === "route" && HomeAssistant.selected(metadata, dispatch)) return HomeAssistant.tools(available)
+    if (routine(request(metadata)) && !dispatch?.inspected)
+      return Object.fromEntries(
+        available.inspect_routines ? [["inspect_routines", available.inspect_routines]] : [],
+      ) as Record<string, T>
     if (routine(request(metadata)))
       return Object.fromEntries(
         [

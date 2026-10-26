@@ -130,19 +130,18 @@ it("requires roster inspection before exposing questions or mutations for a Rout
     RayaChief.tools({ question: tools.question, assign_organization_work: tools.assign_organization_work }, metadata),
   ).toEqual({})
   const available = RayaChief.tools(tools, metadata, { session: "ses_current", user: "msg_current", inspected: true })
-  expect(Object.keys(available)).toEqual([
-    "schedule_task",
-    "inspect_routines",
-    "create_organization",
-    "update_routine",
-    "update_organization",
-    "assign_organization_work",
-    "ask_options",
-    "question",
-  ])
+  expect(Object.keys(available)).toEqual(["inspect_routines", "assign_organization_work"])
   expect(available.inspect_routines).toBe(tools.inspect_routines)
   expect(available.assign_organization_work).toBe(tools.assign_organization_work)
-  expect(available.question).toBe(tools.question)
+  expect(available.question).toBeUndefined()
+  const creation = RayaChief.tools(
+    tools,
+    { [RayaChief.requestKey]: "Create a team of research workers" },
+    { session: "ses_current", user: "msg_current", inspected: true },
+  )
+  expect(creation.schedule_task).toBe(tools.schedule_task)
+  expect(creation.create_organization).toBe(tools.create_organization)
+  expect(creation.question).toBe(tools.question)
 })
 
 it("keeps tracked-work assignment tools available after inspection for explicit saved-worker kickoff requests", () => {

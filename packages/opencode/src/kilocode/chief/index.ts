@@ -4,6 +4,7 @@ import { Permission } from "@/permission"
 import { HomeAssistant } from "../home-assistant/tools"
 import { Refusal } from "../session/tool-refusal"
 import { greeting } from "./conversation"
+import { kickoff } from "../task/request"
 import type { MessageV2 } from "@/session/message-v2"
 
 export namespace RayaChief {
@@ -80,20 +81,7 @@ export namespace RayaChief {
   export function routine(request: string | undefined) {
     if (!request) return false
     if (/\b(routines?|organi[sz]ations?)\b/i.test(request)) return true
-    const kickoff =
-      /\b(?:start|run|launch|delegate|assign|send|kick off)\s+(?:[\w-]+\s+){0,8}(?:job|workflow|work)\s+(?:through|via|by|to)\s+/i.exec(
-        request,
-      )
-    if (kickoff) {
-      const route = request.slice(kickoff.index + kickoff[0].length)
-      if (
-        /^(?:(?:my|our|the)\s+)?(?:saved|existing|configured)\s+(?:[\w-]+\s+){0,3}(?:worker|team|agent)\b/i.test(
-          route,
-        ) ||
-        /^[A-Z][\w-]*(?:\s+[A-Z][\w-]*)?(?=[.,:;!?]|\s+(?:to|for|with|using|and)\b|$)/.test(route)
-      )
-        return true
-    }
+    if (kickoff(request)) return true
     if (
       /\b(?:create|build|start|set up|organize|assemble)\s+(?:(?:a|an|new|small|specialist|my)\s+){0,3}teams?\b(?!\s+(?:page|dashboard|view|component|screen)\b)/i.test(
         request,
@@ -138,6 +126,12 @@ export namespace RayaChief {
     if (routine(request(metadata)) && !dispatch?.inspected)
       return Object.fromEntries(
         available.inspect_routines ? [["inspect_routines", available.inspect_routines]] : [],
+      ) as Record<string, T>
+    if (kickoff(request(metadata)))
+      return Object.fromEntries(
+        ["inspect_routines", "assign_organization_work"].flatMap((name) =>
+          available[name] ? [[name, available[name]]] : [],
+        ),
       ) as Record<string, T>
     if (routine(request(metadata)))
       return Object.fromEntries(

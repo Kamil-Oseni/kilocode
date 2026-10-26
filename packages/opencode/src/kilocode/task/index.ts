@@ -5,6 +5,7 @@ import { Effect, Exit, Schema } from "effect"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import path from "node:path"
+import { statSync } from "node:fs"
 import { Storage } from "@/storage/storage"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
@@ -361,6 +362,13 @@ export namespace RayaTask {
       const normalized = path.resolve(root).replaceAll("\\", "/")
       rules.push({ permission: "external_directory", pattern: normalized, action: "allow" })
       rules.push({ permission: "external_directory", pattern: `${normalized}/**`, action: "allow" })
+      // File reads request parent-directory clearance; scoped read/edit rules still enforce the exact grant.
+      if (statSync(root, { throwIfNoEntry: false })?.isFile())
+        rules.push({
+          permission: "external_directory",
+          pattern: path.join(path.dirname(normalized), "*").replaceAll("\\", "/"),
+          action: "allow",
+        })
     }
     return rules
   }

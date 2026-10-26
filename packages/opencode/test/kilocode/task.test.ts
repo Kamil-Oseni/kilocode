@@ -1731,6 +1731,30 @@ describe("RayaTask store", () => {
     expect((await Effect.runPromise(tasks.get(agent.id))).paths).toEqual(agent.paths)
   })
 
+  test("allows an exact external seed file without granting sibling reads or edits", async () => {
+    await using fixture = await tmpdir()
+    const file = path.join(fixture.path, "prospects.json")
+    const dir = path.join(fixture.path, "jobs")
+    await Bun.write(file, "[]")
+    const root = path.parse(fixture.path).root
+    const rules = RayaTask.rules(
+      { role: "generalist", access: "full", dir, paths: { version: 1, grants: [{ path: file, access: "read" }] } },
+      root,
+    )
+    const pattern = path.relative(root, file)
+    expect(
+      Permission.evaluate("external_directory", FSUtil.normalizePathPattern(path.join(path.dirname(file), "*")), rules)
+        .action,
+    ).toBe("allow")
+    expect(Permission.evaluate("read", pattern, rules).action).toBe("allow")
+    expect(
+      Permission.evaluate("read", path.relative(root, path.join(fixture.path, "private.json")), rules).action,
+    ).toBe("deny")
+    expect(Permission.evaluate("read", path.relative(root, fixture.path), rules).action).toBe("deny")
+    for (const tool of ["edit", "write", "apply_patch"])
+      expect(Permission.evaluate(tool, pattern, rules).action).toBe("deny")
+  })
+
   test("enforces readable and writable folder grants without command escape", () => {
     const root = path.resolve("C:/repo")
     const dir = path.join(root, "reports")

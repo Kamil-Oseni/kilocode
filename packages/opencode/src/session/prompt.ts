@@ -1953,7 +1953,8 @@ export const layer = Layer.effect(
               phase === "route" &&
               ((HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
                 (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id))) ||
-                (RayaChief.routine(RayaChief.request(current.metadata)) && RayaChief.settled(msgs, lastUser.id)) ||
+                (RayaChief.routine(RayaChief.request(current.metadata)) &&
+                  RayaChief.settled(msgs, lastUser.id, RayaChief.request(current.metadata))) ||
                 recalled(msgs, current, lastUser.id) ||
                 mediaRecalled(msgs, current, lastUser.id))) // kilocode_change - original read-only Memory/media questions or selected device requests can release synthesis
           // raya_change end

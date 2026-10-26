@@ -15,6 +15,7 @@ import { ResultContract } from "./result-contract"
 import { Refusal } from "@/kilocode/session/tool-refusal"
 import { example } from "@/kilocode/task-resume"
 import * as GoalGate from "@/kilocode/goal/tool-gate"
+import { compacted } from "@/kilocode/goal/compaction-lineage"
 
 export namespace ChiefVerification {
   export const key = "raya.chief.verification"
@@ -53,69 +54,6 @@ export namespace ChiefVerification {
     callID: string
     request: string
   }
-  /** Only the durable automatic compaction producer chain retains the original authored request. */
-  function compact(
-    rows: readonly SessionV1.WithParts[],
-    user: SessionV1.WithParts,
-    intake: SessionV1.WithParts,
-    message: SessionV1.WithParts,
-    goal?: RayaGoal.State,
-  ) {
-    if (
-      (goal && goal.status !== "active") ||
-      user.info.role !== "user" ||
-      intake.info.role !== "user" ||
-      message.info.role !== "assistant"
-    )
-      return false
-    const idx = rows.findIndex((row) => row.info.id === intake.info.id)
-    const summary = rows[idx - 1]
-    if (
-      summary?.info.role !== "assistant" ||
-      !summary.info.summary ||
-      summary.info.agent !== "compaction" ||
-      summary.info.finish !== "stop" ||
-      summary.info.error ||
-      !summary.info.time.completed ||
-      summary.info.time.completed > intake.info.time.created
-    )
-      return false
-    const origin = summary.info.parentID
-    const parent = rows.findIndex((row) => row.info.id === origin)
-    const authored = rows.findIndex((row) => row.info.id === user.info.id)
-    const marker = rows[parent]
-    if (
-      authored < 0 ||
-      parent <= authored ||
-      parent >= idx - 1 ||
-      marker?.info.role !== "user" ||
-      marker.info.agent !== user.info.agent ||
-      intake.info.agent !== user.info.agent ||
-      marker.info.model.providerID !== user.info.model.providerID ||
-      marker.info.model.modelID !== user.info.model.modelID ||
-      intake.info.model.providerID !== user.info.model.providerID ||
-      intake.info.model.modelID !== user.info.model.modelID ||
-      marker.parts.length !== 1 ||
-      marker.parts[0]?.type !== "compaction" ||
-      !marker.parts[0].auto ||
-      marker.parts[0].overflow === true ||
-      rows.slice(authored + 1, idx).some((row) => row.info.role === "user" && !!RayaChief.requestText(row.parts)) ||
-      !summary.parts.some((part) => part.type === "text" && !!part.text.trim()) ||
-      intake.parts.length !== 1
-    )
-      return false
-    const part = intake.parts[0]
-    return (
-      part?.type === "text" &&
-      part.synthetic === true &&
-      part.ignored !== true &&
-      part.metadata?.compaction_continue === true &&
-      part.text ===
-        "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed." &&
-      [user, marker, summary, intake, message].every((row) => row.info.sessionID === message.info.sessionID)
-    )
-  }
-
   /** Synthetic policy is not intent: only a current persisted dispatch or complete compaction chain bridges it. */
   function dispatch(
     rows: readonly SessionV1.WithParts[],
@@ -129,7 +67,7 @@ export namespace ChiefVerification {
     if (latest?.info.id !== parent) return false
     if (parent === user.info.id) return true
     const intake = rows.find((row) => row.info.id === parent)
-    if (intake && compact(rows, user, intake, message, goal)) return true
+    if (intake && compacted(rows, user, intake, message, goal)) return true
     return (
       goal?.status === "active" &&
       goal.dispatch?.phase === "started" &&

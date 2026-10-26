@@ -1887,6 +1887,14 @@ export const layer = Layer.effect(
           const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
           const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
           const promptOps = yield* ops()
+          // kilocode_change start - bind only verified compaction producer lineage before resolving goal controls
+          if (
+            lastUserMsg?.parts.some(
+              (part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true,
+            )
+          )
+            yield* bind(sessions, state, sessionID)
+          // kilocode_change end
 
           const resolved = yield* SessionTools.resolve({
             // kilocode_change // raya_change - filter Auto tools by phase

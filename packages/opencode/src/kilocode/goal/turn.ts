@@ -10,6 +10,7 @@ import { ResultContract } from "@/kilocode/chief/result-contract"
 import { gate } from "@/kilocode/session/input-gate"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { record } from "@/kilocode/task/continuation"
+import { compacted } from "./compaction-lineage"
 
 const log = Log.create({ service: "raya-goal-turn" })
 
@@ -77,6 +78,41 @@ export const compaction = Effect.gen(function* () {
   })
 })
 
+function follows(
+  rows: readonly SessionV1.WithParts[],
+  session: Session.Info,
+  goal: RayaGoal.State,
+  input: string,
+  worker: string,
+) {
+  const dispatch = goal.dispatch
+  if (
+    goal.status !== "active" ||
+    goal.completion === "reply" ||
+    dispatch?.phase !== "started" ||
+    dispatch.intent !== goal.intent ||
+    dispatch.worker !== worker ||
+    !dispatch.messageID ||
+    !goal.inputs?.includes(dispatch.messageID) ||
+    rows.findLast((row) => row.info.role === "user")?.info.id !== input
+  )
+    return false
+  if (goal.routine) {
+    const identity = Schema.decodeUnknownOption(record)(session.metadata?.rayaRoutine)
+    if (
+      identity._tag !== "Some" ||
+      goal.routine.sessionID !== session.id ||
+      goal.routine.agentID !== identity.value.agentID ||
+      goal.routine.runID !== identity.value.runID
+    )
+      return false
+  }
+  const user = rows.find((row) => row.info.id === dispatch.messageID)
+  const intake = rows.find((row) => row.info.id === input)
+  const message = rows.findLast((row) => row.info.role === "assistant" && row.info.parentID === input)
+  return !!user && !!intake && !!message && compacted(rows, user, intake, message, goal)
+}
+
 export const associate = Effect.fn("RayaGoal.associate")(
   function* (
     goals: ReturnType<typeof RayaGoal.make>,
@@ -94,9 +130,10 @@ export const associate = Effect.fn("RayaGoal.associate")(
     const reader = sessions ?? (service._tag === "Some" ? service.value : undefined)
     const intent = goal.intent
     if (reader && goal.status === "active" && intent) {
-      const input = (yield* reader.messages({ sessionID, limit: 129 })).findLast((row) => row.info.role === "user")
-        ?.info.id
+      const rows = yield* reader.messages({ sessionID, limit: 129 })
+      const input = rows.findLast((row) => row.info.role === "user")?.info.id
       if (input && !goal.inputs?.includes(input)) {
+        const linked = follows(rows, yield* reader.get(sessionID).pipe(Effect.orDie), goal, input, worker.id)
         const admitted = yield* gate.withLock(sessionID)(
           Effect.gen(function* () {
             const current = yield* goals.get(sessionID)
@@ -110,6 +147,13 @@ export const associate = Effect.fn("RayaGoal.associate")(
               owner.id !== worker.id
             )
               return undefined
+            if (linked) {
+              const rows = yield* reader.messages({ sessionID, limit: 129 })
+              const session = yield* reader.get(sessionID).pipe(Effect.orDie)
+              if (!follows(rows, session, current, input, worker.id)) return undefined
+              yield* goals.follow(sessionID, intent, input, worker.id)
+              return true
+            }
             const original = yield* ResultContract.follow(reader, sessionID, input, {
               version: 1,
               sessionID,

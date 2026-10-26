@@ -2,6 +2,95 @@
 import { describe, expect, it } from "bun:test"
 import { RayaChief } from "../../src/kilocode/chief"
 import data from "./fixtures/chief-routing.json"
+import type { MessageV2 } from "../../src/session/message-v2"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+
+type State = Extract<MessageV2.WithParts["parts"][number], { type: "tool" }>["state"]
+const completed = {
+  status: "completed",
+  input: {},
+  output: "The saved worker accepted the request.",
+  title: "Worker request",
+  metadata: {},
+  time: { start: 2, end: 3 },
+} satisfies State
+
+function response(tool: string, state: State = completed, parent = MessageID.make("msg_current")): MessageV2.WithParts {
+  const session = SessionID.make("ses_routine_reply")
+  const message = MessageID.make("msg_routine_result")
+  return {
+    info: {
+      id: message,
+      sessionID: session,
+      parentID: parent,
+      role: "assistant",
+      agent: "auto",
+      mode: "auto",
+      providerID: ProviderV2.ID.make("local"),
+      modelID: ModelV2.ID.make("fixture"),
+      cost: 0,
+      path: { cwd: ".", root: "." },
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 1 },
+    },
+    parts: [
+      {
+        id: PartID.make("prt_routine_result"),
+        sessionID: session,
+        messageID: message,
+        type: "tool",
+        callID: "routine-result",
+        tool,
+        state,
+      },
+    ],
+  }
+}
+
+it("releases a reply after a current user's completed Routine operation", () => {
+  for (const tool of [
+    "schedule_task",
+    "inspect_routines",
+    "create_organization",
+    "update_routine",
+    "update_organization",
+    "assign_organization_work",
+  ])
+    expect(RayaChief.settled([response(tool)], "msg_current")).toBe(true)
+})
+
+it("does not borrow a settled Routine result from an older user request", () => {
+  expect(
+    RayaChief.settled([response("assign_organization_work", completed, MessageID.make("msg_old"))], "msg_current"),
+  ).toBe(false)
+  expect(RayaChief.settled([], "msg_current")).toBe(false)
+})
+
+it("does not release a reply while the current Routine operation is unfinished", () => {
+  for (const state of [
+    { status: "pending", input: {}, raw: "" },
+    { status: "running", input: {}, time: { start: 2 } },
+  ] satisfies State[])
+    expect(RayaChief.settled([response("assign_organization_work", state)], "msg_current")).toBe(false)
+})
+
+it("does not treat unrelated completed tools as a settled Routine operation", () => {
+  for (const tool of ["read", "chief_route", "task", "get_goal"])
+    expect(RayaChief.settled([response(tool)], "msg_current")).toBe(false)
+})
+
+it("releases an honest failure reply for the current Routine operation without fabricating success", () => {
+  const state = {
+    status: "error",
+    input: {},
+    error: "Organization revision changed; no work was assigned.",
+    time: { start: 2, end: 3 },
+  } satisfies State
+  expect(RayaChief.settled([response("assign_organization_work", state)], "msg_current")).toBe(true)
+  expect(state.status).toBe("error")
+})
 
 type Fixture = {
   prompt: string
@@ -24,6 +113,7 @@ it("keeps tracked-work assignment tools available for explicit saved-worker kick
     const available = RayaChief.tools(tools, { [RayaChief.requestKey]: request })
     expect(available.inspect_routines).toBe(tools.inspect_routines)
     expect(available.assign_organization_work).toBe(tools.assign_organization_work)
+    expect(available.chief_route).toBeUndefined()
   }
   for (const request of [
     "Build a team dashboard for my workers",
@@ -395,15 +485,14 @@ describe("Raya Chief routing", () => {
       assign_organization_work: { id: "assign" },
     }
     const expected = [
-      ...initial,
-      "ask_options",
-      "question",
       "schedule_task",
       "inspect_routines",
       "create_organization",
       "update_routine",
       "update_organization",
       "assign_organization_work",
+      "ask_options",
+      "question",
     ]
     expect(
       Object.keys(

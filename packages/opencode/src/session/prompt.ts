@@ -31,6 +31,7 @@ import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_chang
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
 import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - private background result publication
+import { assigned, instruction as assignmentInstruction } from "@/kilocode/task/turn" // kilocode_change - acknowledge saved worker assignments without repeating them
 import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/conversation" // kilocode_change - original greeting needs no workflow tools
 import { settled as recalled, acknowledged, acknowledgement, refused } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
 import { instruction as decline } from "@/kilocode/second-brain/refusal" // kilocode_change - bounded local command repair or clarification only
@@ -1913,6 +1914,7 @@ export const layer = Layer.effect(
           const complete = yield* GoalGate.closed(resolved) // kilocode_change - current original dispatch only
           const mandatory = yield* GoalGate.required(resolved) // kilocode_change - require goal controls in owned specialist dispatches
           const conversation = agent.name === "auto" && acknowledged(msgs, current, lastUser.id)
+          const assignment = agent.name === "auto" && assigned(msgs, current, lastUser.id)
           const chat = agent.name === "auto" && chatting(msgs, current, lastUser.id)
           const refusal = !mandatory && agent.name === "auto" ? refused(msgs, current, lastUser.id) : undefined
           const original = chat ? RayaChief.request(current.metadata) : undefined
@@ -1924,7 +1926,7 @@ export const layer = Layer.effect(
           ) // kilocode_change - durable original message-bound capture route
           const recovery = agent.name === "auto" && (yield* ResultContract.recovery(sessions, sessionID))
           const tools =
-            complete || conversation || chat || refusal?.mode === "clarify"
+            complete || assignment || conversation || chat || refusal?.mode === "clarify"
               ? {}
               : agent.name === "auto"
                 ? {
@@ -1939,6 +1941,7 @@ export const layer = Layer.effect(
                 : resolved
           const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
           const direct =
+            assignment ||
             refusal?.mode === "clarify" ||
             conversation ||
             chat ||
@@ -1946,6 +1949,7 @@ export const layer = Layer.effect(
               phase === "route" &&
               ((HomeAssistant.selected(current.metadata, { session: sessionID, user: lastUser.id }) &&
                 (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id))) ||
+                (RayaChief.routine(RayaChief.request(current.metadata)) && RayaChief.settled(msgs, lastUser.id)) ||
                 recalled(msgs, current, lastUser.id) ||
                 mediaRecalled(msgs, current, lastUser.id))) // kilocode_change - original read-only Memory/media questions or selected device requests can release synthesis
           // raya_change end
@@ -2022,6 +2026,7 @@ export const layer = Layer.effect(
             ...(mcpInstructions ? [mcpInstructions] : []),
             ...(skills ? [skills] : []),
             ...(conversation ? [acknowledgement] : []), // kilocode_change - preference replies acknowledge supplied facts without starting setup
+            ...(assignment ? [assignmentInstruction] : []), // kilocode_change - saved assignment is not finished worker output
             ...(chat ? [greeting] : []), // kilocode_change - original greeting replies without acquisition or saving claims
             ...(refusal ? [decline(refusal)] : []), // kilocode_change - no replacement facts or Goal authority
           ]
@@ -2084,7 +2089,7 @@ export const layer = Layer.effect(
             // kilocode_change start
             // raya_change - require orchestration until goal handling deterministically releases synthesis
             toolChoice:
-              complete || conversation || chat || refusal?.mode === "clarify"
+              complete || assignment || conversation || chat || refusal?.mode === "clarify"
                 ? "none"
                 : mandatory || format.type === "json_schema"
                   ? "required"

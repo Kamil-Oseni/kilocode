@@ -35,6 +35,24 @@ const row = (content: string) => ({
   eval_count: 3,
 })
 
+test("envelope routing instructions follow the actual advertised tool catalog", () => {
+  const catalog = (...names: string[]) => names.map((name) => ({ function: { name, parameters: {} } }))
+  const chief = ToolEnvelope.guide(catalog("chief_route", "inspect_routines", "assign_organization_work"))
+  expect(chief).toContain("Submit chief_route alone and wait for its actual routing decision")
+  expect(chief).not.toContain("Call inspect_routines first")
+  const routine = ToolEnvelope.guide(catalog("inspect_routines", "assign_organization_work"))
+  expect(routine).not.toContain("chief_route")
+  expect(routine).toContain("Call inspect_routines first and wait")
+  expect(routine).toContain("exact IDs and revision")
+  expect(routine).toContain("A saved assignment is not completed worker output")
+  const inspection = ToolEnvelope.guide(catalog("inspect_routines"))
+  expect(inspection).toContain("Call inspect_routines first")
+  expect(inspection).not.toContain("assign_organization_work")
+  const other = ToolEnvelope.guide(tools)
+  expect(other).not.toContain("chief_route")
+  expect(other).not.toContain("inspect_routines")
+})
+
 test("exact schemas and unrepaired arguments; strict outer choice/allowlist/bounds", () => {
   const properties = ToolEnvelope.schema(tools, "auto").anyOf[0].properties
   if (!("arguments" in properties)) throw new Error("Missing tool schema")

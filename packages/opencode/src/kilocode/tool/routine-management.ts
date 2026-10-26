@@ -29,6 +29,7 @@ import { confirm } from "./routine-confirmation"
 import { SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { Criteria } from "@/kilocode/goal/criteria"
+import * as ToolJsonSchema from "@/tool/json-schema"
 import { kickoff, forward } from "@/kilocode/task/request"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
@@ -249,10 +250,6 @@ const AssignOrganizationWork = Schema.Struct({
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
   ).annotate({ description: "Omit unless the user supplied a deadline. Never invent a timestamp." }),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
-  artifacts: Schema.optional(ArtifactPaths).annotate({
-    description:
-      "Only existing input files created or changed in this chat, with actual tool receipts. Omit for job kickoff using saved sources. Future output paths belong in objective or context, never artifacts.",
-  }),
 })
 const InspectTeam = Schema.Struct({
   cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
@@ -1148,8 +1145,9 @@ export function routineManagementTools(input: {
     "assign_organization_work",
     Effect.succeed({
       description:
-        "Assign only the FIRST stage of one tracked job from the main chat to an existing organization. First call inspect_routines. Make one call, then acknowledge its saved state; the receiving worker owns later delegate_work handoffs after producing real files. Never pre-dispatch later stages. Omit future outputs from artifacts and omit deadlines the user did not supply. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
+        "Assign only the FIRST stage of one tracked job from the main chat to an existing organization. First call inspect_routines. Make one call, then acknowledge its saved state; the receiving worker owns later delegate_work handoffs after producing real files. Never pre-dispatch later stages. Describe approved sources and output destinations in objective or context. Omit deadlines the user did not supply. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
       parameters: AssignOrganizationWork,
+      jsonSchema: { ...ToolJsonSchema.fromSchema(AssignOrganizationWork), additionalProperties: false },
       execute: (params: typeof AssignOrganizationWork.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
           if (!ctx.callID)
@@ -1221,7 +1219,6 @@ export function routineManagementTools(input: {
                 : [ctx.sessionID, ctx.messageID, ctx.callID, organization.id],
             ),
           ).slice(0, 48)}`
-          const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
           yield* ctx.ask({
             permission: "schedule_task",
             patterns: [`organization:${organization.id}`, `route:${sender.id}:${recipient.id}`],
@@ -1246,7 +1243,6 @@ export function routineManagementTools(input: {
               context: params.context?.trim(),
               deadline: params.deadline,
               budget: params.budget,
-              artifacts,
             },
             { reportSessionID: ctx.sessionID },
           )

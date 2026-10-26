@@ -17,6 +17,7 @@ import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaContactOutbox } from "@/kilocode/contact/outbox"
 import * as Artifact from "@/kilocode/goal/artifact"
+import * as ToolJsonSchema from "@/tool/json-schema"
 import { RayaTask } from "@/kilocode/task"
 import { archive as indexed } from "@/kilocode/task/archive"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
@@ -1396,6 +1397,13 @@ it.live(
         expect(yield* tasks.list()).toEqual(roster)
         const tools = routineManagementTools({ database, storage, sessions })
         const assign = yield* (yield* tools.assignOrganizationWork).init()
+        const schema = ToolJsonSchema.fromTool({ ...assign, id: "assign_organization_work" })
+        expect(schema.properties?.artifacts).toBeUndefined()
+        expect(schema.additionalProperties).toBe(false)
+        expect(schema.properties?.budget).toBeDefined()
+        expect(schema.properties?.deadline).toBeDefined()
+        const delegated = yield* (yield* tools.delegateWork).init()
+        expect(ToolJsonSchema.fromTool({ ...delegated, id: "delegate_work" }).properties?.artifacts).toBeDefined()
         expect(KiloToolRegistry.available({ ...assign, id: "assign_organization_work" }, agent("primary"))).toBe(true)
         expect(KiloToolRegistry.available({ ...assign, id: "assign_organization_work" }, agent("subagent"))).toBe(false)
         const result = yield* assign.execute(

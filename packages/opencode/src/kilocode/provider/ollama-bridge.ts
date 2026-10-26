@@ -10,6 +10,8 @@ type Fetch = (
   init?: Parameters<typeof globalThis.fetch>[1],
 ) => Promise<Response>
 const bound = 2 * 1024 * 1024
+// Native responses can emit one frame per token; allow 8K outputs plus envelope and terminal frames.
+const acquisition = 16_384
 // Ordinary streams previously had no aggregate quota. These are response capacities, not token limits.
 const total = 64 * 1024 * 1024
 const frames = 1_048_576
@@ -263,7 +265,7 @@ async function required(
     void cancel(signal?.reason)
   }
   const accept = (text: string) => {
-    if (++state.frames > 4096) throw new OllamaBridgeError()
+    if (++state.frames > acquisition) throw new OllamaBridgeError()
     if (!text.trim()) return
     const value = (() => {
       try {
@@ -551,7 +553,7 @@ export class OllamaBridgeError extends Error {
           prompt: metric(row.prompt, 2_147_483_647),
           eval: metric(row.eval, 2_147_483_647),
           bytes: metric(row.bytes, row.reason === "ordinary-stream" ? total : bound),
-          frames: metric(row.frames, row.reason === "ordinary-stream" ? frames : 4096),
+          frames: metric(row.frames, row.reason === "ordinary-stream" ? frames : acquisition + 1),
           content: metric(row.content, bound),
         }
       : undefined

@@ -342,12 +342,47 @@ test("required refuses real HTTP invalid or incomplete calls without publishing 
   }
 })
 
+test("required 8K native frames complete a validated tool envelope before publishing", async () => {
+  const query = "x".repeat(8192)
+  const content = JSON.stringify({ kind: "tool", name: "lookup", arguments: { query } })
+  const rows = [...content].map((content) => ({
+    model: "fixture",
+    message: { role: "assistant", content },
+    done: false,
+  }))
+  expect(rows.length).toBeGreaterThan(4096)
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      expect(await req.json()).toMatchObject({ options: { num_predict: 8192 } })
+      return new Response(wire([...rows, done]))
+    },
+  })
+  try {
+    const response = await localFetch({ ...options, localInferenceToolFormat: "completion-envelope-v1" })(
+      `${server.url}v1/chat/completions`,
+      { method: "POST", body: JSON.stringify({ ...request(), max_tokens: 8192 }) },
+    )
+    const text = await response.text()
+    const values = events(text)
+    const calls = values.flatMap((value) => value.choices[0].delta.tool_calls ?? [])
+    expect(calls).toHaveLength(1)
+    expect(calls[0].function).toEqual({ name: "lookup", arguments: JSON.stringify({ query }) })
+    expect(values.at(-1).choices[0].finish_reason).toBe("tool_calls")
+    expect(text).toEndWith("data: [DONE]\n\n")
+    expect(status().active).toBe(0)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("required validates UTF8 and cumulative byte frame and call bounds on actual HTTP", async () => {
   const repeated = { model: "fixture", message: { role: "assistant", content: "" }, done: false }
   const cases: Record<string, string | Uint8Array> = {
     utf8: new Uint8Array([0xc3, 0x28]),
     bytes: wire([{ ...call, message: { ...call.message, content: "x".repeat(2 * 1024 * 1024) } }, done]),
-    frames: wire([...Array.from({ length: 4096 }, () => repeated), call, done]),
+    frames: wire([...Array.from({ length: 16_384 }, () => repeated), call, done]),
     calls: wire([
       {
         ...call,

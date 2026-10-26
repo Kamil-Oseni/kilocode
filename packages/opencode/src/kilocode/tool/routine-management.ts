@@ -231,8 +231,13 @@ const AssignOrganizationWork = Schema.Struct({
     description:
       "Exact current organization revision returned by inspect_routines. Copy it unchanged; do not increment it.",
   }),
-  senderID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
-  recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  senderID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)).annotate({
+    description: "Exact authorized sender agentID from inspect_routines for the first stage of this job.",
+  }),
+  recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)).annotate({
+    description:
+      "Exact first receiving worker agentID from inspect_routines. That worker owns later handoffs; do not dispatch later stages here.",
+  }),
   objective: Text,
   expected: Schema.optional(Text),
   criteria: Schema.optional(Criteria).annotate({
@@ -242,9 +247,12 @@ const AssignOrganizationWork = Schema.Struct({
   context: Schema.optional(Text),
   deadline: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
-  ),
+  ).annotate({ description: "Omit unless the user supplied a deadline. Never invent a timestamp." }),
   budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
-  artifacts: Schema.optional(ArtifactPaths),
+  artifacts: Schema.optional(ArtifactPaths).annotate({
+    description:
+      "Only existing input files created or changed in this chat, with actual tool receipts. Omit for job kickoff using saved sources. Future output paths belong in objective or context, never artifacts.",
+  }),
 })
 const InspectTeam = Schema.Struct({
   cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
@@ -1140,7 +1148,7 @@ export function routineManagementTools(input: {
     "assign_organization_work",
     Effect.succeed({
       description:
-        "Assign tracked work from the main chat to an existing organization. First call inspect_routines. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
+        "Assign only the FIRST stage of one tracked job from the main chat to an existing organization. First call inspect_routines. Make one call, then acknowledge its saved state; the receiving worker owns later delegate_work handoffs after producing real files. Never pre-dispatch later stages. Omit future outputs from artifacts and omit deadlines the user did not supply. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
       parameters: AssignOrganizationWork,
       execute: (params: typeof AssignOrganizationWork.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {

@@ -1,3 +1,17 @@
+/** Honor explicit budget-field omission without interpreting an absent budget as permission to spend. */
+export function omits(request: string | undefined) {
+  if (!request) return false
+  const text = request.replace(/```[\s\S]*?```/g, "").replace(/^\s*>.*$/gm, "")
+  return (
+    [...text.matchAll(/\bomit\s+(?:(?:the|any|a)\s+)?budget\b/gi)].some(
+      (match) => !/\b(?:not|never|don't|cannot|can't)\s+(?:\w+\s+){0,2}$/i.test(text.slice(0, match.index)),
+    ) ||
+    /\b(?:do not|don't)\s+(?:set|add|supply|include|invent)\s+(?:(?:the|a|any)\s+)?budget(?=\s*(?:[.,;:!?]|$)|\s+(?:key|field|parameter|for|on)\b)/i.test(
+      text,
+    )
+  )
+}
+
 /** Recognize an affirmative handoff requirement without treating prohibitions as requested work. */
 export function forward(text: string) {
   return [...text.matchAll(/\b(?:hand(?:ing)?[\s-]?offs?|delegat(?:e[sd]?(?:_work)?|ing|ion))\b/gi)].some(

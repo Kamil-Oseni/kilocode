@@ -1321,7 +1321,7 @@ it.live(
                 sessionID: ctx.sessionID,
                 messageID: user,
                 type: "text",
-                text: "Run a job through our saved Research Team to write a verified research report.",
+                text: "Run a job through our saved Research Team to write a verified research report. Omit budget and deadline keys for this kickoff.",
               },
             ],
           },
@@ -1393,6 +1393,28 @@ it.live(
         )
         expect(incomplete.metadata.requestStatus).toBe("unresolved")
         expect(incomplete.output).toContain("criterion verifying the accepted handoff")
+        const capped = yield* kickoff.execute(
+          {
+            organizationID: organization.id,
+            expectedRevision: organization.revision,
+            senderID: sender.id,
+            recipientID: recipient.id,
+            objective: "Write the verified research report.",
+            criteria: [
+              { id: "research", description: "Save the research report.", verification: "Read the full saved file." },
+            ],
+            budget: 1,
+          },
+          {
+            ...ctx,
+            ask: () =>
+              Effect.sync(() => {
+                calls.approvals++
+              }),
+          },
+        )
+        expect(capped.metadata.requestStatus).toBe("unresolved")
+        expect(capped.output).toContain("explicitly says to omit budget")
         expect(calls.approvals).toBe(0)
         expect(yield* errands.queued(recipient.id)).toEqual([])
         expect(yield* tasks.runsFor(recipient.id)).toEqual(history)
@@ -1417,6 +1439,7 @@ it.live(
             objective: "Verify the saved organization survives a restart.",
             expected: "A short confirmation with the organization name and worker count.",
             context: "Use the native durable Routines state.",
+            budget: 500,
           },
           context("assign-organization-work"),
         )
@@ -1439,6 +1462,7 @@ it.live(
           objective: "Verify the saved organization survives a restart.",
           expected: "A short confirmation with the organization name and worker count.",
           context: "Use the native durable Routines state.",
+          budget: 500,
         })
 
         const denied = yield* assign.execute(

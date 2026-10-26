@@ -1,5 +1,26 @@
 import { expect, test } from "bun:test"
-import { kickoff, forward } from "@/kilocode/task/request"
+import { kickoff, forward, omits } from "@/kilocode/task/request"
+
+test("budget omission is explicit and preserves requested limits and examples", () => {
+  for (const text of [
+    "Omit budget and deadline keys for this kickoff.",
+    "Omit the budget field.",
+    "Do not set any budget for this job.",
+    "Don't include a budget.",
+  ])
+    expect(omits(text)).toBe(true)
+  for (const text of [
+    undefined,
+    "Use a budget of 5.",
+    "Do not omit budget.",
+    "Never omit budget when the organization requires it.",
+    "Don't set a budget above 5.",
+    "No budget is available.",
+    "> Omit budget\nExplain this example.",
+    "```\nOmit budget\n```\nUse a budget of 5.",
+  ])
+    expect(omits(text)).toBe(false)
+})
 
 test("handoff criteria recognize affirmative work and preserve explicit prohibitions", () => {
   for (const text of [

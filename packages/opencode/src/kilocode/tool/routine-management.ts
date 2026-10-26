@@ -30,7 +30,7 @@ import { SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { Criteria } from "@/kilocode/goal/criteria"
 import * as ToolJsonSchema from "@/tool/json-schema"
-import { kickoff, forward } from "@/kilocode/task/request"
+import { kickoff, forward, omits } from "@/kilocode/task/request"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -253,7 +253,10 @@ const AssignOrganizationWork = Schema.Struct({
   deadline: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
   ).annotate({ description: "Omit unless the user supplied a deadline. Never invent a timestamp." }),
-  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))),
+  budget: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1_000_000))).annotate({
+    description:
+      "Supply only a user-requested model-cost limit or an allocation required by the saved organization. Otherwise omit. Never invent a cap when the user says to omit budget. This is a limit on model charges, not an estimate of the task's business value.",
+  }),
 })
 const InspectTeam = Schema.Struct({
   cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
@@ -1174,6 +1177,12 @@ export function routineManagementTools(input: {
           if (start && (!assistant || assistant.info.sessionID !== ctx.sessionID))
             return yield* Effect.fail(
               new Error("Starting saved-team work requires its current assistant and user request."),
+            )
+          if (start && params.budget !== undefined && omits(request))
+            return yield* Effect.fail(
+              new Error(
+                "This request explicitly says to omit budget. Remove the budget field instead of inventing a cap. Saved worker and organization limits still apply.",
+              ),
             )
           if (!params.criteria && start)
             return yield* Effect.fail(

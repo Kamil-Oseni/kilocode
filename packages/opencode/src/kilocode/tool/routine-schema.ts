@@ -26,7 +26,7 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
       : undefined
   const properties = { ...schema.properties }
   delete properties.deadline
-  return {
+  const result: JSONSchema7 = {
     ...schema,
     additionalProperties: false,
     required:
@@ -46,5 +46,6 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
           }
         : {}),
     },
-  } satisfies JSONSchema7
+  }
+  return result
 })

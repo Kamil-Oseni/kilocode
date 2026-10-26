@@ -17,7 +17,7 @@ export namespace RayaChief {
     "assign_organization_work",
   ]
 
-  export function settled(messages: readonly MessageV2.WithParts[], user: string) {
+  export function settled(messages: readonly MessageV2.WithParts[], user: string, request?: string) {
     return messages.some(
       (row) =>
         row.info.role === "assistant" &&
@@ -26,6 +26,12 @@ export namespace RayaChief {
           (part) =>
             part.type === "tool" &&
             routines.includes(part.tool) &&
+            !(
+              kickoff(request) &&
+              part.tool === "inspect_routines" &&
+              part.state.status === "completed" &&
+              part.state.title === "Saved routines"
+            ) &&
             (part.state.status === "completed" || part.state.status === "error"),
         ),
     )

@@ -68,6 +68,21 @@ it("does not borrow a settled Routine result from an older user request", () => 
   expect(RayaChief.settled([], "msg_current")).toBe(false)
 })
 
+it("keeps a saved-team job active after inspection until assignment or a real failure", () => {
+  const request = "Start one Website Pilot job through Dispatch."
+  const inspection = response("inspect_routines", { ...completed, title: "Saved routines" })
+  expect(RayaChief.settled([inspection], "msg_current", request)).toBe(false)
+  expect(RayaChief.settled([inspection], "msg_current", "List my saved routines")).toBe(true)
+  expect(RayaChief.settled([inspection, response("assign_organization_work")], "msg_current", request)).toBe(true)
+  expect(
+    RayaChief.settled(
+      [response("inspect_routines", { ...completed, title: "Routines unavailable" })],
+      "msg_current",
+      request,
+    ),
+  ).toBe(true)
+})
+
 it("does not release a reply while the current Routine operation is unfinished", () => {
   for (const state of [
     { status: "pending", input: {}, raw: "" },

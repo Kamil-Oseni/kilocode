@@ -1030,6 +1030,13 @@ it.live(
             organizationID: organization.id,
             organizationRevision: organization.revision,
             objective: "Design the approved client site",
+            criteria: [
+              {
+                id: "design-handoff",
+                description: "Hand off the actual produced files to Frontend Lead.",
+                verification: "Cite the accepted delegate_work receipt listing verified artifact identities.",
+              },
+            ],
             budget: 1000,
             deadline,
           },
@@ -1165,6 +1172,13 @@ it.live(
           recipientID: coder.id,
           objective: "Build the approved landing page",
           expected: "Return the deployed source and verification",
+          criteria: [
+            {
+              id: "website",
+              description: "Build the approved responsive website.",
+              verification: "Read the saved HTML and cite actual file receipts.",
+            },
+          ],
           context: "Use the approved design in the current request",
           deadline,
           artifacts: [file],
@@ -1180,10 +1194,20 @@ it.live(
         ).pipe(Effect.provideService(Session.Service, workerSessions as never))
         expect(bounded.properties?.deadline).toMatchObject({ type: "integer", minimum: 1, maximum: deadline })
         expect(bounded.additionalProperties).toBe(false)
+        expect(bounded.required).toContain("artifacts")
+        expect(bounded.properties?.artifacts).toMatchObject({ minItems: 1 })
         const invalid = yield* delegate
           .execute({ ...params, deadline: 0 }, context("delegate-zero-deadline"))
           .pipe(Effect.exit)
         expect(Exit.isFailure(invalid)).toBe(true)
+        expect(yield* errands.byRun(runID)).toHaveLength(0)
+        expect(yield* errands.queued(coder.id)).toEqual([])
+        const omitted = yield* delegate.execute(
+          { ...params, artifacts: undefined },
+          context("delegate-omitted-artifacts"),
+        )
+        expect(omitted.metadata.requestStatus).toBe("unresolved")
+        expect(omitted.output).toContain("artifacts")
         expect(yield* errands.byRun(runID)).toHaveLength(0)
         expect(yield* errands.queued(coder.id)).toEqual([])
         const assigned = yield* delegate.execute(params, context("delegate-build"))

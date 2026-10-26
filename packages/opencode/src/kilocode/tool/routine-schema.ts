@@ -5,8 +5,9 @@ import { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
 import { record } from "@/kilocode/task/continuation"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
+import * as Handoff from "@/kilocode/goal/handoff"
 
-/** Advertise deadlines only when the owning request supplies a verified bound. */
+/** Advertise the owning request's deadline bounds and required file handoffs. */
 export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSONSchema7, sessionID: SessionID) {
   const sessions = yield* Session.Service
   const session = yield* sessions.get(sessionID)
@@ -15,26 +16,37 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
   )
   const database = yield* Database.Service
   const incoming = identity ? yield* RayaTaskDelegation.make(database).bySession(sessionID) : undefined
-  const deadline =
+  const request =
     incoming &&
     incoming.recipientID === identity?.agentID &&
     incoming.childRunID === identity?.runID &&
     (incoming.state === "running" || incoming.state === "needs_input") &&
     (!identity?.organizationID || incoming.organizationID === identity.organizationID) &&
     (!identity?.organizationRevision || incoming.organizationRevision === identity.organizationRevision)
-      ? incoming.deadline
+      ? incoming
       : undefined
+  const deadline = request?.deadline
+  const files = request?.criteria?.some((criterion) => Handoff.artifacts(criterion.description, criterion.verification))
   const properties = { ...schema.properties }
   delete properties.deadline
+  const artifacts = properties.artifacts
   const result: JSONSchema7 = {
     ...schema,
     additionalProperties: false,
-    required:
-      deadline === undefined
-        ? (schema.required ?? []).filter((key) => key !== "deadline")
-        : [...new Set([...(schema.required ?? []), "deadline"])],
+    required: [
+      ...new Set([
+        ...(schema.required ?? []).filter((key) => key !== "deadline"),
+        ...(deadline === undefined ? [] : ["deadline"]),
+        ...(files ? ["artifacts"] : []),
+      ]),
+    ],
     properties: {
       ...properties,
+      ...(files
+        ? {
+            artifacts: { ...(artifacts && typeof artifacts === "object" ? artifacts : {}), type: "array", minItems: 1 },
+          }
+        : {}),
       ...(deadline !== undefined
         ? {
             deadline: {

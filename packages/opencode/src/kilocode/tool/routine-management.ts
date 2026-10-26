@@ -32,6 +32,7 @@ import { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoal } from "@/kilocode/goal"
 import * as ToolJsonSchema from "@/tool/json-schema"
 import { kickoff, forward, omits } from "@/kilocode/task/request"
+import * as Handoff from "@/kilocode/goal/handoff"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -1071,6 +1072,15 @@ export function routineManagementTools(input: {
             return yield* Effect.fail(
               new Error(
                 "This owning request has no deadline. Omit the deadline field; only the owner can authorize one through the original work assignment.",
+              ),
+            )
+          if (
+            incoming?.criteria?.some((criterion) => Handoff.artifacts(criterion.description, criterion.verification)) &&
+            !params.artifacts?.length
+          )
+            return yield* Effect.fail(
+              new Error(
+                "This request requires a verified file handoff. Include artifacts with the exact files already produced in this worker run before assigning the next worker.",
               ),
             )
           if (incoming?.criteria && params.artifacts?.length && !params.criteria)

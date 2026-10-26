@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import path from "node:path"
 import { hostname } from "node:os"
-import { Effect, Exit, Layer, Schema } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
@@ -25,7 +25,7 @@ import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Permission from "@/permission"
-import { MessageID, SessionID } from "@/session/schema"
+import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { Question } from "@/question"
@@ -1300,8 +1300,8 @@ it.live(
         })
         const ctx = context("assign-kickoff-without-criteria")
         const user = MessageID.make("msg_kickoff_original_user")
-        const pair = [
-          Schema.decodeUnknownSync(SessionV1.WithParts)({
+        const pair: SessionV1.WithParts[] = [
+          {
             info: {
               id: user,
               sessionID: ctx.sessionID,
@@ -1312,15 +1312,15 @@ it.live(
             },
             parts: [
               {
-                id: "prt_kickoff_original_text",
+                id: PartID.make("prt_kickoff_original_text"),
                 sessionID: ctx.sessionID,
                 messageID: user,
                 type: "text",
                 text: "Run a job through our saved Research Team to write a verified research report.",
               },
             ],
-          }),
-          Schema.decodeUnknownSync(SessionV1.WithParts)({
+          },
+          {
             info: {
               id: ctx.messageID,
               sessionID: ctx.sessionID,
@@ -1336,7 +1336,7 @@ it.live(
               time: { created: 2 },
             },
             parts: [],
-          }),
+          },
         ]
         const calls = { approvals: 0 }
         const kickoff = yield* (yield* routineManagementTools({

@@ -7,6 +7,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -1307,7 +1308,7 @@ it.live(
               sessionID: ctx.sessionID,
               role: "user",
               agent: "auto",
-              model: { providerID: "fixture", modelID: "fixture" },
+              model: { providerID: ProviderV2.ID.make("fixture"), modelID: "fixture" },
               time: { created: 1 },
             },
             parts: [
@@ -1329,7 +1330,7 @@ it.live(
               agent: "auto",
               mode: "auto",
               modelID: "fixture",
-              providerID: "fixture",
+              providerID: ProviderV2.ID.make("fixture"),
               path: { cwd: directory, root: directory },
               cost: 0,
               tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },

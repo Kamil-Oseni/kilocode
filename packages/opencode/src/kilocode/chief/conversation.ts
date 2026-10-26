@@ -96,3 +96,28 @@ export function acknowledgement(request: string) {
     )
   })
 }
+
+/** Chat-context replies can honor a blanket no-tools instruction without specialist delegation. */
+export function unaided(request: string) {
+  const text = request
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`]*`/g, "")
+    .replace(/^\s*>.*$/gm, "")
+  if (
+    !/\b(?:(?:this|our|current)\s+(?:chat|conversation|discussion)|earlier|previously|(?:i|we|you)\s+(?:just\s+)?(?:said|mentioned|agreed))\b/i.test(
+      text,
+    )
+  )
+    return false
+  const pattern =
+    /\b(?:(?:do not|don't|never)\s+(?:use|call|invoke|run)\s+(?:any\s+)?tools?|without\s+(?:(?:using|calling)\s+)?(?:any\s+)?tools?|no\s+tools?)(?:\s+(?:or|and)\s+(?:(?:start|use)\s+)?(?:any\s+)?workers?)?(?=\s*(?:[.!;,?]|$))/gi
+  if (
+    ![...text.matchAll(pattern)].some(
+      (match) => !/\b(?:say|phrase|words|called|named|quoted)\s*$/i.test(text.slice(0, match.index)),
+    )
+  )
+    return false
+  return !/(?:^|[.;!?]\s*|\b(?:and|then|also)\s+)(?:please\s+)?(?:read|inspect|open|search|browse|check|fetch|write|edit|modify|delete|remove|rename|create|update|save|store|run|execute|launch|start|stop|turn|set|dim|brighten|switch|fade|activate)\b[^.!?;\n]{0,100}\b(?:files?|repositor(?:y|ies)|repos?|director(?:y|ies)|folders?|disks?|drives?|websites?|browsers?|web|internet|lights?|lamps?|bulbs?|moods?|scenes?|rgb|applications?|programs?|commands?|process(?:es)?|workers?|routines?|organi[sz]ations?|preferences?|memory)\b/i.test(
+    text.replace(pattern, ""),
+  )
+}

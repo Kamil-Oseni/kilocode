@@ -161,8 +161,37 @@ it.live(
             "My nickname here is Copper Finch; turn off the lights",
             "My nickname here is Copper Finch; save this to memory",
             "My nickname here is Copper Finch and write the file",
+            "Explain the phrase `without tools or workers`.",
+            "> Without tools or workers.\nInspect the repository files.",
+            "```\nDo not use tools or workers.\n```\nInspect the repository files.",
+            "Inspect the repository files without tools except read.",
           ])
             expect(RayaChief.direct(phrase)).toBe(false)
+          for (const request of [
+            "What project nickname did I give you earlier in this chat? Reply from this conversation without tools or workers.",
+            "Summarize what we agreed earlier in this conversation. Do not use any tools or start any workers.",
+            "From this chat alone, remind me of the project plan. No tools or workers.",
+            "Summarize our earlier discussion of two independent agents, without tools or workers.",
+          ]) {
+            const input = yield* dispatch(dir, request)
+            const result = yield* tool.execute(
+              {
+                result: "narrative",
+                access: "read",
+                objective: "Summarize the prior conversation.",
+                workflow: "home_assistant",
+              },
+              input.ctx,
+            )
+            const saved = yield* sessions.get(input.chat.id)
+            expect(result.metadata.decision?.direct).toBe(true)
+            expect(result.metadata.decision?.request).toBe(request)
+            expect(RayaChief.phase(saved.metadata)).toBe("done")
+            expect(HomeAssistant.selected(saved.metadata, { session: input.chat.id, user: input.user.id })).toBe(false)
+            expect(yield* sessions.children(input.chat.id)).toEqual([])
+          }
+          expect(RayaChief.direct("Inspect the repository files.")).toBe(false)
+          expect(RayaChief.direct("Turn the office light off.")).toBe(false)
           const device = yield* dispatch(dir, "Turn the office light off.")
           const accepted = yield* tool.execute(
             {
@@ -183,7 +212,12 @@ it.live(
           const foreign = yield* dispatch(dir, "Inspect the repository files.")
           const refused = yield* tool
             .execute(
-              { result: "narrative", access: "read", objective: "Turn the light off.", workflow: "home_assistant" },
+              {
+                result: "narrative",
+                access: "read",
+                objective: "Reply from this conversation without tools or workers.",
+                workflow: "home_assistant",
+              },
               foreign.ctx,
             )
             .pipe(Effect.exit)

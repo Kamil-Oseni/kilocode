@@ -29,13 +29,15 @@ export function prohibits(request: string | undefined) {
   if (inspection(request)) return true
   const text = request.replace(/```[\s\S]*?```/g, "").replace(/^\s*>.*$/gm, "")
   return (
-    /\b(?:do not|don't|never)\s+(?:start|run|launch|assign|delegate)(?:\s*(?:,|and|or)\s*(?:start|run|launch|assign|delegate))*\s+(?:(?:any|new|more|the|a|another|additional)\s+){0,3}(?:work|jobs?|workers?|agents?|routines?|tasks?|delegations?)\b/i.test(
+    /\b(?:do not|don't|never)\s+(?:start|run|launch|assign|delegate)(?:\s*(?:,|and|or)\s*(?:start|run|launch|assign|delegate))*\s+(?:(?:any|new|more|the|a|another|additional)\s+){0,3}(?:work|jobs?|workers?|agents?|routines?|tasks?|delegations?)\b(?=\s*(?:[.!?;,]|$)|\s+in\s+this\s+turn\b)/i.test(
       text,
     ) ||
-    /\bno\s+(?:(?:corrections?|changes?)\s+(?:or|and)\s+)?(?:(?:new|more|additional)\s+)?(?:delegations?|assignments?)\b/i.test(
+    /\bno\s+(?:(?:corrections?|changes?)\s+(?:or|and)\s+)?(?:(?:new|more|additional)\s+)?(?:delegations?|assignments?)\b(?=\s*(?:[.!?;,]|$)|\s+in\s+this\s+turn\b)/i.test(
       text,
     ) ||
-    /\b(?:do not|don't|never)\s+(?:call|use)\s+(?:assign_organization_work|delegate_work)\b/i.test(text)
+    /\b(?:do not|don't|never)\s+(?:call|use)\s+(?:assign_organization_work|delegate_work)\b(?=\s*(?:[.!?;,]|$)|\s+in\s+this\s+turn\b)/i.test(
+      text,
+    )
   )
 }
 

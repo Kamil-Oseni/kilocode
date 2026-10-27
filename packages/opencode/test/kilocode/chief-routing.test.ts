@@ -1,5 +1,6 @@
 // raya_change - Milestone B intelligent auto-routing
 import { describe, expect, it } from "bun:test"
+import { prohibits } from "@/kilocode/task/request"
 import { RayaChief } from "../../src/kilocode/chief"
 import data from "./fixtures/chief-routing.json"
 import type { MessageV2 } from "../../src/session/message-v2"
@@ -684,6 +685,10 @@ it("keeps latest read-only status requests observational without sticky assignme
   )
   const request =
     "Read-only status check for the completed job. Do not start or assign work, change goals/settings, write/edit any file, send anything or publish; no corrections or new delegations in this turn."
+  expect(
+    prohibits("Start the saved-team job through Researcher. Do not assign work to Sales until Researcher finishes."),
+  ).toBe(false)
+  expect(prohibits("Do not start or assign work; no new delegations in this turn.")).toBe(true)
   const selected = RayaChief.tools(tools, { [RayaChief.requestKey]: request })
   expect(Object.keys(selected)).toEqual(["read", "glob", "grep", "inspect_routines", "get_goal"])
   expect(

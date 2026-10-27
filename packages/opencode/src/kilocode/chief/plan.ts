@@ -1,20 +1,24 @@
 import { Schema } from "effect"
 import { Permission } from "@/permission"
 import { ChiefBranches } from "./branches"
+import * as TaskFiles from "@/kilocode/tool/task-files"
 
 /** Admission checks for a proposed Auto Chief fanout. This does not launch children. */
 export namespace ChiefPlan {
-  export const Proposal = Schema.Struct({
+  const fields = {
     id: Schema.String,
     name: Schema.String,
     specialist: Schema.String,
-    access: Schema.Literals(["read", "edit"]),
     brief: ChiefBranches.Brief,
     scope: Schema.Array(Schema.String),
     dependsOn: Schema.Array(Schema.String),
     independence: Schema.String,
     authority: Schema.String,
-  })
+  }
+  export const Proposal = Schema.Union([
+    Schema.Struct({ ...fields, access: Schema.Literal("read"), files: Schema.optional(TaskFiles.Declared) }),
+    Schema.Struct({ ...fields, access: Schema.Literal("edit"), files: TaskFiles.Declared }),
+  ])
   export type Proposal = typeof Proposal.Type
 
   export type Agent = {
@@ -48,6 +52,7 @@ export namespace ChiefPlan {
       throw new Error("Auto Chief branches cannot repeat the same objective")
 
     const scope = new Set<string>()
+    const owned: TaskFiles.Declared[] = []
     for (const item of items) {
       if (
         !clean(item.id) ||
@@ -65,6 +70,15 @@ export namespace ChiefPlan {
         throw new Error(`Auto Chief branch ${item.name} depends on another task and cannot run in parallel`)
       if (!item.scope.length || !unique(item.scope))
         throw new Error(`Auto Chief branch ${item.name} needs distinct owned scope`)
+      if (item.access === "edit" && item.files === undefined)
+        throw new Error(
+          `Auto Chief edit branch ${item.name} needs explicit exact files relative to its child workspace`,
+        )
+      if (item.access === "edit") {
+        if (owned.some((files) => TaskFiles.overlap(files, item.files)))
+          throw new Error(`Auto Chief edit branch ${item.name} overlaps another branch's declared files`)
+        owned.push(item.files)
+      }
       for (const value of item.scope) {
         const key = clean(value).toLowerCase()
         if (!key || key === "*" || key === "all" || key === "entire task" || scope.has(key))
@@ -92,6 +106,7 @@ export namespace ChiefPlan {
         expectedReturn: clean(item.brief.expectedReturn),
       },
       scope: item.scope.map(clean),
+      ...(item.files === undefined ? {} : { files: item.files }),
       independence: clean(item.independence),
       authority: clean(item.authority),
     }))

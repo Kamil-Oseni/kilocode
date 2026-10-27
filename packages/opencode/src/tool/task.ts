@@ -43,6 +43,9 @@ import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse f
 import { admit } from "@/kilocode/tool/task-admission" // kilocode_change - own same-child calls before mutable proof reads
 import { Refusal } from "@/kilocode/session/tool-refusal" // kilocode_change - request-bound work class refusal
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
+import * as TaskFiles from "@/kilocode/tool/task-files" // kilocode_change - explicit child file declarations
+import * as TaskFilesProducer from "@/kilocode/tool/task-files-producer" // kilocode_change - bind actual child directories before execution
+import { FSUtil } from "@opencode-ai/core/fs-util" // kilocode_change - validate the selected file-scope filesystem
 import { Desktop } from "@/kilocode/desktop/service" // kilocode_change - exact Computer Use child grant admission
 import { SelectedWindowTarget } from "@/kilocode/desktop/protocol" // kilocode_change - versioned child window admission
 import { TaskComputer } from "@/kilocode/tool/task-computer" // kilocode_change - keep selected child admission in a Kilo-owned boundary
@@ -112,6 +115,11 @@ const BaseParameterFields = {
     description:
       'Set "read" for research, "computer" for lease-scoped desktop work without filesystem edits, or "edit" for an active goal or the current user\'s explicit request to change work, subject to parent permission. Auto tasks without saved authority default to read-only; other agents retain legacy behavior.',
   }),
+  files: Schema.optional(TaskFiles.Declared).annotate({
+    // kilocode_change
+    description:
+      "Exact relative files this child may mutate; no directories, globs or traversal. Required for new unplanned edit Tasks. Empty allows no file mutations. Omit on resume to retain the original binding. This only restricts existing permissions, and disables shell, MCP, custom tools and further delegation.",
+  }), // kilocode_change
   computer_target: Schema.optional(SelectedWindowTarget).annotate({
     description: "Bind a Computer Use child to this exact window ID from the parent's selected-window grant.",
   }), // kilocode_change - selected child authority cannot span a multi-window grant
@@ -174,6 +182,7 @@ export const TaskTool = Tool.define(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service)) // kilocode_change - raya_change: optional outside durable goal contexts
+    const fs = Option.getOrUndefined(yield* Effect.serviceOption(FSUtil.Service)) // kilocode_change - legacy tasks do not require file-scope services
     const desktop = Option.getOrUndefined(yield* Effect.serviceOption(Desktop.Service)) // kilocode_change
     const children = storage ? yield* GoalChildren.make({ storage, sessions }) : undefined // kilocode_change - raya_change
     const branches = storage ? ChiefBranches.make(storage) : undefined // kilocode_change
@@ -367,6 +376,16 @@ export const TaskTool = Tool.define(
         userEdit, // kilocode_change - exact current request authority
         parent: ruleset,
       })
+      const declaration = yield* TaskFilesProducer.prepare({
+        auto: ctx.agent === "auto",
+        access,
+        files: params.files,
+        branch,
+        parent,
+        resumed,
+        storage,
+        fs,
+      }) // kilocode_change - refuse missing or changed file authority before child effects
       const computer = yield* TaskComputer.admit({
         access,
         desktop,
@@ -699,7 +718,8 @@ export const TaskTool = Tool.define(
             // kilocode_change end
             if (session) {
               const identity = TaskName.read(session.metadata?.[TaskName.key])
-              return { session, displayName: identity?.displayName ?? session.title }
+              const files = yield* TaskFilesProducer.bind(declaration, session, ctx.sessionID)
+              return { session, displayName: identity?.displayName ?? session.title, files }
             }
             const siblings = yield* sessions.children(ctx.sessionID)
             const identity = TaskName.allocate({
@@ -713,20 +733,30 @@ export const TaskTool = Tool.define(
               callID: ctx.callID,
               siblings,
             })
+            const bound = yield* TaskFilesProducer.allocate(
+              declaration,
+              edit?.directory ?? parentDirectory,
+              ctx.sessionID,
+            )
             const create = sessions.create({
+              ...(bound ? { id: bound.id } : {}),
               parentID: ctx.sessionID,
               title: identity.displayName,
               agent: next.name,
-              metadata: TaskAuthority.save({ [TaskName.key]: identity }, access), // kilocode_change
+              metadata: TaskAuthority.save(
+                { ...scoped, [TaskName.key]: identity, ...(bound ? { [TaskFiles.key]: bound.files } : {}) },
+                access,
+              ), // kilocode_change
               platform,
               permission: childPermission,
             })
             const child = yield* edit && store ? store.provide({ directory: edit.directory }, create) : create // kilocode_change
-            return { session: child, displayName: identity.displayName }
+            return { session: child, displayName: identity.displayName, files: bound?.files }
           }).pipe(gate.withLock(ctx.sessionID)), // kilocode_change - no stale fresh child after request publication
         )
         .pipe(Effect.tapError(() => lease.release))
       const nextSession = created.session
+      const files = created.files // kilocode_change - immutable scope was bound before child publication
       const displayName = created.displayName
       const message = MessageID.ascending() // kilocode_change - bind Chief admission to this exact child input
       // kilocode_change start - admit the exact child under the goal lock before any child execution
@@ -777,6 +807,7 @@ export const TaskTool = Tool.define(
         {
           ...nextSession.metadata,
           ...scoped, // kilocode_change - preserve historical/resume ceilings before child execution
+          ...(files === undefined ? {} : { [TaskFiles.key]: files }), // kilocode_change - saved immutable Task file ceiling
           // kilocode_change start - carry the checked original contract and exact current child invocation
           ...(receipt
             ? {
@@ -829,6 +860,7 @@ export const TaskTool = Tool.define(
         selectedAgent?: string
         displayName?: string // raya_change - durable identity for compact child monitors
         [TaskAuthority.key]?: { version: 1; access: TaskAuthority.Access } // kilocode_change - verified child authority
+        [TaskFiles.key]?: TaskFiles.Binding // kilocode_change - exact saved file authority in the original Task receipt
         selection?: "auto" | "explicit"
         stepCap?: number
         model: typeof model
@@ -846,6 +878,7 @@ export const TaskTool = Tool.define(
         selectedAgent: next.name, // raya_change - expose Chief routing to parent and nested UI
         displayName, // raya_change
         ...(authority ? { [TaskAuthority.key]: { version: 1 as const, access: authority } } : {}), // kilocode_change
+        ...(files === undefined ? {} : { [TaskFiles.key]: files }), // kilocode_change
         selection, // raya_change
         ...(limit === undefined ? {} : { stepCap: limit }), // kilocode_change // raya_change - keep background metadata JSON-safe
         model,
@@ -869,7 +902,9 @@ export const TaskTool = Tool.define(
 
       const runTask = Effect.fn("TaskTool.runTask")(
         function* () {
-          const parts = yield* ops.resolvePromptParts(KiloTask.environment(handoff, yield* InstanceState.directory)) // kilocode_change - bind the selected worker runtime directory without changing requested paths
+          const parts = yield* ops.resolvePromptParts(
+            TaskFilesProducer.guide(KiloTask.environment(handoff, yield* InstanceState.directory), files),
+          ) // kilocode_change - bind the actual directory and exact attenuated file scope
           KiloSessionProcessor.markReviewTelemetry(parts, params.command) // kilocode_change - carry review command into child session telemetry
           const result = yield* ops.prompt({
             messageID: message, // kilocode_change - use the exact child input recorded for this invocation

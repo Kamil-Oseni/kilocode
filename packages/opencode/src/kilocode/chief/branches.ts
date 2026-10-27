@@ -6,6 +6,7 @@ import { MessageID, SessionID } from "@/session/schema"
 import type { BackgroundJob } from "@/background/job"
 import { mutation } from "@/kilocode/goal/mutation"
 import { durable, stopped } from "@/kilocode/task/owner"
+import * as TaskFiles from "@/kilocode/tool/task-files"
 
 /** Durable admission and result ledger for one bounded Auto Chief fanout. */
 export namespace ChiefBranches {
@@ -24,6 +25,7 @@ export namespace ChiefBranches {
     access: Schema.Literals(["read", "edit"]),
     brief: Brief,
     scope: Schema.optional(Schema.Array(Schema.String)),
+    files: Schema.optional(TaskFiles.Declared),
     independence: Schema.optional(Schema.String),
     authority: Schema.optional(Schema.String),
     worktree: Schema.optional(
@@ -157,7 +159,7 @@ export namespace ChiefBranches {
   }
 
   export type Input = Pick<Branch, "id" | "name" | "specialist" | "access" | "brief"> &
-    Partial<Pick<Branch, "scope" | "independence" | "authority">>
+    Partial<Pick<Branch, "scope" | "files" | "independence" | "authority">>
   type Store = Pick<Storage.Interface, "read" | "create" | "replace" | "remove">
   const key = (id: SessionID) => ["raya", "chief", "branches", id]
   const goal = (id: SessionID) => ["raya", "goal", id]
@@ -231,13 +233,14 @@ export namespace ChiefBranches {
               old.revision === revision &&
               old.requestID === input.requestID &&
               JSON.stringify(
-                old.branches.map(({ id, name, specialist, access, brief, scope, independence, authority }) => ({
+                old.branches.map(({ id, name, specialist, access, brief, scope, files, independence, authority }) => ({
                   id,
                   name,
                   specialist,
                   access,
                   brief,
                   ...(scope === undefined ? {} : { scope }),
+                  ...(files === undefined ? {} : { files }),
                   ...(independence === undefined ? {} : { independence }),
                   ...(authority === undefined ? {} : { authority }),
                 })),

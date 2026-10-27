@@ -2,6 +2,7 @@ import { Permission } from "@/permission"
 import { RayaAskOptions } from "@/kilocode/ask-options"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Refusal } from "../session/tool-refusal"
+import * as TaskFiles from "./task-files"
 
 /** A child session's durable ceiling. Missing metadata means a pre-existing legacy task. */
 export namespace TaskAuthority {
@@ -260,19 +261,22 @@ export namespace TaskAuthority {
 
   export function hard(metadata: Record<string, unknown> | undefined, permission: string, patterns: readonly string[]) {
     const access = read(metadata)
-    return patterns.flatMap((pattern) => {
-      const denied = ceilings(metadata).some((entry) => {
-        const rule = Permission.evaluate(permission, pattern, entry.agent)
-        // Delegator bash policies shape that agent; the child's bash policy and session ceiling remain authoritative.
-        const agent =
-          permission !== "bash" &&
-          !(access === "computer" && computer.includes(permission) && rule.permission === "*") &&
-          rule.action === "deny"
-        const session = Permission.evaluate(permission, pattern, entry.session).action === "deny"
-        return agent || session
-      })
-      return denied ? [{ permission, pattern, action: "deny" as const }] : []
-    })
+    return [
+      ...TaskFiles.hard(metadata, permission, patterns),
+      ...patterns.flatMap((pattern) => {
+        const denied = ceilings(metadata).some((entry) => {
+          const rule = Permission.evaluate(permission, pattern, entry.agent)
+          // Delegator bash policies shape that agent; the child's bash policy and session ceiling remain authoritative.
+          const agent =
+            permission !== "bash" &&
+            !(access === "computer" && computer.includes(permission) && rule.permission === "*") &&
+            rule.action === "deny"
+          const session = Permission.evaluate(permission, pattern, entry.session).action === "deny"
+          return agent || session
+        })
+        return denied ? [{ permission, pattern, action: "deny" as const }] : []
+      }),
+    ]
   }
 
   export function permits(access: Access | undefined, permission: string, pattern: string) {

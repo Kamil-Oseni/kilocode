@@ -2,7 +2,10 @@ import { asSchema, jsonSchema, tool as aiTool } from "ai"
 import { LLMRequestPrep } from "@/session/llm/request"
 import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 import { createRequire } from "node:module"
-import { afterEach, expect } from "bun:test"
+import { afterAll, afterEach, expect } from "bun:test"
+import os from "node:os"
+import path from "node:path"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -49,6 +52,12 @@ import { ProviderTest } from "../fake/provider"
 import { goalTools } from "@/kilocode/tool/goal"
 import * as Tool from "@/tool/tool"
 import { TaskSchema } from "@/kilocode/tool/task-schema"
+import { remove } from "./cleanup"
+
+const db = path.join(os.tmpdir(), `raya-chief-follow-${process.pid}-${crypto.randomUUID()}.sqlite`)
+afterAll(async () => {
+  await Promise.all([db, `${db}-wal`, `${db}-shm`].map(remove))
+}, 30_000)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -80,7 +89,7 @@ const provider = ProviderTest.fake({
 })
 
 const layer = (flags: Partial<RuntimeFlags.Info> = {}, durable = false) =>
-  LayerNode.compile(
+  AppNodeBuilder.build(
     LayerNode.group([
       ...(durable ? [Storage.node, FSUtil.node, Git.node, Worktree.node] : []),
       Agent.node,
@@ -103,6 +112,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}, durable = false) =>
     [
       [Provider.node, provider.layer],
       [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+      ...(durable ? [[Database.node, Database.layerFromPath(db)] as const] : []),
       ...(durable ? [[InstanceStore.bootstrapNode, InstanceBootstrap.node] as const] : []),
     ],
   )
@@ -230,6 +240,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           "parent-deny",
         ].includes(mode)
       const request = work ? "Write the requested file" : "Inspect the private fixture and report its actual contents"
+      const files = work ? { files: ["result.txt"] } : {}
       if (work)
         yield* sessions.setPermission({
           sessionID: chat.id,
@@ -435,11 +446,14 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         callID: call,
         state: {
           status: "running" as const,
-          input: mode.startsWith("refinement")
-            ? { access: "edit" }
-            : mode === "unknown-resume"
-              ? { task_id: SessionID.make("ses_missing_capable_child") }
-              : {},
+          input: {
+            ...files,
+            ...(mode.startsWith("refinement")
+              ? { access: "edit" }
+              : mode === "unknown-resume"
+                ? { task_id: SessionID.make("ses_missing_capable_child") }
+                : {}),
+          },
           time: { start: Date.now() },
         },
       }
@@ -515,6 +529,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
       const result = yield* Effect.exit(
         def.execute(
           {
+            ...files,
             subagent_type:
               ["readonly", "omitted-access"].includes(mode) || mode.startsWith("refinement") ? "researcher" : "general",
             brief: { objective: work ? "Write the requested file" : "Inspect the fixture" },
@@ -597,7 +612,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           },
         })
         if (mode.startsWith("refinement-resume")) {
-          const input = { access: "edit" as const, task_id: SessionID.make("ses_missing_refinement_child") }
+          const input = { ...files, access: "edit" as const, task_id: SessionID.make("ses_missing_refinement_child") }
           const missing = { ...part, id: PartID.ascending(), callID: "missing-resume", state: { ...part.state, input } }
           yield* sessions.updatePart(missing)
           const rejected = yield* Effect.exit(
@@ -743,7 +758,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           callID: "refined-task",
           state: {
             ...part.state,
-            input: { access: "edit", brief: { objective: request } },
+            input: { ...files, access: "edit", brief: { objective: request } },
             status: "running" as const,
           },
         }
@@ -764,7 +779,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect(RayaChief.phase((yield* sessions.get(chat.id)).metadata)).toBe("task")
         expect((yield* sessions.children(chat.id)).length).toBe(before)
         const completed = yield* def.execute(
-          { access: "edit", brief: { objective: request } },
+          { ...files, access: "edit", brief: { objective: request } },
           {
             ...ctx,
             callID: retry.callID,

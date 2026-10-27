@@ -1,6 +1,10 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
+import os from "node:os"
+import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { Cause, Deferred, Effect, Exit, Scope } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
 import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background-job"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -15,8 +19,17 @@ import { ChiefBranches } from "@/kilocode/chief/branches"
 import { ChiefBranchOutcome } from "@/kilocode/chief/outcome"
 import { owner, stopped } from "@/kilocode/task/owner"
 import { testEffect } from "../lib/effect"
+import { remove } from "./cleanup"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
+const db = path.join(os.tmpdir(), `raya-chief-branches-${process.pid}-${crypto.randomUUID()}.sqlite`)
+afterAll(async () => {
+  await Promise.all([db, `${db}-wal`, `${db}-shm`].map(remove))
+}, 30_000)
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node]), [
+    [Database.node, Database.layerFromPath(db)],
+  ]),
+)
 
 const plan = [
   {
@@ -405,7 +418,10 @@ describe("Auto Chief branch ledger", () => {
       expect(admitted.owner).toMatchObject(owner())
       if (process.platform === "win32" || process.platform === "linux") {
         expect(admitted.owner?.birth).toBeTruthy()
-        expect(stopped({ ...admitted.owner, birth: `${admitted.owner?.birth}-older` })).toBe(true)
+        expect(stopped({ ...admitted.owner, birth: `${admitted.owner?.birth}-older` })).toBe(false)
+        const birth =
+          process.platform === "win32" ? "2000-01-01T00:00:00.0000000Z" : `${admitted.owner?.birth?.split(":")[0]}:0`
+        expect(stopped({ ...admitted.owner, birth })).toBe(true)
       }
       expect((yield* ChiefBranches.make(storage).reconcile(id, createdAt)).branches[0].state).toBe("admitted")
 

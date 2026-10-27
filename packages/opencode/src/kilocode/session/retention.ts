@@ -5,6 +5,7 @@ import { Global } from "@opencode-ai/core/global"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { OpenAIRetention } from "@/kilocode/voice/openai-retention"
 import { cleanup } from "@/kilocode/tool/apply-patch-receipt"
+import * as TaskFiles from "@/kilocode/tool/task-files"
 import { Storage } from "@/storage/storage"
 
 function missing(err: unknown): boolean {
@@ -18,6 +19,7 @@ function missing(err: unknown): boolean {
 const reviews = (fs: FSUtil.Interface, storage: Storage.Interface, root: string) =>
   Effect.fn("SessionRetention.reviews")(function* (session: string) {
     yield* cleanup(storage, session)
+    yield* TaskFiles.clear(storage, session)
     const dir = path.join(root, "review_receipt", session)
     yield* fs.remove(dir, { recursive: true }).pipe(Effect.catchIf(missing, () => Effect.void))
   })

@@ -1,5 +1,9 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
+import os from "node:os"
+import path from "node:path"
 import { Effect, Exit } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -16,8 +20,17 @@ import { chiefPlanTool } from "@/kilocode/tool/chief-plan"
 import { Storage } from "@/storage/storage"
 import { Truncate } from "@/tool/truncate"
 import { testEffect } from "../lib/effect"
+import { remove } from "./cleanup"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node])))
+const db = path.join(os.tmpdir(), `raya-chief-plan-tool-${process.pid}-${crypto.randomUUID()}.sqlite`)
+afterAll(async () => {
+  await Promise.all([db, `${db}-wal`, `${db}-shm`].map(remove))
+}, 30_000)
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node]), [
+    [Database.node, Database.layerFromPath(db)],
+  ]),
+)
 const request = "Audit Raya documentation and chat UX"
 const proposals = [
   {
@@ -114,11 +127,11 @@ describe("Auto Chief plan tool admission", () => {
       expect(yield* def.execute({ proposals }, ctx)).toEqual(saved)
       current = { ...state, objective: "Continue the saved goal objective" }
       metadata[RayaChief.requestKey] = current.objective
-      expect(yield* def.execute({ proposals }, ctx)).toEqual(saved)
+      expect(Exit.isFailure(yield* def.execute({ proposals }, ctx).pipe(Effect.exit))).toBe(true)
       current = state
       metadata[RayaChief.requestKey] = request
 
-      const edited = [{ ...proposals[0]!, access: "edit" as const }, proposals[1]!]
+      const edited = [{ ...proposals[0]!, access: "edit" as const, files: ["src/a.ts"] }, proposals[1]!]
       expect(Exit.isFailure(yield* def.execute({ proposals: edited }, ctx).pipe(Effect.exit))).toBe(true)
       expect((yield* ChiefBranches.make(storage).read(id))?.branches[0]?.access).toBe("read")
       session.permission = Permission.fromConfig({ task: { "*": "allow", researcher: "deny" } })

@@ -1,7 +1,8 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterAll, afterEach, describe, expect } from "bun:test" // kilocode_change - private durable fixture database cleanup
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change - bind durable fixtures before graph construction
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option } from "effect" // kilocode_change - Cause for resume-hint coverage
 import { Agent } from "../../src/agent/agent"
@@ -16,7 +17,7 @@ import { InstanceState } from "@/effect/instance-state" // kilocode_change - ver
 import { InstanceStore } from "@/project/instance-store" // kilocode_change - worktree bootstrap layer
 import { InstanceBootstrap } from "@/project/bootstrap" // kilocode_change - real worktree setup
 import path from "node:path" // kilocode_change - verify real child edit destination
-import { hostname } from "node:os" // kilocode_change - prove dead Chief branch owner recovery
+import { hostname, tmpdir } from "node:os" // kilocode_change - prove dead Chief branch owner recovery and isolate durable database
 import { unlink } from "node:fs/promises" // kilocode_change - restore dirty-parent test fixture
 import { Storage } from "@/storage/storage" // kilocode_change - durable Chief branch test
 import { ChiefBranches } from "@/kilocode/chief/branches" // kilocode_change - durable Chief branch test
@@ -53,6 +54,14 @@ import { RayaChief } from "../../src/kilocode/chief" // kilocode_change // raya_
 import { ChiefRouteTool } from "../../src/kilocode/tool/chief-route" // kilocode_change // raya_change - Milestone B
 import { Question } from "../../src/question" // kilocode_change // raya_change - Milestone B option prompt
 import { ProviderTest } from "../fake/provider" // kilocode_change - keep task integration independent of the remote model catalog
+import { remove } from "../kilocode/cleanup" // kilocode_change - release private SQLite files after real graph scopes join
+
+// kilocode_change start - durable authority fixtures must use an actual private disk database
+const db = path.join(tmpdir(), `raya-task-compatibility-${process.pid}-${crypto.randomUUID()}.sqlite`)
+afterAll(async () => {
+  await Promise.all([db, `${db}-wal`, `${db}-shm`].map(remove))
+}, 30_000)
+// kilocode_change end
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -89,7 +98,8 @@ const layer = (
   flags: Partial<RuntimeFlags.Info> = {},
   durable = false, // kilocode_change - optional durable branch fixtures
 ) =>
-  LayerNode.compile(
+  AppNodeBuilder.build(
+    // kilocode_change - selected private DB override reaches every durable dependency
     LayerNode.group([
       ...(durable ? [Storage.node, FSUtil.node, Git.node, Worktree.node] : []), // kilocode_change - real branch worktrees
       Agent.node,
@@ -114,6 +124,7 @@ const layer = (
     [
       [Provider.node, provider.layer],
       [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+      ...(durable ? [[Database.node, Database.layerFromPath(db)] as const] : []), // kilocode_change - one memoized connection shared by event publication and projection
       ...(durable ? [[InstanceStore.bootstrapNode, InstanceBootstrap.node] as const] : []), // kilocode_change
     ],
     // kilocode_change end
@@ -1475,8 +1486,32 @@ function stubOps(opts?: {
       Effect.gen(function* () {
         opts?.onPrompt?.(input)
         const rep = reply(input, opts?.text ?? "done")
-        if (opts?.sessions && opts?.childCost != null) {
-          yield* opts.sessions.updateMessage({ ...rep.info, cost: opts.childCost })
+        if (rep.info.role !== "assistant") throw new Error("Expected the child assistant reply")
+        if (opts?.sessions) {
+          if (!input.messageID) throw new Error("Expected the original child input")
+          yield* opts.sessions.updateMessage({
+            id: input.messageID,
+            role: "user",
+            sessionID: input.sessionID,
+            agent: input.agent ?? "general",
+            model: input.model ?? ref,
+            time: { created: Date.now() },
+          })
+          for (const part of input.parts) {
+            if (part.type !== "text") continue
+            yield* opts.sessions.updatePart({
+              ...part,
+              id: part.id ?? PartID.ascending(),
+              sessionID: input.sessionID,
+              messageID: input.messageID,
+            })
+          }
+          yield* opts.sessions.updateMessage({
+            ...rep.info,
+            cost: opts.childCost ?? rep.info.cost,
+            time: { ...rep.info.time, completed: Date.now() },
+          })
+          for (const part of rep.parts) yield* opts.sessions.updatePart(part)
         }
         return rep
       }),
@@ -1723,7 +1758,8 @@ describe("tool.task", () => {
     { config: { permission: { "*": "allow" } } },
   )
 
-  it.instance("allows explicit edit access only under a parent edit allow", () =>
+  planned.instance("allows explicit edit access only under a parent edit allow", () =>
+    // kilocode_change - exact edit ceilings use actual storage and filesystem
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
@@ -1745,7 +1781,13 @@ describe("tool.task", () => {
       })
       const refused = yield* Effect.exit(
         def.execute(
-          { description: "Edit findings", prompt: "Update the report", subagent_type: "general", access: "edit" },
+          {
+            description: "Edit findings",
+            prompt: "Update the report",
+            subagent_type: "general",
+            access: "edit",
+            files: ["report.md"],
+          }, // kilocode_change
           ctx,
         ),
       )
@@ -1757,7 +1799,13 @@ describe("tool.task", () => {
         permission: [{ permission: "edit", pattern: "*", action: "allow" }],
       })
       const created = yield* def.execute(
-        { description: "Edit findings", prompt: "Update the report", subagent_type: "general", access: "edit" },
+        {
+          description: "Edit findings",
+          prompt: "Update the report",
+          subagent_type: "general",
+          access: "edit",
+          files: ["report.md"],
+        }, // kilocode_change
         ctx,
       )
       const child = yield* sessions.get(created.metadata.sessionId)
@@ -2023,7 +2071,8 @@ describe("tool.task", () => {
   )
 
   // kilocode_change start - direct Chief answers do not launch children
-  it.instance("Chief answers a self-contained question without admitting a child", () =>
+  planned.instance("Chief answers a self-contained question without admitting a child", () =>
+    // kilocode_change - subsequent explicit edit binds actual files
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
@@ -2167,9 +2216,10 @@ describe("tool.task", () => {
         },
       })
       // kilocode_change end
-      const invocation = { description: "Implement API endpoint" } // kilocode_change
+      const invocation = { description: "Implement API endpoint", files: ["src/endpoint.ts"] } // kilocode_change
+      const entry = PartID.ascending() // kilocode_change - retain the actual running Task part for metadata publication
       yield* sessions.updatePart({
-        id: PartID.ascending(),
+        id: entry,
         sessionID: chat.id,
         messageID: next.id,
         type: "tool",
@@ -2183,9 +2233,20 @@ describe("tool.task", () => {
         callID: "endpoint-task", // kilocode_change
         agent: "auto",
         abort: new AbortController().signal,
-        extra: { promptOps: stubOps({ onPrompt: () => (called = true) }) },
+        extra: { promptOps: stubOps({ sessions, onPrompt: () => (called = true) }) },
         messages: [],
-        metadata: () => Effect.void,
+        metadata: (value: { title?: string; metadata?: Record<string, unknown> }) =>
+          sessions
+            .updatePart({
+              id: entry,
+              sessionID: chat.id,
+              messageID: next.id,
+              type: "tool",
+              tool: "task",
+              callID: "endpoint-task",
+              state: { status: "running", input: invocation, metadata: value.metadata, time: { start: Date.now() } },
+            })
+            .pipe(Effect.asVoid),
         ask: () => Effect.void,
       })
       expect(result.metadata.selectedAgent).toBe("coder")
@@ -2356,6 +2417,7 @@ describe("tool.task", () => {
           description: "Implement endpoint",
           subagent_type: "designer",
           access: "edit", // kilocode_change
+          files: ["src/endpoint.ts"], // kilocode_change - explicit child file ceiling
           // kilocode_change start - explicit concrete worker assignment
           brief: {
             objective: "Read the endpoint source, write the requested handler, and read back the saved implementation.",
@@ -2367,7 +2429,7 @@ describe("tool.task", () => {
           messageID: assistant.id,
           agent: "auto",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ onPrompt: (input) => (assigned.input = input) }) }, // kilocode_change
+          extra: { promptOps: stubOps({ sessions, onPrompt: (input) => (assigned.input = input) }) }, // kilocode_change
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -2411,13 +2473,13 @@ describe("tool.task", () => {
       expect(RayaChief.follow((yield* sessions.get(chat.id)).metadata)?.request).toBe(pending.request)
       let handoff: SessionPrompt.PromptInput | undefined
       const followup = yield* def.execute(
-        { subagent_type: "designer" },
+        { subagent_type: "designer", files: ["src/endpoint.ts"] }, // kilocode_change - fresh continued assignment owns exact files
         {
           sessionID: chat.id,
           messageID: assistant.id,
           agent: "auto",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ onPrompt: (input) => (handoff = input) }) },
+          extra: { promptOps: stubOps({ sessions, onPrompt: (input) => (handoff = input) }) },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -2445,7 +2507,7 @@ describe("tool.task", () => {
           messageID: assistant.id,
           agent: "auto",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ onPrompt: (input) => (resumed.input = input) }) },
+          extra: { promptOps: stubOps({ sessions, onPrompt: (input) => (resumed.input = input) }) },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -2486,13 +2548,13 @@ describe("tool.task", () => {
       })
       const capture: { input?: SessionPrompt.PromptInput } = {}
       yield* def.execute(
-        {},
+        { files: [] }, // kilocode_change - canvas handoff grants no file mutation
         {
           sessionID: chat.id,
           messageID: assistant.id,
           agent: "auto",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps({ onPrompt: (input) => (capture.input = input) }) },
+          extra: { promptOps: stubOps({ sessions, onPrompt: (input) => (capture.input = input) }) },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -2624,7 +2686,10 @@ describe("tool.task", () => {
           tool: "task",
           state: { status: "running", input: {}, time: { start: Date.now() } },
         })
-        const result = yield* def.execute({ description: "Continue", subagent_type: "designer" }, ctx)
+        const result = yield* def.execute(
+          { description: "Continue", subagent_type: "designer", files: ["src/endpoint.ts"] },
+          ctx,
+        ) // kilocode_change
         expect(result.metadata.selectedAgent).toBe("coder")
         expect(result.metadata.selection).toBe("auto")
         expect(seen?.agent).toBe("coder")

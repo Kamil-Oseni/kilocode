@@ -47,6 +47,26 @@ function alternatives(schema: JSONSchema7): JSONSchema7[] {
   ]
 }
 
+/** Fresh edits declare exact files; resume and saved branch variants retain their original authority. */
+function files(schema: JSONSchema7): JSONSchema7 {
+  if (!schema.properties?.files || !schema.anyOf) return schema
+  return {
+    ...schema,
+    anyOf: schema.anyOf.flatMap<JSONSchema7 | boolean>((entry) => {
+      if (typeof entry !== "object" || !entry.required?.some((key) => key === "prompt" || key === "brief"))
+        return [entry]
+      return [
+        {
+          ...entry,
+          required: [...new Set([...entry.required, "files"])],
+          properties: { ...entry.properties, access: { type: "string", const: "edit" } },
+        },
+        { ...entry, properties: { ...entry.properties, access: { type: "string", enum: ["read", "computer"] } } },
+      ]
+    }),
+  }
+}
+
 /** Preserve static tool instructions and append only authenticated recovery guidance. */
 export function description(value: string, schema: JSONSchema7) {
   const instruction = instructions.get(schema)
@@ -74,8 +94,9 @@ export function objective(schema: JSONSchema7): JSONSchema7 {
       },
     ],
   }
-  originals.set(result, schema)
-  return result
+  const scoped = files(result)
+  originals.set(scoped, schema)
+  return scoped
 }
 
 export const prepare = Effect.fn("TaskSchema.prepare")(function* (

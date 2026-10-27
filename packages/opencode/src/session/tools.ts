@@ -45,6 +45,7 @@ import { InstanceState } from "@/effect/instance-state" // kilocode_change
 import * as ToolLineage from "@/kilocode/task/effect-tools" // kilocode_change - retain the original tool catalog execution
 import * as OutputAdmission from "@/kilocode/task/output-admission" // kilocode_change
 import * as OutputScope from "@/kilocode/task/output-scope" // kilocode_change
+import * as TaskFiles from "@/kilocode/tool/task-files" // kilocode_change - attenuate exact Task file scopes
 import * as ToolNetwork from "@/kilocode/sandbox/network" // kilocode_change
 import * as ExecutionLineage from "@/kilocode/task/effect-lineage" // kilocode_change - check original MCP callback lineage
 
@@ -106,6 +107,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const direct = TaskAuthority.direct(input.session.metadata, input.session.id, input.session.parentID) // kilocode_change
   const visible = (id: string) =>
     !(direct && id === "task") && // kilocode_change - match assigned worker execution admission
+    TaskFiles.permits(input.session.metadata, id) && // kilocode_change - exclude opaque effects and unscoped delegation
     TaskAuthority.permits(TaskAuthority.read(input.session.metadata), id, "*") &&
     (!authority || pathVisible(id, authority)) // kilocode_change - execution still checks the concrete authorized path
   const grant = (id: string) => (routine ? id : "read")

@@ -27,6 +27,7 @@ import { MemoryMarker } from "@/kilocode/memory/marker"
 import { KilocodeSystemPrompt } from "@/kilocode/system-prompt"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { TaskAuthority } from "@/kilocode/tool/task-authority"
+import * as TaskFiles from "@/kilocode/tool/task-files"
 import ASK_CODE_SWITCH from "./ask-code-switch.txt"
 import { consumeAutoTitle, markAutoTitle } from "@/kilo-sessions/rename-adoptions"
 import { gate } from "./input-gate"
@@ -341,6 +342,7 @@ export namespace KiloSessionPrompt {
   }) {
     const agent = (yield* input.agents.get(input.agent.name)) ?? input.agent
     const session = yield* input.sessions.get(input.session.id)
+    yield* TaskFiles.check(session, []).pipe(Effect.orDie)
     const ceiling = TaskAuthority.rules(TaskAuthority.read(session.metadata))
 
     // kilocode_change start - tag every rule with its true origin before merging, so the winning

@@ -6,9 +6,13 @@ import { SessionID } from "@/session/schema"
 import * as Lineage from "./effect-lineage"
 import * as Files from "./output-scope"
 import { record } from "./continuation"
+import * as TaskFiles from "../tool/task-files"
 
 /** Attenuate actual native effects; this never grants a tool, path or filesystem permission. */
-export const check = Effect.fn("RoutineOutputs.check")(function* (sessionID: string, targets: readonly string[]) {
+const routine = Effect.fn("RoutineOutputs.check")(function* (
+  sessionID: string,
+  targets: readonly string[],
+): Effect.fn.Return<Files.Outputs | undefined, unknown> {
   const actor = yield* Lineage.session()
   if (actor !== undefined && actor !== sessionID)
     return yield* Effect.fail(new Error("The original output-scope session changed."))
@@ -116,4 +120,26 @@ export const check = Effect.fn("RoutineOutputs.check")(function* (sessionID: str
       new Error("This file is outside this worker's declared outputs. Preserve other stages' files."),
     )
   return files
+})
+
+/** Both assignments constrain native effects; neither scope can bypass the other. */
+export const check = Effect.fn("AssignedOutputs.check")(function* (
+  sessionID: string,
+  targets: readonly string[],
+): Effect.fn.Return<Files.Outputs | undefined, unknown> {
+  const inherited = yield* routine(sessionID, targets)
+  const module = yield* Effect.promise(() => import("@/session/session"))
+  const service = yield* Effect.serviceOption(module.Session.Service)
+  if (Option.isNone(service)) {
+    const stores = yield* Effect.promise(() => import("@/storage/storage"))
+    const storage = yield* Effect.serviceOption(stores.Storage.Service)
+    if (Option.isSome(storage) && (yield* TaskFiles.find(storage.value, sessionID)))
+      return yield* Effect.fail(new Error("The assigned file-scope session is unavailable."))
+    return inherited
+  }
+  const session = yield* service.value.get(SessionID.make(sessionID))
+  const assigned = yield* TaskFiles.check(session, targets)
+  if (assigned === undefined) return inherited
+  if (inherited === undefined) return assigned
+  return assigned.filter((file) => Files.includes(inherited, file))
 })

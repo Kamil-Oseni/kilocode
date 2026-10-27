@@ -6,6 +6,8 @@ import { SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
 import { ResultContract } from "./result-contract"
 import { Storage } from "@/storage/storage"
+import type * as TaskFiles from "@/kilocode/tool/task-files"
+import { isDeepStrictEqual } from "node:util"
 
 /** Resolve a planned child from durable authority, never from the task caller's substitutions. */
 export namespace ChiefTaskBinding {
@@ -21,6 +23,7 @@ export namespace ChiefTaskBinding {
       branch_id?: string
       task_id?: string
       access?: "read" | "edit" | "computer"
+      files?: typeof TaskFiles.Declared.Type
       subagent_type?: string
       prompt?: string
       brief?: {
@@ -81,6 +84,8 @@ export namespace ChiefTaskBinding {
       if (branch && branch.state !== "planned") throw new Error("Auto Chief branch has already been admitted")
       if (branch && (input.params.task_id || (input.params.access && input.params.access !== branch.access)))
         throw new Error("Auto Chief branch identity or authority cannot be changed")
+      if (branch && input.params.files !== undefined && !isDeepStrictEqual(input.params.files, branch.files))
+        throw new Error("Auto Chief branch files cannot be changed")
       if (
         branch &&
         input.params.subagent_type &&

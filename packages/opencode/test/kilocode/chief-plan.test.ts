@@ -90,11 +90,13 @@ describe("Auto Chief branch proposal", () => {
     )
     expect(() =>
       check(
-        [{ ...proposals[0], specialist: "coder", access: "edit" }, proposals[1]],
+        [{ ...proposals[0], specialist: "coder", access: "edit", files: ["src/a.ts"] }, proposals[1]],
         Permission.fromConfig({ task: "allow", edit: "ask" }),
       ),
     ).toThrow("does not grant editing authority")
-    expect(check([{ ...proposals[0], specialist: "coder", access: "edit" }, proposals[1]])[0]?.access).toBe("edit")
+    expect(
+      check([{ ...proposals[0], specialist: "coder", access: "edit", files: ["src/a.ts"] }, proposals[1]])[0]?.access,
+    ).toBe("edit")
   })
 
   test("refuses malformed model proposals and missing request", () => {

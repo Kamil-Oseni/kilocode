@@ -13,6 +13,32 @@ export function preserve(...values: (string | undefined)[]) {
     : Effect.succeed(text || undefined)
 }
 
+/** Only current owner text can request a read-only status turn. */
+export function inspection(request: string | undefined) {
+  if (!request) return false
+  const text = request
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^\s*>.*$/gm, "")
+    .trim()
+  return /^(?:please\s+)?read[ -]only\s+(?:status\s+)?(?:check|review|inspection)\b/i.test(text)
+}
+
+/** Explicit current-turn restrictions never grant or revoke saved worker authority. */
+export function prohibits(request: string | undefined) {
+  if (!request) return false
+  if (inspection(request)) return true
+  const text = request.replace(/```[\s\S]*?```/g, "").replace(/^\s*>.*$/gm, "")
+  return (
+    /\b(?:do not|don't|never)\s+(?:start|run|launch|assign|delegate)(?:\s*(?:,|and|or)\s*(?:start|run|launch|assign|delegate))*\s+(?:(?:any|new|more|the|a|another|additional)\s+){0,3}(?:work|jobs?|workers?|agents?|routines?|tasks?|delegations?)\b/i.test(
+      text,
+    ) ||
+    /\bno\s+(?:(?:corrections?|changes?)\s+(?:or|and)\s+)?(?:(?:new|more|additional)\s+)?(?:delegations?|assignments?)\b/i.test(
+      text,
+    ) ||
+    /\b(?:do not|don't|never)\s+(?:call|use)\s+(?:assign_organization_work|delegate_work)\b/i.test(text)
+  )
+}
+
 /** Honor explicit field omission without interpreting an absent budget as permission to spend. */
 export function omits(request: string | undefined, field: "budget" | "deadline" = "budget") {
   if (!request) return false

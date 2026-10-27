@@ -4,7 +4,7 @@ import { Permission } from "@/permission"
 import { HomeAssistant } from "../home-assistant/tools"
 import { Refusal } from "../session/tool-refusal"
 import { acknowledgement, greeting, unaided } from "./conversation"
-import { kickoff } from "../task/request"
+import { kickoff, inspection } from "../task/request"
 import type { MessageV2 } from "@/session/message-v2"
 
 export namespace RayaChief {
@@ -117,6 +117,20 @@ export namespace RayaChief {
     dispatch?: { session: string; user: string; inspected?: boolean },
     refusal?: "repair" | "clarify" | "route",
   ) {
+    if (inspection(request(metadata)))
+      return Object.fromEntries(
+        [
+          "read",
+          "glob",
+          "grep",
+          "list",
+          "inspect_routines",
+          "inspect_team",
+          "get_goal",
+          "ask_options",
+          "question",
+        ].flatMap((name) => (available[name] ? [[name, available[name]]] : [])),
+      ) as Record<string, T>
     if (phase(metadata) === "route" && refusal)
       return Object.fromEntries(
         refusal === "route" && available.chief_route

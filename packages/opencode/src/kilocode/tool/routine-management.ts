@@ -33,7 +33,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoal } from "@/kilocode/goal"
 import * as ToolJsonSchema from "@/tool/json-schema"
-import { kickoff, forward, omits, preserve } from "@/kilocode/task/request"
+import { kickoff, forward, omits, preserve, prohibits } from "@/kilocode/task/request"
 import * as Handoff from "@/kilocode/goal/handoff"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
@@ -1241,6 +1241,12 @@ export function routineManagementTools(input: {
           const request = user?.parts
             .flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : []))
             .join("\n")
+          if (prohibits(request))
+            return yield* Effect.fail(
+              new Error(
+                "The current owner request forbids starting or assigning work. Report the existing state without creating another assignment.",
+              ),
+            )
           const start = kickoff(request)
           if (start && (!assistant || assistant.info.sessionID !== ctx.sessionID))
             return yield* Effect.fail(
@@ -1336,6 +1342,11 @@ export function routineManagementTools(input: {
               objective: params.objective,
             },
           })
+          const latest = (yield* input.sessions.messages({ sessionID: ctx.sessionID })).findLast(
+            (message) => message.info.role === "user" && message.info.sessionID === ctx.sessionID,
+          )
+          if (latest?.info.id !== user?.info.id)
+            return yield* Effect.fail(new Error("The owner request changed before organization work could start."))
           const record = yield* runner.delegate(
             {
               source,

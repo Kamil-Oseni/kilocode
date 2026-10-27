@@ -1895,6 +1895,59 @@ it.live(
           if (!("delegationID" in result.metadata)) throw new Error("Supplied budget assignment has no delegation ID")
           expect((yield* errands.get(String(result.metadata.delegationID))).budget).toBe(2)
         }
+        const turn = (text: string, token: string) => {
+          const rows = pair.slice(0, 2)
+          const prompt = rows.find((row) => row.info.role === "user")
+          const answer = rows.find((row) => row.info.role === "assistant")
+          if (!prompt || prompt.info.role !== "user" || !answer || answer.info.role !== "assistant")
+            throw new Error("Original owner fixture pair is incomplete")
+          const user = MessageID.make(`msg_${token}_user`)
+          const assistant = MessageID.make(`msg_${token}_assistant`)
+          pair.push(
+            {
+              info: { ...prompt.info, id: user },
+              parts: [
+                { id: PartID.make(`prt_${token}`), sessionID: ctx.sessionID, messageID: user, type: "text", text },
+              ],
+            },
+            { info: { ...answer.info, id: assistant, parentID: user }, parts: [] },
+          )
+          return {
+            ...ctx,
+            messageID: assistant,
+            callID: token,
+            ask: () =>
+              Effect.sync(() => {
+                calls.approvals++
+              }),
+          }
+        }
+        const previous = yield* database.db.select().from(Delegation).all()
+        const existing = yield* tasks.runsFor(recipient.id)
+        const workers = yield* tasks.list()
+        const approvals = calls.approvals
+        const review = turn(
+          "Read-only status check for the completed job. Do not start or assign work, change goals/settings, write/edit any file, send anything or publish. Read the five actual saved files and report the result honestly; no corrections or new delegations in this turn.",
+          "readonly_followup",
+        )
+        const refusal = yield* kickoff.execute(
+          { ...params, outputs: [path.join(directory, "unauthorized.md")] },
+          review,
+        )
+        expect(refusal.metadata.requestStatus).toBe("unresolved")
+        expect(refusal.output).toContain("current owner request forbids starting or assigning work")
+        expect(calls.approvals).toBe(approvals)
+        expect(yield* database.db.select().from(Delegation).all()).toEqual(previous)
+        expect(yield* tasks.runsFor(recipient.id)).toEqual(existing)
+        expect(yield* tasks.list()).toEqual(workers)
+        const approved = turn(owner, "explicit_new_job")
+        const allowed = yield* kickoff.execute(
+          { ...params, outputs: [path.join(directory, "explicit-new-research.md")] },
+          approved,
+        )
+        expect(allowed.metadata.requestStatus).toBe("complete")
+        expect(calls.approvals).toBe(approvals + 1)
+        expect(yield* database.db.select().from(Delegation).all()).toHaveLength(previous.length + 1)
       }).pipe(
         Effect.provide(
           Storage.layerWithDatabase(path.join(directory, "storage")).pipe(

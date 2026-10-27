@@ -663,3 +663,34 @@ describe("Raya Chief routing", () => {
   })
   // raya_change end
 })
+
+it("keeps latest read-only status requests observational without sticky assignment restrictions", () => {
+  const tools = Object.fromEntries(
+    [
+      "read",
+      "glob",
+      "grep",
+      "inspect_routines",
+      "get_goal",
+      "assign_organization_work",
+      "delegate_work",
+      "write",
+      "edit",
+      "update_goal",
+      "update_routine",
+      "chief_route",
+      "task",
+    ].map((id) => [id, { id }]),
+  )
+  const request =
+    "Read-only status check for the completed job. Do not start or assign work, change goals/settings, write/edit any file, send anything or publish; no corrections or new delegations in this turn."
+  const selected = RayaChief.tools(tools, { [RayaChief.requestKey]: request })
+  expect(Object.keys(selected)).toEqual(["read", "glob", "grep", "inspect_routines", "get_goal"])
+  expect(
+    RayaChief.tools(
+      tools,
+      { [RayaChief.requestKey]: "Run one manual job through our saved Research Team to write the requested report." },
+      { session: "session", user: "new-user", inspected: true },
+    ).assign_organization_work,
+  ).toBe(tools.assign_organization_work)
+})

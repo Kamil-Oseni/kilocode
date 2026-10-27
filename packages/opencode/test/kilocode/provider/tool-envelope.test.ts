@@ -41,6 +41,8 @@ test("envelope routing instructions follow the actual advertised tool catalog", 
   expect(chief).toContain("Submit chief_route alone and wait for its actual routing decision")
   expect(chief).toContain("Submit assign_organization_work alone and wait for its actual assignment result")
   expect(chief).not.toContain("Call inspect_routines first")
+  expect(chief).toContain("When needed, submit inspect_routines alone, once, and wait for its result.")
+  expect(chief).not.toContain("wait for its result before calling any other tool")
   const routine = ToolEnvelope.guide(catalog("inspect_routines", "assign_organization_work"))
   expect(routine).not.toContain("chief_route")
   expect(routine).toContain("call inspect_routines only if it has not already succeeded")
@@ -103,7 +105,7 @@ test("Goal mutations reject entire concurrent envelopes and preserve independent
       "Routine inspection requires a separate single-call envelope",
     )
   const guide = ToolEnvelope.guide([{ function: { name: "inspect_routines", parameters: {} } }])
-  expect(guide).toContain("Submit inspect_routines alone, once, and wait for its result")
+  expect(guide).toContain("When needed, submit inspect_routines alone, once, and wait for its result")
   expect(guide).toContain("Reuse its successful result for this user request")
 
   expect(

@@ -19,6 +19,8 @@ import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
+import { RayaTaskOrganization } from "@/kilocode/task/organization"
+import { PtyArchive } from "@/kilocode/pty/archive"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
 import { RayaRoutineReports } from "@/kilocode/task/projection"
 import { Codec } from "@/kilocode/task/schema"
@@ -52,6 +54,7 @@ const root = LayerNode.group([
   CrossSpawnSpawner.node,
   InstanceStore.node,
   FSUtil.node,
+  PtyArchive.node,
 ])
 const env = AppNodeBuilder.build(root, [
   [Database.node, Database.layerFromPath(db)],
@@ -1530,5 +1533,115 @@ it.instance("actual accepted Goal audit and current captured reads persist their
       "command",
       "byte-equality",
     ])
+  }),
+)
+
+it.instance("organization stopping and archive preserve notification repair without resuming workers", () =>
+  Effect.gen(function* () {
+    const first = yield* seed()
+    const second = yield* seed()
+    const reports = RayaRoutineReports.make(first)
+    const execution = RayaTaskExecution.make(first.storage)
+    const contexts = [first, second]
+    const targets = contexts.map((ctx) => {
+      const target = ctx.agent.reportSessionID
+      if (!target) throw new Error("The original report destination is required")
+      return target
+    })
+    const blocked = new Set(contexts.map((ctx) => createHash("sha256").update(ctx.run.id).digest("hex")))
+    const fault = { writes: 0 }
+    const storage: Storage.Interface = {
+      ...first.storage,
+      replace: (key, value) =>
+        Effect.gen(function* () {
+          if (
+            key[0] === "raya" &&
+            key[1] === "routine-reports" &&
+            typeof value === "object" &&
+            value !== null &&
+            "status" in value &&
+            value.status === "complete"
+          ) {
+            fault.writes += 1
+            if (blocked.has(key[2])) return yield* Effect.die(new Error("Injected archived worker report failure"))
+          }
+          yield* first.storage.replace(key, value)
+        }),
+    }
+    const original = RayaTaskRunner.make({ ...first, storage })
+    const organizations = RayaTaskOrganization.make(
+      first.database,
+      { ...original.tasks, stop: original.stopMembers },
+      storage,
+    )
+    const organization = yield* organizations.create({
+      name: "Stopped report owners",
+      members: [
+        { agentID: first.agent.id, role: "Coordinator" },
+        { agentID: second.agent.id, role: "Specialist", supervisorID: first.agent.id },
+      ],
+    })
+    for (const ctx of contexts) {
+      yield* reports.publish({ agent: ctx.agent, run: ctx.run })
+      yield* execution.enter(ctx.run, Effect.void)
+      expect((yield* original.settle(ctx.chat.id).pipe(Effect.exit))._tag).toBe("Success")
+      expect(yield* execution.receipt(ctx.run)).toBeUndefined()
+    }
+    expect(fault.writes).toBe(2)
+    // Real archive first persists stopping_at. The ordinary fixture has no
+    // physical Stop services, so its supported refusal leaves that exact fence.
+    const refusal = yield* organizations
+      .archive(organization.id, { expectedRevision: organization.revision })
+      .pipe(Effect.flip)
+    expect(refusal.message).toBe("Organization workers could not all be stopped. Retry the archive.")
+    expect(yield* organizations.stopped(first.agent.id)).toBe(true)
+    expect((yield* organizations.get(organization.id)).archived).toBe(false)
+    const replacement = yield* first.goals.create(first.chat.id, "A later owner Goal must remain untouched")
+    const runs = yield* Effect.forEach(contexts, (ctx) => original.tasks.runsFor(ctx.agent.id))
+    const transcripts = yield* Effect.forEach(contexts, (ctx) => ctx.sessions.messages({ sessionID: ctx.chat.id }))
+    const destinations = yield* Effect.forEach(contexts, (ctx, index) =>
+      ctx.sessions.messages({ sessionID: targets[index] }),
+    )
+    const sessions = yield* first.database.db.all("SELECT id FROM session ORDER BY id")
+    const before = Date.now()
+    yield* original.tick(before)
+    expect(fault.writes).toBe(4)
+    yield* original.tick(Date.now())
+    expect(fault.writes).toBe(4)
+    blocked.delete(createHash("sha256").update(first.run.id).digest("hex"))
+    yield* Effect.sleep(Math.max(0, before + 30_050 - Date.now()))
+    yield* original.tick(Date.now())
+    const cards = yield* Effect.forEach(contexts, (_, index) => reports.page({ sessionID: targets[index] }))
+    expect(cards[0].items.find((card) => card.runID === first.run.id)?.status).toBe("complete")
+    expect(cards[1].items.find((card) => card.runID === second.run.id)?.status).toBe("running")
+    const state = yield* SessionRunState.Service
+    const pty = yield* PtyArchive.Service
+    const ready = RayaTaskRunner.make({ ...first, storage, halt: state.cancel, pty })
+    const archive = RayaTaskOrganization.make(first.database, { ...ready.tasks, stop: ready.stopMembers }, storage)
+    const saved = yield* archive.archive(organization.id, { expectedRevision: organization.revision })
+    expect(saved.archived).toBe(true)
+    expect(yield* archive.stopped(second.agent.id)).toBe(true)
+    blocked.clear()
+    const fresh = RayaTaskRunner.make({ ...first, storage })
+    yield* fresh.revive()
+    const repaired = yield* reports.page({ sessionID: targets[1] })
+    const restored = repaired.items.find((card) => card.runID === second.run.id)
+    expect(restored?.status).toBe("complete")
+    expect(restored?.runRevision).toBe(runs[1].find((run) => run.id === second.run.id)?.revision)
+    const writes = fault.writes
+    yield* fresh.revive()
+    yield* fresh.tick(Date.now())
+    expect(fault.writes).toBe(writes)
+    expect((yield* reports.page({ sessionID: targets[1] })).items).toEqual(repaired.items)
+    expect(yield* first.goals.get(first.chat.id)).toEqual(replacement)
+    for (const [index, ctx] of contexts.entries()) {
+      expect(yield* fresh.tasks.runsFor(ctx.agent.id)).toEqual(runs[index])
+      expect(yield* ctx.sessions.messages({ sessionID: ctx.chat.id })).toEqual(transcripts[index])
+      expect(yield* ctx.sessions.messages({ sessionID: targets[index] })).toEqual(destinations[index])
+      expect(yield* execution.receipt(ctx.run)).toBeUndefined()
+      expect((yield* fresh.tasks.get(ctx.agent.id)).enabled).toBe(false)
+    }
+    expect(yield* archive.get(organization.id)).toEqual(saved)
+    expect(yield* first.database.db.all("SELECT id FROM session ORDER BY id")).toEqual(sessions)
   }),
 )

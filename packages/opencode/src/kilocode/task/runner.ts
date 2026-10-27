@@ -3273,7 +3273,10 @@ export namespace RayaTaskRunner {
     })
 
     const reboot = Effect.fn("RayaTaskRunner.reboot")(function* (item: RayaTask.Agent) {
-      if (organizations && (yield* organizations.stopped(item.id))) return
+      if (organizations && (yield* organizations.stopped(item.id))) {
+        yield* retry(item.id)
+        return
+      }
       const prior = yield* tasks.runsFor(item.id)
       const resumed = new Set<string>()
       // Saved history retains at most 50 terminal runs plus its schedule anchor; replay each retained candidate.
@@ -3413,9 +3416,11 @@ export namespace RayaTaskRunner {
             items,
             (item) =>
               Effect.gen(function* () {
+                // Historical notification repair cannot resume work, including
+                // while organization Stop/archive keeps execution fenced.
+                yield* retry(item.id)
                 if (organizations && (yield* organizations.stopped(item.id))) return undefined
                 yield* tasks.enforce(item.id)
-                yield* retry(item.id)
                 yield* reconcile(item.id)
                 if (schedule) {
                   yield* schedule.pulse(item.id)

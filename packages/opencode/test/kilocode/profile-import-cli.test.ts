@@ -179,3 +179,52 @@ test("public import entry restores actual encrypted SQL and disabled workers wit
       .digest("hex"),
   ).toBe(digest)
 }, 180000)
+
+test.skipIf(process.platform !== "win32")(
+  "import and restored environments isolate actual Windows legacy roaming discovery",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "raya-roaming-isolation-"))
+    const trap = path.join(root, "original-roaming")
+    const file = path.join(trap, "Code", "User", "globalStorage", "kilocode.kilo-code", "settings", "custom_modes.yaml")
+    const sentinel =
+      "customModes:\n  - slug: original-roaming-marker\n    name: Original roaming marker\n    roleDefinition: Private original source marker\n    groups: [read]\n"
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, sentinel)
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "run",
+        "--conditions=browser",
+        path.join(import.meta.dir, "fixtures/profile-roaming-isolation.ts"),
+        trap,
+      ],
+      {
+        env: { ...process.env, APPDATA: trap },
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        windowsHide: true,
+      },
+    )
+    const output = new Response(child.stdout).text()
+    const errors = new Response(child.stderr).text()
+    try {
+      const [code, stdout, stderr] = await withTimeout(
+        Promise.all([child.exited, output, errors]),
+        30_000,
+        `Roaming isolation retained at ${root}`,
+      )
+      await writeFile(path.join(root, "stdout.log"), stdout)
+      await writeFile(path.join(root, "stderr.log"), stderr)
+      expect(code, stderr).toBe(0)
+      expect(stdout).toContain("ROAMING_ISOLATION_OK")
+      expect(await readFile(file, "utf8")).toBe(sentinel)
+      expect(() => process.kill(child.pid, 0)).toThrow()
+    } finally {
+      if (child.exitCode === null) child.kill("SIGKILL")
+      await child.exited
+      await Promise.all([output, errors])
+    }
+  },
+  35_000,
+)

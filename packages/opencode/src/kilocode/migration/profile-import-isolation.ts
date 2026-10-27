@@ -12,6 +12,7 @@ export async function isolate() {
     USERPROFILE: path.join(root, "home"),
     KILO_TEST_HOME: path.join(root, "home"),
     LOCALAPPDATA: path.join(root, "local"),
+    APPDATA: path.join(root, "roaming"),
     XDG_DATA_HOME: path.join(root, "data"),
     XDG_CONFIG_HOME: path.join(root, "config"),
     XDG_CACHE_HOME: path.join(root, "cache"),

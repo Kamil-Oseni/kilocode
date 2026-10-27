@@ -353,6 +353,7 @@ export async function restore(
       HOME: path.join(target, "home"),
       USERPROFILE: path.join(target, "home"),
       LOCALAPPDATA: path.join(target, "local"),
+      APPDATA: path.join(target, "roaming"),
       KILO_TEST_HOME: path.join(target, "home"),
       XDG_DATA_HOME: path.join(target, "data"),
       XDG_CONFIG_HOME: path.join(target, "config"),

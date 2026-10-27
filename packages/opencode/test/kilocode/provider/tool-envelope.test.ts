@@ -87,11 +87,36 @@ test("exact schemas and unrepaired arguments; strict outer choice/allowlist/boun
 })
 
 test("Goal mutations reject entire concurrent envelopes and preserve independent calls", () => {
-  const names = new Set(["update_goal", "read", "chief_route", "assign_organization_work", "inspect_routines"])
+  const names = new Set([
+    "update_goal",
+    "read",
+    "write",
+    "chief_route",
+    "assign_organization_work",
+    "inspect_routines",
+    "delegate_work",
+  ])
   const mutation = { name: "update_goal", arguments: { criterionID: "verified" } }
   const read = { name: "read", arguments: { criterionID: "other" } }
   const assignment = { name: "assign_organization_work", arguments: { workerID: "researcher" } }
   const inspection = { name: "inspect_routines", arguments: {} }
+  const delegation = { name: "delegate_work", arguments: {} }
+  const write = { name: "write", arguments: { filePath: "research.md", content: "Research" } }
+  expect(
+    ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls: [delegation] }), names, "required").tool_calls,
+  ).toEqual([{ function: delegation }])
+  for (const calls of [
+    [delegation, write, write, read],
+    [write, delegation],
+    [delegation, delegation],
+  ])
+    expect(() => ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls }), names, "required")).toThrow(
+      "Work delegation requires a separate single-call envelope",
+    )
+  expect(ToolEnvelope.guide([{ function: { name: "delegate_work", parameters: {} } }])).toContain(
+    "Submit delegate_work alone and wait for its actual result",
+  )
+
   expect(
     ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls: [inspection] }), names, "required").tool_calls,
   ).toEqual([{ function: inspection }])
@@ -146,6 +171,7 @@ test("Goal mutations reject entire concurrent envelopes and preserve independent
     { function: { name: "assign_organization_work", parameters: {} } },
     { function: { name: "chief_route", parameters: {} } },
     { function: { name: "inspect_routines", parameters: {} } },
+    { function: { name: "delegate_work", parameters: {} } },
     { function: { name: "read", parameters: tools[0].function.parameters } },
   ]
   const batches = ToolEnvelope.schema(definitions, "required").anyOf.filter(
@@ -156,7 +182,9 @@ test("Goal mutations reject entire concurrent envelopes and preserve independent
     if (!("calls" in branch.properties)) throw new Error("Missing calls schema")
     const calls = branch.properties.calls
     expect(calls.items.anyOf.map((item) => item.properties.name.const)).toEqual(
-      calls.maxItems === 1 ? ["update_goal", "assign_organization_work", "chief_route", "inspect_routines"] : ["read"],
+      calls.maxItems === 1
+        ? ["update_goal", "assign_organization_work", "chief_route", "inspect_routines", "delegate_work"]
+        : ["read"],
     )
   }
 })

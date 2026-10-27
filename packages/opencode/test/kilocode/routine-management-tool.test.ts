@@ -19,6 +19,7 @@ import { eq } from "drizzle-orm"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaContactOutbox } from "@/kilocode/contact/outbox"
+import * as Handoff from "@/kilocode/goal/handoff"
 import * as Artifact from "@/kilocode/goal/artifact"
 import * as ToolJsonSchema from "@/tool/json-schema"
 import { RayaTask } from "@/kilocode/task"
@@ -1301,27 +1302,44 @@ it.live(
         expect(omitted.output).toContain("artifacts")
         expect(yield* errands.byRun(runID)).toHaveLength(0)
         expect(yield* errands.queued(coder.id)).toEqual([])
-        yield* database.db
-          .update(Delegation)
-          .set({
-            criteria: JSON.stringify([
-              {
-                id: "sales-handoff",
-                description: "hand both builder files to Sales",
-                verification:
-                  "Call delegate_work to Website Pilot Sales with artifacts [index.html, builder-brief.md] written by Builder.",
-              },
-            ]),
-          })
-          .where(eq(Delegation.id, incoming.record.id))
-          .run()
-        const downstream = yield* delegate.execute(
-          { ...params, artifacts: undefined },
-          context("delegate-builder-wording-without-artifacts"),
-        )
-        expect(downstream.metadata.requestStatus).toBe("unresolved")
-        expect(downstream.output).toContain("verified file handoff")
-        expect(yield* errands.byRun(runID)).toHaveLength(0)
+        for (const criterion of [
+          {
+            id: "sales-handoff",
+            description: "hand both builder files to Sales",
+            verification:
+              "Call delegate_work to Website Pilot Sales with artifacts [index.html, builder-brief.md] written by Builder.",
+          },
+          {
+            id: "research-pass",
+            description:
+              "Pass your actual research.md to Website Pilot Builder via delegate_work. Verify acceptor confirmed receipt of that exact file.",
+            verification: "Show accepted child criterion from delegate result citing my research.md.",
+          },
+          {
+            id: "builder-pass",
+            description:
+              "Pass both index.html and builder-brief.md outputs to Website Pilot Sales worker for final outreach drafts and factual report. Confirm receipt of these exact files via child delegate result.",
+            verification:
+              "Show accepted child criterion from delegate_work receipt that lists index.html and builder-brief.md in artifacts",
+          },
+        ]) {
+          yield* database.db
+            .update(Delegation)
+            .set({ criteria: JSON.stringify([criterion]) })
+            .where(eq(Delegation.id, incoming.record.id))
+            .run()
+          const downstream = yield* delegate.execute(
+            { ...params, artifacts: undefined },
+            context(`delegate-${criterion.id}-without-artifacts`),
+          )
+          expect(downstream.metadata.requestStatus).toBe("unresolved")
+          expect(downstream.output).toContain("verified file handoff")
+          expect(yield* errands.byRun(runID)).toHaveLength(0)
+        }
+        expect(Handoff.required("Do not pass your actual research.md to Builder.", "")).toBe(false)
+        expect(Handoff.required("Do not hand these files to Sales.", "")).toBe(false)
+        expect(Handoff.required("", "Show no delegate_work receipt.")).toBe(false)
+        expect(Handoff.required("Hand research.md to Builder.", "")).toBe(true)
         yield* database.db
           .update(Delegation)
           .set({ criteria: JSON.stringify(incoming.record.criteria) })

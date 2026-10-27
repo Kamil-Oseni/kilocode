@@ -9,6 +9,7 @@ const serial = new Set([
   "chief_route",
   "assign_organization_work",
   "inspect_routines",
+  "delegate_work",
 ])
 const wire = z.discriminatedUnion("kind", [
   call.extend({ kind: z.literal("tool"), content: z.string().optional() }),
@@ -130,6 +131,9 @@ export namespace ToolEnvelope {
       (names.has("assign_organization_work")
         ? "Submit assign_organization_work alone and wait for its actual assignment result before calling other tools or assigning more work. Never duplicate or race worker assignments. "
         : "") +
+      (names.has("delegate_work")
+        ? "Submit delegate_work alone and wait for its actual result. Finish and verify your output files before the handoff; never mix delegation with reads, writes, edits or another delegation in one envelope. "
+        : "") +
       reply() +
       " Tool definitions: " +
       JSON.stringify(
@@ -166,6 +170,8 @@ export namespace ToolEnvelope {
       throw new Error("Worker assignment requires a separate single-call envelope")
     if (calls.length > 1 && calls.some((call) => call.name === "inspect_routines"))
       throw new Error("Routine inspection requires a separate single-call envelope")
+    if (calls.length > 1 && calls.some((call) => call.name === "delegate_work"))
+      throw new Error("Work delegation requires a separate single-call envelope")
     if (calls.length > 1 && calls.some((call) => serial.has(call.name)))
       throw new Error("Goal mutations require a separate single-call envelope")
     return { content: value.content ?? "", tool_calls: calls.map((call) => ({ function: call })) }

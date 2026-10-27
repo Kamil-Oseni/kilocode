@@ -706,7 +706,16 @@ export namespace RayaTaskRunner {
                 ),
           ),
         )
-    })
+    }).pipe(
+      Effect.mapError((err) =>
+        err instanceof RayaTask.GuardError
+          ? err
+          : new RayaTask.GuardError({
+              kind: "unavailable",
+              message: "Saved deadline notifications could not be recovered.",
+            }),
+      ),
+    )
     const spent = Effect.fn("RayaTaskRunner.delegationSpend")(function* (row: Errand) {
       if (!row.sessionID) return undefined
       const goal = yield* goals.get(row.sessionID)

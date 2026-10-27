@@ -367,8 +367,9 @@ for (const mode of [
       }
       if (mode.startsWith("compaction")) {
         const runs = yield* SessionRunState.Service
+        const storage = yield* Storage.Service
+        const store = yield* InstanceStore.Service
         const prepare = Effect.gen(function* () {
-          const storage = yield* Storage.Service
           const goals = RayaGoal.make({ storage, sessions })
           if (mode !== "compaction-absent") yield* goals.create(chat.id, request, mode === "compaction" ? authored : undefined)
           if (mode === "compaction") {
@@ -457,7 +458,7 @@ for (const mode of [
           return {info:assistant,parts:[]}
         })
         yield* (mode === "compaction"
-          ? runs.ensureRunning(chat.id,Effect.succeed({info:assistant,parts:[]}),prepare)
+          ? runs.ensureRunning(chat.id,Effect.succeed({info:assistant,parts:[]}),prepare.pipe(Effect.provideService(InstanceStore.Service,store),Effect.orDie))
           : prepare)
       }
       const call = "follow-from-goal"

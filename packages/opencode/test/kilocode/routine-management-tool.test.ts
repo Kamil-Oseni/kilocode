@@ -1244,17 +1244,18 @@ it.live(
         ).pipe(Effect.provideService(Session.Service, workerSessions as never))
         expect(conditional.required).not.toContain("criteria")
         expect(conditional.anyOf).toHaveLength(2)
-        const alternatives = conditional.anyOf?.filter(
-          (item): item is Exclude<typeof item, boolean> => typeof item === "object",
-        )
-        expect(alternatives?.[0]?.required).not.toContain("artifacts")
-        expect(alternatives?.[0]?.properties?.outputs).toMatchObject({ maxItems: 0 })
-        expect(alternatives?.[0]?.additionalProperties).toBe(false)
-        expect(alternatives?.[0]?.required).not.toContain("criteria")
-        expect(alternatives?.[1]?.required).toContain("criteria")
-        expect(alternatives?.[1]?.required).toContain("artifacts")
-        expect(alternatives?.[1]?.properties?.criteria).toMatchObject({ type: "array", minItems: 1 })
-        expect(alternatives?.[1]?.properties?.artifacts).toMatchObject({ type: "array", minItems: 1 })
+        const question = conditional.anyOf?.[0]
+        const delivery = conditional.anyOf?.[1]
+        if (typeof question !== "object" || typeof delivery !== "object")
+          throw new Error("Expected object schemas for question and delivery branches")
+        expect(question.required).not.toContain("artifacts")
+        expect(question.properties?.outputs).toMatchObject({ maxItems: 0 })
+        expect(question.additionalProperties).toBe(false)
+        expect(question.required).not.toContain("criteria")
+        expect(delivery.required).toContain("criteria")
+        expect(delivery.required).toContain("artifacts")
+        expect(delivery.properties?.criteria).toMatchObject({ type: "array", minItems: 1 })
+        expect(delivery.properties?.artifacts).toMatchObject({ type: "array", minItems: 1 })
         yield* database.db
           .update(Delegation)
           .set({ criteria: JSON.stringify(incoming.record.criteria) })

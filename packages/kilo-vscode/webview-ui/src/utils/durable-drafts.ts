@@ -38,6 +38,7 @@ type Record = {
   moving?: boolean
   reviewed?: boolean
   reading?: number
+  recovering?: boolean
 }
 type Operation = ComposerDraftRequest extends infer R
   ? R extends ComposerDraftRequest
@@ -79,6 +80,9 @@ function consumed(local: DraftContent, sent: DraftContent, cleared: DraftContent
 const cutoff = (record: Record) => record.seal?.revision ?? record.revision
 const contents = (record: Record) => snapshot(record.seal?.content ?? record.content)
 const merged = (record: Record, local: DraftContent) => !!record.seal && !same(record.content, local)
+const recoverable = (record: Record) =>
+  !record.recovering && (record.error === "conflict" || record.error === "promotion")
+const copied = (record: Record) => !record.error && record.loaded && record.saved === 1 && record.revision === 1
 const sendable = (record: Record): record is Record & { owner: string } =>
   !record.error && !record.held && !record.seal && !record.reading && !record.moving && !!record.owner
 const committed = (
@@ -703,8 +707,10 @@ export class DurableDrafts {
 
   async recover(identity: DraftTarget, destination: DraftTarget) {
     const source = this.record(identity)
-    if (source.error !== "conflict" && source.error !== "promotion") return false
+    if (!recoverable(source)) return false
     if (
+      !this.ready() ||
+      !source.owner ||
       !destination.pendingID ||
       destination.sessionID ||
       destination.box !== identity.box ||
@@ -713,21 +719,44 @@ export class DurableDrafts {
       return false
     const next = this.record(destination)
     if (next.loaded || next.revision > 0) return false
-    next.content = snapshot(source.content)
-    next.revision = 1
-    await this.sync(next)
-    if (next.error || !next.loaded || next.saved !== next.revision) return false
-    const loaded = await this.request({ type: "composerDraftLoad", identity: source.identity }, source.owner)
-    if (loaded.error) return false
-    source.entry = loaded.entry ?? undefined
-    source.content = snapshot(loaded.entry?.content ?? empty())
-    source.revision = 0
-    source.saved = 0
-    source.error = undefined
-    source.uncertain = undefined
-    source.held = undefined
-    this.notify()
-    return true
+    const revision = source.revision
+    const owner = source.owner
+    const context = this.contexts.get(identity.box)
+    const fence = source.fence ?? 0
+    const generation = this.generation
+    const error = source.error
+    const valid = () =>
+      this.ready() &&
+      this.generation === generation &&
+      this.owners.get(identity.box) === owner &&
+      this.contexts.get(identity.box) === context &&
+      source.owner === owner &&
+      (source.fence ?? 0) === fence &&
+      source.revision === revision &&
+      source.error === error &&
+      this.records.get(id(identity, owner, source.context)) === source
+    source.recovering = true
+    try {
+      next.content = snapshot(source.content)
+      next.revision = 1
+      await this.sync(next)
+      // A durable recovery copy can remain even when newer typing or ownership
+      // changes forbid resetting the source or selecting that older copy.
+      if (!valid() || !copied(next)) return false
+      const loaded = await this.request({ type: "composerDraftLoad", identity: source.identity }, owner)
+      if (loaded.error || !valid() || next.saved !== 1 || next.revision !== 1) return false
+      source.entry = loaded.entry ?? undefined
+      source.content = snapshot(loaded.entry?.content ?? empty())
+      source.revision = 0
+      source.saved = 0
+      source.error = undefined
+      source.uncertain = undefined
+      source.held = undefined
+      this.notify()
+      return true
+    } finally {
+      source.recovering = false
+    }
   }
 
   async capture(identity: DraftTarget): Promise<DraftCapture | undefined> {

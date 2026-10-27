@@ -870,6 +870,96 @@ test("real CAS conflict retains local content and refuses blind retry", async ()
   expect((await restarted.controller.hydrate(identity)).content).toEqual(rich)
 })
 
+test("conflict recovery preserves typing and owner changes across real SQL waits without duplicate copies", async () => {
+  for (const phase of ["save", "load", "owner"] as const) {
+    await using storage = await draftStorage()
+    using left = pane(storage)
+    using right = pane(storage)
+    await until(() => left.controller.ready() && right.controller.ready())
+    await Promise.all([left.controller.hydrate(identity), right.controller.hydrate(identity)])
+    left.controller.edit(identity, rich)
+    expect(await left.controller.capture(identity)).toBeDefined()
+    const original = { ...rich, text: `Conflicted ${phase} content` }
+    right.controller.edit(identity, original)
+    await until(() => right.controller.view(identity).error === "conflict")
+    const destination = {
+      ...identity,
+      pendingID: `sidebar-pending:recovered-${phase}`,
+      key: `${identity.box}:pending:recovered-${phase}`,
+    }
+    const duplicate = {
+      ...destination,
+      pendingID: `${destination.pendingID}-duplicate`,
+      key: `${destination.key}-duplicate`,
+    }
+    const saving = gate()
+    const loading = gate()
+    right.controls.pause = saving
+    const recovery = right.controller.recover(identity, destination)
+    try {
+      await until(() =>
+        right.requests.some(
+          (request) => request.type === "composerDraftSave" && request.identity.key === destination.key,
+        ),
+      )
+      expect(await right.controller.recover(identity, duplicate)).toBe(false)
+      expect(right.requests.some((request) => "identity" in request && request.identity.key === duplicate.key)).toBe(
+        false,
+      )
+      if (phase !== "save") {
+        right.controls.load = loading
+        saving.open()
+        await until(
+          () =>
+            right.requests.filter(
+              (request) => request.type === "composerDraftLoad" && request.identity.key === identity.key,
+            ).length === 2,
+        )
+      }
+      const current = phase === "owner" ? original : { ...rich, text: `New typing during ${phase} recovery` }
+      if (phase === "owner") {
+        const state = {
+          type: "composerDraftState",
+          epoch: right.controller.epoch,
+          generation: 1,
+          connected: true,
+        } as const
+        right.emit({ ...state, owners: [{ box: identity.box, owner: "different-workspace-owner" }] })
+        right.emit({ ...state, owners: [{ box: identity.box, owner: storage.root }] })
+      } else right.controller.edit(identity, current)
+      saving.open()
+      loading.open()
+      expect(await recovery).toBe(false)
+      expect(right.controller.view(identity).content).toEqual(current)
+      expect(right.controller.view(identity).error).toBe("conflict")
+      expect(right.controller.view(destination).content).toEqual(original)
+      using reopened = pane(storage)
+      await until(() => reopened.controller.ready())
+      expect((await reopened.controller.hydrate(destination)).content).toEqual(original)
+      expect((await reopened.controller.hydrate(identity)).content).toEqual(rich)
+      right.controls.pause = undefined
+      right.controls.load = undefined
+      const retained = {
+        ...destination,
+        pendingID: `${destination.pendingID}-current`,
+        key: `${destination.key}-current`,
+      }
+      expect(await right.controller.recover(identity, retained)).toBe(true)
+      expect((await reopened.controller.hydrate(retained)).content).toEqual(current)
+      expect(right.controller.view(identity).content).toEqual(rich)
+      expect(
+        right.requests.filter(
+          (request) => request.type === "composerDraftSave" && request.identity.key === destination.key,
+        ),
+      ).toHaveLength(1)
+    } finally {
+      saving.open()
+      loading.open()
+      await recovery
+    }
+  }
+})
+
 test("late initial disk hydration keeps new typing together with saved attachments and exact missing model", async () => {
   await using storage = await draftStorage()
   using first = pane(storage)

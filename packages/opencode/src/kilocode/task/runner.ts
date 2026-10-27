@@ -3205,8 +3205,7 @@ export namespace RayaTaskRunner {
     // Rebuild notifications from retained terminal results, never from execution ownership.
     const republish = (run: RayaTask.Run) =>
       Effect.gen(function* () {
-        const eligible = run.status === "complete" || (run.status === "blocked" && failed(run))
-        if (!eligible || !run.outcome || RayaTask.pending(run)) return
+        if (RayaTask.pending(run)) return
         const latest = (yield* tasks.runsFor(run.agentID)).find((item) => item.id === run.id)
         if (!isDeepStrictEqual(latest, run))
           return yield* new RayaTask.GuardError({ message: "The saved report's retained run changed." })
@@ -3230,6 +3229,10 @@ export namespace RayaTaskRunner {
           !isDeepStrictEqual(identity.trigger, run.trigger)
         )
           return yield* new RayaTask.GuardError({ message: "The saved report's session identity changed." })
+        // A terminal row can precede physical retirement. Rebuild only its
+        // notification after the original execution has released ownership.
+        if (yield* execution.retained(run)) return
+        if (run.status === "stopped" && !(yield* original(run))) return
         yield* report(run)
       }).pipe(
         Effect.mapError((err) =>
@@ -3270,10 +3273,11 @@ export namespace RayaTaskRunner {
       const current = yield* tasks.runsFor(item.id)
       const done: RayaTask.Run[] = []
       for (const run of current) {
-        if (!run.outcome || (run.status !== "complete" && run.status !== "blocked") || RayaTask.pending(run)) continue
+        if (RayaTask.pending(run)) continue
         const goal = yield* goals.get(run.sessionID)
         if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
         yield* republish(run)
+        if (!run.outcome || (run.status !== "complete" && run.status !== "blocked")) continue
         done.push(run)
       }
       const restored = yield* Effect.gen(function* () {

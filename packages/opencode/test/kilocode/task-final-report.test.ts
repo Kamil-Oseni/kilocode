@@ -29,6 +29,7 @@ import { InstanceBootstrap } from "@/project/bootstrap-service"
 import { InstanceStore } from "@/project/instance-store"
 import { MessageID, PartID } from "@/session/schema"
 import { Session } from "@/session/session"
+import { SessionRunState } from "@/session/run-state"
 import { Storage } from "@/storage/storage"
 import { testEffect } from "../lib/effect"
 import { remove as cleanup } from "./cleanup"
@@ -45,6 +46,7 @@ const root = LayerNode.group([
   Bus.node,
   Database.node,
   Session.node,
+  SessionRunState.node,
   SessionProjector.node,
   Storage.node,
   CrossSpawnSpawner.node,
@@ -65,7 +67,14 @@ const ref = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("
 // Real Session/Storage/SQLite and the production runner; only the already-accepted
 // audit is seeded. These tests do not assert that a prose audit proves its claims.
 const seed = Effect.fn("FinalReportTest.seed")(function* (
-  opts: { final?: boolean; answer?: string; timer?: boolean; cron?: boolean; unobserved?: boolean } = {},
+  opts: {
+    final?: boolean
+    answer?: string
+    timer?: boolean
+    cron?: boolean
+    unobserved?: boolean
+    pending?: boolean
+  } = {},
 ) {
   const storage = yield* Storage.Service
   const database = yield* Database.Service
@@ -290,17 +299,19 @@ const seed = Effect.fn("FinalReportTest.seed")(function* (
   })
   const finished = yield* goals.finished(chat.id, answer.id)
   if (!finished?.dispatch || finished.dispatch.phase !== "finished") throw new Error("Actual final bookkeeping failed")
-  const goal = {
-    ...finished,
-    status: "complete" as const,
-    activeAt: undefined,
-    audit: {
-      summary: "Audit paraphrase, deliberately different from the final answer",
-      verifiedAt: at,
-      requirements: [],
-    },
-  }
-  yield* storage.replace(["raya", "goal", chat.id], goal satisfies RayaGoal.State)
+  const goal = opts.pending
+    ? finished
+    : {
+        ...finished,
+        status: "complete" as const,
+        activeAt: undefined,
+        audit: {
+          summary: "Audit paraphrase, deliberately different from the final answer",
+          verifiedAt: at,
+          requirements: [],
+        },
+      }
+  if (!opts.pending) yield* storage.replace(["raya", "goal", chat.id], goal satisfies RayaGoal.State)
   const run = yield* runner.tasks.record({
     id,
     agentID: agent.id,
@@ -360,6 +371,94 @@ const seed = Effect.fn("FinalReportTest.seed")(function* (
     queue,
   }
 })
+
+it.instance("retired ordinary terminal reports recover without replaying their original work", () =>
+  Effect.gen(function* () {
+    const runs = yield* SessionRunState.Service
+    for (const status of ["blocked", "error", "stopped"] as const) {
+      const ctx = yield* seed({ pending: true })
+      const reports = RayaRoutineReports.make(ctx)
+      const target = ctx.agent.reportSessionID
+      if (!target) return yield* Effect.die(new Error("Missing original report destination"))
+      yield* reports.publish({ agent: ctx.agent, run: ctx.run })
+      const initial = (yield* reports.page({ sessionID: target })).items.find((card) => card.runID === ctx.run.id)
+      if (!initial) return yield* Effect.die(new Error("Missing original running report"))
+      const execution = RayaTaskExecution.make(ctx.storage)
+      yield* execution.enter(ctx.run, Effect.void)
+      const fault = { armed: true, hits: 0 }
+      const storage: Storage.Interface = {
+        ...ctx.storage,
+        replace: (key, value) =>
+          Effect.gen(function* () {
+            if (
+              fault.armed &&
+              key[0] === "raya" &&
+              key[1] === "routine-reports" &&
+              key[2] === createHash("sha256").update(ctx.run.id).digest("hex") &&
+              typeof value === "object" &&
+              value !== null &&
+              "status" in value &&
+              value.status === status
+            ) {
+              fault.hits++
+              return yield* Effect.die(new Error("Injected original terminal report failure"))
+            }
+            yield* ctx.storage.replace(key, value)
+          }),
+      }
+      const original = RayaTaskRunner.make({ ...ctx, storage })
+      if (status === "blocked")
+        yield* ctx.goals.update(ctx.chat.id, { status: "blocked", reason: "An ordinary dependency is unavailable." })
+      if (status === "error") yield* ctx.goals.clear(ctx.chat.id, ctx.goal.intent ?? "unset")
+      if (status === "stopped") {
+        const receipt = yield* original.stopGoal((tasks) =>
+          ctx.goals.stop(ctx.chat.id, ctx.goal.intent ?? "unset", runs, undefined, undefined, {
+            prepare: (id) =>
+              tasks.prepare(id).pipe(Effect.mapError((err) => new RayaGoal.AuditError({ message: err.message }))),
+            finish: (id, pin, finished) =>
+              tasks
+                .finish(id, pin, finished)
+                .pipe(Effect.mapError((err) => new RayaGoal.AuditError({ message: err.message }))),
+          }),
+        )
+        expect(receipt.phase).toBe("finished")
+      }
+      if (status !== "stopped") yield* original.settle(ctx.chat.id)
+      expect(fault.hits).toBe(1)
+      const terminal = (yield* original.tasks.runsFor(ctx.agent.id)).find((run) => run.id === ctx.run.id)
+      if (!terminal) return yield* Effect.die(new Error("Missing actual terminal run"))
+      expect(terminal.status).toBe(status)
+      expect(yield* execution.receipt(ctx.run)).toBeUndefined()
+      expect((yield* reports.page({ sessionID: target })).items.find((card) => card.id === initial.id)?.status).toBe(
+        "running",
+      )
+      const prior = yield* ctx.goals.get(ctx.chat.id)
+      if (prior) yield* ctx.goals.clear(ctx.chat.id, prior.intent ?? "unset")
+      const replacement = yield* ctx.goals.create(ctx.chat.id, "A later owner request must not be replayed")
+      const messages = yield* ctx.sessions.messages({ sessionID: ctx.chat.id })
+      const destination = yield* ctx.sessions.messages({ sessionID: target })
+      const history = yield* original.tasks.runsFor(ctx.agent.id)
+      fault.armed = false
+      const fresh = RayaTaskRunner.make({ ...ctx, storage: { ...ctx.storage } })
+      yield* fresh.revive()
+      const recovered = (yield* reports.page({ sessionID: target })).items.find((card) => card.id === initial.id)
+      if (!recovered) return yield* Effect.die(new Error("Missing recovered original report"))
+      expect(recovered.status).toBe(status)
+      expect(recovered.runRevision).toBe(terminal.revision)
+      expect(recovered.reportSessionID).toBe(target)
+      expect(recovered.summary).toBe(terminal.outcome?.summary ?? terminal.blockedReason ?? "")
+      yield* fresh.revive()
+      expect((yield* reports.page({ sessionID: target })).items.filter((card) => card.runID === ctx.run.id)).toEqual([
+        recovered,
+      ])
+      expect(yield* fresh.tasks.runsFor(ctx.agent.id)).toEqual(history)
+      expect(yield* ctx.sessions.messages({ sessionID: ctx.chat.id })).toEqual(messages)
+      expect(yield* ctx.sessions.messages({ sessionID: target })).toEqual(destination)
+      expect(yield* ctx.goals.get(ctx.chat.id)).toEqual(replacement)
+      expect(yield* execution.receipt(ctx.run)).toBeUndefined()
+    }
+  }),
+)
 
 it.instance("a completed routine repairs its original report after publication failure and execution retirement", () =>
   Effect.gen(function* () {
@@ -1147,6 +1246,7 @@ it.instance(
       ]
       // Projection of an already-saved audit only. Existing Goal validators own
       // execution/evidence validation; no command or byte check is run here.
+      if (!ctx.goal.audit) return yield* Effect.die(new Error("The accepted audit fixture is unavailable"))
       yield* ctx.storage.replace(["raya", "goal", ctx.chat.id], {
         ...ctx.goal,
         criteria,

@@ -125,6 +125,7 @@ export class DurableDrafts {
   private records = new Map<string, Record>()
   private owners = new Map<string, string>()
   private contexts = new Map<string, string>()
+  private scopes = new Map<string, object>()
   private listeners = new Set<() => void>()
   private requests = new Map<
     string,
@@ -250,6 +251,7 @@ export class DurableDrafts {
       for (const record of this.records.values()) {
         if (record.identity.box === box) record.fence = (record.fence ?? 0) + 1
       }
+    this.scopes.delete(box)
     this.contexts.set(box, value)
     if (known) this.owners.delete(box)
     this.notify()
@@ -494,7 +496,11 @@ export class DurableDrafts {
   }
 
   async list(box: string) {
+    const scope = this.scopes.get(box) ?? {}
+    this.scopes.set(box, scope)
     const reply = await this.request({ type: "composerDraftList", box })
+    // Scope transitions retire the original catalog even when the same owner returns.
+    if (this.closed || this.scopes.get(box) !== scope) throw new Error(reply.error ?? "scope")
     for (const entry of reply.entries ?? []) {
       const record = this.record(target(entry))
       if (record.loaded || record.revision !== 0) continue
@@ -833,6 +839,9 @@ export class DurableDrafts {
   private state(message: Extract<ComposerDraftExtensionMessage, { type: "composerDraftState" }>) {
     const owners = new Map(message.owners.map((scope) => [scope.box, scope.owner]))
     this.fences(message, owners)
+    for (const box of this.scopes.keys())
+      if (!message.connected || message.generation !== this.generation || owners.get(box) !== this.owners.get(box))
+        this.scopes.delete(box)
     if (this.generation !== message.generation || !message.connected) {
       for (const [requestID, request] of this.requests) {
         clearTimeout(request.timer)
@@ -1042,6 +1051,7 @@ export class DurableDrafts {
 
   dispose() {
     this.closed = true
+    this.scopes.clear()
     this.transport.postMessage({ type: "composerDraftPane", epoch: this.epoch, active: false })
     this.unsubscribe()
     for (const [requestID, request] of this.requests) {

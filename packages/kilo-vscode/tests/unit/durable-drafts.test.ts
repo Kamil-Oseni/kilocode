@@ -280,6 +280,7 @@ function pane(
   const controls: {
     pause?: ReturnType<typeof gate>
     load?: ReturnType<typeof gate>
+    list?: ReturnType<typeof gate>
     clear?: ReturnType<typeof gate>
     move?: ReturnType<typeof gate>
     lost?: boolean
@@ -327,7 +328,9 @@ function pane(
                 ? controls.clear
                 : message.type === "composerDraftPromote"
                   ? controls.move
-                  : undefined
+                  : message.type === "composerDraftList"
+                    ? controls.list
+                    : undefined
         void (async () => {
           if (pause) await pause.wait
           if (message.type === "composerDraftLoad" && controls.unavailableLoad) {
@@ -513,6 +516,73 @@ test("production disk drafts restore exact rich content and unavailable selectio
   expect((await next.controller.hydrate(identity)).content).toEqual(rich)
   expect((await next.controller.list(identity.box))[0].identity.pendingID).toBe(identity.pendingID)
 })
+
+test("late draft catalogs refuse workspace and owner ABA, reconnects and disposed panes before caching", async () => {
+  await using a = await draftStorage()
+  await using b = await draftStorage()
+  const base = { owner: a.root, requestID: "seed", epoch: "seed", generation: 1 }
+  const seeded = await a.handle({ ...base, type: "composerDraftSave", identity, content: rich, mutation: "seed" })
+  expect(seeded.entry?.content).toEqual(rich)
+  for (const phase of ["context", "context-aba", "owner", "owner-aba", "reconnect", "generation", "dispose"]) {
+    using view = pane(
+      a,
+      5000,
+      new Map([
+        [a.root, a],
+        [b.root, b],
+      ]),
+      false,
+    )
+    view.controller.context(identity.box, "workspace-A")
+    const state = {
+      type: "composerDraftState" as const,
+      epoch: view.controller.epoch,
+      generation: 1,
+      connected: true,
+      owners: [{ box: identity.box, owner: a.root }],
+    }
+    view.emit(state)
+    const held = gate()
+    view.controls.list = held
+    const listing = view.controller.list(identity.box).then(
+      (entries) => ({ entries, error: undefined }),
+      (err: unknown) => ({ entries: undefined, error: err instanceof Error ? err.message : String(err) }),
+    )
+    expect(view.requests.map((request) => request.type)).toEqual(["composerDraftList"])
+    if (phase.startsWith("context")) view.controller.context(identity.box, "workspace-B")
+    if (phase === "context-aba") {
+      view.controller.context(identity.box, "workspace-A")
+      view.emit(state)
+    }
+    if (phase.startsWith("owner")) view.emit({ ...state, owners: [{ box: identity.box, owner: b.root }] })
+    if (phase === "owner-aba") view.emit(state)
+    if (phase === "reconnect") {
+      view.emit({ ...state, connected: false })
+      view.emit(state)
+    }
+    if (phase === "generation") view.emit({ ...state, generation: 2 })
+    if (phase === "dispose") view.controller.dispose()
+    held.open()
+    const result = await listing
+    expect(result.entries).toBeUndefined()
+    expect(result.error).toBe(
+      phase === "reconnect" || phase === "generation" || phase === "dispose" ? "disconnected" : "scope",
+    )
+    expect(view.controller.view(identity)).toMatchObject({
+      loaded: false,
+      stored: false,
+      content: { text: "", images: [], comments: [] },
+    })
+    expect(view.requests.map((request) => request.type)).toEqual(["composerDraftList"])
+    view.controls.list = undefined
+    if (phase === "dispose") continue
+    if (phase === "context") view.emit(state)
+    const entries = await view.controller.list(identity.box)
+    expect(entries.map((entry) => entry.content)).toEqual(phase === "owner" ? [] : [rich])
+    expect(view.controller.view(identity).content.text).toBe(phase === "owner" ? "" : rich.text)
+  }
+  expect((await a.handle({ ...base, type: "composerDraftLoad", identity })).entry).toEqual(seeded.entry)
+}, 30000)
 
 test("authoritative owners partition same-box pending drafts before hydration and never dispatch into another profile", async () => {
   await using a = await draftStorage()

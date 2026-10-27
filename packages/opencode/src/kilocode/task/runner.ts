@@ -298,7 +298,12 @@ export namespace RayaTaskRunner {
             tasks,
             inbox,
             check: () => transfer.check(),
-            publish: (value) => reports.publishDeferred(value),
+            publish: (value) =>
+              value.delegationID && errands
+                ? errands.get(value.delegationID).pipe(
+                    Effect.flatMap((row) => (row.state === "queued" ? queuedReport(row, value.notice) : Effect.void)),
+                  )
+                : reports.publishDeferred(value),
           })
         : undefined
     const report = Effect.fn("RayaTaskRunner.report")(function* (run: RayaTask.Run) {
@@ -306,10 +311,18 @@ export namespace RayaTaskRunner {
       if (!saved || (!saved.definition.sourceSessionID && !saved.definition.reportSessionID)) return
       if (saved.agentID !== run.agentID || saved.at !== run.at)
         yield* Effect.die(new Error("Routine report startup identity changed."))
+      const session = yield* input.sessions.get(run.sessionID)
+      const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
+      const delegated = identity?.delegationID && errands ? yield* errands.get(identity.delegationID) : undefined
+      if (delegated && (delegated.recipientID !== run.agentID || delegated.childRunID !== run.id))
+        yield* Effect.die(new Error("Routine report delegation identity changed."))
       yield* reports.publish({
         agent: saved.definition,
         run,
         ...(run.trigger?.kind === "timer" ? { occurrenceID: run.trigger.id } : {}),
+        ...(delegated ? { delegationID: delegated.id } : {}),
       })
     })
     const publish = (run: RayaTask.Run) =>
@@ -387,6 +400,45 @@ export namespace RayaTaskRunner {
           guard: authority,
         })
       : undefined
+    const project = Effect.fn("RayaTaskRunner.queuedReport")(function* (
+      row: Errand,
+      notice?: { at: number; reason: "busy" | "deferred" },
+    ) {
+      if (!errands || row.sessionID) return
+      const recipient = yield* tasks
+        .get(row.recipientID)
+        .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
+      if (!recipient) return
+      const origin = yield* origins.resolve((yield* errands.chain(row.id)).map((item) => item.source))
+      if (!origin) return
+      const status =
+        row.state === "cancelled"
+          ? "stopped"
+          : row.state === "failed"
+            ? "error"
+            : row.state === "queued"
+              ? "queued"
+              : undefined
+      if (!status) return
+      yield* reports.publishDeferred({
+        agent: { ...recipient, sourceSessionID: origin, reportSessionID: origin },
+        id: row.id,
+        at: notice?.at ?? (status === "queued" ? row.time : Date.now()),
+        status,
+        summary:
+          row.reason ??
+          (notice
+            ? "This request has been queued for a while because its worker is busy."
+            : "Queued until the worker is available."),
+        ...(notice ? { notice } : {}),
+      })
+    })
+    const queuedReport = (row: Errand, notice?: { at: number; reason: "busy" | "deferred" }) =>
+      project(row, notice).pipe(
+        Effect.catch((err) =>
+          Effect.sync(() => log.error("queued request report publication failed", { id: row.id, err })),
+        ),
+      )
     const initialize = cold.gate.withPermit(
       Effect.gen(function* () {
         if (cold.ready) return
@@ -575,10 +627,12 @@ export namespace RayaTaskRunner {
             Effect.sync(() => log.error("delegation timeout failed", { err })),
           ),
         )
-        if (failed)
+        if (failed) {
+          yield* queuedReport(failed)
           yield* sync(failed).pipe(
             Effect.catch((err) => Effect.sync(() => log.error("delegation budget sync failed", { err }))),
           )
+        }
         yield* drop(row.recipientID, row.sessionID, row.childRunID, LATE)
         if (!row.sessionID || !input.halt) continue
         yield* input
@@ -1310,7 +1364,7 @@ export namespace RayaTaskRunner {
             message: "This delegation's saved run identity is inconsistent and needs recovery review.",
           })
         if (taken.deadline !== undefined && taken.deadline <= Date.now()) {
-          yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE)
+          yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE).pipe(Effect.tap(queuedReport))
           yield* drop(recipient.id, prior.sessionID, prior.id, LATE)
           return yield* errands.get(taken.id)
         }
@@ -1341,11 +1395,11 @@ export namespace RayaTaskRunner {
           undefined,
           undefined,
           "The organization no longer authorizes this delegation.",
-        )
+        ).pipe(Effect.tap(queuedReport))
         return yield* errands.get(taken.id)
       }
       if (taken.deadline !== undefined && taken.deadline <= Date.now()) {
-        yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE)
+        yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE).pipe(Effect.tap(queuedReport))
         return yield* errands.get(taken.id)
       }
       const note = prompt(sender, recipient, {
@@ -1410,14 +1464,14 @@ export namespace RayaTaskRunner {
               undefined,
               undefined,
               err instanceof Error ? err.message : "Delegated work could not start.",
-            )
+            ).pipe(Effect.tap(queuedReport))
             return yield* Effect.fail(err)
           }),
         ),
       )
       const current = yield* errands.get(taken.id)
       if (current.deadline !== undefined && current.deadline <= Date.now()) {
-        yield* errands.finish(current.id, "failed", recipient, undefined, undefined, LATE)
+        yield* errands.finish(current.id, "failed", recipient, undefined, undefined, LATE).pipe(Effect.tap(queuedReport))
         yield* drop(recipient.id, run.sessionID, run.id, LATE)
         return yield* errands.get(current.id)
       }
@@ -1495,6 +1549,7 @@ export namespace RayaTaskRunner {
           return yield* new RayaTask.GuardError({ message: "This assignment already has another report conversation." })
       }
       const admitted = yield* errands.admit(input, sender, recipient, found.gone, allocation)
+      yield* queuedReport(admitted.record)
       if (parent && goal?.budget?.modelCost !== undefined)
         yield* sync(admitted.record).pipe(
           Effect.mapError(
@@ -1513,6 +1568,7 @@ export namespace RayaTaskRunner {
           undefined,
           "This worker was removed before the request could start.",
         )
+        yield* queuedReport(failed)
         yield* sync(failed)
         return failed
       }
@@ -1544,6 +1600,7 @@ export namespace RayaTaskRunner {
       }
       const recipient = (yield* fetch(row.recipientID))?.agent ?? absent(row.recipientID)
       const record = yield* errands.stop(row.id, recipient, "Stopped by the user.", yield* spent(row))
+      yield* queuedReport(record)
       yield* sync(record)
       for (const child of kids) {
         const other = (yield* fetch(child.recipientID))?.agent ?? absent(child.recipientID)
@@ -1553,6 +1610,7 @@ export namespace RayaTaskRunner {
           "Stopped because the parent request was stopped.",
           yield* spent(child),
         )
+        yield* queuedReport(stopped)
         yield* sync(stopped)
       }
       const listed = [row, ...kids]
@@ -2975,6 +3033,12 @@ export namespace RayaTaskRunner {
                 yield* reconcile(item.id)
                 if (schedule) {
                   yield* schedule.pulse(item.id)
+                }
+                if (item.enabled && errands && waiting) {
+                  for (const row of yield* errands.queued(item.id)) {
+                    yield* queuedReport(row)
+                    yield* waiting.delegation({ agent: item, id: row.id, now: from })
+                  }
                 }
                 if (!item.enabled || (item.schedule.kind !== "once" && item.schedule.kind !== "cron")) return undefined
                 const last = (yield* tasks.runsFor(item.id)).at(-1)

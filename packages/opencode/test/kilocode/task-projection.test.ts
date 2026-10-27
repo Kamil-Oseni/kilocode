@@ -139,18 +139,43 @@ it.live("routine cards survive reopening, upgrade queued occurrences and keep th
       })
       expect(selected?.delivery).toBe("delivered")
       expect(selected?.sourceSessionID).toBeUndefined()
+      yield* reports.publishDeferred({ agent, id: "stopped", at: 3, summary: "Queued" })
+      const stopped = yield* reports.publishDeferred({
+        agent,
+        id: "stopped",
+        at: 4,
+        status: "stopped",
+        summary: "Stopped before startup",
+      })
+      for (const status of ["running", "complete"] as const) {
+        const late = yield* reports.publish({
+          agent,
+          run: { ...run, id: "late-run", status },
+          delegationID: "stopped",
+        })
+        expect(late).toEqual(stopped)
+        expect(late?.runID).toBeUndefined()
+      }
+      const legacy = { ...run, id: "legacy-run" }
+      yield* reports.publish({ agent, run: legacy })
+      const upgraded = yield* reports.publish({
+        agent,
+        run: { ...legacy, status: "complete", revision: 2 },
+        delegationID: "legacy-delegation",
+      })
+      expect(upgraded).toMatchObject({ id: "legacy-run", runID: "legacy-run", status: "complete" })
       return { agent, run }
     }).pipe(Effect.provide(state(directory)))
     yield* Effect.gen(function* () {
       const reports = RayaRoutineReports.make({ storage: yield* Storage.Service, sessions, scope: source })
-      expect(yield* reports.list(source.id)).toHaveLength(2)
+      expect(yield* reports.list(source.id)).toHaveLength(4)
       const storage = yield* Storage.Service
       const key = ["raya", "routine-reports", createHash("sha256").update("occurrence").digest("hex")]
       const retained = yield* storage.read(key)
       yield* storage.remove(key)
       expect(yield* reports.page({ sessionID: source.id }).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
       yield* storage.replace(key, retained)
-      expect(yield* reports.list(source.id)).toHaveLength(2)
+      expect(yield* reports.list(source.id)).toHaveLength(4)
       items.delete(source.id)
       const card = yield* reports.publish({
         agent: saved.agent,

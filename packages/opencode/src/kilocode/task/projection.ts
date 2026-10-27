@@ -66,6 +66,7 @@ export namespace RayaRoutineReports {
       at: number
       summary: string
       notice?: Card["notice"]
+      status?: Card["status"]
     }
     const publish = Effect.fn("RayaRoutineReports.publish")(function* (value: Input) {
       if (value.run && value.agent.id !== value.run.agentID)
@@ -74,6 +75,10 @@ export namespace RayaRoutineReports {
       if (prior && prior.agentID !== value.agent.id)
         return yield* Effect.fail(new Error("Report run identity belongs to another worker."))
       if (prior?.runID && !value.run) {
+        yield* index.upsert(prior)
+        return prior
+      }
+      if (prior && prior.status !== "queued" && (!value.run || !prior.runID)) {
         yield* index.upsert(prior)
         return prior
       }
@@ -117,10 +122,15 @@ export namespace RayaRoutineReports {
         directory: origin?.directory ?? "",
         revision: prior?.revision ?? 1,
         runRevision: value.run?.revision ?? (value.run ? 1 : undefined),
-        status: replay ? prior!.status : (value.run?.status ?? "queued"),
-        at: replay || (prior?.notice && !value.run && !value.notice) ? prior!.at : value.at,
+        status: replay ? prior.status : (value.run?.status ?? value.status ?? "queued"),
+        at:
+          replay || (prior?.notice && !value.run && !value.notice && (!value.status || value.status === "queued"))
+            ? prior.at
+            : value.at,
         summary:
-          replay || (prior?.notice && !value.run && !value.notice) ? prior!.summary : value.summary.slice(0, 8000),
+          replay || (prior?.notice && !value.run && !value.notice && (!value.status || value.status === "queued"))
+            ? prior.summary
+            : value.summary.slice(0, 8000),
         delivery,
         notice: prior?.notice ?? value.notice,
       }
@@ -167,14 +177,18 @@ export namespace RayaRoutineReports {
     })
     return {
       page,
-      publish: (value: { agent: Codec.Agent; run: Codec.Run; occurrenceID?: string }) =>
+      publish: (value: { agent: Codec.Agent; run: Codec.Run; occurrenceID?: string; delegationID?: string }) =>
         mutate(
           input.storage,
-          publish({
-            ...value,
-            id: value.occurrenceID ?? value.run.id,
-            at: value.run.at,
-            summary: value.run.outcome?.summary ?? value.run.blockedReason ?? "",
+          Effect.gen(function* () {
+            const legacy =
+              value.delegationID && !(yield* read(value.delegationID)) ? yield* read(value.run.id) : undefined
+            return yield* publish({
+              ...value,
+              id: value.occurrenceID ?? (legacy ? value.run.id : value.delegationID) ?? value.run.id,
+              at: value.run.at,
+              summary: value.run.outcome?.summary ?? value.run.blockedReason ?? "",
+            })
           }),
           "Routine report",
         ),
@@ -184,6 +198,7 @@ export namespace RayaRoutineReports {
         at: number
         summary: string
         notice?: Card["notice"]
+        status?: Card["status"]
       }) => mutate(input.storage, publish(value), "Routine report"),
       list: (sessionID: SessionID) => page({ sessionID }).pipe(Effect.map((result) => result.items)),
     }

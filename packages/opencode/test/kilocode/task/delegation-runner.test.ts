@@ -16,6 +16,7 @@ import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { RayaTaskExecution } from "@/kilocode/task/execution"
+import { RayaRoutineReports } from "@/kilocode/task/projection"
 import { RayaGoal } from "@/kilocode/goal"
 import { owner } from "@/kilocode/task/owner"
 
@@ -108,14 +109,15 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
     Effect.gen(function* () {
       const database = yield* Database.Service
       const storage = memory()
+      const chat = session("ses_accounting_requester")
       const starts: string[] = []
       const sessions = retained({
-        create: () =>
+        create: (input) =>
           Effect.sync(() => {
             starts.push("start")
-            return session("ses_books")
+            return session(input?.id ?? "ses_books")
           }),
-        get: () => Effect.die("unused"),
+        get: (id: SessionID) => id === chat.id ? Effect.succeed(chat) : Effect.die("unused"),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       })
@@ -142,18 +144,36 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
         enabled: true,
         schedule: { kind: "manual" },
       })
-      const first = yield* runner.delegate({
-        source: "dlg_friday",
-        senderID: chief.id,
-        recipientID: books.id,
-        objective: "List missing Friday receipts.",
-        expected: "Named missing receipts, not a payment.",
-        deadline: Date.now() + 60_000,
-        budget: 25,
-      })
+      const first = yield* runner.delegate(
+        {
+          source: "dlg_friday",
+          senderID: chief.id,
+          recipientID: books.id,
+          objective: "List missing Friday receipts.",
+          expected: "Named missing receipts, not a payment.",
+          deadline: Date.now() + 60_000,
+          budget: 25,
+        },
+        { reportSessionID: chat.id },
+      )
       expect(first.state).toBe("running")
       expect(starts).toEqual(["start"])
-      expect(first.sessionID).toBe(SessionID.make("ses_books"))
+      expect((yield* sessions.get(first.sessionID!)).id).toBe(first.sessionID!)
+      const reports = yield* RayaRoutineReports.make({
+        storage,
+        sessions,
+        scope: { projectID: chat.projectID, directory: chat.directory },
+      }).list(chat.id)
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({
+        id: first.id,
+        runID: first.childRunID,
+        status: "running",
+        reportSessionID: chat.id,
+        workerSessionID: first.sessionID,
+        delivery: "delivered",
+      })
+      expect(reports[0].revision).toBeGreaterThan(1)
       const saved = yield* snapshots.find(first.childRunID!)
       expect(saved?.definition.objective).toBe("Reconcile receipts.")
       expect(saved?.objective).toContain("List missing Friday receipts.")
@@ -954,6 +974,82 @@ test("restart recovers the exact delegation session when history was not recorde
       expect((yield* runner.tasks.runsFor(books.id)).filter((run) => run.id === taken.childRunID)).toHaveLength(1)
       expect(yield* storage.list(["raya", "agent-claims"])).toEqual([])
       expect((yield* database.db.select().from(SessionTable).all()).filter((row) => row.id === sid)).toHaveLength(1)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
+test("a queued chat assignment keeps one stopped requester card without starting inference", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const chat = session("ses_queued_report")
+      const sessions = retained({
+        create: () => Effect.die("Stopped queued work must not create a worker session"),
+        get: (id: SessionID) => Effect.succeed(session(id)),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      })
+      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const reports = RayaRoutineReports.make({
+        storage,
+        sessions,
+        scope: { projectID: chat.projectID, directory: chat.directory },
+      })
+      const sender = yield* runner.tasks.create({
+        name: "Dispatch",
+        objective: "Assign the requested work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const recipient = yield* runner.tasks.create({
+        name: "Researcher",
+        objective: "Research the requested job",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      yield* runner.tasks.record({
+        id: "run_busy_before_report",
+        agentID: recipient.id,
+        at: Date.now(),
+        sessionID: SessionID.make("ses_busy_before_report"),
+        status: "running",
+      })
+      const queued = yield* runner.delegate(
+        {
+          source: "dlg_requester_report",
+          senderID: sender.id,
+          recipientID: recipient.id,
+          objective: "Research after the current job finishes",
+        },
+        { reportSessionID: chat.id },
+      )
+      expect(queued.state).toBe("queued")
+      const initial = yield* reports.list(chat.id)
+      expect(initial).toHaveLength(1)
+      expect(initial[0]).toMatchObject({
+        id: queued.id,
+        agentID: recipient.id,
+        reportSessionID: chat.id,
+        name: "Researcher",
+        status: "queued",
+        delivery: "delivered",
+      })
+      expect(initial[0].workerSessionID).toBeUndefined()
+      expect(initial[0].notice).toBeUndefined()
+      expect((yield* runner.stop(queued.id)).state).toBe("cancelled")
+      const stopped = yield* reports.list(chat.id)
+      expect(stopped).toHaveLength(1)
+      expect(stopped[0]).toMatchObject({ id: queued.id, status: "stopped", reportSessionID: chat.id })
+      expect(stopped[0].revision).toBeGreaterThan(initial[0].revision)
+      yield* runner.stop(queued.id)
+      yield* runner.tick(queued.time + 31 * 60_000)
+      const final = (yield* reports.list(chat.id)).filter((card) => card.id === queued.id)
+      expect(final).toHaveLength(1)
+      expect(final[0]).toEqual(stopped[0])
+      expect(final[0].notice).toBeUndefined()
+      expect(final[0].workerSessionID).toBeUndefined()
+      expect(yield* runner.tasks.runsFor(recipient.id)).toHaveLength(1)
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })

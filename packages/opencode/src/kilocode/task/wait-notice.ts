@@ -6,6 +6,7 @@ import type { Database } from "@opencode-ai/core/database/database"
 import {
   RayaRoutineOccurrenceTable as Occurrence,
   RayaRoutineMessageTable as Message,
+  RayaRoutineDelegationTable as Delegation,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import type { Storage } from "@/storage/storage"
 import { RayaTask } from "."
@@ -31,6 +32,7 @@ type Dependencies = {
   publish?(input: {
     agent: RayaTask.Agent
     id: string
+    delegationID?: string
     at: number
     summary: string
     notice: { at: number; reason: Input["reason"] }
@@ -123,6 +125,86 @@ export namespace RayaTaskWait {
         })
       return result
     })
-    return { notice }
+    const delegation = Effect.fn("RayaTaskWait.delegation")(function* (
+      request: Omit<Input, "occurrenceID" | "reason"> & { id: string },
+    ) {
+      const now = request.now ?? Date.now()
+      const delay = request.threshold ?? 30 * 60_000
+      if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(delay) || delay < 0 || delay > 7 * 86400_000)
+        return yield* new RayaTask.GuardError({ message: "A valid waiting-notice time and threshold are required." })
+      const result = yield* mutate(
+        input.storage,
+        Effect.gen(function* () {
+          yield* input.check()
+          const current = yield* input.tasks
+            .get(request.agent.id)
+            .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
+          if (!current?.enabled || !isDeepStrictEqual(definition(current), definition(request.agent))) return undefined
+          const runs = yield* input.tasks.runsFor(current.id)
+          if (runs.some((run) => run.status === "blocked" && run.blockedReason === "waiting on you")) return undefined
+          return yield* input.database.db.transaction(
+            (tx) =>
+              Effect.gen(function* () {
+                yield* input.check()
+                const queued = yield* tx
+                  .select()
+                  .from(Delegation)
+                  .where(
+                    and(
+                      eq(Delegation.id, request.id),
+                      eq(Delegation.recipient_id, current.id),
+                      eq(Delegation.state, "queued"),
+                    ),
+                  )
+                  .get()
+                  .pipe(Effect.orDie)
+                if (
+                  !queued ||
+                  now - queued.time_created <= delay ||
+                  (queued.deadline !== null && queued.deadline <= now)
+                )
+                  return undefined
+                const source = "wait:delegation:" + createHash("sha256").update(queued.id).digest("hex")
+                const prior = yield* tx
+                  .select()
+                  .from(Message)
+                  .where(and(eq(Message.agent_id, current.id), eq(Message.source, source)))
+                  .get()
+                  .pipe(Effect.orDie)
+                if (prior && (prior.kind !== "system" || prior.occurrence_id !== source))
+                  return yield* new RayaTask.GuardError({
+                    message: "The waiting notice has a different durable identity.",
+                  })
+                yield* input.check()
+                const record = yield* input.inbox.publish({
+                  agentID: current.id,
+                  source,
+                  kind: "system",
+                  body:
+                    prior?.body ??
+                    "This assignment has been queued for a while while its worker waits to become available.",
+                  occurrenceID: source,
+                })
+                yield* input.check()
+                return { agent: current, record, created: !prior, quiet: request.quiet === true }
+              }),
+            { behavior: "immediate" },
+          )
+        }),
+      )
+      if (!result) return undefined
+      yield* input.check()
+      if (input.publish)
+        yield* input.publish({
+          agent: result.agent,
+          id: request.id,
+          delegationID: request.id,
+          at: result.record.time,
+          summary: result.record.body,
+          notice: { at: result.record.time, reason: "busy" },
+        })
+      return result
+    })
+    return { notice, delegation }
   }
 }

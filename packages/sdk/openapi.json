@@ -45282,6 +45282,15 @@
                     "objective": {
                       "type": "string"
                     },
+                    "outputs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "maxItems": 16
+                    },
                     "organizationPolicy": {
                       "type": "object",
                       "properties": {
@@ -49663,6 +49672,15 @@
                       "minItems": 1,
                       "maxItems": 20
                     },
+                    "outputs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "maxItems": 16
+                    },
                     "context": {
                       "type": "string",
                       "pattern": "\\S",
@@ -49899,6 +49917,15 @@
                     "minItems": 1,
                     "maxItems": 20
                   },
+                  "outputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    "maxItems": 16
+                  },
                   "context": {
                     "type": "string",
                     "pattern": "\\S",
@@ -50084,6 +50111,15 @@
                       },
                       "minItems": 1,
                       "maxItems": 20
+                    },
+                    "outputs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "maxItems": 16
                     },
                     "context": {
                       "type": "string",
@@ -50374,6 +50410,15 @@
                           "minItems": 1,
                           "maxItems": 20
                         },
+                        "outputs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "maxItems": 16
+                        },
                         "context": {
                           "type": "string",
                           "pattern": "\\S",
@@ -50576,6 +50621,15 @@
                             },
                             "minItems": 1,
                             "maxItems": 20
+                          },
+                          "outputs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "maxItems": 16
                           },
                           "context": {
                             "type": "string",
@@ -50780,6 +50834,15 @@
                             },
                             "minItems": 1,
                             "maxItems": 20
+                          },
+                          "outputs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "maxItems": 16
                           },
                           "context": {
                             "type": "string",
@@ -51071,6 +51134,15 @@
                       },
                       "minItems": 1,
                       "maxItems": 20
+                    },
+                    "outputs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "maxItems": 16
                     },
                     "context": {
                       "type": "string",

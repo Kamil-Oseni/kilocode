@@ -10537,6 +10537,7 @@ export class Delegate extends HeyApiClient {
         description: string
         verification: string
       }>
+      outputs?: Array<string>
       context?: string
       deadline?: number
       budget?: number
@@ -10567,6 +10568,7 @@ export class Delegate extends HeyApiClient {
             { in: "body", key: "objective" },
             { in: "body", key: "expected" },
             { in: "body", key: "criteria" },
+            { in: "body", key: "outputs" },
             { in: "body", key: "context" },
             { in: "body", key: "deadline" },
             { in: "body", key: "budget" },

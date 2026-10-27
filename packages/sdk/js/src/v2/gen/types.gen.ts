@@ -28060,6 +28060,7 @@ export type KilocodeRoutineSnapshotResponses = {
       }
     }
     objective: string
+    outputs?: Array<string>
     organizationPolicy?: {
       organizationID: string
       organizationRevision: number
@@ -29217,6 +29218,7 @@ export type KilocodeRoutineDelegateCreateData = {
       description: string
       verification: string
     }>
+    outputs?: Array<string>
     context?: string
     deadline?: number
     budget?: number
@@ -29277,6 +29279,7 @@ export type KilocodeRoutineDelegateCreateResponses = {
       description: string
       verification: string
     }>
+    outputs?: Array<string>
     context?: string
     deadline?: number
     budget?: number
@@ -29348,6 +29351,7 @@ export type KilocodeRoutineDelegateGetResponses = {
       description: string
       verification: string
     }>
+    outputs?: Array<string>
     context?: string
     deadline?: number
     budget?: number
@@ -29421,6 +29425,7 @@ export type KilocodeRoutineDelegateChainResponses = {
         description: string
         verification: string
       }>
+      outputs?: Array<string>
       context?: string
       deadline?: number
       budget?: number
@@ -29457,6 +29462,7 @@ export type KilocodeRoutineDelegateChainResponses = {
         description: string
         verification: string
       }>
+      outputs?: Array<string>
       context?: string
       deadline?: number
       budget?: number
@@ -29493,6 +29499,7 @@ export type KilocodeRoutineDelegateChainResponses = {
         description: string
         verification: string
       }>
+      outputs?: Array<string>
       context?: string
       deadline?: number
       budget?: number
@@ -29566,6 +29573,7 @@ export type KilocodeRoutineDelegateCancelResponses = {
       description: string
       verification: string
     }>
+    outputs?: Array<string>
     context?: string
     deadline?: number
     budget?: number

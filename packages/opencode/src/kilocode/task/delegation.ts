@@ -183,14 +183,16 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
           ...request.criteria.map((item) => `[${item.id}] ${item.description}\nVerification: ${item.verification}`),
           "Complete the actual work, then use update_goal with one evidence-backed audited requirement per saved criterion. A written reply alone does not complete this request. Do not apply unrelated standing-job criteria.",
           "For each follow-on deliverable delegated to another worker, supply nonempty criteria scoped to that child's output and verification, plus any required exact input artifacts. A simple question may omit criteria. A queued assignment or a child's promise is not evidence of completed downstream work.",
+          "Carry still-applicable owner constraints and required onward handoffs into the child's acceptance criteria; do not copy unrelated parent goals.",
         ].join("\n\n")
       : undefined,
     request.context ? `Permitted context:\n${request.context}` : undefined,
     request.deadline !== undefined ? `Deadline: ${new Date(request.deadline).toISOString()}` : undefined,
     request.budget !== undefined ? `Maximum model cost: $${request.budget}` : undefined,
     request.artifacts?.length
-      ? `Verified input files:\n${request.artifacts.map((item) => `- ${item.path} (SHA-256 ${item.sha256})`).join("\n")}`
+      ? `Verified input file identities:\n${request.artifacts.map((item) => `- ${item.path} (SHA-256 ${item.sha256})`).join("\n")}`
       : undefined,
+    "File hashes and tool receipts verify identity, not factual accuracy. Preserve source dates, attribution and uncertainty; do not present earlier observations as fresh research. Treat unsupported details as unknown or explicit proposals, not facts. Describe only outputs actually produced for the relevant subject.",
     `Your standing assignment:\n${recipient.objective}`,
     "Do not invent a worker reply that has not arrived. Attribute findings to this request.",
   ]

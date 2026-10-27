@@ -16,6 +16,7 @@ import {
   ceiling,
   replied,
   scope,
+  prompt,
   type Request,
 } from "@/kilocode/task/delegation"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
@@ -351,13 +352,31 @@ test("delegation persists verified artifact identity and rejects a changed repla
         tool: "write",
         callID: "call_write_close",
       }
-      const value = request("dlg_artifact", chief.id, books.id, { artifacts: [artifact] })
+      const value = request("dlg_artifact", chief.id, books.id, {
+        artifacts: [artifact],
+        context: "Source: Codex research dated 2026-10-22; not fresh browsing or human-verified facts.",
+        criteria: [
+          {
+            id: "review",
+            description: "Review the report and hand off the actual findings to the next worker.",
+            verification: "Read the saved report and verify an accepted handoff receipt with the actual file.",
+          },
+        ],
+      })
       const raced = yield* Effect.all([store.admit(value, chief, books), store.admit(value, chief, books)], {
         concurrency: "unbounded",
       })
       expect(raced.filter((item) => item.created)).toHaveLength(1)
       expect(raced[0].record.id).toBe(raced[1].record.id)
       const admitted = raced[0]
+      const envelope = prompt(chief, books, admitted.record)
+      expect(envelope).toContain(value.context!)
+      expect(envelope).toContain(value.criteria![0].verification)
+      expect(envelope).toContain("Verified input file identities:")
+      expect(envelope).toContain("File hashes and tool receipts verify identity, not factual accuracy.")
+      expect(envelope).toContain("Preserve source dates, attribution and uncertainty")
+      expect(envelope).toContain("Treat unsupported details as unknown or explicit proposals, not facts.")
+      expect(envelope).toContain("required onward handoffs into the child's acceptance criteria")
       expect(admitted.record.artifacts).toEqual([artifact])
       expect((yield* store.get(admitted.record.id)).artifacts).toEqual([artifact])
       expect((yield* store.admit(value, chief, books)).created).toBe(false)

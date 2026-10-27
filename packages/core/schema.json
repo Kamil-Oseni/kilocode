@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "2a4589b4-c5a9-49e3-aef2-c3a8a4282ad2",
+  "id": "27aabf41-c9c3-432a-9dc1-efac9cd8ba30",
   "prevIds": [
-    "5e2b61f5-5c6e-4d8b-b678-5255211a6200"
+    "2a4589b4-c5a9-49e3-aef2-c3a8a4282ad2"
   ],
   "ddl": [
     {
@@ -1821,6 +1821,16 @@
       "default": null,
       "generated": null,
       "name": "criteria",
+      "entityType": "columns",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "outputs",
       "entityType": "columns",
       "table": "raya_routine_delegation"
     },

@@ -43,6 +43,9 @@ import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_chang
 import { LazyTools } from "@/kilocode/session/lazy-tools" // kilocode_change
 import { InstanceState } from "@/effect/instance-state" // kilocode_change
 import * as ToolLineage from "@/kilocode/task/effect-tools" // kilocode_change - retain the original tool catalog execution
+import * as OutputAdmission from "@/kilocode/task/output-admission" // kilocode_change
+import * as OutputScope from "@/kilocode/task/output-scope" // kilocode_change
+import * as ToolNetwork from "@/kilocode/sandbox/network" // kilocode_change
 import * as ExecutionLineage from "@/kilocode/task/effect-lineage" // kilocode_change - check original MCP callback lineage
 
 const MCP_RESOURCE_TOOLS = {
@@ -69,6 +72,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   promptOps: TaskPromptOps
   memoryCache: MemoryMarker.Cache // kilocode_change
 }) {
+  const scoped = (yield* OutputAdmission.check(input.session.id, [])) !== undefined // kilocode_change
   const tools: Record<string, AITool> = {}
   // kilocode_change start - transfer the original catalog owner into callback fibers
   const run = yield* EffectBridge.make().pipe(
@@ -193,6 +197,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     agent: input.agent,
     permission: input.session.permission,
     networkRestricted: restricted, // kilocode_change - let the registry suppress code-mode in restricted sessions
+    nativeOnly: scoped, // kilocode_change - validated immutable output restriction
     trustedOnly: routine, // kilocode_change - fail closed on local plugin tools in Routines
   }) // kilocode_change - retain registry definitions for the original goal owner
   // kilocode_change start - exact durable dispatch and current user determine final synthesis
@@ -215,6 +220,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // kilocode_change end
   for (const item of items) {
     // kilocode_change
+    if (scoped && (!ToolNetwork.isBuiltin(item) || !OutputScope.mediated(item.id))) continue // kilocode_change
     if (!visible(item.id)) continue // kilocode_change - the model must not see tools outside child authority
     // kilocode_change start - project fresh Task objectives against the original saved request before provider conversion
     const advertised = yield* TaskSchema.prepare(
@@ -235,11 +241,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           Effect.gen(function* () {
             const ctx = context(args, options)
             yield* input.processor.begin({ id: options.toolCallId, name: item.id, input: args }) // kilocode_change - persist only the actual validated invocation before permission/Chief guards
-            yield* plugin.trigger(
-              "tool.execute.before",
-              { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
-              { args },
-            )
+            if (!scoped)
+              yield* plugin.trigger(
+                "tool.execute.before",
+                { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
+                { args },
+              )
             // kilocode_change start
             const result = yield* SandboxPolicy.executeTool(ctx.sessionID, item, item.execute(args, ctx))
             // kilocode_change end
@@ -254,11 +261,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             }
             // kilocode_change - mark successful targeted memory recalls for the assistant badge
             if (item.id === "kilo_memory_recall") MemoryMarker.recall({ result: output, cache: input.memoryCache }) // kilocode_change
-            yield* plugin.trigger(
-              "tool.execute.after",
-              { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
-              output,
-            )
+            if (!scoped)
+              yield* plugin.trigger(
+                "tool.execute.after",
+                { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+                output,
+              )
             if (options.abortSignal?.aborted) {
               yield* input.processor.completeToolCall(options.toolCallId, output)
             }
@@ -270,9 +278,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     catalog.record(item, tools[item.id]) // kilocode_change
   }
 
-  const hasMcpResourceServer = Object.values(yield* mcp.clients()).some(
-    (client) => !!client.getServerCapabilities()?.resources,
-  )
+  const hasMcpResourceServer =
+    !scoped && Object.values(yield* mcp.clients()).some((client) => !!client.getServerCapabilities()?.resources)
   if (!restricted && hasMcpResourceServer) {
     tools[MCP_RESOURCE_TOOLS.list] = tool({
       description:
@@ -565,7 +572,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // kilocode_change end
   if (flags.experimentalCodeMode) return finish() // kilocode_change
 
-  const mcpTools = restricted ? {} : yield* mcp.tools() // kilocode_change
+  const mcpTools = restricted || scoped ? {} : yield* mcp.tools() // kilocode_change
   for (const [key, entry] of Object.entries(mcpTools)) {
     if (!visible(key)) continue // kilocode_change - hide unsaved connected-service tools from Routine models
     const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)

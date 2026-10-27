@@ -309,6 +309,7 @@ export default {
           \`objective\` text NOT NULL,
           \`expected\` text,
           \`criteria\` text,
+          \`outputs\` text,
           \`context\` text,
           \`deadline\` integer,
           \`budget\` integer,

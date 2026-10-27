@@ -964,6 +964,7 @@ export namespace RayaTaskDelegation {
             objective: row.objective,
             expected: row.expected,
             criteria: row.criteria,
+            outputs: row.outputs,
             context: row.context,
             deadline: row.deadline,
             budget: row.budget,

@@ -204,6 +204,23 @@ export function matches(run: { id: string; agentID: string; sessionID: string })
 }
 
 /** Only an original live callback can identify its current Routine execution session. */
+/** Read original identity only; this is not an execution capability. */
+export function origin() {
+  return Effect.withFiber((fiber) =>
+    Effect.sync(() => {
+      const frame = Context.getReferenceUnsafe(fiber.context, Current)
+      if (!frame) return undefined
+      const state = require(frame)
+      if (state.fiber !== fiber) throw refuse()
+      return {
+        id: state.root.original.runID,
+        agentID: state.root.original.agentID,
+        sessionID: state.root.original.sessionID,
+      }
+    }),
+  )
+}
+
 export function session() {
   return Effect.withFiber((fiber) =>
     Effect.sync(() => {

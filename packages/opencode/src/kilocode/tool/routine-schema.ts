@@ -26,7 +26,7 @@ export const assignment = Effect.fn("RoutineSchema.assignment")(function* (
   return {
     ...schema,
     additionalProperties: false,
-    required: [...new Set([...(schema.required ?? []).filter((key) => !removed.has(key)), "criteria"])],
+    required: [...new Set([...(schema.required ?? []).filter((key) => !removed.has(key)), "criteria", "outputs"])],
     properties,
   } satisfies JSONSchema7
 })
@@ -63,6 +63,7 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
         ...(schema.required ?? []).filter((key) => key !== "deadline"),
         ...(deadline === undefined ? [] : ["deadline"]),
         ...(files ? ["artifacts", "criteria"] : []),
+        ...(request?.outputs === undefined ? [] : ["outputs"]),
       ]),
     ],
     properties: {

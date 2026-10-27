@@ -24,7 +24,21 @@ export const check = Effect.fn("RoutineOutputs.check")(function* (sessionID: str
     return yield* Effect.fail(new Error("The original output-scope session is unavailable."))
   }
   const current = found.value
-  if (current.metadata?.rayaRoutine === undefined) return undefined
+  if (current.metadata?.rayaRoutine === undefined) {
+    const original = yield* Lineage.origin()
+    if (original?.sessionID === sessionID)
+      return yield* Effect.fail(new Error("The original managed session lost its output-scope identity."))
+    if (original) {
+      const stores = yield* Effect.promise(() => import("@/storage/storage"))
+      const storage = yield* Effect.serviceOption(stores.Storage.Service)
+      if (Option.isNone(storage)) return yield* Effect.fail(new Error("The original startup scope is unavailable."))
+      const starts = yield* Effect.promise(() => import("./snapshot"))
+      const snapshot = yield* starts.RayaTaskSnapshot.make({ storage: storage.value }).find(original.id)
+      if (!snapshot || snapshot.outputs !== undefined)
+        return yield* Effect.fail(new Error("Scoped worker execution cannot escape through a child session."))
+    }
+    return undefined
+  }
   if (actor === undefined)
     return yield* Effect.fail(new Error("The original output-scope execution owner is unavailable."))
   const identity = yield* Schema.decodeUnknownEffect(record)(current.metadata?.rayaRoutine)

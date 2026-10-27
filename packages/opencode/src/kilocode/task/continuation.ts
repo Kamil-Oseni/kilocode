@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import type { Storage } from "@/storage/storage"
 import { RayaTask } from "."
@@ -9,7 +9,8 @@ import { isDeepStrictEqual } from "node:util"
 import { RayaTaskExecution } from "./execution"
 import { SessionID } from "@/session/schema"
 import { Trigger } from "./trigger"
-import { Outputs } from "./output-scope"
+import { Outputs, pinned } from "./output-scope"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 
 export const record = Schema.Struct({
   version: Schema.Literals([1, 2]),
@@ -42,6 +43,32 @@ export function continuation(input: {
     if (raw === undefined) return true
     const identity = yield* Schema.decodeUnknownEffect(record)(raw).pipe(Effect.orElseSucceed(() => undefined))
     if (!identity) return false
+    const scope = yield* Effect.gen(function* () {
+      if (!identity.delegationID) return identity.outputs === undefined
+      if (!input.database) return false
+      const module = yield* Effect.promise(() => import("./delegation"))
+      const row = yield* module.RayaTaskDelegation.make(input.database).get(identity.delegationID)
+      const starts = yield* Effect.promise(() => import("./snapshot"))
+      const saved = yield* starts.RayaTaskSnapshot.make(input).find(identity.runID)
+      if (
+        !saved ||
+        row.recipientID !== identity.agentID ||
+        row.childRunID !== identity.runID ||
+        row.sessionID !== input.session.id ||
+        row.organizationID !== identity.organizationID ||
+        row.organizationRevision !== identity.organizationRevision ||
+        (row.state !== "running" && row.state !== "needs_input") ||
+        !isDeepStrictEqual(row.outputs, identity.outputs) ||
+        !isDeepStrictEqual(saved.outputs, row.outputs)
+      )
+        return false
+      if (row.outputs === undefined) return true
+      const fs = yield* Effect.serviceOption(FSUtil.Service)
+      if (Option.isNone(fs)) return false
+      yield* pinned(fs.value, row.outputs)
+      return true
+    }).pipe(Effect.catchCause(() => Effect.succeed(false)))
+    if (!scope) return false
     const execution = RayaTaskExecution.make(input.storage)
     const admit = (run: RayaTask.Run) =>
       execution.authorized(run).pipe(

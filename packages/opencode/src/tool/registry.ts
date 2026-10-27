@@ -116,6 +116,7 @@ export interface Interface {
     agent: Agent.Info
     permission?: PermissionV1.Ruleset
     networkRestricted?: boolean // kilocode_change - hide network-backed code-mode catalogs in restricted sessions
+    nativeOnly?: boolean // kilocode_change - exact scoped runs never expose opaque plugin code
     trustedOnly?: boolean // kilocode_change - Routine sessions reject project/local plugin tools
   }) => Effect.Effect<Tool.Def[]>
   // kilocode_change end
@@ -387,6 +388,7 @@ const layer = Layer.effect(
       const cfg = yield* config.get() // kilocode_change
       const authority = input.trustedOnly ? Permission.merge(input.agent.permission, input.permission ?? []) : undefined // kilocode_change
       const filtered = (yield* all()).filter((tool) => {
+        if (input.nativeOnly && !ToolNetwork.isBuiltin(tool)) return false // kilocode_change
         if (input.trustedOnly && !ToolNetwork.isBuiltin(tool) && !ToolTrust.check(tool)) return false // kilocode_change
         if (authority && !pathVisible(tool.id, authority)) return false // kilocode_change - retain path-granted file tools in discovery
         if (!KiloToolRegistry.available(tool, input.agent)) return false // kilocode_change
@@ -416,7 +418,7 @@ const layer = Layer.effect(
             parameters: tool.parameters,
             jsonSchema: tool.jsonSchema,
           }
-          yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          if (!input.nativeOnly) yield* plugin.trigger("tool.definition", { toolID: tool.id }, output) // kilocode_change
           const jsonSchema =
             output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
               ? output.jsonSchema

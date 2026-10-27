@@ -60,6 +60,7 @@ import { make as reportOrigin } from "./report-origin"
 import { RayaTaskWait } from "./wait-notice"
 import { final } from "./final-report"
 import { verify } from "./final-output"
+import * as Files from "./output-scope"
 import { bound as reviewed } from "@/kilocode/goal/review-source"
 
 const WAIT = "waiting on you"
@@ -372,6 +373,21 @@ export namespace RayaTaskRunner {
       if (organizations && ((yield* organizations.stopped(sender.id)) || (yield* organizations.stopped(recipient.id))))
         return yield* new RayaTask.GuardError({ message: "This worker's organization is stopping or archived." })
       const session = yield* input.sessions.get(run.sessionID)
+      const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+        Effect.mapError(
+          () => new RayaTask.GuardError({ message: "The original output-scope identity is unavailable." }),
+        ),
+      )
+      if (!isDeepStrictEqual(snapshot.outputs, row.outputs) || !isDeepStrictEqual(identity.outputs, row.outputs))
+        return yield* new RayaTask.GuardError({ message: "The immutable delegated output scope changed." })
+      if (row.outputs !== undefined) {
+        const fs = yield* Effect.serviceOption(FSUtil.Service)
+        if (Option.isNone(fs))
+          return yield* new RayaTask.GuardError({ message: "Output scope filesystem validation is unavailable." })
+        yield* Files.pinned(fs.value, row.outputs).pipe(
+          Effect.mapError(() => new RayaTask.GuardError({ message: "A declared output target changed." })),
+        )
+      }
       const rules = yield* open(
         recipient.dir,
         Effect.gen(function* () {
@@ -629,7 +645,9 @@ export namespace RayaTaskRunner {
       if (strict)
         return effect.pipe(
           Effect.catchTag("RayaTask.NotFoundError", () =>
-            Effect.fail(new RayaTask.GuardError({ kind: "unavailable", message: "The worker run could not be retired." })),
+            Effect.fail(
+              new RayaTask.GuardError({ kind: "unavailable", message: "The worker run could not be retired." }),
+            ),
           ),
         )
       return effect.pipe(
@@ -808,6 +826,7 @@ export namespace RayaTaskRunner {
           runID?: string
           delegationID?: string
           criteria?: Criteria
+          outputs?: typeof Files.Outputs.Type
           budget?: RayaGoal.Budget
           bind?: { source: string; sessionID: SessionID }
         },
@@ -868,6 +887,7 @@ export namespace RayaTaskRunner {
                     at: owner.at,
                     definition: origin ? { ...item, sourceSessionID: origin, reportSessionID: origin } : item,
                     objective,
+                    ...(opts?.outputs === undefined ? {} : { outputs: opts.outputs }),
                     ...(admitted.organization?.policy
                       ? {
                           organizationPolicy: {
@@ -894,6 +914,7 @@ export namespace RayaTaskRunner {
                             scheduleVersion: item.scheduleVersion ?? 1,
                             trigger: admitted.selected.trigger,
                             ...(opts?.delegationID ? { delegationID: opts.delegationID } : {}),
+                            ...(opts?.outputs === undefined ? {} : { outputs: opts.outputs }),
                             ...(item.budget ? { budget: item.budget } : {}),
                             ...(admitted.organization
                               ? {
@@ -1386,7 +1407,8 @@ export namespace RayaTaskRunner {
           identity.scheduleVersion !== (prior.scheduleVersion ?? 1) ||
           !isDeepStrictEqual(identity.trigger, prior.trigger) ||
           identity.organizationID !== taken.organizationID ||
-          identity.organizationRevision !== taken.organizationRevision
+          identity.organizationRevision !== taken.organizationRevision ||
+          !isDeepStrictEqual(identity.outputs, taken.outputs)
         )
           return yield* new RayaTask.GuardError({
             message: "This delegation's saved run identity is inconsistent and needs recovery review.",
@@ -1443,6 +1465,7 @@ export namespace RayaTaskRunner {
         objective: taken.objective,
         expected: taken.expected,
         criteria: taken.criteria,
+        outputs: taken.outputs,
         context: taken.context,
         deadline: taken.deadline,
         budget: taken.budget,
@@ -1455,6 +1478,7 @@ export namespace RayaTaskRunner {
         runID: taken.childRunID,
         delegationID: taken.id,
         criteria: taken.criteria,
+        outputs: taken.outputs,
         budget: taken.budget === undefined ? undefined : { modelCost: taken.budget },
         guard: Effect.gen(function* () {
           const organization = taken.organizationID

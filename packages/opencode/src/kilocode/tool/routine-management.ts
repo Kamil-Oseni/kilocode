@@ -28,6 +28,7 @@ import { workflow } from "./workflow-request"
 import { confirm } from "./routine-confirmation"
 import { SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
+import { Outputs } from "@/kilocode/task/output-scope"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoal } from "@/kilocode/goal"
 import * as ToolJsonSchema from "@/tool/json-schema"
@@ -212,6 +213,10 @@ const DelegateWork = Schema.Struct({
   }),
   objective: Text,
   expected: Schema.optional(Text),
+  outputs: Schema.optional(Outputs).annotate({
+    description:
+      "Absolute exact files this recipient may create or change. Use [] for read-only work. These must be disjoint from every other stage's declared outputs, including completed stages. Inputs and child outputs are not this worker's outputs. Existing saved permissions still apply. Scoped jobs cannot use shell, opaque tools or file transfer between stages.",
+  }),
   criteria: Schema.optional(Criteria).annotate({
     description:
       "Acceptance criteria for every requested deliverable and handoff in this work request. Define verification actions from the owner's requested outcomes, not factual answers to assume. Never introduce unsupported business facts or requirements absent from the owner request; source-derived facts require actual read evidence and retain their original observation dates. Unknown facts stay unknown. A required handoff needs its own criterion verifying accepted delegation with the actual files. Each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
@@ -247,6 +252,10 @@ const AssignOrganizationWork = Schema.Struct({
   }),
   objective: Text,
   expected: Schema.optional(Text),
+  outputs: Schema.optional(Outputs).annotate({
+    description:
+      "Absolute exact files this recipient may create or change. Use [] for read-only work. These must be disjoint from every other stage's declared outputs, including completed stages. Inputs and child outputs are not this worker's outputs. Existing saved permissions still apply. Scoped jobs cannot use shell, opaque tools or file transfer between stages.",
+  }),
   criteria: Schema.optional(Criteria).annotate({
     description:
       "Acceptance criteria for every requested deliverable and handoff in this work request. Define verification actions from the owner's requested outcomes, not factual answers to assume. Never introduce unsupported business facts or requirements absent from the owner request; source-derived facts require actual read evidence and retain their original observation dates. Unknown facts stay unknown. A required handoff needs its own criterion verifying accepted delegation with the actual files. Each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
@@ -1100,7 +1109,10 @@ export function routineManagementTools(input: {
           const source = `delegate:${digest(
             JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, sender.id, organization.id]),
           ).slice(0, 48)}`
-          const context = yield* preserve(incoming?.context, incoming?.context ? params.context : params.context?.trim())
+          const context = yield* preserve(
+            incoming?.context,
+            incoming?.context ? params.context : params.context?.trim(),
+          )
           const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
           const request = {
             source,
@@ -1113,6 +1125,7 @@ export function routineManagementTools(input: {
             objective: params.objective.trim(),
             expected: params.expected?.trim(),
             criteria: params.criteria,
+            outputs: params.outputs,
             context,
             deadline: params.deadline,
             budget: params.budget,
@@ -1136,6 +1149,7 @@ export function routineManagementTools(input: {
             record.objective !== params.objective.trim() ||
             record.expected !== params.expected?.trim() ||
             !isDeepStrictEqual(record.criteria, params.criteria) ||
+            !isDeepStrictEqual(record.outputs, params.outputs) ||
             record.context !== context ||
             record.deadline !== params.deadline ||
             (!inherited && record.budget !== params.budget) ||
@@ -1222,6 +1236,12 @@ export function routineManagementTools(input: {
                 'Starting saved-team work requires request-specific acceptance criteria in the criteria array. Each item must include id, description and verification, for example {"id":"research","description":"Save the requested research file","verification":"Read the saved file and cite its evidence"}. Add a separate criterion for any required accepted file handoff; a planning reply must not complete the job.',
               ),
             )
+          if (start && params.outputs === undefined)
+            return yield* Effect.fail(
+              new Error(
+                "Starting saved-team work requires outputs: absolute exact files this first worker may change, or [] for read-only work. List later stages' outputs only in their own delegate_work request.",
+              ),
+            )
           if (
             start &&
             forward(`${params.objective}\n${params.expected ?? ""}`) &&
@@ -1297,12 +1317,15 @@ export function routineManagementTools(input: {
               objective: params.objective.trim(),
               expected: params.expected?.trim(),
               criteria: params.criteria,
+              outputs: params.outputs,
               context,
               deadline: params.deadline,
               budget: params.budget,
             },
             { reportSessionID: ctx.sessionID },
           )
+          if (!isDeepStrictEqual(record.outputs, params.outputs))
+            return yield* Effect.fail(new Error("The saved output scope does not match this request."))
           if (!isDeepStrictEqual(record.criteria, params.criteria))
             return yield* Effect.fail(new Error("The saved work criteria do not match this request."))
           const reason = record.reason ? ` ${record.reason}` : ""

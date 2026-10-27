@@ -473,13 +473,17 @@ it.instance("a completed routine repairs its original report after publication f
     const execution = RayaTaskExecution.make(ctx.storage)
     yield* execution.enter(ctx.run, Effect.void)
     expect((yield* execution.receipt(ctx.run))?.state).toBe("idle")
-    const fault = { armed: true, hits: 0 }
+    const fault = { armed: true, hits: 0, writes: 0, indexes: 0, reads: 0 }
     const storage: Storage.Interface = {
       ...ctx.storage,
+      readBounded: <T>(key: string[], limit: number) => {
+        if (key[0] === "raya" && key[1] === "routine-reports") fault.reads += 1
+        return ctx.storage.readBounded<T>(key, limit)
+      },
       replace: (key, value) =>
         Effect.gen(function* () {
+          if (key[0] === "raya" && key[1] === "routine-report-index") fault.indexes += 1
           if (
-            fault.armed &&
             key[0] === "raya" &&
             key[1] === "routine-reports" &&
             key[2] === createHash("sha256").update(ctx.run.id).digest("hex") &&
@@ -488,8 +492,11 @@ it.instance("a completed routine repairs its original report after publication f
             "status" in value &&
             value.status === "complete"
           ) {
-            fault.hits += 1
-            return yield* Effect.die(new Error("Injected terminal requester-card write failure"))
+            fault.writes += 1
+            if (fault.armed) {
+              fault.hits += 1
+              return yield* Effect.die(new Error("Injected terminal requester-card write failure"))
+            }
           }
           yield* ctx.storage.replace(key, value)
         }),
@@ -505,10 +512,73 @@ it.instance("a completed routine repairs its original report after publication f
     )
     fault.armed = false
     const fresh = RayaTaskRunner.make({ ...ctx, storage: { ...ctx.storage } })
-    const replacement = yield* ctx.goals.create(ctx.chat.id, "A newer owner goal must remain untouched")
+    const newer = yield* ctx.goals.create(ctx.chat.id, "A newer owner goal must remain untouched")
+    if (!newer.intent) return yield* Effect.die(new Error("The actual replacement Goal has no intent"))
+    const marker = {
+      version: 1 as const,
+      dispatchID: crypto.randomUUID(),
+      messageID: ctx.user.id,
+      oldIntent: "original-fixture-intent",
+      intent: newer.intent,
+      source: "attached-followup",
+      outcome: "error" as const,
+      execution: "a".repeat(64),
+      at: Date.now(),
+    }
+    const held = yield* Schema.decodeUnknownEffect(RayaGoal.State)({
+      ...newer,
+      status: "blocked",
+      activeAt: undefined,
+      blockedReason: "Review the uncertain reply before continuing",
+      dispatch: {
+        id: marker.dispatchID,
+        messageID: marker.messageID,
+        intent: marker.oldIntent,
+        phase: "finished",
+        queuedAt: marker.at,
+      },
+      replyRecovery: marker,
+    })
+    yield* ctx.storage.replace(["raya", "goal", ctx.chat.id], held)
     const messages = yield* ctx.sessions.messages({ sessionID: ctx.chat.id })
     const destination = yield* ctx.sessions.messages({ sessionID: target })
     const runs = yield* fresh.tasks.runsFor(ctx.agent.id)
+    // The manual fixture is disabled; notification repair must not depend on
+    // scheduling eligibility or create a new execution owner.
+    expect((yield* original.tasks.get(ctx.agent.id)).enabled).toBe(false)
+    const before = Date.now()
+    yield* original.tick(before)
+    expect((yield* reports.page({ sessionID: target })).items.find((card) => card.id === initial.id)?.status).toBe(
+      "running",
+    )
+    expect(fault.writes).toBe(1)
+    expect(yield* ctx.goals.get(ctx.chat.id)).toEqual(held)
+    const reviewed = yield* ctx.goals.edit(ctx.chat.id, { status: "active", expectedIntent: newer.intent })
+    const replacement = reviewed.state
+    expect(replacement.replyRecovery?.reviewedAt).toBeDefined()
+    // Exercise the real retry throttle after explicit review; no fake clock.
+    yield* Effect.sleep(Math.max(0, before + 30_050 - Date.now()))
+    yield* original.tick(Date.now())
+    const warm = (yield* reports.page({ sessionID: target })).items.find((card) => card.id === initial.id)
+    if (!warm) return yield* Effect.die(new Error("The warm completed report is unavailable"))
+    expect(warm.status).toBe("complete")
+    expect(warm.runRevision).toBe(terminal?.revision)
+    expect(warm.reportSessionID).toBe(target)
+    expect(fault.writes).toBe(2)
+    const indexes = fault.indexes
+    const reads = fault.reads
+    yield* original.tick(Date.now())
+    expect(fault.writes).toBe(2)
+    expect(fault.indexes).toBe(indexes)
+    expect(fault.reads).toBe(reads)
+    expect((yield* reports.page({ sessionID: target })).items.filter((card) => card.runID === ctx.run.id)).toEqual([
+      warm,
+    ])
+    expect(yield* original.tasks.runsFor(ctx.agent.id)).toEqual(runs)
+    expect(yield* ctx.goals.get(ctx.chat.id)).toEqual(replacement)
+    expect(yield* ctx.sessions.messages({ sessionID: ctx.chat.id })).toEqual(messages)
+    expect(yield* ctx.sessions.messages({ sessionID: target })).toEqual(destination)
+    expect(yield* execution.receipt(ctx.run)).toBeUndefined()
     yield* fresh.revive()
     const recovered = (yield* reports.page({ sessionID: target })).items.find((card) => card.id === initial?.id)
     if (!recovered) return yield* Effect.die(new Error("The original completed report is unavailable"))

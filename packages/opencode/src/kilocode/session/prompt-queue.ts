@@ -10,6 +10,7 @@ type Slot = {
   readonly previous: Promise<void>
   readonly done: PromiseWithResolvers<void>
   readonly tail: Promise<void>
+  readonly ready: { settled: boolean }
 }
 
 type Target = {
@@ -25,8 +26,8 @@ export namespace KiloSessionPromptQueue {
   const dropped = new Map<SessionID, Set<MessageID>>()
   // Monotonic arrival counter per session. latest holds the seq of the most
   // recently enqueued slot; activeSince snapshots latest at the moment the
-  // currently running slot actually started. hasFollowup returns true only when
-  // a newer slot was enqueued after the active one began running.
+  // currently running slot actually started. hasFollowup compares that snapshot
+  // with actual remaining waiters, excluding cancelled arrival history.
   const latest = new Map<SessionID, number>()
   const activeSince = new Map<SessionID, number>()
   // FIFO waiting list of user message IDs that have been
@@ -34,6 +35,8 @@ export namespace KiloSessionPromptQueue {
   // own message is never in this list. Published via session.queue.changed so
   // remote clients can reconcile "Queued" badges.
   const waiting = new Map<SessionID, MessageID[]>()
+  // Arrival sequences exist only for actual waiting slots, never cancelled history.
+  const arrivals = new Map<SessionID, Map<MessageID, number>>()
   let seq = 0
 
   /** @internal - test-only helper */
@@ -44,7 +47,8 @@ export namespace KiloSessionPromptQueue {
       dropped.has(sessionID) ||
       latest.has(sessionID) ||
       activeSince.has(sessionID) ||
-      waiting.has(sessionID)
+      waiting.has(sessionID) ||
+      arrivals.has(sessionID)
     )
   }
 
@@ -70,6 +74,12 @@ export namespace KiloSessionPromptQueue {
   // actually changes; suppress the redundant empty→empty transition to keep
   // the bus quiet. Replay uses snapshot() directly so it is never affected.
   const publishIfChanged = (sessionID: SessionID, next: MessageID[]) => {
+    const pending = arrivals.get(sessionID)
+    if (pending) {
+      const ids = new Set(next)
+      for (const id of pending.keys()) if (!ids.has(id)) pending.delete(id)
+      if (!pending.size) arrivals.delete(sessionID)
+    }
     const prev = waiting.get(sessionID) ?? []
     if (prev.length === 0 && next.length === 0) return
     if (prev.length === next.length && prev.every((id, i) => id === next[i])) return
@@ -136,9 +146,9 @@ export namespace KiloSessionPromptQueue {
    * the now-superseded turn.
    */
   export function hasFollowup(sessionID: SessionID): boolean {
-    const l = latest.get(sessionID) ?? 0
     const a = activeSince.get(sessionID) ?? 0
-    return l > a && (waiting.get(sessionID)?.length ?? 0) > 0
+    const pending = arrivals.get(sessionID)
+    return (waiting.get(sessionID) ?? []).some((id) => (pending?.get(id) ?? 0) > a)
   }
 
   export function scope(sessionID: SessionID, messages: MessageV2.WithParts[]) {
@@ -194,6 +204,10 @@ export namespace KiloSessionPromptQueue {
         // on the transition that actually mutates the waiting list.
         const startsImmediately = !tails.has(sessionID)
         const previous = tails.get(sessionID) ?? Promise.resolve()
+        const ready = { settled: startsImmediately }
+        void previous.then(() => {
+          ready.settled = true
+        })
         const done = Promise.withResolvers<void>()
         // Keep later queued prompts moving; each caller still observes its own failure.
         const tail = settle(previous).then(() => done.promise)
@@ -201,9 +215,12 @@ export namespace KiloSessionPromptQueue {
         if (!startsImmediately) {
           // Another slot is still running; this prompt joins the waiting FIFO.
           const list = waiting.get(sessionID) ?? []
+          const pending = arrivals.get(sessionID) ?? new Map<MessageID, number>()
+          pending.set(target, mine)
+          arrivals.set(sessionID, pending)
           publishIfChanged(sessionID, [...list, target])
         }
-        return { seq: mine, version: version(sessionID), target, previous, done, tail } satisfies Slot
+        return { seq: mine, version: version(sessionID), target, previous, done, tail, ready } satisfies Slot
       }),
       (slot) =>
         reserved.pipe(
@@ -211,8 +228,8 @@ export namespace KiloSessionPromptQueue {
           Effect.flatMap(() => {
             if (isCancelled(sessionID, slot)) return cancelled
             // Snapshot the latest seq at the moment this slot actually starts
-            // running. hasFollowup compares against this value so the slot only
-            // breaks when something newer than itself arrives.
+            // running. Only remaining waiters that arrive after this snapshot
+            // can supersede the active slot.
             activeSince.set(sessionID, latest.get(sessionID) ?? slot.seq)
             // This slot is taking over, so drop its
             // own message ID from the head of the waiting list (if present)
@@ -239,17 +256,32 @@ export namespace KiloSessionPromptQueue {
         ),
       (slot) =>
         Effect.sync(() => {
+          const list = waiting.get(sessionID) ?? []
+          if (list.includes(slot.target))
+            publishIfChanged(
+              sessionID,
+              list.filter((id) => id !== slot.target),
+            )
           slot.done.resolve()
-          if (tails.get(sessionID) !== slot.tail) return
-          tails.delete(sessionID)
-          versions.delete(sessionID)
-          targets.delete(sessionID)
-          dropped.delete(sessionID)
-          latest.delete(sessionID)
-          activeSince.delete(sessionID)
-          // Last slot of the session finished cleanly;
-          // drop any lingering waiting entry and clear internal state.
-          waiting.delete(sessionID)
+          const clear = () => {
+            if (tails.get(sessionID) !== slot.tail) return
+            tails.delete(sessionID)
+            versions.delete(sessionID)
+            targets.delete(sessionID)
+            dropped.delete(sessionID)
+            latest.delete(sessionID)
+            activeSince.delete(sessionID)
+            waiting.delete(sessionID)
+            arrivals.delete(sessionID)
+          }
+          // A cancelled latest waiter still owns a tail chained to its live
+          // predecessor. Retire the caller promptly, but preserve that barrier
+          // and the predecessor's active scope until the original tail settles.
+          if (slot.ready.settled) {
+            clear()
+            return
+          }
+          void slot.tail.then(clear)
         }),
     )
   }

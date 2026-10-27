@@ -323,7 +323,7 @@ export namespace RayaTaskRunner {
       const delegated = identity?.delegationID && errands ? yield* errands.get(identity.delegationID) : undefined
       if (delegated && (delegated.recipientID !== run.agentID || delegated.childRunID !== run.id))
         yield* Effect.die(new Error("Routine report delegation identity changed."))
-      yield* reports.publish({
+      return yield* reports.publish({
         agent: saved.definition,
         run,
         ...(run.trigger?.kind === "timer" ? { occurrenceID: run.trigger.id } : {}),
@@ -332,6 +332,7 @@ export namespace RayaTaskRunner {
     })
     const publish = (run: RayaTask.Run) =>
       report(run).pipe(
+        Effect.asVoid,
         Effect.catchCause((cause) =>
           Cause.hasInterrupts(cause)
             ? Effect.failCause(cause)
@@ -3206,6 +3207,8 @@ export namespace RayaTaskRunner {
     const republish = (run: RayaTask.Run) =>
       Effect.gen(function* () {
         if (RayaTask.pending(run)) return
+        const goal = yield* goals.get(run.sessionID)
+        if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) return
         const latest = (yield* tasks.runsFor(run.agentID)).find((item) => item.id === run.id)
         if (!isDeepStrictEqual(latest, run))
           return yield* new RayaTask.GuardError({ message: "The saved report's retained run changed." })
@@ -3233,7 +3236,7 @@ export namespace RayaTaskRunner {
         // notification after the original execution has released ownership.
         if (yield* execution.retained(run)) return
         if (run.status === "stopped" && !(yield* original(run))) return
-        yield* report(run)
+        return (yield* report(run)) !== undefined
       }).pipe(
         Effect.mapError((err) =>
           err instanceof RayaTask.GuardError
@@ -3243,14 +3246,31 @@ export namespace RayaTaskRunner {
         Effect.catchCause((cause) =>
           Cause.hasInterrupts(cause)
             ? Effect.failCause(cause)
-            : Effect.sync(() =>
+            : Effect.sync(() => {
                 log.error("routine report recovery remains pending", {
                   runID: run.id,
                   err: Cause.squash(cause),
-                }),
-              ),
+                })
+                return false
+              }),
         ),
       )
+
+    const reporting = new Map<string, { at: number; done: Map<string, number> }>()
+    const retry = Effect.fn("RayaTaskRunner.retryReports")(function* (id: string) {
+      const now = Date.now()
+      const prior = reporting.get(id)
+      if (prior && now >= prior.at && now - prior.at < 30_000) return
+      const state = { at: now, done: new Map<string, number>() }
+      reporting.set(id, state)
+      // History retains at most fifty terminal runs plus its schedule anchor.
+      // Remember only exact successful revisions in that bounded history.
+      const runs = (yield* tasks.runsFor(id)).filter((run) => !RayaTask.pending(run)).slice(-51)
+      for (const run of runs) {
+        const revision = run.revision ?? 1
+        if (prior?.done.get(run.id) === revision || (yield* republish(run))) state.done.set(run.id, revision)
+      }
+    })
 
     const reboot = Effect.fn("RayaTaskRunner.reboot")(function* (item: RayaTask.Agent) {
       if (organizations && (yield* organizations.stopped(item.id))) return
@@ -3386,13 +3406,16 @@ export namespace RayaTaskRunner {
         Effect.andThen(lapse(from)),
         Effect.andThen(schedule ? schedule.clean() : Effect.void),
         Effect.andThen(tasks.list()),
-        Effect.flatMap((items) =>
-          Effect.forEach(
+        Effect.flatMap((items) => {
+          const ids = new Set(items.map((item) => item.id))
+          for (const id of reporting.keys()) if (!ids.has(id)) reporting.delete(id)
+          return Effect.forEach(
             items,
             (item) =>
               Effect.gen(function* () {
                 if (organizations && (yield* organizations.stopped(item.id))) return undefined
                 yield* tasks.enforce(item.id)
+                yield* retry(item.id)
                 yield* reconcile(item.id)
                 if (schedule) {
                   yield* schedule.pulse(item.id)
@@ -3427,8 +3450,8 @@ export namespace RayaTaskRunner {
                 return undefined
               }).pipe(Effect.catch(() => Effect.void)),
             { concurrency: 4, discard: true },
-          ),
-        ),
+          )
+        }),
       )
 
     const tick = (from: number) =>

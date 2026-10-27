@@ -1,6 +1,6 @@
 import path from "path"
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { Effect, ManagedRuntime } from "effect"
+import { Effect, Exit, Fiber, ManagedRuntime } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import { Bus } from "../../src/bus"
@@ -137,12 +137,7 @@ function scoped<T>(dir: string, fn: (prompt: SessionPrompt.Interface, workers: T
       const prompt = yield* SessionPrompt.Service
       const workers = yield* TaskWorker.Service
       return yield* Effect.promise(() => fn(prompt, workers))
-    }).pipe(
-      Effect.provide(prompt),
-      provideInstance(dir),
-      Effect.provide(testInstanceStoreLayer),
-      Effect.scoped,
-    ),
+    }).pipe(Effect.provide(prompt), provideInstance(dir), Effect.provide(testInstanceStoreLayer), Effect.scoped),
   )
 }
 
@@ -1591,4 +1586,209 @@ describe("session prompt queue", () => {
       })
     })
   })
+})
+
+for (const mode of ["interrupted", "reservation failure"]) {
+  test(`retains the active predecessor when the latest queued prompt is ${mode}`, async () => {
+    await using tmp = await tmpdir({ git: true })
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const session = SessionID.make(`ses_queue_barrier_${mode.replaceAll(" ", "_")}`)
+        const a = MessageID.make("msg_barrier_a"),
+          b = MessageID.make("msg_barrier_b"),
+          c = MessageID.make("msg_barrier_c")
+        const events: string[][] = []
+        const off = Bus.subscribe(KiloSession.Event.QueueChanged, (event) => {
+          if (event.properties.sessionID === session) events.push([...event.properties.queued])
+        })
+        const started = Promise.withResolvers<void>()
+        const release = Promise.withResolvers<void>()
+        const reserved = Promise.withResolvers<void>()
+        const later = Promise.withResolvers<void>()
+        const entered: string[] = []
+        const first = Effect.runPromise(
+          KiloSessionPromptQueue.enqueue(
+            session,
+            a,
+            Effect.gen(function* () {
+              entered.push("a")
+              started.resolve()
+              yield* Effect.promise(() => release.promise)
+              expect(KiloSessionPromptQueue.active(session)).toBe(a)
+              return "a"
+            }),
+            Effect.succeed("cancelled"),
+          ),
+        )
+        await started.promise
+        const queued = Effect.runFork(
+          KiloSessionPromptQueue.enqueue(
+            session,
+            b,
+            Effect.sync(() => {
+              entered.push("b")
+              return "b"
+            }),
+            Effect.succeed("cancelled"),
+            Effect.sync(() => {
+              reserved.resolve()
+              if (mode === "reservation failure") throw new Error("Exact queued reservation failed")
+            }),
+          ),
+        )
+        let third: Promise<string> | undefined
+        try {
+          await reserved.promise
+          const stopped =
+            mode === "interrupted"
+              ? Fiber.interrupt(queued).pipe(Effect.andThen(Fiber.await(queued)))
+              : Fiber.await(queued)
+          const timer: { id?: ReturnType<typeof setTimeout> } = {}
+          const exit = await Promise.race([
+            Effect.runPromise(stopped),
+            new Promise<never>((_, reject) => {
+              timer.id = setTimeout(() => reject(new Error("Queued cancellation waited for its predecessor")), 2000)
+            }),
+          ]).finally(() => clearTimeout(timer.id))
+          expect(Exit.isFailure(exit)).toBe(true)
+          expect(KiloSessionPromptQueue.active(session)).toBe(a)
+          expect(KiloSessionPromptQueue.snapshot(session)).toEqual([])
+          expect(KiloSessionPromptQueue.hasFollowup(session)).toBe(false)
+          third = Effect.runPromise(
+            KiloSessionPromptQueue.enqueue(
+              session,
+              c,
+              Effect.sync(() => {
+                entered.push("c")
+                expect(KiloSessionPromptQueue.active(session)).toBe(c)
+                return "c"
+              }),
+              Effect.succeed("cancelled"),
+              Effect.sync(() => later.resolve()),
+            ),
+          )
+          await later.promise
+          expect(entered).toEqual(["a"])
+          expect(KiloSessionPromptQueue.active(session)).toBe(a)
+          expect(KiloSessionPromptQueue.snapshot(session)).toEqual([c])
+          expect(KiloSessionPromptQueue.hasFollowup(session)).toBe(true)
+          release.resolve()
+          expect(await first).toBe("a")
+          expect(await third).toBe("c")
+          expect(entered).toEqual(["a", "c"])
+          expect(KiloSessionPromptQueue.snapshot(session)).toEqual([])
+          expect(KiloSessionPromptQueue.active(session)).toBeUndefined()
+          expect(KiloSessionPromptQueue._hasInternalState(session)).toBe(false)
+          await Effect.runPromise(
+            pollWithTimeout(
+              Effect.sync(() => (events.length >= 4 ? true : undefined)),
+              "Queue transitions were not published",
+              "2 seconds",
+            ),
+          )
+          expect(events).toEqual([[b], [], [c], []])
+        } finally {
+          release.resolve()
+          await Effect.runPromise(Fiber.interrupt(queued))
+          await Promise.allSettled([first, ...(third ? [third] : [])])
+          off()
+        }
+      },
+    })
+  })
+}
+
+test("cancelled newer waiter does not turn an older queued prompt into a follow-up", async () => {
+  const session = SessionID.make("ses_queue_arrival_ownership")
+  const a = MessageID.make("msg_arrival_a"),
+    b = MessageID.make("msg_arrival_b"),
+    c = MessageID.make("msg_arrival_c"),
+    d = MessageID.make("msg_arrival_d")
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const active = Promise.withResolvers<void>()
+  const finish = Promise.withResolvers<void>()
+  const reserved = Promise.withResolvers<void>()
+  const order: string[] = []
+  const enqueue = (id: MessageID, work: Effect.Effect<string>) =>
+    KiloSessionPromptQueue.enqueue(session, id, work, Effect.succeed("cancelled"))
+  const first = Effect.runPromise(
+    enqueue(
+      a,
+      Effect.gen(function* () {
+        order.push("a")
+        started.resolve()
+        yield* Effect.promise(() => release.promise)
+        return "a"
+      }),
+    ),
+  )
+  await started.promise
+  const second = Effect.runPromise(
+    enqueue(
+      b,
+      Effect.gen(function* () {
+        order.push("b")
+        active.resolve()
+        yield* Effect.promise(() => finish.promise)
+        expect(KiloSessionPromptQueue.active(session)).toBe(b)
+        return "b"
+      }),
+    ),
+  )
+  const third = Effect.runPromise(
+    enqueue(
+      c,
+      Effect.sync(() => {
+        order.push("c")
+        return "c"
+      }),
+    ),
+  )
+  let fourth: Fiber.Fiber<string> | undefined
+  try {
+    release.resolve()
+    expect(await first).toBe("a")
+    await active.promise
+    expect(KiloSessionPromptQueue.snapshot(session)).toEqual([c])
+    expect(KiloSessionPromptQueue.hasFollowup(session)).toBe(false)
+    fourth = Effect.runFork(
+      KiloSessionPromptQueue.enqueue(
+        session,
+        d,
+        Effect.sync(() => {
+          order.push("d")
+          return "d"
+        }),
+        Effect.succeed("cancelled"),
+        Effect.sync(() => reserved.resolve()),
+      ),
+    )
+    await reserved.promise
+    expect(KiloSessionPromptQueue.hasFollowup(session)).toBe(true)
+    await Effect.runPromise(Fiber.interrupt(fourth))
+    expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fourth)))).toBe(true)
+    expect(KiloSessionPromptQueue.snapshot(session)).toEqual([c])
+    expect(KiloSessionPromptQueue.active(session)).toBe(b)
+    expect(KiloSessionPromptQueue.hasFollowup(session)).toBe(false)
+    expect(order).toEqual(["a", "b"])
+    finish.resolve()
+    expect(await second).toBe("b")
+    expect(await third).toBe("c")
+    expect(order).toEqual(["a", "b", "c"])
+    await Effect.runPromise(
+      pollWithTimeout(
+        Effect.sync(() => (KiloSessionPromptQueue._hasInternalState(session) ? undefined : true)),
+        "The retired latest barrier did not prune its queue state",
+        "2 seconds",
+      ),
+    )
+    expect(KiloSessionPromptQueue._hasInternalState(session)).toBe(false)
+  } finally {
+    release.resolve()
+    finish.resolve()
+    if (fourth) await Effect.runPromise(Fiber.interrupt(fourth))
+    await Promise.allSettled([first, second, third])
+  }
 })

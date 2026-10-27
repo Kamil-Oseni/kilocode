@@ -215,7 +215,7 @@ const DelegateWork = Schema.Struct({
   expected: Schema.optional(Text),
   outputs: Schema.optional(Outputs).annotate({
     description:
-      "Absolute exact files this recipient may create or change. Use [] for read-only work. These must be disjoint from every other stage's declared outputs, including completed stages. Inputs and child outputs are not this worker's outputs. Existing saved permissions still apply. Scoped jobs cannot use shell, opaque tools or file transfer between stages.",
+      "Absolute exact files this recipient may create or change. Use [] for read-only work. These must be disjoint from every other stage's declared outputs, including completed stages. Inputs and child outputs are not this worker's outputs. Existing saved permissions still apply. Scoped jobs cannot use shell or opaque tools. Handoff files remain read inputs; they do not transfer write ownership.",
   }),
   criteria: Schema.optional(Criteria).annotate({
     description:
@@ -254,7 +254,7 @@ const AssignOrganizationWork = Schema.Struct({
   expected: Schema.optional(Text),
   outputs: Schema.optional(Outputs).annotate({
     description:
-      "Absolute exact files this recipient may create or change. Use [] for read-only work. These must be disjoint from every other stage's declared outputs, including completed stages. Inputs and child outputs are not this worker's outputs. Existing saved permissions still apply. Scoped jobs cannot use shell, opaque tools or file transfer between stages.",
+      "Absolute exact files this recipient may create or change. Use [] for read-only work. These must be disjoint from every other stage's declared outputs, including completed stages. Inputs and child outputs are not this worker's outputs. Existing saved permissions still apply. Scoped jobs cannot use shell or opaque tools. Handoff files remain read inputs; they do not transfer write ownership.",
   }),
   criteria: Schema.optional(Criteria).annotate({
     description:

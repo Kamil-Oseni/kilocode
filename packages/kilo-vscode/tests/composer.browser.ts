@@ -19,7 +19,7 @@ test("closing recovered pending tabs hides them for this view without discarding
   await expect
     .poll(async () => (await entries()).entries.find((entry) => entry.identity.pendingID === original)?.content.text)
     .toBe("Original recovered pending draft")
-  await page.reload()
+  await page.goto(`${url}&cold&initial=${encodeURIComponent(original)}`)
   const ids = () => page.evaluate(() => (window as Window & { __localTabs: { ids: () => string[] } }).__localTabs.ids())
   await expect.poll(ids).toContain(original)
   await page.evaluate(
@@ -27,6 +27,7 @@ test("closing recovered pending tabs hides them for this view without discarding
     original,
   )
   await expect.poll(ids).not.toContain(original)
+  await page.evaluate(() => (window as Window & { __releaseDraftOwner: () => void }).__releaseDraftOwner())
   await prompt.fill("A newer independent draft")
   await expect
     .poll(async () => (await entries()).entries.some((entry) => entry.content.text === "A newer independent draft"))

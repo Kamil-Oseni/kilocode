@@ -80,6 +80,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   // Closing hides a recovered composer in this view; its saved draft remains
   // recoverable on the next view load, or through an explicit open/add.
   const dismissed = new Set<string>()
+  const unresolved = new Map<string, string>()
   const key = (id: string) =>
     JSON.stringify([
       server.workspaceDirectory(),
@@ -87,6 +88,24 @@ export const LocalTabsProvider: ParentComponent = (props) => {
       durable.owner("sidebar:fallback"),
       id,
     ])
+  const hide = (id: string) => {
+    if (!durable.owner("sidebar:new-task")) {
+      unresolved.set(id, server.workspaceDirectory())
+      return
+    }
+    dismissed.add(key(id))
+  }
+  const bind = () => {
+    for (const [id, directory] of unresolved) {
+      if (directory !== server.workspaceDirectory()) {
+        unresolved.delete(id)
+        continue
+      }
+      if (!durable.owner("sidebar:new-task")) continue
+      dismissed.add(key(id))
+      unresolved.delete(id)
+    }
+  }
   const [catalog, setCatalog] = createSignal(0)
   const unsubscribe = durable.subscribe(() => setCatalog((value) => value + 1))
   onCleanup(unsubscribe)
@@ -115,6 +134,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
       discovery = undefined
       return
     }
+    bind()
     const owner = durable.owner("sidebar:new-task")
     if (!owner || discovery === owner) return
     discovery = owner
@@ -159,6 +179,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   }
   createEffect(() => {
     catalog()
+    bind()
     const remaining = origins.pending().filter((id) => !dismissed.has(key(id)))
     setIds((current) => [...new Set([...current, ...remaining])])
   })
@@ -174,6 +195,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   }
 
   const open = (id: string) => {
+    unresolved.delete(id)
     dismissed.delete(key(id))
     apply(openSessionTab(current(), id))
     focus(id)
@@ -193,6 +215,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   }
 
   const add = (id = pending()) => {
+    unresolved.delete(id)
     dismissed.delete(key(id))
     apply(addPendingTab(current(), id))
     focus(id)
@@ -200,7 +223,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
   }
 
   const close = (id: string) => {
-    if (isPendingTab(id)) dismissed.add(key(id))
+    if (isPendingTab(id)) hide(id)
     const before = active()
     const next = closeTab(current(), id, pending)
     apply(next)
@@ -213,7 +236,7 @@ export const LocalTabsProvider: ParentComponent = (props) => {
 
   const closeOthers = (id: string) => {
     const removed = ids().filter((tab) => tab !== id && isPendingTab(tab))
-    for (const pending of removed) dismissed.add(key(pending))
+    for (const pending of removed) hide(pending)
     const next = closeOtherTabs(current(), id)
     apply(next)
     focus(next.active)

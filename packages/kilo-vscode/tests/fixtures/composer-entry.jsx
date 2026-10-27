@@ -85,7 +85,10 @@ window.__changeRemoteDraft = async (identity, text) => {
 }
 window.__composerMessages = messages
 window.acquireVsCodeApi = () => ({
-  getState: () => undefined,
+  getState: () => {
+    const initial = new URLSearchParams(location.search).get("initial")
+    return initial ? { sidebarSessionTabIDs: [initial], sidebarActiveSessionTabID: initial } : undefined
+  },
   setState: () => {},
   postMessage: (msg) => {
     messages.push(msg)

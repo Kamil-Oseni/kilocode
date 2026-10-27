@@ -411,6 +411,7 @@ it.instance("a completed routine repairs its original report after publication f
     const runs = yield* fresh.tasks.runsFor(ctx.agent.id)
     yield* fresh.revive()
     const recovered = (yield* reports.page({ sessionID: target })).items.find((card) => card.id === initial?.id)
+    if (!recovered) return yield* Effect.die(new Error("The original completed report is unavailable"))
     expect(yield* fresh.tasks.runsFor(ctx.agent.id)).toEqual(runs)
     expect(yield* ctx.sessions.messages({ sessionID: ctx.chat.id })).toEqual(messages)
     expect(yield* execution.receipt(ctx.run)).toBeUndefined()

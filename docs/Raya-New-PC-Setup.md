@@ -1,3 +1,15 @@
+October 27, 2026 - Current installed 1c39 workflow outcome.
+
+Everyday Raya is `7.4.23-snapshot+1c39a4f183.local.1793086108035`. Its qualified installation preserves 4,641 saved files across four roots, 555 exact non-package payloads and unrelated registrations; compiler/package target success remains distinct from forced descendant-cleanup wrapper results. Detailed delivery receipts are in `Raya-Current-Readiness.md`.
+
+The actual installed `1c39a4f183` job `job-20261027-scoped-3ea62ba2` completed Researcher -> Builder -> Sales with actual scoped artifact handoffs and all five files preserved. Output quality did **not** pass: design/form requirements were omitted, verification claims were unsupported and links referred to absent targets. Canada Wide's seed website is correctly `canwidewc.ca`; its different email domain is not evidence that the website is wrong. Completion and handoff receipts are execution evidence, not factual or visual acceptance.
+
+A subsequent explicit read-only request incorrectly admitted one new Builder (`rdl_109eb4e9169e06b01de6a83a3ee7be6df176d4c85ea20211`). It had already completed before the HTTP-200 stop attempt, so it was not cancelled by the operator. No descendants were created, all five original file hashes remained unchanged, and active requests reached zero. The latest-request admission/catalog guard is being corrected in source and is **not installed**. Evidence: `.tmp/business-20261022/normal-service-8fd6a20e-d0c1-4cc0-b617-a0803f21477a/job-outcome-quality-and-readonly-failure-v1.json`, **2,017 bytes**, SHA-256 `b4cf44de4fd6c8fd19d2a74f3461e2351aed7ecf928f52c6e7616e7a47ec4483`.
+
+Original backend owner 35346 joined with outer exit zero, but progress records forced source closure/code 1, original source/helper exits 1 and readers joined. This is not a clean source-close pass. The owned 9B unload records `models: []`. Preserve the failed original outputs without replay or operator repair. Installed gates remain **2/9 (22.2%)**, overall readiness **unmeasured**; historical **48/100 / 38 unfinished** remain unchanged. Voice is deferred, cloud workers released and second-PC migration cancelled.
+
+Historical checkpoint retained below:
+
 October 27, 2026 — Live job exposed an assignment loop; narrow correction pending.
 
 Everyday Raya selects `7.4.23-snapshot+33ebc66429.local.1793076278099`. It includes dated source/onward-handoff guidance, manual queued-worker reporting, cancelled-ancestor admission/restart guards, retired-calendar card repair and Stop ordering/retirement fixes. Archive: 193,709,362 bytes, SHA-256 `fa42f26c69e6cc94db7ae37e689e391cb5d3556ae6109a77412da1f8e2e8166a`. Installed CLI: 309,460,480 bytes, SHA-256 `9e34d73f1d2ab97bece48a2069447c090067a3bbf063c7970005d025adba9112`.

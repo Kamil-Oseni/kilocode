@@ -27,6 +27,8 @@ import { durableDrafts } from "../../webview-ui/src/utils/durable-drafts"
 
 const messages = []
 const profile = new URLSearchParams(location.search).get("draft") ?? crypto.randomUUID()
+const restored = new URLSearchParams(location.search).has("restored")
+const box = restored ? "sidebar:new-task" : "fixture"
 let held
 window.__releaseDraftOwner = () => {
   if (held) {
@@ -57,7 +59,7 @@ window.__listDrafts = () =>
   relay({
     type: "composerDraftList",
     owner: profile,
-    box: "fixture",
+    box,
     requestID: crypto.randomUUID(),
     epoch: "fixture-list",
     generation: 1,
@@ -94,7 +96,7 @@ window.acquireVsCodeApi = () => ({
             type: "composerDraftState",
             epoch: msg.epoch,
             generation: 1,
-            owners: [{ box: "fixture", owner: profile }],
+            owners: (restored ? [box, "sidebar:fallback"] : [box]).map((box) => ({ box, owner: profile })),
             connected: true,
           }
           if (new URLSearchParams(location.search).has("cold")) held = state
@@ -379,6 +381,7 @@ function Fixture() {
     },
     hasModelOverride: () => false,
     status: () => (busy() ? "busy" : "idle"),
+    isSubmitting: () => false,
     abort: () => {
       window.__workStops = (window.__workStops ?? 0) + 1
       setBusy(false)
@@ -395,13 +398,14 @@ function Fixture() {
   }
   const Composer = () => {
     const tabs = useLocalTabs()
+    if (restored) window.__localTabs = tabs
     window.__draftTarget = () => tabs?.pending() ?? pending()
     window.__selectDraft = (value) => {
       if (tabs) return tabs.select(value)
       setID("")
       setPending(value)
     }
-    return <PromptInput boxId="fixture" pendingSessionID={tabs?.pending()} />
+    return <PromptInput boxId={box} pendingSessionID={tabs?.pending()} />
   }
   return (
     <ServerContext.Provider

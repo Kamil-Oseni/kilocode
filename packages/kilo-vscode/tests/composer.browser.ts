@@ -1,6 +1,61 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
+test("closing recovered pending tabs hides them for this view without discarding durable drafts", async ({ page }) => {
+  const profile = crypto.randomUUID()
+  const url = `/?theme=dark&draft=${profile}&tabs&restored&pending=bootstrap`
+  await page.goto(url)
+  const prompt = page.locator("textarea.prompt-input")
+  await prompt.fill("Original recovered pending draft")
+  const original = await page.evaluate(() => (window as Window & { __draftTarget: () => string }).__draftTarget())
+  const entries = () =>
+    page.evaluate(() =>
+      (
+        window as Window & {
+          __listDrafts: () => Promise<{ entries: { identity: { pendingID: string }; content: { text: string } }[] }>
+        }
+      ).__listDrafts(),
+    )
+  await expect
+    .poll(async () => (await entries()).entries.find((entry) => entry.identity.pendingID === original)?.content.text)
+    .toBe("Original recovered pending draft")
+  await page.reload()
+  const ids = () => page.evaluate(() => (window as Window & { __localTabs: { ids: () => string[] } }).__localTabs.ids())
+  await expect.poll(ids).toContain(original)
+  await page.evaluate(
+    (id) => (window as Window & { __localTabs: { close: (id: string) => void } }).__localTabs.close(id),
+    original,
+  )
+  await expect.poll(ids).not.toContain(original)
+  await prompt.fill("A newer independent draft")
+  await expect
+    .poll(async () => (await entries()).entries.some((entry) => entry.content.text === "A newer independent draft"))
+    .toBe(true)
+  expect(await ids()).not.toContain(original)
+  expect((await entries()).entries.find((entry) => entry.identity.pendingID === original)?.content.text).toBe(
+    "Original recovered pending draft",
+  )
+  await page.evaluate(
+    (id) => (window as Window & { __localTabs: { open: (id: string) => void } }).__localTabs.open(id),
+    original,
+  )
+  await expect(prompt).toHaveValue("Original recovered pending draft")
+  await page.evaluate(
+    (id) => (window as Window & { __localTabs: { closeOthers: (id: string) => void } }).__localTabs.closeOthers(id),
+    original,
+  )
+  await prompt.fill("Original recovered pending draft, edited")
+  await expect
+    .poll(async () => (await entries()).entries.find((entry) => entry.identity.pendingID === original)?.content.text)
+    .toBe("Original recovered pending draft, edited")
+  expect(await ids()).toEqual([original])
+  await page.reload()
+  await expect.poll(ids).toContain(original)
+  await expect
+    .poll(async () => (await entries()).entries.some((entry) => entry.content.text === "A newer independent draft"))
+    .toBe(true)
+})
+
 for (const tabs of [false, true]) {
   test(`New Task preserves the original draft and opens an empty ${tabs ? "tab" : "standalone composer"}`, async ({
     page,

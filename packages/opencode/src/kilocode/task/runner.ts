@@ -3202,13 +3202,14 @@ export namespace RayaTaskRunner {
       }
     })
 
-    // Rebuild notifications from retained completed results, never from execution ownership.
+    // Rebuild notifications from retained terminal results, never from execution ownership.
     const republish = (run: RayaTask.Run) =>
       Effect.gen(function* () {
-        if (run.status !== "complete" || !run.outcome || RayaTask.pending(run)) return
+        const eligible = run.status === "complete" || (run.status === "blocked" && failed(run))
+        if (!eligible || !run.outcome || RayaTask.pending(run)) return
         const latest = (yield* tasks.runsFor(run.agentID)).find((item) => item.id === run.id)
         if (!isDeepStrictEqual(latest, run))
-          return yield* new RayaTask.GuardError({ message: "The completed report's retained run changed." })
+          return yield* new RayaTask.GuardError({ message: "The saved report's retained run changed." })
         const saved = yield* snapshots.find(run.id)
         if (!saved || (!saved.definition.sourceSessionID && !saved.definition.reportSessionID)) return
         if (
@@ -3218,7 +3219,7 @@ export namespace RayaTaskRunner {
           saved.at !== run.at ||
           (saved.definition.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1)
         )
-          return yield* new RayaTask.GuardError({ message: "The completed report's startup identity changed." })
+          return yield* new RayaTask.GuardError({ message: "The saved report's startup identity changed." })
         const session = yield* input.sessions.get(run.sessionID)
         const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine)
         if (
@@ -3228,19 +3229,19 @@ export namespace RayaTaskRunner {
           identity.scheduleVersion !== (run.scheduleVersion ?? 1) ||
           !isDeepStrictEqual(identity.trigger, run.trigger)
         )
-          return yield* new RayaTask.GuardError({ message: "The completed report's session identity changed." })
+          return yield* new RayaTask.GuardError({ message: "The saved report's session identity changed." })
         yield* report(run)
       }).pipe(
         Effect.mapError((err) =>
           err instanceof RayaTask.GuardError
             ? err
-            : new RayaTask.GuardError({ kind: "unavailable", message: "The completed report could not be recovered." }),
+            : new RayaTask.GuardError({ kind: "unavailable", message: "The saved report could not be recovered." }),
         ),
         Effect.catchCause((cause) =>
           Cause.hasInterrupts(cause)
             ? Effect.failCause(cause)
             : Effect.sync(() =>
-                log.error("completed routine report recovery remains pending", {
+                log.error("routine report recovery remains pending", {
                   runID: run.id,
                   err: Cause.squash(cause),
                 }),

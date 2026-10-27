@@ -2040,7 +2040,7 @@ export namespace RayaGoal {
       const state = yield* get(sessionID)
       if (!state || state.status !== "active" || state.intent !== intent || !worker.trim() || !state.inputs?.length)
         return
-      if (state.inputs.includes(messageID)) return
+      if (state.inputs.includes(messageID) && state.dispatch?.messageID === messageID) return
       const rows = yield* deps.sessions.messages({ sessionID })
       const users = rows.filter((row) => row.info.role === "user")
       const latest = users
@@ -2050,7 +2050,7 @@ export namespace RayaGoal {
       if (users.filter((row) => row.info.id === messageID).length !== 1) return
       yield* save(sessionID, {
         ...state,
-        inputs: [...state.inputs, messageID],
+        inputs: [...new Set([...state.inputs, messageID])],
         dispatch: {
           id: crypto.randomUUID(),
           messageID,

@@ -21,6 +21,7 @@ import * as TaskWorker from "@/kilocode/session/task-worker"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { database, storage as stored } from "./fixtures/effect-profile"
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 
 const it = testEffect(
   LayerNode.compile(
@@ -56,148 +57,180 @@ const scoped = testEffect(
   ),
 )
 
-scoped.live(
-  "verified compaction binds resumed evidence and tools without accepting forged or successor input",
-  () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const sessions = yield* Session.Service
-        const storage = yield* Storage.Service
-        const runs = yield* SessionRunState.Service
-        const bind = yield* binding
-        const goals = RayaGoal.make({ storage, sessions })
-        const identity = {
-          version: 1,
-          agentID: "researcher",
-          runID: "run-compaction",
-          scheduleVersion: 1,
-          trigger: { kind: "manual" },
-        }
-        const session = yield* sessions.create({ metadata: { rayaRoutine: identity } })
-        yield* Effect.addFinalizer(() => goals.clear(session.id))
-        const user = () =>
-          sessions.updateMessage({
-            id: MessageID.ascending(),
+for (const mode of ["continue", "replay"])
+  scoped.live(
+    `verified compaction ${mode} binds resumed evidence and tools without accepting forged or successor input`,
+    () =>
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const storage = yield* Storage.Service
+          const runs = yield* SessionRunState.Service
+          const bind = yield* binding
+          const goals = RayaGoal.make({ storage, sessions })
+          const identity = {
+            version: 1,
+            agentID: "researcher",
+            runID: "run-compaction",
+            scheduleVersion: 1,
+            trigger: { kind: "manual" },
+          }
+          const session = yield* sessions.create({ metadata: { rayaRoutine: identity } })
+          yield* Effect.addFinalizer(() => goals.clear(session.id))
+          const user = () =>
+            sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: session.id,
+              role: "user",
+              time: { created: Date.now() },
+              agent: "code",
+              model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+            })
+          const assistant = (parent: MessageV2.User, summary = false) =>
+            sessions.updateMessage({
+              id: MessageID.ascending(),
+              parentID: parent.id,
+              sessionID: session.id,
+              role: "assistant",
+              agent: summary ? "compaction" : "code",
+              mode: "code",
+              summary,
+              finish: summary ? "stop" : undefined,
+              time: { created: Date.now(), completed: summary ? Date.now() : undefined },
+              path: { cwd: session.directory, root: session.directory },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              providerID: ProviderV2.ID.make("test"),
+              modelID: ModelV2.ID.make("test-model"),
+            })
+          const original = yield* user()
+          const raw = yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: original.id,
             sessionID: session.id,
-            role: "user",
-            time: { created: Date.now() },
-            agent: "code",
-            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+            type: "text",
+            text: "Write research and hand it off",
+            synthetic: mode === "replay" ? true : undefined,
           })
-        const assistant = (parent: MessageV2.User, summary = false) =>
-          sessions.updateMessage({
-            id: MessageID.ascending(),
-            parentID: parent.id,
-            sessionID: session.id,
-            role: "assistant",
-            agent: summary ? "compaction" : "code",
-            mode: "code",
-            summary,
-            finish: summary ? "stop" : undefined,
-            time: { created: Date.now(), completed: summary ? Date.now() : undefined },
-            path: { cwd: session.directory, root: session.directory },
-            cost: 0,
-            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-            providerID: ProviderV2.ID.make("test"),
-            modelID: ModelV2.ID.make("test-model"),
-          })
-        const original = yield* user()
-        yield* sessions.updatePart({
-          id: PartID.ascending(),
-          messageID: original.id,
-          sessionID: session.id,
-          type: "text",
-          text: "Write research and hand it off",
-        })
-        const first = yield* assistant(original)
-        yield* goals.create(
-          session.id,
-          "Write research and hand it off",
-          original.id,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          { agentID: identity.agentID, runID: identity.runID, sessionID: session.id },
-        )
-        return yield* runs.ensureRunning(
-          session.id,
-          Effect.succeed({ info: first, parts: [] }),
-          Effect.gen(function* () {
-            yield* bind(sessions, runs, session.id)
-            const before = yield* goals.get(session.id)
-            expect(before?.inputs).toEqual([original.id])
-            const marker = yield* user()
-            const token = yield* sessions.updatePart({
-              id: PartID.ascending(),
-              messageID: marker.id,
-              sessionID: session.id,
-              type: "compaction",
-              auto: false,
-            })
-            const summary = yield* assistant(marker, true)
-            yield* sessions.updatePart({
-              id: PartID.ascending(),
-              messageID: summary.id,
-              sessionID: session.id,
-              type: "text",
-              text: "Research still needs a verified handoff.",
-            })
-            const current = yield* user()
-            const notice = yield* sessions.updatePart({
-              id: PartID.ascending(),
-              messageID: current.id,
-              sessionID: session.id,
-              type: "text",
-              synthetic: true,
-              metadata: { compaction_continue: true },
-              text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
-            })
-            const message = yield* assistant(current)
-            yield* bind(sessions, runs, session.id)
-            expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
-            yield* sessions.updatePart({ ...token, auto: true })
-            yield* sessions.updatePart({ ...notice, synthetic: false })
-            yield* bind(sessions, runs, session.id)
-            expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
-            yield* sessions.updatePart(notice)
-            yield* sessions.updateMessage({ ...summary, finish: "error" })
-            yield* bind(sessions, runs, session.id)
-            expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
-            yield* sessions.updateMessage(summary)
-            yield* bind(sessions, runs, session.id)
-            const saved = yield* goals.get(session.id)
-            expect(saved?.dispatch?.messageID).toBe(current.id)
-            expect(saved?.dispatch?.id).not.toBe(before?.dispatch?.id)
-            expect(saved?.inputs).toEqual([original.id, current.id])
-            expect(saved?.intent).toBe(before?.intent)
-            expect(saved?.createdAt).toBe(before?.createdAt)
-            const schema = GoalGate.owned({}, goals.get)
-            const check = yield* GoalGate.prepare(schema, session.id, current.id, () => Effect.succeed(current.id))
-            const tools = GoalGate.bind({}, check, Effect.runPromise)
-            expect(yield* GoalGate.required(tools)).toBe(true)
-            expect(yield* GoalGate.closed(tools)).toBe(false)
-            const successor = yield* user()
-            yield* sessions.updatePart({
-              id: PartID.ascending(),
-              messageID: successor.id,
-              sessionID: session.id,
-              type: "text",
-              text: "New unrelated request",
-            })
-            yield* assistant(successor)
-            yield* bind(sessions, runs, session.id)
-            expect((yield* goals.get(session.id))?.inputs).toEqual([original.id, current.id])
-            const next = yield* GoalGate.prepare(schema, session.id, successor.id, () => Effect.succeed(successor.id))
-            expect(yield* GoalGate.required(GoalGate.bind({}, next, Effect.runPromise))).toBe(false)
-            return { info: message, parts: [] }
-          }),
-        )
-      }),
-    ),
-  30_000,
-)
+          const source = mode === "replay" ? InputReceipt.seal(original, [raw])! : raw
+          if (mode === "replay") yield* sessions.updatePart(source)
+          const first = yield* assistant(original)
+          yield* goals.create(
+            session.id,
+            "Write research and hand it off",
+            original.id,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { agentID: identity.agentID, runID: identity.runID, sessionID: session.id },
+          )
+          return yield* runs.ensureRunning(
+            session.id,
+            Effect.succeed({ info: first, parts: [] }),
+            Effect.gen(function* () {
+              yield* bind(sessions, runs, session.id)
+              const before = yield* goals.get(session.id)
+              expect(before?.inputs).toEqual([original.id])
+              const marker = yield* user()
+              const token = yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: marker.id,
+                sessionID: session.id,
+                type: "compaction",
+                auto: false,
+              })
+              const summary = yield* assistant(marker, true)
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: summary.id,
+                sessionID: session.id,
+                type: "text",
+                text: "Research still needs a verified handoff.",
+              })
+              const current = yield* user()
+              const notice = yield* sessions.updatePart(
+                mode === "replay"
+                  ? {
+                      ...source,
+                      id: PartID.ascending(),
+                      messageID: current.id,
+                    }
+                  : {
+                      id: PartID.ascending(),
+                      messageID: current.id,
+                      sessionID: session.id,
+                      type: "text",
+                      synthetic: true,
+                      metadata: { compaction_continue: true },
+                      text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+                    },
+              )
+              const message = yield* assistant(current)
+              yield* bind(sessions, runs, session.id)
+              expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
+              yield* sessions.updatePart({ ...token, auto: true })
+              yield* sessions.updatePart({ ...notice, synthetic: false })
+              yield* bind(sessions, runs, session.id)
+              expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
+              yield* sessions.updatePart(notice)
+              yield* sessions.updateMessage({ ...summary, finish: "error" })
+              yield* bind(sessions, runs, session.id)
+              expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
+              yield* sessions.updateMessage(summary)
+              if (mode === "replay") {
+                yield* sessions.updatePart({ ...notice, text: "A different request behind a copied input seal" })
+                yield* bind(sessions, runs, session.id)
+                expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
+                yield* sessions.updatePart(notice)
+                for (const value of [
+                  { ...before, intent: "stale-replay-intent" },
+                  { ...before, completion: "reply" },
+                  { ...before, status: "paused", pause: "user-control" },
+                  { ...before, status: "blocked" },
+                ]) {
+                  yield* storage.replace(["raya", "goal", session.id], value)
+                  yield* bind(sessions, runs, session.id)
+                  expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
+                }
+                yield* storage.replace(["raya", "goal", session.id], {
+                  ...before,
+                  inputs: [...before!.inputs!, current.id],
+                })
+              }
+              yield* bind(sessions, runs, session.id)
+              const saved = yield* goals.get(session.id)
+              expect(saved?.dispatch?.messageID).toBe(current.id)
+              expect(saved?.dispatch?.id).not.toBe(before?.dispatch?.id)
+              expect(saved?.inputs).toEqual([original.id, current.id])
+              expect(saved?.intent).toBe(before?.intent)
+              expect(saved?.createdAt).toBe(before?.createdAt)
+              const schema = GoalGate.owned({}, goals.get)
+              const check = yield* GoalGate.prepare(schema, session.id, current.id, () => Effect.succeed(current.id))
+              const tools = GoalGate.bind({}, check, Effect.runPromise)
+              expect(yield* GoalGate.required(tools)).toBe(true)
+              expect(yield* GoalGate.closed(tools)).toBe(false)
+              const successor = yield* user()
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: successor.id,
+                sessionID: session.id,
+                type: "text",
+                text: "New unrelated request",
+              })
+              yield* assistant(successor)
+              yield* bind(sessions, runs, session.id)
+              expect((yield* goals.get(session.id))?.inputs).toEqual([original.id, current.id])
+              const next = yield* GoalGate.prepare(schema, session.id, successor.id, () => Effect.succeed(successor.id))
+              expect(yield* GoalGate.required(GoalGate.bind({}, next, Effect.runPromise))).toBe(false)
+              return { info: message, parts: [] }
+            }),
+          )
+        }),
+      ),
+    30_000,
+  )
 
 scoped.live(
   "compaction restores only the current routine's active work goal despite a different dispatch parent",

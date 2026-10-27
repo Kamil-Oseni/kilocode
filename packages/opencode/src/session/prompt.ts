@@ -1906,7 +1906,10 @@ export const layer = Layer.effect(
           // kilocode_change start - bind only verified compaction producer lineage before resolving goal controls
           if (
             lastUserMsg?.parts.some(
-              (part) => part.type === "text" && part.synthetic && part.metadata?.compaction_continue === true,
+              (part) =>
+                part.type === "text" &&
+                part.synthetic &&
+                (part.metadata?.compaction_continue === true || part.metadata?.["raya.input.complete"] !== undefined),
             )
           )
             yield* bind(sessions, state, sessionID)

@@ -1,6 +1,8 @@
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { RayaGoal } from "."
 import { RayaChief } from "@/kilocode/chief"
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
+import { isDeepStrictEqual } from "node:util"
 
 /** Only the durable automatic compaction producer chain retains the original authored request. */
 export function compacted(
@@ -11,7 +13,7 @@ export function compacted(
   goal?: RayaGoal.State,
 ) {
   if (
-    (goal && goal.status !== "active") ||
+    (goal && (goal.status !== "active" || goal.completion === "reply")) ||
     user.info.role !== "user" ||
     intake.info.role !== "user" ||
     message.info.role !== "assistant"
@@ -49,12 +51,26 @@ export function compacted(
     !marker.parts[0].auto ||
     marker.parts[0].overflow === true ||
     rows.slice(authored + 1, idx).some((row) => row.info.role === "user" && !!RayaChief.requestText(row.parts)) ||
-    !summary.parts.some((part) => part.type === "text" && !!part.text.trim()) ||
-    intake.parts.length !== 1
+    !summary.parts.some((part) => part.type === "text" && !!part.text.trim())
   )
     return false
   const part = intake.parts[0]
+  if (InputReceipt.complete(user, user.info.sessionID, user.info.id)) {
+    const payload = (row: SessionV1.WithParts) =>
+      row.parts.map((part) => {
+        const clean = InputReceipt.clean(part)
+        const { id: _id, messageID: _message, sessionID: _session, ...body } = clean
+        return body
+      })
+    if (
+      intake.parts.length === user.parts.length &&
+      isDeepStrictEqual(payload(user), payload(intake)) &&
+      [user, marker, summary, intake, message].every((row) => row.info.sessionID === message.info.sessionID)
+    )
+      return true
+  }
   return (
+    intake.parts.length === 1 &&
     part?.type === "text" &&
     part.synthetic === true &&
     part.ignored !== true &&

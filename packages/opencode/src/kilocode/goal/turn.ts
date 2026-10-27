@@ -132,7 +132,7 @@ export const associate = Effect.fn("RayaGoal.associate")(
     if (reader && goal.status === "active" && intent) {
       const rows = yield* reader.messages({ sessionID, limit: 129 })
       const input = rows.findLast((row) => row.info.role === "user")?.info.id
-      if (input && !goal.inputs?.includes(input)) {
+      if (input && (!goal.inputs?.includes(input) || goal.dispatch?.messageID !== input)) {
         const linked = follows(rows, yield* reader.get(sessionID).pipe(Effect.orDie), goal, input, worker.id)
         const admitted = yield* gate.withLock(sessionID)(
           Effect.gen(function* () {

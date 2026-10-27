@@ -1,3 +1,19 @@
+October 27, 2026 - 447ed8fb6b installed; refresh local inference status from bounded session hints.
+
+Everyday Raya is `7.4.23-snapshot+447ed8fb6b.local.1793114215583`, source `447ed8fb6bbb31edfe0a59793dc85982411fc2a4`. Delivery authority: `.tmp/new-pc/worker-447ed8fb6b-delivery-qualified.json`. VSIX **194,214,961 bytes**, SHA-256 `cb508da060c80b2208f3363b1c3ebc28c536545404b7eccb69b7fb6c72f03c9b`; CLI **310,809,088 bytes**, SHA-256 `d7c15826109177776580cd40d759e39974e31e2209e2db9f2d89a12a02cd5ad9`.
+
+Local inference queue changes now publish bounded, transient, session-ID-only invalidation events from the actual requesting instance. Chat, Routine and background Task status consumers react by fetching their existing authoritative read-only observations; pushed events supply no trusted snapshot, worker authority or execution action. Matching session/workspace/request and connection fences remain in force. Repeated events during a pending read coalesce into one fresh follow-up, while Stop, input, retry/offline and terminal states retain priority. Chat and Task polling remains at five seconds and Routine polling at four seconds, with existing freshness limits as fallback; this does not promise zero latency or sustained event delivery.
+
+Source authority: `.tmp/new-pc/inference-events-source-qualified.json`. Backend checks pass **23 tests / 176 assertions**, bridge checks **13 / 85**, actual mounted chat and Routine fixtures **one selected case each**, and the production Task monitor check **1 / 23**. These are focused scheduler/bridge/controller or mounted-component observations, not loaded installed SSE-to-UI or model acceptance. Intermediate wrong CLI lint invocation, UI complexity failures and Routine fixture failures remain retained alongside their corrected successors.
+
+Full CLI types pass in **64.938 seconds**; UI types pass in **7.328 seconds**, with final source typing also covered by the delivery's uncached push checks. UI lint V3 passes in **1.547 seconds**, with **zero errors and warnings**. CLI scoped lint passes in **7.656 seconds**, with **zero errors and one cleanup warning** retained. The stock snapshot includes its actual CLI compile and three smoke checks under the same owned job (`integratedCompiler`); there is no separate compiler invocation or separate compiler-duration claim.
+
+The actual stock snapshot target passes in **99.984 seconds**, with any descendant cleanup qualified separately by its receipt. Official installation c8b734 exits zero. Before/after preservation pass naturally in **35.250 / 6.500 seconds**, preserving **5,051 files**, **557 exact payloads**, **560 CRC-checked entries** and unrelated registrations. Receipt `C:\Users\kamil\.codex\worktrees\raya-local-services\raya\.tmp\new-pc\everyday-conversation-preservation-a0fa56258ced489bbd619a5653823974\after-qualified-registry-v2.json`, SHA-256 `1cf641e888c5b3a3f88e8907dae623c207b253f3af8be6b7d06df76ae34ab921`. Git delivery remains separately recorded.
+
+Installed workflow gates remain **2/9 (22.2%)**, overall **unmeasured**. `FUT-ARCH-03` and `FUT-LOCAL-01` remain **In progress**. No new loaded-client/GUI, real-model, resource, Windows boot, reinstall or full workflow gate is claimed. The unchanged full legacy cold-restart child-deadline failure remains open; successful retained-profile diagnostics and separate c322 held-profile/promotion observations do not qualify that original failure. Stable chat and Routine workers remain the priority; voice is deferred, cloud workers released and second-PC migration canceled. The prior model-trial approval rejection remains respected.
+
+Historical c322 held-profile, promotion and delivery checkpoints:
+
 October 27, 2026 - c322a0a6aa installed; bounded fresh held-profile reads survive native reopening.
 
 Installed held-profile evidence, October 27, 2026:

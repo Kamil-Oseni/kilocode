@@ -1,10 +1,16 @@
-## Current checkpoint — October 27, 2026
+## Current-state authority and gate scope
 
-Use [current readiness](Raya-Current-Readiness.md) as the current installed-state authority. Everyday Raya is `7.4.23-snapshot+1063f4a610.local.1793093025123`, source `1063f4a61036058725c8585f25968653bdd3ca3e`. Package manifest `.tmp/new-pc/worker-1063f4a610-package.json` records VSIX SHA-256 `0242cd5559bce89383545500231c8de231ae7317c893b1d25372d0255b2b434a`, CLI SHA-256 `44b080421fbb716ba0ea9d80c4d5082e8d0612b8be614e8fb26d1c05c117b892`, and 558 CRC-checked entries.
+This ledger defines the installed workflow requirements and preserves dated checkpoints. Use [current readiness](Raya-Current-Readiness.md) as the sole current installed-state authority for the version, package manifest, preservation receipts, Git delivery and acceptance boundaries. Package delivery does not itself establish workflow acceptance.
+
+At the October 27, 2026 review, the unchanged nine-gate denominator has **2/9 (22.2%)** passed and **seven gates pending**, including deferred voice. Overall readiness is **unmeasured**; no gate is promoted by this ledger update. Second-PC migration remains canceled and cloud workers remain released. Earlier checkpoint claims below retain their dated scope.
+
+### Historical October 27 checkpoint — 1063 delivery
+
+At this checkpoint, everyday Raya was `7.4.23-snapshot+1063f4a610.local.1793093025123`, source `1063f4a61036058725c8585f25968653bdd3ca3e`. Package manifest `.tmp/new-pc/worker-1063f4a610-package.json` records VSIX SHA-256 `0242cd5559bce89383545500231c8de231ae7317c893b1d25372d0255b2b434a`, CLI SHA-256 `44b080421fbb716ba0ea9d80c4d5082e8d0612b8be614e8fb26d1c05c117b892`, and 558 CRC-checked entries.
 
 Closed installation preservation passes for **4,940 saved files** across four roots, **555 exact payloads** and unchanged unrelated registrations against this installation's own baseline. Receipt: `.tmp/new-pc/everyday-conversation-preservation-7309161023234387a6e0e824b50b6388/after-qualified-registry-v2.json`. Separate normal-hook atomic Git delivery to both remote branches at `ad62b98a1afc1e3c079bca50dbf968b5b97e16ad` is recorded in `.tmp/new-pc/worker-1063f4a610-git-delivery.json`.
 
-These establish the audited-candidate and normal-installation-preservation gates only: **2/9 (22.2%)**, with **seven gates pending**, including deferred voice. Overall readiness remains **unmeasured**. Output quality still fails the latest actual worker trial; inference under the backed-up thinking-default change is unverified, and next-trial preparation remains blocked by automatic approval. Installed manual-assignment origin handling has focused source/UI checks, but actual installed requesting-chat workflow acceptance is not established. Notification-recovery work in progress is not installed and earns no gate credit. Second-PC migration remains canceled; cloud workers remain released.
+These established the audited-candidate and normal-installation-preservation gates only. At this checkpoint, output quality still failed the latest actual worker trial; inference under the backed-up thinking-default change was unverified, and next-trial preparation remained blocked by automatic approval. Installed manual-assignment origin handling had focused source/UI checks, but actual installed requesting-chat workflow acceptance was not established. Notification-recovery work was in progress, uninstalled and earned no gate credit.
 
 ### Historical October 27 checkpoint — 1c39 before its trial
 

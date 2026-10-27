@@ -28,7 +28,8 @@ import { workflow } from "./workflow-request"
 import { confirm } from "./routine-confirmation"
 import { SessionID } from "@/session/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
-import { Outputs } from "@/kilocode/task/output-scope"
+import { Outputs, canonical } from "@/kilocode/task/output-scope"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoal } from "@/kilocode/goal"
 import * as ToolJsonSchema from "@/tool/json-schema"
@@ -1114,6 +1115,8 @@ export function routineManagementTools(input: {
             incoming?.context ? params.context : params.context?.trim(),
           )
           const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
+          const outputs =
+            params.outputs === undefined ? undefined : yield* canonical(yield* FSUtil.Service, params.outputs)
           const request = {
             source,
             senderID: sender.id,
@@ -1125,7 +1128,7 @@ export function routineManagementTools(input: {
             objective: params.objective.trim(),
             expected: params.expected?.trim(),
             criteria: params.criteria,
-            outputs: params.outputs,
+            outputs,
             context,
             deadline: params.deadline,
             budget: params.budget,
@@ -1149,7 +1152,7 @@ export function routineManagementTools(input: {
             record.objective !== params.objective.trim() ||
             record.expected !== params.expected?.trim() ||
             !isDeepStrictEqual(record.criteria, params.criteria) ||
-            !isDeepStrictEqual(record.outputs, params.outputs) ||
+            !isDeepStrictEqual(record.outputs, outputs) ||
             record.context !== context ||
             record.deadline !== params.deadline ||
             (!inherited && record.budget !== params.budget) ||
@@ -1296,6 +1299,8 @@ export function routineManagementTools(input: {
                 : [ctx.sessionID, ctx.messageID, ctx.callID, organization.id],
             ),
           ).slice(0, 48)}`
+          const outputs =
+            params.outputs === undefined ? undefined : yield* canonical(yield* FSUtil.Service, params.outputs)
           yield* ctx.ask({
             permission: "schedule_task",
             patterns: [`organization:${organization.id}`, `route:${sender.id}:${recipient.id}`],
@@ -1317,14 +1322,14 @@ export function routineManagementTools(input: {
               objective: params.objective.trim(),
               expected: params.expected?.trim(),
               criteria: params.criteria,
-              outputs: params.outputs,
+              outputs,
               context,
               deadline: params.deadline,
               budget: params.budget,
             },
             { reportSessionID: ctx.sessionID },
           )
-          if (!isDeepStrictEqual(record.outputs, params.outputs))
+          if (!isDeepStrictEqual(record.outputs, outputs))
             return yield* Effect.fail(new Error("The saved output scope does not match this request."))
           if (!isDeepStrictEqual(record.criteria, params.criteria))
             return yield* Effect.fail(new Error("The saved work criteria do not match this request."))

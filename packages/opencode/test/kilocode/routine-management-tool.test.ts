@@ -1026,6 +1026,8 @@ it.live(
         const deadline = Date.now() + 86_400_000
         const owner =
           'Build ONE unofficial Eric concept, then Sales saves THREE UNSENT drafts.\nKeep this owner wording: "one per prospect"; no sends.'
+        const file = path.join(directory, "approved-design.md")
+        const destination = path.join(directory, "index.html")
         const incoming = yield* errands.admit(
           {
             source: "test:design-request",
@@ -1034,6 +1036,7 @@ it.live(
             organizationID: organization.id,
             organizationRevision: organization.revision,
             objective: "Design the approved client site",
+            outputs: [file],
             context: owner,
             criteria: [
               {
@@ -1071,7 +1074,6 @@ it.live(
           scheduleVersion: 1,
           trigger: { kind: "manual" },
         })
-        const file = path.join(directory, "approved-design.md")
         yield* fs.writeFileString(file, "# Approved design\n\nUse the final desktop layout.")
         const revision = yield* Artifact.capture(fs, file)
         if (revision.status !== "captured") return yield* Effect.die(new Error("artifact revision was not captured"))
@@ -1187,6 +1189,7 @@ it.live(
           context: "Use the approved design in the current request",
           deadline,
           artifacts: [file],
+          outputs: [destination.replaceAll("\\", "/")],
         }
         const schema = ToolJsonSchema.fromTool(available)
         expect(schema.properties?.deadline).toMatchObject({ exclusiveMinimum: 0 })
@@ -1255,6 +1258,14 @@ it.live(
         expect(yield* errands.byRun(runID)).toHaveLength(0)
         expect(yield* errands.queued(coder.id)).toEqual([])
         const assigned = yield* delegate.execute(params, context("delegate-build"))
+        expect(assigned.metadata.requestStatus).toBe("complete")
+        expect(yield* errands.byRun(runID)).toHaveLength(1)
+        expect((yield* errands.byRun(runID))[0]?.outputs).toEqual([destination])
+        expect(yield* delegate.execute({ ...params, outputs: [destination] }, context("delegate-build"))).toEqual(
+          assigned,
+        )
+        expect(yield* errands.byRun(runID)).toHaveLength(1)
+
         expect(assigned).toMatchObject({
           title: "Work delegation saved",
           metadata: {
@@ -1589,6 +1600,7 @@ it.live(
             senderID: sender.id,
             recipientID: recipient.id,
             objective: "Save the research report, then hand off to Builder.",
+            outputs: [],
             criteria: [
               { id: "research", description: "Save the research report.", verification: "Read the full saved file." },
             ],
@@ -1655,6 +1667,7 @@ it.live(
             { id: "research", description: "Save the research report.", verification: "Read the full saved file." },
           ],
           context: "Use the saved prospect seed.",
+          outputs: [path.join(directory, "research.md").replaceAll("\\", "/")],
         }
         const oversized = yield* kickoff.execute(
           { ...params, context: "x".repeat(3990) },
@@ -1674,6 +1687,10 @@ it.live(
         expect(started.metadata.requestStatus).toBe("complete")
         if (!("delegationID" in started.metadata)) throw new Error("Owner request assignment has no delegation ID")
         const preserved = yield* errands.get(String(started.metadata.delegationID))
+        expect(preserved.outputs).toEqual([path.join(directory, "research.md")])
+        expect(yield* kickoff.execute({ ...params, outputs: [path.join(directory, "research.md")] }, ctx)).toEqual(
+          started,
+        )
         expect(preserved.context).toContain(owner)
         expect(preserved.context).toContain(params.context)
         expect(yield* kickoff.execute({ ...params, context: preserved.context }, ctx)).toEqual(started)

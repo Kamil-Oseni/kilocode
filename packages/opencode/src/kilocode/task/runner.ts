@@ -626,7 +626,12 @@ export namespace RayaTaskRunner {
         }
         return next
       })
-      if (strict) return effect
+      if (strict)
+        return effect.pipe(
+          Effect.catchTag("RayaTask.NotFoundError", () =>
+            Effect.fail(new RayaTask.GuardError({ kind: "unavailable", message: "The worker run could not be retired." })),
+          ),
+        )
       return effect.pipe(
         Effect.catch((err) =>
           Effect.sync(() => {

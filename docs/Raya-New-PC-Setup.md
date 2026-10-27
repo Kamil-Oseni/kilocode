@@ -1,3 +1,21 @@
+October 27, 2026 - 8fc77fcb6e installed; isolate imported roaming settings.
+
+Everyday Raya is `7.4.23-snapshot+8fc77fcb6e.local.1793110479069`, source `8fc77fcb6ea6fb9e40947d7418fe0e5ad706e23d`. Delivery authority: `.tmp/new-pc/worker-8fc77fcb6e-delivery-qualified.json`. VSIX **194,219,270 bytes**, SHA-256 `61b6b8b6de91c03fd2dd4f59c7d1ea303962939736297d232dda4bbc1b08b784`; CLI **310,795,264 bytes**, SHA-256 `72bb79ed9a3eedffab539d0fd911111ede5e04b79a12a84e85a13e03cb33ecc9`.
+
+Profile import and the restored profile now route `APPDATA` into their own subtrees, keeping legacy Windows roaming settings discovery out of the original account's profile. The actual ModesMigrator trap case passes **1 test / 4 assertions**: the sentinel mode is discoverable under the explicit trap environment, absent under importer/restored environments, and its source bytes remain unchanged. This is an isolation boundary, not a grant, work resumption or full recovery claim. Source evidence: `.tmp/new-pc/roaming-isolation-source-qualified.json`.
+
+Full CLI types pass naturally in **46.875 seconds**, and scoped CLI lint passes in **9.437 seconds** with **zero errors / zero warnings**. The unchanged full legacy restart rerun still **FAILS** in **22.125 seconds** at its ten-second child deadline. That original failure remains retained; successful diagnostic re-entry against an existing retained profile does not qualify a fresh full legacy restart.
+
+Separate installed **25cd** evidence verifies a rich pending draft across two distinct, naturally retired native CLI epochs: six actual public HTTP operations return **200, 200, 200, 200, 400, 200**. Exact text, comments/image, model/agent/variant, selection and revision survive cold backend reopen; the expected stale-CAS conflict preserves the newer draft. Both native families reach zero with joined streams and no force; the model-refusal sink records zero attempts. Bounded evidence: `.tmp/new-pc/installed-draft-reopen-25cd-bounded-qualified-v2.json`.
+
+The original 25cd whole owner nevertheless remains **FAIL** because its strict config-byte guard detected startup additions of `$schema` and `permission.bash`. Matching production schema-publication and compatibility-migration code explain the exact reconstructed change, with other config parameters unchanged. Original pre-normalization config bytes were not separately captured. The guard and failure were not removed or rerun; this bounded qualification is not a green whole-owner result or a current-8fc77fcb6e UI/model acceptance claim.
+
+Compiler/three smokes and stock snapshot targets pass in **37.812 / 86.719 seconds**; any original-gone descendant cleanup remains a distinct qualification. Official installation c71cd4 exits zero. Before/after preservation pass naturally in **34.484 / 6.422 seconds**, preserving **5,030 files**, **557 exact payloads**, **560 CRC-checked entries** and unrelated registrations. Receipt `C:\Users\kamil\.codex\worktrees\raya-local-services\raya\.tmp\new-pc\everyday-conversation-preservation-e6eb878d105a47ae9f6a045bbbec42e9\after-qualified-registry-v2.json`, SHA-256 `cfcb9bbe9798c6bd69c8a956f52570fe4e34e6b610484502102ce5d2f22c062d`. Git delivery remains separately recorded; no source-push statistics are inferred here.
+
+Installed workflow gates remain **2/9 (22.2%)**, overall **unmeasured**. `FUT-DATA-01` remains **In progress**; loaded-client/Memento, Windows boot, reinstall and the unresolved fresh legacy restart remain separate. No new GUI, model, quality or complete workflow acceptance is claimed. Stable chat and routine workers remain the priority; voice is deferred, cloud workers released and second-PC migration canceled. The prior automatic-approval model-trial rejection remains respected.
+
+Historical 25cd checkpoint:
+
 October 27, 2026 - 25cd35e874 installed; preserve restored Task file limits.
 
 Everyday Raya is `7.4.23-snapshot+25cd35e874.local.1793109274244`, source `25cd35e874a07ef6f43a04c396b97a9ccb1e4382`. Delivery authority: `.tmp/new-pc/worker-25cd35e874-delivery-qualified.json`. VSIX **194,212,351 bytes**, SHA-256 `2827b43894fa897f8b257bc5e86e46ca75a3dbbe53af924b0cb66f4f6b4940f6`; CLI **310,794,752 bytes**, SHA-256 `77b804093d376bc0b6dd9d5bf4f4b2ebb3d5fa8bca5c7d3afd699021a6b23cb0`.

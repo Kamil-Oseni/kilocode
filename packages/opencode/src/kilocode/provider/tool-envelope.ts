@@ -1,7 +1,10 @@
 import z from "zod"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 
 type Tool = { function: { name: string; description?: string; parameters: Record<string, unknown> } }
 const call = z.object({ name: z.string().min(1), arguments: z.record(z.string(), z.unknown()) }).strict()
+const marker = "raya:scoped-file-order:v1"
+const mutations = new Set(["write", "edit", "apply_patch"])
 const serial = new Set([
   "create_goal",
   "update_goal",
@@ -19,6 +22,15 @@ const wire = z.discriminatedUnion("kind", [
 
 /** Outer protocol validation only. Tool execution retains semantic/evidence authority. */
 export namespace ToolEnvelope {
+  /** Ordering attenuation only; native permissions and immutable output admission remain authoritative. */
+  export function mark(schema: JSONSchema7): JSONSchema7 {
+    return { ...schema, $comment: marker }
+  }
+
+  export function scoped(tools: readonly Tool[]) {
+    return tools.some((tool) => mutations.has(tool.function.name) && tool.function.parameters.$comment === marker)
+  }
+
   export class Empty extends Error {
     constructor() {
       super("Text envelope omitted a reply")
@@ -65,6 +77,7 @@ export namespace ToolEnvelope {
         additionalProperties: false,
       }
     })
+    const limited = scoped(tools)
     const value = {
       anyOf: [
         ...calls.map((call) => ({
@@ -73,7 +86,11 @@ export namespace ToolEnvelope {
           required: [...call.required, "kind"],
         })),
         ...[false, true].flatMap((mutation) => {
-          const items = calls.filter((call) => serial.has(call.properties.name.const) === mutation)
+          const items = calls.filter(
+            (call) =>
+              (serial.has(call.properties.name.const) || (limited && mutations.has(call.properties.name.const))) ===
+              mutation,
+          )
           if (!items.length) return []
           return [
             {
@@ -134,6 +151,9 @@ export namespace ToolEnvelope {
       (names.has("delegate_work")
         ? "Submit delegate_work alone and wait for its actual result. Finish and verify your output files before the handoff; never mix delegation with reads, writes, edits or another delegation in one envelope. "
         : "") +
+      (scoped(tools)
+        ? "This worker has declared output files. Submit write, edit or apply_patch alone, and wait for its completed result before reading, verifying or changing another file. Independent reads may share an envelope. "
+        : "") +
       reply() +
       " Tool definitions: " +
       JSON.stringify(
@@ -152,6 +172,7 @@ export namespace ToolEnvelope {
     names: ReadonlySet<string>,
     choice: "auto" | "required" | "none",
     refs?: readonly string[],
+    limited = false,
   ) {
     const value = wire.parse(JSON.parse(text))
     if (value.kind === "text") {
@@ -172,6 +193,8 @@ export namespace ToolEnvelope {
       throw new Error("Routine inspection requires a separate single-call envelope")
     if (calls.length > 1 && calls.some((call) => call.name === "delegate_work"))
       throw new Error("Work delegation requires a separate single-call envelope")
+    if (limited && calls.length > 1 && calls.some((call) => mutations.has(call.name)))
+      throw new Error("Scoped file mutations require a separate single-call envelope")
     if (calls.length > 1 && calls.some((call) => serial.has(call.name)))
       throw new Error("Goal mutations require a separate single-call envelope")
     return { content: value.content ?? "", tool_calls: calls.map((call) => ({ function: call })) }

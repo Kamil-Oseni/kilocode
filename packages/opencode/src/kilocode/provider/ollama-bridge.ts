@@ -245,6 +245,7 @@ async function required(
   signal?: AbortSignal | null,
   envelope?: "auto" | "required" | "none",
   refs?: readonly string[],
+  limited = false,
 ) {
   const rows: z.infer<typeof response>[] = []
   const decoder = new TextDecoder("utf-8", { fatal: true })
@@ -421,7 +422,7 @@ async function required(
   const content = rows.map((row) => row.message?.content ?? "").join("")
   const message = (() => {
     try {
-      return ToolEnvelope.decode(content, names, envelope, refs)
+      return ToolEnvelope.decode(content, names, envelope, refs, limited)
     } catch (err) {
       const terminal = rows.at(-1)!
       throw new OllamaBridgeError({
@@ -643,6 +644,7 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
         return { ...tool, function: { ...tool.function, parameters: original.parameters } }
       })
     }
+    const limited = ToolEnvelope.scoped(data.tools ?? [])
     const format = envelope ? OllamaPrompt.format(data.tools ?? [], envelope, frame) : undefined
     const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined)
     const messages = OllamaPrompt.project(data.messages, data.tools ?? [], protocol, data.tool_choice, output, frame)
@@ -771,7 +773,16 @@ export function ollama(options: Readonly<Record<string, unknown>>, fetcher: Fetc
       const reader = native.body.getReader()
       if (data.tool_choice === "required" || envelope) {
         const acquire = (reader: ReadableStreamDefaultReader<Uint8Array>) =>
-          required(reader, data.model, advertised, data.stream === true, signal, envelope, ResultFrame.selected(frame))
+          required(
+            reader,
+            data.model,
+            advertised,
+            data.stream === true,
+            signal,
+            envelope,
+            ResultFrame.selected(frame),
+            limited,
+          )
         const rows = await correction(
           () => acquire(reader),
           async () => {

@@ -1,3 +1,5 @@
+import { asSchema } from "ai"
+import { TaskSchema } from "@/kilocode/tool/task-schema"
 import { expect } from "bun:test"
 import path from "node:path"
 import { Effect, Exit, Schema } from "effect"
@@ -122,7 +124,8 @@ it.instance(
       expect(Exit.isFailure(yield* Admission.check(session.id, [file]).pipe(Effect.exit))).toBe(true)
       const execution = RayaTaskExecution.make(store)
       const owner = { id: taken.childRunID, agentID: recipient.id, sessionID: session.id }
-      const model = ProviderTest.model()
+      // The ordering contract is the explicitly selected local compatible envelope, not OpenAI strict schema.
+      const model = ProviderTest.model({ api: { ...ProviderTest.model().api, npm: "@ai-sdk/openai-compatible" } })
       const agents = yield* Agent.Service
       const agent = yield* agents.get("generalist")
       if (!agent) throw new Error("Actual builtin agent is missing")
@@ -207,6 +210,15 @@ it.instance(
           const tools = yield* resolver
           expect(Object.keys(tools)).toContain("read")
           expect(Object.keys(tools)).toContain("write")
+          for (const name of ["write", "edit", "apply_patch"])
+            if (tools[name])
+              expect(asSchema(tools[name].inputSchema).jsonSchema).toMatchObject({
+                $comment: "raya:scoped-file-order:v1",
+              })
+          expect(asSchema(tools.read.inputSchema).jsonSchema).not.toMatchObject({
+            $comment: "raya:scoped-file-order:v1",
+          })
+
           for (const name of ["bash", "task", "execute", "webfetch", "lsp", "list_mcp_resources"])
             expect(Object.keys(tools)).not.toContain(name)
           yield* sessions.setMetadata({
@@ -241,6 +253,8 @@ it.instance(
       const ordinary = yield* sessions.create({ title: "Ordinary unchanged chat" })
       expect(yield* Admission.check(ordinary.id, [other])).toBeUndefined()
       expect(yield* continuation({ database: db, storage: store, session: ordinary })).toBe(true)
+      const legacy = { type: "object" as const, properties: { filePath: { type: "string" as const } } }
+      expect(yield* TaskSchema.prepare("write", legacy, ordinary.id, message.id, agent.name)).toEqual(legacy)
     }),
   {},
   30_000,

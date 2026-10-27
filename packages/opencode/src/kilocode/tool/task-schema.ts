@@ -7,6 +7,8 @@ import { MessageID, SessionID } from "@/session/schema"
 import { ChiefVerification } from "@/kilocode/chief/verification"
 import { example } from "@/kilocode/task-resume"
 import * as RoutineSchema from "./routine-schema"
+import * as OutputAdmission from "@/kilocode/task/output-admission"
+import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 
 const originals = new WeakMap<JSONSchema7, JSONSchema7>()
 const instructions = new WeakMap<JSONSchema7, string>()
@@ -83,6 +85,10 @@ export const prepare = Effect.fn("TaskSchema.prepare")(function* (
   messageID: MessageID,
   agent: string,
 ) {
+  if (["write", "edit", "apply_patch"].includes(id)) {
+    const files = yield* OutputAdmission.check(sessionID, []).pipe(Effect.orDie)
+    if (files !== undefined) return ToolEnvelope.mark(schema)
+  }
   if (id === "delegate_work") return yield* RoutineSchema.prepare(schema, sessionID).pipe(Effect.orDie)
   if (id === "assign_organization_work" && agent === "auto")
     return yield* RoutineSchema.assignment(schema, sessionID, messageID).pipe(Effect.orDie)

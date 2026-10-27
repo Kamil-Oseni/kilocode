@@ -2,4 +2,4 @@
 "raya": patch
 ---
 
-Keep worker handoffs separate from file operations and require saved file receipts for explicit file-transfer criteria.
+Keep scoped worker file changes and handoffs in separate local tool envelopes, and require saved file receipts for explicit file-transfer criteria.

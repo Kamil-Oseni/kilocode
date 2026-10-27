@@ -490,3 +490,70 @@ test("native per-request original schemas restore only exact advertised names an
   )
   expect(JSON.stringify(captured[2].format)).not.toContain('"enum":["changed"]')
 })
+
+test("scoped file ordering survives original schema restoration without changing unscoped batches", async () => {
+  const names = new Set(["write", "edit", "apply_patch", "read"])
+  const definitions = [...names].map((name) => ({
+    type: "function" as const,
+    function: { name, parameters: name === "read" ? { type: "object" } : ToolEnvelope.mark({ type: "object" }) },
+  }))
+  expect(ToolEnvelope.scoped(definitions)).toBe(true)
+  expect(ToolEnvelope.guide(definitions)).toContain("Submit write, edit or apply_patch alone")
+  const read = { name: "read", arguments: { filePath: "own.md" } }
+  for (const name of ["write", "edit", "apply_patch"]) {
+    const mutation = { name, arguments: {} }
+    expect(
+      ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls: [mutation] }), names, "required", undefined, true)
+        .tool_calls,
+    ).toEqual([{ function: mutation }])
+    for (const calls of [
+      [mutation, read],
+      [read, mutation],
+      [mutation, mutation],
+    ])
+      expect(() =>
+        ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls }), names, "required", undefined, true),
+      ).toThrow("Scoped file mutations require a separate single-call envelope")
+  }
+  const reads = JSON.stringify({ kind: "tools", calls: [read, read] })
+  expect(ToolEnvelope.decode(reads, names, "required", undefined, true).tool_calls).toHaveLength(2)
+  const writes = JSON.stringify({
+    kind: "tools",
+    calls: [
+      { name: "write", arguments: {} },
+      { name: "write", arguments: {} },
+    ],
+  })
+  expect(ToolEnvelope.decode(writes, names, "required").tool_calls).toHaveLength(2)
+  const batches = ToolEnvelope.schema(definitions, "required").anyOf.filter(
+    (branch) => branch.properties.kind.const === "tools",
+  )
+  for (const branch of batches) {
+    if (!("calls" in branch.properties)) throw new Error("Missing actual batch schema")
+    const calls = branch.properties.calls
+    expect(calls.items.anyOf.map((item) => item.properties.name.const)).toEqual(
+      calls.maxItems === 1 ? ["write", "edit", "apply_patch"] : ["read"],
+    )
+  }
+  const original = Object.fromEntries(
+    definitions.map((row) => [row.function.name, tool({ inputSchema: jsonSchema(row.function.parameters) })]),
+  )
+  const cfg = context(options, { api: { id: "fixture" }, limit: { context: 32768 } }, original)
+  const wire = definitions.map((row) => ({ ...row, function: { ...row.function, parameters: { type: "object" } } }))
+  const captured: Record<string, unknown>[] = []
+  const answer = { value: JSON.stringify({ kind: "tools", calls: [{ name: "write", arguments: {} }, read] }) }
+  const send = ollama(cfg, async (_input, init) => {
+    if (typeof init?.body !== "string") throw new Error("Missing real bridge request body")
+    captured.push(JSON.parse(init.body))
+    return Response.json(row(answer.value))
+  })
+  const payload = { ...request("required"), tools: wire }
+  await expect(
+    send("http://127.0.0.1/v1/chat/completions", { method: "POST", body: JSON.stringify(payload) }),
+  ).rejects.toThrow()
+  expect(JSON.stringify(captured[0].format)).toContain("raya:scoped-file-order:v1")
+  expect(JSON.stringify(captured[0].format)).toContain('"maxItems":1')
+  answer.value = JSON.stringify({ kind: "tool", name: "write", arguments: {} })
+  const accepted = await send("http://127.0.0.1/v1/chat/completions", { method: "POST", body: JSON.stringify(payload) })
+  expect((await accepted.json()).choices[0].message.tool_calls).toHaveLength(1)
+})

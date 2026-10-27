@@ -1,3 +1,13 @@
+## Current checkpoint — October 27, 2026
+
+The extension registry currently selects `7.4.23-snapshot+fb887daee3.local.1793018641562`. Remote `main` delivery at `f7d40123be` is complete. The worker source-attribution and manual queue-reporting fixes are committed separately and awaiting the build chat's combined package and installation. They are not yet installed behavior.
+
+The delivery priority is an actual Researcher → Builder → Sales job: three dated prospect records, one unofficial website preview with its brief, and three unsent outreach drafts, reported to the requesting conversation. That full installed workflow remains unaccepted. The narrow constrained-chat recall check passed; it does not prove every chat task. Voice remains deferred.
+
+Use [Current Readiness](Raya-Current-Readiness.md) for the current delivery checklist. All dated entries below retain their original historical scope. Their candidate names, counts and uses of “current” must not be presented as today's installed state or an overall completion percentage. Do not repeat passed checks without changed code or an observed failure.
+
+## Historical checkpoints
+
 October 19, 2026 — Conversation refresh source qualification; installed gate scope unchanged.
 
 The open Routine conversation repair passes **118 unit tests / 425 assertions plus 7 mounted browser cases**, full extension types/lint/Knip/production bundle and affected guards. Source index `.tmp/new-pc/routine-conversation-source-full-qualified-v1.json` is **24,072 bytes**, SHA-256 `88b2e2ce0d9c7a0bdbf0f3f9ff84a6acbe80105dcd3d55bd122fe14f1fc0af34`. Delivery and installed acceptance remain pending. A genuine populated native host archive trial was refused because its temporary broker overlapped the protected source profile; it creates no archive and earns no recovery credit. Its original evidence is preserved and a fresh-only corrected launcher is prepared. Installed readiness stays **2/9 (22.2%)**, Memory **0/1**, overall **unmeasured**; the wider implementation remains active. See the current progress entries for exact scope and remaining requirements.

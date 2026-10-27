@@ -1078,6 +1078,19 @@ export function routineManagementTools(input: {
               (incoming.state !== "running" && incoming.state !== "needs_input"))
           )
             return yield* Effect.fail(new Error("The current delegated request no longer matches this worker run."))
+          for (const field of ["budget", "deadline"] as const)
+            if (params[field] !== undefined && omits(incoming?.context, field))
+              return yield* Effect.fail(
+                new Error(
+                  `The original owner request explicitly says to omit ${field}. Remove the ${field} field; saved limits still apply.`,
+                ),
+              )
+          if (params.outputs?.length && !params.criteria)
+            return yield* Effect.fail(
+              new Error(
+                "Delegating output files requires child-specific acceptance criteria before assignment. Include criteria with id, description and verification for this recipient's actual deliverables.",
+              ),
+            )
           if (params.deadline !== undefined && incoming?.deadline === undefined)
             return yield* Effect.fail(
               new Error(
@@ -1085,7 +1098,13 @@ export function routineManagementTools(input: {
               ),
             )
           if (
-            incoming?.criteria?.some((criterion) => Handoff.artifacts(criterion.description, criterion.verification)) &&
+            incoming?.criteria?.some((criterion) =>
+              incoming.outputs === undefined
+                ? Handoff.artifacts(criterion.description, criterion.verification)
+                : !!params.outputs?.length &&
+                  (Handoff.artifacts(criterion.description, criterion.verification) ||
+                    (!!incoming.outputs.length && Handoff.required(criterion.description, criterion.verification))),
+            ) &&
             !params.artifacts?.length
           )
             return yield* Effect.fail(

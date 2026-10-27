@@ -11,6 +11,7 @@ export function required(description: string, verification: string) {
           text,
         ) ||
         /^\s*delegate_work\s+receipt\b/i.test(text) ||
+        /^\s*(?:call|use)\s+delegate_work\b/i.test(text) ||
         /\b(?:cite|verify|require|include)\s+(?:(?:an?|the|actual|successful|accepted)\s+){0,3}(?:delegation|delegate_work|handoff|hand-off)\s+receipt\b/i.test(
           text,
         )),

@@ -49,10 +49,16 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
     (!identity?.organizationRevision || incoming.organizationRevision === identity.organizationRevision)
       ? incoming
       : undefined
-  const deadline = request?.deadline
-  const files = request?.criteria?.some((criterion) => Handoff.artifacts(criterion.description, criterion.verification))
+  const deadline = omits(request?.context, "deadline") ? undefined : request?.deadline
+  const scoped = request?.outputs !== undefined
+  const files = request?.criteria?.some(
+    (criterion) =>
+      Handoff.artifacts(criterion.description, criterion.verification) ||
+      (!!request.outputs?.length && Handoff.required(criterion.description, criterion.verification)),
+  )
   const properties = { ...schema.properties }
   delete properties.deadline
+  if (omits(request?.context)) delete properties.budget
   const artifacts = properties.artifacts
   const criteria = properties.criteria
   const result: JSONSchema7 = {
@@ -62,13 +68,13 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
       ...new Set([
         ...(schema.required ?? []).filter((key) => key !== "deadline"),
         ...(deadline === undefined ? [] : ["deadline"]),
-        ...(files ? ["artifacts", "criteria"] : []),
+        ...(files && !scoped ? ["artifacts", "criteria"] : []),
         ...(request?.outputs === undefined ? [] : ["outputs"]),
       ]),
     ],
     properties: {
       ...properties,
-      ...(files
+      ...(files && !scoped
         ? {
             artifacts: { ...(artifacts && typeof artifacts === "object" ? artifacts : {}), type: "array", minItems: 1 },
             criteria: { ...(criteria && typeof criteria === "object" ? criteria : {}), type: "array", minItems: 1 },
@@ -85,6 +91,42 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
           }
         : {}),
     },
+  }
+  if (scoped) {
+    const outputs = properties.outputs
+    const question = { ...result.properties }
+    const required = (result.required ?? []).filter((key) => key !== "artifacts" && key !== "criteria")
+    return {
+      ...result,
+      anyOf: [
+        {
+          ...result,
+          required,
+          properties: {
+            ...question,
+            outputs: { ...(outputs && typeof outputs === "object" ? outputs : {}), type: "array", maxItems: 0 },
+          },
+        },
+        {
+          ...result,
+          required: [...new Set([...required, "criteria", ...(files ? ["artifacts"] : [])])],
+          properties: {
+            ...result.properties,
+            outputs: { ...(outputs && typeof outputs === "object" ? outputs : {}), type: "array", minItems: 1 },
+            criteria: { ...(criteria && typeof criteria === "object" ? criteria : {}), type: "array", minItems: 1 },
+            ...(files
+              ? {
+                  artifacts: {
+                    ...(artifacts && typeof artifacts === "object" ? artifacts : {}),
+                    type: "array",
+                    minItems: 1,
+                  },
+                }
+              : {}),
+          },
+        },
+      ],
+    } satisfies JSONSchema7
   }
   if (files || !request?.criteria?.length) return result
   const question = { ...result.properties }

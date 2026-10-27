@@ -1041,8 +1041,8 @@ it.live(
             criteria: [
               {
                 id: "design-handoff",
-                description: "Hand off the actual produced files to Frontend Lead.",
-                verification: "Cite the accepted delegate_work receipt listing verified artifact identities.",
+                description: "Complete approved-design.md and delegate it to Frontend Lead.",
+                verification: "The delegate_work receipt must list approved-design.md as its output artifact.",
               },
             ],
             budget: 1000,
@@ -1202,10 +1202,25 @@ it.live(
         ).pipe(Effect.provideService(Session.Service, workerSessions as never))
         expect(bounded.properties?.deadline).toMatchObject({ type: "integer", minimum: 1, maximum: deadline })
         expect(bounded.additionalProperties).toBe(false)
-        expect(bounded.required).toContain("artifacts")
-        expect(bounded.required).toContain("criteria")
-        expect(bounded.properties?.artifacts).toMatchObject({ minItems: 1 })
-        expect(bounded.properties?.criteria).toMatchObject({ type: "array", minItems: 1 })
+        expect(bounded.required).toContain("outputs")
+        expect(bounded.anyOf).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              required: expect.arrayContaining(["outputs"]),
+              properties: expect.objectContaining({
+                outputs: expect.objectContaining({ maxItems: 0 }),
+              }),
+            }),
+            expect.objectContaining({
+              required: expect.arrayContaining(["outputs", "artifacts", "criteria"]),
+              properties: expect.objectContaining({
+                artifacts: expect.objectContaining({ minItems: 1 }),
+                criteria: expect.objectContaining({ minItems: 1 }),
+                outputs: expect.objectContaining({ minItems: 1 }),
+              }),
+            }),
+          ]),
+        )
         yield* database.db
           .update(Delegation)
           .set({
@@ -1230,7 +1245,8 @@ it.live(
         expect(conditional.required).not.toContain("criteria")
         expect(conditional.anyOf).toHaveLength(2)
         const alternatives = conditional.anyOf?.filter((item) => typeof item === "object")
-        expect(alternatives?.[0]?.properties?.artifacts).toBeUndefined()
+        expect(alternatives?.[0]?.required).not.toContain("artifacts")
+        expect(alternatives?.[0]?.properties?.outputs).toMatchObject({ maxItems: 0 })
         expect(alternatives?.[0]?.additionalProperties).toBe(false)
         expect(alternatives?.[0]?.required).not.toContain("criteria")
         expect(alternatives?.[1]?.required).toContain("criteria")
@@ -1249,6 +1265,27 @@ it.live(
         expect(Exit.isFailure(invalid)).toBe(true)
         expect(yield* errands.byRun(runID)).toHaveLength(0)
         expect(yield* errands.queued(coder.id)).toEqual([])
+        const criterionless = yield* delegate.execute(
+          { ...params, criteria: undefined, artifacts: undefined },
+          context("delegate-output-without-criteria"),
+        )
+        expect(criterionless.metadata.requestStatus).toBe("unresolved")
+        expect(criterionless.output).toContain("output files requires child-specific acceptance criteria")
+        expect(yield* errands.byRun(runID)).toHaveLength(0)
+        yield* database.db
+          .update(Delegation)
+          .set({ context: `${owner}\nOmit budget and deadline keys; neither was supplied.` })
+          .where(eq(Delegation.id, incoming.record.id))
+          .run()
+        const capped = yield* delegate.execute({ ...params, budget: 3000 }, context("delegate-invented-budget"))
+        expect(capped.metadata.requestStatus).toBe("unresolved")
+        expect(capped.output).toContain("explicitly says to omit budget")
+        expect(yield* errands.byRun(runID)).toHaveLength(0)
+        const timed = yield* delegate.execute(params, context("delegate-omitted-deadline"))
+        expect(timed.metadata.requestStatus).toBe("unresolved")
+        expect(timed.output).toContain("explicitly says to omit deadline")
+        expect(yield* errands.byRun(runID)).toHaveLength(0)
+        yield* database.db.update(Delegation).set({ context: owner }).where(eq(Delegation.id, incoming.record.id)).run()
         const omitted = yield* delegate.execute(
           { ...params, artifacts: undefined },
           context("delegate-omitted-artifacts"),
@@ -1257,6 +1294,32 @@ it.live(
         expect(omitted.output).toContain("artifacts")
         expect(yield* errands.byRun(runID)).toHaveLength(0)
         expect(yield* errands.queued(coder.id)).toEqual([])
+        yield* database.db
+          .update(Delegation)
+          .set({
+            criteria: JSON.stringify([
+              {
+                id: "sales-handoff",
+                description: "hand both builder files to Sales",
+                verification:
+                  "Call delegate_work to Website Pilot Sales with artifacts [index.html, builder-brief.md] written by Builder.",
+              },
+            ]),
+          })
+          .where(eq(Delegation.id, incoming.record.id))
+          .run()
+        const downstream = yield* delegate.execute(
+          { ...params, artifacts: undefined },
+          context("delegate-builder-wording-without-artifacts"),
+        )
+        expect(downstream.metadata.requestStatus).toBe("unresolved")
+        expect(downstream.output).toContain("verified file handoff")
+        expect(yield* errands.byRun(runID)).toHaveLength(0)
+        yield* database.db
+          .update(Delegation)
+          .set({ criteria: JSON.stringify(incoming.record.criteria) })
+          .where(eq(Delegation.id, incoming.record.id))
+          .run()
         const assigned = yield* delegate.execute(params, context("delegate-build"))
         expect(assigned.metadata.requestStatus).toBe("complete")
         expect(yield* errands.byRun(runID)).toHaveLength(1)
@@ -1358,11 +1421,14 @@ it.live(
             recipientID: designer.id,
             objective: "Which layout should we discuss?",
             context: "A simple design question.",
+            outputs: [],
           },
           { ...context("delegate-simple-question"), sessionID: manual },
         )
         expect(question.metadata.requestStatus).toBe("complete")
         expect((yield* errands.byRun(run))[0]?.context).toBe("A simple design question.")
+        expect((yield* errands.byRun(run))[0]?.outputs).toEqual([])
+        expect((yield* errands.byRun(run))[0]?.criteria).toBeUndefined()
 
         const missing = yield* delegate.execute(
           { ...params, objective: "Use a missing receipt", artifacts: [path.join(directory, "not-created.md")] },

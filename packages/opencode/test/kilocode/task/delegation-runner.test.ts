@@ -1954,10 +1954,10 @@ test("an overdue queued request fails on tick without starting", async () => {
         database,
         storage,
         sessions: retained({
-          create: () =>
+          create: (input) =>
             Effect.sync(() => {
               starts.push("start")
-              return session(`ses_${starts.length}`)
+              return session(input?.id ?? `ses_${starts.length}`)
             }),
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),

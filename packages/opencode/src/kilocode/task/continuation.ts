@@ -40,11 +40,32 @@ export function continuation(input: {
 }): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const raw = input.session.metadata?.rayaRoutine
-    if (raw === undefined) return true
+    if (raw === undefined) {
+      if (!input.database) return true
+      return yield* Effect.gen(function* () {
+        const module = yield* Effect.promise(() => import("./delegation"))
+        const row = yield* module.RayaTaskDelegation.make(input.database!).bySession(input.session.id)
+        if (!row) return true
+        if (row.outputs !== undefined || !row.childRunID) return false
+        const starts = yield* Effect.promise(() => import("./snapshot"))
+        const saved = yield* starts.RayaTaskSnapshot.make(input).find(row.childRunID)
+        return !!saved && saved.outputs === undefined
+      }).pipe(Effect.catchCause(() => Effect.succeed(false)))
+    }
     const identity = yield* Schema.decodeUnknownEffect(record)(raw).pipe(Effect.orElseSucceed(() => undefined))
     if (!identity) return false
     const scope = yield* Effect.gen(function* () {
-      if (!identity.delegationID) return identity.outputs === undefined
+      if (!identity.delegationID) {
+        if (identity.outputs !== undefined) return false
+        if (input.database) {
+          const module = yield* Effect.promise(() => import("./delegation"))
+          const row = yield* module.RayaTaskDelegation.make(input.database).bySession(input.session.id)
+          if (row?.outputs !== undefined) return false
+        }
+        const starts = yield* Effect.promise(() => import("./snapshot"))
+        const saved = yield* starts.RayaTaskSnapshot.make(input).find(identity.runID)
+        return saved?.outputs === undefined
+      }
       if (!input.database) return false
       const module = yield* Effect.promise(() => import("./delegation"))
       const row = yield* module.RayaTaskDelegation.make(input.database).get(identity.delegationID)
@@ -153,7 +174,7 @@ export function owned<A, E, R>(
 ) {
   return Effect.gen(function* () {
     const raw = input.session.metadata?.rayaRoutine
-    if (raw === undefined) return yield* body
+    if (raw === undefined) return (yield* continuation(input)) ? yield* body : undefined
     const identity = yield* Schema.decodeUnknownEffect(record)(raw).pipe(Effect.orElseSucceed(() => undefined))
     if (!identity || !(yield* continuation(input))) return undefined
     const execution = RayaTaskExecution.make(input.storage)

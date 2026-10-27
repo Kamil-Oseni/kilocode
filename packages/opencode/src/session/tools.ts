@@ -543,7 +543,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const select = () => {
     if (initial !== tools) return initial // kilocode_change - timer observation precedes discovery/code/MCP advertisement
     // kilocode_change - preserve the original complete catalogue
-    if (!LazyTools.eligible(input.agent)) return tools
+    if (scoped || !LazyTools.eligible(input.agent)) return tools
     const user = input.messages.findLast((row) => row.info.role === "user")
     if (!user) throw new Error("Bounded tools require a current user turn")
     return LazyTools.bind({

@@ -2360,6 +2360,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     </details>
                     <OrganizationActivity
                       id={item.id}
+                      current={session.currentSessionID}
                       item={item}
                       agents={agents().map((agent) => ({ ...agent, state: boxes()[agent.id]?.state }))}
                       {...(workReceipt()?.organizationID === item.id

@@ -1179,20 +1179,27 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     })
     const agentDelegate = Effect.fn("KilocodeHttpApi.agentDelegate")(function* (ctx: {
       params: { agentID: string }
-      payload: DelegationRequest
+      payload: DelegationRequest & { reportSessionID?: SessionID }
     }) {
       yield* owned(ctx.params.agentID)
       yield* remembered(ctx.payload.recipientID)
-      return yield* runner.delegate({ ...ctx.payload, senderID: ctx.params.agentID }).pipe(
-        Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
-        Effect.catchTag("RayaTask.GuardError", (err) =>
-          Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
-        ),
-        Effect.catchTag("RayaTaskDelegation.Invalid", (err) =>
-          Effect.fail(new InvalidRequestError({ message: err.message })),
-        ),
-        Effect.catchTag("RayaTaskDelegation.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
-      )
+      yield* routing(ctx.payload)
+      const { reportSessionID, ...request } = ctx.payload
+      return yield* runner
+        .delegate(
+          { ...request, senderID: ctx.params.agentID },
+          reportSessionID === undefined ? undefined : { reportSessionID },
+        )
+        .pipe(
+          Effect.catchTag("RayaTask.NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))),
+          Effect.catchTag("RayaTask.GuardError", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
+          ),
+          Effect.catchTag("RayaTaskDelegation.Invalid", (err) =>
+            Effect.fail(new InvalidRequestError({ message: err.message })),
+          ),
+          Effect.catchTag("RayaTaskDelegation.Conflict", () => Effect.fail(new HttpApiError.Conflict({}))),
+        )
     })
     const agentDelegateGet = Effect.fn("KilocodeHttpApi.agentDelegateGet")(function* (ctx: {
       params: { agentID: string; id: string }

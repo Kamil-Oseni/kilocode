@@ -49971,6 +49971,10 @@
                     },
                     "minItems": 1,
                     "maxItems": 16
+                  },
+                  "reportSessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
                   }
                 },
                 "required": ["source", "senderID", "recipientID", "objective"],

@@ -75,11 +75,13 @@ const item = {
 }
 const [revision, setRevision] = createSignal(2)
 const [available, setAvailable] = createSignal()
+const [session, setSession] = createSignal("ses_before")
 function Fixture() {
   const dialog = useDialog()
   onMount(() =>
     dialog.show(() =>
       createComponent(OrganizationAssignment, {
+        current: session,
         get item() {
           return { ...item, revision: revision() }
         },
@@ -228,16 +230,27 @@ try {
   assert.match(document.body.textContent, /No budget is available for this work/)
   assert.equal(button("Assign work").disabled, true)
   setAvailable()
+  setSession("ses_clicked")
   await tick()
   button("Assign work").click()
   await tick()
   const work = sent.findLast((msg) => msg.type === "routineDelegate")
+  setSession("ses_after")
+  assert.equal(work.reportSessionID, "ses_clicked")
   assert.equal(work.agentID, "other")
   assert.equal(work.recipientID, "writer")
   assert.equal(work.organizationRevision, 3)
   assert.equal(work.objective, "Write a reviewed report")
   assert.equal(work.expected, "Report matches records")
   assert.equal(work.context, "Use current records")
+  reply({ type: "routineDelegated", requestID: work.requestID, agentID: work.agentID, error: "Response was lost" })
+  await tick()
+  button("Assign work").click()
+  await tick()
+  const retry = sent.findLast((msg) => msg.type === "routineDelegate")
+  assert.notEqual(retry.requestID, work.requestID)
+  assert.equal(retry.source, work.source)
+  assert.equal(retry.reportSessionID, "ses_clicked")
 } finally {
   dispose()
   window.close()

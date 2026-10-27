@@ -44,6 +44,28 @@ test("routine report HTTP validates ordinary conversations and missing destinati
     }),
   })
   expect(assigned.status).toBe(400)
+  const delegation = {
+    source: "manual-report",
+    senderID: "missing-sender",
+    recipientID: "missing-recipient",
+    objective: "Review the current report.",
+  }
+  const invalidOrigin = await app.request("/kilocode/agent/missing-sender/delegate", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...delegation, reportSessionID: "not-a-session" }),
+  })
+  expect(invalidOrigin.status).toBe(400)
+  const incomplete = await app.request("/kilocode/agent/missing-sender/delegate", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      ...delegation,
+      reportSessionID: session.id,
+      organizationID: `org_${"a".repeat(32)}`,
+    }),
+  })
+  expect(incomplete.status).toBe(400)
   const missing = await app.request("/kilocode/agent-reports?sessionID=ses_missing_report", { headers })
   expect(missing.status).toBe(400)
 }, 30_000)

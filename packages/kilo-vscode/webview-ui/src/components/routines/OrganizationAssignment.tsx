@@ -20,6 +20,7 @@ export type Follow = {
 type Sent = {
   request: string
   source: string
+  reportSessionID?: string
   sender: string
   recipient: string
   objective: string
@@ -227,6 +228,7 @@ const Simple: Component<{
 
 export const OrganizationAssignment: Component<{
   item: Organization
+  current?: () => string | undefined
   agents: Agent[]
   parent?: Follow
   available?: number
@@ -364,6 +366,15 @@ export const OrganizationAssignment: Component<{
   const unsub = vscode.onMessage(receive)
   onCleanup(unsub)
 
+  const [origin, setOrigin] = createSignal<{ id: string | undefined }>()
+  // This source keeps its first destination even if an uncertain reply is retried.
+  const destination = () => {
+    const saved = origin()
+    const id = saved ? saved.id : props.parent ? undefined : props.current?.()
+    if (!saved) setOrigin({ id })
+    return id ? { reportSessionID: id } : {}
+  }
+
   const submit = () => {
     if (review() && !fresh()) return
     if (!valid() || sent()) return
@@ -371,6 +382,7 @@ export const OrganizationAssignment: Component<{
     const value: Sent = {
       request,
       source,
+      ...destination(),
       sender: sender(),
       recipient: recipient(),
       objective: objective().trim(),
@@ -389,6 +401,7 @@ export const OrganizationAssignment: Component<{
       agentID: value.sender,
       recipientID: value.recipient,
       source: value.source,
+      ...(value.reportSessionID ? { reportSessionID: value.reportSessionID } : {}),
       ...(value.parentID ? { parentID: value.parentID } : {}),
       ...(value.parentRunID ? { parentRunID: value.parentRunID } : {}),
       organizationID: props.item.id,

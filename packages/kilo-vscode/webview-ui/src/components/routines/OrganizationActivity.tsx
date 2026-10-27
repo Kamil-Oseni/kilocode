@@ -159,6 +159,7 @@ function empty(active: number, more: boolean) {
 
 export const OrganizationActivity: Component<{
   id: string
+  current?: () => string | undefined
   item: import("@kilocode/sdk/v2/client").KilocodeRoutineOrganizationListResponse["items"][number]
   agents: { id: string; name: string; enabled: boolean; state?: string }[]
   receipt?: { id: string; name: string }
@@ -198,6 +199,7 @@ export const OrganizationActivity: Component<{
     dialog.show(() => (
       <OrganizationAssignment
         item={props.item}
+        current={props.current}
         agents={props.agents}
         parent={parent}
         {...(available() === undefined ? {} : { available: available() })}

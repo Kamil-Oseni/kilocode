@@ -366,6 +366,7 @@ export interface RoutineDelegateMessage {
   agentID: string
   recipientID: string
   source: string
+  reportSessionID?: string
   objective: string
   parentID?: string
   parentRunID?: string

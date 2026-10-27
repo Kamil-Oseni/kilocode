@@ -710,12 +710,16 @@ async function pass(ctx: Ctx) {
   const text = typeof msg.objective === "string" ? msg.objective : ""
   if (!text.trim() || text.length > 8000) throw new Error("Write what the other worker should answer.")
   const input = assignment(msg, text.trim())
+  const destination = msg.reportSessionID
+  if (destination !== undefined && (typeof destination !== "string" || !/^ses_\S{1,124}$/.test(destination)))
+    throw new Error("Choose an existing report conversation before assigning work.")
   const result = await ctx.kilo.delegate
     .create(
       {
         directory: ctx.dir,
         agentID: String(msg.agentID),
         ...input,
+        ...(destination === undefined ? {} : { reportSessionID: destination }),
       },
       { throwOnError: true },
     )

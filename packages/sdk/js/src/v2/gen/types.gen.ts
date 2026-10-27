@@ -29228,6 +29228,7 @@ export type KilocodeRoutineDelegateCreateData = {
       tool: string
       callID: string
     }>
+    reportSessionID?: string
   }
   path: {
     agentID: string

@@ -487,17 +487,20 @@ test("routine delegate posts the same source on retry and refreshes inbox summar
     client,
     directory: "workspace",
     post,
+    currentSession: () => "ses_other_active_chat",
     message: {
       type: "routineDelegate",
       requestID: "dlg1",
       agentID: "chief",
       recipientID: "books",
       source: "dlg:retry",
+      reportSessionID: "ses_clicked",
       objective: "Review Friday expenses.",
     },
   })
   expect(payload).toEqual({
     source: "dlg:retry",
+    reportSessionID: "ses_clicked",
     senderID: "chief",
     recipientID: "books",
     objective: "Review Friday expenses.",

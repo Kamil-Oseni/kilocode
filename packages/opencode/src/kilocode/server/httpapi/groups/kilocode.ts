@@ -1360,7 +1360,11 @@ export const KilocodeApi = HttpApi.make("kilocode")
         HttpApiEndpoint.post("agentDelegate", KilocodePaths.agentDelegate, {
           params: { agentID: Schema.String },
           query: WorkspaceRoutingQuery,
-          payload: DelegateAsk,
+          payload: DelegateAsk.mapFields(
+            (fields) => ({ ...fields, reportSessionID: Schema.optional(SessionID) }),
+            // Adding routing leaves the existing organization-pair refinement unchanged.
+            { unsafePreserveChecks: true },
+          ),
           success: described(DelegateRecord, "Tracked worker-to-worker request"),
           error: [InvalidRequestError, HttpApiError.NotFound, HttpApiError.Conflict],
         }).annotateMerge(

@@ -10547,6 +10547,7 @@ export class Delegate extends HeyApiClient {
         tool: string
         callID: string
       }>
+      reportSessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -10573,6 +10574,7 @@ export class Delegate extends HeyApiClient {
             { in: "body", key: "deadline" },
             { in: "body", key: "budget" },
             { in: "body", key: "artifacts" },
+            { in: "body", key: "reportSessionID" },
           ],
         },
       ],

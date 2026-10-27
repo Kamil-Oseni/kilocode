@@ -445,6 +445,37 @@ test("delegation supports a bounded company chain and rejects returning to an ea
   )
 })
 
+test("delegation rejects a stopped ancestor while preserving completed handoffs", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = RayaTaskDelegation.make(yield* Database.Service)
+      const chief = agent("chief", "generalist")
+      const research = agent("research", "generalist")
+      const builder = agent("builder", "generalist")
+      const sales = agent("sales", "generalist")
+      for (const state of ["cancelled", "failed", "completed"] as const) {
+        const root = yield* store.admit(request(`root_${state}`, chief.id, research.id), chief, research)
+        const child = yield* store.admit(
+          request(`child_${state}`, research.id, builder.id, { parentID: root.record.id }),
+          research,
+          builder,
+        )
+        yield* store.finish(root.record.id, state, research, undefined, 0, "Reviewed parent result")
+        const result = yield* store
+          .admit(request(`late_${state}`, builder.id, sales.id, { parentID: child.record.id }), builder, sales)
+          .pipe(Effect.exit)
+        if (state === "completed") {
+          expect(Exit.isSuccess(result)).toBe(true)
+          continue
+        }
+        expect(Exit.isFailure(result)).toBe(true)
+        expect(yield* store.lookup(`late_${state}`)).toBeUndefined()
+        expect((yield* store.get(child.record.id)).state).toBe("queued")
+      }
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("one work tree cannot grow beyond its durable request limit", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -504,7 +535,10 @@ test("bounded children inherit only remaining commitments and replay the saved b
       const replay = yield* store.admit(input, books, sales, false, { limit: 10, spent: 2.5 })
       expect(replay.created).toBe(false)
       expect(replay.record.budget).toBe(4)
-      for (const changed of [{ ...input, budget: 3 }, { ...input, objective: "Different work" }]) {
+      for (const changed of [
+        { ...input, budget: 3 },
+        { ...input, objective: "Different work" },
+      ]) {
         const refusal = yield* store.admit(changed, books, sales, false, allocation).pipe(Effect.flip)
         expect(refusal.message).toContain("different request")
       }

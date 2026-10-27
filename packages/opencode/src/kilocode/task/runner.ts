@@ -300,9 +300,11 @@ export namespace RayaTaskRunner {
             check: () => transfer.check(),
             publish: (value) =>
               value.delegationID && errands
-                ? errands.get(value.delegationID).pipe(
-                    Effect.flatMap((row) => (row.state === "queued" ? queuedReport(row, value.notice) : Effect.void)),
-                  )
+                ? errands
+                    .get(value.delegationID)
+                    .pipe(
+                      Effect.flatMap((row) => (row.state === "queued" ? queuedReport(row, value.notice) : Effect.void)),
+                    )
                 : reports.publishDeferred(value),
           })
         : undefined
@@ -1364,7 +1366,9 @@ export namespace RayaTaskRunner {
             message: "This delegation's saved run identity is inconsistent and needs recovery review.",
           })
         if (taken.deadline !== undefined && taken.deadline <= Date.now()) {
-          yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE).pipe(Effect.tap(queuedReport))
+          yield* errands
+            .finish(taken.id, "failed", recipient, undefined, undefined, LATE)
+            .pipe(Effect.tap(queuedReport))
           yield* drop(recipient.id, prior.sessionID, prior.id, LATE)
           return yield* errands.get(taken.id)
         }
@@ -1388,14 +1392,16 @@ export namespace RayaTaskRunner {
         return attached
       }
       if (!(yield* errands.authorize(taken))) {
-        yield* errands.finish(
-          taken.id,
-          "failed",
-          recipient,
-          undefined,
-          undefined,
-          "The organization no longer authorizes this delegation.",
-        ).pipe(Effect.tap(queuedReport))
+        yield* errands
+          .finish(
+            taken.id,
+            "failed",
+            recipient,
+            undefined,
+            undefined,
+            "The organization no longer authorizes this delegation.",
+          )
+          .pipe(Effect.tap(queuedReport))
         return yield* errands.get(taken.id)
       }
       if (taken.deadline !== undefined && taken.deadline <= Date.now()) {
@@ -1457,21 +1463,25 @@ export namespace RayaTaskRunner {
           Effect.gen(function* () {
             const claim = yield* inspect(input.storage, recipient.id)
             if (claim) return yield* Effect.fail(err)
-            yield* errands.finish(
-              taken.id,
-              "failed",
-              recipient,
-              undefined,
-              undefined,
-              err instanceof Error ? err.message : "Delegated work could not start.",
-            ).pipe(Effect.tap(queuedReport))
+            yield* errands
+              .finish(
+                taken.id,
+                "failed",
+                recipient,
+                undefined,
+                undefined,
+                err instanceof Error ? err.message : "Delegated work could not start.",
+              )
+              .pipe(Effect.tap(queuedReport))
             return yield* Effect.fail(err)
           }),
         ),
       )
       const current = yield* errands.get(taken.id)
       if (current.deadline !== undefined && current.deadline <= Date.now()) {
-        yield* errands.finish(current.id, "failed", recipient, undefined, undefined, LATE).pipe(Effect.tap(queuedReport))
+        yield* errands
+          .finish(current.id, "failed", recipient, undefined, undefined, LATE)
+          .pipe(Effect.tap(queuedReport))
         yield* drop(recipient.id, run.sessionID, run.id, LATE)
         return yield* errands.get(current.id)
       }
@@ -1587,19 +1597,13 @@ export namespace RayaTaskRunner {
           message: "The delegation store is unavailable.",
         })
       const row = yield* errands.get(id)
-      const kids = yield* errands.descendants(id)
-      if (strict) {
-        if (!input.halt)
-          return yield* new RayaTask.GuardError({ message: "Routine stopping services are unavailable." })
-        for (const item of [row, ...kids]) {
-          if (!item.sessionID || item.state === "completed" || item.state === "failed" || item.state === "cancelled")
-            continue
-          const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
-          yield* open(worker.dir, input.halt(item.sessionID))
-        }
-      }
+      if (strict && !input.halt)
+        return yield* new RayaTask.GuardError({ message: "Routine stopping services are unavailable." })
       const recipient = (yield* fetch(row.recipientID))?.agent ?? absent(row.recipientID)
       const record = yield* errands.stop(row.id, recipient, "Stopped by the user.", yield* spent(row))
+      // Completed history stays intact; stopping an already completed parent does
+      // not establish a cancellation fence for future explicitly assigned work.
+      const kids = yield* errands.descendants(id)
       yield* queuedReport(record)
       yield* sync(record)
       for (const child of kids) {
@@ -1617,22 +1621,20 @@ export namespace RayaTaskRunner {
       const failures: Cause.Cause<unknown>[] = []
       for (const item of listed) {
         if (item.state === "completed" || item.state === "failed") continue
+        if (item.sessionID) {
+          if (!input.halt) {
+            failures.push(Cause.fail(new Error("Routine stopping services are unavailable.")))
+            continue
+          }
+          const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
+          const halted = yield* Effect.exit(open(worker.dir, input.halt(item.sessionID)))
+          if (Exit.isFailure(halted)) {
+            log.error("delegated session stop failed", { err: Cause.squash(halted.cause) })
+            failures.push(halted.cause)
+            continue
+          }
+        }
         const dropped = yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.")
-        if (strict || !item.sessionID) {
-          if (dropped) yield* execution.finish(dropped)
-          continue
-        }
-        if (!input.halt) {
-          failures.push(Cause.fail(new Error("Routine stopping services are unavailable.")))
-          continue
-        }
-        const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
-        const halted = yield* Effect.exit(open(worker.dir, input.halt(item.sessionID)))
-        if (Exit.isFailure(halted)) {
-          log.error("delegated session stop failed", { err: Cause.squash(halted.cause) })
-          failures.push(halted.cause)
-          continue
-        }
         if (dropped) yield* execution.finish(dropped)
       }
       if (failures.length)

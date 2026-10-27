@@ -117,7 +117,7 @@ test("chief of staff obtains a tracked accounting result without rewriting eithe
             starts.push("start")
             return session(input?.id ?? "ses_books")
           }),
-        get: (id: SessionID) => id === chat.id ? Effect.succeed(chat) : Effect.die("unused"),
+        get: (id: SessionID) => (id === chat.id ? Effect.succeed(chat) : Effect.die("unused")),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       })
@@ -1382,7 +1382,22 @@ test("stopping a parent cancels live descendants without rewriting assignments",
   await Effect.runPromise(
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const storage = memory()
+      const base = memory()
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const boundary = { armed: false, session: "" }
+      const storage = {
+        ...base,
+        read: <T>(key: string[]) =>
+          Effect.gen(function* () {
+            if (boundary.armed && key.join("/") === `raya/goal/${boundary.session}`) {
+              boundary.armed = false
+              yield* Deferred.succeed(entered, undefined)
+              yield* Deferred.await(release)
+            }
+            return yield* base.read<T>(key)
+          }),
+      }
       const starts: string[] = []
       const halted: string[] = []
       const runner = RayaTaskRunner.make({
@@ -1393,10 +1408,10 @@ test("stopping a parent cancels live descendants without rewriting assignments",
             halted.push(sessionID)
           }),
         sessions: retained({
-          create: () =>
+          create: (input) =>
             Effect.sync(() => {
               starts.push("start")
-              return session(`ses_${starts.length}`)
+              return session(input?.id ?? `ses_${starts.length}`)
             }),
           get: () => Effect.die("unused"),
           messages: () => Effect.succeed([]),
@@ -1435,6 +1450,11 @@ test("stopping a parent cancels live descendants without rewriting assignments",
         objective: "List missing Friday receipts.",
       })
       expect(parent.state).toBe("running")
+      // Admit a genuine child after Stop begins but before it commits parent cancellation.
+      boundary.session = parent.sessionID!
+      boundary.armed = true
+      const stopping = yield* runner.stop(parent.id).pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
       const child = yield* runner.delegate({
         source: "dlg_stop_child",
         senderID: books.id,
@@ -1443,7 +1463,8 @@ test("stopping a parent cancels live descendants without rewriting assignments",
         objective: "Confirm the missing receipts against policy.",
       })
       expect(child.state).toBe("running")
-      const stopped = yield* runner.stop(parent.id)
+      yield* Deferred.succeed(release, undefined)
+      const stopped = yield* Fiber.join(stopping)
       expect(stopped.state).toBe("cancelled")
       expect(stopped.reason).toBe("Stopped by the user.")
       expect(halted).toEqual([parent.sessionID!, child.sessionID!])

@@ -519,14 +519,69 @@ export namespace RayaTaskDelegation {
       if (allocation && !value.parentRunID)
         return yield* new Invalid({ message: "Bounded delegated work requires its parent run identity." })
       if (gone)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", GONE, organization, allocation)
+        return yield* persist(
+          value,
+          sender,
+          recipient,
+          workspace,
+          depth,
+          "failed",
+          GONE,
+          organization,
+          allocation,
+          lineage,
+        )
       if (sender.dir?.trim() && recipient.dir?.trim() && workspace === undefined)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", AWAY, organization, allocation)
+        return yield* persist(
+          value,
+          sender,
+          recipient,
+          workspace,
+          depth,
+          "failed",
+          AWAY,
+          organization,
+          allocation,
+          lineage,
+        )
       if (!recipient.enabled)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", PAUSED, organization, allocation)
+        return yield* persist(
+          value,
+          sender,
+          recipient,
+          workspace,
+          depth,
+          "failed",
+          PAUSED,
+          organization,
+          allocation,
+          lineage,
+        )
       if (recipient.access === undefined)
-        return yield* persist(value, sender, recipient, workspace, depth, "failed", ACCESS, organization, allocation)
-      return yield* persist(value, sender, recipient, workspace, depth, "queued", undefined, organization, allocation)
+        return yield* persist(
+          value,
+          sender,
+          recipient,
+          workspace,
+          depth,
+          "failed",
+          ACCESS,
+          organization,
+          allocation,
+          lineage,
+        )
+      return yield* persist(
+        value,
+        sender,
+        recipient,
+        workspace,
+        depth,
+        "queued",
+        undefined,
+        organization,
+        allocation,
+        lineage,
+      )
     })
     const persist = Effect.fn("RayaTaskDelegation.persist")(function* (
       value: Request,
@@ -538,6 +593,7 @@ export namespace RayaTaskDelegation {
       reason?: string,
       organization?: { id: string; name: string; revision: number; budget?: number },
       allocation?: { limit: number; spent: number },
+      lineage: readonly Record[] = [],
     ) {
       const saved = yield* db
         .transaction(
@@ -655,8 +711,7 @@ export namespace RayaTaskDelegation {
                   message: "The remaining allowance cannot fund the minimum supported child budget of 1.",
                 })
               for (const limit of limits) {
-                if (budget !== undefined && budget > limit.amount)
-                  return yield* new Invalid({ message: limit.message })
+                if (budget !== undefined && budget > limit.amount) return yield* new Invalid({ message: limit.message })
               }
               if (organization) {
                 const owner = yield* tx
@@ -721,6 +776,20 @@ export namespace RayaTaskDelegation {
                 reason: reason ?? null,
                 time_created: now,
                 time_updated: now,
+              }
+              // Stop cancels the parent before scanning descendants. This transaction
+              // must observe that fence before a new child can become visible.
+              for (const ancestor of lineage) {
+                const current = yield* tx
+                  .select({ parentID: Delegation.parent_id, state: Delegation.state })
+                  .from(Delegation)
+                  .where(eq(Delegation.id, ancestor.id))
+                  .get()
+                  .pipe(Effect.orDie)
+                if (!current || (current.parentID ?? undefined) !== ancestor.parentID)
+                  return yield* new Invalid({ message: "The parent delegation chain changed before admission." })
+                if (current.state === "failed" || current.state === "cancelled")
+                  return yield* new Invalid({ message: "The parent delegation chain was stopped or failed." })
               }
               yield* tx.insert(Delegation).values(saved).run().pipe(Effect.orDie)
               return { row: saved, created: true }

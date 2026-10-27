@@ -1,4 +1,4 @@
-import { header, type Lane } from "./inference-lane"
+import { decode, header, originHeader, type Lane, type Origin } from "./inference-lane"
 import { ollama } from "./ollama-bridge"
 import * as Lineage from "../task/effect-lineage"
 import * as ResultFrame from "./result-frame"
@@ -26,6 +26,17 @@ type Job = {
   lane: Lane
   runner: Lineage.Runner | undefined
   frame: ResultFrame.Frame | undefined
+  origin?: Origin
+  since: number
+}
+
+export type Observation = Origin & {
+  version: 1
+  epoch: string
+  observedAt: number
+  since?: number
+  queued: number
+  active: number
 }
 
 export class LocalInferenceError extends Error {
@@ -52,6 +63,13 @@ function size(input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) {
   if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) return body.byteLength
   if (body instanceof Blob) return undefined // A slice may retain a much larger backing store.
   if (body instanceof URLSearchParams) return Buffer.byteLength(body.toString())
+  return undefined
+}
+
+function tag(source: HeadersInit | undefined, name: string): unknown {
+  if (source instanceof Headers) return source.get(name)
+  if (Array.isArray(source)) return source.find(([key]) => key.toLowerCase() === name)?.[1]
+  if (source) return Object.getOwnPropertyDescriptor(source, name)?.value
   return undefined
 }
 
@@ -167,6 +185,8 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
   for (const [key, value] of Object.entries(limits))
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid local scheduler ${key}`)
   const queue: Job[] = []
+  const running = new Set<Job>()
+  const epoch = crypto.randomUUID()
   let active = 0
   let bytes = 0
   let burst = 0
@@ -180,6 +200,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     detach(job)
     job.phase = "closed"
     active--
+    running.delete(job)
     job.reader?.releaseLock()
     next()
   }
@@ -214,6 +235,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     clearTimeout(job.timer)
     job.phase = "fetching"
     active++
+    running.add(job)
     try {
       const response = await ResultFrame.run(
         job.frame,
@@ -288,6 +310,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     input: Parameters<Fetch>[0],
     init?: Parameters<Fetch>[1],
     lane: Lane = "interactive",
+    origin?: Origin,
   ): Promise<Response> => {
     const signal = init?.signal !== undefined ? init.signal : input instanceof Request ? input.signal : undefined
     if (signal?.aborted) return Promise.reject(signal.reason)
@@ -333,6 +356,8 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
         lane,
         runner: Lineage.runner(),
         frame: ResultFrame.current(),
+        origin: origin ? { ...origin } : undefined,
+        since: Date.now(),
       }
       job.abort = () => {
         job.output?.error(signal?.reason)
@@ -359,6 +384,21 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     snapshot() {
       return { active, queued: queue.length, bytes }
     },
+    observe(origin: Origin): Observation {
+      const matches = (job: Job) =>
+        job.origin?.sessionID === origin.sessionID && job.origin.messageID === origin.messageID
+      const waiting = queue.filter(matches)
+      const active = [...running].filter(matches).length
+      return {
+        version: 1,
+        epoch,
+        ...origin,
+        observedAt: Date.now(),
+        ...(waiting.length ? { since: Math.min(...waiting.map((job) => job.since)) } : {}),
+        queued: waiting.length,
+        active,
+      }
+    },
   }
 }
 
@@ -366,6 +406,10 @@ const shared = createLocalScheduler()
 
 export function status() {
   return shared.snapshot()
+}
+
+export function observe(origin: Origin): Observation {
+  return shared.observe(origin)
 }
 
 /** Both native and AI SDK integrations reuse this one backend-local scheduler. */
@@ -376,24 +420,25 @@ export function localFetch(options: Readonly<Record<string, unknown>>, fetcher: 
     Lineage.run(Lineage.runner(), () => {
       const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
       signal?.throwIfAborted()
-      return fetcher(input, init)
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+      if (!headers.has(header) && !headers.has(originHeader)) return fetcher(input, init)
+      headers.delete(header)
+      headers.delete(originHeader)
+      return fetcher(input, { ...init, headers })
     })
   const bridge = ollama(options, original)
   if (!localConfig(options).enabled) return original
   const fetch: Fetch = (input, init) => {
     const source = init?.headers ?? (input instanceof Request ? input.headers : undefined)
-    const selected =
-      source instanceof Headers
-        ? source.get(header)
-        : Array.isArray(source)
-          ? source.find(([key]) => key.toLowerCase() === header)?.[1]
-          : source && Object.getOwnPropertyDescriptor(source, header)?.value
+    const attribution = decode(tag(source, originHeader))
+    const selected = tag(source, header)
     const transport: Fetch = (input, init) => {
       const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
       headers.delete(header)
+      headers.delete(originHeader)
       return bridge(input, { ...init, headers })
     }
-    return shared.fetch(transport, input, init, selected === "background" ? "background" : "interactive")
+    return shared.fetch(transport, input, init, selected === "background" ? "background" : "interactive", attribution)
   }
   return fetch
 }

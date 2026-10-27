@@ -239,7 +239,10 @@ const live: Layer.Layer<
       const prepared = { ...base, tools, params: { ...base.params, maxOutputTokens } }
       yield* Lineage.check() // kilocode_change - preserve the original binding after remaining preparation waits
       const selected = item.options.localInference === true ? yield* lane(input, database) : "interactive"
-      prepared.headers = headers(prepared.headers, selected, item.options.localInference === true)
+      prepared.headers = headers(prepared.headers, selected, item.options.localInference === true, {
+        sessionID: input.sessionID,
+        messageID: input.user.id,
+      })
       // kilocode_change end
 
       // Wire up toolExecutor for DWS workflow models so that tool calls

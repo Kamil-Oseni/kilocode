@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect"
 import * as Lineage from "@opencode-ai/core/kilocode/background-lineage" // kilocode_change
 import * as Outcome from "@/kilocode/background/outcome" // kilocode_change
 import { Service as OutcomeService } from "@opencode-ai/core/kilocode/background-outcome" // kilocode_change
+import * as Queue from "@/kilocode/background/local-inference" // kilocode_change - current local queue observations are never persisted authority
 
 export {
   Service,
@@ -32,8 +33,10 @@ const layer = Layer.effect(
     )
     // kilocode_change end
     return CoreBackgroundJob.Service.of({
-      list: () => InstanceState.useEffect(state, (jobs) => jobs.list()),
-      get: (id) => InstanceState.useEffect(state, (jobs) => jobs.get(id)),
+      // kilocode_change start - observe current transport state without altering saved job metadata
+      list: () => InstanceState.useEffect(state, (jobs) => jobs.list().pipe(Effect.flatMap(Queue.list))),
+      get: (id) => InstanceState.useEffect(state, (jobs) => jobs.get(id).pipe(Effect.flatMap(Queue.get))),
+      // kilocode_change end
       start: (input) => InstanceState.useEffect(state, (jobs) => jobs.start(input)),
       extend: (input) => InstanceState.useEffect(state, (jobs) => jobs.extend(input)),
       wait: (input) => InstanceState.useEffect(state, (jobs) => jobs.wait(input)),

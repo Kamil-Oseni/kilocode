@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, ManagedRuntime } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
-import { headers, lane } from "../../../src/kilocode/provider/inference-lane"
+import { decode, headers, lane, originHeader } from "../../../src/kilocode/provider/inference-lane"
 
 test("persisted Routine ancestry selects background while interactive specialists keep chat priority", async () => {
   const runtime = ManagedRuntime.make(Database.layerFromPath(":memory:"))
@@ -47,4 +47,10 @@ test("cloud headers preserve identity and only local requests receive the resour
   expect(local).toHaveProperty("x-raya-inference-lane", "background")
   expect(local["x-value"]).toBe("unchanged")
   expect(input).toEqual({ "x-value": "unchanged" })
+  const attributed = headers(input, "background", true, { sessionID: "ses_child", messageID: "msg_input" })
+  expect(decode(new Headers(attributed).get(originHeader))).toEqual({ sessionID: "ses_child", messageID: "msg_input" })
+  expect(decode('{"sessionID":"ses_child","messageID":"msg_input","extra":true}')).toBeUndefined()
+  expect(decode('{"sessionID":"ses_child","messageID":"msg_input"')).toBeUndefined()
+  expect(decode("x".repeat(1025))).toBeUndefined()
+  expect(decode('{"sessionID":"","messageID":"msg_input"}')).toBeUndefined()
 })

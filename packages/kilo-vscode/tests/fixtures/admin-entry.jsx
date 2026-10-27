@@ -10,6 +10,7 @@ import { SecondBrain } from "../../webview-ui/src/components/settings/SecondBrai
 import { SavedMemory, SavedConversation } from "../../webview-ui/src/components/chat/SavedMemory"
 import { MemoryProvider } from "../../webview-ui/src/context/memory"
 import { ServerContext, useServer } from "../../webview-ui/src/context/server"
+import { SessionContext, useSession } from "../../webview-ui/src/context/session"
 import { createSignal, Show } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 
@@ -167,6 +168,33 @@ window.acquireVsCodeApi = () => ({
               },
             ]
           : [],
+      }
+      if (state === "workers-local") {
+        const local = {
+          version: 1,
+          epoch: "10ff0000-0000-4000-8000-000000000000",
+          sessionID: "synthetic-child",
+          messageID: "synthetic-input",
+          observedAt: Date.now(),
+          since: Date.now() - 10_000,
+          queued: 1,
+          active: 0,
+        }
+        const response = (change = {}) =>
+          emit({
+            ...reply,
+            jobs: reply.jobs.map((job) => ({
+              ...job,
+              metadata: { ...job.metadata, childMessageID: "synthetic-input", localInference: { ...local, ...change } },
+            })),
+          })
+        if (message.type === "cancelBackgroundJob") {
+          response()
+          return
+        }
+        window.__workerReplies ??= []
+        window.__workerReplies.push(response)
+        return
       }
       if (state === "workers-held") {
         window.__workerReplies ??= []
@@ -356,15 +384,53 @@ function ProposalFixture() {
 }
 
 function AdminFixture() {
+  const session = useSession()
+  const [attention, setAttention] = createSignal()
+  window.__workerAttention = setAttention
+  const scoped =
+    state === "workers-local"
+      ? {
+          ...session,
+          allMessages: () => ({
+            "synthetic-child": [
+              { id: "synthetic-input", role: "user", sessionID: "synthetic-child" },
+              {
+                id: "synthetic-answer",
+                role: "assistant",
+                sessionID: "synthetic-child",
+                parentID: "synthetic-input",
+                modelID: "synthetic-model",
+              },
+            ],
+          }),
+          getSessionToolParts: (id) =>
+            id === "synthetic-child"
+              ? [
+                  {
+                    id: "synthetic-write",
+                    type: "tool",
+                    tool: "write",
+                    messageID: "synthetic-answer",
+                    state: { status: "running", input: { filePath: "/synthetic/history.txt" } },
+                  },
+                ]
+              : [],
+          scopedPermissions: () =>
+            attention() === "permission" ? [{ id: "permission", sessionID: "synthetic-child" }] : [],
+          scopedQuestions: () => (attention() === "question" ? [{ id: "question", sessionID: "synthetic-child" }] : []),
+        }
+      : session
   const [visible, setVisible] = createSignal(true)
   window.__workersRemount = () => {
     setVisible(false)
     queueMicrotask(() => setVisible(true))
   }
   return (
-    <Show when={visible()}>
-      <AdminView onBack={() => record({ type: "back" })} />
-    </Show>
+    <SessionContext.Provider value={scoped}>
+      <Show when={visible()}>
+        <AdminView onBack={() => record({ type: "back" })} />
+      </Show>
+    </SessionContext.Provider>
   )
 }
 

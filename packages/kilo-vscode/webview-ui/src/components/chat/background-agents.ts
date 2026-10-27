@@ -53,8 +53,44 @@ export interface BackgroundAgent {
   completedAt?: number
   jobID: string
   revision?: string
+  messageID?: string
+  localInference?: unknown
   permission?: PermissionRequest
   question?: QuestionRequest
+}
+
+function stamp(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+}
+
+function observation(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return
+  const row = value as Record<string, unknown>
+  if (
+    row.version !== 1 ||
+    typeof row.epoch !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.epoch) ||
+    typeof row.sessionID !== "string" ||
+    typeof row.messageID !== "string" ||
+    !stamp(row.observedAt) ||
+    !stamp(row.since) ||
+    row.since > row.observedAt ||
+    typeof row.queued !== "number" ||
+    !Number.isSafeInteger(row.queued) ||
+    row.queued <= 0 ||
+    row.active !== 0
+  )
+    return
+  return { sessionID: row.sessionID, messageID: row.messageID, observedAt: row.observedAt, since: row.since }
+}
+
+/** A fresh queue observation describes waiting, never historical tool or model activity. */
+export function backgroundAgentWait(agent: BackgroundAgent, now: number, unavailable = false): number | undefined {
+  if (unavailable || agent.status !== "running" || agent.permission || agent.question || !agent.messageID) return
+  const row = observation(agent.localInference)
+  if (!row || row.sessionID !== agent.id || row.messageID !== agent.messageID) return
+  if (!stamp(now) || now < row.observedAt || now - row.observedAt > 15_000) return
+  return Math.floor((now - row.since) / 1_000)
 }
 
 /** Capture the displayed invocation; never select a newer revision while stopping. */
@@ -205,6 +241,8 @@ export function backgroundJobAgents(
         completedAt: job.completed_at,
         jobID: job.id,
         revision: text(job.revision),
+        messageID: text(job.metadata?.childMessageID),
+        localInference: job.metadata?.localInference,
         permission: permissions.find((item) => item.sessionID === id),
         question: questions.find((item) => item.sessionID === id),
       }

@@ -6,13 +6,17 @@ import {
   localConfig,
   localFetch,
   LocalInferenceError,
+  observe,
 } from "../../../src/kilocode/provider/local-scheduler"
+import { headers, originHeader } from "../../../src/kilocode/provider/inference-lane"
+import { enrich } from "../../../src/kilocode/background/local-inference"
 
 function fixture() {
   const starts: string[] = []
   const stops: string[] = []
   const streams = new Map<string, ReadableStreamDefaultController<Uint8Array>>()
   const requests: { path: string; body: string; header: string | null }[] = []
+  const internals: { lane: string | null; origin: string | null }[] = []
   const encoder = new TextEncoder()
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -22,6 +26,10 @@ function fixture() {
       const text = await request.text()
       starts.push(path)
       requests.push({ path, body: text, header: request.headers.get("x-value") })
+      internals.push({
+        lane: request.headers.get("x-raya-inference-lane"),
+        origin: request.headers.get(originHeader),
+      })
       if (path === "/empty") return new Response(null, { status: 204 })
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -40,6 +48,7 @@ function fixture() {
     starts,
     stops,
     requests,
+    internals,
     url(path: string) {
       return new URL(path, server.url).href
     },
@@ -64,6 +73,70 @@ async function until(check: () => boolean) {
 }
 
 describe("local inference scheduler with held transport cleanup", () => {
+  test("real local requests project only the current worker input and strip attribution on local and cloud leaves", async () => {
+    const host = fixture()
+    const first = { sessionID: "ses_chat", messageID: "msg_chat" }
+    const child = { sessionID: "ses_child", messageID: "msg_child" }
+    const metadata = {
+      sessionId: child.sessionID,
+      childMessageID: child.messageID,
+      background: true,
+      localInference: { forged: true },
+    }
+    const job = { id: "job_child", type: "task", status: "running" as const, started_at: Date.now(), metadata }
+    const request = localFetch({ localInference: true })
+    const abort = new AbortController()
+    try {
+      const chat = await request(host.url("/chat"), { headers: headers({}, "interactive", true, first) })
+      const waiting = request(host.url("/worker"), {
+        headers: HttpHeaders.fromInput(headers({}, "background", true, child)),
+      })
+      const queued = enrich(job, observe).metadata?.localInference
+      expect(queued).toMatchObject({ version: 1, ...child, queued: 1, active: 0 })
+      expect(queued).toHaveProperty("since")
+      expect(observe(child).epoch).toBe(observe(first).epoch)
+      expect(observe({ ...child, messageID: "msg_other" })).toMatchObject({ queued: 0, active: 0 })
+      expect(enrich({ ...job, status: "completed" }, observe).metadata).not.toHaveProperty("localInference")
+      expect(metadata.localInference).toEqual({ forged: true })
+      const cancelled = request(host.url("/cancelled"), {
+        headers: headers({}, "background", true, child),
+        signal: abort.signal,
+      }).then(
+        () => undefined,
+        (err: unknown) => err,
+      )
+      expect(observe(child).queued).toBe(2)
+      abort.abort(new Error("Cancel queued observation"))
+      expect(await cancelled).toBeInstanceOf(Error)
+      expect(observe(child).queued).toBe(1)
+      host.end("/chat")
+      await chat.text()
+      const worker = await waiting
+      expect(enrich(job, observe).metadata?.localInference).toMatchObject({ ...child, queued: 0, active: 1 })
+      host.end("/worker")
+      await worker.text()
+      expect(enrich(job, observe).metadata?.localInference).toMatchObject({ queued: 0, active: 0 })
+      expect(enrich(job, observe).metadata?.localInference).not.toHaveProperty("since")
+      const cloud = await localFetch({})(host.url("/cloud"), {
+        headers: headers({}, "background", true, child),
+      })
+      host.end("/cloud")
+      await cloud.text()
+      expect(host.starts).toEqual(["/chat", "/worker", "/cloud"])
+      expect(host.internals).toEqual([
+        { lane: null, origin: null },
+        { lane: null, origin: null },
+        { lane: null, origin: null },
+      ])
+      const fresh = createLocalScheduler()
+      expect(fresh.observe(child)).toMatchObject({ queued: 0, active: 0 })
+      expect(fresh.observe(child).epoch).not.toBe(observe(child).epoch)
+    } finally {
+      abort.abort()
+      await host.close()
+    }
+  })
+
   test("consumer cancellation retains the slot until the original stream cancellation joins", async () => {
     const queue = createLocalScheduler()
     const gate = Promise.withResolvers<void>()
@@ -81,8 +154,9 @@ describe("local inference scheduler with held transport cleanup", () => {
         }),
       )
     }
-    const first = await queue.fetch(transport, "http://fixture/first")
-    const second = queue.fetch(transport, "http://fixture/second")
+    const origin = { sessionID: "ses_worker", messageID: "msg_first" }
+    const first = await queue.fetch(transport, "http://fixture/first", undefined, "background", origin)
+    const second = queue.fetch(transport, "http://fixture/second", undefined, "background", origin)
     let joined = false
     const cancellation = first.body!.cancel("finished").then(() => {
       joined = true
@@ -92,6 +166,8 @@ describe("local inference scheduler with held transport cleanup", () => {
       expect(joined).toBe(false)
       expect(calls).toEqual(["http://fixture/first"])
       expect(queue.snapshot()).toMatchObject({ active: 1, queued: 1 })
+      expect(queue.observe(origin)).toMatchObject({ active: 1, queued: 1 })
+      expect(queue.observe({ ...origin, messageID: "msg_later" })).toMatchObject({ active: 0, queued: 0 })
     } finally {
       gate.resolve()
       await cancellation
@@ -100,6 +176,7 @@ describe("local inference scheduler with held transport cleanup", () => {
     expect(joined).toBe(true)
     expect(calls).toEqual(["http://fixture/first", "http://fixture/second"])
     expect(queue.snapshot()).toEqual({ active: 0, queued: 0, bytes: 0 })
+    expect(queue.observe(origin)).toMatchObject({ active: 0, queued: 0 })
   })
 
   test("abort before headers waits for the original response and its body cleanup before dispatch", async () => {

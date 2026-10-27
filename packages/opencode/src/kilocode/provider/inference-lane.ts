@@ -6,6 +6,32 @@ import { SessionID } from "@/session/schema"
 
 export type Lane = "interactive" | "background"
 export const header = "x-raya-inference-lane"
+export const originHeader = "x-raya-inference-origin"
+export type Origin = { sessionID: string; messageID: string }
+
+/** Bounded attribution only; it never identifies execution authority. */
+export function origin(value: unknown): Origin | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const row = value as Record<string, unknown>
+  if (Object.keys(row).length !== 2) return undefined
+  if (
+    typeof row.sessionID !== "string" ||
+    typeof row.messageID !== "string" ||
+    !/^[A-Za-z0-9_-]{1,256}$/.test(row.sessionID) ||
+    !/^[A-Za-z0-9_-]{1,256}$/.test(row.messageID)
+  )
+    return undefined
+  return { sessionID: row.sessionID, messageID: row.messageID }
+}
+
+export function decode(value: unknown): Origin | undefined {
+  if (typeof value !== "string" || value.length > 1024) return undefined
+  try {
+    return origin(JSON.parse(value))
+  } catch {
+    return undefined
+  }
+}
 
 /** Scheduling classification is a resource hint, never Routine execution authority. */
 export function lane(input: { sessionID: string; small?: boolean }, database: Database.Interface) {
@@ -31,7 +57,17 @@ export function lane(input: { sessionID: string; small?: boolean }, database: Da
 }
 
 /** The internal tag is stripped by localFetch before either provider transport sees it. */
-export function headers<A extends Record<string, string>>(input: A, selected: Lane, local: boolean) {
+export function headers<A extends Record<string, string>>(
+  input: A,
+  selected: Lane,
+  local: boolean,
+  attribution?: Origin,
+) {
   if (!local) return input
-  return { ...input, [header]: selected }
+  const parsed = origin(attribution)
+  const clean = { ...input }
+  for (const name of Object.keys(clean)) {
+    if (name.toLowerCase() === originHeader) Reflect.deleteProperty(clean, name)
+  }
+  return { ...clean, [header]: selected, ...(parsed ? { [originHeader]: JSON.stringify(parsed) } : {}) }
 }

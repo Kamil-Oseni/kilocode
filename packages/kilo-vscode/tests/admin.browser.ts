@@ -67,6 +67,76 @@ test("remounted worker panel refuses previous status receipts for the same conve
   await expect(workers.getByRole("button", { name: "Stop: Code", exact: true })).toBeEnabled()
 })
 
+test("worker local-model waiting is fresh, invocation-bound and subordinate to input and status availability", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.clock.install({ time: new Date("2026-10-27T12:00:00Z") })
+  await page.clock.pauseAt(new Date("2026-10-27T12:00:01Z"))
+  await page.goto("/?state=workers-local")
+  const count = () => page.evaluate(() => (window as unknown as { __workerReplies: unknown[] }).__workerReplies.length)
+  const reply = (change: Record<string, unknown> = {}) =>
+    page.evaluate((change) => {
+      const rows = (window as unknown as { __workerReplies: ((change: Record<string, unknown>) => void)[] })
+        .__workerReplies
+      rows.at(-1)!(change)
+    }, change)
+  const refresh = async (change: Record<string, unknown> = {}) => {
+    const before = await count()
+    await page.clock.fastForward(5_000)
+    await expect.poll(count).toBeGreaterThan(before)
+    await reply(change)
+  }
+  await expect.poll(count).toBe(1)
+  await reply()
+  const workers = page.getByRole("region", { name: "Current conversation workers" })
+  await workers.locator('[data-slot="task-header-todos-trigger"]').click()
+  const row = workers.locator('[data-slot="task-header-agent"]')
+  const status = row.locator('[data-slot="task-header-agent-status-label"]')
+  const wait = row.locator('[data-slot="task-header-agent-local-wait"]')
+  await expect(status).toHaveText("Waiting for local model")
+  await expect(wait).toHaveText("Model wait: 10s")
+  await expect(row.locator('[data-slot="task-header-agent-model"]')).toHaveCount(0)
+  await expect(row.locator('[data-slot="task-header-agent-detail"]')).toHaveCount(0)
+  await expect(row.locator('[data-slot="task-header-agent-elapsed"]')).toHaveText("Elapsed: 10s")
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: info.outputPath("worker-local-wait-320.png"), fullPage: true })
+  await refresh({ active: 1 })
+  await expect(status).toHaveText("Running")
+  await expect(wait).toHaveCount(0)
+  await expect(row.locator('[data-slot="task-header-agent-model"]')).toBeVisible()
+  await expect(row.locator('[data-slot="task-header-agent-detail"]')).toBeVisible()
+  await refresh()
+  await expect(status).toHaveText("Waiting for local model")
+  for (const value of ["permission", "question"]) {
+    await page.evaluate(
+      (value) => (window as unknown as { __workerAttention: (value: string) => void }).__workerAttention(value),
+      value,
+    )
+    await expect(wait).toHaveCount(0)
+    await expect(row.getByText("Needs input", { exact: true })).toBeVisible()
+  }
+  await page.evaluate(() => (window as unknown as { __workerAttention: (value?: string) => void }).__workerAttention())
+  await expect(wait).toBeVisible()
+  await refresh({ messageID: "foreign-input" })
+  await expect(wait).toHaveCount(0)
+  await page.evaluate(() => (window as unknown as { __workerReplies: (() => void)[] }).__workerReplies[0]())
+  await expect(wait).toHaveCount(0)
+  await refresh()
+  await expect(wait).toBeVisible()
+  for (const tick of [5_000, 5_000, 5_001]) await page.clock.fastForward(tick)
+  await expect(wait).toHaveCount(0)
+  await page.clock.fastForward(10_000)
+  await expect(workers.getByText("Agent status unavailable · retrying", { exact: true }).first()).toBeVisible()
+  await expect(row.getByRole("button", { name: "Stop: Code", exact: true })).toHaveCount(0)
+  await reply()
+  await expect(wait).toBeVisible()
+  await row.getByRole("button", { name: "Stop: Code", exact: true }).click()
+  await expect(status).toHaveText("Cancelled")
+  await expect(wait).toHaveCount(0)
+  await expect(row.locator('[data-slot="task-header-agent-detail"]')).toHaveCount(0)
+})
+
 test("lost health reads expire and late replies cannot replace a fresh retry", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 })
   await page.clock.install()

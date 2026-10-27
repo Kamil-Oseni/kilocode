@@ -28,6 +28,7 @@ import {
   backgroundAgentElapsed,
   backgroundAgentIdentity,
   backgroundAgentUsage,
+  backgroundAgentWait,
   backgroundJobAgents,
   foregroundAgent,
   reconcileBackgroundAgents,
@@ -139,7 +140,10 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
 
   const label = (agent: BackgroundAgent) => identity(agent).name
 
-  const status = (agent: BackgroundAgent) => language.t(`task.backgroundAgents.status.${agent.status}`)
+  const status = (agent: BackgroundAgent) =>
+    backgroundAgentWait(agent, now(), snapshot().unavailable) !== undefined
+      ? language.t("task.backgroundAgents.localWait")
+      : language.t(`task.backgroundAgents.status.${agent.status}`)
 
   const summary = createMemo(() => {
     if (snapshot().unavailable) return language.t("task.backgroundAgents.unavailable")
@@ -289,12 +293,14 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
             </Show>
             <For each={visible()}>
               {(agent) => {
+                const queued = createMemo(() => backgroundAgentWait(agent, now(), snapshot().unavailable))
                 const activity = createMemo(() =>
                   backgroundAgentActivity(session.getSessionToolParts(agent.id), session.allMessages()[agent.id] ?? []),
                 )
                 const detail = createMemo(() => {
                   if (agent.error) return agent.error
                   if (agent.status !== "running") return
+                  if (queued() !== undefined) return
                   const part = activity()
                   if (!part) return undefined
                   const info = getToolInfo(part.tool, part.state.input)
@@ -336,7 +342,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                         </span>
                       </span>
                       <span data-slot="task-header-agent-secondary">
-                        <Show when={executed()}>
+                        <Show when={queued() === undefined && executed()}>
                           {(value) => (
                             <span
                               data-slot="task-header-agent-model"
@@ -360,6 +366,13 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                             </span>
                           )}
                         </Show>
+                        <Show when={queued() !== undefined}>
+                          <span data-slot="task-header-agent-local-wait">
+                            {language.t("task.backgroundAgents.localElapsed", {
+                              duration: backgroundAgentDuration(queued()!),
+                            })}
+                          </span>
+                        </Show>
                         <Show when={!snapshot().unavailable && agent.status === "completed"}>
                           <span data-slot="task-header-agent-report">
                             {language.t("task.backgroundAgents.viewReport")}
@@ -374,7 +387,11 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
                         </Show>
                         <Show when={!snapshot().unavailable && elapsed() !== undefined}>
                           <span data-slot="task-header-agent-elapsed" title={started()}>
-                            {backgroundAgentDuration(elapsed()!)}
+                            {queued() === undefined
+                              ? backgroundAgentDuration(elapsed()!)
+                              : language.t("task.backgroundAgents.totalElapsed", {
+                                  duration: backgroundAgentDuration(elapsed()!),
+                                })}
                           </span>
                         </Show>
                         <Show when={cost()}>

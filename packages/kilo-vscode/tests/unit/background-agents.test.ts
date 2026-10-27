@@ -6,6 +6,7 @@ import {
   backgroundAgentElapsed,
   backgroundAgentIdentity,
   backgroundAgentUsage,
+  backgroundAgentWait,
   backgroundAgents,
   backgroundJobAgents,
   foregroundAgent,
@@ -62,6 +63,66 @@ const busy: SessionStatusInfo = { type: "busy" }
 const idle: SessionStatusInfo = { type: "idle" }
 
 describe("backgroundAgents", () => {
+  it("shows only a fresh exact-invocation local wait and keeps attention and unavailable states authoritative", () => {
+    const local = {
+      version: 1,
+      epoch: "10ff0000-0000-4000-8000-000000000000",
+      sessionID: "child",
+      messageID: "input",
+      observedAt: 20_000,
+      since: 10_000,
+      queued: 2,
+      active: 0,
+    }
+    const jobs: BackgroundJobInfo[] = [
+      {
+        id: "job",
+        type: "task",
+        status: "running",
+        started_at: 5_000,
+        metadata: {
+          parentSessionId: "parent",
+          sessionId: "child",
+          childMessageID: "input",
+          background: true,
+          localInference: local,
+        },
+      },
+    ]
+    const agent = backgroundJobAgents(jobs, "parent")[0]
+    if (!agent) throw new Error("Expected the original worker")
+    expect(backgroundAgentWait(agent, 25_000)).toBe(15)
+    expect(backgroundAgentWait(agent, 35_000)).toBe(25)
+    expect(backgroundAgentWait(agent, 35_001)).toBeUndefined()
+    expect(backgroundAgentWait(agent, 19_999)).toBeUndefined()
+    expect(backgroundAgentWait(agent, 25_000, true)).toBeUndefined()
+    expect(backgroundAgentWait({ ...agent, status: "completed" }, 25_000)).toBeUndefined()
+    expect(backgroundAgentWait({ ...agent, messageID: undefined }, 25_000)).toBeUndefined()
+    const permission = { id: "permission", sessionID: "child" } as PermissionRequest
+    const question = { id: "question", sessionID: "child" } as QuestionRequest
+    expect(backgroundAgentWait({ ...agent, permission }, 25_000)).toBeUndefined()
+    expect(backgroundAgentWait({ ...agent, question }, 25_000)).toBeUndefined()
+    for (const value of [
+      undefined,
+      null,
+      [],
+      {},
+      { ...local, version: 2 },
+      { ...local, epoch: "old" },
+      { ...local, sessionID: "foreign" },
+      { ...local, messageID: "later" },
+      { ...local, active: 1 },
+      { ...local, queued: 0 },
+      { ...local, queued: 0.5 },
+      { ...local, queued: Infinity },
+      { ...local, observedAt: NaN },
+      { ...local, since: undefined },
+      { ...local, since: 20_001 },
+      { ...local, since: -1 },
+    ])
+      expect(backgroundAgentWait({ ...agent, localInference: value }, 25_000)).toBeUndefined()
+  })
+
   it("retains last-known workers through a failed refresh and replaces them only after recovery", () => {
     const running: BackgroundJobInfo = {
       id: "job",

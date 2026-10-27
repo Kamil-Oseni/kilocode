@@ -46,10 +46,12 @@ export interface BackgroundJobInfo {
   metadata?: {
     parentSessionId?: string
     sessionId?: string
+    childMessageID?: string
     background?: boolean
     displayName?: string
     selectedAgent?: string
     selection?: "auto" | "explicit"
+    localInference?: unknown
   }
 }
 

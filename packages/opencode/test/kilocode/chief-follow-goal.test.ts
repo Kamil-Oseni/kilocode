@@ -10,7 +10,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Cause, Effect, Exit, Schema } from "effect"
+import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { Agent } from "@/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -20,7 +20,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Git } from "@/git"
 import { Worktree } from "@/worktree"
 import { InstanceStore } from "@/project/instance-store"
-import { InstanceBootstrap } from "@/project/bootstrap"
+import { InstanceBootstrap } from "@/project/bootstrap-service"
 import { Storage } from "@/storage/storage"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Session } from "@/session/session"
@@ -48,6 +48,7 @@ import { TaskAuthority } from "@/kilocode/tool/task-authority"
 import { Question } from "@/question"
 import { RayaGoal } from "@/kilocode/goal"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
+import { associate } from "@/kilocode/goal/turn"
 import { ProviderTest } from "../fake/provider"
 import { goalTools } from "@/kilocode/tool/goal"
 import * as Tool from "@/tool/tool"
@@ -113,7 +114,14 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}, durable = false) =>
       [Provider.node, provider.layer],
       [RuntimeFlags.node, RuntimeFlags.layer(flags)],
       ...(durable ? [[Database.node, Database.layerFromPath(db)] as const] : []),
-      ...(durable ? [[InstanceStore.bootstrapNode, InstanceBootstrap.node] as const] : []),
+      ...(durable
+        ? [
+            [
+              InstanceStore.bootstrapNode,
+              Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+            ] as const,
+          ]
+        : []),
     ],
   )
 
@@ -179,51 +187,51 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
   }
 }
 
-// prettier-ignore
-planned.instance("reserves verification for an authenticated Chief follow from goal", () =>
-  Effect.gen(function* () {
-    for (const mode of [
-      "continuation",
-      "current",
-      "request",
-      "user",
-      "call",
-      "compat",
-      "compat-request",
-      "compat-user",
-      "edit",
-      "edit-background",
-      "conflict",
-      "readonly",
-      "omitted-access",
-      "refinement",
-      "refinement-resume",
-      "refinement-resume-legacy",
-      "refinement-resume-forged",
-      "refinement-resume-appeared",
-      "unknown-resume",
-      "refinement-forged",
-      "refinement-child",
-      "refinement-running",
-      "refinement-plan",
-      "refinement-user",
-      "refinement-call",
-      "compaction",
-      "compaction-absent",
-      "compaction-forged",
-      "compaction-failed",
-      "compaction-manual",
-      "compaction-parent",
-      "compaction-newer",
-      "compaction-paused",
-      "stale-contract",
-      "parent-deny",
-      "forged",
-      "stale-dispatch",
-      "changed-intent",
-      "foreign-intake",
-      "newer-input",
-    ] as const) {
+for (const mode of [
+  "continuation",
+  "current",
+  "request",
+  "user",
+  "call",
+  "compat",
+  "compat-request",
+  "compat-user",
+  "edit",
+  "edit-background",
+  "conflict",
+  "readonly",
+  "omitted-access",
+  "refinement",
+  "refinement-resume",
+  "refinement-resume-legacy",
+  "refinement-resume-forged",
+  "refinement-resume-appeared",
+  "unknown-resume",
+  "refinement-forged",
+  "refinement-child",
+  "refinement-running",
+  "refinement-plan",
+  "refinement-user",
+  "refinement-call",
+  "compaction",
+  "compaction-absent",
+  "compaction-forged",
+  "compaction-failed",
+  "compaction-manual",
+  "compaction-parent",
+  "compaction-newer",
+  "compaction-paused",
+  "stale-contract",
+  "parent-deny",
+  "forged",
+  "stale-dispatch",
+  "changed-intent",
+  "foreign-intake",
+  "newer-input",
+] as const) {
+  // prettier-ignore
+  planned.instance(`reserves verification for an authenticated Chief follow from goal (${mode})`, () =>
+    Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
       const work =
@@ -358,83 +366,99 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         }
       }
       if (mode.startsWith("compaction")) {
-        const storage = yield* Storage.Service
-        const goals = RayaGoal.make({ storage, sessions })
-        if (mode !== "compaction-absent") yield* goals.create(chat.id, request)
-        const marker = yield* sessions.updateMessage({
-          id: MessageID.ascending(),
-          role: "user",
-          sessionID: chat.id,
-          agent: "build",
-          model: ref,
-          time: { created: Date.now() },
-        })
-        yield* sessions.updatePart({
-          id: PartID.ascending(),
-          messageID: marker.id,
-          sessionID: chat.id,
-          type: "compaction",
-          auto: mode !== "compaction-manual",
-          overflow: false,
-        })
-        const summary = yield* sessions.updateMessage({
-          ...assistant,
-          id: MessageID.ascending(),
-          agent: "compaction",
-          mode: "compaction",
-          summary: true,
-          parentID: mode === "compaction-parent" ? authored : marker.id,
-          finish: mode === "compaction-failed" ? "length" : "stop",
-          time: { created: Date.now(), completed: Date.now() },
-        })
-        yield* sessions.updatePart({
-          id: PartID.ascending(),
-          sessionID: chat.id,
-          messageID: summary.id,
-          type: "text",
-          text: "Controlled persisted compaction summary",
-        })
-        const intake = yield* sessions.updateMessage({
-          id: MessageID.ascending(),
-          role: "user",
-          sessionID: chat.id,
-          agent: "build",
-          model: ref,
-          time: { created: Date.now() },
-        })
-        yield* sessions.updatePart({
-          id: PartID.ascending(),
-          sessionID: chat.id,
-          messageID: intake.id,
-          type: "text",
-          synthetic: true,
-          metadata: { compaction_continue: true },
-          text:
-            mode === "compaction-forged"
-              ? "Forged guidance"
-              : "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
-        })
-        assistant.id = MessageID.ascending()
-        assistant.parentID = intake.id
-        yield* sessions.updateMessage({ ...assistant, agent: "auto", mode: "auto" })
-        if (mode === "compaction-paused") yield* goals.control(chat.id, "paused")
-        if (mode === "compaction-newer") {
-          const newer = yield* sessions.updateMessage({
+        const runs = yield* SessionRunState.Service
+        const prepare = Effect.gen(function* () {
+          const storage = yield* Storage.Service
+          const goals = RayaGoal.make({ storage, sessions })
+          if (mode !== "compaction-absent") yield* goals.create(chat.id, request, mode === "compaction" ? authored : undefined)
+          if (mode === "compaction") {
+            yield* associate(goals, runs, chat.id, sessions)
+            expect((yield* goals.get(chat.id))?.inputs).toContain(authored)
+          }
+          const marker = yield* sessions.updateMessage({
             id: MessageID.ascending(),
             role: "user",
             sessionID: chat.id,
-            agent: "auto",
+            agent: "build",
+            model: ref,
+            time: { created: Date.now() },
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: marker.id,
+            sessionID: chat.id,
+            type: "compaction",
+            auto: mode !== "compaction-manual",
+            overflow: false,
+          })
+          const summary = yield* sessions.updateMessage({
+            ...assistant,
+            id: MessageID.ascending(),
+            agent: "compaction",
+            mode: "compaction",
+            summary: true,
+            parentID: mode === "compaction-parent" ? authored : marker.id,
+            finish: mode === "compaction-failed" ? "length" : "stop",
+            time: { created: Date.now(), completed: Date.now() },
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: chat.id,
+            messageID: summary.id,
+            type: "text",
+            text: "Controlled persisted compaction summary",
+          })
+          const intake = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: chat.id,
+            agent: "build",
             model: ref,
             time: { created: Date.now() },
           })
           yield* sessions.updatePart({
             id: PartID.ascending(),
             sessionID: chat.id,
-            messageID: newer.id,
+            messageID: intake.id,
             type: "text",
-            text: request,
+            synthetic: true,
+            metadata: { compaction_continue: true },
+            text:
+              mode === "compaction-forged"
+                ? "Forged guidance"
+                : "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
           })
-        }
+          assistant.id = MessageID.ascending()
+          assistant.parentID = intake.id
+          yield* sessions.updateMessage({ ...assistant, agent: "auto", mode: "auto" })
+          if (mode === "compaction") {
+            yield* associate(goals, runs, chat.id, sessions)
+            expect((yield* goals.get(chat.id))?.inputs).toContain(authored)
+            expect((yield* goals.get(chat.id))?.inputs).toContain(intake.id)
+          }
+          if (mode === "compaction-paused") yield* goals.control(chat.id, "paused")
+          if (mode === "compaction-newer") {
+            const newer = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              role: "user",
+              sessionID: chat.id,
+              agent: "auto",
+              model: ref,
+              time: { created: Date.now() },
+            })
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              sessionID: chat.id,
+              messageID: newer.id,
+              type: "text",
+              text: request,
+            })
+          }
+          return {info:assistant,parts:[]}
+        })
+        yield* (mode === "compaction"
+          ? runs.ensureRunning(chat.id,Effect.succeed({info:assistant,parts:[]}),prepare)
+          : prepare)
       }
       const call = "follow-from-goal"
       const part = {
@@ -592,7 +616,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect((yield* sessions.children(chat.id)).length).toBe(before)
         expect(started).toBe(0)
         expect((yield* sessions.get(chat.id)).metadata?.["raya.chief.access-refusals"]).toBeUndefined()
-        continue
+        return
       }
       if (mode.startsWith("refinement")) {
         expect(Exit.isFailure(result)).toBe(true)
@@ -727,7 +751,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toHaveLength(1)
           expect(started).toBe(0)
           expect((yield* sessions.children(chat.id)).length).toBe(mode === "refinement-child" ? before + 1 : before)
-          continue
+          return
         }
         const captured = ChiefRefinement.fingerprint((yield* sessions.get(chat.id)).metadata)
         const routes = yield* Effect.all(
@@ -795,7 +819,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         const child = yield* sessions.get(completed.metadata.sessionId)
         expect(TaskAuthority.hard(child.metadata, "edit", ["/private/result.txt"])).toEqual([])
         expect(TaskAuthority.hard(child.metadata, "edit", ["/private/other.txt"])).toHaveLength(1)
-        continue
+        return
       }
       if (mode === "edit-background" && Exit.isSuccess(result)) {
         const joined = yield* (yield* BackgroundJob.Service).wait({ id: result.value.metadata.sessionId })
@@ -819,7 +843,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           mode.startsWith("compat") || mode.startsWith("refinement") ? "task" : "goal",
         )
         expect(parent.metadata?.["raya.chief.verification"]).toBeUndefined()
-        continue
+        return
       }
       if (Exit.isFailure(result)) throw Cause.squash(result.cause)
       expect(result.value.metadata.selectedAgent).toBe("general")
@@ -852,11 +876,11 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         ])
       }
       expect(started).toBe(1)
-      if (mode === "edit-background") continue
+      if (mode === "edit-background") return
       if (mode === "compat") {
         expect(RayaChief.phase(parent.metadata)).toBe("verify")
         expect(parent.metadata?.["raya.chief.verification"]).toBeUndefined()
-        continue
+        return
       }
       expect(RayaChief.phase(parent.metadata)).toBe(["continuation", "compaction"].includes(mode) ? "goal" : "done")
       expect(parent.metadata?.preserved).toBe(true)
@@ -868,6 +892,10 @@ planned.instance("reserves verification for an authenticated Chief follow from g
       })
       if (["continuation", "compaction"].includes(mode)) {
         const id = result.value.metadata.sessionId
+        expect(result.value.output).toContain(`task_id="${id}"`)
+        expect(result.value.output).toContain("a Task summary is not completion evidence")
+        expect(result.value.output).toContain("Do not repeat successful work")
+        expect(result.value.output).not.toContain("<task_recovery>")
         const decode = (text: string) => {
           const raw = text.match(/<task_recovery>([^\n]+)<\/task_recovery>/)?.[1]
           if (!raw) throw new Error("Task did not expose a structured recovery call")
@@ -876,9 +904,6 @@ planned.instance("reserves verification for an authenticated Chief follow from g
             arguments: Schema.Struct({task_id: SessionID, prompt: Schema.String}),
           }))(JSON.parse(raw))
         }
-        const handoff = decode(result.value.output)
-        expect(handoff.arguments.task_id).toBe(id)
-        expect(handoff.arguments.prompt.trim().length).toBeGreaterThan(0)
         const count = (yield* sessions.children(chat.id)).length
         const attempt = Effect.fn(function* (input: Parameters<typeof def.execute>[0], message = assistant, publication = Effect.void) {
           const retry = {...part,messageID:message.id,id:PartID.ascending(),callID:`recovery-${PartID.ascending()}`,
@@ -904,7 +929,9 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           if (!(error instanceof Refusal)) throw error
           expect(error.reason).toBe("task-recovery")
           expect(error.message).toContain(`task_id="${id}"`)
-          expect(decode(error.message)).toEqual(handoff)
+          const handoff = decode(error.message)
+          expect(handoff.arguments.task_id).toBe(id)
+          expect(handoff.arguments.prompt.trim().length).toBeGreaterThan(0)
           expect((yield* sessions.children(chat.id)).length).toBe(count)
           expect(started).toBe(1)
         }
@@ -912,6 +939,25 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           storage: yield* Storage.Service, sessions, background: yield* BackgroundJob.Service,
           sessionID: chat.id, messageID: assistant.id, agent: "auto", planned: false,
         }
+        const uninspected = yield* ChiefVerification.reuse({...common,taskID:id}).pipe(Effect.exit)
+        expect(Exit.isFailure(uninspected)).toBe(true)
+        if (Exit.isFailure(uninspected)) expect(Cause.pretty(uninspected.cause)).toContain("get_goal in an earlier turn")
+        const getter = yield* goalTools(RayaGoal.make({storage:common.storage,sessions}),sessions).get.pipe(Effect.flatMap(Tool.init))
+        const inspect = Effect.fn(function* () {
+          const start = Date.now()
+          const call = `inspection-${PartID.ascending()}`
+          const captured = yield* getter.execute({}, {sessionID:chat.id,messageID:assistant.id,callID:call,agent:"auto",abort:new AbortController().signal,messages:[],ask:()=>Effect.void,metadata:()=>Effect.void})
+          yield* sessions.updatePart({id:PartID.ascending(),sessionID:chat.id,messageID:assistant.id,
+            type:"tool",tool:"get_goal",callID:call,state:{status:"completed",input:{},
+              title:captured.title,output:captured.output,metadata:captured.metadata,time:{start,end:Date.now()}},
+          })
+          yield* sessions.updateMessage({...assistant,agent:"auto",mode:"auto",finish:"stop",time:{...assistant.time,completed:Date.now()}})
+          assistant.id = MessageID.ascending()
+          assistant.time = {created:Date.now()}
+          yield* sessions.updateMessage({...assistant,agent:"auto",mode:"auto"})
+          common.messageID = assistant.id
+        })
+        yield* inspect()
         const require = createRequire(import.meta.url)
         const Constructor: new (options: { strict: boolean }) => { compile(schema: unknown): (value: unknown) => boolean } = createRequire(require.resolve("effect/package.json"))("ajv/dist/2020")
         const validator = new Constructor({ strict: false })
@@ -950,6 +996,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect(error.reason).toBe("task-objective")
         expect(started).toBe(1)
         expect((yield* sessions.children(chat.id)).length).toBe(count)
+        yield* inspect()
         // Static execution decoding must enforce correction even without the advertised schema.
         for (const input of [
           { task_id: id },
@@ -1017,7 +1064,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         // Synthesis updates presentation evidence without erasing the authenticated worker.
         const goals = RayaGoal.make({storage: common.storage, sessions})
         expect((yield* goals.get(chat.id))?.status).toBe("active")
-        const synthesis = {...part,id:PartID.ascending(),callID:"recover-synthesis",tool:"chief_synthesize",
+        const synthesis = {...part,id:PartID.ascending(),messageID:assistant.id,callID:"recover-synthesis",tool:"chief_synthesize",
           state:{status:"running" as const,input:{},time:{start:Date.now()}},
         }
         yield* sessions.updatePart(synthesis)
@@ -1031,7 +1078,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         // Saved branch admission is owned by ChiefTaskBinding, not the unplanned recovery fence.
         yield* ChiefVerification.reuse({...common, planned: true})
         yield* ChiefVerification.reuse({...common, agent: "build"})
-        const resumed = yield* attempt(handoff.arguments)
+        const resumed = yield* attempt({task_id:id,prompt:"Correct the missing fixture work and verify its actual result"})
         expect(resumed.metadata.sessionId).toBe(id)
         const retained = yield* sessions.get(id)
         expect(TaskAuthority.direct(retained.metadata, retained.id, retained.parentID)).toBe(true)
@@ -1039,6 +1086,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect((yield* sessions.children(chat.id)).length).toBe(count)
         expect(started).toBe(2)
         for (const status of ["error", "cancelled"] as const) {
+          yield* inspect()
           failure = status
           const failed = yield* Effect.exit(attempt({task_id:id,prompt:"Recover the same worker"}))
           expect(Exit.isFailure(failed)).toBe(true)
@@ -1047,6 +1095,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
           if (!Exit.isFailure(replacement)) throw new Error("Failed resume admitted a replacement")
           expect(Cause.squash(replacement.cause)).toBeInstanceOf(Refusal)
           failure = undefined
+          yield* inspect()
           const recovered = yield* attempt({task_id:id,prompt:"Repair the failed recovery"})
           expect(recovered.metadata.sessionId).toBe(id)
           expect((yield* sessions.children(chat.id)).length).toBe(count)
@@ -1162,7 +1211,7 @@ planned.instance("reserves verification for an authenticated Chief follow from g
         expect((yield* sessions.children(chat.id)).length).toBe(count)
         expect(started).toBe(6)
       }
-    }
-  }),
-  30_000,
-)
+    }),
+    30_000,
+  )
+}

@@ -2,7 +2,14 @@ import z from "zod"
 
 type Tool = { function: { name: string; description?: string; parameters: Record<string, unknown> } }
 const call = z.object({ name: z.string().min(1), arguments: z.record(z.string(), z.unknown()) }).strict()
-const serial = new Set(["create_goal", "update_goal", "update_goal_plan", "chief_route", "assign_organization_work"])
+const serial = new Set([
+  "create_goal",
+  "update_goal",
+  "update_goal_plan",
+  "chief_route",
+  "assign_organization_work",
+  "inspect_routines",
+])
 const wire = z.discriminatedUnion("kind", [
   call.extend({ kind: z.literal("tool"), content: z.string().optional() }),
   z.object({ kind: z.literal("tools"), calls: z.array(call).min(1).max(128), content: z.string().optional() }).strict(),
@@ -117,6 +124,9 @@ export namespace ToolEnvelope {
     const value =
       "Return one JSON envelope matching the response schema. Use kind tool (name and arguments), tools (independent calls), or text (content, only when allowed). Calls in one tools envelope can execute concurrently; their array order does not make later calls wait for earlier results. Emit dependent operations in separate envelopes, waiting for the actual result before the next operation. Submit only one update_goal call for the current audit and wait for its result; never duplicate or race Goal status updates. Preserve exact tool arguments. Copy supplied literal filePath values character-for-character from the current request or verified tool output; do not reconstruct paths from memory. Before submitting a tool call, compare the entire decoded path, including its prefix, every directory segment and repeated characters, against that supplied value. JSON escaping must not change the decoded path. Tool results include their original toolCallId and output. Cite only the exact ID of an eligible successful result; never invent an ID. Copy goal criterion IDs and requirement strings from the current get_goal result as decoded text, without rewriting paths, capitalization, or adding JSON escapes. A rejected completion audit leaves the goal active: correct the audit using actual eligible evidence; do not resume an already active goal. " +
       routing +
+      (names.has("inspect_routines")
+        ? "Submit inspect_routines alone, once, and wait for its result before calling any other tool. Reuse its successful result for this user request; never duplicate or race routine inspections. "
+        : "") +
       (names.has("assign_organization_work")
         ? "Submit assign_organization_work alone and wait for its actual assignment result before calling other tools or assigning more work. Never duplicate or race worker assignments. "
         : "") +
@@ -154,6 +164,8 @@ export namespace ToolEnvelope {
       throw new Error("Chief routing requires a separate single-call envelope")
     if (calls.length > 1 && calls.some((call) => call.name === "assign_organization_work"))
       throw new Error("Worker assignment requires a separate single-call envelope")
+    if (calls.length > 1 && calls.some((call) => call.name === "inspect_routines"))
+      throw new Error("Routine inspection requires a separate single-call envelope")
     if (calls.length > 1 && calls.some((call) => serial.has(call.name)))
       throw new Error("Goal mutations require a separate single-call envelope")
     return { content: value.content ?? "", tool_calls: calls.map((call) => ({ function: call })) }

@@ -85,10 +85,27 @@ test("exact schemas and unrepaired arguments; strict outer choice/allowlist/boun
 })
 
 test("Goal mutations reject entire concurrent envelopes and preserve independent calls", () => {
-  const names = new Set(["update_goal", "read", "chief_route", "assign_organization_work"])
+  const names = new Set(["update_goal", "read", "chief_route", "assign_organization_work", "inspect_routines"])
   const mutation = { name: "update_goal", arguments: { criterionID: "verified" } }
   const read = { name: "read", arguments: { criterionID: "other" } }
   const assignment = { name: "assign_organization_work", arguments: { workerID: "researcher" } }
+  const inspection = { name: "inspect_routines", arguments: {} }
+  expect(
+    ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls: [inspection] }), names, "required").tool_calls,
+  ).toEqual([{ function: inspection }])
+  for (const calls of [
+    [inspection, inspection, inspection],
+    [inspection, read],
+    [read, inspection],
+    [inspection, mutation],
+  ])
+    expect(() => ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls }), names, "required")).toThrow(
+      "Routine inspection requires a separate single-call envelope",
+    )
+  const guide = ToolEnvelope.guide([{ function: { name: "inspect_routines", parameters: {} } }])
+  expect(guide).toContain("Submit inspect_routines alone, once, and wait for its result")
+  expect(guide).toContain("Reuse its successful result for this user request")
+
   expect(
     ToolEnvelope.decode(JSON.stringify({ kind: "tools", calls: [assignment] }), names, "required").tool_calls,
   ).toEqual([{ function: assignment }])
@@ -126,6 +143,7 @@ test("Goal mutations reject entire concurrent envelopes and preserve independent
     ...tools,
     { function: { name: "assign_organization_work", parameters: {} } },
     { function: { name: "chief_route", parameters: {} } },
+    { function: { name: "inspect_routines", parameters: {} } },
     { function: { name: "read", parameters: tools[0].function.parameters } },
   ]
   const batches = ToolEnvelope.schema(definitions, "required").anyOf.filter(
@@ -136,7 +154,7 @@ test("Goal mutations reject entire concurrent envelopes and preserve independent
     if (!("calls" in branch.properties)) throw new Error("Missing calls schema")
     const calls = branch.properties.calls
     expect(calls.items.anyOf.map((item) => item.properties.name.const)).toEqual(
-      calls.maxItems === 1 ? ["update_goal", "assign_organization_work", "chief_route"] : ["read"],
+      calls.maxItems === 1 ? ["update_goal", "assign_organization_work", "chief_route", "inspect_routines"] : ["read"],
     )
   }
 })

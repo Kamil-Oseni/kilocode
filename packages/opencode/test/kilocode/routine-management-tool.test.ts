@@ -13,6 +13,8 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { RayaRoutineDelegationTable as Delegation } from "@opencode-ai/core/kilocode/routine.sql"
+import { eq } from "drizzle-orm"
 import { Agent } from "@/agent/agent"
 import { Git } from "@/git"
 import { RayaContactOutbox } from "@/kilocode/contact/outbox"
@@ -1201,6 +1203,43 @@ it.live(
         expect(bounded.required).toContain("criteria")
         expect(bounded.properties?.artifacts).toMatchObject({ minItems: 1 })
         expect(bounded.properties?.criteria).toMatchObject({ type: "array", minItems: 1 })
+        yield* database.db
+          .update(Delegation)
+          .set({
+            criteria: JSON.stringify([
+              {
+                id: "research",
+                description: "Save research.md and hand off to Builder.",
+                verification: "Cite the accepted delegation receipt.",
+              },
+            ]),
+          })
+          .where(eq(Delegation.id, incoming.record.id))
+          .run()
+          .pipe(Effect.orDie)
+        const conditional = yield* TaskSchema.prepare(
+          "delegate_work",
+          schema,
+          sessionID,
+          context("conditional-handoff-schema").messageID,
+          "designer",
+        ).pipe(Effect.provideService(Session.Service, workerSessions as never))
+        expect(conditional.required).not.toContain("criteria")
+        expect(conditional.anyOf).toHaveLength(2)
+        const alternatives = conditional.anyOf?.filter((item) => typeof item === "object")
+        expect(alternatives?.[0]?.properties?.artifacts).toBeUndefined()
+        expect(alternatives?.[0]?.additionalProperties).toBe(false)
+        expect(alternatives?.[0]?.required).not.toContain("criteria")
+        expect(alternatives?.[1]?.required).toContain("criteria")
+        expect(alternatives?.[1]?.required).toContain("artifacts")
+        expect(alternatives?.[1]?.properties?.criteria).toMatchObject({ type: "array", minItems: 1 })
+        expect(alternatives?.[1]?.properties?.artifacts).toMatchObject({ type: "array", minItems: 1 })
+        yield* database.db
+          .update(Delegation)
+          .set({ criteria: JSON.stringify(incoming.record.criteria) })
+          .where(eq(Delegation.id, incoming.record.id))
+          .run()
+          .pipe(Effect.orDie)
         const invalid = yield* delegate
           .execute({ ...params, deadline: 0 }, context("delegate-zero-deadline"))
           .pipe(Effect.exit)

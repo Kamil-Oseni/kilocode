@@ -85,5 +85,22 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
         : {}),
     },
   }
-  return result
+  if (files || !request?.criteria?.length) return result
+  const question = { ...result.properties }
+  delete question.artifacts
+  return {
+    ...result,
+    anyOf: [
+      { ...result, properties: question },
+      {
+        ...result,
+        required: [...new Set([...(result.required ?? []), "artifacts", "criteria"])],
+        properties: {
+          ...result.properties,
+          artifacts: { ...(artifacts && typeof artifacts === "object" ? artifacts : {}), type: "array", minItems: 1 },
+          criteria: { ...(criteria && typeof criteria === "object" ? criteria : {}), type: "array", minItems: 1 },
+        },
+      },
+    ],
+  } satisfies JSONSchema7
 })

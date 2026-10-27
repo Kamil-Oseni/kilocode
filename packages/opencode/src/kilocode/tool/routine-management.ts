@@ -214,7 +214,7 @@ const DelegateWork = Schema.Struct({
   expected: Schema.optional(Text),
   criteria: Schema.optional(Criteria).annotate({
     description:
-      "Acceptance criteria for every requested deliverable and handoff in this work request. A required handoff needs its own criterion verifying accepted delegation with the actual files. Each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
+      "Acceptance criteria for every requested deliverable and handoff in this work request. Define verification actions from the owner's requested outcomes, not factual answers to assume. Never introduce unsupported business facts or requirements absent from the owner request; source-derived facts require actual read evidence and retain their original observation dates. Unknown facts stay unknown. A required handoff needs its own criterion verifying accepted delegation with the actual files. Each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
   }),
   context: Schema.optional(Text),
   deadline: Schema.optional(
@@ -249,7 +249,7 @@ const AssignOrganizationWork = Schema.Struct({
   expected: Schema.optional(Text),
   criteria: Schema.optional(Criteria).annotate({
     description:
-      "Acceptance criteria for every requested deliverable and handoff in this work request. A required handoff needs its own criterion verifying accepted delegation with the actual files. Each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
+      "Acceptance criteria for every requested deliverable and handoff in this work request. Define verification actions from the owner's requested outcomes, not factual answers to assume. Never introduce unsupported business facts or requirements absent from the owner request; source-derived facts require actual read evidence and retain their original observation dates. Unknown facts stay unknown. A required handoff needs its own criterion verifying accepted delegation with the actual files. Each criterion requires an evidence-backed completion audit. Omit for a question requiring only a reply. Do not copy unrelated standing-job criteria.",
   }),
   context: Schema.optional(Text),
   deadline: Schema.optional(
@@ -1086,7 +1086,7 @@ export function routineManagementTools(input: {
           if (incoming?.criteria && params.artifacts?.length && !params.criteria)
             return yield* Effect.fail(
               new Error(
-                "Handing off produced files from an audited job requires child-specific acceptance criteria. Describe and verify the recipient's actual deliverables; do not copy unrelated parent criteria.",
+                "Handing off produced files from an audited job requires child-specific acceptance criteria. Include criteria as an array of objects with id, description and verification. Describe and verify the recipient's actual deliverables; do not copy unrelated parent criteria or invent facts or requirements.",
               ),
             )
           if (incoming) {

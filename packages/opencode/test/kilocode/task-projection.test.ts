@@ -344,8 +344,10 @@ it.live("retired calendar cards reconcile in their frozen conversation once acro
       )
       const page = yield* reports.page({ sessionID: target.id, limit: 200 })
       const repaired = page.items.find((card) => card.id === rows[0].id)
+      const prior = cards[0]
+      if (!prior) return yield* Effect.die("Expected the original queued report card.")
       expect(repaired).toEqual({
-        ...cards[0],
+        ...prior,
         status: "stopped",
         summary: "Replaced by a newer schedule version.",
         revision: 2,

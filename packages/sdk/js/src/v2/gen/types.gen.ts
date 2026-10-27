@@ -96,6 +96,7 @@ export type Event =
   | EventServerConnected1
   | EventGlobalDisposed1
   | EventGlobalConfigUpdated1
+  | EventSessionInferenceChanged
   | EventSessionTurnOpen
   | EventSessionTurnClose
   | EventSessionQueueChanged
@@ -2798,6 +2799,7 @@ export type GlobalEvent = {
   project?: string
   workspace?: string
   payload:
+    | EventSessionInferenceChanged
     | EventSessionTurnOpen
     | EventSessionTurnClose
     | EventSessionQueueChanged
@@ -8746,6 +8748,14 @@ export type SkillV2Source = SkillV2DirectorySource | SkillV2UrlSource | SkillV2E
 
 export type MoveSessionDestination = {
   directory: string
+}
+
+export type EventSessionInferenceChanged = {
+  id: string
+  type: "session.inference.changed"
+  properties: {
+    sessionID: string
+  }
 }
 
 export type EventSessionTurnOpen = {

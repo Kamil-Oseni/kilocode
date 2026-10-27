@@ -47,12 +47,14 @@ function createLocalInference(input: {
   let scope: Scope | undefined
   let pending: { id: string; at: number } | undefined
   let reconnecting = false
+  let dirty = false
 
   const request = () => {
     if (!scope || !selected || halted === selected || reconnecting) return
     if (pending && Date.now() - pending.at < 15_000) return
     if (pending) setValue()
     const id = crypto.randomUUID()
+    dirty = false
     pending = { id, at: Date.now() }
     input.post({ type: "requestLocalInference", sessionID: scope.sessionID, requestID: id })
   }
@@ -63,6 +65,7 @@ function createLocalInference(input: {
     selected = next
     scope = next ? untrack(input.scope) : undefined
     pending = undefined
+    dirty = false
     setValue()
     request()
   })
@@ -70,12 +73,14 @@ function createLocalInference(input: {
     if (message.type === "sessionTurnClosed" && message.sessionID === scope?.sessionID) {
       halted = key()
       pending = undefined
+      dirty = false
       setValue()
       return
     }
     if (message.type === "connectionState") {
       reconnecting = true
       pending = undefined
+      dirty = false
       setValue()
       queueMicrotask(() => {
         reconnecting = false
@@ -83,9 +88,21 @@ function createLocalInference(input: {
       })
       return
     }
+    if (message.type === "localInferenceChanged") {
+      if (message.sessionID !== scope?.sessionID || selected !== key() || halted === selected) return
+      setValue()
+      if (pending) dirty = true
+      else request()
+      return
+    }
     if (message.type !== "localInferenceLoaded" || !scope || !pending) return
     if (message.sessionID !== scope.sessionID || message.requestID !== pending.id || selected !== key()) return
     pending = undefined
+    if (dirty) {
+      dirty = false
+      request()
+      return
+    }
     setValue(message.error ? undefined : Inference.read(message.snapshot, scope.sessionID, Date.now()))
   })
   onCleanup(unsubscribe)
@@ -108,6 +125,7 @@ function createLocalInference(input: {
     cancel: () => {
       halted = key()
       pending = undefined
+      dirty = false
       setValue()
     },
   }

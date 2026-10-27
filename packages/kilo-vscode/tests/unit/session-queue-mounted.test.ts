@@ -230,6 +230,19 @@ test("mounted ordinary chat waits only for the fresh active input and clears on 
     await receipt()
     await expect(label).toHaveText("Waiting for local model")
     await expect(duration).toHaveText("Model wait: 6s")
+    const before = (await reads()).length
+    await deliver({ type: "localInferenceChanged", sessionID: "ses_foreign" })
+    expect((await reads()).length).toBe(before)
+    await deliver({ type: "localInferenceChanged", sessionID: "ses_wait" })
+    expect((await reads()).length).toBe(before + 1)
+    await expect(duration).toHaveCount(0)
+    for (let index = 0; index < 12; index++) await deliver({ type: "localInferenceChanged", sessionID: "ses_wait" })
+    expect((await reads()).length).toBe(before + 1)
+    await receipt()
+    expect((await reads()).length).toBe(before + 2)
+    await expect(duration).toHaveCount(0) // an invalidated pending snapshot cannot restore the label
+    await receipt()
+    await expect(duration).toHaveCount(1)
     await page.clock.fastForward(5_000)
     await receipt(1)
     await expect(duration).toHaveCount(0)
@@ -273,6 +286,7 @@ test("mounted ordinary chat waits only for the fresh active input and clears on 
     await expect(duration).toHaveCount(0)
     await receipt(0, "msg_active", late)
     const count = (await reads()).length
+    await deliver({ type: "localInferenceChanged", sessionID: "ses_wait" })
     await page.clock.fastForward(10_000)
     expect((await reads()).length).toBe(count)
     await expect(duration).toHaveCount(0)

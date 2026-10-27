@@ -775,3 +775,112 @@ describe("local inference scheduler with real HTTP streams", () => {
     }
   })
 })
+
+test("transient inference invalidations retain the requesting instance through real queued HTTP cancellation", async () => {
+  const [{ Bus }, { KiloSessionEvent }, { provideTestInstance, tmpdir }] = await Promise.all([
+    import("../../../src/bus"),
+    import("../../../src/kilocode/session/event"),
+    import("../../fixture/fixture"),
+  ])
+  await using owner = await tmpdir({ git: true })
+  await using other = await tmpdir({ git: true })
+  const host = fixture()
+  const queue = createLocalScheduler({ age: 10_000 })
+  const origin = { sessionID: "ses_invalidation", messageID: "msg_first" }
+  const events: { properties: unknown; snapshot: ReturnType<typeof queue.session> }[] = []
+  const foreign: unknown[] = []
+  const controller = new AbortController()
+  const bodies: Response[] = []
+  try {
+    await provideTestInstance({
+      directory: owner.path,
+      fn: async () => {
+        const off = Bus.subscribe(KiloSessionEvent.InferenceChanged, (event) => {
+          events.push({ properties: event.properties, snapshot: queue.session(origin.sessionID) })
+        })
+        try {
+          const first = await queue.fetch(globalThis.fetch, host.url("/event-first"), undefined, "interactive", origin)
+          bodies.push(first)
+          const second = queue.fetch(globalThis.fetch, host.url("/event-second"), undefined, "background", {
+            ...origin,
+            messageID: "msg_second",
+          })
+          const third = queue
+            .fetch(globalThis.fetch, host.url("/event-cancelled"), { signal: controller.signal }, "background", {
+              ...origin,
+              messageID: "msg_cancelled",
+            })
+            .then(
+              () => {
+                throw new Error("Cancelled queued request dispatched")
+              },
+              (error) => error,
+            )
+          const helper = queue.fetch(globalThis.fetch, host.url("/event-helper"), undefined, "background", {
+            ...origin,
+            messageID: "msg_helper",
+            helper: true,
+          })
+          await until(() =>
+            events.some((event) =>
+              event.snapshot.requests.some((row) => row.messageID === "msg_cancelled" && row.queued === 1),
+            ),
+          )
+          await provideTestInstance({
+            directory: other.path,
+            fn: async () => {
+              const off = Bus.subscribe(KiloSessionEvent.InferenceChanged, (event) => foreign.push(event))
+              try {
+                const reason = new Error("Cancel queued request")
+                controller.abort(reason)
+                expect(await third).toBe(reason)
+                await until(() =>
+                  events.some(
+                    (event) =>
+                      event.snapshot.requests.some((row) => row.messageID === "msg_second" && row.queued === 1) &&
+                      !event.snapshot.requests.some((row) => row.messageID === "msg_cancelled"),
+                  ),
+                )
+                await first.body!.cancel()
+                const response = await second
+                bodies.push(response)
+                await until(() =>
+                  events.some((event) =>
+                    event.snapshot.requests.some((row) => row.messageID === "msg_second" && row.active === 1),
+                  ),
+                )
+                await response.body!.cancel()
+                const responseHelper = await helper
+                bodies.push(responseHelper)
+                await until(() => events.length > 0 && events.at(-1)!.snapshot.requests.length === 0)
+                const count = events.length
+                await responseHelper.body!.cancel()
+                await until(() => queue.snapshot().active === 0)
+                expect(events.length).toBe(count)
+                expect(foreign).toEqual([])
+              } finally {
+                off()
+              }
+            },
+          })
+          expect(host.starts).toEqual(["/event-first", "/event-second", "/event-helper"])
+          expect(
+            events.every(
+              (event) => JSON.stringify(event.properties) === JSON.stringify({ sessionID: origin.sessionID }),
+            ),
+          ).toBe(true)
+          expect(events.every((event) => event.snapshot.requests.every((row) => row.messageID !== "msg_helper"))).toBe(
+            true,
+          )
+          expect(events.at(-1)?.snapshot.requests).toEqual([])
+        } finally {
+          off()
+        }
+      },
+    })
+  } finally {
+    controller.abort()
+    await Promise.allSettled(bodies.map((response) => response.body?.cancel()))
+    await host.close()
+  }
+})

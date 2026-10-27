@@ -35,6 +35,11 @@ export interface LocalInferenceLoadedMessage {
   error?: string
 }
 
+export interface LocalInferenceChangedMessage {
+  type: "localInferenceChanged"
+  sessionID: string
+}
+
 export interface BackgroundJobsLoadedMessage {
   type: "backgroundJobsLoaded"
   sessionID: string
@@ -2369,5 +2374,6 @@ export type ExtensionMessage =
   | MemoryOperationResultMessage
   | BackgroundJobsLoadedMessage
   | LocalInferenceLoadedMessage
+  | LocalInferenceChangedMessage
   | ChildSteerResultMessage
 import type { AgentReportsLoaded } from "../../../../src/shared/routine-reports"

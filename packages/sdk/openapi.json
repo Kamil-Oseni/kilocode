@@ -79967,6 +79967,9 @@
             "$ref": "#/components/schemas/EventGlobalConfigUpdated1"
           },
           {
+            "$ref": "#/components/schemas/EventSessionInferenceChanged"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionTurnOpen"
           },
           {
@@ -88712,6 +88715,9 @@
           },
           "payload": {
             "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventSessionInferenceChanged"
+              },
               {
                 "$ref": "#/components/schemas/EventSessionTurnOpen"
               },
@@ -108659,6 +108665,31 @@
           }
         },
         "required": ["directory"],
+        "additionalProperties": false
+      },
+      "EventSessionInferenceChanged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.inference.changed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
       "EventSessionTurnOpen": {

@@ -67,7 +67,7 @@ const dispose = render(
           value: { t: (key) => key },
           get children() {
             return createComponent(SessionContext.Provider, {
-              value: { agents: () => [] },
+              value: { agents: () => [], sessions: () => [], currentSessionID: () => undefined },
               get children() {
                 return createComponent(DialogProvider, {
                   get children() {
@@ -244,7 +244,42 @@ try {
   })
   assert.match(root.querySelector("[data-routine-comparison]").textContent, /Current authoritative requirements/)
   assert.equal(root.querySelector(".routines-instructions textarea").value, "Original requirements")
-  console.log("routine-refresh-view: refresh and pending-retention checks passed")
+  emit({ type: "connectionState", state: "connected" })
+  const inference = sent.findLast((msg) => msg.type === "routineList")
+  emit({
+    type: "routineState",
+    requestID: inference.requestID,
+    viewID: inference.viewID,
+    refreshID: 1,
+    refresh: "complete",
+  })
+  emit({
+    type: "routineRuns",
+    agentID: agent.id,
+    runs: [{ id: "live", agentID: agent.id, sessionID: "ses_live", status: "running", at: 100 }],
+  })
+  const count = () => sent.filter((msg) => msg.type === "routineList").length
+  const before = count()
+  emit({ type: "localInferenceChanged", sessionID: "ses_foreign" })
+  assert.equal(count(), before)
+  for (let index = 0; index < 20; index++) emit({ type: "localInferenceChanged", sessionID: "ses_live" })
+  assert.equal(count(), before + 1)
+  const settled = (refreshID) =>
+    emit({
+      type: "routineState",
+      requestID: inference.requestID,
+      viewID: inference.viewID,
+      refreshID,
+      refresh: "complete",
+    })
+  settled(8)
+  assert.equal(count(), before + 2)
+  settled(9)
+  assert.equal(count(), before + 2)
+  emit({ type: "connectionState", state: "disconnected" })
+  emit({ type: "localInferenceChanged", sessionID: "ses_live" })
+  assert.equal(count(), before + 2)
+  console.log("routine-refresh-view: refresh, inference invalidation and pending-retention checks passed")
 } finally {
   dispose()
   root.remove()

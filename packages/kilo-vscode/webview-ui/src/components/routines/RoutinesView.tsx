@@ -938,6 +938,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   let correlation = crypto.randomUUID()
   let revision = 0
   let dirty = false
+  let inferenceDirty = false
   let hold = false
 
   createEffect(() => {
@@ -1315,12 +1316,26 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     load()
   }
 
+  const inference = (msg: ExtensionMessage) => {
+    if (msg.type !== "localInferenceChanged" || connection() !== "connected") return
+    const matching =
+      Object.values(runs()).some((rows) =>
+        rows.some((run) => run.sessionID === msg.sessionID && run.status === "running"),
+      ) || Object.values(boxes()).some((box) => box.inference?.snapshot.sessionID === msg.sessionID)
+    if (!matching) return
+    inferenceDirty = refreshing()
+    load()
+  }
+
+  const again = () => (dirty && polling(hold, chosen(), organization())) || inferenceDirty
+
   const refresh = (msg: ExtensionMessage) => {
     if (msg.type === "connectionState") {
       setConnection(msg.state)
       correlation = crypto.randomUUID()
       revision = 0
       dirty = false
+      inferenceDirty = false
       setRefreshing(false)
       if (msg.state === "connected") load()
       else setFreshness("Disconnected. Previously loaded routine information may be stale.")
@@ -1330,6 +1345,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       correlation = crypto.randomUUID()
       revision = 0
       dirty = false
+      inferenceDirty = false
       setRefreshing(false)
       setLoaded(false)
       setAgents([])
@@ -1361,8 +1377,9 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       if (msg.refresh === "partial")
         setFreshness("Some history could not be refreshed. Previous history remains visible.")
       if (msg.refresh === "error") setFreshness("Refresh failed. Previously loaded information may be stale.")
-      if (msg.refresh !== "loading" && dirty && polling(hold, chosen(), organization())) {
+      if (msg.refresh !== "loading" && again()) {
         dirty = false
+        inferenceDirty = false
         load()
       }
     }
@@ -1510,6 +1527,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const unsub = vscode.onMessage((msg: ExtensionMessage) => {
+    inference(msg)
     if (!refresh(msg)) return
     if (msg.type === "routineForecast") receive(msg)
     if (msg.type === "routineScheduleUpdated") updated(msg)

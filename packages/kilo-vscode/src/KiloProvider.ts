@@ -1,3 +1,4 @@
+import { invalidation as inferenceInvalidation } from "./kilo-provider/local-inference-event"
 import { createHash } from "node:crypto"
 import {
   ComposerDrafts,
@@ -2851,6 +2852,9 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           if (!directory && isEventFromForeignProject(payload, this.projectID)) return false
           const event = unwrapSyncEvent(payload)
           if (!event) return false
+
+          // ID-only worker hints require an exact workspace even when the child is not an open chat.
+          if (event.type === "session.inference.changed") return !!this.inferenceHint(event, directory)
 
           // Remote status events are global and should always pass through
           if (event.type === "kilo-sessions.remote-status-changed") return true
@@ -6902,7 +6906,20 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       .catch(() => console.error("[Raya] Complete input receipt could not be confirmed"))
   }
 
+  private inferenceHint(event: unknown, directory?: string) {
+    return inferenceInvalidation(event, directory, {
+      connected: this.connectionState === "connected",
+      directory: this.getWorkspaceDirectory(),
+      routes: this.sessionDirectories,
+    })
+  }
+
   private handleEvent(event: ProviderEvent, directory?: string): void {
+    if (event.type === "session.inference.changed") {
+      const sessionID = this.inferenceHint(event, directory)
+      if (sessionID) this.postMessage({ type: "localInferenceChanged", sessionID })
+      return
+    }
     if ((event as { type: string }).type === "raya.chief.note.available") {
       const raw = (event as { properties?: unknown }).properties
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) return

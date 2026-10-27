@@ -8,6 +8,8 @@ import { Schema } from "effect"
 const CloseReason = Schema.Literals(["completed", "error", "interrupted", "superseded"])
 
 export const KiloSessionEvent = {
+  // Transient invalidation only: clients re-read their authorized current snapshot.
+  InferenceChanged: BusEvent.define("session.inference.changed", Schema.Struct({ sessionID: SessionID })),
   TurnOpen: BusEvent.define(
     "session.turn.open",
     Schema.Struct({

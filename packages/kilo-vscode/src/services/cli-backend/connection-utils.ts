@@ -20,7 +20,8 @@ export function resolveEventSessionId(
   }
 
   void lookupMessageSessionId
-  if (event.type === "sandbox.status.changed") return event.properties.sessionID
+  if (event.type === "sandbox.status.changed" || event.type === "session.inference.changed")
+    return event.properties.sessionID
   return resolveTransientSessionId(event)
 }
 

@@ -17,6 +17,8 @@ import { Spinner } from "@kilocode/kilo-ui/spinner"
 import { getToolInfo } from "@kilocode/kilo-ui/message-part"
 import { useLanguage } from "../../context/language"
 import { useSession } from "../../context/session"
+import { useServer } from "../../context/server"
+import { createBackgroundMonitor } from "./background-job-monitor"
 import { costLabel } from "../../context/accounting"
 import { useVSCode } from "../../context/vscode"
 import { useWorktreeMode } from "../../context/worktree-mode"
@@ -31,7 +33,6 @@ import {
   backgroundAgentWait,
   backgroundJobAgents,
   foregroundAgent,
-  reconcileBackgroundAgents,
   showBackgroundAgent,
   type BackgroundAgent,
   type BackgroundAgentSnapshot,
@@ -43,6 +44,7 @@ import { model } from "./activity-status"
 
 export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const session = useSession()
+  const server = useServer()
   const language = useLanguage()
   const vscode = useVSCode()
   const worktree = useWorktreeMode()
@@ -54,62 +56,43 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
   const [now, setNow] = createSignal(Date.now())
   const [stop, setStop] = createSignal<{ id: string; revision: string; request: string }>()
   const cancelling = () => stop()?.id
-  let pending: string | undefined
-  let deadline = 0
+  const monitor = createBackgroundMonitor({
+    scope: () => {
+      const sessionID = session.currentSessionID()
+      return sessionID && server.isConnected() ? { sessionID, directory: server.workspaceDirectory() } : undefined
+    },
+    post: vscode.postMessage,
+    listen: vscode.onMessage,
+    update: (state) => {
+      setSnapshot(state.snapshot)
+      setRefreshing(state.refreshing)
+      setStop(state.stop)
+    },
+  })
+  const requestJobs = monitor.request
+  onCleanup(monitor.dispose)
 
   createEffect(
-    on(session.currentSessionID, () => {
-      const id = session.currentSessionID()
-      const saved = id ? loadAgentView(vscode.getState(), id) : { open: false, hidden: [] }
-      setOpen(saved.open)
-      setHidden(new Set(saved.hidden))
-      setSnapshot({ jobs: [], loaded: false, unavailable: false })
-      pending = undefined
-      setRefreshing(false)
-      setStop()
-      if (mounted()) requestJobs()
-    }),
+    on(
+      () => [session.currentSessionID(), server.workspaceDirectory(), server.isConnected()] as const,
+      () => {
+        const id = session.currentSessionID()
+        const saved = id ? loadAgentView(vscode.getState(), id) : { open: false, hidden: [] }
+        setOpen(saved.open)
+        setHidden(new Set(saved.hidden))
+        monitor.reset()
+        if (mounted()) requestJobs()
+      },
+    ),
   )
-
-  const requestJobs = () => {
-    const id = session.currentSessionID()
-    if (!id) return
-    if (pending && Date.now() < deadline) return
-    if (pending) {
-      setSnapshot((state) => ({ ...state, unavailable: true }))
-    }
-    pending = `${id}:${crypto.randomUUID()}`
-    deadline = Date.now() + 15_000
-    setRefreshing(true)
-    vscode.postMessage({ type: "requestBackgroundJobs", sessionID: id, requestID: pending })
-  }
 
   onMount(() => {
     setMounted(true)
-    const unsub = vscode.onMessage((message) => {
-      if (message.type !== "backgroundJobsLoaded") return
-      if (message.sessionID !== session.currentSessionID()) return
-      const original = stop()
-      const receipt = original?.request === message.requestID
-      const refresh = pending === message.requestID
-      if (!receipt && !refresh) return
-      if (refresh || receipt) {
-        pending = undefined
-        setRefreshing(false)
-      }
-      if (receipt) setStop()
-      if (!receipt && !message.error && original) {
-        const job = message.jobs.find((item) => item.id === original.id)
-        if (job && (job.status !== "running" || (job.revision && job.revision !== original.revision))) setStop()
-      }
-      setSnapshot((state) => reconcileBackgroundAgents(state, message))
-    })
     requestJobs()
     const timer = setInterval(requestJobs, 5_000)
     const clock = setInterval(() => setNow(Date.now()), 1_000)
     onCleanup(() => {
       setMounted(false)
-      unsub()
       clearInterval(timer)
       clearInterval(clock)
     })
@@ -194,7 +177,7 @@ export const BackgroundAgents: Component<{ readonly?: boolean }> = (props) => {
     const id = session.currentSessionID()
     if (!id) return
     const request = `${id}:${crypto.randomUUID()}`
-    setStop({ id: agent.jobID, revision: agent.revision, request })
+    monitor.stop({ id: agent.jobID, revision: agent.revision, request })
     const message = backgroundAgentCancellation(agent, id, request)
     if (message) vscode.postMessage(message)
   }

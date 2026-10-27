@@ -1,4 +1,5 @@
 import { decode, header, originHeader, type Lane, type Origin } from "./inference-lane"
+import { notifier } from "./inference-events"
 import { ollama } from "./ollama-bridge"
 import * as Lineage from "../task/effect-lineage"
 import * as ResultFrame from "./result-frame"
@@ -30,6 +31,7 @@ type Job = {
   frame: ResultFrame.Frame | undefined
   origin?: Origin
   since: number
+  notify?: () => void
 }
 
 export type Observation = Pick<Origin, "sessionID" | "messageID"> & {
@@ -203,6 +205,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     job.phase = "closed"
     active--
     running.delete(job)
+    job.notify?.()
     job.reader?.releaseLock()
     next()
   }
@@ -214,6 +217,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     bytes -= job.bytes
     detach(job)
     job.phase = "closed"
+    job.notify?.()
     job.reject(error)
   }
   const cancel = (job: Job, error: unknown): Promise<void> => {
@@ -223,11 +227,14 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     }
     if (job.phase === "closed") return Promise.resolve()
     if (job.cancellation) return job.cancellation
+    if (job.phase !== "cancelling") {
+      job.phase = "cancelling"
+      job.notify?.()
+    }
     if (!job.reader) {
       job.controller.abort(error)
       return Promise.resolve()
     }
-    job.phase = "cancelling"
     // Cancel the owned reader before aborting fetch; abort can error its stream with the requested reason.
     job.cancellation = job.reader.cancel(error).finally(() => finish(job))
     job.controller.abort(error)
@@ -238,6 +245,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     job.phase = "fetching"
     active++
     running.add(job)
+    job.notify?.()
     try {
       const response = await ResultFrame.run(
         job.frame,
@@ -360,6 +368,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
         frame: ResultFrame.current(),
         origin: origin ? { ...origin } : undefined,
         since: Date.now(),
+        notify: notifier(origin),
       }
       job.abort = () => {
         job.output?.error(signal?.reason)
@@ -370,6 +379,7 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
       signal?.addEventListener("abort", job.abort, { once: true })
       queue.push(job)
       bytes += job.bytes
+      job.notify?.()
       job.timer = setTimeout(
         () =>
           remove(

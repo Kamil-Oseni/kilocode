@@ -13,17 +13,24 @@ export function preserve(...values: (string | undefined)[]) {
     : Effect.succeed(text || undefined)
 }
 
-/** Honor explicit budget-field omission without interpreting an absent budget as permission to spend. */
-export function omits(request: string | undefined) {
+/** Honor explicit field omission without interpreting an absent budget as permission to spend. */
+export function omits(request: string | undefined, field: "budget" | "deadline" = "budget") {
   if (!request) return false
   const text = request.replace(/```[\s\S]*?```/g, "").replace(/^\s*>.*$/gm, "")
   return (
-    [...text.matchAll(/\bomit\s+(?:(?:the|any|a)\s+)?budget\b/gi)].some(
-      (match) => !/\b(?:not|never|don't|cannot|can't)\s+(?:\w+\s+){0,2}$/i.test(text.slice(0, match.index)),
+    [
+      ...text.matchAll(
+        /\bomit\s+(?:(?:the|any|a)\s+)?((?:budget|deadline)(?:\s*(?:,|and|&)\s*(?:budget|deadline))*)\b/gi,
+      ),
+    ].some(
+      (match) =>
+        new RegExp(`\\b${field}\\b`, "i").test(match[1]) &&
+        !/\b(?:not|never|don't|cannot|can't)\s+(?:\w+\s+){0,2}$/i.test(text.slice(0, match.index)),
     ) ||
-    /\b(?:do not|don't)\s+(?:set|add|supply|include|invent)\s+(?:(?:the|a|any)\s+)?budget(?=\s*(?:[.,;:!?]|$)|\s+(?:key|field|parameter|for|on)\b)/i.test(
-      text,
-    )
+    new RegExp(
+      `\\b(?:do not|don't)\\s+(?:set|add|supply|include|invent)\\s+(?:(?:the|a|any)\\s+)?${field}(?=\\s*(?:[.,;:!?]|$)|\\s+(?:key|field|parameter|for|on)\\b)`,
+      "i",
+    ).test(text)
   )
 }
 

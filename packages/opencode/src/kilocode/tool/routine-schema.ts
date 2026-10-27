@@ -2,10 +2,34 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import { Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { Session } from "@/session/session"
-import type { SessionID } from "@/session/schema"
+import type { MessageID, SessionID } from "@/session/schema"
 import { record } from "@/kilocode/task/continuation"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import * as Handoff from "@/kilocode/goal/handoff"
+import { kickoff, omits } from "@/kilocode/task/request"
+
+/** Bind job-start grammar to the current owner's request, without changing question assignments. */
+export const assignment = Effect.fn("RoutineSchema.assignment")(function* (
+  schema: JSONSchema7,
+  sessionID: SessionID,
+  messageID: MessageID,
+) {
+  const sessions = yield* Session.Service
+  const messages = yield* sessions.messages({ sessionID })
+  const assistant = messages.find((row) => row.info.id === messageID && row.info.sessionID === sessionID)
+  const user = messages.findLast((row) => row.info.role === "user" && row.info.sessionID === sessionID)
+  if (assistant?.info.role !== "assistant" || assistant.info.parentID !== user?.info.id) return schema
+  const request = user?.parts.flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : [])).join("\n")
+  if (!kickoff(request)) return schema
+  const removed = new Set<string>((["budget", "deadline"] as const).filter((field) => omits(request, field)))
+  const properties = Object.fromEntries(Object.entries(schema.properties ?? {}).filter(([key]) => !removed.has(key)))
+  return {
+    ...schema,
+    additionalProperties: false,
+    required: [...new Set([...(schema.required ?? []).filter((key) => !removed.has(key)), "criteria"])],
+    properties,
+  } satisfies JSONSchema7
+})
 
 /** Advertise the owning request's deadline bounds and required file handoffs. */
 export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSONSchema7, sessionID: SessionID) {

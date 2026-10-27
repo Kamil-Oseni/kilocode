@@ -22,6 +22,17 @@ test("budget omission is explicit and preserves requested limits and examples", 
     expect(omits(text)).toBe(false)
 })
 
+test("field omission keeps deadline and budget choices separate", () => {
+  expect(omits("Omit budget and deadline keys.", "deadline")).toBe(true)
+  expect(omits("Omit deadline and budget keys.")).toBe(true)
+  expect(omits("Omit the deadline field.", "deadline")).toBe(true)
+  expect(omits("Don't include a deadline.", "deadline")).toBe(true)
+  expect(omits("Omit budget; use the supplied deadline.", "deadline")).toBe(false)
+  expect(omits("Do not omit deadline.", "deadline")).toBe(false)
+  expect(omits("```\nOmit deadline\n```", "deadline")).toBe(false)
+  expect(omits("> Omit deadline\nExplain this example.", "deadline")).toBe(false)
+})
+
 test("handoff criteria recognize affirmative work and preserve explicit prohibitions", () => {
   for (const text of [
     "Call delegate_work with the actual saved file.",

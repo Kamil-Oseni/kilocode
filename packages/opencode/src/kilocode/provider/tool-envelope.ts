@@ -109,7 +109,7 @@ export namespace ToolEnvelope {
     const routing = names.has("chief_route")
       ? "Submit chief_route alone and wait for its actual routing decision before calling Task or other tools. Never duplicate or race Chief routing calls. "
       : names.has("inspect_routines")
-        ? "Call inspect_routines first and wait for the actual saved worker IDs, authorized routes and current organization revision. " +
+        ? "For the current user request, call inspect_routines only if it has not already succeeded, then wait for the actual saved worker IDs, authorized routes and current organization revision. Reuse that successful result across subsequent responses; inspect again only after an actual stale-revision error or a relevant saved-state change. " +
           (names.has("assign_organization_work")
             ? "Then use assign_organization_work with those exact IDs and revision to assign the requested work to a real saved worker. A saved assignment is not completed worker output; never invent execution or completion. "
             : "")

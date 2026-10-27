@@ -84,6 +84,8 @@ export const prepare = Effect.fn("TaskSchema.prepare")(function* (
   agent: string,
 ) {
   if (id === "delegate_work") return yield* RoutineSchema.prepare(schema, sessionID).pipe(Effect.orDie)
+  if (id === "assign_organization_work" && agent === "auto")
+    return yield* RoutineSchema.assignment(schema, sessionID, messageID).pipe(Effect.orDie)
   const original = originals.get(schema)
   if (id !== "task" || agent !== "auto" || !original) return schema
   const sessions = yield* Session.Service

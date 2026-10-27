@@ -1405,11 +1405,19 @@ it.live(
           agentID: recipient.id,
           at: Date.now(),
           sessionID: SessionID.make("ses_existing_research"),
-          status: "running",
+          status: "blocked",
+          blockedReason: "waiting on you",
           scheduleVersion: 1,
           trigger: { kind: "manual" },
         })
         const ctx = context("assign-kickoff-without-criteria")
+        const local = {
+          ...sessions,
+          get: (id: SessionID) =>
+            id === ctx.sessionID
+              ? Effect.succeed({ ...routineSession(sender.id, "run_caller"), id, directory, metadata: undefined })
+              : sessions.get(),
+        }
         const user = MessageID.make("msg_kickoff_original_user")
         const owner =
           'Run one manual Website Pilot job through our saved Dispatch -> Researcher -> Builder -> Sales team to write a verified research report.\nPreserve "THREE UNSENT drafts, one per prospect". Omit budget and deadline keys for this kickoff.'
@@ -1455,8 +1463,63 @@ it.live(
         const kickoff = yield* (yield* routineManagementTools({
           database,
           storage,
-          sessions: { ...sessions, messages: () => Effect.succeed(pair) },
+          sessions: { ...local, messages: () => Effect.succeed(pair) },
         }).assignOrganizationWork).init()
+        const wire = ToolJsonSchema.fromTool({ ...kickoff, id: "assign_organization_work" })
+        const project = (rows: SessionV1.WithParts[] = pair, agent = "auto") =>
+          TaskSchema.prepare("assign_organization_work", wire, ctx.sessionID, ctx.messageID, agent).pipe(
+            Effect.provideService(Session.Service, { ...sessions, messages: () => Effect.succeed(rows) } as never),
+          )
+        const advertised = yield* project()
+        expect(advertised.required).toContain("criteria")
+        expect(advertised.properties?.criteria).toEqual(wire.properties?.criteria)
+        expect(advertised.properties?.criteria).toMatchObject({ type: "array", minItems: 1 })
+        expect(advertised.properties?.budget).toBeUndefined()
+        expect(advertised.properties?.deadline).toBeUndefined()
+        expect(advertised.additionalProperties).toBe(false)
+        expect(wire.required).not.toContain("criteria")
+        expect(wire.properties?.budget).toBeDefined()
+        expect(wire.properties?.deadline).toBeDefined()
+        expect(yield* project(pair, "build")).toBe(wire)
+        const question = pair.map((row) =>
+          row.info.role === "user"
+            ? {
+                ...row,
+                parts: row.parts.map((part) =>
+                  part.type === "text" ? { ...part, text: "Ask Researcher what this source means." } : part,
+                ),
+              }
+            : row,
+        )
+        expect(yield* project(question)).toBe(wire)
+        const bounded = pair.map((row) =>
+          row.info.role === "user"
+            ? {
+                ...row,
+                parts: row.parts.map((part) =>
+                  part.type === "text"
+                    ? {
+                        ...part,
+                        text: owner.replace(
+                          "Omit budget and deadline keys for this kickoff.",
+                          "Use a budget of 5 and the deadline I supplied.",
+                        ),
+                      }
+                    : part,
+                ),
+              }
+            : row,
+        )
+        const retained = yield* project(bounded)
+        expect(retained.required).toContain("criteria")
+        expect(retained.properties?.budget).toEqual(wire.properties?.budget)
+        expect(retained.properties?.deadline).toEqual(wire.properties?.deadline)
+        const stale = pair.map((row) =>
+          row.info.role === "assistant"
+            ? { ...row, info: { ...row.info, parentID: MessageID.make("msg_obsolete_owner") } }
+            : row,
+        )
+        expect(yield* project(stale)).toBe(wire)
         const history = yield* tasks.runsFor(recipient.id)
         const roster = yield* tasks.list()
         const errands = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
@@ -1523,6 +1586,22 @@ it.live(
         )
         expect(capped.metadata.requestStatus).toBe("unresolved")
         expect(capped.output).toContain("explicitly says to omit budget")
+        const timed = yield* kickoff.execute(
+          {
+            organizationID: organization.id,
+            expectedRevision: organization.revision,
+            senderID: sender.id,
+            recipientID: recipient.id,
+            objective: "Write the verified research report.",
+            criteria: [
+              { id: "research", description: "Save the research report.", verification: "Read the full saved file." },
+            ],
+            deadline: Date.now() + 60_000,
+          },
+          ctx,
+        )
+        expect(timed.metadata.requestStatus).toBe("unresolved")
+        expect(timed.output).toContain("explicitly says to omit deadline")
         expect(calls.approvals).toBe(0)
         expect(yield* errands.queued(recipient.id)).toEqual([])
         expect(yield* tasks.runsFor(recipient.id)).toEqual(history)
@@ -1561,7 +1640,7 @@ it.live(
         expect(yield* kickoff.execute({ ...params, context: preserved.context }, ctx)).toEqual(started)
         expect((yield* errands.get(preserved.id)).context).toBe(preserved.context)
         expect(yield* errands.queued(recipient.id)).toHaveLength(1)
-        const tools = routineManagementTools({ database, storage, sessions })
+        const tools = routineManagementTools({ database, storage, sessions: local })
         const assign = yield* (yield* tools.assignOrganizationWork).init()
         const schema = ToolJsonSchema.fromTool({ ...assign, id: "assign_organization_work" })
         expect(schema.properties?.artifacts).toBeUndefined()
@@ -1627,7 +1706,7 @@ it.live(
             database,
             storage,
             sessions: {
-              ...sessions,
+              ...local,
               messages: () =>
                 Effect.succeed(
                   pair.map((row) =>

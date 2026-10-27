@@ -1210,10 +1210,16 @@ export function routineManagementTools(input: {
                 "This request explicitly says to omit budget. Remove the budget field instead of inventing a cap. Saved worker and organization limits still apply.",
               ),
             )
+          if (params.deadline !== undefined && omits(request, "deadline"))
+            return yield* Effect.fail(
+              new Error(
+                "This request explicitly says to omit deadline. Remove the deadline field instead of inventing a timestamp.",
+              ),
+            )
           if (!params.criteria && start)
             return yield* Effect.fail(
               new Error(
-                "Starting saved-team work requires request-specific acceptance criteria. Include verifiable criteria for this recipient's actual deliverables and handoff; a planning reply must not complete the job.",
+                'Starting saved-team work requires request-specific acceptance criteria in the criteria array. Each item must include id, description and verification, for example {"id":"research","description":"Save the requested research file","verification":"Read the saved file and cite its evidence"}. Add a separate criterion for any required accepted file handoff; a planning reply must not complete the job.',
               ),
             )
           if (

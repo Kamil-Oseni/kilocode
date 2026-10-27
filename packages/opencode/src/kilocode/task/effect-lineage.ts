@@ -203,6 +203,19 @@ export function matches(run: { id: string; agentID: string; sessionID: string })
   )
 }
 
+/** Only an original live callback can identify its current Routine execution session. */
+export function session() {
+  return Effect.withFiber((fiber) =>
+    Effect.sync(() => {
+      const frame = Context.getReferenceUnsafe(fiber.context, Current)
+      if (!frame) return undefined
+      const state = require(frame)
+      if (state.fiber !== fiber) throw refuse()
+      return state.session
+    }),
+  )
+}
+
 export function promise<A>(body: (signal: AbortSignal) => PromiseLike<A>) {
   return Effect.withFiber((fiber) =>
     Effect.tryPromise({

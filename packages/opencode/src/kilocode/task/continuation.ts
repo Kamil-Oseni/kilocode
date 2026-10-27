@@ -9,6 +9,7 @@ import { isDeepStrictEqual } from "node:util"
 import { RayaTaskExecution } from "./execution"
 import { SessionID } from "@/session/schema"
 import { Trigger } from "./trigger"
+import { Outputs } from "./output-scope"
 
 export const record = Schema.Struct({
   version: Schema.Literals([1, 2]),
@@ -16,6 +17,7 @@ export const record = Schema.Struct({
   runID: Schema.String,
   scheduleVersion: Schema.Number,
   trigger: Trigger,
+  outputs: Schema.optional(Outputs),
   delegationID: Schema.optional(Schema.String),
   organizationID: Schema.optional(Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/))),
   organizationRevision: Schema.optional(

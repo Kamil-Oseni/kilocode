@@ -22,6 +22,8 @@ import {
 } from "./delegation-review"
 import { mutate } from "./mutation"
 import { Criteria } from "@/kilocode/goal/criteria"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import * as Files from "./output-scope"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const body = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000))
@@ -58,6 +60,7 @@ export const Request = Schema.Struct({
   objective: body,
   expected: Schema.optional(body),
   criteria: Schema.optional(Criteria),
+  outputs: Schema.optional(Files.Outputs),
   context: Schema.optional(body),
   deadline: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8.64e15)),
@@ -86,6 +89,7 @@ export const Record = Schema.Struct({
   objective: body,
   expected: Schema.optional(body),
   criteria: Request.fields.criteria,
+  outputs: Request.fields.outputs,
   context: Schema.optional(body),
   deadline: Request.fields.deadline,
   budget: Request.fields.budget,
@@ -187,6 +191,9 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
         ].join("\n\n")
       : undefined,
     request.context ? `Permitted context:\n${request.context}` : undefined,
+    request.outputs !== undefined
+      ? `This run may mutate ONLY these exact declared output files: ${JSON.stringify(request.outputs)}. An empty list means read-only. Other stages' outputs are not yours. Declare a child's own disjoint outputs when delegating; do not list them in your own scope. Inputs and artifact receipts grant no additional write access. This restriction does not grant tools or paths beyond saved permissions.`
+      : undefined,
     request.deadline !== undefined ? `Deadline: ${new Date(request.deadline).toISOString()}` : undefined,
     request.budget !== undefined ? `Maximum model cost: $${request.budget}` : undefined,
     request.artifacts?.length
@@ -219,6 +226,7 @@ function decode(row: typeof Delegation.$inferSelect): Record {
     ...(row.workspace ? { workspace: row.workspace } : {}),
     ...(row.expected ? { expected: row.expected } : {}),
     ...(row.criteria ? { criteria: Schema.decodeUnknownSync(Criteria)(JSON.parse(row.criteria)) } : {}),
+    ...(row.outputs !== null ? { outputs: Schema.decodeUnknownSync(Files.Outputs)(JSON.parse(row.outputs)) } : {}),
     ...(row.context ? { context: row.context } : {}),
     ...(row.deadline !== null ? { deadline: row.deadline } : {}),
     ...(row.budget !== null ? { budget: row.budget } : {}),
@@ -238,6 +246,7 @@ function same(saved: Record, value: Request) {
     saved.objective === value.objective &&
     saved.expected === value.expected &&
     isDeepStrictEqual(saved.criteria, value.criteria) &&
+    isDeepStrictEqual(saved.outputs, value.outputs) &&
     saved.context === value.context &&
     saved.parentID === value.parentID &&
     saved.parentRunID === value.parentRunID &&
@@ -453,11 +462,29 @@ export namespace RayaTaskDelegation {
       gone?: boolean,
       allocation?: { limit: number; spent: number },
     ) {
-      const value = yield* Schema.decodeUnknownEffect(Request)(input).pipe(
+      const parsed = yield* Schema.decodeUnknownEffect(Request)(input).pipe(
         Effect.mapError(
           () => new Invalid({ message: "Delegation requests need a stable source and a non-empty objective." }),
         ),
       )
+      const outputs =
+        parsed.outputs === undefined
+          ? undefined
+          : yield* Effect.gen(function* () {
+              const fs = yield* Effect.serviceOption(FSUtil.Service)
+              if (Option.isNone(fs))
+                return yield* new Invalid({ message: "Canonical output-file admission is unavailable." })
+              return yield* Files.canonical(fs.value, parsed.outputs!).pipe(
+                Effect.mapError(
+                  () =>
+                    new Invalid({
+                      message:
+                        "Declared output files must be canonical, distinct absolute local paths without aliases or wildcards.",
+                    }),
+                ),
+              )
+            })
+      const value = { ...parsed, outputs }
       if (value.criteria && new Set(value.criteria.map((item) => item.id)).size !== value.criteria.length)
         return yield* new Invalid({ message: "Delegated work criterion IDs must be unique." })
       if (value.senderID !== sender.id || value.recipientID !== recipient.id)
@@ -494,6 +521,12 @@ export namespace RayaTaskDelegation {
         })
       const lineage = yield* ancestors(value.parentID)
       const parent = lineage[0]
+      if (parent?.outputs !== undefined && value.outputs === undefined)
+        return yield* new Invalid({
+          message: "This scoped job requires an explicit child outputs list, including [] for read-only work.",
+        })
+      if (parent && parent.outputs === undefined && value.outputs !== undefined)
+        return yield* new Invalid({ message: "Start the job with explicit outputs before adding scoped descendants." })
       if (parent && value.senderID !== parent.recipientID)
         return yield* new Invalid({ message: "Only the receiving worker can delegate follow-on work." })
       if (parent?.organizationID && value.organizationID !== parent.organizationID)
@@ -609,6 +642,43 @@ export namespace RayaTaskDelegation {
                 if (!same(decode(prior), value))
                   return yield* new Conflict({ message: "This delegation source already has a different request." })
                 return { row: prior, created: false }
+              }
+              // Reserve names with the insert in the same immediate transaction. Terminal
+              // ancestors/siblings retain their files; no implicit ownership transfer exists.
+              if (value.parentID) {
+                const parent = yield* tx
+                  .select()
+                  .from(Delegation)
+                  .where(eq(Delegation.id, value.parentID))
+                  .get()
+                  .pipe(Effect.orDie)
+                if (!parent) return yield* new Invalid({ message: "The parent output reservation was not found." })
+                const owner = decode(parent)
+                if ((owner.outputs === undefined) !== (value.outputs === undefined))
+                  return yield* new Invalid({ message: "A child cannot change this job's scoped or unscoped mode." })
+              }
+              if (value.outputs !== undefined && lineage.length) {
+                const root = lineage.at(-1)!.id
+                const selected = yield* tx
+                  .all<typeof Delegation.$inferSelect>(
+                    sql`
+                  WITH RECURSIVE job(id) AS (
+                    SELECT id FROM raya_routine_delegation WHERE id = ${root}
+                    UNION SELECT child.id FROM raya_routine_delegation child JOIN job ON child.parent_id = job.id
+                  ) SELECT * FROM raya_routine_delegation WHERE id IN (SELECT id FROM job) LIMIT ${TREE + 1}
+                `,
+                  )
+                  .pipe(Effect.orDie)
+                if (selected.length > TREE)
+                  return yield* new Invalid({ message: "This job's output reservations exceed the supported bound." })
+                for (const entry of selected) {
+                  const owned = decode(entry).outputs
+                  if (owned === undefined || Files.overlap(value.outputs, owned))
+                    return yield* new Invalid({
+                      message:
+                        "Declared output files overlap another stage in this job. Each recipient needs its own disjoint files.",
+                    })
+                }
               }
               if (value.parentID) {
                 const size = yield* tx
@@ -763,6 +833,7 @@ export namespace RayaTaskDelegation {
                 objective: value.objective,
                 expected: value.expected ?? null,
                 criteria: value.criteria ? JSON.stringify(value.criteria) : null,
+                outputs: value.outputs === undefined ? null : JSON.stringify(value.outputs),
                 context: value.context ?? null,
                 deadline: value.deadline ?? null,
                 budget: budget ?? null,

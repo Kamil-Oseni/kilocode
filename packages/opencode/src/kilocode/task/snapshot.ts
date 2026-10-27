@@ -4,6 +4,7 @@ import { Cause, Effect, Schema } from "effect"
 import type { Storage } from "@/storage/storage"
 import { RayaTask } from "."
 import { SessionID } from "@/session/schema"
+import { Outputs } from "./output-scope"
 
 export namespace RayaTaskSnapshot {
   export class Invalid extends Schema.TaggedErrorClass<Invalid>()("RayaTaskSnapshot.Invalid", {
@@ -16,6 +17,7 @@ export namespace RayaTaskSnapshot {
     at: Schema.Finite,
     definition: RayaTask.Agent,
     objective: Schema.String,
+    outputs: Schema.optional(Outputs),
   }
   const Policy = Schema.Struct({
     organizationID: Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/)),

@@ -1806,6 +1806,144 @@ test("parent run cost stays independent of a completed child request", async () 
   )
 })
 
+test("an expired worker retries halt and exact retirement before resuming its parent", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const events: string[] = []
+      const entered = yield* Deferred.make<RayaTask.Run>()
+      const hold = yield* Deferred.make<void>()
+      const refusal = { halt: true, retirement: false }
+      const remove = storage.remove
+      storage.remove = (key) =>
+        refusal.retirement && key[1] === "agent-executions"
+          ? Effect.die(new Error("Timeout retirement failed"))
+          : remove(key)
+      const execution = RayaTaskExecution.make(storage)
+      yield* Effect.addFinalizer(() =>
+        Effect.gen(function* () {
+          refusal.retirement = false
+          yield* Deferred.succeed(hold, undefined)
+          if (!(yield* Deferred.isDone(entered))) return
+          const run = yield* Deferred.await(entered)
+          for (const _ of Array.from({ length: 500 })) {
+            const receipt = yield* execution.receipt(run)
+            if (!receipt || receipt.state === "idle") {
+              yield* execution.finish(run)
+              return
+            }
+            yield* Effect.sleep("10 millis")
+          }
+          yield* Effect.die(new Error("Timeout fixture did not retire its original continuation"))
+        }).pipe(Effect.orDie),
+      )
+      const sessions = retained({
+        create: (input) => Effect.succeed(session(input?.id ?? "ses_expired_child")),
+        get: (id: SessionID) => Effect.succeed(session(id)),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      })
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions,
+        halt: () =>
+          Effect.gen(function* () {
+            events.push("halt")
+            if (refusal.halt) yield* Effect.die(new Error("Timeout halt failed"))
+            const run = yield* Deferred.await(entered)
+            yield* Deferred.succeed(hold, undefined)
+            for (const _ of Array.from({ length: 500 })) {
+              if ((yield* execution.receipt(run))?.state === "idle") return
+              yield* Effect.sleep("10 millis")
+            }
+            yield* Effect.die(new Error("Timeout fixture did not join the stopped worker"))
+          }).pipe(Effect.orDie),
+        continuation: (run) =>
+          run.sessionID === SessionID.make("ses_expired_parent")
+            ? Effect.sync(() => {
+                events.push("resume")
+              })
+            : Deferred.succeed(entered, run).pipe(Effect.andThen(Deferred.await(hold))),
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Coordinate",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const worker = yield* runner.tasks.create({
+        name: "Worker",
+        objective: "Review",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const parent = SessionID.make("ses_expired_parent")
+      yield* runner.tasks.record({
+        id: "run_expired_parent",
+        agentID: chief.id,
+        sessionID: parent,
+        at: Date.now(),
+        status: "running",
+      })
+      const goals = RayaGoal.make({ database, storage, sessions })
+      const goal = yield* goals.create(parent, "Coordinate", undefined, undefined, undefined, undefined, {
+        modelCost: 1,
+      })
+      const due = Date.now() + 60_000
+      const child = yield* runner.delegate({
+        source: "dlg_expired_retry",
+        senderID: chief.id,
+        recipientID: worker.id,
+        parentRunID: "run_expired_parent",
+        objective: "Review before the deadline",
+        budget: 1,
+        deadline: due,
+      })
+      yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"))
+      expect((yield* goals.get(parent))?.status).toBe("paused")
+      const inbox = RayaTaskInbox.make(database)
+      expect(Exit.isFailure(yield* runner.tick(due).pipe(Effect.exit))).toBe(true)
+      expect(events).toEqual(["halt"])
+      expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("running")
+      expect((yield* runner.tasks.runsFor(worker.id)).find((run) => run.id === child.childRunID)?.status).toBe(
+        "running",
+      )
+      expect((yield* goals.get(parent))?.status).toBe("paused")
+      expect((yield* inbox.page(chief.id)).messages.some((item) => item.source === "reply:dlg_expired_retry")).toBe(
+        false,
+      )
+      refusal.halt = false
+      refusal.retirement = true
+      expect(Exit.isFailure(yield* runner.tick(due).pipe(Effect.exit))).toBe(true)
+      expect(events).toEqual(["halt", "halt"])
+      expect((yield* runner.tasks.runsFor(worker.id)).find((run) => run.id === child.childRunID)?.status).toBe("error")
+      expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("running")
+      expect((yield* goals.get(parent))?.status).toBe("paused")
+      yield* runner.tasks.record({
+        id: "run_expired_successor",
+        agentID: worker.id,
+        sessionID: child.sessionID!,
+        at: due,
+        status: "running",
+      })
+      refusal.retirement = false
+      yield* runner.tick(due)
+      expect(events).toEqual(["halt", "halt", "resume"])
+      expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("failed")
+      expect((yield* runner.tasks.runsFor(worker.id)).find((run) => run.id === "run_expired_successor")?.status).toBe(
+        "running",
+      )
+      expect((yield* goals.get(parent))?.status).toBe("active")
+      expect(
+        (yield* inbox.page(chief.id)).messages.filter((item) => item.source === "reply:dlg_expired_retry"),
+      ).toHaveLength(1)
+      expect((yield* goals.get(parent))?.createdAt).toBe(goal.createdAt)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+})
+
 test("an overdue queued request fails on tick without starting", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

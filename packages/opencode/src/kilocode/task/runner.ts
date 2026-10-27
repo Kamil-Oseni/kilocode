@@ -659,33 +659,66 @@ export namespace RayaTaskRunner {
         ),
       )
     }
-    const lapse = Effect.fn("RayaTaskRunner.lapse")(function* (from: number) {
-      if (!errands) return
-      const rows = yield* errands.overdue(from)
-      for (const row of rows) {
-        const recipient = yield* tasks
-          .get(row.recipientID)
-          .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
-        if (!recipient) continue
-        const failed = yield* errands.finish(row.id, "failed", recipient, undefined, yield* spent(row), LATE).pipe(
-          Effect.catchTag("RayaTaskDelegation.Conflict", () => Effect.void),
-          Effect.catchTag("RayaTaskDelegation.Invalid", (err) =>
-            Effect.sync(() => log.error("delegation timeout failed", { err })),
-          ),
-        )
-        if (failed) {
-          yield* queuedReport(failed)
-          yield* sync(failed).pipe(
-            Effect.catch((err) => Effect.sync(() => log.error("delegation budget sync failed", { err }))),
+    const lapse = Effect.fn("RayaTaskRunner.lapse")(
+      function* (from: number) {
+        if (!errands) return
+        const rows = yield* errands.overdue(from)
+        for (const row of rows) {
+          const recipient = yield* tasks
+            .get(row.recipientID)
+            .pipe(Effect.catchTag("RayaTask.NotFoundError", () => Effect.succeed(undefined)))
+          if (!recipient) continue
+          const history = yield* tasks.runsFor(recipient.id)
+          const run = row.childRunID ? history.find((entry) => entry.id === row.childRunID) : undefined
+          if (row.sessionID && (!run || run.sessionID !== row.sessionID))
+            yield* new RayaTask.GuardError({ message: "The expired worker's original run could not be verified." })
+          if (run && RayaTask.pending(run)) {
+            if (
+              !input.halt ||
+              history.some(
+                (entry) => entry.id !== run.id && entry.sessionID === run.sessionID && RayaTask.pending(entry),
+              )
+            )
+              yield* new RayaTask.GuardError({
+                message: "The expired worker cannot be stopped safely. Retry later.",
+              })
+            // The expired deadline remains the durable admission fence until physical
+            // halt and exact retirement succeed. Failed stops remain selectable.
+            yield* open(recipient.dir, input.halt!(run.sessionID))
+          }
+          if (run) {
+            if (!RayaTask.pending(run) && (run.status !== "error" || run.blockedReason !== LATE)) {
+              if ((yield* errands.bySession(run.sessionID))?.id !== row.id)
+                yield* new RayaTask.GuardError({ message: "The expired worker's saved assignment changed." })
+              yield* close(run)
+              continue
+            }
+            const dropped = yield* drop(recipient.id, run.sessionID, run.id, LATE, true)
+            if (dropped) {
+              yield* execution.finish(dropped)
+              yield* publish(dropped)
+            }
+          }
+          const failed = yield* errands.finish(row.id, "failed", recipient, undefined, yield* spent(row), LATE).pipe(
+            Effect.catchTag("RayaTaskDelegation.Conflict", () => Effect.void),
+            Effect.catchTag("RayaTaskDelegation.Invalid", (err) =>
+              Effect.sync(() => log.error("delegation timeout failed", { err })),
+            ),
           )
+          if (failed) {
+            yield* queuedReport(failed)
+            yield* sync(failed).pipe(
+              Effect.catch((err) => Effect.sync(() => log.error("delegation budget sync failed", { err }))),
+            )
+          }
         }
-        yield* drop(row.recipientID, row.sessionID, row.childRunID, LATE)
-        if (!row.sessionID || !input.halt) continue
-        yield* input
-          .halt(row.sessionID)
-          .pipe(Effect.catch((err) => Effect.sync(() => log.error("timed out session stop failed", { err }))))
-      }
-    })
+      },
+      Effect.mapError((err) =>
+        err instanceof RayaTask.GuardError
+          ? err
+          : new RayaTask.GuardError({ kind: "unavailable", message: err instanceof Error ? err.message : String(err) }),
+      ),
+    )
     const retain = Effect.fn("RayaTaskRunner.retain")(function* (run: RayaTask.Run) {
       yield* publish(run)
       const item = posted(run)

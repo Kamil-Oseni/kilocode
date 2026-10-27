@@ -1,3 +1,15 @@
+October 27, 2026 - c322a0a6aa installed; bounded rich-draft promotion and native reopening verified.
+
+Installed promotion evidence, October 27, 2026:
+
+Installed `c322a0a6aa` now has a separate bounded model-free public-API promotion check: a real empty Session is created, a rich pending draft is atomically promoted to it, and the same request replays idempotently before and after natural CLI closure/reopening. Exact text, review comment, PNG attachment, model/agent/variant/selection and target token survive. The original pending entry remains a tombstone; stale save and new-mutation promotion both return conflict without resurrecting content or duplicating the live session draft. Both Session transcript reads are empty.
+
+Qualification: `.tmp/new-pc/installed-draft-promotion-c322-qualified-v2.json`. All **14 HTTP calls** match expectation: **12 successful responses and 2 expected 400 conflicts**. The original owned check passes naturally in **16.828 seconds**, with no forced cleanup or model requests. Source PIDs **972 / 37620** are separate native-owned epochs; each retires its complete **47-member family** with all exit codes zero and joined readers. Independently retained raw before/after configuration bytes are identical, including the schema and explicit bash-deny policy supplied before launch.
+
+This is installed API/native CLI reopening evidence, with no new build or installation. It does not establish loaded-client/GUI, Memento, Windows boot, reinstall, model quality or a full workflow gate. `FUT-DATA-01` remains **In progress**; gates remain **2/9 (22.2%)**, overall **unmeasured**. The earlier 25cd whole-owner config-byte-guard failure remains separate and retained; this fresh fixture's explicit configuration does not relabel it. The unresolved fresh legacy restart child-deadline failure remains open.
+
+Preserved c322 delivery checkpoint:
+
 October 27, 2026 - c322a0a6aa installed; fence late draft catalogs to their original view scope.
 
 Everyday Raya is `7.4.23-snapshot+c322a0a6aa.local.1793112158158`, source `c322a0a6aaf3698e8bb85a9a15bb31a8fc762597`. Delivery authority: `.tmp/new-pc/worker-c322a0a6aa-delivery-qualified.json`. VSIX **194,238,162 bytes**, SHA-256 `bfd48d2ee03eeb94c04453e66852c2a3c421a9dd3d98d5ca5bc53dfe52b9ac44`; CLI **310,801,408 bytes**, SHA-256 `e031b1d87144c478db1200608f9840d7f2ec5d98f278404fa6df35d093524052`.

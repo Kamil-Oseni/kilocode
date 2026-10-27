@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import path from "node:path"
 import { hostname } from "node:os"
 import { Effect, Exit, Layer } from "effect"
@@ -1244,14 +1245,17 @@ it.live(
         ).pipe(Effect.provideService(Session.Service, workerSessions as never))
         expect(conditional.required).not.toContain("criteria")
         expect(conditional.anyOf).toHaveLength(2)
-        const question = conditional.anyOf?.[0]
-        const delivery = conditional.anyOf?.[1]
-        if (typeof question !== "object" || typeof delivery !== "object")
-          throw new Error("Expected object schemas for question and delivery branches")
-        expect(question.required).not.toContain("artifacts")
-        expect(question.properties?.outputs).toMatchObject({ maxItems: 0 })
-        expect(question.additionalProperties).toBe(false)
-        expect(question.required).not.toContain("criteria")
+        const branch = (index: number): JSONSchema7 => {
+          const item = conditional.anyOf?.[index]
+          if (typeof item !== "object") throw new Error("Expected an object schema branch")
+          return item
+        }
+        const empty = branch(0)
+        const delivery = branch(1)
+        expect(empty.required).not.toContain("artifacts")
+        expect(empty.properties?.outputs).toMatchObject({ maxItems: 0 })
+        expect(empty.additionalProperties).toBe(false)
+        expect(empty.required).not.toContain("criteria")
         expect(delivery.required).toContain("criteria")
         expect(delivery.required).toContain("artifacts")
         expect(delivery.properties?.criteria).toMatchObject({ type: "array", minItems: 1 })

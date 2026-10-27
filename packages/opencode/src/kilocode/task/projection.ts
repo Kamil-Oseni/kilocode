@@ -11,6 +11,9 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { isDeepStrictEqual } from "node:util"
 import { history } from "./report-history"
+import type { Database } from "@opencode-ai/core/database/database"
+import { RayaRoutineOccurrenceTable as Occurrence } from "@opencode-ai/core/kilocode/routine.sql"
+import { eq } from "drizzle-orm"
 
 export namespace RayaRoutineReports {
   export const Card = Schema.Struct({
@@ -48,6 +51,7 @@ export namespace RayaRoutineReports {
   export function make(input: {
     storage: Storage.Interface
     sessions: Pick<Session.Interface, "get">
+    database?: Database.Interface
     scope?: { projectID: string; directory: string }
   }) {
     const index = history(input.storage, decode)
@@ -59,6 +63,16 @@ export namespace RayaRoutineReports {
         Effect.flatMap(decode),
         Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
       )
+    const save = Effect.fn("RayaRoutineReports.save")(function* (card: Card) {
+      yield* input.storage.replace(key(card.id), card)
+      yield* index.upsert(card)
+      GlobalBus.emit("event", {
+        directory: card.directory,
+        project: card.projectID,
+        payload: { type: Changed.type, properties: { card } },
+      })
+      return card
+    })
     type Input = {
       agent: Codec.Agent
       id: string
@@ -140,14 +154,47 @@ export namespace RayaRoutineReports {
         return prior
       }
       const next = yield* decode({ ...saved, revision: (prior?.revision ?? 0) + 1 })
-      yield* input.storage.replace(key(value.id), next)
-      yield* index.upsert(next)
-      GlobalBus.emit("event", {
-        directory: next.directory,
-        project: next.projectID,
-        payload: { type: Changed.type, properties: { card: next } },
-      })
-      return next
+      return yield* save(next)
+    })
+    const reconcile = Effect.fn("RayaRoutineReports.reconcile")(function* (card: Card, target: Session.Info) {
+      const database = input.database
+      if (!database || card.status !== "queued" || card.runID || card.workerSessionID) return card
+      return yield* mutate(
+        input.storage,
+        Effect.gen(function* () {
+          const current = yield* read(card.id)
+          if (!current || current.id !== card.id)
+            return yield* Effect.fail(new Error("Routine report identity changed during reconciliation."))
+          if (current.reportSessionID !== target.id || !same(current, target)) return undefined
+          const destination = yield* lookup(target.id)
+          if (
+            destination._tag === "None" ||
+            destination.value.metadata?.rayaRoutine ||
+            !same(current, destination.value)
+          )
+            return undefined
+          if (current.status !== "queued" || current.runID || current.workerSessionID) return current
+          const row = yield* database.db.select().from(Occurrence).where(eq(Occurrence.id, current.id)).get()
+          if (
+            !row ||
+            row.agent_id !== current.agentID ||
+            row.state !== "skipped" ||
+            row.claim_id !== null ||
+            row.session_id !== null ||
+            current.id !== `timer:${JSON.stringify([row.agent_id, row.schedule_version, row.scheduled_at])}`
+          )
+            return current
+          return yield* save(
+            yield* decode({
+              ...current,
+              status: "stopped",
+              summary: (row.reason ?? "This scheduled occurrence was skipped before startup.").slice(0, 8000),
+              revision: current.revision + 1,
+            }),
+          )
+        }),
+        "Routine report",
+      )
     })
     const page = Effect.fn("RayaRoutineReports.page")(function* (query: {
       sessionID: SessionID
@@ -168,9 +215,14 @@ export namespace RayaRoutineReports {
       }
       const bootstrap = yield* mutate(input.storage, index.bootstrap(), "Routine report history")
       const result = yield* index.page(query)
+      const cards = yield* Effect.forEach(
+        result.items.filter((card) => same(card, target)),
+        (card) => reconcile(card, target),
+        { concurrency: 1 },
+      )
       const response: Page = {
         ...result,
-        items: result.items.filter((card) => same(card, target)),
+        items: cards.filter((card): card is Card => card !== undefined),
         bootstrap: { complete: bootstrap.complete, scanned: bootstrap.scanned, total: bootstrap.total },
       }
       return response

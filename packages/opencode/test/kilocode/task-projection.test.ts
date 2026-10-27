@@ -9,6 +9,8 @@ import { Storage } from "@/storage/storage"
 import type { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { RayaTask } from "@/kilocode/task"
+import { RayaTaskQueue } from "@/kilocode/task/queue"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { RayaRoutineReports } from "@/kilocode/task/projection"
 import { make as reportOrigin } from "@/kilocode/task/report-origin"
 import { testEffect } from "../lib/effect"
@@ -278,6 +280,100 @@ it.live("foreign destinations stay undelivered and policy edits advance the sche
         "active",
       ])
       expect((yield* database.db.select().from(Revocations).all())[0].state).toBe("published")
+    }).pipe(Effect.provide(state(directory)))
+  }),
+)
+
+it.live("retired calendar cards reconcile in their frozen conversation once across reopening", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const source = info("ses_calendar_caller", directory)
+    const target = info("ses_calendar_target", directory)
+    const foreign = info("ses_calendar_foreign", path.join(directory, "foreign"))
+    const sessions = {
+      get: (id: SessionID) => Effect.succeed(id === source.id ? source : id === target.id ? target : foreign),
+    }
+    const saved = yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const database = yield* Database.Service
+      const tasks = RayaTask.make({ storage, database })
+      const queue = RayaTaskQueue.make(database)
+      const reports = RayaRoutineReports.make({ storage, database, sessions, scope: source })
+      const at = Date.now() + 60_000
+      const agent = yield* tasks.create({
+        name: "Calendar reports",
+        objective: "Review notes",
+        schedule: { kind: "once", at },
+        sourceSessionID: source.id,
+        reportSessionID: target.id,
+      })
+      yield* queue.publish({
+        agentID: agent.id,
+        version: 1,
+        occurrences: [0, 1, 2, 3].map((offset) => ({ at: at + offset, observedAt: at + offset })),
+      })
+      const rows = yield* queue.pending(agent.id, 1)
+      const cards = yield* Effect.forEach(rows, (row) =>
+        reports.publishDeferred({
+          agent: row === rows[2] ? { ...agent, sourceSessionID: foreign.id } : agent,
+          id: row.id,
+          at: row.observed_at,
+          summary: "Waiting",
+          notice: { at: row.observed_at + 31 * 60_000, reason: "busy" },
+        }),
+      )
+      const manual = yield* reports.publishDeferred({ agent, id: "rdl_manual_retained", at, summary: "Manual waiting" })
+      const active = rows[1]
+      yield* queue.claim({ id: active.id, claimID: "live", owner: "backend", now: at, until: at + 180_000 })
+      const other = yield* tasks.create({ name: "Other", objective: "Work", schedule: { kind: "manual" } })
+      const mismatch = cards[3]!
+      yield* storage.replace(["raya", "routine-reports", createHash("sha256").update(mismatch.id).digest("hex")], {
+        ...mismatch,
+        agentID: other.id,
+      })
+      yield* queue.retire(agent.id, 2)
+      // Repair must not rely on a live roster definition or its current report destination.
+      yield* tasks.update(agent.id, { reportSessionID: source.id, expectedReportSessionID: target.id })
+      const changed: string[] = []
+      const listener = (event: GlobalEvent) => {
+        if (event.payload.type === "raya.routine.report.changed") changed.push(event.payload.properties.card.id)
+      }
+      yield* Effect.acquireRelease(
+        Effect.sync(() => GlobalBus.on("event", listener)),
+        () => Effect.sync(() => GlobalBus.off("event", listener)),
+      )
+      const page = yield* reports.page({ sessionID: target.id, limit: 200 })
+      const repaired = page.items.find((card) => card.id === rows[0].id)
+      expect(repaired).toEqual({
+        ...cards[0],
+        status: "stopped",
+        summary: "Replaced by a newer schedule version.",
+        revision: 2,
+      })
+      expect(page.items.find((card) => card.id === active.id)).toEqual(cards[1])
+      expect(page.items.some((card) => card.id === rows[2].id)).toBe(false)
+      expect(changed).toEqual([rows[0].id])
+      expect(yield* reports.list(source.id)).toEqual([])
+      const all = yield* reports.list(target.id)
+      expect(all.find((card) => card.id === manual?.id)).toEqual(manual)
+      expect(all.find((card) => card.id === mismatch.id)).toEqual({ ...mismatch, agentID: other.id })
+      expect(changed).toEqual([rows[0].id])
+      const retained = yield* storage.read([
+        "raya",
+        "routine-reports",
+        createHash("sha256").update(rows[2].id).digest("hex"),
+      ])
+      expect(retained).toEqual(cards[2])
+      return { repaired, active: cards[1], manual, target }
+    }).pipe(Effect.provide(state(directory)))
+    yield* Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const database = yield* Database.Service
+      const reports = RayaRoutineReports.make({ storage, database, sessions, scope: source })
+      const cards = yield* reports.list(saved.target.id)
+      expect(cards.find((card) => card.id === saved.repaired?.id)).toEqual(saved.repaired)
+      expect(cards.find((card) => card.id === saved.active?.id)).toEqual(saved.active)
+      expect(cards.find((card) => card.id === saved.manual?.id)).toEqual(saved.manual)
     }).pipe(Effect.provide(state(directory)))
   }),
 )

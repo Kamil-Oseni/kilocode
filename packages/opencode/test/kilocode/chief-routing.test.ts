@@ -699,3 +699,50 @@ it("keeps latest read-only status requests observational without sticky assignme
     ).assign_organization_work,
   ).toBe(tools.assign_organization_work)
 })
+
+it("releases read-only synthesis only after the current user's successful observation", () => {
+  const request =
+    "Read-only status check for the completed job. Do not start or assign work; read the saved files and report honestly."
+  const session = { id: "ses_routine_reply", metadata: { [RayaChief.requestKey]: request } }
+  const user = MessageID.make("msg_current")
+  const source: MessageV2.WithParts = {
+    info: {
+      id: user,
+      sessionID: SessionID.make(session.id),
+      role: "user",
+      agent: "auto",
+      model: { providerID: ProviderV2.ID.make("local"), modelID: ModelV2.ID.make("fixture") },
+      time: { created: 1 },
+    },
+    parts: [
+      {
+        id: PartID.make("prt_current_status"),
+        messageID: user,
+        sessionID: SessionID.make(session.id),
+        type: "text",
+        text: request,
+      },
+    ],
+  }
+  expect(RayaChief.observed([source], session, user)).toBe(false)
+  expect(RayaChief.observed([source, response("read", completed, MessageID.make("msg_old"))], session, user)).toBe(
+    false,
+  )
+  expect(
+    RayaChief.observed(
+      [source, response("read", { status: "error", input: {}, error: "Unavailable", time: { start: 2, end: 3 } })],
+      session,
+      user,
+    ),
+  ).toBe(false)
+  expect(RayaChief.observed([source, response("write")], session, user)).toBe(false)
+  expect(RayaChief.observed([source, response("read")], session, user)).toBe(true)
+  expect(
+    RayaChief.observed(
+      [source, response("read")],
+      { ...session, metadata: { [RayaChief.requestKey]: "Start a new job" } },
+      user,
+    ),
+  ).toBe(false)
+  expect(RayaChief.observed([source, response("read")], session, "msg_next_user")).toBe(false)
+})

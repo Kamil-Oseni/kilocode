@@ -37,6 +37,39 @@ export namespace RayaChief {
     )
   }
 
+  /** A current user's successful observation permits an honest reply, not a completion claim. */
+  export function observed(
+    messages: readonly MessageV2.WithParts[],
+    session: { id: string; parentID?: string; metadata?: Record<string, unknown> },
+    user: string,
+  ) {
+    if (session.parentID || session.metadata?.rayaRoutine !== undefined || phase(session.metadata) !== "route")
+      return false
+    const source = messages.findLast((row) => row.info.role === "user")
+    if (!source || source.info.role !== "user" || source.info.id !== user || source.info.sessionID !== session.id)
+      return false
+    const text = requestText(source.parts)
+    if (!inspection(text) || text !== request(session.metadata)) return false
+    const tools = new Set(["read", "glob", "grep", "list", "inspect_routines", "inspect_team", "get_goal"])
+    return messages.some(
+      (row) =>
+        row.info.role === "assistant" &&
+        row.info.sessionID === session.id &&
+        row.info.parentID === user &&
+        row.parts.some(
+          (part) =>
+            part.type === "tool" &&
+            part.sessionID === session.id &&
+            part.messageID === row.info.id &&
+            tools.has(part.tool) &&
+            part.state.status === "completed" &&
+            !!part.state.output.trim() &&
+            part.state.time.start >= source.info.time.created &&
+            part.state.time.end >= part.state.time.start,
+        ),
+    )
+  }
+
   export const threshold = 0.7
   export const target = 0.9
   export const pendingKey = "raya.chief.pending"

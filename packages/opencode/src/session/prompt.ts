@@ -31,6 +31,7 @@ import { KiloReference } from "@/kilocode/reference/contains" // kilocode_change
 import { KiloReadObject } from "@/kilocode/tool/read-object" // kilocode_change
 import { KiloTask } from "@/kilocode/tool/task" // kilocode_change // raya_change - Milestone D child step ceiling
 import { HomeAssistant } from "@/kilocode/home-assistant/tools" // kilocode_change - current-turn direct device synthesis
+import { inspection } from "@/kilocode/task/request" // kilocode_change - read-only review cannot resume a retained worker
 import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change - Milestone B Auto routing state
 import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - private background result publication
 import { assigned, inspected, instruction as assignmentInstruction } from "@/kilocode/task/turn" // kilocode_change - inspect saved workers before assignment and acknowledge without repeating it
@@ -1965,7 +1966,9 @@ export const layer = Layer.effect(
                       { session: sessionID, user: lastUser.id, inspected: inspected(msgs, current, lastUser.id) },
                       refusal?.mode,
                     ),
-                    ...(!refusal && recovery && resolved.task ? { task: resolved.task } : {}),
+                    ...(!inspection(RayaChief.request(current.metadata)) && !refusal && recovery && resolved.task
+                      ? { task: resolved.task }
+                      : {}),
                   }
                 : resolved
           const phase = agent.name === "auto" ? RayaChief.phase(current.metadata) : undefined
@@ -1980,6 +1983,7 @@ export const layer = Layer.effect(
                 (!Object.keys(tools).length || HomeAssistant.settled(msgs, current, lastUser.id))) ||
                 (RayaChief.routine(RayaChief.request(current.metadata)) &&
                   RayaChief.settled(msgs, lastUser.id, RayaChief.request(current.metadata))) ||
+                RayaChief.observed(msgs, current, lastUser.id) || // kilocode_change - current read-only observation releases optional synthesis
                 recalled(msgs, current, lastUser.id) ||
                 mediaRecalled(msgs, current, lastUser.id))) // kilocode_change - original read-only Memory/media questions or selected device requests can release synthesis
           // raya_change end

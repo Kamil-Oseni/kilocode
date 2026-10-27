@@ -1814,17 +1814,14 @@ test("an expired worker retries halt and exact retirement before resuming its pa
       const events: string[] = []
       const entered = yield* Deferred.make<RayaTask.Run>()
       const hold = yield* Deferred.make<void>()
-      const refusal = { halt: true, retirement: false }
-      const remove = storage.remove
-      storage.remove = (key) =>
-        refusal.retirement && key[1] === "agent-executions"
-          ? Effect.die(new Error("Timeout retirement failed"))
-          : remove(key)
+      const settling = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const refusal = { halt: true }
       const execution = RayaTaskExecution.make(storage)
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          refusal.retirement = false
           yield* Deferred.succeed(hold, undefined)
+          yield* Deferred.succeed(release, undefined)
           if (!(yield* Deferred.isDone(entered))) return
           const run = yield* Deferred.await(entered)
           for (const _ of Array.from({ length: 500 })) {
@@ -1852,20 +1849,17 @@ test("an expired worker retries halt and exact retirement before resuming its pa
           Effect.gen(function* () {
             events.push("halt")
             if (refusal.halt) yield* Effect.die(new Error("Timeout halt failed"))
-            const run = yield* Deferred.await(entered)
             yield* Deferred.succeed(hold, undefined)
-            for (const _ of Array.from({ length: 500 })) {
-              if ((yield* execution.receipt(run))?.state === "idle") return
-              yield* Effect.sleep("10 millis")
-            }
-            yield* Effect.die(new Error("Timeout fixture did not join the stopped worker"))
           }).pipe(Effect.orDie),
         continuation: (run) =>
           run.sessionID === SessionID.make("ses_expired_parent")
             ? Effect.sync(() => {
                 events.push("resume")
               })
-            : Deferred.succeed(entered, run).pipe(Effect.andThen(Deferred.await(hold))),
+            : Deferred.succeed(entered, run).pipe(
+                Effect.andThen(Deferred.await(hold)),
+                Effect.ensuring(Deferred.succeed(settling, undefined).pipe(Effect.andThen(Deferred.await(release)))),
+              ),
       })
       const chief = yield* runner.tasks.create({
         name: "Chief",
@@ -1915,12 +1909,26 @@ test("an expired worker retries halt and exact retirement before resuming its pa
         false,
       )
       refusal.halt = false
-      refusal.retirement = true
       expect(Exit.isFailure(yield* runner.tick(due).pipe(Effect.exit))).toBe(true)
+      yield* Deferred.await(settling).pipe(Effect.timeout("5 seconds"))
       expect(events).toEqual(["halt", "halt"])
       expect((yield* runner.tasks.runsFor(worker.id)).find((run) => run.id === child.childRunID)?.status).toBe("error")
       expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("running")
       expect((yield* goals.get(parent))?.status).toBe("paused")
+      const original = yield* Deferred.await(entered)
+      expect(yield* execution.retained(original)).toBe(true)
+      yield* runner.observe(child.sessionID!)
+      yield* runner.settle(child.sessionID!)
+      expect(events).toEqual(["halt", "halt"])
+      expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("running")
+      expect((yield* goals.get(parent))?.status).toBe("paused")
+      expect((yield* inbox.page(chief.id)).messages.some((item) => item.source === "reply:dlg_expired_retry")).toBe(
+        false,
+      )
+      yield* Deferred.succeed(release, undefined)
+      yield* Effect.gen(function* () {
+        while (yield* execution.retained(original)) yield* Effect.sleep("10 millis")
+      }).pipe(Effect.timeout("5 seconds"))
       yield* runner.tasks.record({
         id: "run_expired_successor",
         agentID: worker.id,
@@ -1928,7 +1936,6 @@ test("an expired worker retries halt and exact retirement before resuming its pa
         at: due,
         status: "running",
       })
-      refusal.retirement = false
       yield* runner.tick(due)
       expect(events).toEqual(["halt", "halt", "resume"])
       expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("failed")

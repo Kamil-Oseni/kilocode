@@ -696,6 +696,11 @@ export namespace RayaTaskRunner {
             const dropped = yield* drop(recipient.id, run.sessionID, run.id, LATE, true)
             if (dropped) {
               yield* execution.finish(dropped)
+              if (yield* execution.retained(dropped))
+                yield* new RayaTask.GuardError({
+                  kind: "unavailable",
+                  message: "The expired worker is still retiring. Retry after its original execution has stopped.",
+                })
               yield* publish(dropped)
             }
           }
@@ -2140,6 +2145,7 @@ export namespace RayaTaskRunner {
           withheld("no-pending-run")
           const done = history.findLast((entry) => matches(entry) && entry.status !== "running")
           if (done) {
+            if (done.status === "error" && done.blockedReason === LATE && (yield* execution.retained(done))) continue
             if (
               done.status === "stopped" &&
               ((stop && !isDeepStrictEqual(stop, done.stop)) || !(yield* original(done, !!stop)))

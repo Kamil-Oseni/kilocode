@@ -495,7 +495,10 @@ test("scoped file ordering survives original schema restoration without changing
   const names = new Set(["write", "edit", "apply_patch", "read"])
   const definitions = [...names].map((name) => ({
     type: "function" as const,
-    function: { name, parameters: name === "read" ? { type: "object" } : ToolEnvelope.mark({ type: "object" }) },
+    function: {
+      name,
+      parameters: { ...(name === "read" ? { type: "object" as const } : ToolEnvelope.mark({ type: "object" })) },
+    },
   }))
   expect(ToolEnvelope.scoped(definitions)).toBe(true)
   expect(ToolEnvelope.guide(definitions)).toContain("Submit write, edit or apply_patch alone")

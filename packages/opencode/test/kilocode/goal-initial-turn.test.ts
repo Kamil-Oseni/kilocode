@@ -190,14 +190,16 @@ for (const mode of ["continue", "replay"])
                   { ...before, status: "paused", pause: "user-control" },
                   { ...before, status: "blocked" },
                 ]) {
-                  yield* storage.replace(["raya", "goal", session.id], value)
+                  yield* storage.replace(["raya", "goal", session.id], value).pipe(Effect.orDie)
                   yield* bind(sessions, runs, session.id)
                   expect((yield* goals.get(session.id))?.dispatch?.messageID).toBe(original.id)
                 }
-                yield* storage.replace(["raya", "goal", session.id], {
-                  ...before,
-                  inputs: [...before!.inputs!, current.id],
-                })
+                yield* storage
+                  .replace(["raya", "goal", session.id], {
+                    ...before,
+                    inputs: [...before!.inputs!, current.id],
+                  })
+                  .pipe(Effect.orDie)
               }
               yield* bind(sessions, runs, session.id)
               const saved = yield* goals.get(session.id)

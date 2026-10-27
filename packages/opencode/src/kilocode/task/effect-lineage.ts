@@ -216,6 +216,7 @@ export function origin() {
         id: state.root.original.runID,
         agentID: state.root.original.agentID,
         sessionID: state.root.original.sessionID,
+        predecessor: state.root.original.predecessor,
       }
     }),
   )

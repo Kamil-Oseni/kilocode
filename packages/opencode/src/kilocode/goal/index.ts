@@ -375,7 +375,11 @@ export namespace RayaGoal {
       return { delegated, total: cost + delegated }
     })
 
-    const delegated = Effect.fn("RayaGoal.delegated")(function* (sessionID: SessionID, runID?: string) {
+    const delegated = Effect.fn("RayaGoal.delegated")(function* (
+      sessionID: SessionID,
+      runID?: string,
+      before?: (next: State) => Effect.Effect<string, AuditError>,
+    ) {
       const state = yield* requireGoal(sessionID)
       const usage = yield* spend(sessionID, state, state.usage.cost ?? 0, runID)
       const now = Date.now()
@@ -388,25 +392,30 @@ export namespace RayaGoal {
         hit === undefined
       if (!pause && !resume && state.usage.delegatedCost === usage.delegated) return { state, resumed: false }
       if (state.status === "complete" || state.status === "blocked") return { state, resumed: false }
-      const next = yield* save(sessionID, {
-        ...state,
-        status: pause ? "paused" : resume ? "active" : state.status,
-        budgetHit: pause ? hit : resume ? undefined : state.budgetHit,
-        activeMs: pause ? elapsed(state, now) : state.activeMs,
-        activeAt: pause ? undefined : resume ? now : state.activeAt,
-        updatedAt: now,
-        usage: { ...state.usage, delegatedCost: usage.delegated },
-        progress:
-          pause || resume
-            ? progress(state, {
-                at: now,
-                kind: "status",
-                message: pause
-                  ? `Paused: ${budgetReason(hit!)}`
-                  : "Delegated work settled below the saved model-cost limit. Goal resumed.",
-              })
-            : state.progress,
-      })
+      const next = yield* save(
+        sessionID,
+        {
+          ...state,
+          status: pause ? "paused" : resume ? "active" : state.status,
+          budgetHit: pause ? hit : resume ? undefined : state.budgetHit,
+          activeMs: pause ? elapsed(state, now) : state.activeMs,
+          activeAt: pause ? undefined : resume ? now : state.activeAt,
+          updatedAt: now,
+          usage: { ...state.usage, delegatedCost: usage.delegated },
+          progress:
+            pause || resume
+              ? progress(state, {
+                  at: now,
+                  kind: "status",
+                  message: pause
+                    ? `Paused: ${budgetReason(hit!)}`
+                    : "Delegated work settled below the saved model-cost limit. Goal resumed.",
+                })
+              : state.progress,
+        },
+        state,
+        resume ? before : undefined,
+      )
       return { state: next, resumed: resume }
     })
 

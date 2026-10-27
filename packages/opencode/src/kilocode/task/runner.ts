@@ -57,6 +57,7 @@ import { TaskRetirement, receipts } from "@/kilocode/goal/stop-receipt"
 import { trace } from "./trace"
 import { RayaRoutineReports } from "./projection"
 import { make as reportOrigin } from "./report-origin"
+import { make as parentHandoff, type Handoff } from "./parent-handoff"
 import { RayaTaskWait } from "./wait-notice"
 import { final } from "./final-report"
 import { verify } from "./final-output"
@@ -282,6 +283,7 @@ export namespace RayaTaskRunner {
     const transfer = hold(input.storage)
     const tasks = RayaTask.make(input)
     const execution = RayaTaskExecution.make(input.storage)
+    const handoffs = parentHandoff(input.storage)
     const snapshots = RayaTaskSnapshot.make(input)
     const reports = RayaRoutineReports.make(input)
     const origins = reportOrigin(input.storage)
@@ -571,14 +573,37 @@ export namespace RayaTaskRunner {
             rows.some((row) => row.id === run.id && row.sessionID === run.sessionID && row.status === "running"),
           ),
         )
-    const continueRun = Effect.fn("RayaTaskRunner.continueRun")(function* (run: RayaTask.Run) {
+    const continueRun = Effect.fn("RayaTaskRunner.continueRun")(function* (run: RayaTask.Run, handoff?: Handoff) {
       yield* intake(
         Effect.gen(function* () {
           yield* transfer.check()
           if (!(yield* current(run))) return
-          const permit = yield* execution.acquire(run)
-          if (!permit) return
-          yield* admission.observe(execution.enter(run, turn(run).pipe(Effect.andThen(() => retirement(run)))), known)
+          if (!handoff) {
+            const permit = yield* execution.acquire(run)
+            if (!permit) return
+          }
+          const body = handoff
+            ? Effect.gen(function* () {
+                const latest = (yield* tasks.runsFor(run.agentID)).find((item) => item.id === run.id)
+                if (!latest || latest.status !== "running" || latest.sessionID !== run.sessionID)
+                  return yield* new RayaTask.GuardError({
+                    message: "The original parent run changed before continuation entry.",
+                  })
+                const goal = yield* goals.get(latest.sessionID)
+                const session = yield* input.sessions.get(latest.sessionID)
+                if (!goal || session.id !== latest.sessionID)
+                  return yield* new RayaTask.GuardError({
+                    message: "The original parent Goal changed before continuation entry.",
+                  })
+                const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(
+                  session.metadata?.rayaRoutine,
+                ).pipe(Effect.orDie)
+                if (!(yield* handoffs.enter(latest, handoff, goal, identity))) return
+                yield* turn(latest)
+                yield* retirement(latest)
+              })
+            : turn(run).pipe(Effect.andThen(() => retirement(run)))
+          yield* admission.observe(execution.enter(run, body, handoff?.execution.digest), known)
         }),
       )
     })
@@ -610,9 +635,57 @@ export namespace RayaTaskRunner {
       const parent = history.find((run) => run.id === row.parentRunID)
       if (!parent) return
       const result = yield* goals
-        .delegated(parent.sessionID, parent.id)
+        .delegated(
+          parent.sessionID,
+          parent.id,
+          parent.goalCreatedAt === undefined
+            ? undefined
+            : (next) =>
+                Effect.gen(function* () {
+                  const latest = (yield* tasks.runsFor(parent.agentID)).find((run) => run.id === parent.id)
+                  if (!latest || latest.status !== "running" || latest.sessionID !== parent.sessionID)
+                    return yield* new RayaTask.GuardError({
+                      message: "The original parent run changed before budget resumption.",
+                    })
+                  const session = yield* input.sessions.get(parent.sessionID)
+                  const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine)
+                  if (
+                    session.id !== parent.sessionID ||
+                    identity.agentID !== parent.agentID ||
+                    identity.runID !== parent.id
+                  )
+                    return yield* new RayaTask.GuardError({
+                      message: "The original parent session changed before budget resumption.",
+                    })
+                  const receipt = yield* execution.receipt(parent)
+                  if (receipt?.state === "active" && (yield* execution.authorized(parent))) {
+                    if (!next.revision)
+                      return yield* new RayaTask.GuardError({ message: "The parent Goal has no resumption revision." })
+                    return next.revision
+                  }
+                  return yield* handoffs.prepare(latest, next, identity, receipt)
+                }).pipe(
+                  Effect.mapError(
+                    () =>
+                      new RayaGoal.AuditError({ message: "The original parent continuation could not be prepared." }),
+                  ),
+                ),
+        )
         .pipe(Effect.catchTag("RayaGoal.NotFoundError", () => Effect.succeed(undefined)))
-      if (!result?.resumed) return
+      if (!result) return
+      const saved = parent.goalCreatedAt === undefined ? undefined : yield* handoffs.read(parent)
+      if (saved?.phase === "ready") {
+        const session = yield* input.sessions.get(parent.sessionID)
+        const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine).pipe(
+          Effect.orDie,
+        )
+        if (session.id !== parent.sessionID)
+          return yield* new RayaTask.GuardError({ message: "The original parent session changed before resumption." })
+        const ready = yield* handoffs.ready(parent, result.state, identity, yield* execution.receipt(parent))
+        if (ready) yield* continueRun(parent, ready)
+        return
+      }
+      if (!result.resumed) return
       yield* continueRun(parent)
     })
     const settlement = Semaphore.makeUnsafe(1)

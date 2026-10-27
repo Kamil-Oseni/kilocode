@@ -50,7 +50,8 @@ const completed = new Map<string, typeof Record.Type>()
 const recovering = new Set<string>()
 const hash = (id: string) => createHash("sha256").update(id).digest("hex")
 const key = (id: string) => ["raya", "agent-executions", hash(id)]
-const originals = new WeakMap<object, { record: typeof Record.Type; fiber?: unknown }>()
+const originals = new WeakMap<object, { record: typeof Record.Type; fiber?: unknown; predecessor?: string }>()
+const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex")
 const same = (left: typeof Owner.Type, right: typeof Owner.Type) =>
   left.host === right.host && left.pid === right.pid && left.birth === right.birth
 
@@ -66,7 +67,13 @@ export namespace RayaTaskExecution {
       active.has(saved.record.token) &&
       busy.has(saved.record.token)
     if (!alive()) return undefined
-    return Object.freeze({ ...saved.record, owner: Object.freeze({ ...saved.record.owner }), fiber, alive })
+    return Object.freeze({
+      ...saved.record,
+      owner: Object.freeze({ ...saved.record.owner }),
+      predecessor: saved.predecessor,
+      fiber,
+      alive,
+    })
   }
   /** Own one exact continuing run. Foreign or uncertain live work always fails closed. */
   export function make(storage: Store) {
@@ -85,11 +92,14 @@ export namespace RayaTaskExecution {
         ),
       )
 
-    const acquire = Effect.fn("RayaTaskExecution.acquire")(function* (run: {
-      id: string
-      agentID: string
-      sessionID: SessionID
-    }) {
+    const acquire = Effect.fn("RayaTaskExecution.acquire")(function* (
+      run: {
+        id: string
+        agentID: string
+        sessionID: SessionID
+      },
+      expected?: string,
+    ) {
       const found = durable()
       if (!found.birth)
         return yield* new RayaTask.GuardError({
@@ -100,6 +110,10 @@ export namespace RayaTaskExecution {
         storage,
         Effect.gen(function* () {
           const prior = yield* load(run.id)
+          if (expected !== undefined && (prior?.state !== "idle" || digest(prior) !== expected))
+            return yield* new RayaTask.GuardError({
+              message: "This parent continuation's exact idle execution changed before admission.",
+            })
           if (prior) {
             if (prior.agentID !== run.agentID || prior.runID !== run.id || prior.sessionID !== run.sessionID)
               return yield* new RayaTask.GuardError({
@@ -144,7 +158,10 @@ export namespace RayaTaskExecution {
         active.add(result.record.token)
         permits.add(result)
         const snapshot = structuredClone(result.record)
-        originals.set(result, { record: Object.freeze({ ...snapshot, owner: Object.freeze(snapshot.owner) }) })
+        originals.set(result, {
+          record: Object.freeze({ ...snapshot, owner: Object.freeze(snapshot.owner) }),
+          predecessor: expected,
+        })
       }
       return result
     })
@@ -171,11 +188,19 @@ export namespace RayaTaskExecution {
       )
     })
 
-    const mark = Effect.fn("RayaTaskExecution.mark")(function* (permit: Permit, state: "active" | "idle") {
+    const mark = Effect.fn("RayaTaskExecution.mark")(function* (
+      permit: Permit,
+      state: "active" | "idle",
+      expected?: typeof Record.Type,
+    ) {
       yield* mutate(
         storage,
         Effect.gen(function* () {
           const current = yield* load(permit.record.runID)
+          if (expected !== undefined && !isDeepStrictEqual(current, expected))
+            return yield* new RayaTask.GuardError({
+              message: "This parent continuation's acquired execution changed before entry.",
+            })
           if (
             !current ||
             current.token !== permit.record.token ||
@@ -259,7 +284,7 @@ export namespace RayaTaskExecution {
           saved.fiber = fiber
           return lineage.own(permit, body)
         })
-        return yield* mark(permit, "active").pipe(
+        return yield* mark(permit, "active", saved.predecessor === undefined ? undefined : saved.record).pipe(
           Effect.andThen(heartbeat(permit)),
           Effect.andThen(
             // A protected recovery tick must still cancel its actual model wait;
@@ -344,19 +369,24 @@ export namespace RayaTaskExecution {
     const enter = <A, E, R>(
       owner: { id: string; agentID: string; sessionID: SessionID },
       body: Effect.Effect<A, E, R>,
+      expected?: string,
     ) =>
       Effect.gen(function* () {
-        if (yield* reentrant(owner)) return yield* body
+        if (yield* reentrant(owner)) {
+          if (expected !== undefined)
+            return yield* new RayaTask.GuardError({ message: "This parent continuation is already executing." })
+          return yield* body
+        }
         const deadline = performance.now() + 5_000
         while (true) {
           if (performance.now() >= deadline) return undefined
-          const result = yield* acquire(owner).pipe(Effect.exit)
+          const result = yield* acquire(owner, expected).pipe(Effect.exit)
           if (Exit.isFailure(result)) return undefined
           if (result.value) {
             if (performance.now() >= deadline) return undefined
             return yield* run(result.value, body)
           }
-          if (yield* reentrant(owner)) return yield* body
+          if (expected === undefined && (yield* reentrant(owner))) return yield* body
           if (performance.now() >= deadline) return undefined
           yield* Effect.sleep("20 millis")
         }

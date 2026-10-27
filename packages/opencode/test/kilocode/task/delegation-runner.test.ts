@@ -7,6 +7,7 @@ import { RayaRoutineMessageTable as Message } from "@opencode-ai/core/kilocode/r
 import { eq, sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import path from "node:path"
+import { isDeepStrictEqual } from "node:util"
 import { tmpdir } from "../../fixture/fixture"
 import { Storage } from "@/storage/storage"
 import { read as bounded } from "../../fixture/bounded-memory"
@@ -2032,6 +2033,137 @@ test("an overdue queued request fails on tick without starting", async () => {
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("deadline settlement retries the original parent after execution admission fails before entry", async () => {
+  await using directory = await tmpdir()
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const base = memory()
+      const fault = { key: "", session: "", armed: false, hits: 0 }
+      const storage = {
+        ...base,
+        read: <T>(key: string[]) =>
+          Effect.gen(function* () {
+            if (fault.armed && key.join("/") === fault.key) {
+              const goal = yield* base.read<{ status: string }>(["raya", "goal", fault.session])
+              if (goal.status === "active") {
+                fault.armed = false
+                fault.hits += 1
+                return yield* Effect.die(new Error("Injected parent execution receipt read failure"))
+              }
+            }
+            return yield* base.read<T>(key)
+          }),
+      }
+      const starts: string[] = []
+      const turns: RayaTask.Run[] = []
+      const sessions = retained({
+        create: (input) =>
+          Effect.sync(() => {
+            const id = input?.id ?? `ses_admission_${starts.length}`
+            starts.push(id)
+            return session(id)
+          }),
+        get: () => Effect.die("Unknown fixture session"),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      })
+      const continuation = (run: RayaTask.Run) =>
+        Effect.sync(() => {
+          turns.push(run)
+        })
+      const runner = RayaTaskRunner.make({ database, storage, sessions, continuation })
+      const execution = RayaTaskExecution.make(storage)
+      yield* Effect.addFinalizer(() =>
+        Effect.forEach(turns, (run) => execution.finish(run).pipe(Effect.orDie), { discard: true }),
+      )
+      const sponsor = yield* runner.tasks.create({
+        name: "Owner",
+        objective: "Request work",
+        schedule: { kind: "manual" },
+        enabled: true,
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Coordinate work",
+        schedule: { kind: "manual" },
+        enabled: true,
+      })
+      const books = yield* runner.tasks.create({
+        name: "Books",
+        objective: "Review work",
+        schedule: { kind: "manual" },
+        enabled: true,
+      })
+      const assignment = yield* runner.delegate({
+        source: "dlg_admission_parent",
+        senderID: sponsor.id,
+        recipientID: chief.id,
+        objective: "Coordinate audited work",
+        criteria: [
+          {
+            id: "coordination",
+            description: "Inspect the actual child result",
+            verification: "Read the saved child result",
+          },
+        ],
+        budget: 1,
+      })
+      const parent = (yield* runner.tasks.runsFor(chief.id)).find((run) => run.id === assignment.childRunID)
+      if (!parent) return yield* Effect.die(new Error("Missing original parent Run"))
+      yield* runner.fire(books.id)
+      const goals = RayaGoal.make({ database, storage, sessions })
+      const due = Date.now() + 60_000
+      const child = yield* runner.delegate({
+        source: "dlg_admission_child",
+        senderID: chief.id,
+        recipientID: books.id,
+        parentID: assignment.id,
+        parentRunID: parent.id,
+        objective: "Review before deadline",
+        budget: 1,
+        deadline: due,
+      })
+      expect(child.state).toBe("queued")
+      const paused = yield* goals.get(parent.sessionID)
+      expect(paused?.status).toBe("paused")
+      expect(paused?.completion).not.toBe("reply")
+      const receipt = yield* execution.receipt(parent)
+      expect(receipt?.state).toBe("idle")
+      const before = turns.filter((run) => run.id === parent.id).length
+      fault.key = `raya/agent-executions/${createHash("sha256").update(parent.id).digest("hex")}`
+      fault.session = parent.sessionID
+      fault.armed = true
+      expect(Exit.isFailure(yield* runner.tick(due).pipe(Effect.exit))).toBe(true)
+      expect(fault.hits).toBe(1)
+      expect((yield* goals.get(parent.sessionID))?.status).toBe("active")
+      expect(yield* execution.receipt(parent)).toEqual(receipt)
+      expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("failed")
+      expect(turns.filter((run) => run.id === parent.id)).toHaveLength(before)
+      const count = starts.length
+      const fresh = RayaTaskRunner.make({ database, storage: { ...storage }, sessions, continuation })
+      yield* fresh.revive()
+      const reopened = turns.filter((run) => run.id === parent.id).length
+      yield* runner.tick(due)
+      yield* runner.tick(due)
+      const retried = turns.filter((run) => run.id === parent.id).length
+      yield* fresh.tick(due)
+      console.info(
+        JSON.stringify({
+          scope: "original-parent-admission-recovery",
+          before,
+          retried,
+          reopened,
+          receiptUnchanged: isDeepStrictEqual(yield* execution.receipt(parent), receipt),
+        }),
+      )
+      expect(starts).toHaveLength(count)
+      expect(retried).toBe(before + 1)
+      expect(reopened).toBe(before + 1)
+    }).pipe(Effect.provide(Database.layerFromPath(path.join(directory.path, "admission.sqlite"))), Effect.scoped),
+  )
+}, 30_000)
 
 test("deadline notifications recover an exact queued failure after reply and report faults and database reopen", async () => {
   await using directory = await tmpdir()

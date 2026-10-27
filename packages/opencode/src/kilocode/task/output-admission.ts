@@ -28,7 +28,7 @@ export const check = Effect.fn("RoutineOutputs.check")(function* (sessionID: str
     const database = yield* Effect.serviceOption(Database.Service)
     if (Option.isSome(database)) {
       const module = yield* Effect.promise(() => import("./delegation"))
-      const delegated = yield* module.RayaTaskDelegation.make(database.value).bySession(sessionID)
+      const delegated = yield* module.RayaTaskDelegation.make(database.value).bySession(SessionID.make(sessionID))
       if (delegated) {
         if (delegated.outputs !== undefined)
           return yield* Effect.fail(new Error("The original managed session lost its output-scope identity."))

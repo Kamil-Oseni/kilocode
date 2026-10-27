@@ -72,7 +72,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   promptOps: TaskPromptOps
   memoryCache: MemoryMarker.Cache // kilocode_change
 }) {
-  const scoped = (yield* OutputAdmission.check(input.session.id, [])) !== undefined // kilocode_change
+  const scoped = (yield* OutputAdmission.check(input.session.id, []).pipe(Effect.orDie)) !== undefined // kilocode_change
   const tools: Record<string, AITool> = {}
   // kilocode_change start - transfer the original catalog owner into callback fibers
   const run = yield* EffectBridge.make().pipe(

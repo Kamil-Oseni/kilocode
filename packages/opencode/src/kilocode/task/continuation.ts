@@ -44,7 +44,7 @@ export function continuation(input: {
       if (!input.database) return true
       return yield* Effect.gen(function* () {
         const module = yield* Effect.promise(() => import("./delegation"))
-        const row = yield* module.RayaTaskDelegation.make(input.database!).bySession(input.session.id)
+        const row = yield* module.RayaTaskDelegation.make(input.database!).bySession(SessionID.make(input.session.id))
         if (!row) return true
         if (row.outputs !== undefined || !row.childRunID) return false
         const starts = yield* Effect.promise(() => import("./snapshot"))
@@ -59,7 +59,7 @@ export function continuation(input: {
         if (identity.outputs !== undefined) return false
         if (input.database) {
           const module = yield* Effect.promise(() => import("./delegation"))
-          const row = yield* module.RayaTaskDelegation.make(input.database).bySession(input.session.id)
+          const row = yield* module.RayaTaskDelegation.make(input.database).bySession(SessionID.make(input.session.id))
           if (row?.outputs !== undefined) return false
         }
         const starts = yield* Effect.promise(() => import("./snapshot"))

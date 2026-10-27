@@ -441,7 +441,13 @@ export namespace RayaTaskRunner {
       yield* reports.publishDeferred({
         agent: { ...recipient, sourceSessionID: origin, reportSessionID: origin },
         id: row.id,
-        at: notice?.at ?? (status === "queued" ? row.time : Date.now()),
+        at:
+          notice?.at ??
+          (status === "queued"
+            ? row.time
+            : status === "error" && row.reason === LATE
+              ? (row.deadline ?? row.time)
+              : Date.now()),
         status,
         summary:
           row.reason ??
@@ -609,6 +615,98 @@ export namespace RayaTaskRunner {
       if (!result?.resumed) return
       yield* continueRun(parent)
     })
+    const settlement = Semaphore.makeUnsafe(1)
+    const acknowledgement = Schema.Struct({
+      version: Schema.Literal(1),
+      digest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+    })
+    const repair = (id: string) =>
+      settlement
+        .withPermit(
+          Effect.gen(function* () {
+            if (!errands) return
+            const row = yield* errands.get(id)
+            if (row.state !== "failed" || row.reason !== LATE || row.deadline === undefined) return
+            if (row.sessionID) {
+              const run = (yield* tasks.runsFor(row.recipientID)).find((run) => run.id === row.childRunID)
+              if (
+                !run ||
+                run.sessionID !== row.sessionID ||
+                run.status !== "error" ||
+                run.blockedReason !== LATE ||
+                (yield* execution.retained(run))
+              )
+                return yield* new RayaTask.GuardError({
+                  message: "The expired worker's exact retirement is still unverified.",
+                })
+            } else if (row.childRunID) {
+              const run = (yield* tasks.runsFor(row.recipientID)).find((run) => run.id === row.childRunID)
+              if (run || (yield* snapshots.find(row.childRunID)) || (yield* inspect(input.storage, row.recipientID)))
+                return yield* new RayaTask.GuardError({
+                  message: "The expired worker's unattached startup needs review.",
+                })
+            }
+            const key = ["raya", "task", "deadline-notifications", createHash("sha256").update(row.id).digest("hex")]
+            const digest = createHash("sha256").update(JSON.stringify(row)).digest("hex")
+            const ack = { version: 1, digest }
+            const saved = yield* input.storage.readBounded<unknown>(key, 2048).pipe(
+              Effect.flatMap(Schema.decodeUnknownEffect(acknowledgement)),
+              Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
+            )
+            if (isDeepStrictEqual(saved, ack)) return row
+            const recipient = (yield* fetch(row.recipientID))?.agent ?? absent(row.recipientID)
+            // Replay the stored result, never derive new arguments from a later Run.
+            const current = yield* errands.replay(row, recipient)
+            yield* project(current)
+            // This acknowledges notifications only, not a parent model turn.
+            yield* input.storage.write(key, ack)
+            return current
+          }),
+        )
+        .pipe(
+          Effect.flatMap((current) =>
+            Effect.gen(function* () {
+              if (current?.parentRunID) {
+                const parent = (yield* tasks.runsFor(current.senderID)).find((run) => run.id === current.parentRunID)
+                if (!parent)
+                  return yield* new RayaTask.GuardError({
+                    message: "The expired request's original parent run is unavailable.",
+                  })
+                if (RayaTask.pending(parent)) {
+                  const goal = yield* goals.get(parent.sessionID)
+                  const session = yield* input.sessions.get(parent.sessionID)
+                  const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(
+                    session.metadata?.rayaRoutine,
+                  ).pipe(Effect.orElseSucceed(() => undefined))
+                  if (
+                    parent.goalCreatedAt === undefined ||
+                    session.id !== parent.sessionID ||
+                    goal?.createdAt !== parent.goalCreatedAt ||
+                    identity?.agentID !== parent.agentID ||
+                    identity.runID !== parent.id
+                  )
+                    return yield* new RayaTask.GuardError({
+                      message: "The expired request's original parent Goal changed.",
+                    })
+                  yield* sync(current)
+                }
+              }
+            }),
+          ),
+        )
+    const repairs = Effect.gen(function* () {
+      if (!errands) return
+      for (const row of yield* errands.expired(LATE))
+        yield* repair(row.id).pipe(
+          Effect.catchCause((cause) =>
+            Cause.hasInterrupts(cause)
+              ? Effect.failCause(cause)
+              : Effect.sync(() =>
+                  log.error("delegation settlement recovery remains pending", { id: row.id, err: Cause.squash(cause) }),
+                ),
+          ),
+        )
+    })
     const spent = Effect.fn("RayaTaskRunner.delegationSpend")(function* (row: Errand) {
       if (!row.sessionID) return undefined
       const goal = yield* goals.get(row.sessionID)
@@ -711,10 +809,7 @@ export namespace RayaTaskRunner {
             ),
           )
           if (failed) {
-            yield* queuedReport(failed)
-            yield* sync(failed).pipe(
-              Effect.catch((err) => Effect.sync(() => log.error("delegation budget sync failed", { err }))),
-            )
+            yield* repair(failed.id)
           }
         }
       },
@@ -1647,6 +1742,10 @@ export namespace RayaTaskRunner {
           return yield* new RayaTask.GuardError({ message: "This assignment already has another report conversation." })
       }
       const admitted = yield* errands.admit(input, sender, recipient, found.gone, allocation)
+      if (admitted.record.state === "failed" && admitted.record.reason === LATE) {
+        yield* repair(admitted.record.id)
+        return admitted.record
+      }
       yield* queuedReport(admitted.record)
       if (parent && goal?.budget?.modelCost !== undefined)
         yield* sync(admitted.record).pipe(
@@ -3119,6 +3218,7 @@ export namespace RayaTaskRunner {
 
     const revive: Runner["revive"] = Effect.fn("RayaTaskRunner.revive")(function* () {
       if (yield* transfer.held().pipe(Effect.orDie)) return
+      yield* repairs
       const items = yield* tasks.list()
       for (const item of items) {
         yield* reboot(item).pipe(
@@ -3148,7 +3248,8 @@ export namespace RayaTaskRunner {
     })
 
     const pulse = (from: number) =>
-      lapse(from).pipe(
+      repairs.pipe(
+        Effect.andThen(lapse(from)),
         Effect.andThen(schedule ? schedule.clean() : Effect.void),
         Effect.andThen(tasks.list()),
         Effect.flatMap((items) =>

@@ -6,6 +6,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { RayaRoutineMessageTable as Message } from "@opencode-ai/core/kilocode/routine.sql"
 import { eq, sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
+import path from "node:path"
+import { tmpdir } from "../../fixture/fixture"
 import { Storage } from "@/storage/storage"
 import { read as bounded } from "../../fixture/bounded-memory"
 import { SessionID } from "@/session/schema"
@@ -1817,6 +1819,7 @@ test("an expired worker retries halt and exact retirement before resuming its pa
       const settling = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
       const refusal = { halt: true }
+      const parents = new Map<SessionID, Session.Info>()
       const execution = RayaTaskExecution.make(storage)
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
@@ -1837,7 +1840,7 @@ test("an expired worker retries halt and exact retirement before resuming its pa
       )
       const sessions = retained({
         create: (input) => Effect.succeed(session(input?.id ?? "ses_expired_child")),
-        get: (id: SessionID) => Effect.succeed(session(id)),
+        get: (id: SessionID) => Effect.succeed(parents.get(id) ?? session(id)),
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       })
@@ -1874,16 +1877,31 @@ test("an expired worker retries halt and exact retirement before resuming its pa
         schedule: { kind: "manual" },
       })
       const parent = SessionID.make("ses_expired_parent")
+      const goals = RayaGoal.make({ database, storage, sessions })
+      const goal = yield* goals.create(parent, "Coordinate", undefined, undefined, undefined, undefined, {
+        modelCost: 1,
+      })
       yield* runner.tasks.record({
         id: "run_expired_parent",
         agentID: chief.id,
         sessionID: parent,
         at: Date.now(),
         status: "running",
+        goalCreatedAt: goal.createdAt,
       })
-      const goals = RayaGoal.make({ database, storage, sessions })
-      const goal = yield* goals.create(parent, "Coordinate", undefined, undefined, undefined, undefined, {
-        modelCost: 1,
+      const original = (yield* runner.tasks.runsFor(chief.id)).find((run) => run.id === "run_expired_parent")
+      if (!original) return yield* Effect.die(new Error("Missing parent fixture Run"))
+      parents.set(parent, {
+        ...session(parent),
+        metadata: {
+          rayaRoutine: {
+            version: 2,
+            agentID: chief.id,
+            runID: original.id,
+            scheduleVersion: 1,
+            trigger: { kind: "manual" },
+          },
+        },
       })
       const due = Date.now() + 60_000
       const child = yield* runner.delegate({
@@ -1915,8 +1933,8 @@ test("an expired worker retries halt and exact retirement before resuming its pa
       expect((yield* runner.tasks.runsFor(worker.id)).find((run) => run.id === child.childRunID)?.status).toBe("error")
       expect((yield* RayaTaskDelegation.make(database).get(child.id)).state).toBe("running")
       expect((yield* goals.get(parent))?.status).toBe("paused")
-      const original = yield* Deferred.await(entered)
-      expect(yield* execution.retained(original)).toBe(true)
+      const enteredRun = yield* Deferred.await(entered)
+      expect(yield* execution.retained(enteredRun)).toBe(true)
       yield* runner.observe(child.sessionID!)
       yield* runner.settle(child.sessionID!)
       expect(events).toEqual(["halt", "halt"])
@@ -1927,7 +1945,7 @@ test("an expired worker retries halt and exact retirement before resuming its pa
       )
       yield* Deferred.succeed(release, undefined)
       yield* Effect.gen(function* () {
-        while (yield* execution.retained(original)) yield* Effect.sleep("10 millis")
+        while (yield* execution.retained(enteredRun)) yield* Effect.sleep("10 millis")
       }).pipe(Effect.timeout("5 seconds"))
       yield* runner.tasks.record({
         id: "run_expired_successor",
@@ -2014,6 +2032,249 @@ test("an overdue queued request fails on tick without starting", async () => {
     }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
   )
 })
+
+test("deadline notifications recover an exact queued failure after reply and report faults and database reopen", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "deadline.sqlite")
+  const base = memory()
+  const fault = { report: false }
+  const storage = {
+    ...base,
+    replace: (key: string[], value: unknown) =>
+      Effect.suspend(() =>
+        fault.report &&
+        key[0] === "raya" &&
+        key[1] === "routine-reports" &&
+        typeof value === "object" &&
+        value !== null &&
+        "status" in value &&
+        value.status === "error"
+          ? Effect.die(new Error("Injected terminal report failure"))
+          : base.replace(key, value),
+      ),
+  }
+  const chat = session("ses_deadline_origin")
+  const starts: string[] = []
+  const turns: string[] = []
+  const sessions = retained({
+    create: (input) =>
+      Effect.sync(() => {
+        const id = input?.id ?? `ses_deadline_${starts.length}`
+        starts.push(id)
+        return session(id)
+      }),
+    get: (id: SessionID) => (id === chat.id ? Effect.succeed(chat) : Effect.die("Unknown fixture session")),
+    messages: () => Effect.succeed([]),
+    children: () => Effect.succeed([]),
+  })
+  const first = await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions,
+        continuation: (run) =>
+          Effect.sync(() => {
+            turns.push(run.agentID)
+          }),
+      })
+      const chief = yield* runner.tasks.create({
+        name: "Chief",
+        objective: "Coordinate",
+        schedule: { kind: "manual" },
+        enabled: true,
+      })
+      const books = yield* runner.tasks.create({
+        name: `Books ${"x".repeat(121)}`,
+        objective: "Review",
+        schedule: { kind: "manual" },
+        enabled: true,
+      })
+      const sponsor = yield* runner.tasks.create({
+        name: "Owner",
+        objective: "Request work",
+        schedule: { kind: "manual" },
+        enabled: true,
+      })
+      const assignment = yield* runner.delegate(
+        {
+          source: "dlg_deadline_parent",
+          senderID: sponsor.id,
+          recipientID: chief.id,
+          objective: "Coordinate bounded work",
+          budget: 1,
+        },
+        { reportSessionID: chat.id },
+      )
+      const parent = (yield* runner.tasks.runsFor(chief.id)).find((run) => run.id === assignment.childRunID)
+      if (!parent) return yield* Effect.die(new Error("Missing original parent Run"))
+      yield* runner.fire(books.id)
+      const goals = RayaGoal.make({ database, storage, sessions })
+      const goal = yield* goals.get(parent.sessionID)
+      if (!goal) return yield* Effect.die(new Error("Missing actual parent Goal"))
+      const request = {
+        source: "dlg_deadline_fault",
+        senderID: chief.id,
+        recipientID: books.id,
+        parentID: assignment.id,
+        parentRunID: parent.id,
+        objective: "Review later",
+        budget: 1,
+        deadline: Date.now() + 60_000,
+      }
+      const queued = yield* runner.delegate(request)
+      expect(queued.state).toBe("queued")
+      expect(queued.childRunID).toBeUndefined()
+      expect((yield* goals.get(parent.sessionID))?.status).toBe("paused")
+      const store = RayaTaskDelegation.make(database)
+      const waiting = yield* runner.tasks.create({
+        name: "Waiting",
+        objective: "Wait for intake",
+        schedule: { kind: "manual" },
+        enabled: true,
+      })
+      yield* store.admit(
+        {
+          source: "dlg_deadline_preallocated",
+          senderID: chief.id,
+          recipientID: waiting.id,
+          objective: "Accepted without a session",
+          deadline: request.deadline,
+        },
+        chief,
+        waiting,
+      )
+      const accepted = yield* store.take(waiting.id)
+      expect(accepted?.state).toBe("accepted")
+      expect(accepted?.childRunID).toBeDefined()
+      expect(accepted?.sessionID).toBeUndefined()
+      if (!accepted) return yield* Effect.die(new Error("Missing actual accepted preallocation"))
+      yield* database.db.run(
+        `CREATE TRIGGER fail_deadline_reply BEFORE INSERT ON raya_routine_message WHEN NEW.source = 'reply:dlg_deadline_fault' BEGIN SELECT RAISE(ABORT, 'injected reply failure'); END`,
+      )
+      expect(Exit.isFailure(yield* runner.tick(request.deadline).pipe(Effect.exit))).toBe(true)
+      const saved = yield* store.get(queued.id)
+      expect(saved).toMatchObject({ state: "failed", reason: "This request timed out. It was not completed." })
+      expect(saved.sessionID).toBeUndefined()
+      expect(saved.childRunID).toBeUndefined()
+      const inbox = RayaTaskInbox.make(database)
+      expect(
+        (yield* inbox.page(chief.id)).messages.filter((row) => row.source === "reply:dlg_deadline_fault"),
+      ).toHaveLength(0)
+      yield* database.db.run("DROP TRIGGER fail_deadline_reply")
+      fault.report = true
+      yield* runner.tick(request.deadline)
+      expect(
+        (yield* inbox.page(chief.id)).messages.filter((row) => row.source === "reply:dlg_deadline_fault"),
+      ).toHaveLength(1)
+      expect((yield* goals.get(parent.sessionID))?.status).toBe("paused")
+      const cards = yield* RayaRoutineReports.make({
+        database,
+        storage,
+        sessions,
+        scope: { projectID: chat.projectID, directory: chat.directory },
+      }).list(chat.id)
+      expect(cards.find((row) => row.id === queued.id)?.status).toBe("queued")
+      expect(yield* store.get(queued.id)).toEqual(saved)
+      expect(yield* store.get(accepted.id)).toMatchObject({ state: "failed", childRunID: accepted.childRunID })
+      expect((yield* store.get(accepted.id)).sessionID).toBeUndefined()
+      expect(
+        (yield* inbox.page(chief.id)).messages.filter((row) => row.source === "reply:dlg_deadline_preallocated"),
+      ).toHaveLength(1)
+      expect(
+        Exit.isFailure(
+          yield* store.attach(accepted.id, accepted.childRunID!, SessionID.make("ses_late_attach")).pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      const reply = (yield* inbox.page(chief.id)).messages.find((row) => row.source === "reply:dlg_deadline_fault")
+      if (!reply) return yield* Effect.die(new Error("Missing committed failure reply"))
+      expect(reply.body).toContain(books.name)
+      yield* runner.tasks.update(books.id, { name: "Renamed Books" })
+      for (const [index, name] of ["", "y".repeat(8100)].entries()) {
+        const current = yield* runner.tasks.update(waiting.id, { name })
+        // The Agent codec permits an empty historical name; ordinary update keeps its old display name.
+        const worker = { ...current, name }
+        const source = `dlg_name_bound_${index}`
+        const admitted = yield* store.admit(
+          {
+            source,
+            senderID: chief.id,
+            recipientID: worker.id,
+            objective: "Check saved reply",
+            deadline: request.deadline,
+          },
+          chief,
+          worker,
+        )
+        const ended = yield* store.finish(admitted.record.id, "failed", worker, undefined, undefined, saved.reason)
+        const original = (yield* inbox.page(chief.id)).messages.find((row) => row.source === `reply:${source}`)
+        if (!original) return yield* Effect.die(new Error("Missing original bounded reply"))
+        if (name) expect(original.body).toHaveLength(8000)
+        else expect(original.body).toStartWith("Delegation failed ().\n")
+        const renamed = yield* runner.tasks.update(waiting.id, { name: "Renamed Waiting" })
+        expect(yield* store.replay(ended, renamed)).toEqual(ended)
+        expect((yield* inbox.page(chief.id)).messages.find((row) => row.source === `reply:${source}`)).toEqual(original)
+      }
+      return {
+        request,
+        saved,
+        parent,
+        chief,
+        reply,
+        starts: starts.length,
+        turns: turns.filter((id) => id === chief.id).length,
+      }
+    }).pipe(Effect.provide(Database.layerFromPath(file)), Effect.scoped),
+  )
+  fault.report = false
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const runner = RayaTaskRunner.make({
+        database,
+        storage: { ...storage },
+        sessions,
+        continuation: (run) =>
+          Effect.sync(() => {
+            turns.push(run.agentID)
+          }),
+      })
+      const store = RayaTaskDelegation.make(database)
+      expect(yield* store.get(first.saved.id)).toEqual(first.saved)
+      yield* runner.tick(first.request.deadline)
+      yield* runner.tick(first.request.deadline)
+      expect(yield* runner.delegate(first.request)).toEqual(first.saved)
+      expect(starts).toHaveLength(first.starts)
+      expect(turns.filter((id) => id === first.chief.id)).toHaveLength(first.turns + 1)
+      const replies = (yield* RayaTaskInbox.make(database).page(first.chief.id)).messages.filter(
+        (row) => row.source === "reply:dlg_deadline_fault",
+      )
+      expect(replies).toHaveLength(1)
+      expect(replies[0]).toEqual(first.reply)
+      expect(replies[0].body).toContain(first.saved.reason!)
+      const cards = yield* RayaRoutineReports.make({
+        database,
+        storage,
+        sessions,
+        scope: { projectID: chat.projectID, directory: chat.directory },
+      }).list(chat.id)
+      const card = cards.find((row) => row.id === first.saved.id)
+      expect(card?.status).toBe("error")
+      yield* runner.tick(first.request.deadline)
+      expect(
+        (yield* RayaRoutineReports.make({
+          database,
+          storage,
+          sessions,
+          scope: { projectID: chat.projectID, directory: chat.directory },
+        }).list(chat.id)).find((row) => row.id === first.saved.id),
+      ).toEqual(card)
+      expect((yield* RayaGoal.make({ database, storage, sessions }).get(first.parent.sessionID))?.status).toBe("active")
+      expect(yield* store.get(first.saved.id)).toEqual(first.saved)
+    }).pipe(Effect.provide(Database.layerFromPath(file)), Effect.scoped),
+  )
+}, 30_000)
 
 test("an archived or other-folder worker is denied without starting", async () => {
   await Effect.runPromise(

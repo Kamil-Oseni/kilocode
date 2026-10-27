@@ -7,6 +7,7 @@ import type { Storage } from "@/storage/storage"
 import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineOrganizationTable as Organization,
+  RayaRoutineMessageTable as Message,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
 import { commitment, direct, standing } from "./commitment"
@@ -1290,6 +1291,49 @@ export namespace RayaTaskDelegation {
       }
       return record
     })
+    const replay = Effect.fn("RayaTaskDelegation.replayDeadlineReply")(function* (
+      row: Record,
+      recipient: RayaTask.Agent,
+    ) {
+      const current = yield* get(row.id)
+      if (
+        current.state !== "failed" ||
+        current.deadline === undefined ||
+        recipient.id !== current.recipientID ||
+        !isDeepStrictEqual(current, row)
+      )
+        return yield* new Conflict({ message: "The saved deadline result changed before replay." })
+      const expected = replied(current, recipient)
+      if (!expected) return yield* new Invalid({ message: "The saved deadline result has no reply." })
+      const saved = yield* db
+        .select()
+        .from(Message)
+        .where(and(eq(Message.agent_id, expected.agentID), eq(Message.source, expected.source)))
+        .get()
+        .pipe(Effect.orDie)
+      if (!saved) return yield* finish(current.id, "failed", recipient, current.response, current.cost, current.reason)
+      const prefix = "Delegation failed ("
+      const valid =
+        saved.kind === expected.kind &&
+        saved.session_id === (expected.sessionID ?? null) &&
+        saved.occurrence_id === (expected.occurrenceID ?? null) &&
+        saved.files === null &&
+        saved.attachments === null &&
+        saved.body.length <= 8000 &&
+        saved.body.startsWith(prefix) &&
+        Array.from({ length: saved.body.length - prefix.length + 1 }, (_, index) => index).some((size) => {
+          const name = saved.body.slice(prefix.length, prefix.length + size)
+          return (
+            (saved.body.slice(prefix.length + size).startsWith(").\n") ||
+              (saved.body.length === 8000 && prefix.length + size === 8000)) &&
+            replied(current, { ...recipient, name })?.body === saved.body
+          )
+        })
+      if (!valid)
+        return yield* new Conflict({ message: "The saved deadline reply has different content or ownership." })
+      if (reviews) yield* reviews.finish(current.id).pipe(Effect.orDie)
+      return current
+    })
     const resume = Effect.fn("RayaTaskDelegation.resume")(function* (id: string, runID: string, sessionID: SessionID) {
       const saved = yield* db.select().from(Delegation).where(eq(Delegation.id, id)).get().pipe(Effect.orDie)
       if (!saved) return yield* new Invalid({ message: "This delegation request was not found." })
@@ -1428,6 +1472,15 @@ export namespace RayaTaskDelegation {
         .pipe(Effect.orDie)
       return rows.map(decode)
     })
+    const expired = Effect.fn("RayaTaskDelegation.expired")(function* (reason: string) {
+      return yield* db
+        .select({ id: Delegation.id })
+        .from(Delegation)
+        .where(and(eq(Delegation.state, "failed"), eq(Delegation.reason, reason), isNotNull(Delegation.deadline)))
+        .orderBy(asc(Delegation.time_created), asc(Delegation.id))
+        .all()
+        .pipe(Effect.orDie)
+    })
     const held = Effect.fn("RayaTaskDelegation.held")(function* (id: string) {
       const rows = yield* db
         .select()
@@ -1459,6 +1512,7 @@ export namespace RayaTaskDelegation {
       rearm,
       attach,
       finish,
+      replay,
       resume,
       get,
       lookup,
@@ -1468,6 +1522,7 @@ export namespace RayaTaskDelegation {
       stop,
       queued,
       overdue,
+      expired,
       bySession,
       byRun,
       held,

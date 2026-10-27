@@ -1669,6 +1669,7 @@ export namespace RayaTaskRunner {
       const listed = [row, ...kids]
       const failures: Cause.Cause<unknown>[] = []
       const halted: Errand[] = []
+      const retired: RayaTask.Run[] = []
       for (const item of listed) {
         if (item.state === "completed" || item.state === "failed") continue
         if (item.sessionID) {
@@ -1690,7 +1691,10 @@ export namespace RayaTaskRunner {
         const result = yield* Effect.exit(
           Effect.gen(function* () {
             const dropped = yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.", true)
-            if (dropped) yield* execution.finish(dropped)
+            if (dropped) {
+              yield* execution.finish(dropped)
+              retired.push(dropped)
+            }
           }),
         )
         if (Exit.isFailure(result)) {
@@ -1703,6 +1707,17 @@ export namespace RayaTaskRunner {
           kind: "unavailable",
           message: "A worker session could not be stopped. Retry Stop before starting more work.",
         })
+      for (const run of retired) {
+        const current = (yield* tasks.runsFor(run.agentID)).find((row) => row.id === run.id)
+        if (
+          !current ||
+          current.sessionID !== run.sessionID ||
+          current.status !== "error" ||
+          current.blockedReason !== run.blockedReason
+        )
+          return yield* new RayaTask.GuardError({ message: "The stopped worker result changed before publication." })
+        yield* publish(current)
+      }
       const stopped = new Set(
         records.flatMap((item) => (item.state === "cancelled" && item.childRunID ? [item.childRunID] : [])),
       )

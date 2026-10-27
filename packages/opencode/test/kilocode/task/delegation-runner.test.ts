@@ -1427,6 +1427,84 @@ test("waiting for the user survives restart and holds the next delegation", asyn
   )
 }, 30000)
 
+test("stopping started delegated work updates its original report once", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const storage = memory()
+      const chat = session("ses_started_stop_report")
+      const sessions = retained({
+        create: (input) => Effect.succeed(session(input!.id!)),
+        get: (id) => Effect.succeed(session(id)),
+        messages: () => Effect.succeed([]),
+        children: () => Effect.succeed([]),
+      })
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions,
+        halt: () => Effect.void,
+        continuation: () => Effect.void,
+      })
+      const reports = RayaRoutineReports.make({
+        storage,
+        sessions,
+        scope: { projectID: chat.projectID, directory: chat.directory },
+      })
+      const sender = yield* runner.tasks.create({
+        name: "Dispatch",
+        objective: "Assign work",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const worker = yield* runner.tasks.create({
+        name: "Researcher",
+        objective: "Research",
+        access: "brief",
+        schedule: { kind: "manual" },
+      })
+      const row = yield* runner.delegate(
+        {
+          source: "started-stop-report",
+          senderID: sender.id,
+          recipientID: worker.id,
+          objective: "Research the requested job",
+        },
+        { reportSessionID: chat.id },
+      )
+      expect(row.state).toBe("running")
+      const before = (yield* runner.tasks.runsFor(worker.id)).find((run) => run.id === row.childRunID)!
+      const initial = yield* reports.list(chat.id)
+      expect(initial).toHaveLength(1)
+      expect(initial[0]?.status).toBe("running")
+      expect((yield* runner.stop(row.id)).state).toBe("cancelled")
+      const run = (yield* runner.tasks.runsFor(worker.id)).find((run) => run.id === row.childRunID)!
+      const cards = yield* reports.list(chat.id)
+      expect(cards).toHaveLength(1)
+      expect(cards[0]).toMatchObject({
+        id: row.id,
+        runID: run.id,
+        workerSessionID: row.sessionID,
+        reportSessionID: chat.id,
+        status: "error",
+        summary: "Stopped by the user.",
+        runRevision: run.revision,
+      })
+      expect(cards[0]!.revision).toBeGreaterThan(initial[0]!.revision)
+      expect(cards[0]!.runRevision).toBeGreaterThan(initial[0]!.runRevision!)
+      expect((yield* runner.stop(row.id)).state).toBe("cancelled")
+      expect(yield* reports.list(chat.id)).toEqual(cards)
+      const snapshot = yield* RayaTaskSnapshot.make({ storage }).get(run.id)
+      yield* reports.publish({
+        agent: snapshot.definition,
+        run: { ...before, status: "complete" },
+        delegationID: row.id,
+      })
+      expect(yield* reports.list(chat.id)).toEqual(cards)
+    }).pipe(Effect.provide(Database.layerFromPath(":memory:")), Effect.scoped),
+  )
+}, 15_000)
+
 test("stopping a parent cancels live descendants without rewriting assignments", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

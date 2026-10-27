@@ -854,6 +854,10 @@ export namespace RayaTaskDelegation {
       return updated[0] ? decode(updated[0]) : undefined
     })
     const authorize = Effect.fn("RayaTaskDelegation.authorize")(function* (row: Record) {
+      const lineage = yield* ancestors(row.parentID).pipe(
+        Effect.catchTag("RayaTaskDelegation.Invalid", () => Effect.succeed(undefined)),
+      )
+      if (!lineage || lineage.some((item) => item.state === "failed" || item.state === "cancelled")) return false
       if (!row.organizationID)
         return shares
           ? yield* shares(row.senderID, row.recipientID).pipe(

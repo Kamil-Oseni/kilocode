@@ -461,6 +461,7 @@ test("delegation rejects a stopped ancestor while preserving completed handoffs"
           builder,
         )
         yield* store.finish(root.record.id, state, research, undefined, 0, "Reviewed parent result")
+        expect(yield* store.authorize(child.record)).toBe(state === "completed")
         const result = yield* store
           .admit(request(`late_${state}`, builder.id, sales.id, { parentID: child.record.id }), builder, sales)
           .pipe(Effect.exit)

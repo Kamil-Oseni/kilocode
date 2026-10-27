@@ -3202,6 +3202,52 @@ export namespace RayaTaskRunner {
       }
     })
 
+    // Rebuild notifications from retained completed results, never from execution ownership.
+    const republish = (run: RayaTask.Run) =>
+      Effect.gen(function* () {
+        if (run.status !== "complete" || !run.outcome || RayaTask.pending(run)) return
+        const latest = (yield* tasks.runsFor(run.agentID)).find((item) => item.id === run.id)
+        if (!isDeepStrictEqual(latest, run))
+          return yield* new RayaTask.GuardError({ message: "The completed report's retained run changed." })
+        const saved = yield* snapshots.find(run.id)
+        if (!saved || (!saved.definition.sourceSessionID && !saved.definition.reportSessionID)) return
+        if (
+          saved.runID !== run.id ||
+          (saved.sessionID !== undefined && saved.sessionID !== run.sessionID) ||
+          saved.agentID !== run.agentID ||
+          saved.at !== run.at ||
+          (saved.definition.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1)
+        )
+          return yield* new RayaTask.GuardError({ message: "The completed report's startup identity changed." })
+        const session = yield* input.sessions.get(run.sessionID)
+        const identity = yield* Schema.decodeUnknownEffect(ContinuationRecord)(session.metadata?.rayaRoutine)
+        if (
+          session.id !== run.sessionID ||
+          identity.agentID !== run.agentID ||
+          identity.runID !== run.id ||
+          identity.scheduleVersion !== (run.scheduleVersion ?? 1) ||
+          !isDeepStrictEqual(identity.trigger, run.trigger)
+        )
+          return yield* new RayaTask.GuardError({ message: "The completed report's session identity changed." })
+        yield* report(run)
+      }).pipe(
+        Effect.mapError((err) =>
+          err instanceof RayaTask.GuardError
+            ? err
+            : new RayaTask.GuardError({ kind: "unavailable", message: "The completed report could not be recovered." }),
+        ),
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.failCause(cause)
+            : Effect.sync(() =>
+                log.error("completed routine report recovery remains pending", {
+                  runID: run.id,
+                  err: Cause.squash(cause),
+                }),
+              ),
+        ),
+      )
+
     const reboot = Effect.fn("RayaTaskRunner.reboot")(function* (item: RayaTask.Agent) {
       if (organizations && (yield* organizations.stopped(item.id))) return
       const prior = yield* tasks.runsFor(item.id)
@@ -3226,6 +3272,7 @@ export namespace RayaTaskRunner {
         if (!run.outcome || (run.status !== "complete" && run.status !== "blocked") || RayaTask.pending(run)) continue
         const goal = yield* goals.get(run.sessionID)
         if (goal?.replyRecovery && goal.replyRecovery.reviewedAt === undefined) continue
+        yield* republish(run)
         done.push(run)
       }
       const restored = yield* Effect.gen(function* () {

@@ -20,6 +20,7 @@ import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { RayaTaskExecution } from "@/kilocode/task/execution"
 import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { RayaTaskInbox } from "@/kilocode/task/inbox"
+import { RayaRoutineReports } from "@/kilocode/task/projection"
 import { Codec } from "@/kilocode/task/schema"
 import * as Artifact from "@/kilocode/goal/artifact"
 import { read } from "@/kilocode/goal/read-artifact"
@@ -359,6 +360,76 @@ const seed = Effect.fn("FinalReportTest.seed")(function* (
     queue,
   }
 })
+
+it.instance("a completed routine repairs its original report after publication failure and execution retirement", () =>
+  Effect.gen(function* () {
+    const ctx = yield* seed()
+    const reports = RayaRoutineReports.make(ctx)
+    const target = ctx.agent.reportSessionID
+    if (!target) return yield* Effect.die(new Error("Missing original report destination"))
+    yield* reports.publish({ agent: ctx.agent, run: ctx.run })
+    const initial = (yield* reports.page({ sessionID: target })).items.find((card) => card.runID === ctx.run.id)
+    expect(initial?.status).toBe("running")
+    const execution = RayaTaskExecution.make(ctx.storage)
+    yield* execution.enter(ctx.run, Effect.void)
+    expect((yield* execution.receipt(ctx.run))?.state).toBe("idle")
+    const fault = { armed: true, hits: 0 }
+    const storage: Storage.Interface = {
+      ...ctx.storage,
+      replace: (key, value) =>
+        Effect.gen(function* () {
+          if (
+            fault.armed &&
+            key[0] === "raya" &&
+            key[1] === "routine-reports" &&
+            key[2] === createHash("sha256").update(ctx.run.id).digest("hex") &&
+            typeof value === "object" &&
+            value !== null &&
+            "status" in value &&
+            value.status === "complete"
+          ) {
+            fault.hits += 1
+            return yield* Effect.die(new Error("Injected terminal requester-card write failure"))
+          }
+          yield* ctx.storage.replace(key, value)
+        }),
+    }
+    const original = RayaTaskRunner.make({ ...ctx, storage })
+    expect((yield* original.settle(ctx.chat.id).pipe(Effect.exit))._tag).toBe("Success")
+    expect(fault.hits).toBe(1)
+    const terminal = (yield* original.tasks.runsFor(ctx.agent.id)).find((run) => run.id === ctx.run.id)
+    expect(terminal?.status).toBe("complete")
+    expect(yield* execution.receipt(ctx.run)).toBeUndefined()
+    expect((yield* reports.page({ sessionID: target })).items.find((card) => card.id === initial?.id)?.status).toBe(
+      "running",
+    )
+    fault.armed = false
+    const fresh = RayaTaskRunner.make({ ...ctx, storage: { ...ctx.storage } })
+    const replacement = yield* ctx.goals.create(ctx.chat.id, "A newer owner goal must remain untouched")
+    const messages = yield* ctx.sessions.messages({ sessionID: ctx.chat.id })
+    const destination = yield* ctx.sessions.messages({ sessionID: target })
+    const runs = yield* fresh.tasks.runsFor(ctx.agent.id)
+    yield* fresh.revive()
+    const recovered = (yield* reports.page({ sessionID: target })).items.find((card) => card.id === initial?.id)
+    expect(yield* fresh.tasks.runsFor(ctx.agent.id)).toEqual(runs)
+    expect(yield* ctx.sessions.messages({ sessionID: ctx.chat.id })).toEqual(messages)
+    expect(yield* execution.receipt(ctx.run)).toBeUndefined()
+    expect(recovered?.status).toBe("complete")
+    expect(recovered?.id).toBe(initial?.id)
+    expect(recovered?.reportSessionID).toBe(target)
+    expect(recovered?.runRevision).toBe(terminal?.revision)
+    expect(yield* ctx.goals.get(ctx.chat.id)).toEqual(replacement)
+    expect(yield* ctx.sessions.messages({ sessionID: target })).toEqual(destination)
+    yield* fresh.revive()
+    const repeated = (yield* reports.page({ sessionID: target })).items.filter((card) => card.runID === ctx.run.id)
+    expect(repeated).toEqual([recovered])
+    expect(yield* fresh.tasks.runsFor(ctx.agent.id)).toEqual(runs)
+    expect(yield* ctx.sessions.messages({ sessionID: ctx.chat.id })).toEqual(messages)
+    expect(yield* ctx.sessions.messages({ sessionID: target })).toEqual(destination)
+    expect(yield* ctx.goals.get(ctx.chat.id)).toEqual(replacement)
+    expect(yield* execution.receipt(ctx.run)).toBeUndefined()
+  }),
+)
 
 it.instance(
   "failed frozen final output retains the original report without learning success or replaying on repeat settlement",

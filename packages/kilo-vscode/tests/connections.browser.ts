@@ -4,12 +4,89 @@ import AxeBuilder from "@axe-core/playwright"
 declare global {
   interface Window {
     connections: {
-      messages: () => { type: string; config?: unknown; projectConfig?: unknown }[]
+      messages: () => {
+        type: string
+        config?: unknown
+        projectConfig?: unknown
+        projectUnset?: unknown
+        globalUnset?: unknown
+      }[]
       actions: () => { type: string; name: string; directory?: string }[]
       offline: () => void
     }
   }
 }
+
+test("Connections project environment deletion preserves its exact unset path", async ({ page }) => {
+  await page.goto("/")
+  const hub = page.locator('[data-component="connections-settings"]')
+  const project = hub.locator('[data-component="card"]').filter({ has: page.getByText("Project", { exact: true }) })
+  await project.getByRole("button", { name: "Configure", exact: true }).click()
+  await hub.getByPlaceholder("KEY", { exact: true }).fill("KEEP")
+  await hub.getByPlaceholder("value", { exact: true }).fill("keep-value")
+  await hub.getByRole("button", { name: "Add", exact: true }).click()
+  await expect(hub.getByText("KEEP=keep-value", { exact: true })).toBeVisible()
+  await hub.getByText("TOKEN=secret-environment", { exact: true }).locator("..").getByRole("button").click()
+  await expect.soft(hub.getByText("TOKEN=secret-environment", { exact: true })).toBeHidden()
+  await expect(hub.getByText("KEEP=keep-value", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Save fixture settings" }).click()
+  expect(
+    await page.evaluate(() =>
+      window.connections
+        .messages()
+        .filter((item) => item.type === "updateConfig")
+        .map((item) => ({
+          config: item.config,
+          project: item.projectConfig,
+          globalUnset: item.globalUnset,
+          projectUnset: item.projectUnset,
+        })),
+    ),
+  ).toEqual([
+    {
+      config: {},
+      project: { mcp: { Project: { environment: { KEEP: "keep-value" } } } },
+      globalUnset: [],
+      projectUnset: [["mcp", "Project", "environment", "TOKEN"]],
+    },
+  ])
+  expect(await page.evaluate(() => window.connections.actions())).toEqual([])
+  await page.goto("/?legacy=1")
+  await project.getByRole("button", { name: "Configure", exact: true }).click()
+  await hub.getByPlaceholder("KEY", { exact: true }).fill("KEEP")
+  await hub.getByPlaceholder("value", { exact: true }).fill("keep-value")
+  await hub.getByRole("button", { name: "Add", exact: true }).click()
+  await hub.getByText("TOKEN=secret-environment", { exact: true }).locator("..").getByRole("button").click()
+  await expect(hub.getByText("TOKEN=secret-environment", { exact: true })).toBeHidden()
+  await expect(hub.getByText("KEEP=keep-value", { exact: true })).toBeVisible()
+  await hub.getByPlaceholder("KEY", { exact: true }).fill("TOKEN")
+  await hub.getByPlaceholder("value", { exact: true }).fill("replacement")
+  await hub.getByRole("button", { name: "Add", exact: true }).click()
+  await expect(hub.getByText("TOKEN=replacement", { exact: true })).toBeVisible()
+  await expect(hub.getByText("KEEP=keep-value", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Save fixture settings" }).click()
+  expect(
+    await page.evaluate(() =>
+      window.connections
+        .messages()
+        .filter((item) => item.type === "updateConfig")
+        .map((item) => ({
+          config: item.config,
+          project: item.projectConfig,
+          globalUnset: item.globalUnset,
+          projectUnset: item.projectUnset,
+        })),
+    ),
+  ).toEqual([
+    {
+      config: {},
+      project: { mcp: { Project: { env: { KEEP: "keep-value", TOKEN: "replacement" } } } },
+      globalUnset: [],
+      projectUnset: [],
+    },
+  ])
+  expect(await page.evaluate(() => window.connections.actions())).toEqual([])
+})
 
 test("Connections overview layout and keyboard access at 320px", async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 850 })
@@ -129,6 +206,7 @@ test("actual Connections overview is passive and explicit changes retain their c
   }
   await expect(hub).toContainText("FIRST=first")
   await expect(hub).toContainText("SECOND=second")
+  await expect(hub).toContainText("TOKEN=secret-environment")
   await page.getByRole("button", { name: "Save fixture settings" }).click()
   expect(
     await page.evaluate(() =>
@@ -144,7 +222,7 @@ test("actual Connections overview is passive and explicit changes retain their c
         mcp: {
           Project: {
             command: ["new-command", "secret-argument"],
-            environment: { TOKEN: "secret-environment", FIRST: "first", SECOND: "second" },
+            environment: { FIRST: "first", SECOND: "second" },
           },
         },
       },

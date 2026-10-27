@@ -14,6 +14,8 @@ interface Props {
   onBack: () => void
   onRemove: (name: string) => void
   onUpdate: (partial: Partial<McpConfig>) => void
+  canRemoveEnvironment: (field: "environment" | "env", key: string) => boolean
+  onRemoveEnvironment: (field: "environment" | "env", key: string) => void
 }
 
 const McpEditView: Component<Props> = (props) => {
@@ -40,22 +42,21 @@ const McpEditView: Component<Props> = (props) => {
     return ""
   }
 
-  const env = createMemo(() => Object.entries(cfg().environment ?? cfg().env ?? {}))
+  const field = () => (cfg().environment !== undefined || cfg().env === undefined ? "environment" : "env")
+  const env = createMemo(() => Object.entries(cfg()[field()] ?? {}))
 
   const addEnv = () => {
     const key = envKey().trim()
     const val = envVal().trim()
     if (!key) return
-    const existing = cfg().environment ?? cfg().env ?? {}
-    update({ environment: { ...existing, [key]: val } })
+    update({ [field()]: { [key]: val } })
     setEnvKey("")
     setEnvVal("")
   }
 
   const removeEnv = (key: string) => {
-    const existing = { ...(cfg().environment ?? cfg().env ?? {}) }
-    delete existing[key]
-    update({ environment: existing })
+    if (!props.canRemoveEnvironment(field(), key)) return
+    props.onRemoveEnvironment(field(), key)
   }
 
   return (
@@ -196,7 +197,18 @@ const McpEditView: Component<Props> = (props) => {
                 >
                   {key}={val}
                 </span>
-                <IconButton size="small" variant="ghost" icon="close" onClick={() => removeEnv(key)} />
+                <IconButton
+                  size="small"
+                  variant="ghost"
+                  icon="close"
+                  disabled={!props.canRemoveEnvironment(field(), key)}
+                  title={
+                    props.canRemoveEnvironment(field(), key)
+                      ? language.t("common.remove")
+                      : language.t("settings.connections.inherited")
+                  }
+                  onClick={() => removeEnv(key)}
+                />
               </div>
             )}
           </For>

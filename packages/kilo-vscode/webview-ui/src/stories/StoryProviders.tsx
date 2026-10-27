@@ -17,6 +17,7 @@ import { FeedbackProvider } from "../context/feedback"
 import { ProviderContext } from "../context/provider"
 import { flattenModels, findModel as _findModel } from "../context/provider-utils"
 import { ConfigProvider, ConfigContext } from "../context/config"
+import { deepMerge } from "../utils/config-utils"
 import { DisplayProvider } from "../context/display"
 import { DataProvider, type OpenDiffFn, type OpenFileFn } from "@kilocode/kilo-ui/context/data"
 import { DiffComponentProvider } from "@kilocode/kilo-ui/context/diff"
@@ -337,6 +338,8 @@ const ConfigWrapper: ParentComponent<{
     const [cfg, setCfg] = createSignal(props.config)
     const [global, setGlobal] = createSignal(props.globalConfig ?? props.config)
     const [project, setProject] = createSignal(props.projectConfig ?? props.config)
+    const [globals, setGlobals] = createSignal<Config>({})
+    const [projects, setProjects] = createSignal<Config>({})
     const [settings, setSettings] = createSignal<Record<string, unknown>>({})
     const [dirty, setDirty] = createSignal(false)
     const features = createMemo(() => {
@@ -353,7 +356,8 @@ const ConfigWrapper: ParentComponent<{
     const value = {
       config: createMemo(() => cfg()),
       globalConfig: createMemo(() => (scoped ? global() : cfg())),
-      globalDraft: () => ({}),
+      globalDraft: globals,
+      projectDraft: projects,
       projectConfig: createMemo(() => (scoped ? project() : cfg())),
       collections: () => ({}),
       settings,
@@ -371,6 +375,7 @@ const ConfigWrapper: ParentComponent<{
         setDirty(true)
       },
       updateGlobalConfig: (partial: Partial<Config>) => {
+        setGlobals((prev) => deepMerge(prev, partial))
         const update = (prev: Config) => {
           const next = merge(prev as Record<string, unknown>, partial as Record<string, unknown>) as Config
           props.onGlobalConfigChange?.(next)
@@ -382,6 +387,7 @@ const ConfigWrapper: ParentComponent<{
         setDirty(true)
       },
       updateProjectConfig: (partial: Partial<Config>) => {
+        setProjects((prev) => deepMerge(prev, partial))
         const update = (prev: Config) => {
           const next = merge(prev as Record<string, unknown>, partial as Record<string, unknown>) as Config
           props.onProjectConfigChange?.(next)
@@ -390,6 +396,28 @@ const ConfigWrapper: ParentComponent<{
         }
         if (scoped) setProject(update)
         if (!scoped) setCfg(update)
+        setDirty(true)
+      },
+      unsetMcpEnvironment: (scope: "global" | "project", name: string, field: "environment" | "env", key: string) => {
+        const update = (prev: Config) => {
+          const current = prev.mcp?.[name]
+          if (!current || !Object.hasOwn(current[field] ?? {}, key)) return prev
+          const entries = { ...current[field] }
+          delete entries[key]
+          const next = { ...prev, mcp: { ...prev.mcp, [name]: { ...current, [field]: entries } } }
+          if (scope === "project") props.onProjectConfigChange?.(next)
+          if (scope === "global") props.onGlobalConfigChange?.(next)
+          props.onConfigChange?.(next)
+          return next
+        }
+        const source = scope === "global" ? (scoped ? global() : cfg()) : scoped ? project() : cfg()
+        if (!Object.hasOwn(source.mcp?.[name]?.[field] ?? {}, key)) return
+        const patch = { mcp: { [name]: { [field]: { [key]: undefined } } } } as Partial<Config>
+        if (scope === "global") setGlobals((prev) => deepMerge(prev, patch))
+        if (scope === "project") setProjects((prev) => deepMerge(prev, patch))
+        if (!scoped) setCfg(update)
+        if (scoped && scope === "global") setGlobal(update)
+        if (scoped && scope === "project") setProject(update)
         setDirty(true)
       },
       updateSetting: (key: string, value: unknown) => {

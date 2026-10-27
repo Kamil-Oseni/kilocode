@@ -41,7 +41,7 @@ const project = {
     Project: {
       type: "local",
       command: ["secret-command", "secret-argument"],
-      environment: { TOKEN: "secret-environment" },
+      [new URLSearchParams(location.search).has("legacy") ? "env" : "environment"]: { TOKEN: "secret-environment" },
       enabled: true,
     },
   },

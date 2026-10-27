@@ -42,6 +42,7 @@ interface ConfigContextValue {
   globalConfig: Accessor<Config>
   globalDraft: Accessor<Partial<Config>>
   projectConfig: Accessor<Config>
+  projectDraft: Accessor<Partial<Config>>
   collections: Accessor<ConfigCollections>
   settings: Accessor<Record<string, unknown>>
   features: Accessor<FeatureFlags>
@@ -52,6 +53,7 @@ interface ConfigContextValue {
   updateConfig: (partial: Partial<Config>) => void
   updateGlobalConfig: (partial: Partial<Config>) => void
   updateProjectConfig: (partial: Partial<Config>) => void
+  unsetMcpEnvironment: (scope: "global" | "project", name: string, field: "environment" | "env", key: string) => void
   updateSetting: (key: string, value: unknown) => void
   applySetting: (key: string, value: unknown, writeKey?: string) => void
   saveConfig: () => void
@@ -317,6 +319,16 @@ export const ConfigProvider: ParentComponent = (props) => {
     setSaveError(null)
   }
 
+  function unsetMcpEnvironment(scope: "global" | "project", name: string, field: "environment" | "env", key: string) {
+    const source = scope === "global" ? globalConfig() : projectConfig()
+    if (!Object.hasOwn(source.mcp?.[name]?.[field] ?? {}, key)) return
+    // Undefined is a draft-only unset marker, removed from saved values and
+    // serialized separately by configUnsetPaths() when the user saves.
+    const patch = { mcp: { [name]: { [field]: { [key]: undefined } } } } as Partial<Config>
+    if (scope === "global") return updateGlobalConfig(patch)
+    updateProjectConfig(patch)
+  }
+
   function updateSetting(key: string, value: unknown) {
     setSettings((prev) => ({ ...prev, [key]: value }))
     setSettingsDraft((prev) => ({ ...prev, [key]: value }))
@@ -401,6 +413,7 @@ export const ConfigProvider: ParentComponent = (props) => {
     globalConfig,
     globalDraft,
     projectConfig,
+    projectDraft,
     collections,
     settings,
     features,
@@ -411,6 +424,7 @@ export const ConfigProvider: ParentComponent = (props) => {
     updateConfig,
     updateGlobalConfig,
     updateProjectConfig,
+    unsetMcpEnvironment,
     updateSetting,
     applySetting,
     saveConfig,

@@ -436,6 +436,8 @@ function Editor(props: { name: string }) {
       name={props.name}
       value={cfg.config().mcp?.[props.name] ?? {}}
       onUpdate={(partial) => cfg.updateConfig({ mcp: { [props.name]: partial } })}
+      canRemoveEnvironment={(field, key) => Object.hasOwn(cfg.config().mcp?.[props.name]?.[field] ?? {}, key)}
+      onRemoveEnvironment={(field, key) => cfg.unsetMcpEnvironment("global", props.name, field, key)}
       onBack={noop}
       onRemove={noop}
     />

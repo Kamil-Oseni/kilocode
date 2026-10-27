@@ -25,7 +25,7 @@ const ConnectionsTab: Component = () => {
   const [editing, setEditing] = createSignal<{ id: string; origin: "global" | "project"; directory: string }>()
   const value = (row: { name: string; origin: string }): McpConfig => {
     const source =
-      row.origin === "project" ? cfg.projectConfig() : row.origin === "global" ? cfg.globalConfig() : undefined
+      row.origin === "project" ? cfg.projectDraft() : row.origin === "global" ? cfg.globalDraft() : undefined
     return (
       mergeScopedConfig(
         { mcp: { [row.name]: cfg.config().mcp?.[row.name] ?? {} } },
@@ -53,6 +53,18 @@ const ConnectionsTab: Component = () => {
     if (!server.isConnected() || !row || (row.origin !== "project" && row.origin !== "global")) return
     const write = row.origin === "project" ? cfg.updateProjectConfig : cfg.updateGlobalConfig
     write({ mcp: { [row.name]: partial } })
+  }
+  const owned = (field: "environment" | "env", key: string) => {
+    const row = selected()
+    if (!row || (row.origin !== "project" && row.origin !== "global")) return false
+    const source = row.origin === "project" ? cfg.projectConfig() : cfg.globalConfig()
+    return Object.hasOwn(source.mcp?.[row.name]?.[field] ?? {}, key)
+  }
+  const unset = (field: "environment" | "env", key: string) => {
+    const row = selected()
+    if (!server.isConnected() || !row || !owned(field, key) || (row.origin !== "project" && row.origin !== "global"))
+      return
+    cfg.unsetMcpEnvironment(row.origin, row.name, field, key)
   }
   const toggle = (id: string) => {
     const row = entries().items.find((item) => item.id === id && item.editable)
@@ -234,6 +246,8 @@ const ConnectionsTab: Component = () => {
             onBack={() => setEditing(undefined)}
             onRemove={remove}
             onUpdate={update}
+            canRemoveEnvironment={owned}
+            onRemoveEnvironment={unset}
           />
         )}
       </Show>

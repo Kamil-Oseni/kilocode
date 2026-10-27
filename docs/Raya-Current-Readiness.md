@@ -4,6 +4,16 @@ Updated October 27, 2026. Priority: stable chat and routine workers. Voice is de
 
 ## Installed version
 
+Installed held-profile evidence, October 27, 2026:
+
+Installed c322 separately passes a fresh encrypted held-profile check. A new isolated preparation genuinely seals and restores the fixture in **11.500 seconds**, validates its inactive mapped destination, and stops before hold release, live Storage activation or the old fixture's restart sequence. The original full legacy restart failure remains untouched; this prefix is not a full-fixture pass.
+
+Qualification: `.tmp/new-pc/installed-held-profile-c322-qualified-v1.json`; actual result `.tmp/new-pc/installed-held-profile-c322-v3-result.json`. The installed check passes naturally in **13.203 seconds**, with **10 GET responses, all 200**, across two separately retired CLI epochs. Public reads retain the exact held review, mapped Session, paused Goal/cost, terminal Routine history and empty event journal. **16 critical files** remain byte-identical and **8 SQL tables** retain identical canonical rows. Source PIDs **23380 / 27016** each retire a complete **47-member native family**, with zero exit codes and joined readers; no forced cleanup or model requests occur.
+
+The two earlier harness attempts remain retained as prelaunch failures. V3 corrects parent runtime-directory preparation, genuinely absent configuration handling and the existing full event-response shape; it does not weaken the hold or rewrite source evidence. The result covers the enumerated critical-file set and selected SQL tables, not an exhaustive new-file inventory. This is a new bounded installed observation, with no new build or installation and no combined Task-file, loaded-client/GUI, model, Windows boot, reinstall or complete legacy-fixture acceptance. The prior promotion check remains separate, as does the original 25cd whole-owner config-guard failure. `FUT-DATA-01` remains **In progress**; gates remain **2/9 (22.2%)**, overall **unmeasured**.
+
+Preserved c322 promotion and delivery checkpoints:
+
 Installed promotion evidence, October 27, 2026:
 
 Installed `c322a0a6aa` now has a separate bounded model-free public-API promotion check: a real empty Session is created, a rich pending draft is atomically promoted to it, and the same request replays idempotently before and after natural CLI closure/reopening. Exact text, review comment, PNG attachment, model/agent/variant/selection and target token survive. The original pending entry remains a tombstone; stale save and new-mutation promotion both return conflict without resurrecting content or duplicating the live session draft. Both Session transcript reads are empty.

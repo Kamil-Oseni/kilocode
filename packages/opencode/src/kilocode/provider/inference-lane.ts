@@ -7,13 +7,19 @@ import { SessionID } from "@/session/schema"
 export type Lane = "interactive" | "background"
 export const header = "x-raya-inference-lane"
 export const originHeader = "x-raya-inference-origin"
-export type Origin = { sessionID: string; messageID: string }
+export type Origin = { sessionID: string; messageID: string; helper?: true }
 
 /** Bounded attribution only; it never identifies execution authority. */
 export function origin(value: unknown): Origin | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
   const row = value as Record<string, unknown>
-  if (Object.keys(row).length !== 2) return undefined
+  const keys = Object.keys(row)
+  if (
+    (keys.length !== 2 && keys.length !== 3) ||
+    keys.some((key) => key !== "sessionID" && key !== "messageID" && key !== "helper") ||
+    (Object.hasOwn(row, "helper") && row.helper !== true)
+  )
+    return undefined
   if (
     typeof row.sessionID !== "string" ||
     typeof row.messageID !== "string" ||
@@ -21,7 +27,11 @@ export function origin(value: unknown): Origin | undefined {
     !/^[A-Za-z0-9_-]{1,256}$/.test(row.messageID)
   )
     return undefined
-  return { sessionID: row.sessionID, messageID: row.messageID }
+  return {
+    sessionID: row.sessionID,
+    messageID: row.messageID,
+    ...(row.helper === true ? { helper: true as const } : {}),
+  }
 }
 
 export function decode(value: unknown): Origin | undefined {

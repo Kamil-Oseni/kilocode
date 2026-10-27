@@ -25,6 +25,7 @@ type Ctx = {
   speechToTextModels: () => Promise<void>
   modelUsage: (message: ModelUsageMessage) => Promise<void>
   backgroundJobs: (sessionID: string, requestID: string) => Promise<void>
+  localInference: (sessionID: string, requestID: string) => Promise<void>
   cancelBackgroundJob: (jobID: string, sessionID: string, requestID: string, revision: string) => Promise<void>
   backgroundSubagents: (sessionID: string) => Promise<void>
   chiefNotes: (input: ChiefNotesRequest) => Promise<void>
@@ -84,7 +85,18 @@ async function routeBackgroundMessage(
     if (typeof message.sessionID === "string") await ctx.backgroundSubagents(message.sessionID)
     return true
   }
-  return undefined
+  return routeInferenceMessage(message, ctx)
+}
+
+async function routeInferenceMessage(
+  message: { type: string; sessionID?: unknown; requestID?: unknown },
+  ctx: Ctx,
+): Promise<boolean | undefined> {
+  if (message.type !== "requestLocalInference") return undefined
+  if (typeof message.sessionID === "string" && typeof message.requestID === "string") {
+    await ctx.localInference(message.sessionID, message.requestID)
+  }
+  return true
 }
 
 async function routeChildMessage(

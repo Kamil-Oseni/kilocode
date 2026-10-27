@@ -96,6 +96,7 @@ describe("local inference scheduler with held transport cleanup", () => {
       expect(queued).toHaveProperty("since")
       expect(observe(child).epoch).toBe(observe(first).epoch)
       expect(observe({ ...child, messageID: "msg_other" })).toMatchObject({ queued: 0, active: 0 })
+      expect(createLocalScheduler().session(child.sessionID).requests).toEqual([])
       expect(enrich({ ...job, status: "completed" }, observe).metadata).not.toHaveProperty("localInference")
       expect(metadata.localInference).toEqual({ forged: true })
       const cancelled = request(host.url("/cancelled"), {
@@ -167,6 +168,9 @@ describe("local inference scheduler with held transport cleanup", () => {
       expect(calls).toEqual(["http://fixture/first"])
       expect(queue.snapshot()).toMatchObject({ active: 1, queued: 1 })
       expect(queue.observe(origin)).toMatchObject({ active: 1, queued: 1 })
+      expect(queue.session(origin.sessionID).requests).toMatchObject([
+        { messageID: origin.messageID, active: 1, queued: 1 },
+      ])
       expect(queue.observe({ ...origin, messageID: "msg_later" })).toMatchObject({ active: 0, queued: 0 })
     } finally {
       gate.resolve()

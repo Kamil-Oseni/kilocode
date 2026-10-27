@@ -541,6 +541,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly streams = new SessionStreamScheduler((msg) => this.postMessage(msg))
   private jobsBackoff = 0
   private readonly jobReads = new Map<string, symbol>()
+  private readonly inference = new Map<string, symbol>()
   private readonly jobStops = new Map<
     string,
     {
@@ -1339,6 +1340,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           speechToTextModels: () => this.fetchAndSendSpeechToTextModels(),
           modelUsage: (msg) => handleModelUsageMessage(msg, this.extensionContext, (value) => this.postMessage(value)),
           backgroundJobs: (sessionID, requestID) => this.fetchAndSendBackgroundJobs(sessionID, requestID),
+          localInference: (sessionID, requestID) => this.fetchAndSendLocalInference(sessionID, requestID),
           cancelBackgroundJob: (jobID, sessionID, requestID, revision) =>
             this.cancelBackgroundJob(jobID, sessionID, requestID, revision),
           backgroundSubagents: (sessionID) => this.backgroundSubagents(sessionID),
@@ -4271,6 +4273,40 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return
     }
     this.postMessage({ type: "speechToTextModelsLoaded" as const, models: result.models })
+  }
+
+  private async fetchAndSendLocalInference(sessionID: string, requestID: string): Promise<void> {
+    const client = this.client
+    if (!client || this.connectionState !== "connected") {
+      this.postMessage({ type: "localInferenceLoaded", sessionID, requestID, error: "Not connected" })
+      return
+    }
+    const directory = this.getWorkspaceDirectory(sessionID)
+    const generation = this.connectionGeneration
+    const id = Symbol()
+    this.inference.set(sessionID, id)
+    const current = () =>
+      this.inference.get(sessionID) === id &&
+      this.client === client &&
+      this.connectionState === "connected" &&
+      this.connectionGeneration === generation &&
+      sameDirectory(directory, this.getWorkspaceDirectory(sessionID))
+    try {
+      const { data } = await client.kilocode.localInference({ directory, sessionID }, { throwOnError: true })
+      if (!current()) return
+      this.postMessage({ type: "localInferenceLoaded", sessionID, requestID, snapshot: data })
+    } catch (error) {
+      if (!current()) return
+      console.warn("[Raya] Provider: Failed to fetch local model status:", getErrorMessage(error))
+      this.postMessage({
+        type: "localInferenceLoaded",
+        sessionID,
+        requestID,
+        error: "Local model status is temporarily unavailable",
+      })
+    } finally {
+      if (this.inference.get(sessionID) === id) this.inference.delete(sessionID)
+    }
   }
 
   private async fetchAndSendBackgroundJobs(sessionID: string, requestID: string): Promise<void> {
@@ -7964,6 +8000,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.routineEvents.dispose()
     this.routineReporting.dispose()
     this.deliveries.clear()
+    this.inference.clear()
     if (this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)
     }

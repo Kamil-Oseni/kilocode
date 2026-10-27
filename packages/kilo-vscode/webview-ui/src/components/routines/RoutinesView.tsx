@@ -38,6 +38,7 @@ import { OrganizationActivity } from "./OrganizationActivity"
 import { ArchivedOrganizations } from "./ArchivedOrganizations"
 import { ReportSetting } from "./ReportSetting"
 import { RestoreReview } from "./RestoreReview"
+import { waiting } from "./inference"
 import { polling } from "./routine-polling"
 import { projectRuns } from "./run-projection"
 import { Output } from "../../../../src/shared/routine-output"
@@ -652,6 +653,7 @@ function blocked(command: ReturnType<typeof action>, access: Agent["access"], ca
 const Person: Component<{
   item: Agent
   box?: Box
+  waiting?: boolean
   stale?: string
   picked: boolean
   manage: boolean
@@ -709,11 +711,16 @@ const Person: Component<{
         class="routines-identity"
         data-routine-worker={props.item.id}
         aria-current={flag(props.current)}
-        aria-label={`${props.item.name}, ${props.item.role}, ${occupancy(props.item, props.box)}${props.box?.unread ? `, ${props.box.unread} unread` : ""}`}
+        aria-label={`${props.item.name}, ${props.item.role}, ${props.waiting ? "Waiting for local model" : occupancy(props.item, props.box)}${props.box?.unread ? `, ${props.box.unread} unread` : ""}`}
         onClick={() => call(props.onChoose)}
       >
         <span class="routines-name">{props.item.name}</span>
         <span class="routines-job">{props.box?.latest?.body ?? props.item.objective}</span>
+        <Show when={props.waiting}>
+          <span class="routines-note" role="status">
+            Waiting for local model
+          </span>
+        </Show>
         <Show when={due(props.item)}>{(date) => <span class="routines-note">{date()}</span>}</Show>
         <Show when={props.stale}>
           <span class="routines-note" role="status">
@@ -922,6 +929,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [freshness, setFreshness] = createSignal("Waiting to refresh routines.")
   const [connection, setConnection] = createSignal<ConnectionState>("connected")
   const [stale, setStale] = createSignal<Record<string, string>>({})
+  const [clock, setClock] = createSignal(Date.now())
   const [boxes, setBoxes] = createSignal<Record<string, Box>>({})
   const [chosen, setChosen] = createSignal<string>()
   const [query, setQuery] = createSignal("")
@@ -1274,7 +1282,13 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     load()
     if (session.agents().length === 0) vscode.postMessage({ type: "requestAgents" })
     const tick = setInterval(() => {
-      if (polling(hold, chosen(), organization())) load()
+      setClock(Date.now())
+      const selected = agents().find((item) => item.id === chosen())
+      if (
+        polling(hold, chosen(), organization()) ||
+        (!hold && selected && latest(selected, runs())?.status === "running")
+      )
+        load()
     }, 4000)
     onCleanup(() => clearInterval(tick))
   })
@@ -1475,7 +1489,18 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   }
 
   const boxed = (msg: Extract<ExtensionMessage, { type: "routineInbox" }>) => {
-    if (msg.error) return
+    if (msg.error) {
+      setBoxes((items) =>
+        Object.fromEntries(
+          Object.entries(items).map(([id, item]) => {
+            const next = { ...item }
+            delete next.inference
+            return [id, next]
+          }),
+        ),
+      )
+      return
+    }
     if (!Array.isArray(msg.items)) return
     const next: Record<string, Box> = {}
     for (const item of msg.items as Box[]) {
@@ -2187,6 +2212,15 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                       <Person
                         item={item}
                         box={boxes()[item.id]}
+                        waiting={waiting({
+                          box: boxes()[item.id],
+                          run: run(),
+                          connected: connection() === "connected",
+                          stale: !!stale()[item.id],
+                          recovery: item.execution?.state === "recovery",
+                          stopping: !!busy()[item.id],
+                          now: clock(),
+                        })}
                         stale={stale()[item.id]}
                         picked={!!picked()[item.id]}
                         manage={manage()}
@@ -2244,6 +2278,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     workspace={item().dir ? folder(item().dir!) : undefined}
                     workers={others(item().id, agents())}
                     runID={held(item(), runs())}
+                    run={latest(item(), runs())}
+                    stale={!!stale()[item().id]}
+                    recovery={item().execution?.state === "recovery"}
+                    now={clock()}
                     anchor={anchor(boxes()[item().id]?.conversationID)}
                     onAnchor={(value) => saveAnchor(boxes()[item().id]?.conversationID, value)}
                     onEdit={() => edit(item())}

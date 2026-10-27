@@ -23069,6 +23069,50 @@ export type KilocodeSessionModelUsageResponses = {
 export type KilocodeSessionModelUsageResponse =
   KilocodeSessionModelUsageResponses[keyof KilocodeSessionModelUsageResponses]
 
+export type KilocodeLocalInferenceData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    sessionID: string
+  }
+  url: "/kilocode/local-inference"
+}
+
+export type KilocodeLocalInferenceErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type KilocodeLocalInferenceError = KilocodeLocalInferenceErrors[keyof KilocodeLocalInferenceErrors]
+
+export type KilocodeLocalInferenceResponses = {
+  /**
+   * Current local model requests for one session
+   */
+  200: {
+    version: 1
+    sessionID: string
+    epoch: string
+    observedAt: number
+    requests: Array<{
+      messageID: string
+      queued: number
+      active: number
+      since?: number
+    }>
+  }
+}
+
+export type KilocodeLocalInferenceResponse = KilocodeLocalInferenceResponses[keyof KilocodeLocalInferenceResponses]
+
 export type KilocodeBackgroundJobsData = {
   body?: never
   path?: never
@@ -28783,6 +28827,21 @@ export type KilocodeRoutineInboxResponses = {
     }
     unread: number
     state: "scheduled" | "running" | "waiting" | "needs_input" | "paused" | "failed"
+    inference?: {
+      runID: string
+      snapshot: {
+        version: 1
+        sessionID: string
+        epoch: string
+        observedAt: number
+        requests: Array<{
+          messageID: string
+          queued: number
+          active: number
+          since?: number
+        }>
+      }
+    }
     nextRun?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     draft?: string
     draftAttachments?: Array<{

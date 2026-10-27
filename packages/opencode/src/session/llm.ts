@@ -242,6 +242,7 @@ const live: Layer.Layer<
       prepared.headers = headers(prepared.headers, selected, item.options.localInference === true, {
         sessionID: input.sessionID,
         messageID: input.user.id,
+        ...(input.small ? { helper: true as const } : {}),
       })
       // kilocode_change end
 

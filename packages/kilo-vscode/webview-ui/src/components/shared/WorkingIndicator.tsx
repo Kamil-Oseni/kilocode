@@ -12,6 +12,7 @@ import { useSession } from "../../context/session"
 import { useLanguage } from "../../context/language"
 import { useVSCode } from "../../context/vscode"
 import { StatusText } from "./StatusText"
+import { backgroundAgentDuration } from "../chat/background-agents"
 
 export const WorkingIndicator: Component = () => {
   const session = useSession()
@@ -39,6 +40,12 @@ export const WorkingIndicator: Component = () => {
     onCleanup(() => clearInterval(id))
   })
 
+  const waiting = createMemo(() => {
+    const info = session.statusInfo()
+    if (info.type === "retry" || info.type === "offline") return
+    return session.localInference?.()
+  })
+
   // Memoized so an unchanged label never reaches `StatusText`: the status is
   // recomputed on every streamed part, and each pass through would otherwise
   // replay the swap animation.
@@ -46,6 +53,7 @@ export const WorkingIndicator: Component = () => {
     const info = session.statusInfo()
     if (info.type === "retry") return info.message || language.t("session.status.retry")
     if (info.type === "offline") return info.message || language.t("session.status.offline")
+    if (waiting()) return language.t("task.backgroundAgents.localWait")
     return session.statusText() ?? language.t("ui.sessionTurn.status.thinking")
   })
 
@@ -61,6 +69,13 @@ export const WorkingIndicator: Component = () => {
   return (
     <div class="working-indicator">
       <StatusText text={statusText()} />
+      <Show when={waiting()?.elapsed !== undefined}>
+        <span class="working-count" data-slot="chat-local-inference-wait">
+          {language.t("task.backgroundAgents.localElapsed", {
+            duration: backgroundAgentDuration(waiting()!.elapsed!),
+          })}
+        </span>
+      </Show>
       {/* Kept out of the label: a countdown inside the morphing text would swap it
           once a second, and every tick would read as a new status. */}
       <Show when={isRetrying() && retryCountdown() > 0}>

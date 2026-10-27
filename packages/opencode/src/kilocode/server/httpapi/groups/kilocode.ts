@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Snapshot as InferenceSnapshot } from "@/kilocode/provider/inference-observation"
 import { RayaRoutineReports } from "@/kilocode/task/projection"
 import { endpoints as composerDrafts } from "./composer-drafts"
 import { Approval as RestoreApproval, Summary as RestoreSummary } from "@/kilocode/migration/destination-review"
@@ -137,6 +138,11 @@ export const BackgroundJobMetadata = {
 }
 
 export const BackgroundJobsQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  sessionID: SessionID,
+})
+
+export const LocalInferenceQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   sessionID: SessionID,
 })
@@ -289,6 +295,7 @@ export const KilocodePaths = {
   agentManagerReply: `${root}/agent-manager/:requestID/reply`,
   agentManagerReject: `${root}/agent-manager/:requestID/reject`,
   sessionModelUsage: `/session/:sessionID/model-usage`,
+  localInference: `${root}/local-inference`,
   backgroundJobs: `${root}/background-jobs`,
   backgroundJobCancel: `${root}/background-jobs/:jobID/cancel`,
   goal: `/session/:sessionID/goal`, // raya_change - Milestone A session-scoped goal API
@@ -751,6 +758,18 @@ export const KilocodeApi = HttpApi.make("kilocode")
             identifier: "kilocode.sessionModelUsage",
             summary: "Get session model usage",
             description: "Get token usage and direct cost by model for the complete top-level session tree.",
+          }),
+        ),
+        HttpApiEndpoint.get("localInference", KilocodePaths.localInference, {
+          query: LocalInferenceQuery,
+          success: described(InferenceSnapshot, "Current local model requests for one session"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.localInference",
+            summary: "Observe local model requests for a session",
+            description:
+              "Read bounded current request observations in the selected session workspace without starting work.",
           }),
         ),
         HttpApiEndpoint.get("backgroundJobs", KilocodePaths.backgroundJobs, {

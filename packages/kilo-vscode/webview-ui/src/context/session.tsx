@@ -71,7 +71,7 @@ import {
   type MessagePageState,
 } from "./session-utils"
 import { Identifier } from "../utils/id"
-import { reconcileQueued } from "./session-queue"
+import { activeUserMessageID, reconcileQueued, visibleMessages as filterVisibleMessages } from "./session-queue"
 import { apply, gather, type ReviewCounts } from "../components/chat/review-stats" // raya_change - session-scoped review counts
 import { resolveModelSelection } from "./model-selection"
 import { getAgentModel } from "./session-model-store"
@@ -85,7 +85,6 @@ import { sessionVariantKeys, transferVariants, variantKey } from "./session-vari
 import { createSessionVariants } from "./session-variants"
 import { KILO_AUTO, KILO_PROVIDER_ID, parseModelString } from "../../../src/shared/provider-model"
 import { reviewMetadata, type ReviewMessageData } from "../../../src/shared/review-comments"
-import { activeUserMessageID, visibleMessages as filterVisibleMessages } from "./session-queue"
 import { clearSessionDraftDiscarded, deleteDraftsForSession } from "../utils/draft-store"
 import { createAbortState } from "./abort-state"
 import { createCloudContinuation } from "./session-cloud-continuation"
@@ -96,6 +95,7 @@ import { createModelSelector } from "./session-model-selector"
 import { createMessageSender } from "./session-send"
 import { creation } from "./session-creation"
 import { bootstrap } from "./model-bootstrap"
+import { createChatInference } from "./local-inference"
 
 const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
@@ -132,6 +132,7 @@ interface SessionContextValue {
   statusInfo: Accessor<SessionStatusInfo>
   closeReason: Accessor<SessionCloseReason | undefined>
   statusText: Accessor<string | undefined>
+  localInference?: Accessor<{ elapsed?: number } | undefined>
   busySince: Accessor<number | undefined>
   submitting: Accessor<boolean>
   isSubmitting: (id: string) => boolean
@@ -2389,6 +2390,7 @@ export const SessionProvider: ParentComponent = (props) => {
   }
 
   function abort(source: "user-stop" | "user-escape" = "user-stop") {
+    inference.cancel()
     const sessionID = currentSessionID()
     const scope = sessionID ?? draftSessionID()
     if (!scope) {
@@ -2904,7 +2906,15 @@ export const SessionProvider: ParentComponent = (props) => {
     if (!id || costs.size === 0) return []
     return buildCostBreakdown(id, costs, familyLabels(), language.t("context.stats.thisSession"))
   })
-
+  const inference = createChatInference(
+    server,
+    vscode,
+    currentSessionID,
+    statusInfo,
+    submitting,
+    (id) => scopedPermissions(id).length > 0 || scopedQuestions(id).length > 0,
+    () => activeUserMessageID(messages(), statusInfo(), (msg) => getParts(msg.id), submitting()),
+  )
   // Status text derived from current turn's assistant message parts
   const statusText = createMemo<string | undefined>(() => {
     if (status() === "idle") return undefined
@@ -2966,6 +2976,7 @@ export const SessionProvider: ParentComponent = (props) => {
     statusInfo,
     closeReason,
     statusText,
+    localInference: inference.waiting,
     busySince,
     submitting,
     isSubmitting,

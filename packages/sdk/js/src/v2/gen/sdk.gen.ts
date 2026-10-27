@@ -271,6 +271,8 @@ import type {
   KilocodeGoalUpdateResponses,
   KilocodeHeapSnapshotErrors,
   KilocodeHeapSnapshotResponses,
+  KilocodeLocalInferenceErrors,
+  KilocodeLocalInferenceResponses,
   KilocodeNotebookListErrors,
   KilocodeNotebookListResponses,
   KilocodeNotebookRejectErrors,
@@ -14433,6 +14435,42 @@ export class Kilocode extends HeyApiClient {
       ThrowOnError
     >({
       url: "/session/{sessionID}/model-usage",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Observe local model requests for a session
+   *
+   * Read bounded current request observations in the selected session workspace without starting work.
+   */
+  public localInference<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      KilocodeLocalInferenceResponses,
+      KilocodeLocalInferenceErrors,
+      ThrowOnError
+    >({
+      url: "/kilocode/local-inference",
       ...options,
       ...params,
     })

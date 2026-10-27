@@ -24,6 +24,7 @@ import type {
   SessionStatusInfo,
   ToolPart,
 } from "../../types/messages"
+import * as Inference from "../../context/local-inference-state"
 
 export interface BackgroundAgentSnapshot {
   jobs: BackgroundJobInfo[]
@@ -59,37 +60,24 @@ export interface BackgroundAgent {
   question?: QuestionRequest
 }
 
-function stamp(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-}
-
-function observation(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return
-  const row = value as Record<string, unknown>
-  if (
-    row.version !== 1 ||
-    typeof row.epoch !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.epoch) ||
-    typeof row.sessionID !== "string" ||
-    typeof row.messageID !== "string" ||
-    !stamp(row.observedAt) ||
-    !stamp(row.since) ||
-    row.since > row.observedAt ||
-    typeof row.queued !== "number" ||
-    !Number.isSafeInteger(row.queued) ||
-    row.queued <= 0 ||
-    row.active !== 0
-  )
-    return
-  return { sessionID: row.sessionID, messageID: row.messageID, observedAt: row.observedAt, since: row.since }
-}
-
 /** A fresh queue observation describes waiting, never historical tool or model activity. */
 export function backgroundAgentWait(agent: BackgroundAgent, now: number, unavailable = false): number | undefined {
   if (unavailable || agent.status !== "running" || agent.permission || agent.question || !agent.messageID) return
-  const row = observation(agent.localInference)
-  if (!row || row.sessionID !== agent.id || row.messageID !== agent.messageID) return
-  if (!stamp(now) || now < row.observedAt || now - row.observedAt > 15_000) return
+  if (!agent.localInference || typeof agent.localInference !== "object" || Array.isArray(agent.localInference)) return
+  const value = agent.localInference as Record<string, unknown>
+  const row = Inference.wait(
+    {
+      version: value.version,
+      sessionID: value.sessionID,
+      epoch: value.epoch,
+      observedAt: value.observedAt,
+      requests: [{ messageID: value.messageID, queued: value.queued, active: value.active, since: value.since }],
+    },
+    agent.id,
+    agent.messageID,
+    now,
+  )
+  if (!row || row.since === undefined) return
   return Math.floor((now - row.since) / 1_000)
 }
 

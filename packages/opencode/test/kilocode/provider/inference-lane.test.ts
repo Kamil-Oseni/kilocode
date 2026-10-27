@@ -53,4 +53,11 @@ test("cloud headers preserve identity and only local requests receive the resour
   expect(decode('{"sessionID":"ses_child","messageID":"msg_input"')).toBeUndefined()
   expect(decode("x".repeat(1025))).toBeUndefined()
   expect(decode('{"sessionID":"","messageID":"msg_input"}')).toBeUndefined()
+  const helper = headers(input, "background", true, { sessionID: "ses_child", messageID: "msg_input", helper: true })
+  expect(decode(new Headers(helper).get(originHeader))).toEqual({
+    sessionID: "ses_child",
+    messageID: "msg_input",
+    helper: true,
+  })
+  expect(decode('{"sessionID":"ses_child","messageID":"msg_input","helper":false}')).toBeUndefined()
 })

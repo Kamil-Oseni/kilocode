@@ -2,6 +2,7 @@ import { cancel as cancelBackground } from "../background-cancel"
 import { Cause, Effect, Result, Schema } from "effect"
 import path from "node:path"
 import { composerHandlers } from "./composer-drafts"
+import * as LocalInference from "../local-inference"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -56,6 +57,8 @@ import { RayaTaskInbox, type Draft as InboxDraft, type Send as InboxSend } from 
 import { RayaTaskInfo, type Identity as TaskIdentity } from "@/kilocode/task/info"
 import { RayaTaskDelegation, type Request as DelegationRequest } from "@/kilocode/task/delegation"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { RayaTaskExecution } from "@/kilocode/task/execution"
+import * as RoutineInference from "@/kilocode/task/local-inference"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import {
   RayaTaskOrganization,
@@ -89,6 +92,7 @@ import {
   BackgroundJobInfo,
   BackgroundJobMetadata,
   BackgroundJobsQuery,
+  LocalInferenceQuery,
   ProjectUsageQuery, // raya_change - historical project usage
   GoalCreatePayload, // raya_change - Milestone A goal API
   GoalUpdatePayload, // raya_change - Milestone A goal API
@@ -170,6 +174,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
     const info = RayaTaskInfo.make(database)
     const errands = RayaTaskDelegation.make(database)
+    const execution = RayaTaskExecution.make(storage)
     const checkpoints = RayaCheckpoint.make({ storage, snapshots }) // raya_change - named workspace checkpoints
     const designSystem = RayaDesignSystem.make({ storage }) // raya_change - owner design-system lock
     const healing = RayaSelfHeal.make(storage) // raya_change - one backlog shared across sessions and projects
@@ -497,6 +502,19 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
       const usage = yield* ModelUsage.get(ctx.params.sessionID)
       if (!usage) return yield* new HttpApiError.NotFound({})
       return usage
+    })
+
+    const localInference = Effect.fn("KilocodeHttpApi.localInference")(function* (ctx: {
+      query: typeof LocalInferenceQuery.Type
+    }) {
+      const scope = yield* InstanceState.context
+      const found = yield* LocalInference.read(
+        sessions,
+        { projectID: scope.project.id, directory: scope.directory },
+        ctx.query.sessionID,
+      ).pipe(Effect.catchTag("NotFoundError", () => Effect.fail(new HttpApiError.NotFound({}))))
+      if (!found) return yield* new HttpApiError.NotFound({})
+      return found
     })
 
     const backgroundJobs = Effect.fn("KilocodeHttpApi.backgroundJobs")(function* (ctx: {
@@ -1063,7 +1081,16 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
           const history = yield* runner.tasks.runsFor(agent.id)
           runs.set(agent.id, history.at(-1))
         }
-        return yield* inbox.summaries(agents, runs)
+        const items = yield* inbox.summaries(agents, runs)
+        const scheduler = yield* Effect.promise(() => import("@/kilocode/provider/local-scheduler"))
+        return yield* RoutineInference.project({
+          items,
+          agents,
+          runs,
+          sessions,
+          authorized: (run) => execution.authorized(run),
+          current: scheduler.session,
+        })
       },
       Effect.catchTag("RayaTask.GuardError", (err) =>
         Effect.fail(new InvalidRequestError({ message: err.message, kind: err.kind, field: err.field })),
@@ -1397,6 +1424,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
         .handle("agentManagerReply", agentManagerReply)
         .handle("agentManagerReject", agentManagerReject)
         .handle("sessionModelUsage", sessionModelUsage)
+        .handle("localInference", localInference)
         .handle("backgroundJobs", backgroundJobs)
         .handle("backgroundJobCancel", backgroundJobCancel)
         // raya_change start - Milestone A session-scoped goal API

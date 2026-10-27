@@ -11,6 +11,7 @@ import {
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
 import { RayaTask } from "./index"
+import { Snapshot } from "../provider/inference-observation"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const text = Schema.String.check(Schema.isMaxLength(8000))
@@ -188,6 +189,7 @@ export const Item = Schema.Struct({
   latest: Schema.optional(Record),
   unread: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   state: State,
+  inference: Schema.optional(Schema.Struct({ runID: token, snapshot: Snapshot })),
   nextRun: Schema.optional(Schema.Number),
   draft: Schema.optional(Schema.String),
   draftAttachments: Schema.optional(Attachments),
@@ -365,7 +367,8 @@ export namespace RayaTaskInbox {
   export function make(database: Database.Interface, profile?: { database: string; storage: string }) {
     const db = database.db
     const root = profile ?? { database: Database.path(), storage: path.join(Global.Path.data, "storage") }
-    const canonical = (value: string) => (process.platform === "win32" ? path.resolve(value).toLowerCase() : path.resolve(value))
+    const canonical = (value: string) =>
+      process.platform === "win32" ? path.resolve(value).toLowerCase() : path.resolve(value)
     const owner = `rpo_${digest(JSON.stringify(["raya-routine-profile-v1", canonical(root.database), canonical(root.storage)])).slice(0, 48)}`
     const state = (row: typeof Conversation.$inferSelect) => {
       const attachments = listedAttachments(row.draft_attachments)
@@ -935,7 +938,8 @@ export namespace RayaTaskInbox {
                 .where(eq(Conversation.agent_id, agentID))
                 .get()
                 .pipe(Effect.orDie)
-              if (!row) return yield* new Conflict({ message: "This routine conversation disappeared during the draft save." })
+              if (!row)
+                return yield* new Conflict({ message: "This routine conversation disappeared during the draft save." })
               return state(row)
             }),
           { behavior: "immediate" },

@@ -2,6 +2,8 @@ import { decode, header, originHeader, type Lane, type Origin } from "./inferenc
 import { ollama } from "./ollama-bridge"
 import * as Lineage from "../task/effect-lineage"
 import * as ResultFrame from "./result-frame"
+import type { Snapshot } from "./inference-observation"
+import { MessageID, SessionID } from "@/session/schema"
 
 type Fetch = (
   input: Parameters<typeof globalThis.fetch>[0],
@@ -30,7 +32,7 @@ type Job = {
   since: number
 }
 
-export type Observation = Origin & {
+export type Observation = Pick<Origin, "sessionID" | "messageID"> & {
   version: 1
   epoch: string
   observedAt: number
@@ -386,17 +388,42 @@ export function createLocalScheduler(input: Partial<Limits> = {}) {
     },
     observe(origin: Origin): Observation {
       const matches = (job: Job) =>
-        job.origin?.sessionID === origin.sessionID && job.origin.messageID === origin.messageID
+        !job.origin?.helper && job.origin?.sessionID === origin.sessionID && job.origin.messageID === origin.messageID
       const waiting = queue.filter(matches)
       const active = [...running].filter(matches).length
       return {
         version: 1,
         epoch,
-        ...origin,
+        sessionID: origin.sessionID,
+        messageID: origin.messageID,
         observedAt: Date.now(),
         ...(waiting.length ? { since: Math.min(...waiting.map((job) => job.since)) } : {}),
         queued: waiting.length,
         active,
+      }
+    },
+    session(sessionID: string): Snapshot {
+      const requests = new Map<string, Snapshot["requests"][number]>()
+      for (const job of [...running, ...queue]) {
+        if (job.origin?.sessionID !== sessionID || job.origin.helper) continue
+        const messageID = MessageID.make(job.origin.messageID)
+        const item = requests.get(messageID) ?? { messageID, queued: 0, active: 0 }
+        if (job.phase === "queued") {
+          requests.set(messageID, {
+            ...item,
+            queued: item.queued + 1,
+            since: item.since === undefined ? job.since : Math.min(item.since, job.since),
+          })
+          continue
+        }
+        requests.set(messageID, { ...item, active: item.active + 1 })
+      }
+      return {
+        version: 1,
+        sessionID: SessionID.make(sessionID),
+        epoch,
+        observedAt: Date.now(),
+        requests: [...requests.values()],
       }
     },
   }
@@ -410,6 +437,10 @@ export function status() {
 
 export function observe(origin: Origin): Observation {
   return shared.observe(origin)
+}
+
+export function session(sessionID: string): Snapshot {
+  return shared.session(sessionID)
 }
 
 /** Both native and AI SDK integrations reuse this one backend-local scheduler. */

@@ -58,6 +58,18 @@ describe("routeEarlyMessage clipboard handling", () => {
 })
 
 describe("routeEarlyMessage background jobs", () => {
+  it("forwards exact local inference request correlation and rejects malformed reads", async () => {
+    const calls: unknown[] = []
+    const ctx = {
+      localInference: async (sessionID: string, requestID: string) => calls.push([sessionID, requestID]),
+    } as Ctx
+    expect(
+      await routeEarlyMessage({ type: "requestLocalInference", sessionID: "ses_parent", requestID: "queue-1" }, ctx),
+    ).toBe(true)
+    expect(await routeEarlyMessage({ type: "requestLocalInference", sessionID: 1, requestID: "bad" }, ctx)).toBe(true)
+    expect(calls).toEqual([["ses_parent", "queue-1"]])
+  })
+
   it("forwards list request correlation", async () => {
     const calls: unknown[] = []
     const ctx = {

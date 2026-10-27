@@ -5,6 +5,8 @@ import type { ConnectionState, ExtensionMessage } from "../../types/messages"
 import { routineFailure } from "../../utils/routine-recovery"
 import { matches, sameContent } from "../../utils/routine-draft-recovery"
 import { isEnterKeyCommitNotIme } from "../../utils/ime-enter"
+import type { LocalInferenceSnapshot } from "../../../../src/shared/local-inference"
+import { waiting } from "./inference"
 import { ChatInfo } from "./ChatInfo"
 import { ConversationSearch } from "./ConversationSearch"
 import { ConversationState } from "./ConversationState"
@@ -129,6 +131,7 @@ export type Box = {
   latest?: Note
   unread: number
   state: "scheduled" | "running" | "waiting" | "needs_input" | "paused" | "failed"
+  inference?: { runID: string; snapshot: LocalInferenceSnapshot }
   nextRun?: number
   draft?: string
   draftAttachments?: DraftFile[]
@@ -667,6 +670,10 @@ export const Inbox: Component<{
   workspace?: string
   workers?: Peer[]
   runID?: string
+  run?: { id: string; sessionID: string; status: string }
+  stale?: boolean
+  recovery?: boolean
+  now?: number
   objective: string
   schedule: string
   manual: boolean
@@ -706,6 +713,18 @@ export const Inbox: Component<{
   const [phase, setPhase] = createSignal<"idle" | "sending" | "failed">("idle")
   const [error, setError] = createSignal("")
   const [halt, setHalt] = createSignal<"idle" | "sending" | "failed">("idle")
+  const occupancy = () =>
+    waiting({
+      box: props.box,
+      run: props.run,
+      connected: connected(),
+      stale: props.stale,
+      recovery: props.recovery,
+      stopping: halt() === "sending",
+      now: props.now ?? Date.now(),
+    })
+      ? "Waiting for local model"
+      : status(props.box?.state ?? "scheduled", props.manual, props.enabled)
   const [look, setLook] = createSignal("")
   const [loading, setLoading] = createSignal(true)
   const [mountReady, setMountReady] = createSignal(false)
@@ -1805,7 +1824,7 @@ export const Inbox: Component<{
           <strong tabIndex={-1}>{props.name}</strong>
           <span class="routines-meta">
             {props.role}
-            {` · ${status(props.box?.state ?? "scheduled", props.manual, props.enabled)}`}
+            {` · ${occupancy()}`}
             <Show when={props.box?.nextRun}>
               {(at) => (
                 <>
@@ -2074,7 +2093,7 @@ export const Inbox: Component<{
             schedule={props.schedule}
             access={props.access}
             output={props.output}
-            state={status(props.box?.state ?? "scheduled", props.manual, props.enabled)}
+            state={occupancy()}
             workspace={props.workspace}
             enabled={props.enabled}
             canInspect={props.canInspect}

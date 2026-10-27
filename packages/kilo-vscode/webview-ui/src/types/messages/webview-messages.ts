@@ -447,6 +447,12 @@ export interface RequestBackgroundJobsMessage {
   requestID: string
 }
 
+export interface RequestLocalInferenceMessage {
+  type: "requestLocalInference"
+  sessionID: string
+  requestID: string
+}
+
 export interface CancelBackgroundJobMessage {
   type: "cancelBackgroundJob"
   jobID: string
@@ -2229,6 +2235,7 @@ export type WebviewMessage =
   | RoutineOrganizationArchiveMessage
   | RoutineOrganizationArchivedListMessage
   | RequestBackgroundJobsMessage
+  | RequestLocalInferenceMessage
   | CancelBackgroundJobMessage
   | BackgroundSubagentsMessage
   | RevertSessionRequest

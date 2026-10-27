@@ -25,6 +25,15 @@ import type { AnacondaDesktopExtensionMessage } from "../../../../src/shared/ana
 import type { ChiefNotesAvailable, ChiefNotesResult } from "../../../../src/shared/chief-notes-messages"
 import type { ProvidersLoadStateMessage } from "./providers"
 import type { RestoreResult } from "../../../../src/shared/restore-review"
+import type { LocalInferenceSnapshot } from "../../../../src/shared/local-inference"
+
+export interface LocalInferenceLoadedMessage {
+  type: "localInferenceLoaded"
+  sessionID: string
+  requestID: string
+  snapshot?: LocalInferenceSnapshot
+  error?: string
+}
 
 export interface BackgroundJobsLoadedMessage {
   type: "backgroundJobsLoaded"
@@ -2359,5 +2368,6 @@ export type ExtensionMessage =
   | MemoryEventMessage
   | MemoryOperationResultMessage
   | BackgroundJobsLoadedMessage
+  | LocalInferenceLoadedMessage
   | ChildSteerResultMessage
 import type { AgentReportsLoaded } from "../../../../src/shared/routine-reports"

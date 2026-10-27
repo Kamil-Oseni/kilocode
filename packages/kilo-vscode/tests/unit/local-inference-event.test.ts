@@ -1,17 +1,21 @@
 import { expect, test } from "bun:test"
+import { WorkerHints } from "../../src/kilo-provider/worker-inference-hints"
 import { invalidation } from "../../src/kilo-provider/local-inference-event"
 import type { ExtensionMessage } from "../../webview-ui/src/types/messages"
 
 const { KiloProvider } = await import("../../src/KiloProvider")
 type Host = {
   connectionState: string
+  workerHints: WorkerHints
   sessionDirectories: Map<string, string>
   getWorkspaceDirectory: () => string
   postMessage: (message: ExtensionMessage) => void
+  workerInferenceHint: (event: unknown, directory?: string) => string | undefined
   inferenceHint: (event: unknown, directory?: string) => string | undefined
 }
 const provider = KiloProvider.prototype as unknown as {
   inferenceHint: (this: Host, event: unknown, directory?: string) => string | undefined
+  workerInferenceHint: (this: Host, event: unknown, directory?: string) => string | undefined
   handleEvent: (this: Host, event: unknown, directory?: string) => void
 }
 
@@ -20,10 +24,12 @@ test("inference hints use exact workspace routes without adopting a child or tru
   const routes = new Map([["ses_known", "C:/known"]])
   const state: Host = {
     connectionState: "connected",
+    workerHints: new WorkerHints(),
     sessionDirectories: routes,
     getWorkspaceDirectory: () => "C:/current",
     postMessage: (message) => sent.push(message),
     inferenceHint: provider.inferenceHint,
+    workerInferenceHint: provider.workerInferenceHint,
   }
   const hint = (sessionID: string) => ({
     type: "session.inference.changed",

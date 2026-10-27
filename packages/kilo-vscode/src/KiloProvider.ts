@@ -1,3 +1,4 @@
+import { WorkerHints } from "./kilo-provider/worker-inference-hints"
 import { invalidation as inferenceInvalidation } from "./kilo-provider/local-inference-event"
 import { createHash } from "node:crypto"
 import {
@@ -412,7 +413,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private voiceCurrent = () => false
   private currentSession: Session | null = null
   /** Remembers the last selected session so /new can stay in the same worktree after clearSession. */
-  private contextSessionID: string | undefined
+  private selected: string | undefined
+  private get contextSessionID() {
+    return this.selected
+  }
+  private set contextSessionID(id: string | undefined) {
+    if (this.selected !== id) this.workerHints.clear()
+    this.selected = id
+  }
   private connectionState: "connecting" | "connected" | "disconnected" | "error" = "connecting"
   private connectionGeneration = 0
   private readonly goalReads = new Map<string, symbol>()
@@ -542,6 +550,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private readonly streams = new SessionStreamScheduler((msg) => this.postMessage(msg))
   private jobsBackoff = 0
   private readonly jobReads = new Map<string, symbol>()
+  private readonly workerHints = new WorkerHints()
   private readonly inference = new Map<string, symbol>()
   private readonly jobStops = new Map<
     string,
@@ -709,6 +718,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   private setCurrentSession(session: Session | null): void {
+    if (
+      this.currentSession?.id !== session?.id ||
+      (this.currentSession && session && !sameDirectory(this.currentSession.directory, session.directory))
+    )
+      this.workerHints.clear()
     const ids = new Set([this.currentSession?.id, session?.id])
     for (const id of ids) {
       if (id) this.refreshes.set(id, (this.refreshes.get(id) ?? 0) + 1)
@@ -766,6 +780,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   public setProjectDirectory(directory: string | null): void {
     if (this.projectDirectory === directory) return
+    this.workerHints.clear()
     this.routineRefresh.invalidate()
     this.routineEvents.invalidate()
     this.routineReporting.invalidate()
@@ -1074,6 +1089,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   public setSessionDirectory(sessionId: string, directory: string): void {
     const current = this.sessionDirectories.get(sessionId) ?? this.getRootDirectory()
     this.aborts.preserve(sessionId, this.sessionStatusMap.get(sessionId), current)
+    if (!sameDirectory(current, directory)) this.workerHints.clear()
     this.sessionDirectories.set(sessionId, directory)
     if (this.connectionState === "connected") void this.fetchAndSendSandboxStatus(sessionId)
   }
@@ -1081,6 +1097,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   public clearSessionDirectory(sessionId: string): void {
     const current = this.sessionDirectories.get(sessionId) ?? this.getRootDirectory()
     this.aborts.preserve(sessionId, this.sessionStatusMap.get(sessionId), current)
+    this.workerHints.clear()
     this.sessionDirectories.delete(sessionId)
     if (this.connectionState === "connected") void this.fetchAndSendSandboxStatus(sessionId)
   }
@@ -2776,6 +2793,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       const prior = this.connectionState
       if (prior === "connected" && state !== "connected") this.reconnectPending = true
       if (prior !== state) {
+        this.workerHints.clear()
         this.routineRefresh.invalidate()
         this.routineEvents.invalidate()
         this.routineReporting.invalidate()
@@ -2848,6 +2866,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       // Subscribe to SSE events for this webview (filtered by tracked sessions)
       this.unsubscribeEvent = this.connectionService.onEventFiltered(
         (payload, directory) => {
+          const hint = unwrapSyncEvent(payload)
+          if (hint?.type === "session.inference.changed" && this.workerInferenceHint(hint, directory)) return true
           if (directory && directory !== "global" && !this.isCurrentProjectDirectory(directory)) return false
           if (!directory && isEventFromForeignProject(payload, this.projectID)) return false
           const event = unwrapSyncEvent(payload)
@@ -4316,10 +4336,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private async fetchAndSendBackgroundJobs(sessionID: string, requestID: string): Promise<void> {
     const client = this.client
     if (!client || this.connectionState !== "connected") {
+      this.workerHints.clear()
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: [], error: "Not connected" })
       return
     }
     if (this.jobsBackoff > Date.now()) {
+      this.workerHints.clear()
       this.postMessage({
         type: "backgroundJobsLoaded",
         sessionID,
@@ -4344,8 +4366,23 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (!current()) return
       this.jobsBackoff = 0
       this.postMessage({ type: "backgroundJobsLoaded", sessionID, requestID, jobs: data })
+      const parent = this.contextSessionID ?? this.currentSession?.id
+      if (parent === sessionID && this.isCurrentProjectSession(parent) && this.isCurrentProjectDirectory(directory))
+        await this.workerHints.refresh({
+          parent,
+          directory,
+          client,
+          generation,
+          jobs: data,
+          current: () =>
+            current() &&
+            (this.contextSessionID ?? this.currentSession?.id) === parent &&
+            this.isCurrentProjectSession(parent) &&
+            this.isCurrentProjectDirectory(directory),
+        })
     } catch (error) {
       if (!current()) return
+      this.workerHints.clear()
       this.jobsBackoff = Date.now() + 15_000
       console.warn("[Raya] Provider: Failed to fetch background jobs:", getErrorMessage(error))
       this.postMessage({
@@ -6906,7 +6943,37 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       .catch(() => console.error("[Raya] Complete input receipt could not be confirmed"))
   }
 
+  private workerInferenceHint(event: unknown, directory?: string) {
+    if (this.connectionState !== "connected" || !directory || directory === "global") return
+    if (
+      !event ||
+      typeof event !== "object" ||
+      !("type" in event) ||
+      event.type !== "session.inference.changed" ||
+      !("properties" in event)
+    )
+      return
+    const properties = event.properties
+    if (!properties || typeof properties !== "object" || !("sessionID" in properties)) return
+    const id = properties.sessionID
+    if (typeof id !== "string" || !/^ses_[A-Za-z0-9_-]{1,252}$/.test(id)) return
+    const parent = this.contextSessionID ?? this.currentSession?.id
+    if (!parent || !this.isCurrentProjectSession(parent)) return
+    const current = this.getWorkspaceDirectory(parent)
+    if (!this.isCurrentProjectDirectory(current)) return
+    return this.workerHints.hint(id, directory, {
+      parent,
+      directory: current,
+      client: this.client,
+      generation: this.connectionGeneration,
+    })
+      ? id
+      : undefined
+  }
+
   private inferenceHint(event: unknown, directory?: string) {
+    const worker = this.workerInferenceHint(event, directory)
+    if (worker) return worker
     return inferenceInvalidation(event, directory, {
       connected: this.connectionState === "connected",
       directory: this.getWorkspaceDirectory(),
@@ -8018,6 +8085,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.routineReporting.dispose()
     this.deliveries.clear()
     this.inference.clear()
+    this.workerHints.dispose()
     if (this.opts.focusContext) {
       void vscode.commands.executeCommand("setContext", this.opts.focusContext, false)
     }

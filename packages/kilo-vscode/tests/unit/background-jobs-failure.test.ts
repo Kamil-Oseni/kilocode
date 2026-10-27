@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
+import { WorkerHints } from "../../src/kilo-provider/worker-inference-hints"
 
 const { KiloProvider } = await import("../../src/KiloProvider")
 
@@ -17,6 +18,7 @@ type Context = {
   connectionState: "connected"
   jobsBackoff: number
   jobReads: Map<string, symbol>
+  workerHints: WorkerHints
   getWorkspaceDirectory: () => string
   postMessage: (message: Reply) => void
 }
@@ -39,6 +41,7 @@ describe("background job refresh", () => {
       connectionState: "connected",
       jobsBackoff: 0,
       jobReads: new Map(),
+      workerHints: new WorkerHints(),
       getWorkspaceDirectory: () => "C:\\workspace",
       postMessage: (message) => sent.push(message),
     }
@@ -84,6 +87,7 @@ for (const action of ["refresh", "cancel"] as const)
           connectionGeneration: 1,
           jobsBackoff: 0,
           jobReads: new Map<string, symbol>(),
+          workerHints: new WorkerHints(),
           jobStops: new Map<string, Stop>(),
           getWorkspaceDirectory: () => workspace.directory,
           postMessage: (message: Reply) => sent.push(message),
@@ -147,6 +151,7 @@ for (const status of [200, 503])
       connectionGeneration: 1,
       jobsBackoff: 0,
       jobReads: new Map<string, symbol>(),
+      workerHints: new WorkerHints(),
       jobStops: new Map<string, Stop>(),
       getWorkspaceDirectory: () => "C:/original",
       postMessage: (message: Reply) => sent.push(message),
@@ -198,6 +203,7 @@ for (const status of [200, 503])
       connectionGeneration: 1,
       jobsBackoff: 0,
       jobReads: new Map<string, symbol>(),
+      workerHints: new WorkerHints(),
       getWorkspaceDirectory: () => "C:/original",
       postMessage: (message: Reply) => sent.push(message),
     }
@@ -245,6 +251,7 @@ it("actual SDK worker status reads for independent sessions both complete", asyn
     connectionGeneration: 1,
     jobsBackoff: 0,
     jobReads: new Map<string, symbol>(),
+    workerHints: new WorkerHints(),
     getWorkspaceDirectory: () => "C:/original",
     postMessage: (message: Reply) => sent.push(message),
   }
@@ -291,6 +298,7 @@ for (const status of [200, 503])
         connectionGeneration: 1,
         jobsBackoff: 0,
         jobReads: new Map<string, symbol>(),
+        workerHints: new WorkerHints(),
         jobStops: new Map<string, Stop>(),
         getWorkspaceDirectory: () => "C:/original",
         postMessage: (message: Reply) => sent.push(message),
@@ -353,6 +361,7 @@ for (const conflict of ["http", "pending"] as const)
       connectionGeneration: 1,
       jobsBackoff: 0,
       jobReads: new Map<string, symbol>(),
+      workerHints: new WorkerHints(),
       jobStops: new Map<string, Stop>(),
       getWorkspaceDirectory: () => "C:/original",
       postMessage: (message: Reply) => sent.push(message),
@@ -416,6 +425,7 @@ for (const kind of ["directory", "client", "generation"] as const)
       connectionGeneration: 1,
       jobsBackoff: 0,
       jobReads: new Map<string, symbol>(),
+      workerHints: new WorkerHints(),
       jobStops: new Map<string, Stop>(),
       getWorkspaceDirectory: () => workspace.directory,
       postMessage: (message: Reply) => sent.push(message),

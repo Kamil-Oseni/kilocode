@@ -1,12 +1,33 @@
 # Raya current readiness
 
-Updated October 26, 2026. Priority: stable chat and routine workers. Voice is deferred. Historical readiness percentages are not a current progress measure.
+Updated October 27, 2026. Priority: stable chat and routine workers. Voice is deferred. Historical readiness percentages are not a current progress measure.
 
 ## Installed version
 
-Everyday Raya is `7.4.23-snapshot+fb887daee3.local.1793018641562`. The installed manifest and runtime were independently checked. Its CLI is 309,347,840 bytes, SHA-256 `65794ed0f8f7286cdc3cbda77cf40259a5ed13216245329c7a2d5c7a04b9bb4d`. Post-install preservation completed successfully (`worker-chat-fb887daee3-after.json`: `passed: true`, `targetSucceeded: true`). All 4,338 files across the four listed saved roots were unchanged. This verifies installation and preservation; loaded-runtime acceptance is limited to the short chat checks below.
+Everyday Raya is `7.4.23-snapshot+aa79d74153.local.1793075352668`. The extension registry and installed CLI were independently checked. Its CLI is 309,444,608 bytes, SHA-256 `86b210136f876ec0ea08ebcde4b7df07814184f3706e8efbea5be9b494c66ea7`. The post-install receipt `everyday-conversation-preservation-c54cb84385004dfe96f5f5cb710a3193/after-qualified-registry-v2.json` passes and lists 4,379 unchanged files across four saved roots (76 + 4,010 + 4 + 289), exact package payloads and unchanged unrelated registrations. This verifies delivery and preservation, not current loaded model acceptance. The earlier bounded chat result below belongs to installed `fb887daee3`.
 
-This version installs model pinning, owner-bound deadline controls, required file-handoff admission, accepted-receipt completion checks, original-request preservation through descendants, and the transport correction below. Combined typing, compilation and packaging passed their targets. Installation does not prove completion of the requested workflow.
+This version installs the earlier routing, model-pinning and handoff corrections plus source-attribution guidance and manual queue reports. Combined typing, compilation and packaging passed their targets. Follow-up cancellation fencing and retired-calendar report repairs are committed in source but are not installed yet. Installation does not prove completion of the requested workflow.
+
+The first short ordinary-chat check on the prior f25 version failed. In session `ses_e87d73e06ffeAlQ3O5LwT0JFQr`, the actual pinned local 4B model selected `home_assistant` / `read` for a plain conversational acknowledgement request, then terminated with `UnknownError: Invalid envelope tool definitions`. The saved route and terminal error were independently read from the session. The installed e57 correction rejects invented device work and supports bounded conversational acknowledgements.
+
+The e57 replay in `ses_e87cd675affeG5eHfyosVEXziX` replied “Understood, I can call you Copper Finch.” and correctly answered the next turn with “Copper Finch.” Both turns finished without an error on the actual local 4B model, but recall unnecessarily launched a read-only Generalist task. Source commit `821a4cb651`, installed as `fb887daee3`, addresses chat-context recall and summaries under an owner-authored blanket no-tools constraint; its existing routing fixture passes 44 assertions, including unchanged external-action guards.
+
+The installed fb replay reused that conversation. User turn `msg_1784003d80016p1lE2RqZd1m0V` completed on the actual local 4B model with exactly “Copper Finch,” no error and no new Task. Only internal `chief_route` was called before final synthesis. This proves the observed constrained-recall regression; it is not a claim that all conversation, routing or routine workflows pass.
+
+## Delivery checklist
+
+| Requirement | Current evidence | Remaining work |
+|---|---|---|
+| Stable everyday chat | Installed fb recalls the supplied nickname without a bridge error or new specialist task. | Continue with actual task use and the unfinished job; do not repeat this passed recall check without a relevant change. This bounded result does not prove all chat behaviour. |
+| Routine jobs and worker handoffs | Researcher → Builder accepted an actual matching file on saved local models; original owner scope survived. | Finish the requested Researcher → Builder → Sales chain with factual outputs. The stopped trial does not pass. |
+| Progress and results in the requesting chat | Both stopped worker cards were delivered to the exact original caller; its persisted turn and tools settled. | Confirm the next successful job's final results, keeping saved delivery evidence separate from visual UI claims. |
+| One notice for a long-waiting job | Installed `aa79d74153` includes manual queue reporting. Focused source checks prove notice deduplication after reopening, queued → running and queued → stopped cards, terminal-race suppression and legacy report identity reuse. | Installed interactive acceptance remains pending. Actual long-wait timing requires naturally aged work; do not invent a clock override or claim the source check is an observed installed alert. |
+| Verified results | Captured file bytes/hash match. Preview renders and sends nothing, but its content contains unsupported claims. | Revise through the actual worker and verify the resulting files; do not substitute operator-written output as worker success. |
+| Safe updates and recovery | Installed manifest/runtime match the new package and all 4,379 listed saved files were preserved. Historical rollback and restore instructions remain retained. | Keep the release identity and remaining limitations current after the next installation. No restore exercise is required for this delivery. |
+| Git delivery | The earlier delivery to remote `main` and the consolidation branch at `f7d40123be` completed through the real hook. New installed/source changes are committed locally. | Push the newer commits through the normal hook when ready; do not present the old remote checkpoint as containing the new fixes. Preserve the main checkout's unrelated changes. |
+| Broader requested features | Memory, resource/context management, activity/status UI and reusable moods retain their separate implementation and historical evidence. | Their original requirements remain in the linked implementation backlog; this narrow workflow check does not prove them all complete. Voice remains explicitly deferred. |
+
+Do not reopen an already-passed focused check unless changed code or an observed failure justifies it. The observed chat instruction gap is corrected and installed. Current delivery priority is the unfinished job, rather than a new broad model or regression campaign.
 
 ## Earlier cfe workflow evidence
 

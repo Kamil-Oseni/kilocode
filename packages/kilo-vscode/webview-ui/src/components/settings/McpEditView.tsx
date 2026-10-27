@@ -4,33 +4,27 @@ import { Card } from "@kilocode/kilo-ui/card"
 import { Button } from "@kilocode/kilo-ui/button"
 import { IconButton } from "@kilocode/kilo-ui/icon-button"
 
-import { useConfig } from "../../context/config"
 import { useLanguage } from "../../context/language"
 import type { McpConfig } from "../../types/messages"
 import SettingsRow from "./SettingsRow"
 
 interface Props {
   name: string
+  value: McpConfig
   onBack: () => void
   onRemove: (name: string) => void
+  onUpdate: (partial: Partial<McpConfig>) => void
 }
 
 const McpEditView: Component<Props> = (props) => {
   const language = useLanguage()
-  const { config, updateConfig } = useConfig()
 
-  const cfg = createMemo<McpConfig>(() => config().mcp?.[props.name] ?? {})
+  const cfg = createMemo(() => props.value)
 
   const [envKey, setEnvKey] = createSignal("")
   const [envVal, setEnvVal] = createSignal("")
 
-  const update = (partial: Partial<McpConfig>) => {
-    const existing = config().mcp ?? {}
-    const current = existing[props.name] ?? {}
-    updateConfig({
-      mcp: { ...existing, [props.name]: { ...current, ...partial } },
-    })
-  }
+  const update = (partial: Partial<McpConfig>) => props.onUpdate(partial)
 
   const transport = () => cfg().type ?? (cfg().url ? "remote" : "local")
 

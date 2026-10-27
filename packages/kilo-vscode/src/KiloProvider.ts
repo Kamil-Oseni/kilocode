@@ -144,6 +144,7 @@ import {
 } from "./kilo-provider/work-style"
 import { handleSidebarWorktreeMessage } from "./kilo-provider/sidebar-worktree"
 import * as McpOAuth from "./kilo-provider/mcp-oauth"
+import { bound as mcpContext } from "./kilo-provider/mcp-context"
 import { submit } from "./kilo-provider/submission"
 import { hasGit } from "./kilo-provider/git-status"
 import { handlePersonalTodoMessage } from "./kilo-provider/personal-todos"
@@ -1624,39 +1625,14 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           this.handleRemoveAgent(message.name).catch((e) => console.error("[Raya] handleRemoveAgent failed:", e))
           break
         case "removeMcp":
-          this.handleRemoveMcp(message.name).catch((e) => console.error("[Raya] handleRemoveMcp failed:", e))
+        case "connectMcp":
+        case "disconnectMcp":
+        case "authenticateMcp":
+          this.handleMcpAction(message)
           break
         case "requestMcpStatus":
           this.fetchAndSendMcpStatus().catch((e) => console.error("[Raya] fetchAndSendMcpStatus failed:", e))
           break
-        case "connectMcp": {
-          const c1 = this.client
-          if (c1) {
-            void McpOAuth.connectMcpServer(c1, message.name, this.getWorkspaceDirectory(), () =>
-              this.refreshMcpStatus(),
-            ).catch((e) => console.error("[Raya] connectMcpServer failed:", e))
-          }
-          break
-        }
-        case "disconnectMcp": {
-          const c2 = this.client
-          if (c2) {
-            void McpOAuth.disconnectMcpServer(c2, message.name, this.getWorkspaceDirectory(), () =>
-              this.refreshMcpStatus(),
-            ).catch((e) => console.error("[Raya] disconnectMcpServer failed:", e))
-          }
-          break
-        }
-        case "authenticateMcp": {
-          const c = this.client
-          if (c) {
-            void McpOAuth.authenticateMcpServer(c, message.name, this.getWorkspaceDirectory(), () =>
-              this.refreshMcpStatus(),
-            ).catch((e) => console.error("[Raya] authenticateMcpServer failed:", e))
-          }
-          break
-        }
-
         case "questionReply": {
           await this.replyQuestion(message)
           break
@@ -4133,6 +4109,34 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     }
     this.cachedAgentsMessage = null
     await this.fetchAndSendAgents()
+  }
+
+  private handleMcpAction(
+    message: Extract<WebviewMessage, { type: "removeMcp" | "connectMcp" | "disconnectMcp" | "authenticateMcp" }>,
+  ): void {
+    if (!this.checkMcpContext(message.contextDirectory)) return
+    if (message.type === "removeMcp") {
+      void this.handleRemoveMcp(message.name).catch((err) => console.error("[Raya] handleRemoveMcp failed:", err))
+      return
+    }
+    const client = this.client
+    if (!client) return
+    const directory = this.getWorkspaceDirectory()
+    const actions = {
+      connectMcp: McpOAuth.connectMcpServer,
+      disconnectMcp: McpOAuth.disconnectMcpServer,
+      authenticateMcp: McpOAuth.authenticateMcpServer,
+    }
+    void actions[message.type](client, message.name, directory, () => this.refreshMcpStatus()).catch((err) =>
+      console.error("[Raya] MCP action failed:", err),
+    )
+  }
+
+  private checkMcpContext(directory?: string): boolean {
+    if (mcpContext(directory, this.getWorkspaceDirectory())) return true
+    this.postMessage({ type: "mcpStatusLoaded", status: {} })
+    this.postMessage({ type: "error", message: "The workspace changed. Reopen Connections before trying again." })
+    return false
   }
 
   private async handleRemoveMcp(name: string): Promise<void> {

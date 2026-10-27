@@ -216,14 +216,14 @@ interface SessionContextValue {
   agents: Accessor<AgentInfo[]>
   allAgents: Accessor<AgentInfo[]>
   removeAgent: (name: string) => void
-  removeMcp: (name: string) => void
+  removeMcp: (name: string, directory?: string) => void
 
   // MCP server status (runtime connect/disconnect)
   mcpStatus: Accessor<Record<string, McpStatusEntry>>
   mcpLoading: Accessor<string | null>
-  connectMcp: (name: string) => void
-  disconnectMcp: (name: string) => void
-  authenticateMcp: (name: string) => void
+  connectMcp: (name: string, directory?: string) => void
+  disconnectMcp: (name: string, directory?: string) => void
+  authenticateMcp: (name: string, directory?: string) => void
   selectedAgent: (sessionID?: string) => string
   selectAgent: (name: string, sessionID?: string) => void
   getSessionAgent: (sessionID: string) => string
@@ -436,34 +436,28 @@ export const SessionProvider: ParentComponent = (props) => {
     vscode.postMessage({ type: "removeAgent", name })
   }
 
-  const removeMcp = (name: string) => {
-    vscode.postMessage({ type: "removeMcp", name })
+  const removeMcp = (name: string, directory?: string) => {
+    vscode.postMessage({ type: "removeMcp", name, ...(directory === undefined ? {} : { contextDirectory: directory }) })
   }
 
   // MCP runtime status
   const [mcpStatus, setMcpStatus] = createSignal<Record<string, McpStatusEntry>>({})
   const [mcpLoading, setMcpLoading] = createSignal<string | null>(null)
 
-  const connectMcp = (name: string) => {
+  const mcp = (type: "connectMcp" | "disconnectMcp" | "authenticateMcp", name: string, directory?: string) => {
     if (mcpLoading()) return
     if (!server.isConnected()) return
     setMcpLoading(name)
-    vscode.postMessage({ type: "connectMcp", name })
+    vscode.postMessage({
+      type,
+      name,
+      ...(directory === undefined ? {} : { contextDirectory: directory }),
+    })
   }
 
-  const disconnectMcp = (name: string) => {
-    if (mcpLoading()) return
-    if (!server.isConnected()) return
-    setMcpLoading(name)
-    vscode.postMessage({ type: "disconnectMcp", name })
-  }
-
-  const authenticateMcp = (name: string) => {
-    if (mcpLoading()) return
-    if (!server.isConnected()) return
-    setMcpLoading(name)
-    vscode.postMessage({ type: "authenticateMcp", name })
-  }
+  const connectMcp = (name: string, directory?: string) => mcp("connectMcp", name, directory)
+  const disconnectMcp = (name: string, directory?: string) => mcp("disconnectMcp", name, directory)
+  const authenticateMcp = (name: string, directory?: string) => mcp("authenticateMcp", name, directory)
 
   // Pending agent selection for before a session exists
   const [pendingAgentSelection, setPendingAgentSelection] = createSignal<string | null>(null)

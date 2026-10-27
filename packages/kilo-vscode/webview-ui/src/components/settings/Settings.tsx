@@ -12,6 +12,7 @@ import { useSession } from "../../context/session"
 import ModelsTab from "./ModelsTab"
 import ProvidersTab from "./ProvidersTab"
 import AgentBehaviourTab from "./AgentBehaviourTab"
+import ConnectionsTab from "./ConnectionsTab"
 import AutoApproveTab from "./AutoApproveTab"
 import BrowserTab from "./BrowserTab"
 import CheckpointsTab from "./CheckpointsTab"
@@ -225,7 +226,9 @@ const Settings: Component<SettingsProps> = (props) => {
   const vscode = useVSCode()
   const { loading, isDirty, saving, saveError, saveConfig, discardConfig, features } = useConfig()
   const session = useSession()
-  const [active, setActive] = createSignal(props.tab ?? "models")
+  const route = (value: string) =>
+    ["mcp", "mcpServers", "agentBehaviour.mcpServers"].includes(value) ? "connections" : value
+  const [active, setActive] = createSignal(route(props.tab ?? "models"))
   const [errorExpanded, setErrorExpanded] = createSignal(false)
   const sandboxing = createMemo(() => Sandboxing.visible(features()))
 
@@ -236,6 +239,7 @@ const Settings: Component<SettingsProps> = (props) => {
       { value: "models", title: language.t("settings.models.title") },
       { value: "speech", title: language.t("settings.speech.title") },
       { value: "goalsRouting", title: language.t("settings.goalsRouting.title") },
+      { value: "connections", title: language.t("settings.connections.search") },
       { value: "agentBehaviour", title: language.t("settings.agentBehaviour.title") },
       { value: "autoApprove", title: language.t("settings.autoApprove.title") },
       { value: "browser", title: language.t("settings.webTools.title") },
@@ -249,7 +253,8 @@ const Settings: Component<SettingsProps> = (props) => {
       { value: "language", title: language.t("settings.language.title") },
       { value: "aboutKiloCode", title: language.t("settings.aboutKiloCode.title") },
     ]
-    if (props.agentManagerSettings) items.push({ value: "agentManager", title: language.t("agentManager.settings.title") })
+    if (props.agentManagerSettings)
+      items.push({ value: "agentManager", title: language.t("agentManager.settings.title") })
     if (features().indexing) items.push({ value: "indexing", title: language.t("settings.indexing.title") })
     if (sandboxing()) items.push({ value: "sandboxing", title: language.t("settings.sandboxing.title") })
     return items
@@ -284,7 +289,7 @@ const Settings: Component<SettingsProps> = (props) => {
     on(
       () => props.tab,
       (tab) => {
-        if (tab) setActive(tab)
+        if (tab) setActive(route(tab))
       },
     ),
   )
@@ -300,9 +305,10 @@ const Settings: Component<SettingsProps> = (props) => {
   })
 
   const onTabChange = (tab: string) => {
-    setActive(tab)
-    props.onTabChange?.(tab)
-    vscode.postMessage({ type: "settingsTabChanged", tab })
+    const value = route(tab)
+    setActive(value)
+    props.onTabChange?.(value)
+    vscode.postMessage({ type: "settingsTabChanged", tab: value })
   }
 
   return (
@@ -367,6 +373,10 @@ const Settings: Component<SettingsProps> = (props) => {
             {language.t("settings.navigation.advanced")}
           </div>
           {/* raya_change end */}
+          <Tabs.Trigger value="connections" aria-label={language.t("settings.connections.title")}>
+            <Icon name="providers" />
+            <span class="label">{language.t("settings.connections.title")}</span>
+          </Tabs.Trigger>
           <Tabs.Trigger value="agentBehaviour" aria-label={language.t("settings.agentBehaviour.title")}>
             <Icon name="brain" />
             <span class="label">{language.t("settings.agentBehaviour.title")}</span>
@@ -444,9 +454,13 @@ const Settings: Component<SettingsProps> = (props) => {
           <h3>{language.t("settings.providers.title")}</h3>
           <ProvidersTab />
         </Tabs.Content>
+        <Tabs.Content value="connections">
+          <h3>{language.t("settings.connections.title")}</h3>
+          <ConnectionsTab />
+        </Tabs.Content>
         <Tabs.Content value="agentBehaviour">
           <h3>{language.t("settings.agentBehaviour.title")}</h3>
-          <AgentBehaviourTab />
+          <AgentBehaviourTab onConnections={() => onTabChange("connections")} />
         </Tabs.Content>
         <Tabs.Content value="autoApprove">
           <h3>{language.t("settings.autoApprove.title")}</h3>

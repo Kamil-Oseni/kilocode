@@ -818,6 +818,7 @@ export interface RemoveModeMessage {
 export interface RemoveMcpMessage {
   type: "removeMcp"
   name: string
+  contextDirectory?: string
 }
 
 export interface RequestMcpStatusMessage {
@@ -827,16 +828,19 @@ export interface RequestMcpStatusMessage {
 export interface ConnectMcpMessage {
   type: "connectMcp"
   name: string
+  contextDirectory?: string
 }
 
 export interface DisconnectMcpMessage {
   type: "disconnectMcp"
   name: string
+  contextDirectory?: string
 }
 
 export interface AuthenticateMcpMessage {
   type: "authenticateMcp"
   name: string
+  contextDirectory?: string
 }
 
 export interface SetLanguageRequest {

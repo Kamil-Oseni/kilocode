@@ -7,6 +7,7 @@ import { onMount, createSignal } from "solid-js"
 import type { Meta, StoryObj } from "storybook-solidjs-vite"
 import { StoryProviders, mockSessionValue } from "./StoryProviders"
 import { SessionContext } from "../context/session"
+import { useConfig } from "../context/config"
 import { KiloEmbeddingModelsContext } from "../context/kilo-embedding-models"
 import Settings from "../components/settings/Settings"
 import ProvidersTab from "../components/settings/ProvidersTab"
@@ -428,6 +429,19 @@ export const AgentBehaviourSkillsOverflow: Story = {
   },
 }
 
+function Editor(props: { name: string }) {
+  const cfg = useConfig()
+  return (
+    <McpEditView
+      name={props.name}
+      value={cfg.config().mcp?.[props.name] ?? {}}
+      onUpdate={(partial) => cfg.updateConfig({ mcp: { [props.name]: partial } })}
+      onBack={noop}
+      onRemove={noop}
+    />
+  )
+}
+
 export const McpEditViewLocal: Story = {
   name: "McpEditView — local server (stdio)",
   render: () => (
@@ -444,7 +458,7 @@ export const McpEditViewLocal: Story = {
       }
     >
       <div style={{ "max-height": "700px", overflow: "auto" }}>
-        <McpEditView name="filesystem" onBack={noop} onRemove={noop} />
+        <Editor name="filesystem" />
       </div>
     </StoryProviders>
   ),
@@ -467,7 +481,7 @@ export const McpEditViewLocalWithEnv: Story = {
       }
     >
       <div style={{ "max-height": "700px", overflow: "auto" }}>
-        <McpEditView name="my-mcp" onBack={noop} onRemove={noop} />
+        <Editor name="my-mcp" />
       </div>
     </StoryProviders>
   ),
@@ -489,7 +503,7 @@ export const McpEditViewRemote: Story = {
       }
     >
       <div style={{ "max-height": "700px", overflow: "auto" }}>
-        <McpEditView name="remote-mcp" onBack={noop} onRemove={noop} />
+        <Editor name="remote-mcp" />
       </div>
     </StoryProviders>
   ),

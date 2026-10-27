@@ -1244,7 +1244,9 @@ it.live(
         ).pipe(Effect.provideService(Session.Service, workerSessions as never))
         expect(conditional.required).not.toContain("criteria")
         expect(conditional.anyOf).toHaveLength(2)
-        const alternatives = conditional.anyOf?.filter((item) => typeof item === "object")
+        const alternatives = conditional.anyOf?.filter(
+          (item): item is Exclude<typeof item, boolean> => typeof item === "object",
+        )
         expect(alternatives?.[0]?.required).not.toContain("artifacts")
         expect(alternatives?.[0]?.properties?.outputs).toMatchObject({ maxItems: 0 })
         expect(alternatives?.[0]?.additionalProperties).toBe(false)

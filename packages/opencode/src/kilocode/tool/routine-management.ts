@@ -1,7 +1,7 @@
 import path from "node:path"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { english } from "@opencode-ai/core/kilocode/schedule"
 import type { Database } from "@opencode-ai/core/database/database"
 import type { PtyArchive } from "@/kilocode/pty/archive"
@@ -488,6 +488,13 @@ export function routineManagementTools(input: {
       organizationID: metadata.organizationID,
       organizationRevision: metadata.organizationRevision,
     })
+  })
+
+  const targets = Effect.fn("RayaRoutineManagement.targets")(function* (files?: typeof Outputs.Type) {
+    if (files === undefined) return undefined
+    const fs = yield* Effect.serviceOption(FSUtil.Service)
+    if (Option.isNone(fs)) return yield* Effect.fail(new Error("Canonical output-file admission is unavailable."))
+    return yield* canonical(fs.value, files)
   })
 
   const handoff = Effect.fn("RayaRoutineManagement.handoff")(function* (
@@ -1134,8 +1141,7 @@ export function routineManagementTools(input: {
             incoming?.context ? params.context : params.context?.trim(),
           )
           const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
-          const outputs =
-            params.outputs === undefined ? undefined : yield* canonical(yield* FSUtil.Service, params.outputs)
+          const outputs = yield* targets(params.outputs)
           const request = {
             source,
             senderID: sender.id,
@@ -1318,8 +1324,7 @@ export function routineManagementTools(input: {
                 : [ctx.sessionID, ctx.messageID, ctx.callID, organization.id],
             ),
           ).slice(0, 48)}`
-          const outputs =
-            params.outputs === undefined ? undefined : yield* canonical(yield* FSUtil.Service, params.outputs)
+          const outputs = yield* targets(params.outputs)
           yield* ctx.ask({
             permission: "schedule_task",
             patterns: [`organization:${organization.id}`, `route:${sender.id}:${recipient.id}`],

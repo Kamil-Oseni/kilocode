@@ -1167,13 +1167,16 @@ export namespace RayaTaskDelegation {
       response?: string,
       cost?: number,
       reason?: string,
+      quiet = false,
     ) {
       const prior = yield* get(id)
       const amount = typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : undefined
       if (prior.state === "completed" || prior.state === "failed" || prior.state === "cancelled") {
         if (prior.state === state && prior.response === response && prior.cost === amount && prior.reason === reason) {
-          yield* reply(prior, recipient)
-          if (reviews) yield* reviews.finish(prior.id).pipe(Effect.orDie)
+          if (!quiet) {
+            yield* reply(prior, recipient)
+            if (reviews) yield* reviews.finish(prior.id).pipe(Effect.orDie)
+          }
           return prior
         }
         return yield* new Conflict({ message: "This delegation already has a different result." })
@@ -1200,15 +1203,19 @@ export namespace RayaTaskDelegation {
           current.cost === amount &&
           current.reason === reason
         ) {
-          yield* reply(current, recipient)
-          if (reviews && state !== "needs_input") yield* reviews.finish(current.id).pipe(Effect.orDie)
+          if (!quiet) {
+            yield* reply(current, recipient)
+            if (reviews && state !== "needs_input") yield* reviews.finish(current.id).pipe(Effect.orDie)
+          }
           return current
         }
         return yield* new Conflict({ message: "This delegation already has a different result." })
       }
       const record = decode(updated[0])
-      yield* reply(record, recipient)
-      if (reviews && state !== "needs_input") yield* reviews.finish(record.id).pipe(Effect.orDie)
+      if (!quiet) {
+        yield* reply(record, recipient)
+        if (reviews && state !== "needs_input") yield* reviews.finish(record.id).pipe(Effect.orDie)
+      }
       return record
     })
     const resume = Effect.fn("RayaTaskDelegation.resume")(function* (id: string, runID: string, sessionID: SessionID) {
@@ -1303,11 +1310,12 @@ export namespace RayaTaskDelegation {
       recipient: RayaTask.Agent,
       reason: string,
       cost?: number,
+      quiet = false,
     ) {
       const prior = yield* get(id)
       if (prior.state === "cancelled") return prior
       if (prior.state === "completed" || prior.state === "failed") return prior
-      return yield* finish(id, "cancelled", recipient, undefined, cost, reason)
+      return yield* finish(id, "cancelled", recipient, undefined, cost, reason, quiet)
     })
     const queued = Effect.fn("RayaTaskDelegation.queued")(function* (recipientID: string) {
       const rows = yield* db

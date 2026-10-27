@@ -598,16 +598,36 @@ export namespace RayaTaskRunner {
       const goal = yield* goals.get(row.sessionID)
       return goal?.usage.cost
     })
-    const drop = (id: string, sid: SessionID | undefined, rid: string | undefined, reason: string) =>
-      Effect.gen(function* () {
+    const drop = (id: string, sid: SessionID | undefined, rid: string | undefined, reason: string, strict = false) => {
+      const effect = Effect.gen(function* () {
         const history = yield* tasks.runsFor(id)
-        const run = history.find((row) => (rid && row.id === rid) || (sid && row.sessionID === sid))
-        if (!run) return
+        const run = history.find((row) =>
+          strict && rid ? row.id === rid : (rid && row.id === rid) || (sid && row.sessionID === sid),
+        )
+        if (!run) {
+          if (strict && (rid || sid))
+            return yield* new RayaTask.GuardError({
+              kind: "unavailable",
+              message: "The worker run could not be retired.",
+            })
+          return
+        }
         if (!RayaTask.pending(run)) return run.status === "error" && run.blockedReason === reason ? run : undefined
         const next = { ...run, status: "error" as const, blockedReason: reason }
-        if (!(yield* tasks.transition(run, next))) return
+        if (!(yield* tasks.transition(run, next))) {
+          if (!strict) return
+          const current = (yield* tasks.runsFor(id)).find((row) => row.id === run.id)
+          if (!current || RayaTask.pending(current))
+            return yield* new RayaTask.GuardError({
+              kind: "unavailable",
+              message: "The worker run could not be retired.",
+            })
+          return current
+        }
         return next
-      }).pipe(
+      })
+      if (strict) return effect
+      return effect.pipe(
         Effect.catch((err) =>
           Effect.sync(() => {
             log.error("delegated run drop failed", { err })
@@ -615,6 +635,7 @@ export namespace RayaTaskRunner {
           }),
         ),
       )
+    }
     const lapse = Effect.fn("RayaTaskRunner.lapse")(function* (from: number) {
       if (!errands) return
       const rows = yield* errands.overdue(from)
@@ -1600,12 +1621,11 @@ export namespace RayaTaskRunner {
       if (strict && !input.halt)
         return yield* new RayaTask.GuardError({ message: "Routine stopping services are unavailable." })
       const recipient = (yield* fetch(row.recipientID))?.agent ?? absent(row.recipientID)
-      const record = yield* errands.stop(row.id, recipient, "Stopped by the user.", yield* spent(row))
+      const record = yield* errands.stop(row.id, recipient, "Stopped by the user.", yield* spent(row), true)
       // Completed history stays intact; stopping an already completed parent does
       // not establish a cancellation fence for future explicitly assigned work.
       const kids = yield* errands.descendants(id)
-      yield* queuedReport(record)
-      yield* sync(record)
+      const records = [record]
       for (const child of kids) {
         const other = (yield* fetch(child.recipientID))?.agent ?? absent(child.recipientID)
         const stopped = yield* errands.stop(
@@ -1613,12 +1633,13 @@ export namespace RayaTaskRunner {
           other,
           "Stopped because the parent request was stopped.",
           yield* spent(child),
+          true,
         )
-        yield* queuedReport(stopped)
-        yield* sync(stopped)
+        records.push(stopped)
       }
       const listed = [row, ...kids]
       const failures: Cause.Cause<unknown>[] = []
+      const halted: Errand[] = []
       for (const item of listed) {
         if (item.state === "completed" || item.state === "failed") continue
         if (item.sessionID) {
@@ -1627,21 +1648,43 @@ export namespace RayaTaskRunner {
             continue
           }
           const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
-          const halted = yield* Effect.exit(open(worker.dir, input.halt(item.sessionID)))
-          if (Exit.isFailure(halted)) {
-            log.error("delegated session stop failed", { err: Cause.squash(halted.cause) })
-            failures.push(halted.cause)
+          const result = yield* Effect.exit(open(worker.dir, input.halt(item.sessionID)))
+          if (Exit.isFailure(result)) {
+            log.error("delegated session stop failed", { err: Cause.squash(result.cause) })
+            failures.push(result.cause)
             continue
           }
         }
-        const dropped = yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.")
-        if (dropped) yield* execution.finish(dropped)
+        halted.push(item)
+      }
+      for (const item of halted) {
+        const result = yield* Effect.exit(
+          Effect.gen(function* () {
+            const dropped = yield* drop(item.recipientID, item.sessionID, item.childRunID, "Stopped by the user.", true)
+            if (dropped) yield* execution.finish(dropped)
+          }),
+        )
+        if (Exit.isFailure(result)) {
+          log.error("delegated execution retirement failed", { err: Cause.squash(result.cause) })
+          failures.push(result.cause)
+        }
       }
       if (failures.length)
         return yield* new RayaTask.GuardError({
           kind: "unavailable",
           message: "A worker session could not be stopped. Retry Stop before starting more work.",
         })
+      const stopped = new Set(
+        records.flatMap((item) => (item.state === "cancelled" && item.childRunID ? [item.childRunID] : [])),
+      )
+      for (const item of records) {
+        if (item.state === "cancelled") {
+          const worker = (yield* fetch(item.recipientID))?.agent ?? absent(item.recipientID)
+          yield* errands.finish(item.id, "cancelled", worker, item.response, item.cost, item.reason)
+        }
+        yield* queuedReport(item)
+        if (!item.parentRunID || !stopped.has(item.parentRunID)) yield* sync(item)
+      }
       if (strict) return record
       const seen = new Set<string>()
       for (const item of listed) {

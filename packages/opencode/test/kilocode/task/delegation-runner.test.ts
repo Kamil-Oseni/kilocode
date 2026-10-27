@@ -3,7 +3,8 @@ import { Deferred, Effect, Exit, Fiber } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { SessionTable } from "@opencode-ai/core/session/sql"
-import { sql } from "drizzle-orm"
+import { RayaRoutineMessageTable as Message } from "@opencode-ai/core/kilocode/routine.sql"
+import { eq, sql } from "drizzle-orm"
 import { createHash } from "node:crypto"
 import { Storage } from "@/storage/storage"
 import { read as bounded } from "../../fixture/bounded-memory"
@@ -221,11 +222,18 @@ test("a bounded worker cannot allocate more than its unspent branch budget", asy
       const database = yield* Database.Service
       const storage = memory()
       const starts: string[] = []
+      const events: string[] = []
+      const refusal = { active: true, retirement: false }
+      const replace = storage.replace
+      storage.replace = (key, value) =>
+        refusal.retirement && JSON.stringify(value).includes("Stopped by the user.")
+          ? Effect.die(new Error("History retirement failed"))
+          : replace(key, value)
       const sessions = retained({
-        create: () =>
+        create: (input) =>
           Effect.sync(() => {
             starts.push("start")
-            return session("ses_budget_child")
+            return session(input?.id ?? "ses_budget_child")
           }),
         get: (id: SessionID) =>
           Effect.succeed({
@@ -237,7 +245,19 @@ test("a bounded worker cannot allocate more than its unspent branch budget", asy
         messages: () => Effect.succeed([]),
         children: () => Effect.succeed([]),
       })
-      const runner = RayaTaskRunner.make({ database, storage, sessions })
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions,
+        halt: () =>
+          Effect.sync(() => events.push("halt")).pipe(
+            Effect.andThen(Effect.suspend(() => (refusal.active ? Effect.die(new Error("Stop failed")) : Effect.void))),
+          ),
+        continuation: (run) =>
+          Effect.sync(() => {
+            if (run.sessionID === SessionID.make("ses_budget_parent")) events.push("resume")
+          }),
+      })
       const goals = RayaGoal.make({ database, storage, sessions })
       const chief = yield* runner.tasks.create({
         name: "Chief",
@@ -306,15 +326,44 @@ test("a bounded worker cannot allocate more than its unspent branch budget", asy
       expect(saved?.usage).toMatchObject({ cost: 4, delegatedCost: 6 })
       expect(saved?.budgetHit).toMatchObject({ kind: "model-cost", limit: 10, observed: 10 })
 
-      const childGoal = (yield* goals.get(child.sessionID!))!
-      yield* storage.write(["raya", "goal", child.sessionID!], {
-        ...childGoal,
-        status: "complete",
-        updatedAt: Date.now(),
-        activeAt: undefined,
-        audit: { summary: "The bounded review completed.", verifiedAt: Date.now(), requirements: [] },
+      expect(Exit.isFailure(yield* runner.stop(child.id).pipe(Effect.exit))).toBe(true)
+      expect(events).toEqual(["halt"])
+      expect((yield* goals.get(parent))?.status).toBe("paused")
+      expect((yield* runner.tasks.runsFor(books.id)).find((run) => run.id === child.childRunID)?.status).toBe("running")
+      expect(
+        (yield* RayaTaskInbox.make(database).page(chief.id)).messages.some(
+          (item) => item.source === "reply:dlg_budget_exact",
+        ),
+      ).toBe(false)
+      refusal.active = false
+      const inbox = RayaTaskInbox.make(database)
+      refusal.retirement = true
+      expect(Exit.isFailure(yield* runner.stop(child.id).pipe(Effect.exit))).toBe(true)
+      expect(events).toEqual(["halt", "halt"])
+      expect((yield* goals.get(parent))?.status).toBe("paused")
+      expect((yield* runner.tasks.runsFor(books.id)).find((run) => run.id === child.childRunID)?.status).toBe("running")
+      expect(
+        (yield* inbox.page(chief.id)).messages.filter((item) => item.source === "reply:dlg_budget_exact"),
+      ).toHaveLength(0)
+      refusal.retirement = false
+      const conflict = yield* inbox.publish({
+        agentID: chief.id,
+        source: "reply:dlg_budget_exact",
+        kind: "system",
+        body: "Intentional conflicting fixture receipt",
       })
-      yield* runner.settle(child.sessionID!)
+      expect(Exit.isFailure(yield* runner.stop(child.id).pipe(Effect.exit))).toBe(true)
+      expect(events).toEqual(["halt", "halt", "halt"])
+      expect((yield* goals.get(parent))?.status).toBe("paused")
+      expect((yield* runner.tasks.runsFor(books.id)).find((run) => run.id === child.childRunID)?.status).toBe("error")
+      yield* database.db.delete(Message).where(eq(Message.id, conflict.id)).run().pipe(Effect.orDie)
+      expect((yield* runner.stop(child.id)).state).toBe("cancelled")
+      expect(events).toEqual(["halt", "halt", "halt", "halt", "resume"])
+      expect(
+        (yield* inbox.page(chief.id)).messages.filter(
+          (item) => item.source === "reply:dlg_budget_exact" && item.body.includes("cancelled"),
+        ).length,
+      ).toBe(1)
       const resumed = yield* goals.get(parent)
       expect(resumed?.status).toBe("active")
       expect(resumed?.usage).toMatchObject({ cost: 4, delegatedCost: 0 })

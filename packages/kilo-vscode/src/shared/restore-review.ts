@@ -152,6 +152,27 @@ export const Review = z
       )
       .max(1024),
     choices: Choices.optional(),
+    taskFiles: z
+      .object({
+        version: z.literal(1),
+        revision: digest,
+        entries: z
+          .array(
+            z
+              .object({
+                sessionID: z.string().min(1).max(256),
+                parentID: z.string().min(1).max(256),
+                directory: z.string().min(1).max(4096),
+                declared: z.array(z.string().min(1).max(4096)).max(16),
+                canonical: z.array(z.string().min(1).max(4096)).max(16),
+                branch: z.string().min(1).max(256).optional(),
+              })
+              .strict(),
+          )
+          .max(1000),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

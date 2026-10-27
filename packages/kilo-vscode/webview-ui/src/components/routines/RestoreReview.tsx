@@ -13,6 +13,12 @@ function ChoicesPanel(props: { value?: Summary }) {
   )
 }
 
+function acknowledgement(value?: Summary) {
+  return value?.taskFiles
+    ? "I reviewed the mapped folders, Task file limits and paused workers."
+    : "I reviewed the mapped folders and paused workers."
+}
+
 export function RestoreReview() {
   const vscode = useVSCode()
   const [summary, setSummary] = createSignal<Summary>()
@@ -108,6 +114,38 @@ export function RestoreReview() {
                 </For>
               </ul>
             </details>
+            <Show when={summary()?.taskFiles}>
+              {(limits) => (
+                <details>
+                  <summary>Task file limits ({limits().entries.length})</summary>
+                  <p>
+                    These preserved limits restrict file changes. Reviewing them does not grant file access or resume
+                    old work.
+                  </p>
+                  <ul>
+                    <For each={limits().entries}>
+                      {(item) => (
+                        <li>
+                          <span>Task {item.sessionID}</span>
+                          <p>Mapped folder: {item.directory}</p>
+                          <Show when={item.declared.length > 0} fallback={<p>No file changes allowed.</p>}>
+                            <ul>
+                              <For each={item.declared}>{(file) => <li>{file}</li>}</For>
+                            </ul>
+                          </Show>
+                          <details>
+                            <summary>Exact destination files</summary>
+                            <ul>
+                              <For each={item.canonical}>{(file) => <li>{file}</li>}</For>
+                            </ul>
+                          </details>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </details>
+              )}
+            </Show>
             <details>
               <summary>Transferred workers ({summary()?.workers.length ?? 0})</summary>
               <ul>
@@ -121,7 +159,7 @@ export function RestoreReview() {
               </ul>
             </details>
             <Checkbox checked={folders()} disabled={!!request()} onChange={setFolders}>
-              I reviewed the mapped folders and paused workers.
+              {acknowledgement(summary())}
             </Checkbox>
             <Checkbox checked={credentials()} disabled={!!request()} onChange={setCredentials}>
               I understand that credentials must be reconnected before starting workers.

@@ -11,6 +11,7 @@ import { Codec as Checkpoint } from "../checkpoint/schema"
 import { assertWorking, inventory, lookup, type Working } from "./profile-image"
 import { goalStop } from "./profile-goal-stop-correspondence"
 import { measure } from "./profile-sql"
+import * as TaskFiles from "./profile-task-files"
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 const absolute = z
@@ -25,7 +26,16 @@ const relative = z
   .refine(
     (value) => !/[\\:\0\r\n]/.test(value) && value.split("/").every((part) => part && part !== "." && part !== ".."),
   )
-const role = z.enum(["workers", "initialization", "runs", "goal", "checkpoint", "goal-stop"])
+const role = z.enum([
+  "workers",
+  "initialization",
+  "runs",
+  "goal",
+  "checkpoint",
+  "goal-stop",
+  "task-files",
+  "task-files-orphan",
+])
 const policy = {
   workers: "disabled-remapped",
   initialization: "initialization-marker",
@@ -33,6 +43,8 @@ const policy = {
   goal: "paused-without-recovery",
   checkpoint: "typed-inactive-checkpoints",
   "goal-stop": "historical-stop-without-execution-authority",
+  "task-files": "unchanged-declarations-in-remapped-held-profile",
+  "task-files-orphan": "unpublished-allocation-source-evidence-only",
 } as const
 export const storageJSON = z
   .object({
@@ -58,8 +70,10 @@ export const storageJSON = z
   .strict()
   .refine((value) => value.restoration === policy[value.selector.role], "Storage restoration policy differs")
   .refine(
-    (value) => (value.selector.role === "goal-stop") === (value.sqlDigest !== undefined),
-    "Stop SQL binding is missing",
+    (value) =>
+      ["goal-stop", "task-files", "task-files-orphan"].includes(value.selector.role) ===
+      (value.sqlDigest !== undefined),
+    "Storage SQL binding is missing",
   )
 export type StorageComponents = Readonly<{
   json: readonly Readonly<{ path: string; value: string }>[]
@@ -79,12 +93,20 @@ function selected(file: string) {
   if (/^raya\/goal\/[^/]+\.json$/.test(file)) return "goal" as const
   if (/^raya\/checkpoint\/[^/]+\.json$/.test(file)) return "checkpoint" as const
   if (/^raya\/goal-stops\/[^/]+\/[a-f0-9]{64}\.json$/.test(file)) return "goal-stop" as const
+  if (TaskFiles.filename(file)) return "task-files" as const
   return undefined
 }
-function decode(file: string, raw: string, content?: StorageComponents) {
+function decode(file: string, raw: string, content?: StorageComponents, tasks?: readonly TaskFiles.Entry[]) {
   const kind = selected(file)
   if (!kind) return undefined
   if (kind === "goal-stop") return content && goalStop(file, raw, content) ? kind : undefined
+  if (kind === "task-files") {
+    if (!content) return undefined
+    if (!tasks) return TaskFiles.classify(file, raw, content)
+    const entry = tasks.find((item) => item.path === file)
+    if (!entry || content.json.find((item) => item.path === file)?.value !== raw) return undefined
+    return entry.relation === "bound" ? ("task-files" as const) : ("task-files-orphan" as const)
+  }
   if ((kind === "goal" || kind === "checkpoint") && !Schema.is(SessionID)(file.slice(file.lastIndexOf("/") + 1, -5)))
     return undefined
   const value: unknown = JSON.parse(raw)
@@ -127,14 +149,26 @@ function component(input: StorageComponents) {
     .max(20_000)
     .parse(input.json)
 }
-export function validateStorage(input: z.input<typeof storageJSON>, content: StorageComponents) {
+function validate(
+  input: z.input<typeof storageJSON>,
+  content: StorageComponents,
+  checked: {
+    json: ReturnType<typeof component>
+    digest: string
+    sql?: string
+    tasks: readonly TaskFiles.Entry[]
+  },
+) {
   const entry = storageJSON.parse(input)
-  const json = component(content)
-  if (hash(json) !== entry.componentDigest) throw new Error("Storage JSON correspondence component differs")
+  const json = checked.json
+  if (checked.digest !== entry.componentDigest) throw new Error("Storage JSON correspondence component differs")
   const matches = json.filter((item) => item.path === entry.selector.path)
-  if (entry.selector.role === "goal-stop" && (!content.sql || hash(content.sql) !== entry.sqlDigest))
-    throw new Error("Goal Stop correspondence SQL component differs")
-  if (matches.length !== 1 || decode(matches[0].path, matches[0].value, content) !== entry.selector.role)
+  if (
+    ["goal-stop", "task-files", "task-files-orphan"].includes(entry.selector.role) &&
+    (!content.sql || checked.sql !== entry.sqlDigest)
+  )
+    throw new Error("Storage correspondence SQL component differs")
+  if (matches.length !== 1 || decode(matches[0].path, matches[0].value, content, checked.tasks) !== entry.selector.role)
     throw new Error("Storage JSON correspondence typed selector differs")
   const bytes = Buffer.from(matches[0].value)
   if (
@@ -143,6 +177,15 @@ export function validateStorage(input: z.input<typeof storageJSON>, content: Sto
     key(path.join(entry.storage, ...entry.selector.path.split("/"))) !== key(entry.source)
   )
     throw new Error("Storage JSON correspondence original bytes differ")
+}
+export function validateStorage(input: z.input<typeof storageJSON>, content: StorageComponents) {
+  const json = component(content)
+  return validate(input, content, {
+    json,
+    digest: hash(json),
+    sql: content.sql ? hash(content.sql) : undefined,
+    tasks: TaskFiles.collect(content),
+  })
 }
 const brand: unique symbol = Symbol("held-storage-json-correspondence")
 export type StorageClaim = Readonly<{ [brand]: true }>
@@ -160,20 +203,28 @@ export async function bindStorage(token: Working, input: StorageComponents): Pro
   if (!globals.length || globals.some((entry) => key(path.join(entry.original.data, "storage")) !== key(paths[0])))
     throw new Error("Storage JSON correspondence lacks actual primary Global binding")
   const json = component(input)
-  if (input.sql && json.some((item) => selected(item.path) === "goal-stop")) {
+  const checked = {
+    json,
+    digest: hash(json),
+    sql: input.sql ? hash(input.sql) : undefined,
+    tasks: TaskFiles.collect(input),
+  }
+  const scoped = json.some((item) => selected(item.path) === "task-files")
+  if (input.sql && (scoped || json.some((item) => selected(item.path) === "goal-stop"))) {
     const sessions = input.sql.filter((table) => table.table === "session")
-    if (sessions.length !== 1) throw new Error("Goal Stop correspondence lacks its session table")
+    if (sessions.length !== 1) throw new Error("Storage correspondence lacks its session table")
     const table = sessions[0]
     const db = new Database(image.profile.database, { readonly: true, strict: true })
     try {
-      measure(db, "session", ["id", "metadata"])
+      const fields = scoped ? ["id", "parent_id", "directory", "metadata"] : ["id", "metadata"]
+      measure(db, "session", fields)
       const actual = db
-        .query<{ id: string; metadata: string | null }, []>("SELECT id,metadata FROM session ORDER BY id")
+        .query<Record<string, string | null>, []>(`SELECT ${fields.join(",")} FROM session ORDER BY id`)
         .all()
       const expected = table.rows
-        .map((row) => ({ id: row[table.columns.indexOf("id")], metadata: row[table.columns.indexOf("metadata")] }))
+        .map((row) => Object.fromEntries(fields.map((field) => [field, row[table.columns.indexOf(field)]])))
         .sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0))
-      if (hash(actual) !== hash(expected)) throw new Error("Goal Stop session metadata differs from recovered SQL")
+      if (hash(actual) !== hash(expected)) throw new Error("Storage session identity differs from recovered SQL")
     } finally {
       db.close()
     }
@@ -181,8 +232,7 @@ export async function bindStorage(token: Working, input: StorageComponents): Pro
   }
   const groups: z.output<typeof storageJSON>[] = []
   for (const item of json) {
-    const kind = selected(item.path)
-    if (!kind) continue
+    if (!selected(item.path)) continue
     const source = path.join(paths[0], ...item.path.split("/"))
     const files = native.files.filter((file) => key(file.path) === key(source))
     if (files.length !== 1) throw new Error("Storage JSON correspondence lacks exact native file")
@@ -192,12 +242,13 @@ export async function bindStorage(token: Working, input: StorageComponents): Pro
     inventory(token)
     if (!bytes.equals(Buffer.from(item.value)) || bytes.length !== record.bytes || sum(bytes) !== record.digest)
       throw new Error("Storage JSON correspondence differs from held original bytes")
-    if (decode(item.path, item.value, input) !== kind) continue
+    const kind = decode(item.path, item.value, input, checked.tasks)
+    if (!kind) continue
     const entry = storageJSON.parse({
       kind: "storage-json",
       component: "json",
-      componentDigest: hash(json),
-      ...(kind === "goal-stop" ? { sqlDigest: hash(input.sql) } : {}),
+      componentDigest: checked.digest,
+      ...(["goal-stop", "task-files", "task-files-orphan"].includes(kind) ? { sqlDigest: checked.sql } : {}),
       selector: { role: kind, path: item.path },
       storage: paths[0],
       source: record.path,
@@ -208,7 +259,7 @@ export async function bindStorage(token: Working, input: StorageComponents): Pro
       restoration: policy[kind],
       activation: "inert",
     })
-    validateStorage(entry, input)
+    validate(entry, input, checked)
     groups.push(Object.freeze({ ...entry, selector: Object.freeze(entry.selector) }))
   }
   inventory(token)

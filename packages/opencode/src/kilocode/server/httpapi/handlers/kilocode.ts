@@ -170,7 +170,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const inbox = RayaTaskInbox.make(database)
     const reports = RayaRoutineReports.make({ storage, sessions, database })
     const global = yield* Global.Service
-    const restore = destinationReview({ storage, data: global.data, workers: () => runner.tasks.list() })
+    const restore = destinationReview({ storage, database, data: global.data, workers: () => runner.tasks.list() })
     const organizations = RayaTaskOrganization.make(database, { ...runner.tasks, stop: runner.stopMembers }, storage)
     const info = RayaTaskInfo.make(database)
     const errands = RayaTaskDelegation.make(database)

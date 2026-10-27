@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Option, Schema } from "effect"
-import { Receipt } from "../goal/stop-receipt"
+import { Receipt } from "../goal/stop-receipt-schema"
 import { Codec as Task } from "../task/schema"
 
 type Table = Readonly<{

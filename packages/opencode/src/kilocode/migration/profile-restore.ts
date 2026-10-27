@@ -17,6 +17,9 @@ import { restoreSelfHeal } from "./profile-self-heal"
 import { allocatorLedger } from "./profile-sql-metadata"
 import { renderReview } from "./profile-restore-review-schema"
 import { names } from "./profile-routine-effects"
+import { project as restoreTaskFiles } from "./profile-task-files-restore"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
 export type Column = { name: string; type: string; notnull: number; pk: number }
 
@@ -141,6 +144,17 @@ export async function restore(
     value.sql = payload.shape.sql.parse(
       await restoreOutputs(original.outputs, stage, path.join(target, "data", "kilo"), value.sql),
     )
+  const destination = path.join(target, "data", "kilo")
+  if (options.primaries?.length && !value.artifacts)
+    throw new Error("Primary Git attachment requires captured artifacts")
+  if (value.artifacts) await materialize(value.artifacts, stage, destination, mapping, options.primaries)
+  const scoped = await Effect.runPromise(
+    restoreTaskFiles({ source: original, target: value, mapping, stage, destination }).pipe(
+      Effect.provide(LayerNode.compile(FSUtil.node)),
+    ),
+  )
+  value.sql = scoped.sql
+  value.json = scoped.json
   const { Database } = await import("@opencode-ai/core/database/database")
   const runtime = ManagedRuntime.make(Database.layerFromPath(path.join(stage, "raya.db")))
   const result = await runtime.runPromise(
@@ -267,10 +281,6 @@ export async function restore(
       await Memory.rebuild({ root })
     }
   }
-  const destination = path.join(target, "data", "kilo")
-  if (options.primaries?.length && !value.artifacts)
-    throw new Error("Primary Git attachment requires captured artifacts")
-  if (value.artifacts) await materialize(value.artifacts, stage, destination, mapping, options.primaries)
   if (value.notes) await restoreNotes(value.notes, stage, destination, mapping, original.sql)
   // Named checkpoints must resolve to actual tree objects before publishing the inactive profile.
   // The source snapshot metadata is bound by the bundle schema; Git reads only the rebuilt inert store.

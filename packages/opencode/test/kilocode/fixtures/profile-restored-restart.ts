@@ -20,6 +20,10 @@ const profile = process.argv[2]
 const mode = process.argv[3]
 assert.ok(profile)
 assert.ok(mode === "held" || mode === "reviewed")
+const trace = (phase: string) => {
+  if (process.env.RAYA_PROFILE_RESTART_TRACE === "1") console.log(`PROFILE_RESTART ${mode} ${phase}`)
+}
+trace("start")
 assert.equal(Global.Path.data, profile)
 const runtime = ManagedRuntime.make(
   Layer.merge(
@@ -59,21 +63,28 @@ const manifest = JSON.parse(await readFile(MemoryPaths.files(memory).manifest, "
 assert.equal(manifest.canonical, workspace)
 assert.equal(manifest.folder, path.basename(memory))
 assert.ok((await readFile(path.join(memory, "restore-evidence.json"), "utf8")).includes("HISTORICAL_MEMORY_DECISION"))
+trace("memory-context")
 assert.deepEqual((await KiloMemory.context({ ctx })).blocks, [])
+trace("memory-context-done")
 if (mode === "held") {
+  trace("memory-held")
   assert.equal((await KiloMemory.enable({ ctx })).state.enabled, false)
   assert.equal((await KiloMemory.configure({ ctx, settings: { autoConsolidate: true } })).state.autoConsolidate, false)
   assert.equal((await MemoryFiles.readState(memory)).enabled, false)
 }
 if (mode === "reviewed") {
+  trace("memory-reviewed")
   assert.equal((await KiloMemory.enable({ ctx })).state.enabled, true)
   assert.equal((await MemoryFiles.readState(memory)).capture.turnClose, false)
   assert.equal((await MemoryFiles.readState(memory)).autoConsolidate, false)
   assert.ok(JSON.stringify((await KiloMemory.context({ ctx })).blocks).includes("PERSONAL_MEMORY_MARKER"))
 }
+trace("runtime")
 await runtime.runPromise(
   Effect.gen(function* () {
+    trace("storage-service")
     const storage = yield* Storage.Service
+    trace("storage-ready")
     const database = yield* Database.Service
     if (mode === "held") {
       yield* hold(storage)
@@ -97,12 +108,17 @@ await runtime.runPromise(
     assert.equal(agents[0].execution, undefined)
   }),
 )
+trace("runtime-done")
 await runtime.dispose()
+trace("runtime-disposed")
+trace("server-listen")
 const listener = await Server.listen({ hostname: "127.0.0.1", port: 0 })
 try {
+  trace("server-ready")
   const response = await fetch(new URL("/kilocode/agent/agent/runs", listener.url), {
     headers: { "x-kilo-directory": workspace },
   })
+  trace("history-read")
   assert.equal(response.status, 200, await response.clone().text())
   const runs = await response.json()
   assert.deepEqual(
@@ -112,6 +128,7 @@ try {
   const events = await fetch(new URL("/kilocode/agent/agent/events", listener.url), {
     headers: { "x-kilo-directory": workspace },
   })
+  trace("events-read")
   assert.equal(events.status, 200, await events.clone().text())
   const journal = await events.json()
   assert.equal(journal.cursor, 0)
@@ -131,6 +148,9 @@ try {
   process.exitCode = 1
   console.error(err)
 } finally {
+  trace("server-close")
   await listener.stop(true)
+  trace("finish")
   await finish([])
+  trace("finished")
 }

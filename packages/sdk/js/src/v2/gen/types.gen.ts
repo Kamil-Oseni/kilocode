@@ -26209,6 +26209,18 @@ export type KilocodeProfileRestoreReviewResponses = {
               }
           >
         }
+    taskFiles?: {
+      version: 1
+      revision: string
+      entries: Array<{
+        sessionID: string
+        parentID: string
+        directory: string
+        declared: Array<string>
+        canonical: Array<string>
+        branch?: string
+      }>
+    }
     id?: string
     revision?: string
     review?: {
@@ -26408,6 +26420,18 @@ export type KilocodeProfileRestoreApproveResponses = {
               }
           >
         }
+    taskFiles?: {
+      version: 1
+      revision: string
+      entries: Array<{
+        sessionID: string
+        parentID: string
+        directory: string
+        declared: Array<string>
+        canonical: Array<string>
+        branch?: string
+      }>
+    }
     id?: string
     revision?: string
     review?: {

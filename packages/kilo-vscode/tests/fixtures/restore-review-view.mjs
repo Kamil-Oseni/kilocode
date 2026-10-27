@@ -85,6 +85,26 @@ const saved = {
   uncertainWork: "held-no-replay",
   workspaces: [{ source: "C:/Old/café 日本語 😀", destination: "D:/New/café 日本語 😀" }],
   workers: [{ id: "worker-one", name: "Paused worker café 日本語 😀", enabled: false }],
+  taskFiles: {
+    version: 1,
+    revision: "c".repeat(64),
+    entries: [
+      {
+        sessionID: "ses_child",
+        parentID: "ses_parent",
+        directory: "D:/New/café 日本語 😀",
+        declared: ["src/a.ts"],
+        canonical: ["D:/New/café 日本語 😀/src/a.ts"],
+      },
+      {
+        sessionID: "ses_readonly",
+        parentID: "ses_parent",
+        directory: "D:/New/café 日本語 😀",
+        declared: [],
+        canonical: [],
+      },
+    ],
+  },
 }
 await tick()
 assert.equal(reads().length, 1)
@@ -93,6 +113,11 @@ assert.equal(root.textContent.includes("Mapped folders"), false)
 await emit({ type: "restoreReviewResult", requestID: reads()[0].requestID, summary: saved })
 assert(root.textContent.includes(saved.workspaces[0].destination))
 assert(root.textContent.includes(saved.workers[0].name))
+assert(root.textContent.includes("Task file limits (2)"))
+assert(root.textContent.includes("src/a.ts"))
+assert(root.textContent.includes("D:/New/café 日本語 😀/src/a.ts"))
+assert(root.textContent.includes("No file changes allowed."))
+assert(root.textContent.includes("Reviewing them does not grant file access or resume old work."))
 assert.equal(button("Review this profile").disabled, true)
 const boxes = [...root.querySelectorAll("input[type=checkbox]")]
 assert.equal(boxes.length, 2)

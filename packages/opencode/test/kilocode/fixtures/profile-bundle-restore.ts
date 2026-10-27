@@ -290,7 +290,9 @@ async function restart(mode: string, selected = result) {
     new Response(child.stderr).text(),
   ])
   clearTimeout(timer)
-  assert.equal(code, 0, stderr)
+  await writeFile(path.join(root, `restart-${mode}.stdout.log`), stdout)
+  await writeFile(path.join(root, `restart-${mode}.stderr.log`), stderr)
+  assert.equal(code, 0, `${stderr}\n${stdout}`)
   assert.ok(stdout.includes('"replayed":false'))
   assert.throws(() => process.kill(child.pid, 0))
 }

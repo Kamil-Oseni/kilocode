@@ -161,7 +161,11 @@ export async function exportProfile(
       if (relative === "raya/restore-hold.json") continue
       // Validate each selected path; exclude unrelated caches/configuration instead of
       // silently broadening the allowlist to include credentials or machine authority.
-      if (!filename.safeParse(relative).success) continue
+      if (!filename.safeParse(relative).success) {
+        if (relative.startsWith("raya/task-files/"))
+          throw new Error("Task worker file limits contain an invalid storage path.")
+        continue
+      }
       const selected = await read(file, 128 * 1024 * 1024 - bytes)
       bytes += selected.bytes
       json.push(payload.shape.json.element.parse({ path: relative, value: selected.value }))

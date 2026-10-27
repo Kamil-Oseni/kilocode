@@ -7,10 +7,28 @@ import { RayaTask } from "@/kilocode/task"
 import { hold } from "@/kilocode/task/hold"
 import { ReviewSchema } from "./profile-restore-review-schema"
 import { Choices, choices } from "./destination-choices"
+import * as TaskFiles from "@/kilocode/tool/task-files-schema"
+import { Outputs } from "@/kilocode/task/output-scope"
+import { inspect } from "./profile-task-files-restore"
+import type { Database } from "@opencode-ai/core/database/database"
 
 const text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096))
 const id = Schema.String.check(Schema.isUUID())
 const strict = { parseOptions: { onExcessProperty: "error" as const } }
+const limits = Schema.Struct({
+  version: Schema.Literal(1),
+  revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  entries: Schema.Array(
+    Schema.Struct({
+      sessionID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+      parentID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+      directory: text,
+      declared: TaskFiles.Declared,
+      canonical: Outputs,
+      branch: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+    }),
+  ).check(Schema.isMaxLength(1000)),
+})
 
 export const Approval = Schema.Struct({
   id,
@@ -22,6 +40,7 @@ export const Approval = Schema.Struct({
 export const Summary = Schema.Struct({
   state: Schema.Literals(["absent", "held", "released"]),
   choices: Schema.optional(Choices),
+  taskFiles: Schema.optional(limits),
   id: Schema.optional(id),
   revision: Schema.optional(Schema.String),
   review: Schema.optional(
@@ -37,6 +56,7 @@ export const Summary = Schema.Struct({
 export function destinationReview(input: {
   storage: Storage.Interface
   data: string
+  database?: Database.Interface
   workers: () => Effect.Effect<readonly RayaTask.Agent[]>
 }) {
   const gate = hold(input.storage)
@@ -119,8 +139,40 @@ export function destinationReview(input: {
       const workspaces = entries
         .map(([source, destination]) => ({ source, destination }))
         .sort((a, b) => a.source.localeCompare(b.source))
+      const bindings = yield* inspect(input.data, input.database).pipe(
+        Effect.mapError(() =>
+          invalid(
+            "unavailable",
+            "The transferred Task file limits are unavailable. Repair them before reviewing this profile.",
+          ),
+        ),
+      )
+      const tasks = bindings
+        ?.map((row) => ({
+          sessionID: row.child,
+          parentID: row.parent,
+          directory: row.directory,
+          declared: row.declared,
+          canonical: row.canonical,
+          ...(row.branch === undefined ? {} : { branch: row.branch }),
+        }))
+        .sort((a, b) => a.sessionID.localeCompare(b.sessionID))
+      const taskFiles =
+        tasks === undefined
+          ? undefined
+          : yield* Schema.decodeUnknownEffect(limits)({
+              version: 1,
+              revision: createHash("sha256").update(JSON.stringify(tasks)).digest("hex"),
+              entries: tasks,
+            }).pipe(
+              Effect.mapError(() =>
+                invalid("unavailable", "The transferred Task file limits exceed the review bounds."),
+              ),
+            )
       const revision = createHash("sha256")
-        .update(JSON.stringify({ id: current.id, workspaces, workers, evidence: saved }))
+        .update(
+          JSON.stringify({ id: current.id, workspaces, workers, evidence: saved, ...(taskFiles ? { taskFiles } : {}) }),
+        )
         .digest("hex")
       const inventory = yield* Effect.promise(() => choices(input.data, current.id))
       const latest = yield* gate.get()
@@ -131,6 +183,7 @@ export function destinationReview(input: {
         )
       return {
         choices: inventory,
+        ...(taskFiles ? { taskFiles } : {}),
         state: current.state,
         id: current.id,
         revision,

@@ -7,6 +7,8 @@ import path from "node:path"
 import { Database } from "bun:sqlite"
 import { Schema } from "effect"
 import { withImage } from "@opencode-ai/core/kilocode/source-offline"
+import * as TaskFiles from "../../src/kilocode/tool/task-files"
+import * as Portable from "../../src/kilocode/migration/profile-task-files"
 import { Codec as Task } from "../../src/kilocode/task/schema"
 import { Codec as Goal } from "../../src/kilocode/goal/schema"
 import { Codec as Checkpoint } from "../../src/kilocode/checkpoint/schema"
@@ -195,3 +197,118 @@ test("storage schema import does not initialize Global or admit native roots", a
   expect(code, err).toBe(0)
   expect(out.trim()).toBe("STORAGE_SCHEMA_IMPORT_OK")
 }, 20_000)
+
+test.skipIf(process.platform !== "win32")(
+  "Task scope claims correlate genuine held SQLite children and unpublished native records",
+  async () => {
+    const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "raya-task-storage-correspondence-")))
+    const data = path.join(root, "data"),
+      storage = path.join(data, "storage")
+    const directory = path.join(root, "workspace")
+    await Promise.all([mkdir(storage, { recursive: true }), mkdir(directory)])
+    const owned = path.join(directory, "notes.txt")
+    await writeFile(owned, "Original notes")
+    const make = (child: string) =>
+      Schema.decodeUnknownSync(TaskFiles.Binding)({
+        version: 1,
+        child,
+        parent: "ses_task_parent",
+        directory,
+        declared: ["notes.txt"],
+        canonical: [owned],
+        branch: "review",
+      })
+    const bound = make("ses_task_bound"),
+      orphan = make("ses_task_unpublished")
+    const json = [bound, orphan].map((binding) => ({
+      path: `raya/task-files/${createHash("sha256").update(binding.child).digest("hex")}.json`,
+      value: JSON.stringify(binding),
+    }))
+    const sql = [
+      {
+        table: "session",
+        columns: ["id", "parent_id", "directory", "metadata"],
+        rows: [
+          [bound.parent, null, directory, null],
+          [bound.child, bound.parent, directory, JSON.stringify({ [TaskFiles.key]: bound })],
+        ],
+      },
+    ]
+    const database = path.join(data, "raya.db")
+    const db = new Database(database)
+    db.exec("CREATE TABLE session(id TEXT PRIMARY KEY,parent_id TEXT,directory TEXT,metadata TEXT)")
+    for (const row of sql[0].rows) db.query("INSERT INTO session VALUES(?,?,?,?)").run(...row)
+    db.close()
+    for (const entry of json) {
+      const file = path.join(storage, ...entry.path.split("/"))
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, entry.value, { flag: "wx" })
+    }
+    const helper = path.join(root, "raya-process-host.exe")
+    await copyFile(path.resolve(import.meta.dir, "../../../core/native/kilocode/bin/raya-process-host.exe"), helper)
+    const digest = createHash("sha256")
+      .update(await readFile(helper))
+      .digest("hex")
+    const policy = { version: 1 as const, directories: [data], files: [] }
+    const selected = await select({ database, storage }, policy)
+    const roles = {
+      data,
+      config: data,
+      cache: data,
+      state: data,
+      stateParent: data,
+      bin: data,
+      log: data,
+      repos: data,
+      homeKilocode: data,
+      homeConfigKilo: data,
+    }
+    const selection = { ...selected, globals: [roles] }
+    await withImage(
+      {
+        roots: selection.roots,
+        policy,
+        helper: { executable: helper, digest },
+        registry: path.join(root, "control", "registry"),
+      },
+      (image) =>
+        withWorking(image, selection, async (token) => {
+          const content = { json, sql }
+          const entries = storageGroups(token, await bindStorage(token, content))
+          expect(entries.length).toBe(2)
+          expect(entries.map((entry) => entry.selector.role).sort()).toEqual(["task-files", "task-files-orphan"])
+          for (const entry of entries) {
+            validateStorage(entry, content)
+            expect(entry.activation).toBe("inert")
+            expect(entry.sqlDigest).toMatch(/^[a-f0-9]{64}$/)
+          }
+          expect(entries.find((entry) => entry.selector.role === "task-files-orphan")?.restoration).toBe(
+            "unpublished-allocation-source-evidence-only",
+          )
+          const missing = { ...content, json: json.filter((entry) => JSON.parse(entry.value).child !== bound.child) }
+          await assert.rejects(bindStorage(token, missing), /lacks its immutable/)
+          const marker = structuredClone(content)
+          marker.sql[0].rows[1][3] = "{}"
+          await assert.rejects(bindStorage(token, marker))
+          const changed = structuredClone(content)
+          changed.json[0].value = JSON.stringify({ ...bound, branch: "changed" })
+          await assert.rejects(bindStorage(token, changed))
+          changed.sql[0].rows[1][3] = JSON.stringify({ [TaskFiles.key]: { ...bound, branch: "changed" } })
+          expect(Portable.collect(changed).length).toBe(2)
+          await assert.rejects(bindStorage(token, changed), /session identity differs from recovered SQL/)
+          expect(() => validateStorage(entries[0], marker)).toThrow()
+          const filename = structuredClone(content)
+          filename.json[0].path = "raya/task-files/invalid.json"
+          await assert.rejects(bindStorage(token, filename), /path or byte bound/)
+          const foreign = structuredClone(content)
+          foreign.sql[0].rows[1][2] = path.join(root, "elsewhere")
+          expect(() => Portable.collect(foreign)).toThrow("disagrees")
+          await assert.rejects(writeFile(path.join(storage, "foreign.json"), "forbidden"))
+        }),
+    )
+    expect(await readFile(owned, "utf8")).toBe("Original notes")
+    for (const entry of json)
+      expect(await readFile(path.join(storage, ...entry.path.split("/")), "utf8")).toBe(entry.value)
+  },
+  60_000,
+)

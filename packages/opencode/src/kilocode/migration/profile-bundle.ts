@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, scrypt } from "node:crypto"
 import { z } from "zod"
+import * as TaskFiles from "./profile-task-files"
 import { memory } from "./profile-memory"
 import { tui } from "./profile-tui"
 import { preferences, sanitize } from "./profile-preferences"
@@ -126,6 +127,7 @@ export const filename = z
   .refine((value) => {
     if (!value.endsWith(".json") || value.includes("\\") || value.includes(":")) return false
     if (value === "raya/composer-drafts.json" || value === "raya/composer-drafts-initialized.json") return true
+    if (value.startsWith("raya/task-files")) return TaskFiles.filename(value)
     if (value.startsWith("raya/checkpoint")) return /^raya\/checkpoint\/[^/]+\.json$/.test(value)
     const parts = value.split("/")
     if (parts.some((part) => !part || part === "." || part === "..")) return false
@@ -196,6 +198,7 @@ export const snapshot = z
   .strict()
   .superRefine((value, ctx) => {
     try {
+      TaskFiles.collect(value)
       if (value.disposition)
         validateDisposition(
           value.disposition,

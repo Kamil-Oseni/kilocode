@@ -1,4 +1,6 @@
-# Raya current readiness
+# Raya readiness history
+
+This archived record retains dated source, installed-candidate and readiness claims in their original historical scope. References below to “current”, “latest”, pending work or estimated scores describe those checkpoints; use [current readiness](Raya-Current-Readiness.md) for the present installed state and acceptance boundaries. Historical counts and percentages do not establish present completion.
 
 ## Current source fixes and pending installed acceptance
 

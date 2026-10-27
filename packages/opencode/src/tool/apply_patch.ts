@@ -25,6 +25,7 @@ import { Storage } from "@/storage/storage" // kilocode_change
 import { transact, type Item } from "@/kilocode/tool/apply-patch-transaction" // kilocode_change
 import { records, seal, type Intent, type Receipt } from "@/kilocode/tool/apply-patch-receipt" // kilocode_change
 import { Conflict, journals, Outcome } from "@/kilocode/tool/mutation-journal" // kilocode_change
+import * as Output from "@/kilocode/task/output-admission" // kilocode_change
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -65,6 +66,7 @@ export const ApplyPatchTool = Tool.define(
       }
 
       const instance = yield* InstanceState.context
+      const scoped = yield* Output.check(ctx.sessionID, []) // kilocode_change - validate current scoped authority before replay or external helpers
       // kilocode_change start - bind retries before reading mutable preimages
       const invocation = JSON.stringify([
         ctx.sessionID,
@@ -79,9 +81,10 @@ export const ApplyPatchTool = Tool.define(
       const finish = Effect.fn("ApplyPatchTool.finish")(function* (intent: Intent, committed: typeof Outcome.Type) {
         for (const change of intent.changes) {
           if (change.type === "delete") continue
-          yield* lsp.touchFile(change.movePath ?? change.filePath, "document")
+          if (scoped === undefined) yield* lsp.touchFile(change.movePath ?? change.filePath, "document") // kilocode_change
         }
-        const diagnostics = yield* lsp.diagnostics()
+        const diagnostics: Effect.Success<ReturnType<typeof lsp.diagnostics>> =
+          scoped === undefined ? yield* lsp.diagnostics() : {} // kilocode_change - scoped writes do not start LSP processes
         const summary = intent.changes.map((change) => {
           if (change.type === "add")
             return `A ${path.relative(intent.workspace, change.filePath).replaceAll("\\", "/")}`
@@ -148,6 +151,11 @@ export const ApplyPatchTool = Tool.define(
       if (cached && !retained)
         return yield* new Conflict({ message: "Apply Patch response receipt has no retained intent." })
       if (retained) {
+        const paths = retained.changes.flatMap((change) => [
+          change.filePath,
+          ...(change.movePath ? [change.movePath] : []),
+        ])
+        yield* Output.check(ctx.sessionID, yield* Effect.forEach(paths, (file) => RayaPath.canonical(afs, file))) // kilocode_change - both sides of retained moves
         if (retained.request !== request)
           return yield* new Conflict({ message: "This Apply Patch invocation is already bound to different content." })
         const outcome = yield* journals(storage).get(invocation)
@@ -434,10 +442,11 @@ export const ApplyPatchTool = Tool.define(
       })
 
       // kilocode_change start - format every proposed result away from reviewed paths before any target mutation
+      yield* Output.check(ctx.sessionID, [...targets.values()]) // kilocode_change - deny the entire patch before any target mutation
       for (const change of fileChanges) {
         if (change.type === "delete") continue
         const target = targets.get(change.movePath ?? change.filePath)!
-        if (!(yield* format.available(target))) continue
+        if (scoped !== undefined || !(yield* format.available(target))) continue // kilocode_change - scoped writes cannot invoke opaque formatters
         change.newContent = yield* EncodedIO.stage(
           afs,
           target,
@@ -540,6 +549,7 @@ export const ApplyPatchTool = Tool.define(
         })),
       }
       const intent = yield* replay.prepare(ctx.sessionID, { ...proposed, digest: seal(proposed) })
+      yield* Output.check(ctx.sessionID, [...targets.values()]) // kilocode_change - current run and all source/destination grants must still match
       const committed = yield* transact(storage, {
         invocation,
         digest: intent.digest,

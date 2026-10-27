@@ -23,6 +23,7 @@ import * as TextStream from "../kilocode/text-stream"
 import * as Artifact from "@/kilocode/goal/read-artifact"
 import { PathHint } from "@/kilocode/tool/path-hint"
 import { Refusal } from "@/kilocode/session/tool-refusal"
+import * as Output from "@/kilocode/task/output-admission"
 // kilocode_change end
 
 const DEFAULT_READ_LIMIT = 2000
@@ -210,6 +211,7 @@ export const ReadTool = Tool.define<
       ctx: Tool.Context<Metadata>,
     ) {
       const instance = yield* InstanceState.context
+      const scoped = yield* Output.check(ctx.sessionID, []) // kilocode_change - validate worker authority without requiring a writable read target
       let filepath = params.filePath
       if (!path.isAbsolute(filepath)) {
         filepath = path.resolve(instance.directory, filepath)
@@ -377,7 +379,7 @@ export const ReadTool = Tool.define<
             output += `\n\n(End of file - total ${file.count} lines)`
           }
           output += "\n</content>"
-          yield* warm(bound.target)
+          if (scoped === undefined) yield* warm(bound.target) // kilocode_change - scoped reads cannot start an opaque LSP process
           if (loaded.length > 0) {
             output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`
           }

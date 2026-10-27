@@ -26,6 +26,7 @@ import { assertMutablePath } from "../kilocode/agent-manager/protection" // kilo
 import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 import { Refusal } from "@/kilocode/session/tool-refusal" // kilocode_change
+import * as Output from "@/kilocode/task/output-admission" // kilocode_change
 
 const MAX_DIFF_CONTENT = 500_000 // kilocode_change
 
@@ -113,6 +114,7 @@ export const EditTool = Tool.define(
           assertMutablePath(filePath) // kilocode_change
           const target = yield* RayaPath.canonical(afs, filePath) // kilocode_change
           assertMutablePath(target) // kilocode_change - path aliases cannot bypass protected worktree boundaries
+          const scoped = yield* Output.check(ctx.sessionID, [target]) // kilocode_change - durable worker output authority
           yield* assertExternalDirectoryEffect(ctx, target) // kilocode_change - inspect the target behind a path alias
 
           let diff = ""
@@ -149,7 +151,8 @@ export const EditTool = Tool.define(
                 })
                 yield* RayaPath.check(afs, filePath, target) // kilocode_change - reject link swaps after approval
                 // kilocode_change start - format a private temporary copy before creating the reviewed target
-                if (yield* format.available(target)) {
+                if (scoped === undefined && (yield* format.available(target))) {
+                  // kilocode_change - never invoke an opaque formatter in scoped work
                   contentNew = yield* EncodedIO.stage(
                     afs,
                     target,
@@ -159,6 +162,7 @@ export const EditTool = Tool.define(
                   )
                 }
                 intended = Artifact.digest(EncodedIO.encode(Bom.join(contentNew, desiredBom), Encoding.DEFAULT)) // kilocode_change
+                yield* Output.check(ctx.sessionID, [target]) // kilocode_change - recheck after approval immediately before creation
                 yield* EncodedIO.anchored(target, Bom.join(contentNew, desiredBom), anchor, Encoding.DEFAULT) // kilocode_change - create only beneath the reviewed parent identity
                 // kilocode_change end
                 yield* events.publish(FileSystem.Event.Edited, { file: filePath })
@@ -210,7 +214,8 @@ export const EditTool = Tool.define(
 
               yield* RayaPath.check(afs, filePath, target) // kilocode_change - reject link swaps after approval
               // kilocode_change start - preserve concurrent user bytes and reject replaced or hard-linked targets
-              if (yield* format.available(target)) {
+              if (scoped === undefined && (yield* format.available(target))) {
+                // kilocode_change - never invoke an opaque formatter in scoped work
                 contentNew = yield* EncodedIO.stage(
                   afs,
                   target,
@@ -220,6 +225,7 @@ export const EditTool = Tool.define(
                 )
               }
               intended = Artifact.digest(EncodedIO.encode(Bom.join(contentNew, desiredBom), source.encoding))
+              yield* Output.check(ctx.sessionID, [target]) // kilocode_change - recheck current run immediately before commit
               yield* EncodedIO.checked(target, Bom.join(contentNew, desiredBom), source.encoding, proof, pre.sha256)
               // kilocode_change end
               yield* events.publish(FileSystem.Event.Edited, { file: filePath })
@@ -249,8 +255,11 @@ export const EditTool = Tool.define(
           })
 
           let output = "Edit applied successfully."
-          yield* lsp.touchFile(filePath, "document")
-          const diagnostics = yield* lsp.diagnostics()
+          // kilocode_change start - scoped output writes do not start LSP processes
+          if (scoped === undefined) yield* lsp.touchFile(filePath, "document")
+          const diagnostics: Effect.Success<ReturnType<typeof lsp.diagnostics>> =
+            scoped === undefined ? yield* lsp.diagnostics() : {}
+          // kilocode_change end
           const normalizedFilePath = FSUtil.normalizePath(filePath)
           const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`

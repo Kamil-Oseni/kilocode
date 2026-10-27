@@ -21,6 +21,7 @@ import * as Bom from "@/util/bom"
 import * as Artifact from "@/kilocode/goal/artifact" // kilocode_change
 import { RayaPath } from "@/kilocode/task/path-boundary" // kilocode_change
 import * as ExactWrite from "@/kilocode/tool/exact-write" // kilocode_change
+import * as Output from "@/kilocode/task/output-admission" // kilocode_change
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -58,6 +59,7 @@ export const WriteTool = Tool.define(
           assertMutablePath(filepath) // kilocode_change
           const target = yield* RayaPath.canonical(fs, filepath) // kilocode_change
           assertMutablePath(target) // kilocode_change - path aliases cannot bypass protected worktree boundaries
+          const scoped = yield* Output.check(ctx.sessionID, [target]) // kilocode_change - durable worker output authority
           yield* assertExternalDirectoryEffect(ctx, target) // kilocode_change - inspect the target behind a path alias
 
           const exists = yield* fs.existsSafe(target) // kilocode_change - inspect the canonical destination
@@ -91,10 +93,11 @@ export const WriteTool = Tool.define(
           // kilocode_change start - existing files are validated and written through the same
           // open handle, so a stale path, concurrent edit, or hard link is refused without mutation.
           const final =
-            !params.exact && (yield* format.available(target))
+            !params.exact && scoped === undefined && (yield* format.available(target)) // kilocode_change - scoped writes cannot invoke opaque formatters
               ? yield* EncodedIO.stage(fs, target, Bom.join(contentNew, desiredBom), encoding, format.file)
               : contentNew
           const text = params.exact ? params.content : Bom.join(final, desiredBom)
+          yield* Output.check(ctx.sessionID, [target]) // kilocode_change - recheck current run immediately before commit
           if (exists && proof && pre.sha256) {
             yield* EncodedIO.checked(target, text, encoding, proof, pre.sha256)
           } else {
@@ -108,8 +111,11 @@ export const WriteTool = Tool.define(
           })
 
           let output = "Wrote file successfully."
-          yield* lsp.touchFile(filepath, "document")
-          const diagnostics = yield* lsp.diagnostics()
+          // kilocode_change start - scoped output writes do not start LSP processes
+          if (scoped === undefined) yield* lsp.touchFile(filepath, "document")
+          const diagnostics: Effect.Success<ReturnType<typeof lsp.diagnostics>> =
+            scoped === undefined ? yield* lsp.diagnostics() : {}
+          // kilocode_change end
           const normalizedFilepath = FSUtil.normalizePath(filepath)
           let projectDiagnosticsCount = 0
           for (const [file, issues] of Object.entries(diagnostics)) {

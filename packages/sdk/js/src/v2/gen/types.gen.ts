@@ -23550,6 +23550,20 @@ export type KilocodeGoalGetResponses = {
       runID: string
       sessionID: string
     }
+    dependencyWait?: {
+      runID: string
+      createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      intent: string
+      owner: string
+      messageID: string
+      callID: string
+      input: string
+      inputs: Array<string>
+      children: Array<{
+        id: string
+        sha256: string
+      }>
+    }
     selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
@@ -24361,6 +24375,20 @@ export type KilocodeGoalUpdateResponses = {
       runID: string
       sessionID: string
     }
+    dependencyWait?: {
+      runID: string
+      createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      intent: string
+      owner: string
+      messageID: string
+      callID: string
+      input: string
+      inputs: Array<string>
+      children: Array<{
+        id: string
+        sha256: string
+      }>
+    }
     selfHealAttempt?: string
     selfHealID?: string
     status: "active" | "paused" | "complete" | "blocked"
@@ -25138,6 +25166,20 @@ export type KilocodeGoalCreateResponses = {
       agentID: string
       runID: string
       sessionID: string
+    }
+    dependencyWait?: {
+      runID: string
+      createdAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      intent: string
+      owner: string
+      messageID: string
+      callID: string
+      input: string
+      inputs: Array<string>
+      children: Array<{
+        id: string
+        sha256: string
+      }>
     }
     selfHealAttempt?: string
     selfHealID?: string

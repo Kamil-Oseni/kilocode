@@ -85,7 +85,7 @@ it.live(
           Effect.gen(function* () {
             const sessions = yield* Session.Service
             const request = restricted
-              ? "Read the supplied report. Use saved local models, no cloud, no standing changes, no budget/deadline keys."
+              ? "Read the supplied report. No cloud Task, outreach sends or configuration changes."
               : "Read the supplied report."
             const root = yield* sessions.create({
               metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "task" },
@@ -191,11 +191,24 @@ it.live(
               expect(calls.count).toBe(0)
               expect(yield* sessions.children(root.id)).toEqual([])
               expect(yield* (yield* BackgroundJob.Service).list()).toEqual([])
-              for (const text of [
-                "Explain the phrase 'No cloud workers.'",
-                "Do not require no cloud workers.",
-                "```\nNo cloud workers.\n```\nRead the report.",
-              ]) {
+              for (const [text, blocked] of [
+                ["No cloud Tasks.", true],
+                ["No cloud agents.", true],
+                ["Use saved local models, no cloud, no standing changes.", true],
+                ["Local-only Task.", true],
+                ["Use local workers only.", true],
+                ["Use only saved local models.", true],
+                ["Only use local models.", true],
+                ["Use local inference exclusively.", true],
+                ["Run only locally.", true],
+                ["Explain the phrase 'No cloud workers.'", false],
+                ["Do not require no cloud workers.", false],
+                ["```\nNo cloud workers.\n```\nRead the report.", false],
+                ["Explain the phrase 'No cloud Task.'", false],
+                ["Do not require local-only models.", false],
+                ["Use local models only if convenient.", false],
+                ["```\nNo cloud Task.\n```\nRead the report.", false],
+              ] as const) {
                 const userpart = (yield* sessions.messages({ sessionID: root.id })).find(
                   (row) => row.info.id === user.id,
                 )?.parts[0]
@@ -206,7 +219,7 @@ it.live(
                   metadata: { [RayaChief.requestKey]: text, [RayaChief.phaseKey]: "task" },
                 })
                 expect(
-                  Exit.isSuccess(
+                  Exit.isFailure(
                     yield* Effect.exit(
                       TaskLocal.check({
                         sessions,
@@ -218,7 +231,7 @@ it.live(
                       }),
                     ),
                   ),
-                ).toBe(true)
+                ).toBe(blocked)
               }
             }
             if (local || !restricted) {

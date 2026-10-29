@@ -13,7 +13,13 @@ function restricted(request: string | undefined) {
       ?.replace(/(```|~~~)[\s\S]*?\1/g, "")
       .replace(/^\s*>.*$/gm, "")
       .replace(/"[^"\r\n]*"|`[^`\r\n]*`|'[^'\r\n]*'|“[^”\r\n]*”|‘[^’\r\n]*’/g, "") ?? ""
-  return /(?:^|[\n.!?;,])\s*no\s+cloud(?:\s+(?:workers?|models?|providers?))?(?=\s*(?:[.!?;,:]|$))/i.test(text)
+  return [
+    /(?:^|[\n.!?;,])\s*no\s+cloud(?:\s+(?:workers?|models?|providers?|tasks?|agents?|inference))?(?=\s*(?:[.!?;,:]|$))/i,
+    /(?:^|[\n.!?;,])\s*(?:use\s+)?local(?:-|\s+)only(?:\s+(?:workers?|models?|providers?|tasks?|agents?|inference))?(?=\s*(?:[.!?;,:]|$))/i,
+    /(?:^|[\n.!?;,])\s*(?:use\s+)?(?:saved\s+)?local\s+(?:workers?|models?|providers?|tasks?|agents?|inference)\s+(?:only|exclusively)(?=\s*(?:[.!?;,:]|$))/i,
+    /(?:^|[\n.!?;,])\s*(?:use\s+(?:only|exclusively)|(?:only|exclusively)\s+use)\s+(?:saved\s+)?local\s+(?:workers?|models?|providers?|tasks?|agents?|inference)(?=\s*(?:[.!?;,:]|$))/i,
+    /(?:^|[\n.!?;,])\s*(?:run|work)\s+(?:locally\s+only|only\s+locally)(?=\s*(?:[.!?;,:]|$))/i,
+  ].some((pattern) => pattern.test(text))
 }
 
 /** Enforce an explicit current root Auto restriction before any Task child is produced. */

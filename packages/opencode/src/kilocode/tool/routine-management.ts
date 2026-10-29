@@ -260,7 +260,7 @@ const DelegateWork = Schema.Struct({
 const AssignOrganizationWork = Schema.Struct({
   contract: Schema.optional(Proposal).annotate({
     description:
-      "Optional immutable stage tree for this new job. Freeze every stage's exact outputs, criteria, objective and required onward stages. Host owner capture and existing permissions still apply. Never supply origin or capture credentials.",
+      "Include this immutable stage tree when the owner requests a version1 or frozen stage contract. Omit only for genuinely uncontracted work. Freeze every stage's exact outputs, criteria, objective and required onward stages. Host owner capture and existing permissions still apply. Never supply origin or capture credentials.",
   }),
   organizationID: Organization.fields.id,
   expectedRevision: Organization.fields.revision.annotate({

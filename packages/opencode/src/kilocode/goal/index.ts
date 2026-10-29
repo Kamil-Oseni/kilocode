@@ -35,6 +35,7 @@ import { ChiefBranches } from "@/kilocode/chief/branches"
 import { record as routine } from "@/kilocode/task/continuation"
 import { facts } from "./read-artifact"
 import * as RoutineEvidence from "./routine-evidence"
+import * as RoutineWait from "./routine-wait"
 
 const log = Log.create({ service: "raya-goal-retention" })
 
@@ -387,11 +388,25 @@ export namespace RayaGoal {
       const now = Date.now()
       const hit = exhausted(state, now, usage.total)
       const pause = state.status === "active" && hit !== undefined
-      const resume =
-        state.pause !== "user-control" &&
+      const waiting =
+        before &&
+        runID === state.routine?.runID &&
         state.status === "paused" &&
-        state.budgetHit?.kind === "model-cost" &&
+        state.pause === "agent" &&
+        !state.budgetHit &&
+        !state.review &&
+        !state.replyRecovery &&
         hit === undefined
+          ? yield* RoutineWait.observe({ ...deps, goal: state, wake: true }).pipe(
+              Effect.mapError((err) => new AuditError({ message: String(err) })),
+            )
+          : undefined
+      const resume =
+        !!waiting ||
+        (state.pause !== "user-control" &&
+          state.status === "paused" &&
+          state.budgetHit?.kind === "model-cost" &&
+          hit === undefined)
       if (!pause && !resume && state.usage.delegatedCost === usage.delegated) return { state, resumed: false }
       if (state.status === "complete" || state.status === "blocked") return { state, resumed: false }
       const next = yield* save(
@@ -399,6 +414,9 @@ export namespace RayaGoal {
         {
           ...state,
           status: pause ? "paused" : resume ? "active" : state.status,
+          pause: waiting ? undefined : state.pause,
+          dependencyWait: waiting ? undefined : state.dependencyWait,
+          blockedReason: waiting ? undefined : state.blockedReason,
           budgetHit: pause ? hit : resume ? undefined : state.budgetHit,
           activeMs: pause ? elapsed(state, now) : state.activeMs,
           activeAt: pause ? undefined : resume ? now : state.activeAt,
@@ -411,12 +429,21 @@ export namespace RayaGoal {
                   kind: "status",
                   message: pause
                     ? `Paused: ${budgetReason(hit!)}`
-                    : "Delegated work settled below the saved model-cost limit. Goal resumed.",
+                    : waiting
+                      ? "The original child reply arrived. Goal resumed to inspect its evidence."
+                      : "Delegated work settled below the saved model-cost limit. Goal resumed.",
                 })
               : state.progress,
         },
         state,
-        resume ? before : undefined,
+        resume && before
+          ? (next) =>
+              Effect.gen(function* () {
+                if (waiting)
+                  yield* waiting.check.pipe(Effect.mapError((err) => new AuditError({ message: String(err) })))
+                return yield* before(next)
+              })
+          : undefined,
       )
       return { state: next, resumed: resume }
     })
@@ -635,6 +662,7 @@ export namespace RayaGoal {
         ...state,
         status,
         pause: status === "paused" ? "user-control" : undefined,
+        dependencyWait: undefined,
         review: status === "active" ? undefined : state.review,
         intent: crypto.randomUUID(),
         blockedReason: status === "active" ? undefined : state.blockedReason,
@@ -1236,6 +1264,7 @@ export namespace RayaGoal {
       sessionID: SessionID,
       input: ModelUpdate,
       expected?: string,
+      origin?: { messageID: MessageID; callID: string },
     ) {
       const state = yield* requireGoal(sessionID)
       if (
@@ -1267,6 +1296,7 @@ export namespace RayaGoal {
           ...state,
           status: "active",
           review: undefined,
+          dependencyWait: undefined,
           intent: crypto.randomUUID(),
           usage: { ...state.usage, retries: 0 },
           blockedReason: undefined,
@@ -1286,10 +1316,47 @@ export namespace RayaGoal {
         }
         const reason = clean(input.reason ?? "")
         if (!reason) return yield* new AuditError({ message: "A blocked goal requires a plain reason." })
+        const waiting =
+          origin &&
+          state.status === "active" &&
+          !state.pause &&
+          !state.budgetHit &&
+          !state.review &&
+          !state.replyRecovery
+            ? yield* RoutineWait.observe({ ...deps, goal: state, origin }).pipe(
+                Effect.mapError((err) => new AuditError({ message: String(err) })),
+              )
+            : undefined
+        if (waiting)
+          return yield* save(
+            sessionID,
+            {
+              ...state,
+              status: "paused",
+              pause: "agent",
+              dependencyWait: waiting.marker,
+              blockedReason: reason,
+              updatedAt: now,
+              activeMs: elapsed(state, now),
+              activeAt: undefined,
+              progress: progress(state, {
+                at: now,
+                kind: "status",
+                message: "Waiting for the original delegated child reply.",
+              }),
+            },
+            state,
+            (next) =>
+              waiting.check.pipe(
+                Effect.mapError((err) => new AuditError({ message: String(err) })),
+                Effect.as(next.revision!),
+              ),
+          )
         const wasActive = state.status === "active"
         const next = yield* save(sessionID, {
           ...state,
           status: "blocked",
+          dependencyWait: undefined,
           blockedReason: reason,
           updatedAt: now,
           activeMs: wasActive ? elapsed(state, now) : state.activeMs,
@@ -1315,6 +1382,7 @@ export namespace RayaGoal {
         return yield* save(sessionID, {
           ...state,
           status: "paused",
+          dependencyWait: undefined,
           pause: "agent",
           intent: crypto.randomUUID(),
           updatedAt: now,

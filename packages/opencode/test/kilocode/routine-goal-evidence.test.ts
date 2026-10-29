@@ -2,7 +2,10 @@ import { expect } from "bun:test"
 import path from "node:path"
 import { Effect, Exit } from "effect"
 import { eq } from "drizzle-orm"
-import { RayaRoutineDelegationTable as Delegation } from "@opencode-ai/core/kilocode/routine.sql"
+import {
+  RayaRoutineDelegationTable as Delegation,
+  RayaRoutineMessageTable as Inbox,
+} from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
@@ -28,6 +31,7 @@ import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Artifact from "@/kilocode/goal/artifact"
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
 import { ownerContext } from "@/kilocode/task/request"
+import * as RoutineWait from "@/kilocode/goal/routine-wait"
 import { RayaChief } from "@/kilocode/chief"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
@@ -484,6 +488,44 @@ it.live(
         const assigned = yield* handoff(root, builder, [files[0]], files.slice(1), "research-handoff")
         yield* tasks.transition(held, { ...held, status: "complete" })
         const child = yield* open(builder, assigned, researcher)
+        const blocked = { status: "blocked" as const, reason: "Awaiting Builder" }
+        const part = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: root.session.id,
+          messageID: root.assistant.id,
+          type: "tool",
+          tool: "update_goal",
+          callID: "wait-for-builder",
+          state: { status: "running", input: blocked, time: { start: Date.now() } },
+        })
+        const waiting = yield* goals.update(root.session.id, blocked, undefined, {
+          messageID: root.assistant.id,
+          callID: "wait-for-builder",
+        })
+        expect(waiting.status).toBe("paused")
+        expect(waiting.pause).toBe("agent")
+        expect((yield* errands.get(seed.record.id)).state).toBe("running")
+        yield* sessions.updatePart({
+          ...part,
+          type: "tool",
+          tool: "update_goal",
+          callID: "wait-for-builder",
+          state: {
+            status: "completed",
+            input: blocked,
+            output: "Waiting for the original child",
+            title: "Waiting",
+            metadata: { status: "paused" },
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        expect(yield* RoutineWait.parked(storage, root.session.id, root.user.id)).toBe(true)
+        yield* goals.control(root.session.id, "paused")
+        expect(
+          (yield* goals.delegated(root.session.id, root.run.id, (next) => Effect.succeed(next.revision!))).resumed,
+        ).toBe(false)
+        expect((yield* goals.get(root.session.id))?.pause).toBe("user-control")
+        yield* storage.replace(["raya", "goal", root.session.id], waiting)
         yield* write(child, files[1], "builder-html")
         yield* write(child, files[2], "builder-brief")
         const privatefile = path.join(directory, "private-source.txt")
@@ -508,6 +550,27 @@ it.live(
         })
         const onward = yield* handoff(child, sales, files.slice(1), [], "builder-sales-handoff")
         expect(onward.artifacts).toHaveLength(2)
+        const continuation = yield* sessions.updateMessage({
+          ...child.user,
+          id: MessageID.ascending(),
+          time: { created: Date.now() },
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: child.session.id,
+          messageID: continuation.id,
+          type: "text",
+          synthetic: true,
+          text: "Continue the same accepted assignment.",
+        })
+        yield* goals.follow(child.session.id, child.goal.intent!, continuation.id, "actual-child-continuation")
+        child.assistant = yield* sessions.updateMessage({
+          ...child.assistant,
+          id: MessageID.ascending(),
+          parentID: continuation.id,
+          time: { created: Date.now() },
+        })
+        expect((yield* goals.get(child.session.id))?.inputs).toHaveLength(2)
         yield* goals.update(child.session.id, {
           status: "complete",
           summary: "Actual child handoff",
@@ -538,12 +601,64 @@ it.live(
         if (!complete) throw new Error("Child Goal disappeared")
         const result = final(child.run, complete, yield* sessions.messages({ sessionID: child.session.id }))
         if (!result) throw new Error("Actual final reply was not bound")
+        const childhistory = yield* storage.read<unknown>(["raya", "agent-runs", builder.id])
+        const running = yield* database.db.select().from(Delegation).where(eq(Delegation.id, assigned.id)).get()
+        if (!running) throw new Error("Original child delegation disappeared")
+        const terminal = (yield* tasks.runsFor(builder.id)).find((run) => run.id === child.run.id)
+        if (!terminal) throw new Error("Original child run disappeared")
+        const failure = "The original Builder could not finish its accepted assignment."
+        expect(
+          yield* tasks.transition(terminal, {
+            ...terminal,
+            status: "error",
+            blockedReason: failure,
+            outcome: { kind: "code", summary: failure, cost: 0 },
+          }),
+        ).toBe(true)
+        yield* errands.finish(assigned.id, "failed", builder, failure, 0, failure)
+        const failed = yield* goals.delegated(root.session.id, root.run.id, (next) => Effect.succeed(next.revision!))
+        expect(failed.resumed).toBe(true)
+        expect(failed.state.status).toBe("active")
+        expect((yield* goals.evidence(root.session.id)).some((item) => item.callID === "builder-sales-handoff")).toBe(
+          false,
+        )
+        yield* storage.replace(["raya", "goal", root.session.id], waiting)
+        yield* storage.replace(["raya", "agent-runs", builder.id], childhistory)
+        yield* database.db.update(Delegation).set(running).where(eq(Delegation.id, assigned.id)).run()
+        yield* database.db
+          .delete(Inbox)
+          .where(eq(Inbox.source, `reply:${running.source}`))
+          .run()
         yield* tasks.transition(
           child.run,
           { ...child.run, status: "complete", outcome: { kind: "code", summary, report: result.report, cost: 0 } },
           complete,
         )
         yield* errands.finish(assigned.id, "completed", builder, summary, 0)
+        const parenthistory = yield* storage.read<unknown>(["raya", "agent-runs", researcher.id])
+        yield* tasks.transition(root.run, {
+          ...root.run,
+          status: "stopped",
+          stop: { version: 1, intent: crypto.randomUUID(), at: Date.now() },
+        })
+        expect(
+          Exit.isFailure(
+            yield* goals
+              .delegated(root.session.id, root.run.id, (next) => Effect.succeed(next.revision!))
+              .pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect((yield* goals.get(root.session.id))?.status).toBe("paused")
+        yield* storage.replace(["raya", "agent-runs", researcher.id], parenthistory)
+        const retained = yield* goals.get(root.session.id)
+        yield* storage.replace(["raya", "goal", root.session.id], { ...retained, dependencyWait: undefined })
+        expect(
+          (yield* goals.delegated(root.session.id, root.run.id, (next) => Effect.succeed(next.revision!))).resumed,
+        ).toBe(false)
+        yield* storage.replace(["raya", "goal", root.session.id], retained)
+        const awakened = yield* goals.delegated(root.session.id, root.run.id, (next) => Effect.succeed(next.revision!))
+        expect(awakened.resumed).toBe(true)
+        expect(awakened.state.status).toBe("active")
         const before = yield* goals.get(root.session.id)
         yield* goals.update(root.session.id, { status: "paused", reason: "Waiting for Builder" })
         yield* goals.update(root.session.id, { status: "active" })

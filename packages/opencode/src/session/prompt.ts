@@ -36,6 +36,7 @@ import { RayaChief } from "@/kilocode/chief" // kilocode_change // raya_change -
 import { ResultContract } from "@/kilocode/chief/result-contract" // kilocode_change - private background result publication
 import { assigned, inspected, instruction as assignmentInstruction } from "@/kilocode/task/turn" // kilocode_change - inspect saved workers before assignment and acknowledge without repeating it
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal" // kilocode_change - irreducible original owner refusal cannot become model progress
+import * as RoutineWait from "@/kilocode/goal/routine-wait" // kilocode_change - park authenticated child waits before compaction or another model step
 import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/conversation" // kilocode_change - original greeting needs no workflow tools
 import { settled as recalled, acknowledged, acknowledgement, refused } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
 import { instruction as decline } from "@/kilocode/second-brain/refusal" // kilocode_change - bounded local command repair or clarification only
@@ -1694,6 +1695,7 @@ export const layer = Layer.effect(
         // kilocode_change end
         // kilocode_change start - carry local review command marker into LLM telemetry
         if (lastUser.agent === "auto" && (yield* AssignmentRefusal.finish(sessions, sessionID, lastUser.id))) break // kilocode_change - publish only the authenticated pre-admission refusal before model retry
+        if (yield* RoutineWait.parked(storage, sessionID, lastUser.id)) break // kilocode_change - keep dependency waits ahead of compaction and another model call
         const telemetry =
           KiloSessionProcessor.extractReviewTelemetry(
             msgs.findLast((m) => m.info.role === "user" && m.info.id === lastUser.id)?.parts ?? [],
@@ -2202,6 +2204,7 @@ export const layer = Layer.effect(
             )
           )
             compactionAttempts = 0
+          if (yield* RoutineWait.parked(storage, sessionID, lastUser.id)) return "break" as const // kilocode_change - a newly saved dependency wait must not queue post-tool compaction
           if (result === "stop") {
             if (handle.message.error) closeReasons.set(sessionID, "error")
             return "break" as const

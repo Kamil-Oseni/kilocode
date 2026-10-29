@@ -343,6 +343,22 @@ export namespace Codec {
     startAfter: Schema.optional(MessageID), // reserve initial intake without changing the original checkpoint
     startSnapshot: Schema.optional(Schema.String), // raya_change - restore edits made by child sessions and missing patch parts
     routine: Schema.optional(Schema.Struct({ agentID: Schema.String, runID: Schema.String, sessionID: SessionID })),
+    dependencyWait: Schema.optional(
+      Schema.Struct({
+        runID: Schema.String,
+        createdAt: Schema.Number,
+        intent: Schema.String,
+        owner: Schema.String,
+        messageID: MessageID,
+        callID: Schema.String,
+        input: Schema.String,
+        inputs: Schema.Array(MessageID),
+        children: Schema.Array(Schema.Struct({ id: Schema.String, sha256: Schema.String })).check(
+          Schema.isMinLength(1),
+          Schema.isMaxLength(4),
+        ),
+      }),
+    ),
     selfHealAttempt: Schema.optional(Schema.String), // server-derived durable repair owner
     selfHealID: Schema.optional(Schema.String), // raya_change - link an isolated repair session to the global backlog
     status: Status,

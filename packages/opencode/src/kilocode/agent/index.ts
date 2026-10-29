@@ -68,7 +68,9 @@ function choices(prompt?: string) {
 }
 
 function walkthrough(prompt: string) {
-  return `${prompt}\n\n${direct}\n\n${DELEGATION_GUIDANCE}\n\n${BROWSER_GUIDANCE}\n\n${BROWSER_TEST_GUIDANCE}\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${design}`
+  const assigned =
+    "You are already the assigned specialist. Perform this stage's research, implementation, and declared outputs yourself within inherited permissions. Delegate only separately authorized distinct work or the next stage after its real prerequisites exist; preserve the assigned stage's ownership. For delegate_work, a child that must write files needs its exact declared outputs and child-specific acceptance criteria; outputs: [] is read-only. Hand off only actual eligible file artifacts, then verify the real child result required by this stage. Never replace your own assigned outputs with delegation or repeat an accepted handoff merely because its child is still working."
+  return `${prompt}\n\n${direct}\n\n${assigned}\n\n${BROWSER_GUIDANCE}\n\n${BROWSER_TEST_GUIDANCE}\n\n${CANVAS_GUIDANCE}\n\n${DESIGN_GUIDANCE}\n\n${design}`
 }
 
 export function designerPrompt() {

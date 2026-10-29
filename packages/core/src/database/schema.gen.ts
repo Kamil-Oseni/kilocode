@@ -310,6 +310,9 @@ export default {
           \`expected\` text,
           \`criteria\` text,
           \`outputs\` text,
+          \`contract_id\` text,
+          \`contract_sha256\` text,
+          \`stage_id\` text,
           \`context\` text,
           \`deadline\` integer,
           \`budget\` integer,
@@ -323,6 +326,23 @@ export default {
           \`reason\` text,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
+        );
+      `)
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(`
+        CREATE TABLE \`raya_routine_job_contract\` (
+          \`id\` text PRIMARY KEY,
+          \`version\` integer NOT NULL,
+          \`root_id\` text NOT NULL,
+          \`root_source\` text NOT NULL,
+          \`organization_id\` text NOT NULL,
+          \`organization_revision\` integer NOT NULL,
+          \`origin\` text NOT NULL,
+          \`context\` text,
+          \`proposal\` text NOT NULL,
+          \`sha256\` text NOT NULL,
+          \`time_created\` integer NOT NULL
         );
       `)
       // kilocode_change end
@@ -796,6 +816,21 @@ export default {
       // kilocode_change start
       yield* tx.run(
         `CREATE INDEX \`raya_routine_delegation_organization\` ON \`raya_routine_delegation\` (\`organization_id\`,\`organization_revision\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_delegation_contract_stage\` ON \`raya_routine_delegation\` (\`contract_id\`,\`stage_id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_job_contract_root\` ON \`raya_routine_job_contract\` (\`root_id\`);`,
+      )
+      // kilocode_change end
+      // kilocode_change start
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`raya_routine_job_contract_source\` ON \`raya_routine_job_contract\` (\`root_source\`);`,
       )
       // kilocode_change end
       // kilocode_change start

@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "27aabf41-c9c3-432a-9dc1-efac9cd8ba30",
+  "id": "675499c6-c2d4-4697-8761-7beac87d0d5a",
   "prevIds": [
-    "2a4589b4-c5a9-49e3-aef2-c3a8a4282ad2"
+    "27aabf41-c9c3-432a-9dc1-efac9cd8ba30"
   ],
   "ddl": [
     {
@@ -88,6 +88,10 @@
     },
     {
       "name": "raya_routine_delegation",
+      "entityType": "tables"
+    },
+    {
+      "name": "raya_routine_job_contract",
       "entityType": "tables"
     },
     {
@@ -1840,6 +1844,36 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
+      "name": "contract_id",
+      "entityType": "columns",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "contract_sha256",
+      "entityType": "columns",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "stage_id",
+      "entityType": "columns",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
       "name": "context",
       "entityType": "columns",
       "table": "raya_routine_delegation"
@@ -1963,6 +1997,116 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "raya_routine_delegation"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "version",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "root_id",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "root_source",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "organization_revision",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "origin",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "context",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "proposal",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sha256",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "raya_routine_job_contract"
     },
     {
       "type": "text",
@@ -4703,6 +4847,15 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "raya_routine_job_contract_pk",
+      "table": "raya_routine_job_contract",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "raya_routine_message_pk",
       "table": "raya_routine_message",
       "entityType": "pks"
@@ -5377,6 +5530,52 @@
       "name": "raya_routine_delegation_organization",
       "entityType": "indexes",
       "table": "raya_routine_delegation"
+    },
+    {
+      "columns": [
+        {
+          "value": "contract_id",
+          "isExpression": false
+        },
+        {
+          "value": "stage_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_delegation_contract_stage",
+      "entityType": "indexes",
+      "table": "raya_routine_delegation"
+    },
+    {
+      "columns": [
+        {
+          "value": "root_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_job_contract_root",
+      "entityType": "indexes",
+      "table": "raya_routine_job_contract"
+    },
+    {
+      "columns": [
+        {
+          "value": "root_source",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "raya_routine_job_contract_source",
+      "entityType": "indexes",
+      "table": "raya_routine_job_contract"
     },
     {
       "columns": [

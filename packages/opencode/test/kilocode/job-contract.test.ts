@@ -3,6 +3,8 @@ import { Effect } from "effect"
 import path from "node:path"
 import { canonical, decode as parse, fingerprint, same } from "@/kilocode/task/job-contract"
 import { MessageID, PartID, SessionID } from "@/session/schema"
+import { stage } from "@/kilocode/task/job-contract-store"
+import type { Receipt } from "@/kilocode/task/job-contract"
 
 const proposal = () => ({
   version: 1,
@@ -191,4 +193,47 @@ test("fingerprints ignore set ordering but preserve the actual requirements", ()
     }),
   )
   expect(fingerprint(value)).not.toBe(fingerprint({ ...value, organizationRevision: 2 }))
+})
+
+test("compiled stage context preserves owner constraints without inheriting another stage's instructions", () => {
+  // Data-only compilation does not admit a job or establish native origin authority.
+  const value: Receipt = {
+    version: 1,
+    id: `rjc_${"a".repeat(48)}`,
+    rootID: `rdl_${"b".repeat(48)}`,
+    rootSource: "compilation-only",
+    organizationID: `org_${"c".repeat(32)}`,
+    organizationRevision: 1,
+    origin: {
+      sessionID: SessionID.make("ses_owner"),
+      userID: MessageID.make("msg_user"),
+      messageID: MessageID.make("msg_assistant"),
+      partID: PartID.make("prt_assignment"),
+      callID: "assignment",
+      userSHA256: "d".repeat(64),
+      toolSHA256: "e".repeat(64),
+      goal: null,
+      directory: process.cwd(),
+    },
+    context: "Keep all outreach UNSENT.",
+    proposal: decode(proposal()),
+    sha256: "f".repeat(64),
+  }
+  const job = {
+    ...value,
+    proposal: {
+      ...value.proposal,
+      stages: value.proposal.stages.map((item) => ({ ...item, context: `Only ${item.id} stage instructions.` })),
+    },
+  }
+  const sales = Effect.runSync(stage(job, "sales"))
+  expect(sales.context).toContain("Keep all outreach UNSENT.")
+  expect(sales.context).toContain("Only sales stage instructions.")
+  expect(sales.context).not.toContain("Only builder stage instructions.")
+  expect(sales.context).toStartWith("Raya owner output directory: ")
+  expect(() => Effect.runSync(stage({ ...job, context: "x".repeat(4000) }, "sales"))).toThrow()
+  expect(() =>
+    Effect.runSync(stage({ ...job, origin: { ...job.origin, directory: path.resolve("elsewhere") } }, "sales")),
+  ).toThrow()
+  expect(() => Effect.runSync(stage(job, "undeclared"))).toThrow()
 })

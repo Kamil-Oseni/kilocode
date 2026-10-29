@@ -99,6 +99,27 @@ export const RayaRoutineAttachmentTable = sqliteTable(
   (table) => [index("raya_routine_attachment_owner").on(table.agent_id, table.message_id, table.time_created)],
 )
 
+export const RayaRoutineJobContractTable = sqliteTable(
+  "raya_routine_job_contract",
+  {
+    id: text().primaryKey(),
+    version: integer().notNull(),
+    root_id: text().notNull(),
+    root_source: text().notNull(),
+    organization_id: text().notNull(),
+    organization_revision: integer().notNull(),
+    origin: text().notNull(),
+    context: text(),
+    proposal: text().notNull(),
+    sha256: text().notNull(),
+    time_created: integer().notNull(),
+  },
+  (table) => [
+    uniqueIndex("raya_routine_job_contract_root").on(table.root_id),
+    uniqueIndex("raya_routine_job_contract_source").on(table.root_source),
+  ],
+)
+
 export const RayaRoutineDelegationTable = sqliteTable(
   "raya_routine_delegation",
   {
@@ -116,6 +137,9 @@ export const RayaRoutineDelegationTable = sqliteTable(
     expected: text(),
     criteria: text(),
     outputs: text(),
+    contract_id: text(),
+    contract_sha256: text(),
+    stage_id: text(),
     context: text(),
     deadline: integer(),
     budget: integer(),
@@ -138,6 +162,7 @@ export const RayaRoutineDelegationTable = sqliteTable(
     index("raya_routine_delegation_parent").on(table.parent_id),
     index("raya_routine_delegation_run").on(table.parent_run_id),
     index("raya_routine_delegation_organization").on(table.organization_id, table.organization_revision),
+    uniqueIndex("raya_routine_delegation_contract_stage").on(table.contract_id, table.stage_id),
   ],
 )
 

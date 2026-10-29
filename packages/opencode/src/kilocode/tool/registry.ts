@@ -171,7 +171,8 @@ export namespace KiloToolRegistry {
         : undefined
       // raya_change end
       // raya_change start - Milestone A model-facing goal tools
-      const goalState = goalDeps ? RayaGoal.make(goalDeps) : undefined
+      const database = goalDeps ? yield* Database.Service : undefined
+      const goalState = goalDeps ? RayaGoal.make({ ...goalDeps, database }) : undefined
       const goals = goalState && goalDeps ? goalTools(goalState, goalDeps.sessions, goalDeps.runs) : undefined
       const goalCreate = goals ? yield* goals.create : undefined
       const goalGet = goals ? yield* goals.get : undefined
@@ -213,16 +214,16 @@ export namespace KiloToolRegistry {
       const healRefine = heal ? yield* heal.refine : undefined
       const healVerify = goalState && goalDeps ? yield* selfHealVerify(goalState, goalDeps.storage) : undefined
       const goal = { goalCreate, goalGet, goalUpdate, goalPlan, healRefine, healVerify, ...branches }
-      const routines = goalDeps
-        ? yield* Effect.gen(function* () {
-            const database = yield* Database.Service
-            const pty = yield* PtyArchive.Service
-            return {
-              scheduleTask: yield* scheduleTaskTool({ ...goalDeps, database }),
-              ...(yield* Effect.all(routineManagementTools({ ...goalDeps, database, pty }))),
-            }
-          })
-        : undefined
+      const routines =
+        goalDeps && database
+          ? yield* Effect.gen(function* () {
+              const pty = yield* PtyArchive.Service
+              return {
+                scheduleTask: yield* scheduleTaskTool({ ...goalDeps, database }),
+                ...(yield* Effect.all(routineManagementTools({ ...goalDeps, database, pty }))),
+              }
+            })
+          : undefined
       const personalTodo = goalDeps ? yield* personalTodoTool(goalDeps) : undefined
       // raya_change end
       if (!notebook)

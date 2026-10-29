@@ -33,6 +33,7 @@ import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
 import { ownerContext } from "@/kilocode/task/request"
 import * as RoutineWait from "@/kilocode/goal/routine-wait"
 import { RayaChief } from "@/kilocode/chief"
+import { ToolRegistry } from "@/tool/registry"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -51,6 +52,7 @@ const it = testEffect(
       Database.node,
       FSUtil.node,
       CrossSpawnSpawner.node,
+      ToolRegistry.node,
     ]),
     [
       [Database.node, database],
@@ -498,10 +500,14 @@ it.live(
           callID: "wait-for-builder",
           state: { status: "running", input: blocked, time: { start: Date.now() } },
         })
-        const waiting = yield* goals.update(root.session.id, blocked, undefined, {
-          messageID: root.assistant.id,
-          callID: "wait-for-builder",
-        })
+        const catalog = yield* (yield* ToolRegistry.Service).all()
+        const update = catalog.find((tool) => tool.id === "update_goal")
+        const get = catalog.find((tool) => tool.id === "get_goal")
+        if (!update || !get) throw new Error("Production model-facing Goal tools are unavailable")
+        const output = yield* update.execute(blocked, root.ctx("wait-for-builder"))
+        const waiting = yield* goals.get(root.session.id)
+        if (!waiting) throw new Error("Model-facing Goal update removed the Goal")
+        expect(output.metadata.status).toBe("paused")
         expect(waiting.status).toBe("paused")
         expect(waiting.pause).toBe("agent")
         expect((yield* errands.get(seed.record.id)).state).toBe("running")
@@ -659,6 +665,8 @@ it.live(
         const awakened = yield* goals.delegated(root.session.id, root.run.id, (next) => Effect.succeed(next.revision!))
         expect(awakened.resumed).toBe(true)
         expect(awakened.state.status).toBe("active")
+        const observed = yield* get.execute({}, root.ctx("observe-real-child"))
+        expect(observed.output).toContain("builder-sales-handoff")
         const before = yield* goals.get(root.session.id)
         yield* goals.update(root.session.id, { status: "paused", reason: "Waiting for Builder" })
         yield* goals.update(root.session.id, { status: "active" })

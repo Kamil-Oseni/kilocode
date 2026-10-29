@@ -24,6 +24,7 @@ import { outstanding } from "./stop-jobs"
 import { settle } from "./owned-jobs"
 import * as Artifact from "./artifact"
 import { equality } from "./byte-equality"
+import { verify as content } from "./file-content"
 import { inspection } from "@opencode-ai/core/kilocode/evidence-inspection"
 import { digest } from "@opencode-ai/core/kilocode/evidence-digest"
 import * as Accounting from "./accounting"
@@ -1495,6 +1496,7 @@ export namespace RayaGoal {
             message: `Routine contract stage ${scope.contract.stage} still requires completed successor stages: ${scope.contract.missing.join(", ")}. Use the original contracted child stages and their actual completed native results; an accepted, running, failed or missing child is not completion.`,
           })
         const audit = yield* validateForSession(
+          sessionID,
           submitted,
           scope.messages,
           state.createdAt,
@@ -1624,6 +1626,7 @@ export namespace RayaGoal {
     })
 
     const validateForSession = Effect.fn("RayaGoal.validateAuditForSession")(function* (
+      sessionID: SessionID,
       audit: NonNullable<ModelUpdate["audit"]>,
       messages: SessionV1.WithParts[],
       createdAt: number,
@@ -1806,6 +1809,13 @@ export namespace RayaGoal {
         if (check?.kind === "byte-equality" && !(yield* equality(check, cited)))
           return yield* new AuditError({
             message: `Criterion ${requirement.criterionID} requires current source and target read evidence with exactly the saved original SHA-256 and byte count. Cite both successful Read callIDs together in this criterion's evidence array; citing the source only under a different criterion does not satisfy this check. Read get_goal for eligible callIDs, then correct this same criterion without changing its saved check.`,
+          })
+        if (
+          check?.kind === "file-content" &&
+          !(yield* content(check, cited.filter((part) => part.sessionID === sessionID)))
+        )
+          return yield* new AuditError({
+            message: `Criterion ${requirement.criterionID} requires a current full Read of ${JSON.stringify(check.path)} containing every saved exact literal. The checked file must fit within 8192 UTF-8 bytes. Cite that successful Read callID in this criterion's evidence array. Missing text, partial reads and stale or unavailable content cannot pass. Correct only permitted work, read the final file again, then retry this same criterion without changing its saved check.`,
           })
         verified.push({ ...requirement, evidence: proof })
       }

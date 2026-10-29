@@ -100,7 +100,9 @@ it.live(
         const delegate = catalog.find((tool) => tool.id === "delegate_work")
         const update = catalog.find((tool) => tool.id === "update_goal")
         const read = catalog.find((tool) => tool.id === "read")
-        if (!assign || !delegate || !update || !read) throw new Error("Actual native registry tools unavailable")
+        const write = catalog.find((tool) => tool.id === "write")
+        if (!assign || !delegate || !update || !read || !write)
+          throw new Error("Actual native registry tools unavailable")
         const source = path.join(directory, "source.txt")
         yield* fs.writeFileString(source, "Actual approved source; no child completion is implied.\n")
         const criteria = [
@@ -136,6 +138,7 @@ it.live(
           ask: () => Effect.void,
         })
         for (const mode of ["failed", "completed"]) {
+          const output = path.join(directory, `${mode}-builder.md`)
           const workers: RayaTask.Agent[] = []
           for (const name of ["Dispatch", "Researcher", "Builder"])
             workers.push(
@@ -145,7 +148,7 @@ it.live(
                 objective: "Perform only the exact assigned stage",
                 dir: directory,
                 access: "full",
-                tools: ["read", "get_goal", "update_goal", "delegate_work", "inspect_team"],
+                tools: ["read", "write", "get_goal", "update_goal", "delegate_work", "inspect_team"],
                 enabled: true,
                 schedule: { kind: "manual" },
               }),
@@ -182,8 +185,18 @@ it.live(
                 id: "build",
                 recipientID: builder.id,
                 objective: "Read the approved source for the required child stage",
-                outputs: [],
-                criteria,
+                outputs: mode === "completed" ? [output] : [],
+                criteria:
+                  mode === "completed"
+                    ? [
+                        {
+                          id: "content",
+                          description: "The own final file contains the required literal",
+                          verification: "Cite a fresh complete native Read of the exact own output",
+                          check: { kind: "file-content", path: output, literals: ["Builder consumed research."] },
+                        },
+                      ]
+                    : criteria,
                 next: [],
               },
             ],
@@ -446,13 +459,13 @@ it.live(
           const ctx = (target: typeof root, callID: string) =>
             context(target.session.id, target.reply.id, "generalist", callID)
           yield* invoke(ctx(root, "root-read"), read, { filePath: source })
-          const complete = (callID: string) => ({
+          const complete = (callID: string, criterion = criteria[0]) => ({
             status: "complete",
             summary: "Actual source read verified",
             requirements: [
               {
-                criterionID: criteria[0].id,
-                requirement: criteria[0].description,
+                criterionID: criterion.id,
+                requirement: criterion.description,
                 passed: true,
                 evidence: [{ callID, summary: "Native Read returned the actual approved source" }],
               },
@@ -482,6 +495,14 @@ it.live(
           expect(assigned.outputs).toEqual(next.outputs)
           const child = yield* open(builder, assigned, researcher, reserved)
           expect(child.contract).toEqual({ ...reference, stageID: "build" })
+          expect(child.goal.criteria).toEqual(next.criteria)
+          const snapshot = yield* starts.get(child.run.id)
+          expect(snapshot.contract).toEqual(child.contract)
+          expect(snapshot.outputs).toEqual(next.outputs)
+          const stored = yield* database.db.select().from(Contracts).where(eq(Contracts.id, reference.id)).get()
+          if (!stored) throw new Error("Actual immutable contract missing")
+          const captured = yield* JobContract.decode(JSON.parse(stored.proposal))
+          expect(captured.stages.find((stage) => stage.id === next.id)?.criteria).toEqual(next.criteria)
           const leaf = yield* TaskSchema.prepare(
             "delegate_work",
             wire,
@@ -520,7 +541,37 @@ it.live(
             expect((yield* errands.get(assigned.id)).state).toBe("failed")
             continue
           }
-          const audited = yield* invoke(ctx(child, "complete-child"), update, complete("child-read"))
+          yield* invoke(ctx(child, "wrong-child-write"), write, {
+            filePath: output,
+            content: "Actual child output omits its required literal.\n",
+          })
+          yield* invoke(ctx(child, "wrong-child-read"), read, { filePath: output })
+          const literal = yield* invoke(
+            ctx(child, "missing-child-literal"),
+            update,
+            complete("wrong-child-read", next.criteria[0]),
+          )
+          expect(literal.title).toBe("Completion audit rejected")
+          expect((yield* goals.get(child.session.id))?.status).toBe("active")
+          expect((yield* goals.get(child.session.id))?.auditAttempt?.accepted).toBe(false)
+          yield* invoke(ctx(child, "correct-child-write"), write, {
+            filePath: output,
+            content: "Builder consumed research.\n",
+          })
+          const stale = yield* invoke(
+            ctx(child, "stale-child-read"),
+            update,
+            complete("wrong-child-read", next.criteria[0]),
+          )
+          expect(stale.title).toBe("Completion audit rejected")
+          expect((yield* goals.get(child.session.id))?.status).toBe("active")
+          expect((yield* goals.get(child.session.id))?.auditAttempt?.accepted).toBe(false)
+          yield* invoke(ctx(child, "fresh-child-read"), read, { filePath: output })
+          const audited = yield* invoke(
+            ctx(child, "complete-child"),
+            update,
+            complete("fresh-child-read", next.criteria[0]),
+          )
           expect(audited.metadata.status).toBe("complete")
           expect(audited.output).toContain("Summarize only this stage's actual completed findings")
           expect(audited.output).toContain("approved final-file bytes")
@@ -581,7 +632,7 @@ it.live(
         }
       }),
     ),
-  60000,
+  120000,
 )
 
 it.live(

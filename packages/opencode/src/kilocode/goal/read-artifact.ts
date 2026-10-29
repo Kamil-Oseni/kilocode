@@ -24,6 +24,7 @@ const Content = Schema.Struct({
   canonical: Schema.String.check(Schema.isMaxLength(4096)),
   bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(8192)),
   sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  text: Schema.optional(Schema.String.check(Schema.isMaxLength(8192))),
 })
 
 /** Bounded host-scanned facts, bound to the still-current captured file revision. */
@@ -178,6 +179,7 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
                 canonical: revision.canonical,
                 bytes: revision.bytes,
                 sha256: revision.sha256,
+                text,
               }
             : undefined,
         rayaReadFormat:

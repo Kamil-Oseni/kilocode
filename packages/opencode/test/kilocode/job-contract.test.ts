@@ -7,6 +7,7 @@ import { stage } from "@/kilocode/task/job-contract-store"
 import type { Receipt } from "@/kilocode/task/job-contract"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { record } from "@/kilocode/task/continuation"
+import { Criteria, GoalCriteria } from "@/kilocode/goal/criteria"
 
 const proposal = () => ({
   version: 1,
@@ -46,6 +47,42 @@ const proposal = () => ({
 })
 
 const decode = (value: unknown) => Effect.runSync(parse(value))
+
+test("file-content checks retain exact literals and require their own declared stage output", () => {
+  const job = proposal()
+  const check = { kind: "file-content" as const, path: job.stages[0].outputs[0], literals: ["Research step complete.", "é\r\n"] }
+  const criterion = { ...job.stages[0].criteria[0], check }
+  const checked = (value: unknown) => ({
+    ...job,
+    stages: job.stages.map((stage, index) =>
+      index === 0 ? { ...stage, criteria: [{ ...criterion, check: value }] } : stage,
+    ),
+  })
+  expect(Schema.decodeUnknownSync(Criteria)([criterion])[0].check).toEqual(check)
+  expect(Schema.decodeUnknownSync(GoalCriteria)([criterion])[0].check).toEqual(check)
+  expect(decode(checked(check)).stages[0].criteria[0].check).toEqual(check)
+  for (const value of [
+    { ...check, kind: "future-content" },
+    { ...check, unsupported: true },
+    { ...check, literals: [] },
+    { ...check, literals: [""] },
+    { ...check, literals: ["\ud800"] },
+    { ...check, literals: ["x".repeat(1025)] },
+    { ...check, literals: Array.from({ length: 9 }, () => "x") },
+    { ...check, literals: Array.from({ length: 8 }, () => "é".repeat(1024)) },
+  ]) {
+    expect(() => Schema.decodeUnknownSync(Criteria)([{ ...criterion, check: value }])).toThrow()
+    expect(() => Schema.decodeUnknownSync(GoalCriteria)([{ ...criterion, check: value }])).toThrow()
+    expect(() => decode(checked(value))).toThrow()
+  }
+  for (const file of [
+    job.stages[1].outputs[0],
+    path.resolve("approved-input.md"),
+    path.resolve("undeclared.md"),
+    `${path.dirname(check.path)}/unused/../${path.basename(check.path)}`,
+  ])
+    expect(() => decode(checked({ ...check, path: file }))).toThrow()
+})
 
 test("a declared job retains each stage's outputs and separate recipient criteria", () => {
   const job = decode(proposal())
@@ -195,6 +232,24 @@ test("fingerprints ignore set ordering but preserve the actual requirements", ()
     }),
   )
   expect(fingerprint(value)).not.toBe(fingerprint({ ...value, organizationRevision: 2 }))
+  const checked = (literal: string) =>
+    decode({
+      ...job,
+      stages: job.stages.map((stage, index) =>
+        index === 0
+          ? {
+              ...stage,
+              criteria: stage.criteria.map((criterion) => ({
+                ...criterion,
+                check: { kind: "file-content", path: stage.outputs[0], literals: [literal] },
+              })),
+            }
+          : stage,
+      ),
+    })
+  expect(fingerprint({ ...value, proposal: checked("Research step complete.") })).not.toBe(
+    fingerprint({ ...value, proposal: checked("Different required text.") }),
+  )
 })
 
 test("compiled stage context preserves owner constraints without inheriting another stage's instructions", () => {

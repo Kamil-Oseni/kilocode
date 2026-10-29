@@ -969,7 +969,10 @@ export namespace RayaTaskRunner {
           "Required output (deliver in this run's conversation):\n" + item.output.description,
           "Required acceptance criteria:\n" +
             item.output.criteria
-              .map((criterion) => `[${criterion.id}] ${criterion.description}\nVerification: ${criterion.verification}`)
+              .map(
+                (criterion) =>
+                  `[${criterion.id}] ${criterion.description}\nVerification: ${criterion.verification}${criterion.check ? `\nExact file-content check: ${JSON.stringify(criterion.check)}` : ""}`,
+              )
               .join("\n\n"),
           "Report evidence for each criterion by its ID in the update_goal completion audit: include exactly one requirement per saved criterion, set criterionID to its ID and preserve its description as the requirement text. Preserve any final-response format specified in the worker's objective after accepted completion; do not replace that response with a report about the audit. Do not claim completion when a required criterion is unmet or unverified. If verification requires a person's judgment, request that review. This output contract does not grant permission to send external messages or modify files.",
         )

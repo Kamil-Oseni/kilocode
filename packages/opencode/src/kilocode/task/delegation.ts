@@ -199,7 +199,10 @@ export function prompt(
     request.criteria
       ? [
           "Required acceptance criteria for this request only:",
-          ...request.criteria.map((item) => `[${item.id}] ${item.description}\nVerification: ${item.verification}`),
+          ...request.criteria.map(
+            (item) =>
+              `[${item.id}] ${item.description}\nVerification: ${item.verification}${item.check ? `\nExact file-content check: ${JSON.stringify(item.check)}` : ""}`,
+          ),
           "Complete the actual work, then use update_goal with one evidence-backed audited requirement per saved criterion. A written reply alone does not complete this request. Do not apply unrelated standing-job criteria.",
           "For each follow-on deliverable delegated to another worker, supply nonempty criteria scoped to that child's output and verification, plus any required exact input artifacts. A simple question may omit criteria. A queued assignment or a child's promise is not evidence of completed downstream work.",
           "Carry still-applicable owner constraints and required onward handoffs into the child's acceptance criteria; do not copy unrelated parent goals.",
@@ -508,6 +511,16 @@ export namespace RayaTaskDelegation {
               )
             })
       const value = { ...parsed, outputs }
+      if (
+        value.criteria?.some(
+          (item) =>
+            item.check &&
+            (!value.outputs ||
+              !Schema.is(Files.Outputs)([item.check.path]) ||
+              !Files.includes(value.outputs, item.check.path)),
+        )
+      )
+        return yield* new Invalid({ message: "File-content checks must name this worker's exact declared output files." })
       if (receipt) {
         const entry = yield* compile(receipt, receipt.proposal.entry).pipe(
           Effect.mapError((err) => new Invalid({ message: err.message })),

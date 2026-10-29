@@ -3,6 +3,8 @@ import path from "node:path"
 import { createHash } from "node:crypto"
 import { MessageV2 } from "@/session/message-v2"
 import type { Provider } from "@/provider/provider"
+import type { SessionV1 } from "@opencode-ai/core/v1/session"
+import { verify } from "@/kilocode/goal/file-content"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Cause, Effect, Exit } from "effect"
@@ -204,6 +206,70 @@ tool.instance(
         const result = yield* reader.execute({ filePath: file }, ctx)
         expect(result.output).not.toContain("<file-content-json")
         expect(yield* whole(result.metadata)).toBeUndefined()
+      }
+    }),
+  30_000,
+)
+
+tool.instance(
+  "real full Read content verifies exact literals and rejects partial, stale or altered evidence",
+  () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const fs = yield* FSUtil.Service
+      const file = path.join(instance.directory, "content.md")
+      const reader = yield* (yield* ReadTool).init()
+      const ctx = {
+        sessionID: SessionID.make("ses_content_read"),
+        messageID: MessageID.make("msg_content_read"),
+        callID: "content-read",
+        agent: "code",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const literals = ["Builder consumed research.", "[Research](research.md)", "café"]
+      const check = { kind: "file-content" as const, path: file, literals }
+      for (const newline of ["\n", "\r\n"]) {
+        const text = ["Header", ...literals].join(newline) + newline
+        yield* fs.writeFileString(file, text)
+        const result = yield* reader.execute({ filePath: file }, ctx)
+        const part = (metadata: Record<string, unknown>): SessionV1.ToolPart => ({
+          id: PartID.make("prt_content_read"),
+          messageID: ctx.messageID,
+          sessionID: ctx.sessionID,
+          type: "tool",
+          callID: ctx.callID,
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { filePath: file },
+            output: result.output,
+            title: result.title,
+            metadata,
+            time: { start: 0, end: 1 },
+          },
+        })
+        const content = yield* whole(result.metadata)
+        expect(content?.text).toBe(text)
+        if (!content) throw new Error("Actual complete Read content required")
+        expect(yield* verify(check, [part(result.metadata)])).toBe(true)
+        expect(yield* verify({ ...check, literals: ["Sales consumed both files."] }, [part(result.metadata)])).toBe(false)
+        expect(yield* verify({ ...check, path: path.join(instance.directory, "other.md") }, [part(result.metadata)])).toBe(false)
+        const partial = yield* reader.execute({ filePath: file, limit: 1 }, ctx)
+        const range = yield* reader.execute({ filePath: file, offset: 2 }, ctx)
+        expect(yield* verify(check, [part(partial.metadata)])).toBe(false)
+        expect(yield* verify(check, [part(range.metadata)])).toBe(false)
+        for (const metadata of [
+          { ...result.metadata, truncated: true },
+          { ...result.metadata, display: { ...result.metadata.display, truncated: true } },
+          { ...result.metadata, rayaReadContent: Object.fromEntries(Object.entries(content).filter(([key]) => key !== "text")) },
+          { ...result.metadata, rayaReadContent: { ...content, text: text.replace("Header", "Footer") } },
+        ])
+          expect(yield* verify(check, [part(metadata)])).toBe(false)
+        yield* fs.writeFileString(file, text + "changed")
+        expect(yield* verify(check, [part(result.metadata)])).toBe(false)
       }
     }),
   30_000,

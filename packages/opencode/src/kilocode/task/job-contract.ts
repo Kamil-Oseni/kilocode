@@ -53,6 +53,14 @@ export const Proposal = Schema.Struct({
     if (!stages.has(value.entry)) return "The contract entry must identify an existing stage."
     const parents = new Map<string, string>()
     for (const stage of value.stages) {
+      if (
+        stage.criteria.some(
+          (item) =>
+            item.check &&
+            (!Schema.is(Files.Outputs)([item.check.path]) || !Files.includes(stage.outputs, item.check.path)),
+        )
+      )
+        return `File-content checks must name this contract stage's exact declared outputs: ${stage.id}.`
       if (new Set(stage.criteria.map((item) => item.id)).size !== stage.criteria.length)
         return `Criterion IDs must be unique in contract stage ${stage.id}.`
       if (new Set(stage.next.map((item) => item.stageID)).size !== stage.next.length)

@@ -200,7 +200,7 @@ export namespace Codec {
             verification: Schema.optional(Schema.String),
             required: Schema.Boolean,
             passed: Schema.Boolean,
-            basis: Schema.optional(Schema.Literals(["model-audit", "command", "byte-equality"])),
+            basis: Schema.optional(Schema.Literals(["model-audit", "command", "byte-equality", "file-content"])),
             evidence: Schema.Array(Schema.String),
           }),
         ),

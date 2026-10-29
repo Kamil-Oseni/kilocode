@@ -35,6 +35,7 @@ import { RayaGoal } from "@/kilocode/goal"
 import * as ToolJsonSchema from "@/tool/json-schema"
 import { kickoff, forward, omits, preserve, prohibits } from "@/kilocode/task/request"
 import * as Handoff from "@/kilocode/goal/handoff"
+import * as OwnerScope from "@/kilocode/task/owner-scope"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -1085,6 +1086,9 @@ export function routineManagementTools(input: {
               (incoming.state !== "running" && incoming.state !== "needs_input"))
           )
             return yield* Effect.fail(new Error("The current delegated request no longer matches this worker run."))
+          yield* OwnerScope.unmarked(params.context)
+          const dir = yield* OwnerScope.retained(incoming?.context)
+          yield* OwnerScope.check(dir, params.outputs)
           for (const field of ["budget", "deadline"] as const)
             if (params[field] !== undefined && omits(incoming?.context, field))
               return yield* Effect.fail(
@@ -1136,10 +1140,11 @@ export function routineManagementTools(input: {
           const source = `delegate:${digest(
             JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, sender.id, organization.id]),
           ).slice(0, 48)}`
-          const context = yield* preserve(
-            incoming?.context,
+          const text = yield* preserve(
+            OwnerScope.body(incoming?.context),
             incoming?.context ? params.context : params.context?.trim(),
           )
+          const context = yield* OwnerScope.context(dir, text)
           const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
           const outputs = yield* targets(params.outputs)
           const request = {
@@ -1292,12 +1297,17 @@ export function routineManagementTools(input: {
             assistant.info.parentID === user?.info.id
               ? request
               : undefined
-          const context = yield* preserve(
+          yield* OwnerScope.unmarked(params.context)
+          yield* OwnerScope.unmarked(owner)
+          const dir = yield* OwnerScope.directory(owner)
+          yield* OwnerScope.check(dir, params.outputs)
+          const text = yield* preserve(
             owner ? params.context : params.context?.trim(),
             owner
               ? `Original owner request (context only; current-stage scope and permission limits still apply):\n${owner}`
               : undefined,
           )
+          const context = yield* OwnerScope.context(dir, text)
           const organization = yield* organizations.get(params.organizationID)
           if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
           if (organization.revision !== params.expectedRevision)

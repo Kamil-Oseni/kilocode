@@ -23,14 +23,23 @@ export function inspectionFile(request: string | undefined) {
 }
 
 /** Carry exact owner context without repeated copies or silent truncation. */
-export function preserve(...values: (string | undefined)[]) {
+export class ContextLimit extends Schema.TaggedErrorClass<ContextLimit>()("RayaTaskRequest.ContextLimit", {
+  message: Schema.String,
+}) {}
+
+export function ownerContext(owner: string) {
+  return `Original owner request (context only; current-stage scope and permission limits still apply):\n${owner}`
+}
+
+export function preserve(...values: (string | undefined)[]): Effect.Effect<string | undefined, ContextLimit> {
   const parts = [...new Set(values.filter((value): value is string => !!value?.trim()))]
   const text = parts.filter((value) => !parts.some((other) => other !== value && other.includes(value))).join("\n\n")
   return text.length > 4000
     ? Effect.fail(
-        new Error(
-          "The combined owner context exceeds the 4000-character context limit. Omit or shorten only the additional stage context; the original owner request cannot be truncated.",
-        ),
+        new ContextLimit({
+          message:
+            "The combined owner context exceeds the 4000-character context limit. Omit or shorten only the additional stage context; the original owner request cannot be truncated.",
+        }),
       )
     : Effect.succeed(text || undefined)
 }
@@ -101,6 +110,16 @@ export function kickoff(request: string | undefined) {
   )
   if ([...changes].some((match) => !/(?:do not|don't|never|without)\s*$/i.test(request.slice(0, match.index))))
     return false
+  const text = request
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^\s*>.*$/gm, "")
+    .trim()
+  if (
+    /^(?:please\s+)?(?:run|start|launch|kick off)\s+(?:(?:a|one|single|the|my|our|manual|local)\s+){0,3}(?:saved|existing|configured)\s+(?:(?:manual|local)\s+){0,2}team\s+(?:job|workflow)\b(?!\s+(?:page|dashboard|view|component|screen|editor)\b)/i.test(
+      text,
+    )
+  )
+    return true
   const match =
     /\b(?:start|run|launch|delegate|assign|send|kick off)\s+(?:[\w-]+\s+){0,8}(?:job|workflow|work)\s+(?:through|via|by|to)\s+/i.exec(
       request,

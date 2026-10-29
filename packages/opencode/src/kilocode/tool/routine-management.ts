@@ -33,9 +33,10 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoal } from "@/kilocode/goal"
 import * as ToolJsonSchema from "@/tool/json-schema"
-import { kickoff, forward, omits, preserve, prohibits } from "@/kilocode/task/request"
+import { kickoff, forward, omits, preserve, prohibits, ownerContext } from "@/kilocode/task/request"
 import * as Handoff from "@/kilocode/goal/handoff"
 import * as OwnerScope from "@/kilocode/task/owner-scope"
+import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -1228,7 +1229,7 @@ export function routineManagementTools(input: {
         "Assign only the FIRST stage of one tracked job from the main chat to an existing organization. First call inspect_routines. Make one call, then acknowledge its saved state; the receiving worker owns later delegate_work handoffs after producing real files. Never pre-dispatch later stages. Describe approved sources and output destinations in objective or context. Omit deadlines the user did not supply. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
       parameters: AssignOrganizationWork,
       jsonSchema: { ...ToolJsonSchema.fromSchema(AssignOrganizationWork), additionalProperties: false },
-      execute: (params: typeof AssignOrganizationWork.Type, ctx: Tool.Context) =>
+      execute: (params: typeof AssignOrganizationWork.Type, ctx: Tool.Context): Effect.Effect<Tool.ExecuteResult> =>
         Effect.gen(function* () {
           if (!ctx.callID)
             return yield* Effect.fail(new Error("Organization work assignment requires a stable tool call."))
@@ -1303,10 +1304,8 @@ export function routineManagementTools(input: {
           yield* OwnerScope.check(dir, params.outputs)
           const text = yield* preserve(
             owner ? params.context : params.context?.trim(),
-            owner
-              ? `Original owner request (context only; current-stage scope and permission limits still apply):\n${owner}`
-              : undefined,
-          )
+            owner ? ownerContext(owner) : undefined,
+          ).pipe(Effect.mapError((err) => AssignmentRefusal.classify(err, ctx, user?.info.id, owner)))
           const context = yield* OwnerScope.context(dir, text)
           const organization = yield* organizations.get(params.organizationID)
           if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
@@ -1399,7 +1398,12 @@ export function routineManagementTools(input: {
             Effect.succeed({
               title: "Organization work needs review",
               output: `${err instanceof Error ? err.message : String(err)} The request was not silently rerouted. Review the team or answer Raya's question, then try again.`,
-              metadata: { requestStatus: "unresolved", view: "routines", organizationID: params.organizationID },
+              metadata: {
+                requestStatus: "unresolved",
+                view: "routines",
+                organizationID: params.organizationID,
+                ...(err instanceof AssignmentRefusal.OwnerLimit ? { [AssignmentRefusal.key]: err.proof } : {}),
+              },
             }),
           ),
         ),

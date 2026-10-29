@@ -168,6 +168,8 @@ it("keeps tracked-work assignment tools available after inspection for explicit 
   }
   for (const request of [
     "Start one Website Pilot job through Dispatch: research the three supplied prospects, have Builder make the Eric concept, then Sales save three tailored UNSENT drafts. Use a fresh job folder. Nothing should be sent or published. Verify the actual files and handoffs.",
+    "Run one manual saved local team job Dispatch -> Researcher -> Builder -> Sales. Start only Researcher. Use saved local models, no cloud, no standing changes, no budget/deadline keys.",
+    "Please start a saved local team workflow for the approved files.",
     "Launch a customer outreach workflow through my saved sales worker.",
     "Delegate this invoice work to the existing accounting team.",
   ]) {
@@ -187,6 +189,11 @@ it("keeps tracked-work assignment tools available after inspection for explicit 
     "Run a background task to debug this worker",
     "Start a workflow editor component for my app",
     "Run the test job through the dashboard",
+    "Do not run one manual saved local team job.",
+    'Explain the phrase "Run one manual saved local team job".',
+    "Run one manual saved local team workflow editor component for my app.",
+    "```\nRun one manual saved local team job.\n```\nExplain this example.",
+    "> Run one manual saved local team job.\nExplain this example.",
   ])
     expect(RayaChief.tools(tools, { [RayaChief.requestKey]: request })).toEqual({ chief_route: tools.chief_route })
 })

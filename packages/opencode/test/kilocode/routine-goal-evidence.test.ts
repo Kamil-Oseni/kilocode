@@ -26,6 +26,9 @@ import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { final } from "@/kilocode/task/final-report"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Artifact from "@/kilocode/goal/artifact"
+import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
+import { ownerContext } from "@/kilocode/task/request"
+import { RayaChief } from "@/kilocode/chief"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -52,6 +55,164 @@ const it = testEffect(
   ),
 )
 const model = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") }
+
+it.live(
+  "irreducible original owner context produces a native refusal without another model or assignment",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const info = yield* routineManagementTools({ storage, database, sessions }).assignOrganizationWork
+        const tool = yield* info.init()
+        const prefix = "Run one manual saved local team job through Dispatch -> Researcher -> Builder -> Sales. "
+        for (const length of [4200, 3990, 100]) {
+          const owner = prefix.padEnd(length, "x")
+          const session = yield* sessions.create({
+            agent: "auto",
+            metadata: { [RayaChief.requestKey]: owner, [RayaChief.phaseKey]: "route" },
+          })
+          const user = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: session.id,
+            role: "user",
+            agent: "auto",
+            model,
+            time: { created: Date.now() },
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: session.id,
+            messageID: user.id,
+            type: "text",
+            text: owner,
+          })
+          const assistant = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: session.id,
+            parentID: user.id,
+            role: "assistant",
+            agent: "auto",
+            mode: "auto",
+            providerID: model.providerID,
+            modelID: model.modelID,
+            cost: 0,
+            path: { cwd: directory, root: directory },
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: Date.now() },
+          })
+          const callID = `owner-limit-${length}`
+          const ctx: Tool.Context = {
+            sessionID: session.id,
+            messageID: assistant.id,
+            callID,
+            agent: "auto",
+            abort: AbortSignal.any([]),
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.die("Pre-admission refusal must not ask for permission"),
+          }
+          const params = {
+            organizationID: `org_${"a".repeat(32)}`,
+            expectedRevision: 1,
+            senderID: "sender",
+            recipientID: "recipient",
+            objective: "Read the assigned source",
+            outputs: [],
+            criteria: [
+              { id: "read", description: "Read the approved source", verification: "Cite the actual Read receipt" },
+            ],
+            ...(length === 100 ? { context: "y".repeat(3990) } : {}),
+          }
+          const id = PartID.ascending()
+          const start = Date.now()
+          yield* sessions.updatePart({
+            id,
+            sessionID: session.id,
+            messageID: assistant.id,
+            type: "tool",
+            tool: "assign_organization_work",
+            callID,
+            state: { status: "running", input: params, time: { start } },
+          })
+          const result = yield* tool.execute(params, ctx)
+          expect(result.metadata.requestStatus).toBe("unresolved")
+          expect(result.output).toContain("4000-character context limit")
+          yield* sessions.updatePart({
+            id,
+            sessionID: session.id,
+            messageID: assistant.id,
+            type: "tool",
+            tool: "assign_organization_work",
+            callID,
+            state: {
+              status: "completed",
+              input: params,
+              output: result.output,
+              title: result.title,
+              metadata: result.metadata,
+              time: { start, end: Date.now() },
+            },
+          })
+          yield* sessions.updateMessage({
+            ...assistant,
+            finish: "tool-calls",
+            time: { created: assistant.time.created, completed: Date.now() },
+          })
+          const metadata: Record<string, unknown> = result.metadata
+          if (length === 100) {
+            expect(metadata[AssignmentRefusal.key]).toBeUndefined()
+            expect(yield* AssignmentRefusal.finish(sessions, session.id, user.id)).toBe(false)
+            continue
+          }
+          expect(metadata[AssignmentRefusal.key]).toMatchObject({ userID: user.id, messageID: assistant.id, callID })
+          expect(ownerContext(owner).length).toBeGreaterThan(4000)
+          const failed = yield* sessions.updateMessage({
+            ...assistant,
+            id: MessageID.ascending(),
+            error: { name: "UnknownError", data: { message: "Later parent failure" } },
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: session.id,
+            messageID: failed.id,
+            type: "tool",
+            tool: "assign_organization_work",
+            callID: "accepted-before-error",
+            state: {
+              status: "completed",
+              input: params,
+              output: "Actually accepted",
+              title: "Assignment",
+              metadata: { requestStatus: "complete", delegationID: "actual-side-effect" },
+              time: { start, end: Date.now() },
+            },
+          })
+          expect(yield* AssignmentRefusal.finish(sessions, session.id, user.id)).toBe(false)
+          yield* sessions.removeMessage({ sessionID: session.id, messageID: failed.id })
+          expect(yield* AssignmentRefusal.finish(sessions, session.id, user.id)).toBe(true)
+          const after = yield* sessions.messages({ sessionID: session.id })
+          const last = after.at(-1)
+          expect(last?.info.role).toBe("assistant")
+          expect(last?.parts.find((part) => part.type === "text")?.text).toContain(
+            `requires ${ownerContext(owner).length} characters`,
+          )
+          expect(last?.parts.find((part) => part.type === "text")?.text).toContain("This team job was not started")
+          expect(yield* AssignmentRefusal.finish(sessions, session.id, user.id)).toBe(true)
+          expect((yield* sessions.messages({ sessionID: session.id })).length).toBe(after.length)
+          expect(
+            (yield* sessions.messages({ sessionID: session.id }))
+              .find((row) => row.info.id === user.id)
+              ?.parts.find((part) => part.type === "text")?.text,
+          ).toBe(owner)
+        }
+        expect(yield* database.db.select().from(Delegation).all()).toEqual([])
+        expect(yield* RayaTask.make({ storage, database }).list()).toEqual([])
+      }),
+    ),
+  60000,
+)
 
 it.live(
   "resumed Routine goal can audit actual current-run child handoff without granting output ownership",

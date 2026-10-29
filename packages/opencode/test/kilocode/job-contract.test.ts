@@ -7,7 +7,8 @@ import { stage } from "@/kilocode/task/job-contract-store"
 import type { Receipt } from "@/kilocode/task/job-contract"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { record } from "@/kilocode/task/continuation"
-import { Criteria, GoalCriteria } from "@/kilocode/goal/criteria"
+import { Criteria, FileContent, GoalCriteria } from "@/kilocode/goal/criteria"
+import { fromSchema } from "@/tool/json-schema"
 
 const proposal = () => ({
   version: 1,
@@ -49,6 +50,11 @@ const proposal = () => ({
 const decode = (value: unknown) => Effect.runSync(parse(value))
 
 test("file-content checks retain exact literals and require their own declared stage output", () => {
+  expect(fromSchema(FileContent).properties?.path).toEqual({
+    type: "string",
+    maxLength: 4000,
+    pattern: /^(?:[a-zA-Z]:[\\/]|\/|\\\\)/.source,
+  })
   const job = proposal()
   const check = { kind: "file-content" as const, path: job.stages[0].outputs[0], literals: ["Research step complete.", "é\r\n"] }
   const criterion = { ...job.stages[0].criteria[0], check }
@@ -64,6 +70,9 @@ test("file-content checks retain exact literals and require their own declared s
   for (const value of [
     { ...check, kind: "future-content" },
     { ...check, unsupported: true },
+    { ...check, path: {} },
+    { ...check, path: "relative.md" },
+    { ...check, path: "" },
     { ...check, literals: [] },
     { ...check, literals: [""] },
     { ...check, literals: ["\ud800"] },

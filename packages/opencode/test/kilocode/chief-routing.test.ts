@@ -7,6 +7,7 @@ import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { InvalidArgumentsError } from "@/tool/tool"
 
 type State = Extract<MessageV2.WithParts["parts"][number], { type: "tool" }>["state"]
 const completed = {
@@ -106,6 +107,68 @@ it("releases an honest failure reply for the current Routine operation without f
   } satisfies State
   expect(RayaChief.settled([response("assign_organization_work", state)], "msg_current")).toBe(true)
   expect(state.status).toBe("error")
+})
+
+it("allows one correction for a native Routine schema error before a bounded failure reply", () => {
+  const request = "Use native assign_organization_work with a version1 contract."
+  const state = {
+    status: "error",
+    input: { contract: { stages: [] } },
+    error: new InvalidArgumentsError({
+      tool: "assign_organization_work",
+      detail: '["contract"]["stages"][0]["criteria"][0]["check"]["path"]: Expected string, got {}',
+    }).message,
+    time: { start: 2, end: 3 },
+  } satisfies State
+  const first = response("assign_organization_work", state)
+  const second = response("assign_organization_work", state)
+  second.info.id = MessageID.make("msg_routine_correction")
+  second.parts = second.parts.map((part) => ({
+    ...part,
+    id: PartID.make("prt_routine_correction"),
+    messageID: second.info.id,
+    ...(part.type === "tool" ? { callID: "routine-correction" } : {}),
+  }))
+  const inspected = response("inspect_routines", { ...completed, title: "Saved routines" })
+  expect(RayaChief.settled([inspected, first], "msg_current", request)).toBe(false)
+  expect(RayaChief.settled([first, first], "msg_current", request)).toBe(false)
+  expect(RayaChief.settled([first, second], "msg_current", request)).toBe(true)
+  expect(RayaChief.settled([first, response("assign_organization_work")], "msg_current", request)).toBe(true)
+  expect(
+    RayaChief.settled(
+      [first, response("assign_organization_work", state, MessageID.make("msg_old"))],
+      "msg_current",
+      request,
+    ),
+  ).toBe(false)
+  const foreign = response("assign_organization_work", state)
+  foreign.parts = foreign.parts.map((part) => ({ ...part, sessionID: SessionID.make("ses_foreign") }))
+  expect(RayaChief.settled([first, foreign], "msg_current", request)).toBe(false)
+  expect(
+    RayaChief.settled(
+      [
+        response("assign_organization_work", {
+          ...state,
+          error: "The worker rejected invalid arguments after work began.",
+        }),
+      ],
+      "msg_current",
+      request,
+    ),
+  ).toBe(true)
+  expect(
+    RayaChief.settled(
+      [
+        response("assign_organization_work", {
+          ...completed,
+          metadata: { requestStatus: "unresolved" },
+          output: "The original owner context exceeds its limit. No work started.",
+        }),
+      ],
+      "msg_current",
+      request,
+    ),
+  ).toBe(true)
 })
 
 type Fixture = {

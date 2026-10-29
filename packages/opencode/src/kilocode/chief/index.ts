@@ -20,22 +20,39 @@ export namespace RayaChief {
   ]
 
   export function settled(messages: readonly MessageV2.WithParts[], user: string, request?: string) {
-    return messages.some(
-      (row) =>
-        row.info.role === "assistant" &&
-        row.info.parentID === user &&
-        row.parts.some(
-          (part) =>
+    const operations = messages.flatMap((row) =>
+      row.info.role === "assistant" && row.info.parentID === user
+        ? row.parts.flatMap((part) =>
             part.type === "tool" &&
-            routines.includes(part.tool) &&
-            !(
-              kickoff(request) &&
-              part.tool === "inspect_routines" &&
-              part.state.status === "completed" &&
-              part.state.title === "Saved routines"
-            ) &&
-            (part.state.status === "completed" || part.state.status === "error"),
-        ),
+            part.sessionID === row.info.sessionID &&
+            part.messageID === row.info.id &&
+            routines.includes(part.tool)
+              ? [part]
+              : [],
+          )
+        : [],
+    )
+    // Persisted tool states retain the canonical native validation message, not its typed error.
+    const invalid = operations.filter(
+      (part) =>
+        part.state.status === "error" &&
+        part.state.error.startsWith(`The ${part.tool} tool was called with invalid arguments: `) &&
+        part.state.error.endsWith(".\nPlease rewrite the input so it satisfies the expected schema."),
+    )
+    return (
+      operations.some(
+        (part) =>
+          !invalid.includes(part) &&
+          !(
+            kickoff(request) &&
+            part.tool === "inspect_routines" &&
+            part.state.status === "completed" &&
+            part.state.title === "Saved routines"
+          ) &&
+          (part.state.status === "completed" || part.state.status === "error"),
+      ) ||
+      // One correction opportunity per current owner; repeated validation failures end honestly.
+      new Set(invalid.map((part) => part.id)).size >= 2
     )
   }
 

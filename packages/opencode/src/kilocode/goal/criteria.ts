@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
-const Path = Text.check(Schema.isPattern(/^(?:[a-zA-Z]:[\\/]|\/|\\\\)/))
+const Path = Schema.String.check(Schema.isMaxLength(4000), Schema.isPattern(/^(?:[a-zA-Z]:[\\/]|\/|\\\\)/))
 export const Equality = Schema.Struct({
   kind: Schema.Literal("byte-equality"),
   source: Schema.Struct({

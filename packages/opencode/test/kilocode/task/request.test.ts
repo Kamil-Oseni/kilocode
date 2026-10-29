@@ -82,3 +82,28 @@ test("saved job kickoff stays distinct from creating or managing workers", () =>
   ])
     expect(kickoff(request)).toBe(false)
 })
+
+test("native saved-team assignment stays affirmative and outside examples", () => {
+  const request =
+    "Run one manual local Website Pilot job through the saved Dispatch sponsor -> Researcher -> Builder -> Sales. No cloud Task, outreach sends, submissions, publication, purchases, recurring runs or configuration changes.\nInspect the saved team and current revision first. Use native assign_organization_work with a version1 contract, entry research, and exactly three stages: research -> builder -> sales; both next links required=true. Only start Researcher."
+  expect(kickoff(request)).toBe(true)
+  expect(kickoff("Please use native assign_organization_work with the approved contract.")).toBe(true)
+  expect(kickoff("Call native assign_organization_work for the approved first stage.")).toBe(true)
+  for (const text of [
+    "Do not use native assign_organization_work.",
+    "Never call native assign_organization_work.",
+    "Explain how to use native assign_organization_work.",
+    'Explain the phrase "Use native assign_organization_work".',
+    '"Example:\nUse native assign_organization_work with a contract."',
+    "`Use native assign_organization_work with a contract.`",
+    "```\nUse native assign_organization_work with a contract.\n```\nExplain this example.",
+    "> Use native assign_organization_work with a contract.\nExplain this example.",
+    "~~~\nUse native assign_organization_work with a contract.\n~~~\nExplain this example.",
+    "\u201cExample:\nUse native assign_organization_work with a contract.\u201d",
+    "\u2018Example:\nUse native assign_organization_work with a contract.\u2019",
+    "Read-only status review. Use native assign_organization_work with a contract.",
+    "Do not start workers. Use native assign_organization_work with a contract.",
+    "Create new workers. Use native assign_organization_work with a contract.",
+  ])
+    expect(kickoff(text)).toBe(false)
+})

@@ -114,6 +114,16 @@ export function kickoff(request: string | undefined) {
     .replace(/```[\s\S]*?```/g, "")
     .replace(/^\s*>.*$/gm, "")
     .trim()
+  const native = text.replace(
+    /~~~[\s\S]*?~~~|\u201c[^\u201d]*\u201d|\u2018[^\u2019]*\u2019|"[^"]*"|`[^`]*`|(?:^|\s)'[^'\r\n]*'/g,
+    "",
+  )
+  if (
+    !inspection(request) &&
+    !prohibits(request) &&
+    /(?:^|[.!?;\n])\s*(?:please\s+)?(?:use|call)\s+native\s+assign_organization_work\b/i.test(native)
+  )
+    return true
   if (
     /^(?:please\s+)?(?:run|start|launch|kick off)\s+(?:(?:a|one|single|the|my|our|manual|local)\s+){0,3}(?:saved|existing|configured)\s+(?:(?:manual|local)\s+){0,2}team\s+(?:job|workflow)\b(?!\s+(?:page|dashboard|view|component|screen|editor)\b)/i.test(
       text,

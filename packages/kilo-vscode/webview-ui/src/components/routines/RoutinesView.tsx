@@ -1249,8 +1249,18 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
     setReviewed(item)
   }
   const roster = (items: Agent[]) => {
+    const focus = document.activeElement
     setLoaded(true)
     setAgents(items)
+    queueMicrotask(() => {
+      if (
+        focus instanceof HTMLElement &&
+        focus.isConnected &&
+        root?.querySelector(".routines-list")?.contains(focus) &&
+        document.activeElement === document.body
+      )
+        focus.focus()
+    })
     if (reviewed() && section() !== "output" && !items.some((item) => item.id === reviewed()?.id)) dismiss()
     const id = chosen()
     if (id && !items.some((item) => item.id === id)) choose()
@@ -1357,6 +1367,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
       setOrganizationRequest()
       setOrganizationNotice("")
       setRuns({})
+      setBusy({})
       cursors.clear()
       setStale({})
       setBoxes({})
@@ -2222,46 +2233,51 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 </div>
               </Show>
               <ul class="routines-list">
-                <For each={shown()}>
-                  {(item) => {
-                    const run = () => latest(item, runs())
-                    const command = () => action(run(), !!busy()[item.id], item.execution)
-                    return (
-                      <Person
-                        item={item}
-                        box={boxes()[item.id]}
-                        waiting={waiting({
-                          box: boxes()[item.id],
-                          run: run(),
-                          connected: connection() === "connected",
-                          stale: !!stale()[item.id],
-                          recovery: item.execution?.state === "recovery",
-                          stopping: !!busy()[item.id],
-                          now: clock(),
-                        })}
-                        stale={stale()[item.id]}
-                        picked={!!picked()[item.id]}
-                        manage={manage()}
-                        current={chosen() === item.id}
-                        panel={panel}
-                        inspectable={inspectable(item)}
-                        canOpen={
-                          !!(item.execution ? item.execution.sessionID : run()?.sessionID) && !!props.onOpenSession
-                        }
-                        presence={state(item)}
-                        command={command()}
-                        onChoose={() => choose(item.id)}
-                        onMark={(value) => mark(item.id, value)}
-                        onAct={() => (command() === "open" ? open(item) : fire(item))}
-                        onToggle={() => toggle(item)}
-                        onEdit={() => edit(item)}
-                        onAccess={() => review(item)}
-                        onOutput={() => review(item, "output")}
-                        onInspect={() => inspect(item)}
-                        onRemove={() => confirm([item.id])}
-                      />
-                    )
-                  }}
+                <For each={shown().map((item) => item.id)}>
+                  {(id) => (
+                    <Show when={agents().find((item) => item.id === id)}>
+                      {(item) => {
+                        const run = () => latest(item(), runs())
+                        const command = () => action(run(), !!busy()[id], item().execution)
+                        return (
+                          <Person
+                            item={item()}
+                            box={boxes()[id]}
+                            waiting={waiting({
+                              box: boxes()[id],
+                              run: run(),
+                              connected: connection() === "connected",
+                              stale: !!stale()[id],
+                              recovery: item().execution?.state === "recovery",
+                              stopping: !!busy()[id],
+                              now: clock(),
+                            })}
+                            stale={stale()[id]}
+                            picked={!!picked()[id]}
+                            manage={manage()}
+                            current={chosen() === id}
+                            panel={panel}
+                            inspectable={inspectable(item())}
+                            canOpen={
+                              !!(item().execution ? item().execution?.sessionID : run()?.sessionID) &&
+                              !!props.onOpenSession
+                            }
+                            presence={state(item())}
+                            command={command()}
+                            onChoose={() => choose(id)}
+                            onMark={(value) => mark(id, value)}
+                            onAct={() => (command() === "open" ? open(item()) : fire(item()))}
+                            onToggle={() => toggle(item())}
+                            onEdit={() => edit(item())}
+                            onAccess={() => review(item())}
+                            onOutput={() => review(item(), "output")}
+                            onInspect={() => inspect(item())}
+                            onRemove={() => confirm([id])}
+                          />
+                        )
+                      }}
+                    </Show>
+                  )}
                 </For>
               </ul>
               <Show when={shown().length === 0 && !vacant()}>

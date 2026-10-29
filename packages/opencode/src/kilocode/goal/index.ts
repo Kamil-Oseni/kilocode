@@ -139,7 +139,7 @@ export namespace RayaGoal {
   export const retryLimit = 3
 
   type Sessions = Pick<Session.Interface, "messages" | "children"> &
-    Partial<Pick<Session.Interface, "get" | "setMetadata">>
+    Partial<Pick<Session.Interface, "get" | "setMetadata" | "findMessage">>
   type Deps = {
     storage: Store
     sessions: Sessions
@@ -1192,7 +1192,7 @@ export namespace RayaGoal {
 
     const scoped = Effect.fn("RayaGoal.scopedEvidence")(function* (sessionID: SessionID, state: State) {
       const base = yield* collect(deps.sessions, sessionID, state.createdAt, state.inputs)
-      const routine = yield* RoutineEvidence.observe({ ...deps, goal: state, rows: base }).pipe(
+      const routine = yield* RoutineEvidence.observe({ ...deps, sessionID, goal: state, rows: base }).pipe(
         Effect.mapError(
           () =>
             new AuditError({
@@ -1205,6 +1205,7 @@ export namespace RayaGoal {
         base,
         messages: [...base, ...routine.messages],
         reports: routine.reports,
+        contract: routine.contract,
         check: routine.check.pipe(
           Effect.mapError(
             () =>
@@ -1416,8 +1417,6 @@ export namespace RayaGoal {
           message:
             "This Routine review has no matching original output provenance. Resume it and prepare a fresh review before accepting completion.",
         })
-      const scope = yield* scoped(sessionID, state)
-      const messages = scope.messages
       // raya_change start - accept the flattened audit (top-level `requirements`) that models emit
       // far more often than the nested `audit` object, and make the rejection actionable so a model
       // that still gets it wrong can copy the exact shape and the real evidence IDs in one retry.
@@ -1427,6 +1426,7 @@ export namespace RayaGoal {
           ? { requirements: input.requirements, summary: input.summary }
           : undefined)
       if (!auditInput) {
+        const messages = yield* collect(deps.sessions, sessionID, state.createdAt, state.inputs)
         return yield* new AuditError({
           message:
             `Completion requires a requirement-by-requirement audit. Call update_goal with ` +
@@ -1453,7 +1453,19 @@ export namespace RayaGoal {
       // raya_change start - persist the attempt whether it passes or fails, so a goal that
       // stays blocked/active after a rejected completion still carries the requirement-by-
       // requirement detail and rejection reason for the audit-log view.
-      const audit = yield* Effect.gen(function* () {
+      const reject = (err: AuditError) =>
+        save(sessionID, {
+          ...state,
+          updatedAt: now,
+          auditAttempt: { at: now, accepted: false, reason: err.message, requirements: submitted.requirements },
+          progress: progress(state, {
+            at: now,
+            kind: "status",
+            message: `Completion audit rejected: ${err.message}`,
+          }),
+        }).pipe(Effect.flatMap(() => Effect.fail(err)))
+      const verified = yield* Effect.gen(function* () {
+        const scope = yield* scoped(sessionID, state)
         yield* scope.check
         const owner = state.routine
         const live = owner
@@ -1478,10 +1490,22 @@ export namespace RayaGoal {
               live.map((report) => `${report.delegationID} (${report.state})`).join(", ") +
               '. Keep this same run and its original children. Call update_goal with status="blocked" and a plain waiting reason so the host can park it for the original child reply; do not self-pause, repeat the handoff, poll, or claim child completion from an accepted assignment.',
           })
-        return yield* validateForSession(submitted, messages, state.createdAt, state.objective, state.criteria)
+        if (scope.contract?.missing.length)
+          return yield* new AuditError({
+            message: `Routine contract stage ${scope.contract.stage} still requires completed successor stages: ${scope.contract.missing.join(", ")}. Use the original contracted child stages and their actual completed native results; an accepted, running, failed or missing child is not completion.`,
+          })
+        const audit = yield* validateForSession(
+          submitted,
+          scope.messages,
+          state.createdAt,
+          state.objective,
+          state.criteria,
+        )
+        return { audit, scope }
       }).pipe(
-        Effect.flatMap((audit) => {
-          if (!accepted) return Effect.succeed(audit)
+        Effect.flatMap((verified) => {
+          const audit = verified.audit
+          if (!accepted) return Effect.succeed(verified)
           const prior = state.audit?.requirements.flatMap((item) => item.evidence) ?? []
           const changed = audit.requirements
             .flatMap((item) => item.evidence)
@@ -1502,21 +1526,13 @@ export namespace RayaGoal {
                     "Evidence changed since review was requested. Resume the goal to prepare fresh evidence before accepting it.",
                 }),
               )
-            : Effect.succeed(audit)
+            : Effect.succeed(verified)
         }),
-        Effect.catchTag("RayaGoal.AuditError", (err) =>
-          save(sessionID, {
-            ...state,
-            updatedAt: now,
-            auditAttempt: { at: now, accepted: false, reason: err.message, requirements: submitted.requirements },
-            progress: progress(state, {
-              at: now,
-              kind: "status",
-              message: `Completion audit rejected: ${err.message}`,
-            }),
-          }).pipe(Effect.flatMap(() => Effect.fail(err))),
-        ),
+        Effect.catchTag("RayaGoal.AuditError", reject),
       )
+      const audit = verified.audit
+      const scope = verified.scope
+      const messages = scope.messages
       const criteria =
         state.criteria
           ?.filter((item) => item.review && audit.requirements.some((req) => req.criterionID === item.id && req.passed))
@@ -1534,7 +1550,7 @@ export namespace RayaGoal {
         : accepted
           ? { ...state.review!, status: "accepted" as const, acceptedAt: now }
           : undefined
-      yield* scope.check
+      yield* scope.check.pipe(Effect.catchTag("RayaGoal.AuditError", reject))
       const deliverables = inventory(audit, scope.base)
       const next = yield* save(
         sessionID,

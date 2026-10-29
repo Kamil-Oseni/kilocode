@@ -16,11 +16,13 @@ import { Codec as Task } from "../task/schema"
 import { Codec as Goal } from "./schema"
 import { final } from "../task/final-report"
 import { Outputs } from "../task/output-scope"
+import { Reference, type Stage } from "../task/job-contract"
+import * as Contract from "../task/job-contract-store"
 import * as Artifact from "./artifact"
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const identity = Schema.Struct({
-  version: Schema.Literals([1, 2]),
+  version: Schema.Literals([1, 2, 3]),
   agentID: Schema.String,
   runID: Schema.String,
   scheduleVersion: Schema.Number,
@@ -29,9 +31,10 @@ const identity = Schema.Struct({
   organizationID: Schema.optional(Schema.String),
   organizationRevision: Schema.optional(Schema.Number),
   outputs: Schema.optional(Schema.Array(Schema.String)),
+  contract: Schema.optional(Reference),
 })
 const snapshot = Schema.Struct({
-  version: Schema.Literals([1, 2]),
+  version: Schema.Literals([1, 2, 3]),
   runID: Schema.String,
   sessionID: SessionID,
   agentID: Schema.String,
@@ -39,12 +42,13 @@ const snapshot = Schema.Struct({
   definition: Task.Agent,
   objective: Schema.String,
   outputs: Schema.optional(Schema.Array(Schema.String)),
+  contract: Schema.optional(Reference),
 })
 type Row = typeof Delegation.$inferSelect
 type Part = SessionV1.ToolPart
 type Receipt = Part & { state: Extract<Part["state"], { status: "completed" }> }
 type Store = Partial<Pick<Storage.Interface, "readBounded">>
-type Sessions = Pick<Session.Interface, "messages"> & Partial<Pick<Session.Interface, "get">>
+type Sessions = Pick<Session.Interface, "messages"> & Partial<Pick<Session.Interface, "get" | "findMessage">>
 type Report = {
   delegationID: string
   state: string
@@ -53,6 +57,10 @@ type Report = {
   replyTruncated?: boolean
   artifactsHistorical?: true
   artifacts: unknown
+}
+type Gate = {
+  stage: string
+  missing: string[]
 }
 const location = (value: string) => {
   const normalized = path.resolve(value)
@@ -90,6 +98,7 @@ export function observe(input: {
   database?: Database.Interface
   storage: Store
   sessions: Sessions
+  sessionID?: SessionID
   goal: typeof Goal.State.Type
   rows: readonly SessionV1.WithParts[]
 }) {
@@ -97,6 +106,8 @@ export function observe(input: {
     const messages: SessionV1.WithParts[] = []
     const reports = new Map<string, Report>()
     const owner = input.goal.routine
+    const empty = { messages, reports, contract: undefined as Gate | undefined, check: Effect.void }
+    const sid = input.sessionID ?? owner?.sessionID ?? input.rows[0]?.info.sessionID
     const calls = input.rows
       .filter(
         (row) =>
@@ -105,7 +116,37 @@ export function observe(input: {
           input.goal.inputs?.includes(row.info.parentID),
       )
       .flatMap((row) => row.parts.filter(accepted))
-    if (!owner || !calls.length) return { messages, reports, check: Effect.void }
+    // A contracted stage must be verified even before it has delegated its first successor.
+    // Only nonroutine goals with no native marker or SQL pointer keep the empty shortcut.
+    if (!owner) {
+      const target = input.sessions.get && sid ? yield* input.sessions.get(sid) : undefined
+      const marker = target?.metadata?.rayaRoutine
+      const incoming =
+        input.database && sid
+          ? yield* input.database.db.select().from(Delegation).where(eq(Delegation.session_id, sid)).limit(2).all()
+          : []
+      const tracked = marker !== undefined || incoming.length > 0
+      if (!tracked) {
+        const check = Effect.gen(function* () {
+          if (target && input.sessions.get) {
+            const fresh = yield* input.sessions.get(target.id)
+            if (!isDeepStrictEqual(fresh.metadata?.rayaRoutine, marker)) return yield* unavailable()
+          }
+          if (input.database && sid) {
+            const fresh = yield* input.database.db
+              .select()
+              .from(Delegation)
+              .where(eq(Delegation.session_id, sid))
+              .limit(2)
+              .all()
+            if (!isDeepStrictEqual(fresh, incoming)) return yield* unavailable()
+          }
+          return undefined
+        })
+        return { ...empty, check }
+      }
+      return yield* unavailable()
+    }
     if (
       calls.length > 64 ||
       new Set(calls.map((part) => part.id)).size !== calls.length ||
@@ -271,7 +312,13 @@ export function observe(input: {
           !isDeepStrictEqual(marker.outputs, saved.outputs) ||
           goal.createdAt !== run.goalCreatedAt ||
           goal.objective !== saved.objective ||
-          !isDeepStrictEqual(goal.routine, { agentID: id, runID, sessionID: idSession }) ||
+          !isDeepStrictEqual(goal.routine, {
+            agentID: id,
+            runID,
+            sessionID: idSession,
+            ...(saved.contract ? { contract: saved.contract } : {}),
+          }) ||
+          !isDeepStrictEqual(marker.contract, saved.contract) ||
           !goal.inputs?.length ||
           !goal.intent
         )
@@ -279,6 +326,35 @@ export function observe(input: {
         return { run, saved, target, marker, goal }
       })
     const parent = yield* worker(owner.agentID, owner.runID, owner.sessionID)
+    const store = Contract.make({
+      database,
+      sessions: {
+        get,
+        findMessage:
+          input.sessions.findMessage ?? (() => Effect.die(new Error("Native contract source lookup is unavailable."))),
+      },
+    })
+    const view = yield* store.current({
+      run: parent.run,
+      goal: parent.goal,
+      session: parent.target,
+      snapshot: parent.saved,
+    })
+    const criteria = (goal: typeof Goal.State.Type, stage: Pick<Stage, "criteria">) =>
+      isDeepStrictEqual(
+        [...(goal.criteria ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
+        [...stage.criteria].sort((a, b) => a.id.localeCompare(b.id)),
+      )
+    if (view) {
+      if (!criteria(parent.goal, view.stage)) return yield* unavailable()
+      checks.push(view.check)
+    }
+    const completed = new Set<string>()
+    if (!calls.length && !view) {
+      const check = Effect.forEach(checks, (check) => check, { discard: true })
+      yield* check
+      return { ...empty, check }
+    }
     const captured = yield* rows(owner.sessionID)
     const actual = captured.flatMap((row) => row.parts)
     if (
@@ -373,6 +449,7 @@ export function observe(input: {
       if (origins.length !== 1 || !match(row, origins[0], owner.agentID, owner.runID, incoming.id))
         return yield* unavailable()
       const origin = origins[0]
+      const stage = view ? yield* store.child(view, row) : undefined
       if (row.state !== "completed") {
         reports.set(origin.id, { delegationID: row.id, state: row.state, workerAuthored: true, artifacts: undefined })
         continue
@@ -413,6 +490,20 @@ export function observe(input: {
         result.summary !== row.response
       )
         return yield* unavailable()
+      if (view && stage) {
+        const ref = { ...view.ref, stageID: stage.id }
+        if (
+          child.saved.version !== 3 ||
+          child.marker.version !== 3 ||
+          !isDeepStrictEqual(child.run.contract, ref) ||
+          !isDeepStrictEqual(child.goal.routine?.contract, ref) ||
+          !isDeepStrictEqual(child.saved.contract, ref) ||
+          !isDeepStrictEqual(child.marker.contract, ref) ||
+          !criteria(child.goal, stage)
+        )
+          return yield* unavailable()
+        completed.add(stage.id)
+      }
       reports.set(origin.id, {
         delegationID: row.id,
         state: row.state,
@@ -537,6 +628,12 @@ export function observe(input: {
     }
     const check = Effect.forEach(checks, (check) => check, { discard: true })
     yield* check
-    return { messages, reports, check }
+    const contract: Gate | undefined = view
+      ? {
+          stage: view.stage.id,
+          missing: view.required.filter((stage) => !completed.has(stage.id)).map((stage) => stage.id),
+        }
+      : undefined
+    return { messages, reports, contract, check }
   })
 }

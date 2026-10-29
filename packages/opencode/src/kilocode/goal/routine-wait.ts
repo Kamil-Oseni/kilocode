@@ -16,6 +16,7 @@ import { record as Identity } from "../task/continuation"
 import { Codec as Goal } from "./schema"
 import * as Evidence from "./routine-evidence"
 import { Outputs } from "../task/output-scope"
+import { Reference } from "../task/job-contract"
 
 type State = typeof Goal.State.Type
 type Row = typeof Delegation.$inferSelect
@@ -39,7 +40,7 @@ const sessionpin = (session: Session.Info) => ({
 export function observe(input: {
   database?: Database.Interface
   storage: Partial<Pick<Storage.Interface, "readBounded">>
-  sessions: Pick<Session.Interface, "messages"> & Partial<Pick<Session.Interface, "get">>
+  sessions: Pick<Session.Interface, "messages"> & Partial<Pick<Session.Interface, "get" | "findMessage">>
   goal: State
   wake?: boolean
   origin?: { messageID: MessageID; callID: string }
@@ -172,6 +173,8 @@ export function observe(input: {
       const saved = yield* bounded<unknown>(startkey, 128 * 1024)
       const snapshot = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
+          version: Schema.Literals([1, 2, 3]),
+          contract: Schema.optional(Reference),
           runID: Schema.String,
           sessionID: SessionID,
           agentID: Schema.String,
@@ -226,11 +229,19 @@ export function observe(input: {
         (child &&
           (child.createdAt !== run.goalCreatedAt ||
             child.objective !== snapshot.objective ||
-            !isDeepStrictEqual(child.routine, { agentID: run.agentID, runID: run.id, sessionID: run.sessionID }))) ||
+            !isDeepStrictEqual(child.routine, {
+              agentID: run.agentID,
+              runID: run.id,
+              sessionID: run.sessionID,
+              ...(snapshot.contract ? { contract: snapshot.contract } : {}),
+            }))) ||
         !snapshot.definition.dir ||
         location(snapshot.definition.dir) !== location(session.directory) ||
         session.projectID !== parent.projectID ||
         session.directory !== parent.directory ||
+        !isDeepStrictEqual(identity.contract, snapshot.contract) ||
+        !isDeepStrictEqual(run.contract, snapshot.contract) ||
+        (snapshot.contract !== undefined && (identity.version !== 3 || snapshot.version !== 3)) ||
         !isDeepStrictEqual(identity.outputs, snapshot.outputs) ||
         !isDeepStrictEqual(outputs, snapshot.outputs)
       )
@@ -256,6 +267,7 @@ export function observe(input: {
           goalCreatedAt: run.goalCreatedAt,
           trigger: run.trigger,
           scheduleVersion: run.scheduleVersion,
+          ...(run.contract ? { contract: run.contract } : {}),
         },
       })
       if (input.wake && prior!.children.find((item) => item.id === row.id)?.sha256 !== sha256)

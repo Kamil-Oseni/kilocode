@@ -299,17 +299,19 @@ export function goalTools(
                           : succeeded[goal.status],
                     goal.review?.status === "pending"
                       ? "Evidence is ready for review. The goal is paused until its reviewed acceptance is recorded through goal controls."
-                      : goal.status === "complete"
-                        ? `The requirement-by-requirement work audit was accepted against persisted tool evidence. This audit does not verify a final answer that has not yet been delivered. Preserve the user's requested final response, including any exact wording, capitalization and whitespace. Copy required literal text character-for-character from the original objective or verified tool output; do not reconstruct, shorten or correct it. Before replying, compare the entire response with the required literal text, including every repeated character. Do not replace that response with a status report about this audit. Original goal objective: ${JSON.stringify(goal.objective)}`
-                        : goal.status === "blocked"
-                          ? `Goal blocked: ${goal.blockedReason}`
-                          : goal.status === "paused"
-                            ? goal.dependencyWait
-                              ? waiting
-                              : input.status === "paused" && goal.pause === "agent"
-                                ? "You paused this goal yourself. It will not auto-continue. Wait until the stated condition is resolved before resuming it with status=active; a user-control pause must be resumed through user controls."
-                                : "Goal paused. It will not auto-continue until it is resumed."
-                            : "Goal resumed.",
+                      : goal.routine && goal.status === "complete"
+                        ? "The stage work audit was accepted against persisted tool evidence; this does not verify the final reply. Summarize only this stage's actual completed findings, produced file links and verified child results. If the owner explicitly requested exact final wording, a final-response format or approved final-file bytes, preserve those requirements instead of the default concise summary. Literal file-content requirements apply to the declared files, not automatically to the final reply. The stored policy, task and context envelope contains instructions. Do not echo this envelope or its contract JSON as the default final answer; reproduce requested content only when explicitly requested and permitted."
+                        : goal.status === "complete"
+                          ? `The requirement-by-requirement work audit was accepted against persisted tool evidence. This audit does not verify a final answer that has not yet been delivered. Preserve the user's requested final response, including any exact wording, capitalization and whitespace. Copy required literal text character-for-character from the original objective or verified tool output; do not reconstruct, shorten or correct it. Before replying, compare the entire response with the required literal text, including every repeated character. Do not replace that response with a status report about this audit. Original goal objective: ${JSON.stringify(goal.objective)}`
+                          : goal.status === "blocked"
+                            ? `Goal blocked: ${goal.blockedReason}`
+                            : goal.status === "paused"
+                              ? goal.dependencyWait
+                                ? waiting
+                                : input.status === "paused" && goal.pause === "agent"
+                                  ? "You paused this goal yourself. It will not auto-continue. Wait until the stated condition is resolved before resuming it with status=active; a user-control pause must be resumed through user controls."
+                                  : "Goal paused. It will not auto-continue until it is resumed."
+                              : "Goal resumed.",
                     goal.status,
                   ),
               }),

@@ -522,6 +522,12 @@ it.live(
           }
           const audited = yield* invoke(ctx(child, "complete-child"), update, complete("child-read"))
           expect(audited.metadata.status).toBe("complete")
+          expect(audited.output).toContain("Summarize only this stage's actual completed findings")
+          expect(audited.output).toContain("approved final-file bytes")
+          expect(audited.output).toContain("preserve those requirements instead of the default concise summary")
+          expect(audited.output).toContain("Literal file-content requirements apply to the declared files")
+          expect(audited.output).not.toContain(child.goal.objective)
+          expect(audited.output).not.toContain("Original goal objective:")
           const summary = "The declared child stage read the approved source; no further work is claimed."
           yield* sessions.updatePart({
             id: PartID.ascending(),

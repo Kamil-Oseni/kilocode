@@ -43,6 +43,7 @@ import { TaskRepeat } from "@/kilocode/task-repeat" // kilocode_change - reuse f
 import { admit } from "@/kilocode/tool/task-admission" // kilocode_change - own same-child calls before mutable proof reads
 import { Refusal } from "@/kilocode/session/tool-refusal" // kilocode_change - request-bound work class refusal
 import { TaskAuthority } from "@/kilocode/tool/task-authority" // kilocode_change - durable Raya child authority
+import * as TaskLocal from "@/kilocode/tool/task-local" // kilocode_change - enforce explicit root owner cloud restrictions before child production
 import * as TaskFiles from "@/kilocode/tool/task-files" // kilocode_change - explicit child file declarations
 import * as TaskFilesProducer from "@/kilocode/tool/task-files-producer" // kilocode_change - bind actual child directories before execution
 import { FSUtil } from "@opencode-ai/core/fs-util" // kilocode_change - validate the selected file-scope filesystem
@@ -559,6 +560,14 @@ export const TaskTool = Tool.define(
       })
       const model = selected.model
       const variant = selected.variant
+      yield* TaskLocal.check({
+        sessions,
+        provider,
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        agent: ctx.agent,
+        providerID: model.providerID,
+      })
       // kilocode_change end
 
       const ops = ctx.extra?.promptOps as TaskPromptOps

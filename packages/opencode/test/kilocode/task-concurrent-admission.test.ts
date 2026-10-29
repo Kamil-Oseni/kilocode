@@ -26,6 +26,8 @@ import { admit } from "@/kilocode/tool/task-admission"
 import { Refusal } from "@/kilocode/session/tool-refusal"
 import { SessionRetirement } from "@/kilocode/session/retirement"
 import { ChiefTaskBinding } from "@/kilocode/chief/task-binding"
+import { RayaChief } from "@/kilocode/chief"
+import * as TaskLocal from "@/kilocode/tool/task-local"
 import { ProviderTest } from "../fake/provider"
 import { disposeAllInstances, tmpdirScoped, provideInstance, testInstanceStoreLayer } from "../fixture/fixture"
 import path from "node:path"
@@ -63,6 +65,183 @@ const it = testEffect(
       [RuntimeFlags.node, RuntimeFlags.layer()],
     ]),
   ),
+)
+
+it.live(
+  "root Auto no-cloud request refuses the actual Task before producing a child",
+  () =>
+    Effect.gen(function* () {
+      for (const [local, restricted] of [
+        [false, true],
+        [true, true],
+        [false, false],
+      ] as const) {
+        const dir = yield* tmpdirScoped()
+        const selected = ProviderTest.fake({
+          model,
+          info: ProviderTest.info({ options: { localInference: local } }, model),
+        })
+        yield* provideInstance(dir)(
+          Effect.gen(function* () {
+            const sessions = yield* Session.Service
+            const request = restricted
+              ? "Read the supplied report. Use saved local models, no cloud, no standing changes, no budget/deadline keys."
+              : "Read the supplied report."
+            const root = yield* sessions.create({
+              metadata: { [RayaChief.requestKey]: request, [RayaChief.phaseKey]: "task" },
+            })
+            const user = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: root.id,
+              role: "user",
+              agent: "auto",
+              model: ref,
+              time: { created: Date.now() },
+            })
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              sessionID: root.id,
+              messageID: user.id,
+              type: "text",
+              text: request,
+            })
+            const assistant = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: root.id,
+              parentID: user.id,
+              role: "assistant",
+              agent: "auto",
+              mode: "auto",
+              providerID: ref.providerID,
+              modelID: ref.modelID,
+              cost: 0,
+              path: { cwd: dir, root: dir },
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: Date.now() },
+            })
+            const part = yield* sessions.updatePart({
+              id: PartID.ascending(),
+              sessionID: root.id,
+              messageID: assistant.id,
+              type: "tool",
+              tool: "task",
+              callID: "local-selection",
+              state: { status: "running", input: {}, time: { start: Date.now() } },
+            })
+            const calls = { count: 0 }
+            const ops: TaskPromptOps = {
+              cancel: () => Effect.void,
+              resolvePromptParts: (text) => Effect.succeed([{ type: "text", text }]),
+              prompt: (input) =>
+                Effect.gen(function* () {
+                  calls.count += 1
+                  if (!input.messageID || !input.agent) throw new Error("Child invocation missing")
+                  yield* sessions.updateMessage({
+                    id: input.messageID,
+                    sessionID: input.sessionID,
+                    role: "user",
+                    agent: input.agent,
+                    model: ref,
+                    time: { created: Date.now() },
+                  })
+                  const info = yield* sessions.updateMessage({
+                    ...assistant,
+                    id: MessageID.ascending(),
+                    sessionID: input.sessionID,
+                    parentID: input.messageID,
+                    agent: input.agent,
+                    mode: input.agent,
+                    finish: "stop",
+                    time: { created: Date.now(), completed: Date.now() },
+                  })
+                  const text = yield* sessions.updatePart({
+                    id: PartID.ascending(),
+                    sessionID: input.sessionID,
+                    messageID: info.id,
+                    type: "text",
+                    text: "Observed fixture only",
+                  })
+                  return { info, parts: [text] }
+                }),
+            }
+            const tool = yield* TaskTool.pipe(Effect.flatMap((info) => info.init()))
+            const ctx = {
+              sessionID: root.id,
+              messageID: assistant.id,
+              agent: "auto",
+              callID: "local-selection",
+              abort: new AbortController().signal,
+              extra: { promptOps: ops },
+              messages: [],
+              ask: () => Effect.void,
+              metadata: (value: { metadata?: Record<string, unknown> }) =>
+                sessions
+                  .updatePart({
+                    ...part,
+                    state: { status: "running", input: {}, time: { start: Date.now() }, metadata: value.metadata },
+                  })
+                  .pipe(Effect.asVoid),
+            }
+            const result = yield* Effect.exit(
+              tool.execute({ subagent_type: "general", access: "read", prompt: "Read the supplied report" }, ctx),
+            )
+            if (restricted && !local) {
+              expect(Exit.isFailure(result)).toBe(true)
+              if (Exit.isFailure(result)) expect(String(Cause.squash(result.cause))).toContain("forbids cloud workers")
+              expect(calls.count).toBe(0)
+              expect(yield* sessions.children(root.id)).toEqual([])
+              expect(yield* (yield* BackgroundJob.Service).list()).toEqual([])
+              for (const text of [
+                "Explain the phrase 'No cloud workers.'",
+                "Do not require no cloud workers.",
+                "```\nNo cloud workers.\n```\nRead the report.",
+              ]) {
+                const userpart = (yield* sessions.messages({ sessionID: root.id })).find(
+                  (row) => row.info.id === user.id,
+                )?.parts[0]
+                if (!userpart || userpart.type !== "text") throw new Error("Original user text missing")
+                yield* sessions.updatePart({ ...userpart, text })
+                yield* sessions.setMetadata({
+                  sessionID: root.id,
+                  metadata: { [RayaChief.requestKey]: text, [RayaChief.phaseKey]: "task" },
+                })
+                expect(
+                  Exit.isSuccess(
+                    yield* Effect.exit(
+                      TaskLocal.check({
+                        sessions,
+                        provider: yield* Provider.Service,
+                        sessionID: root.id,
+                        messageID: assistant.id,
+                        agent: "auto",
+                        providerID: ref.providerID,
+                      }),
+                    ),
+                  ),
+                ).toBe(true)
+              }
+            }
+            if (local || !restricted) {
+              expect(Exit.isSuccess(result)).toBe(true)
+              if (Exit.isFailure(result)) throw Cause.squash(result.cause)
+              expect(calls.count).toBe(1)
+              expect((yield* sessions.children(root.id)).length).toBe(1)
+            }
+          }).pipe(
+            Effect.provide(
+              Layer.fresh(
+                LayerNode.compile(graph, [
+                  [Database.node, Database.layerFromPath(path.join(dir, "local-task.sqlite"))],
+                  [Provider.node, selected.layer],
+                  [RuntimeFlags.node, RuntimeFlags.layer()],
+                ]),
+              ),
+            ),
+          ),
+        )
+      }
+    }),
+  20_000,
 )
 
 it.live("fresh duplicate Auto Task is refused before child creation regardless of execution order", () =>

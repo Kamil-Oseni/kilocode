@@ -7,6 +7,7 @@ import { record } from "@/kilocode/task/continuation"
 import { RayaTaskDelegation } from "@/kilocode/task/delegation"
 import * as Handoff from "@/kilocode/goal/handoff"
 import { kickoff, omits } from "@/kilocode/task/request"
+import { required as contractRequired } from "@/kilocode/task/job-contract-request"
 
 /** Bind job-start grammar to the current owner's request, without changing question assignments. */
 export const assignment = Effect.fn("RoutineSchema.assignment")(function* (
@@ -26,7 +27,14 @@ export const assignment = Effect.fn("RoutineSchema.assignment")(function* (
   return {
     ...schema,
     additionalProperties: false,
-    required: [...new Set([...(schema.required ?? []).filter((key) => !removed.has(key)), "criteria", "outputs"])],
+    required: [
+      ...new Set([
+        ...(schema.required ?? []).filter((key) => !removed.has(key)),
+        "criteria",
+        "outputs",
+        ...(contractRequired(request) ? ["contract"] : []),
+      ]),
+    ],
     properties,
   } satisfies JSONSchema7
 })

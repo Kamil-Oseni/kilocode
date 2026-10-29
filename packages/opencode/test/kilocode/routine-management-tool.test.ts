@@ -33,6 +33,7 @@ import { RayaTaskQueue } from "@/kilocode/task/queue"
 import { KiloToolRegistry } from "@/kilocode/tool/registry"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import { TaskSchema } from "@/kilocode/tool/task-schema"
+import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 import * as Permission from "@/permission"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Session } from "@/session/session"
@@ -1653,6 +1654,39 @@ it.live(
         expect(advertised.properties?.budget).toBeUndefined()
         expect(advertised.properties?.deadline).toBeUndefined()
         expect(advertised.additionalProperties).toBe(false)
+        expect(advertised.required).not.toContain("contract")
+        const requested = (text: string) =>
+          pair.map((row) =>
+            row.info.role === "user"
+              ? {
+                  ...row,
+                  parts: row.parts.map((part) => (part.type === "text" ? { ...part, text } : part)),
+                }
+              : row,
+          )
+        const instruction = "Use native assign_organization_work with a version1 contract."
+        const contracted = yield* project(requested(`${owner}\n${instruction}`))
+        expect(contracted.required).toContain("contract")
+        expect(contracted.properties?.contract).toEqual(wire.properties?.contract)
+        const envelope = ToolEnvelope.schema(
+          [{ function: { name: "assign_organization_work", parameters: { ...contracted } } }],
+          "required",
+        )
+        expect(envelope.anyOf[0]).toMatchObject({
+          properties: { arguments: { required: expect.arrayContaining(["contract", "criteria", "outputs"]) } },
+        })
+        for (const text of [
+          `${owner}\n"${instruction}"`,
+          `${owner}\nExplain how to use native assign_organization_work with a version1 contract.`,
+          "Read-only status review. " + instruction,
+        ])
+          expect((yield* project(requested(text))).required).not.toContain("contract")
+        const unrelated = requested(`${owner}\n${instruction}`).map((row) =>
+          row.info.role === "assistant"
+            ? { ...row, info: { ...row.info, parentID: MessageID.make("msg_obsolete_owner") } }
+            : row,
+        )
+        expect(yield* project(unrelated)).toBe(wire)
         expect(wire.required).not.toContain("criteria")
         expect(wire.properties?.budget).toBeDefined()
         expect(wire.properties?.deadline).toBeDefined()

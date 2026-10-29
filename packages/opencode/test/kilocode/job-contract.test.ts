@@ -49,13 +49,13 @@ const decode = (value: unknown) => Effect.runSync(parse(value))
 
 test("a declared job retains each stage's outputs and separate recipient criteria", () => {
   const job = decode(proposal())
-  const sales = job.stages[2]!
+  const sales = job.stages[2]
   expect(job.stages[1]?.next).toEqual([{ stageID: "sales", required: true }])
   expect(same(sales, sales)).toBe(true)
   expect(same(sales, { ...sales, outputs: sales.outputs.toReversed(), criteria: sales.criteria.toReversed() })).toBe(
     true,
   )
-  expect(same(sales, { ...sales, outputs: [sales.outputs[0]!, path.resolve("sales-report.md")] })).toBe(false)
+  expect(same(sales, { ...sales, outputs: [sales.outputs[0], path.resolve("sales-report.md")] })).toBe(false)
   expect(
     same(sales, { ...sales, criteria: [{ id: "drafts", description: "Three drafts", verification: "Read files" }] }),
   ).toBe(false)
@@ -101,7 +101,7 @@ test("invalid graphs and overlapping or ambiguous stage contracts are rejected",
     decode({
       ...job,
       stages: job.stages.map((stage) =>
-        stage.id === "sales" ? { ...stage, outputs: [job.stages[0]!.outputs[0]!] } : stage,
+        stage.id === "sales" ? { ...stage, outputs: [job.stages[0].outputs[0]] } : stage,
       ),
     }),
   ).toThrow()
@@ -109,7 +109,7 @@ test("invalid graphs and overlapping or ambiguous stage contracts are rejected",
     decode({
       ...job,
       stages: job.stages.map((stage) =>
-        stage.id === "sales" ? { ...stage, criteria: [stage.criteria[0]!, stage.criteria[0]!] } : stage,
+        stage.id === "sales" ? { ...stage, criteria: [stage.criteria[0], stage.criteria[0]] } : stage,
       ),
     }),
   ).toThrow()
@@ -140,7 +140,7 @@ test("proposal data cannot carry host provenance and stays bounded as a whole", 
 
 test("contracts respect the existing sibling and depth limits", () => {
   const job = proposal()
-  const stage = job.stages[0]!
+  const stage = job.stages[0]
   const stages = Array.from({ length: 6 }, (_, index) => ({
     ...stage,
     id: `stage${index}`,

@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect"
+import { Cause, Effect, Option, Schema } from "effect"
 import type { Database } from "@opencode-ai/core/database/database"
 import type { Storage } from "@/storage/storage"
 import { RayaTask } from "."
@@ -61,7 +61,11 @@ export function continuation(input: {
         const starts = yield* Effect.promise(() => import("./snapshot"))
         const saved = yield* starts.RayaTaskSnapshot.make(input).find(row.childRunID)
         return !!saved && saved.outputs === undefined
-      }).pipe(Effect.catchCause(() => Effect.succeed(false)))
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause) ? Effect.failCause(cause).pipe(Effect.orDie) : Effect.succeed(false),
+        ),
+      )
     }
     const identity = yield* Schema.decodeUnknownEffect(record)(raw).pipe(Effect.orElseSucceed(() => undefined))
     if (!identity) return false
@@ -101,7 +105,11 @@ export function continuation(input: {
       if (Option.isNone(fs)) return false
       yield* pinned(fs.value, row.outputs)
       return true
-    }).pipe(Effect.catchCause(() => Effect.succeed(false)))
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterrupts(cause) ? Effect.failCause(cause).pipe(Effect.orDie) : Effect.succeed(false),
+      ),
+    )
     if (!scope) return false
     const execution = RayaTaskExecution.make(input.storage)
     const admit = (run: RayaTask.Run) =>
@@ -130,7 +138,11 @@ export function continuation(input: {
           ),
           Effect.catch(() => Effect.succeed(false)),
         )
-      }).pipe(Effect.catchCause(() => Effect.succeed(false)))
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause) ? Effect.failCause(cause).pipe(Effect.orDie) : Effect.succeed(false),
+        ),
+      )
     if (identity.trigger.kind !== "timer") {
       const history = yield* RayaTask.make(input).runsFor(identity.agentID)
       const run = history.find(

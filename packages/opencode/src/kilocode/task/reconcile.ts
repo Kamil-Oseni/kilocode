@@ -13,6 +13,9 @@ import { recover } from "./recovery"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { sql } from "drizzle-orm"
 import { SessionID } from "@/session/schema"
+import { RayaTaskSnapshot } from "./snapshot"
+import * as Contract from "./job-contract-store"
+import { same } from "./job-contract"
 
 /** Repair persisted links/history; recovering a stopped claim must not repeat session or model work. */
 export function reconcile(input: {
@@ -25,6 +28,8 @@ export function reconcile(input: {
   const queue = RayaTaskQueue.make(input.database)
   const errands = RayaTaskDelegation.make(input.database)
   const inbox = RayaTaskInbox.make(input.database)
+  const snapshots = RayaTaskSnapshot.make(input)
+  const contracts = Contract.make(input)
   const inspect = Effect.fn("RayaTaskRecovery.inspect")(function* (
     claim: Parameters<Parameters<typeof recover>[2]>[0],
   ) {
@@ -50,6 +55,8 @@ export function reconcile(input: {
       if (!goal || goal.status !== "active") return undefined
       const history = yield* tasks.runsFor(claim.agentID)
       const prior = history.find((run) => run.id === claim.id)
+      if (identity.contract || prior?.contract || goal.routine?.contract || (yield* snapshots.find(claim.id))?.contract)
+        return undefined
       const run: RayaTask.Run = {
         id: claim.id,
         agentID: claim.agentID,
@@ -121,10 +128,54 @@ export function reconcile(input: {
       const goal = yield* goals.get(sid)
       const history = yield* tasks.runsFor(claim.agentID)
       const prior = history.find((run) => run.id === claim.id)
+      const snapshot = yield* snapshots.find(claim.id)
+      const tracked = !!(
+        errand.contract ||
+        identity.contract ||
+        goal?.routine?.contract ||
+        prior?.contract ||
+        snapshot?.contract
+      )
+      if (tracked) {
+        const ref = identity.contract
+        if (
+          !ref ||
+          !snapshot ||
+          !goal ||
+          goal.status !== "active" ||
+          !isDeepStrictEqual(errand.contract, ref) ||
+          !isDeepStrictEqual(snapshot.contract, ref) ||
+          !isDeepStrictEqual(goal.routine?.contract, ref) ||
+          (prior && !isDeepStrictEqual(prior.contract, ref)) ||
+          snapshot.runID !== claim.id ||
+          snapshot.agentID !== claim.agentID ||
+          snapshot.definition.id !== claim.agentID ||
+          snapshot.sessionID !== sid ||
+          snapshot.at !== claim.at ||
+          snapshot.objective !== goal.objective ||
+          goal.routine?.agentID !== claim.agentID ||
+          goal.routine.runID !== claim.id ||
+          goal.routine.sessionID !== sid ||
+          (prior && prior.goalCreatedAt !== goal.createdAt)
+        )
+          return undefined
+        const proof = yield* contracts.read(ref).pipe(Effect.orElseSucceed(() => undefined))
+        if (!proof) return undefined
+        const expected = yield* Contract.stage(proof.receipt, ref.stageID).pipe(Effect.orElseSucceed(() => undefined))
+        if (!expected || !same(expected, errand)) return undefined
+        if (
+          !(yield* proof.check.pipe(
+            Effect.as(true),
+            Effect.orElseSucceed(() => false),
+          ))
+        )
+          return undefined
+      }
       const run: RayaTask.Run = {
         id: claim.id,
         agentID: claim.agentID,
         sessionID: sid,
+        ...(identity.contract && goal ? { contract: identity.contract, goalCreatedAt: goal.createdAt } : {}),
         at: claim.at,
         scheduleVersion: identity.scheduleVersion,
         trigger: identity.trigger,
@@ -200,6 +251,8 @@ export function reconcile(input: {
     const goal = yield* goals.get(sid)
     const history = yield* tasks.runsFor(claim.agentID)
     const prior = history.find((run) => run.id === claim.id)
+    if (identity.contract || prior?.contract || goal?.routine?.contract || (yield* snapshots.find(claim.id))?.contract)
+      return undefined
     const run: RayaTask.Run = {
       id: claim.id,
       agentID: claim.agentID,
@@ -251,6 +304,7 @@ export function reconcile(input: {
             if (
               attached.childRunID !== found.run.id ||
               attached.sessionID !== found.run.sessionID ||
+              !isDeepStrictEqual(attached.contract, found.run.contract) ||
               attached.state !== "running"
             )
               return false
@@ -260,6 +314,8 @@ export function reconcile(input: {
               saved.sessionID === found.run.sessionID &&
               saved.at === found.run.at &&
               saved.scheduleVersion === found.run.scheduleVersion &&
+              isDeepStrictEqual(saved.contract, found.run.contract) &&
+              (!found.run.contract || saved.goalCreatedAt === found.run.goalCreatedAt) &&
               isDeepStrictEqual(saved.trigger, found.run.trigger)
             )
           }

@@ -67,6 +67,40 @@ test("delegation policy intersects access and workspace without granting broader
   expect(scope({ dir: "/a" }, { dir: "/a/" })).toBe("/a")
 })
 
+test("contracted delegation prompt uses only its assigned stage while legacy keeps its standing job", () => {
+  const sender = agent("dispatch", "generalist")
+  const recipient = agent("researcher", "generalist", {
+    objective: "Read the standing prospect seed and produce a business concept and outreach drafts.",
+    tools: ["read", "write", "delegate_work"],
+    dir: path.resolve("jobs"),
+  })
+  const saved = structuredClone(recipient)
+  const context = "This is the bounded handoff check, not the standing business outreach job."
+  const value = request("contracted", sender.id, recipient.id, {
+    contract: { id: `rjc_${"a".repeat(48)}`, sha256: "b".repeat(64), stageID: "research" },
+    objective: "Write and read research.md containing Research step complete.",
+    criteria: [{ id: "R1", description: "Research step complete.", verification: "Read the final own file." }],
+    outputs: [path.resolve("jobs", "research.md")],
+    context,
+  })
+  const next = [{ stageID: "builder", recipientID: "builder", required: true }]
+  const contracted = prompt(sender, recipient, value, next)
+  expect(contracted).not.toContain(recipient.objective)
+  expect(contracted).not.toContain("Your standing assignment:")
+  expect(contracted).toContain(value.objective)
+  expect(contracted).toContain("[R1] Research step complete.")
+  expect(contracted).toContain("Verification: Read the final own file.")
+  expect(contracted).toContain(context)
+  expect(contracted).toContain(JSON.stringify(value.outputs))
+  expect(contracted).toContain(JSON.stringify(next))
+  expect(contracted).toContain("Required successors must actually complete")
+  expect(contracted).toContain("This restriction does not grant tools or paths beyond saved permissions.")
+  const legacy = prompt(sender, recipient, { ...value, contract: undefined })
+  expect(legacy).toContain(`Your standing assignment:\n${recipient.objective}`)
+  expect(legacy).toContain(value.objective)
+  expect(recipient).toEqual(saved)
+})
+
 test("organization-scoped delegation persists admission provenance and revalidates before start", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {

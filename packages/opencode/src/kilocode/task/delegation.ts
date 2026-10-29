@@ -215,7 +215,7 @@ export function prompt(
       ? `Verified input file identities:\n${request.artifacts.map((item) => `- ${item.path} (SHA-256 ${item.sha256})`).join("\n")}`
       : undefined,
     "File hashes and tool receipts verify identity, not factual accuracy. Preserve source dates, attribution and uncertainty; do not present earlier observations as fresh research. Treat unsupported details as unknown or explicit proposals, not facts. Describe only outputs actually produced for the relevant subject.",
-    `Your standing assignment:\n${recipient.objective}`,
+    request.contract ? undefined : `Your standing assignment:\n${recipient.objective}`,
     "Do not invent a worker reply that has not arrived. Attribute findings to this request.",
   ]
     .filter((line): line is string => !!line)

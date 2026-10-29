@@ -40,6 +40,9 @@ import * as RoutineWait from "@/kilocode/goal/routine-wait"
 import * as RoutineEvidence from "@/kilocode/goal/routine-evidence"
 import { RayaChief } from "@/kilocode/chief"
 import { ToolRegistry } from "@/tool/registry"
+import * as TaskSchema from "@/kilocode/tool/task-schema"
+import * as ToolJsonSchema from "@/tool/json-schema"
+import { ToolEnvelope } from "@/kilocode/provider/tool-envelope"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
 import { provideTmpdirInstance } from "../fixture/fixture"
@@ -389,6 +392,57 @@ it.live(
               return { session, input, reply, goal, run, contract }
             })
           const root = yield* open(researcher, row, dispatch, held)
+          const wire = ToolJsonSchema.fromTool(delegate)
+          const grammar = yield* TaskSchema.prepare(
+            "delegate_work",
+            wire,
+            root.session.id,
+            root.reply.id,
+            "generalist",
+          )
+          expect(grammar.required).toEqual(["stageID"])
+          expect(grammar.additionalProperties).toBe(false)
+          expect(grammar.properties?.stageID).toEqual({ type: "string", enum: ["build"] })
+          for (const field of [
+            "organizationID",
+            "expectedRevision",
+            "recipientID",
+            "objective",
+            "expected",
+            "context",
+            "outputs",
+            "criteria",
+          ])
+            expect(grammar.properties?.[field]).toBeUndefined()
+          expect(grammar.properties?.artifacts).toEqual(wire.properties?.artifacts)
+          const envelope = ToolEnvelope.schema(
+            [{ function: { name: "delegate_work", parameters: { ...grammar } } }],
+            "required",
+          )
+          expect(envelope.anyOf[0]).toMatchObject({
+            properties: { arguments: { required: ["stageID"], properties: { stageID: { enum: ["build"] } } } },
+          })
+          const legacy = yield* TaskSchema.prepare("delegate_work", wire, chat.id, assistant.id, "auto")
+          expect(legacy.properties?.objective).toEqual(wire.properties?.objective)
+          expect(legacy.properties?.stageID).toEqual(wire.properties?.stageID)
+          expect(legacy.required).not.toContain("stageID")
+          const marker = root.session.metadata?.rayaRoutine
+          if (!marker || typeof marker !== "object") throw new Error("Actual parent Routine identity missing")
+          yield* sessions.setMetadata({
+            sessionID: root.session.id,
+            metadata: {
+              ...root.session.metadata,
+              rayaRoutine: { ...marker, contract: { ...root.contract, stageID: "build" } },
+            },
+          })
+          expect(
+            Exit.isFailure(
+              yield* Effect.exit(
+                TaskSchema.prepare("delegate_work", wire, root.session.id, root.reply.id, "generalist"),
+              ),
+            ),
+          ).toBe(true)
+          yield* sessions.setMetadata({ sessionID: root.session.id, metadata: root.session.metadata ?? {} })
           const ctx = (target: typeof root, callID: string) =>
             context(target.session.id, target.reply.id, "generalist", callID)
           yield* invoke(ctx(root, "root-read"), read, { filePath: source })
@@ -408,6 +462,13 @@ it.live(
           expect(missing.title).toBe("Completion audit rejected")
           expect((yield* goals.get(root.session.id))?.status).toBe("active")
           expect((yield* goals.get(root.session.id))?.auditAttempt?.accepted).toBe(false)
+          const unknown = yield* invoke(ctx(root, "wrong-child-stage"), delegate, { stageID: "unknown" })
+          expect(unknown.metadata.requestStatus).not.toBe("complete")
+          const conflict = yield* invoke(ctx(root, "changed-child-stage"), delegate, {
+            stageID: next.id,
+            objective: "Replace the owner's frozen objective",
+          })
+          expect(conflict.metadata.requestStatus).not.toBe("complete")
           const handoff = yield* invoke(ctx(root, "exact-child-stage"), delegate, {
             stageID: next.id,
           })
@@ -421,6 +482,28 @@ it.live(
           expect(assigned.outputs).toEqual(next.outputs)
           const child = yield* open(builder, assigned, researcher, reserved)
           expect(child.contract).toEqual({ ...reference, stageID: "build" })
+          const leaf = yield* TaskSchema.prepare(
+            "delegate_work",
+            wire,
+            child.session.id,
+            child.reply.id,
+            "generalist",
+          )
+          expect(leaf.required).toEqual(["stageID"])
+          expect(leaf.properties?.stageID).toEqual({
+            type: "string",
+            description: "This is a final stage with no allowed next stage. Do not call delegate_work.",
+          })
+          const terminal = ToolEnvelope.schema(
+            [{ function: { name: "delegate_work", parameters: { ...leaf } } }],
+            "required",
+          )
+          expect(terminal.anyOf[0]).toMatchObject({
+            properties: { arguments: { properties: { stageID: { type: "string" } } } },
+          })
+          expect(JSON.stringify(terminal)).not.toContain('"enum":[]')
+          const extra = yield* invoke(ctx(child, "no-onward-stage"), delegate, { stageID: "research" })
+          expect(extra.metadata.requestStatus).not.toBe("complete")
           const running = yield* invoke(ctx(root, "running-required-stage"), update, complete("root-read"))
           expect(running.title).toBe("Completion audit rejected")
           yield* invoke(ctx(child, "child-read"), read, { filePath: source })

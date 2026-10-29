@@ -193,7 +193,8 @@ test("real shipped SQL schema and persistent goal restore into a new held inacti
     stderr: "pipe",
     windowsHide: true,
   })
-  const timer = setTimeout(() => child.kill(), 45_000)
+  // Four cold held/reviewed restarts may each consume their bounded 30-second budget.
+  const timer = setTimeout(() => child.kill(), 150_000)
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -211,4 +212,4 @@ test("real shipped SQL schema and persistent goal restore into a new held inacti
     portableAuthorityClaimed: false,
   })
   expect(() => process.kill(child.pid, 0)).toThrow()
-}, 50_000)
+}, 155_000)

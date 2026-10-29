@@ -274,6 +274,7 @@ Global.Path.data = result.path
 const storage = ManagedRuntime.make(AppNodeBuilder.build(LayerNode.group([Storage.node])))
 const store = await storage.runPromise(Storage.Service)
 async function restart(mode: string, selected = result) {
+  const started = performance.now()
   const child = Bun.spawn(
     [process.execPath, path.join(import.meta.dir, "profile-restored-restart.ts"), selected.path, mode],
     {
@@ -283,7 +284,13 @@ async function restart(mode: string, selected = result) {
       windowsHide: true,
     },
   )
-  const timer = setTimeout(() => child.kill(), 10_000)
+  // Cold source imports and mandatory Windows identity checks share this budget.
+  // A native identity request alone permits 15 seconds; retain a bounded aggregate.
+  let expired = false
+  const timer = setTimeout(() => {
+    expired = true
+    child.kill()
+  }, 30_000)
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -292,6 +299,11 @@ async function restart(mode: string, selected = result) {
   clearTimeout(timer)
   await writeFile(path.join(root, `restart-${mode}.stdout.log`), stdout)
   await writeFile(path.join(root, `restart-${mode}.stderr.log`), stderr)
+  await writeFile(
+    path.join(root, `restart-${mode}-${crypto.randomUUID()}.timing.json`),
+    JSON.stringify({ mode, profile: selected.path, elapsed: performance.now() - started, expired, code }),
+  )
+  assert.equal(expired, false, `Restored ${mode} child exceeded its 30-second aggregate startup/check/exit budget`)
   assert.equal(code, 0, `${stderr}\n${stdout}`)
   assert.ok(stdout.includes('"replayed":false'))
   assert.throws(() => process.kill(child.pid, 0))

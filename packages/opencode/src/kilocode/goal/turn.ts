@@ -10,7 +10,7 @@ import { ResultContract } from "@/kilocode/chief/result-contract"
 import { gate } from "@/kilocode/session/input-gate"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { record } from "@/kilocode/task/continuation"
-import { compacted } from "./compaction-lineage"
+import { compacted, replayed } from "./compaction-lineage"
 
 const log = Log.create({ service: "raya-goal-turn" })
 
@@ -133,7 +133,9 @@ export const associate = Effect.fn("RayaGoal.associate")(
       const rows = yield* reader.messages({ sessionID, limit: 129 })
       const input = rows.findLast((row) => row.info.role === "user")?.info.id
       if (input && (!goal.inputs?.includes(input) || goal.dispatch?.messageID !== input)) {
-        const linked = follows(rows, yield* reader.get(sessionID).pipe(Effect.orDie), goal, input, worker.id)
+        const session = yield* reader.get(sessionID).pipe(Effect.orDie)
+        const replay = replayed(rows, session, goal, input, worker.id)
+        const linked = follows(rows, session, goal, input, worker.id)
         const admitted = yield* gate.withLock(sessionID)(
           Effect.gen(function* () {
             const current = yield* goals.get(sessionID)
@@ -145,6 +147,15 @@ export const associate = Effect.fn("RayaGoal.associate")(
               current.createdAt !== goal.createdAt ||
               owner.phase !== "running" ||
               owner.id !== worker.id
+            )
+              return undefined
+            if (replay) {
+              return !!(yield* goals.replayed(sessionID, intent, input, worker.id, current.revision))
+            }
+            if (
+              rows
+                .find((row) => row.info.id === input)
+                ?.parts.some((part) => part.type === "text" && part.metadata?.["raya.input.complete"] !== undefined)
             )
               return undefined
             if (linked) {

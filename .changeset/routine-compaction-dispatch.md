@@ -1,5 +1,6 @@
 ---
 "@kilocode/cli": patch
+"raya": patch
 ---
 
-Continue routine work after automatic conversation compaction while preserving its goal, evidence scope and verified completion controls.
+Keep routine workers progressing through repeated automatic conversation compaction.

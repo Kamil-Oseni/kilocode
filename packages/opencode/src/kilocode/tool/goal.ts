@@ -40,6 +40,9 @@ const uncited = (reason: string | undefined, id: string) =>
 const literal =
   "For literal file requirements, compare the complete Read file-content-json and file-format with the original goal objective, including requested encoding, newline endings, final newline and actual byte count. LF (\\n) and CRLF (\\r\\n) are different bytes, including on Windows. Inspect separately captured eligibleEvidence.format when available; its endings, newline, bytes and sha256 are observed file facts, not proof that the original requirement is met. The eligibleEvidence output preview can be clipped; never treat it as complete file-content-json. Successful Write/Read calls and identical numbered lines do not establish that the requested bytes match. If complete byte evidence is unavailable, do not claim exact verification or invent byte counts or hashes. A concrete mismatch requires correction in the same authorized worker after a completed get_goal inspection, then fresh full readback before completion. Correct citations alone never require another Task."
 
+const waiting =
+  "Waiting for the original delegated worker reply. This same run and its accepted child remain active. The host will resume this goal after its verified reply arrives. Do not resume this goal yourself, repeat the handoff, or poll for updates."
+
 const citation = (reason: string | undefined) =>
   reason?.startsWith("Delegation result ") ||
   (reason?.startsWith("Evidence ") &&
@@ -237,7 +240,7 @@ export function goalTools(
   const update = Tool.define(
     "update_goal",
     Effect.succeed({
-      description: `Finish, block, pause, or resume the active goal. Read get_goal first and copy each saved criterion's exact id into criterionID and its description into requirement. Omit criterionID only when the goal has no saved criteria. To mark complete, derive every concrete requirement from the full objective and submit a requirement-by-requirement audit. Read get_goal again after verification and copy the exact eligibleEvidence.callID for each supporting result; never invent callIDs, part IDs, or short numeric IDs. Cite only eligible callIDs from this goal session or its descendants (get_goal lists them). Task handoff reports and child summaries are not completion evidence; cite their underlying work or verification results. Never cite unrelated sessions; never reuse evidence or done-when text from another project. Shape: { "status": "complete", "summary": "<one line>", "requirements": [ { "criterionID": "<saved criterion ID>", "requirement": "<exact saved criterion description; otherwise what was done>", "passed": true, "evidence": [ { "callID": "<copy exact eligibleEvidence.callID from get_goal>", "summary": "<what it proved>" } ] } ] } — use this top-level requirements shape and omit audit. If audit is explicitly supplied, it must be a native object, never a JSON-encoded string; do not send both shapes. Every required criterion and every claimed success must pass and cite one or more real completed work or verification tool calls by callID; a saved criterion explicitly marked required=false may instead be reported passed=false with an empty evidence list. Include every saved criterion exactly once, and provide at least one requirement supported by verified work. Criteria marked review=true require a separate goal-control acceptance: a valid audit pauses the goal ready for review instead of completing it. Do not resume it merely to bypass that review. If a criterion requires human judgment but is not classified, pause and request the needed review instead of claiming that judgment is verified. include messageID only when it is available. Successful command evidence must have exit code 0. Missing, failed, uncertain, goal-control-only, or invented evidence is rejected and leaves the goal active. An accepted delegate_work handoff does not authorize repeating the receiving worker's work or writing its outputs unless this stage explicitly assigns that work to you. Audit this worker's own saved criteria and artifacts; when an accepted handoff is the required result, verify its real receipt instead of performing later stages yourself. Do not mark blocked merely because an accepted child is still running. If this stage explicitly requires that child's result, leave the goal active and give a waiting reply; do not send status=active for an already active goal. When honest progress is impossible, mark blocked with a plain reason. Pause (with a short reason) instead of grinding when you hit an approval wall or genuinely need the user to act; the goal stops auto-continuing until they resume, and mark active again to resume a goal you paused yourself or a blocked goal. A goal paused by user controls must wait for those controls to resume it; never resume it yourself. You cannot clear a goal. ${literal}`,
+      description: `Finish, block, pause, or resume the active goal. Read get_goal first and copy each saved criterion's exact id into criterionID and its description into requirement. Omit criterionID only when the goal has no saved criteria. To mark complete, derive every concrete requirement from the full objective and submit a requirement-by-requirement audit. Read get_goal again after verification and copy the exact eligibleEvidence.callID for each supporting result; never invent callIDs, part IDs, or short numeric IDs. Cite only eligible callIDs from this goal session or its descendants (get_goal lists them). Task handoff reports and child summaries are not completion evidence; cite their underlying work or verification results. Never cite unrelated sessions; never reuse evidence or done-when text from another project. Shape: { "status": "complete", "summary": "<one line>", "requirements": [ { "criterionID": "<saved criterion ID>", "requirement": "<exact saved criterion description; otherwise what was done>", "passed": true, "evidence": [ { "callID": "<copy exact eligibleEvidence.callID from get_goal>", "summary": "<what it proved>" } ] } ] } — use this top-level requirements shape and omit audit. If audit is explicitly supplied, it must be a native object, never a JSON-encoded string; do not send both shapes. Every required criterion and every claimed success must pass and cite one or more real completed work or verification tool calls by callID; a saved criterion explicitly marked required=false may instead be reported passed=false with an empty evidence list. Include every saved criterion exactly once, and provide at least one requirement supported by verified work. Criteria marked review=true require a separate goal-control acceptance: a valid audit pauses the goal ready for review instead of completing it. Do not resume it merely to bypass that review. If a criterion requires human judgment but is not classified, pause and request the needed review instead of claiming that judgment is verified. include messageID only when it is available. Successful command evidence must have exit code 0. Missing, failed, uncertain, goal-control-only, or invented evidence is rejected and leaves the goal active. An accepted delegate_work handoff does not authorize repeating the receiving worker's work or writing its outputs unless this stage explicitly assigns that work to you. Audit this worker's own saved criteria and artifacts; when an accepted handoff is the required result, verify its real receipt instead of performing later stages yourself. If this stage requires the result of an accepted, still-running child, send status=blocked with a plain waiting reason. The host parks this goal while preserving the same run and original child, then resumes it after the verified child reply. Do not resume a host dependency wait yourself, repeat the handoff, or poll for updates. If the accepted handoff itself satisfies this stage, audit its real receipt instead of waiting for later-stage work. When honest progress is impossible, mark blocked with a plain reason. Pause (with a short reason) instead of grinding when you hit an approval wall or genuinely need the user to act; the goal stops auto-continuing until they resume, and mark active again to resume a goal you paused yourself or a blocked goal. A goal paused by user controls must wait for those controls to resume it; never resume it yourself. You cannot clear a goal. ${literal}`,
       parameters: RayaGoal.ModelUpdate,
       jsonSchema: GoalGate.owned(owned(ToolJsonSchema.fromSchema(RayaGoal.ModelUpdate), goals.get), goals.get),
       execute: (input: RayaGoal.ModelUpdate, ctx) =>
@@ -302,8 +305,10 @@ export function goalTools(
                           ? `Goal blocked: ${goal.blockedReason}`
                           : goal.status === "paused"
                             ? goal.dependencyWait
-                              ? "Waiting for the original delegated worker reply. Its saved work remains active; do not repeat the handoff. The host will resume this goal after its verified reply arrives."
-                              : "Goal paused. It will not auto-continue until it is resumed."
+                              ? waiting
+                              : input.status === "paused" && goal.pause === "agent"
+                                ? "You paused this goal yourself. It will not auto-continue. Wait until the stated condition is resolved before resuming it with status=active; a user-control pause must be resumed through user controls."
+                                : "Goal paused. It will not auto-continue until it is resumed."
                             : "Goal resumed.",
                     goal.status,
                   ),
@@ -315,13 +320,23 @@ export function goalTools(
           if (
             saved?.status === "paused" &&
             saved.pause === "agent" &&
+            saved.dependencyWait &&
+            !saved.review &&
+            !saved.replyRecovery &&
+            !saved.budgetHit
+          )
+            return result("Waiting for delegated worker", waiting, saved.status)
+          if (
+            saved?.status === "paused" &&
+            saved.pause === "agent" &&
+            !saved.dependencyWait &&
             !saved.review &&
             !saved.replyRecovery &&
             !saved.budgetHit
           )
             return {
               ...output,
-              output: `${output.output}\nYou paused this goal yourself. If you paused only to wait for delegated work, read get_goal, then explicitly resume with {"status":"active"} and wait for the existing child; do not repeat its work. If the original pause requires user action, keep waiting until that condition is resolved before resuming. Resuming does not accept this audit: verify the remaining requirements and submit a new completion audit afterward.`,
+              output: `${output.output}\nYou paused this goal yourself. Keep waiting until the original pause condition is resolved, then explicitly resume with {"status":"active"}. A user-control pause must be resumed through user controls. Resuming does not accept this audit: verify the remaining requirements and submit a new completion audit afterward.`,
             }
           const evidence = yield* goals
             .evidence(ctx.sessionID)

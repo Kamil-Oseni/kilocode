@@ -1,4 +1,5 @@
 import { Codec } from "./schema"
+import { replayed as replay } from "./compaction-lineage"
 // raya_change - Milestone A durable native goal state and evidence audit
 import { Cause, Effect, Fiber, Schema } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
@@ -2140,6 +2141,31 @@ export namespace RayaGoal {
       })
     })
 
+    /** Called under the live producer's input gate; preserve its original dispatch identity. */
+    const replayed = Effect.fn("RayaGoal.replayed")(function* (
+      sessionID: SessionID,
+      intent: string,
+      messageID: MessageID,
+      worker: string,
+      revision: string | undefined,
+    ) {
+      const state = yield* get(sessionID)
+      if (!state || !revision || state.intent !== intent || state.revision !== revision || !deps.sessions.get)
+        return undefined
+      const rows = yield* deps.sessions.messages({ sessionID, limit: 129 })
+      const session = yield* deps.sessions.get(sessionID)
+      if (!replay(rows, session, state, messageID, worker)) return undefined
+      return yield* save(
+        sessionID,
+        {
+          ...state,
+          inputs: [...new Set([...(state.inputs ?? []), messageID])],
+          dispatch: { ...state.dispatch!, messageID },
+        },
+        state,
+      )
+    })
+
     /** The Task input boundary verifies parent ownership before calling this internal intake. */
     const follow = Effect.fn("RayaGoal.follow")(function* (
       sessionID: SessionID,
@@ -2538,6 +2564,7 @@ export namespace RayaGoal {
       bound,
       initial,
       follow,
+      replayed,
     }
   }
 }

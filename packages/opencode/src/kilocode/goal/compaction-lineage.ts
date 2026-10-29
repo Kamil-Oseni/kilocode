@@ -1,3 +1,6 @@
+import type { Session } from "@/session/session"
+import { Schema } from "effect"
+import { record } from "@/kilocode/task/continuation"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { RayaGoal } from "."
 import { RayaChief } from "@/kilocode/chief"
@@ -79,4 +82,99 @@ export function compacted(
       "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed." &&
     [user, marker, summary, intake, message].every((row) => row.info.sessionID === message.info.sessionID)
   )
+}
+
+/** Follow only complete copied inputs through a bounded, persisted automatic compaction chain. */
+export function replayed(
+  rows: readonly SessionV1.WithParts[],
+  session: Session.Info,
+  goal: RayaGoal.State,
+  input: string,
+  worker: string,
+) {
+  const dispatch = goal.dispatch
+  if (
+    rows.length > 128 ||
+    JSON.stringify(rows).length > 2 * 1024 * 1024 ||
+    goal.status !== "active" ||
+    goal.completion === "reply" ||
+    !goal.intent ||
+    dispatch?.phase !== "started" ||
+    dispatch.intent !== goal.intent ||
+    dispatch.worker !== worker ||
+    !dispatch.messageID ||
+    !goal.inputs?.includes(dispatch.messageID) ||
+    rows.findLast((row) => row.info.role === "user")?.info.id !== input ||
+    new Set(rows.map((row) => row.info.id)).size !== rows.length ||
+    rows.some(
+      (row, idx) =>
+        row.info.sessionID !== session.id ||
+        (idx > 0 &&
+          (rows[idx - 1].info.id >= row.info.id || rows[idx - 1].info.time.created > row.info.time.created)) ||
+        row.parts.some((part) => part.sessionID !== session.id || part.messageID !== row.info.id),
+    )
+  )
+    return false
+  if (goal.routine) {
+    const identity = Schema.decodeUnknownOption(record)(session.metadata?.rayaRoutine)
+    if (
+      identity._tag !== "Some" ||
+      goal.routine.sessionID !== session.id ||
+      goal.routine.agentID !== identity.value.agentID ||
+      goal.routine.runID !== identity.value.runID
+    )
+      return false
+  }
+  const user = rows.find((row) => row.info.id === dispatch.messageID)
+  if (user?.info.role !== "user") return false
+  const part = user.parts.find((part) => part.type === "text" && part.metadata?.["raya.input.complete"])
+  const proof = part?.type === "text" ? part.metadata?.["raya.input.complete"] : undefined
+  if (!proof || typeof proof !== "object" || !("messageID" in proof) || typeof proof.messageID !== "string")
+    return false
+  const source = rows.find((row) => row.info.id === proof.messageID)
+  if (
+    source?.info.role !== "user" ||
+    !goal.inputs.includes(source.info.id) ||
+    !InputReceipt.complete(source, session.id, source.info.id)
+  )
+    return false
+  const start = rows.indexOf(source)
+  const end = rows.findIndex((row) => row.info.id === input)
+  if (end <= start || rows.findIndex((row) => row.info.id === user.info.id) < start) return false
+  const security = (row: SessionV1.User) => ({
+    agent: row.agent,
+    model: row.model,
+    tools: row.tools,
+    system: row.system,
+    format: row.format,
+  })
+  const payload = (row: SessionV1.WithParts) =>
+    row.parts.map((part) => {
+      const { id: _id, messageID: _message, sessionID: _session, ...body } = part
+      return body
+    })
+  const users = rows.slice(start + 1, end + 1).filter((row) => row.info.role === "user")
+  if (!users.length || users.length > 16) return false
+  const markers = new Set<string>()
+  for (const intake of users) {
+    if (intake.parts.length === 1 && intake.parts[0]?.type === "compaction") {
+      if (!intake.parts[0].auto || intake.parts[0].overflow === true) return false
+      markers.add(intake.info.id)
+      continue
+    }
+    const message = rows.find((row) => row.info.role === "assistant" && row.info.parentID === intake.info.id)
+    const idx = rows.indexOf(intake)
+    const summary = rows[idx - 1]
+    if (
+      intake.info.role !== "user" ||
+      !message ||
+      summary?.info.role !== "assistant" ||
+      !markers.delete(summary.info.parentID) ||
+      !isDeepStrictEqual(security(source.info), security(intake.info)) ||
+      !isDeepStrictEqual(payload(source), payload(intake)) ||
+      !compacted(rows, source, intake, message, goal)
+    )
+      return false
+  }
+  return markers.size === 0 && users.at(-1)?.info.id === input
 }

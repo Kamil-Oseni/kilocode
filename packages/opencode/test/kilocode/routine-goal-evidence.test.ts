@@ -1,12 +1,13 @@
 import { expect } from "bun:test"
 import path from "node:path"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Schema } from "effect"
 import { eq } from "drizzle-orm"
 import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineMessageTable as Inbox,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -27,6 +28,8 @@ import { RayaTaskDelegation, prompt, type Record as Request } from "@/kilocode/t
 import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { final } from "@/kilocode/task/final-report"
+import * as JobContract from "@/kilocode/task/job-contract"
+import { continuation, owned } from "@/kilocode/task/continuation"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Artifact from "@/kilocode/goal/artifact"
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
@@ -62,6 +65,407 @@ const it = testEffect(
   ),
 )
 const model = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") }
+
+it.live(
+  "native contracted Routine completion requires its actual completed exact child stage",
+  () =>
+    provideTmpdirInstance((directory) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const database = yield* Database.Service
+        const fs = yield* FSUtil.Service
+        const tasks = RayaTask.make({ storage, database })
+        const goals = RayaGoal.make({ storage, database, sessions })
+        const starts = RayaTaskSnapshot.make({ storage })
+        const catalog = yield* (yield* ToolRegistry.Service).all()
+        const assign = catalog.find((tool) => tool.id === "assign_organization_work")
+        const delegate = catalog.find((tool) => tool.id === "delegate_work")
+        const update = catalog.find((tool) => tool.id === "update_goal")
+        const read = catalog.find((tool) => tool.id === "read")
+        if (!assign || !delegate || !update || !read) throw new Error("Actual native registry tools unavailable")
+        const source = path.join(directory, "source.txt")
+        yield* fs.writeFileString(source, "Actual approved source; no child completion is implied.\n")
+        const criteria = [
+          { id: "read", description: "Read the approved source", verification: "Cite the actual source Read receipt" },
+        ]
+        const busy = (agent: RayaTask.Agent) =>
+          Effect.gen(function* () {
+            const session = yield* sessions.create({ title: "Reserved fixture; no inference" })
+            return yield* tasks.record({
+              id: crypto.randomUUID(),
+              agentID: agent.id,
+              sessionID: session.id,
+              at: Date.now(),
+              status: "running",
+              trigger: { kind: "manual" },
+              scheduleVersion: 1,
+            })
+          })
+        const context = (
+          sessionID: Session.Info["id"],
+          messageID: MessageID,
+          agent: string,
+          callID: string,
+        ): Tool.Context => ({
+          sessionID,
+          messageID,
+          callID,
+          agent,
+          abort: AbortSignal.any([]),
+          messages: [],
+          extra: {},
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        for (const mode of ["failed", "completed"]) {
+          const workers: RayaTask.Agent[] = []
+          for (const name of ["Dispatch", "Researcher", "Builder"])
+            workers.push(
+              yield* tasks.create({
+                name: `${mode} ${name}`,
+                role: "generalist",
+                objective: "Perform only the exact assigned stage",
+                dir: directory,
+                access: "full",
+                tools: ["read", "get_goal", "update_goal", "delegate_work", "inspect_team"],
+                enabled: true,
+                schedule: { kind: "manual" },
+              }),
+            )
+          const dispatch = workers[0]
+          const researcher = workers[1]
+          const builder = workers[2]
+          const organizations = RayaTaskOrganization.make(database, tasks, storage)
+          const team = yield* organizations.create({
+            name: `${mode} contract team`,
+            purpose: "Verify exact native required-stage completion",
+            members: workers.map((item) => ({ agentID: item.id, role: item.name })),
+            delegations: [
+              { senderID: dispatch.id, recipientID: researcher.id },
+              { senderID: researcher.id, recipientID: builder.id },
+            ],
+          })
+          const errands = RayaTaskDelegation.make(database, organizations.authorize, organizations.shares)
+          const held = yield* busy(researcher)
+          const reserved = yield* busy(builder)
+          const proposal = yield* JobContract.decode({
+            version: 1,
+            entry: "research",
+            stages: [
+              {
+                id: "research",
+                recipientID: researcher.id,
+                objective: "Read the approved source for the original stage",
+                outputs: [],
+                criteria,
+                next: [{ stageID: "build", required: true }],
+              },
+              {
+                id: "build",
+                recipientID: builder.id,
+                objective: "Read the approved source for the required child stage",
+                outputs: [],
+                criteria,
+                next: [],
+              },
+            ],
+          })
+          const entry = proposal.stages[0]
+          const next = proposal.stages[1]
+          const owner = `Run one manual saved local team job through Dispatch -> Researcher -> Builder. Each stage reads ${source}; Builder must complete before Researcher completes. Use only ${directory}.`
+          const chat = yield* sessions.create({
+            agent: "auto",
+            metadata: { [RayaChief.requestKey]: owner, [RayaChief.phaseKey]: "route" },
+          })
+          const user = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: chat.id,
+            role: "user",
+            agent: "auto",
+            model,
+            time: { created: Date.now() },
+          })
+          const original = yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: chat.id,
+            messageID: user.id,
+            type: "text",
+            text: owner,
+          })
+          const sealed = InputReceipt.seal(user, [original])
+          if (!sealed) throw new Error("Native original input publication could not be sealed")
+          yield* sessions.updatePart(sealed)
+          const assistant = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            sessionID: chat.id,
+            parentID: user.id,
+            role: "assistant",
+            agent: "auto",
+            mode: "auto",
+            providerID: model.providerID,
+            modelID: model.modelID,
+            cost: 0,
+            path: { cwd: directory, root: directory },
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: Date.now() },
+          })
+          const invoke = (ctx: Tool.Context, tool: Tool.Def, input: Record<string, unknown>) =>
+            Effect.gen(function* () {
+              const id = PartID.ascending()
+              const start = Date.now()
+              yield* sessions.updatePart({
+                id,
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                type: "tool",
+                tool: tool.id,
+                callID: ctx.callID!,
+                state: { status: "running", input, time: { start } },
+              })
+              const session = yield* sessions.get(ctx.sessionID)
+              const result = yield* owned({ database, storage, sessions, session }, tool.execute(input, ctx))
+              if (!result) throw new Error("Actual original tool execution was not admitted")
+              yield* sessions.updatePart({
+                id,
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                type: "tool",
+                tool: tool.id,
+                callID: ctx.callID!,
+                state: {
+                  status: "completed",
+                  input,
+                  output: result.output,
+                  title: result.title,
+                  metadata: result.metadata,
+                  time: { start, end: Date.now() },
+                },
+              })
+              return result
+            })
+          const params = {
+            organizationID: team.id,
+            expectedRevision: team.revision,
+            senderID: dispatch.id,
+            recipientID: entry.recipientID,
+            objective: entry.objective,
+            outputs: entry.outputs,
+            criteria: entry.criteria,
+            contract: proposal,
+          }
+          const admitted = yield* invoke(context(chat.id, assistant.id, "auto", `assign-${mode}`), assign, params)
+          expect(admitted.metadata.requestStatus).toBe("complete")
+          const metadata: Record<string, unknown> = admitted.metadata
+          if (typeof metadata.delegationID !== "string") throw new Error("Native contract admission has no request")
+          const row = yield* errands.get(metadata.delegationID)
+          const reference = yield* Schema.decodeUnknownEffect(JobContract.Reference)(
+            "contract" in row ? row.contract : undefined,
+          )
+          expect(reference.stageID).toBe("research")
+          const open = (agent: RayaTask.Agent, row: Request, sender: RayaTask.Agent, held: RayaTask.Run) =>
+            Effect.gen(function* () {
+              yield* tasks.transition(held, { ...held, status: "complete" })
+              const selected = yield* errands.take(agent.id)
+              if (!selected?.childRunID || selected.id !== row.id) throw new Error("Exact declared stage not reserved")
+              const contract = yield* Schema.decodeUnknownEffect(JobContract.Reference)(
+                "contract" in selected ? selected.contract : undefined,
+              )
+              const session = yield* sessions.create({
+                agent: "generalist",
+                permission: RayaTask.rules(agent, directory),
+                metadata: {
+                  rayaRoutine: {
+                    version: 3,
+                    agentID: agent.id,
+                    runID: selected.childRunID,
+                    scheduleVersion: 1,
+                    trigger: { kind: "manual" },
+                    delegationID: row.id,
+                    organizationID: team.id,
+                    organizationRevision: team.revision,
+                    outputs: row.outputs,
+                    contract,
+                  },
+                },
+              })
+              const input = yield* sessions.updateMessage({
+                id: MessageID.ascending(),
+                sessionID: session.id,
+                role: "user",
+                agent: "generalist",
+                model,
+                time: { created: Date.now() },
+              })
+              const objective = prompt(sender, agent, row)
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                sessionID: session.id,
+                messageID: input.id,
+                type: "text",
+                text: objective,
+              })
+              const goal = yield* goals.create(
+                session.id,
+                objective,
+                input.id,
+                undefined,
+                undefined,
+                row.criteria,
+                undefined,
+                undefined,
+                { agentID: agent.id, runID: selected.childRunID, sessionID: session.id, contract },
+              )
+              yield* goals.initial(session.id, goal.intent!, "actual-contract-fixture")
+              const run = yield* tasks.record({
+                id: selected.childRunID,
+                agentID: agent.id,
+                sessionID: session.id,
+                at: Date.now(),
+                status: "running",
+                scheduleVersion: 1,
+                trigger: { kind: "manual" },
+                goalCreatedAt: goal.createdAt,
+                contract,
+              })
+              const snapshot = yield* Schema.decodeUnknownEffect(RayaTaskSnapshot.Info)({
+                version: 3,
+                runID: run.id,
+                sessionID: session.id,
+                agentID: agent.id,
+                at: run.at,
+                definition: agent,
+                objective,
+                outputs: row.outputs,
+                contract,
+              })
+              yield* starts.save(snapshot)
+              yield* errands.attach(row.id, run.id, session.id)
+              const reply = yield* sessions.updateMessage({
+                id: MessageID.ascending(),
+                sessionID: session.id,
+                parentID: input.id,
+                role: "assistant",
+                agent: "generalist",
+                mode: "generalist",
+                providerID: model.providerID,
+                modelID: model.modelID,
+                cost: 0,
+                path: { cwd: directory, root: directory },
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: Date.now() },
+              })
+              const admission = { database, storage, sessions, session }
+              expect(yield* continuation(admission)).toBe(true)
+              expect(yield* owned(admission, Effect.succeed("actual-contract-body"))).toBe("actual-contract-body")
+              return { session, input, reply, goal, run, contract }
+            })
+          const root = yield* open(researcher, row, dispatch, held)
+          const ctx = (target: typeof root, callID: string) =>
+            context(target.session.id, target.reply.id, "generalist", callID)
+          yield* invoke(ctx(root, "root-read"), read, { filePath: source })
+          const complete = (callID: string) => ({
+            status: "complete",
+            summary: "Actual source read verified",
+            requirements: [
+              {
+                criterionID: criteria[0].id,
+                requirement: criteria[0].description,
+                passed: true,
+                evidence: [{ callID, summary: "Native Read returned the actual approved source" }],
+              },
+            ],
+          })
+          const missing = yield* invoke(ctx(root, "missing-required-stage"), update, complete("root-read"))
+          expect(missing.title).toBe("Completion audit rejected")
+          expect((yield* goals.get(root.session.id))?.status).toBe("active")
+          expect((yield* goals.get(root.session.id))?.auditAttempt?.accepted).toBe(false)
+          const handoff = yield* invoke(ctx(root, "exact-child-stage"), delegate, {
+            stageID: next.id,
+          })
+          expect(handoff.metadata.requestStatus).toBe("complete")
+          const receipt: Record<string, unknown> = handoff.metadata
+          if (typeof receipt.delegationID !== "string") throw new Error("Actual child admission has no request")
+          const assigned = yield* errands.get(receipt.delegationID)
+          expect(assigned.recipientID).toBe(next.recipientID)
+          expect(assigned.objective).toBe(next.objective)
+          expect(assigned.criteria).toEqual(next.criteria)
+          expect(assigned.outputs).toEqual(next.outputs)
+          const child = yield* open(builder, assigned, researcher, reserved)
+          expect(child.contract).toEqual({ ...reference, stageID: "build" })
+          const running = yield* invoke(ctx(root, "running-required-stage"), update, complete("root-read"))
+          expect(running.title).toBe("Completion audit rejected")
+          yield* invoke(ctx(child, "child-read"), read, { filePath: source })
+          if (mode === "failed") {
+            yield* tasks.transition(child.run, {
+              ...child.run,
+              status: "error",
+              outcome: { kind: "notify", summary: "Required native child did not complete", cost: 0 },
+            })
+            yield* errands.finish(assigned.id, "failed", builder, undefined, 0, "Required child failed")
+            const failed = yield* invoke(ctx(root, "failed-required-stage"), update, complete("root-read"))
+            expect(failed.title).toBe("Completion audit rejected")
+            expect((yield* goals.get(root.session.id))?.status).toBe("active")
+            expect((yield* errands.get(assigned.id)).state).toBe("failed")
+            continue
+          }
+          const audited = yield* invoke(ctx(child, "complete-child"), update, complete("child-read"))
+          expect(audited.metadata.status).toBe("complete")
+          const summary = "The declared child stage read the approved source; no further work is claimed."
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: child.session.id,
+            messageID: child.reply.id,
+            type: "text",
+            text: summary,
+          })
+          yield* sessions.updateMessage({
+            ...child.reply,
+            finish: "stop",
+            time: { ...child.reply.time, completed: Date.now() },
+          })
+          yield* goals.finished(child.session.id, child.reply.id)
+          const done = yield* goals.get(child.session.id)
+          if (!done) throw new Error("Actual completed child Goal missing")
+          const result = final(child.run, done, yield* sessions.messages({ sessionID: child.session.id }))
+          if (!result) throw new Error("Actual child final report is not authenticated")
+          yield* tasks.transition(child.run, {
+            ...child.run,
+            status: "complete",
+            outcome: { kind: "notify", summary, report: result.report, cost: 0 },
+          })
+          yield* errands.finish(assigned.id, "completed", builder, summary, 0)
+          const saved = child.session.metadata
+          const identity = saved?.rayaRoutine
+          if (!identity || typeof identity !== "object" || Array.isArray(identity))
+            throw new Error("Actual child Routine identity missing")
+          yield* sessions.setMetadata({
+            sessionID: child.session.id,
+            metadata: {
+              ...saved,
+              rayaRoutine: { ...identity, contract: { ...child.contract, stageID: "research" } },
+            },
+          })
+          const prior = yield* goals.get(root.session.id)
+          const attempted = Date.now()
+          const wrong = yield* invoke(ctx(root, "wrong-child-stage"), update, complete("root-read"))
+          expect(wrong.title).toBe("Completion audit rejected")
+          const rejected = yield* goals.get(root.session.id)
+          expect(rejected?.status).toBe("active")
+          expect(rejected?.auditAttempt?.accepted).toBe(false)
+          expect(rejected?.auditAttempt?.at).toBeGreaterThanOrEqual(attempted)
+          expect(rejected?.auditAttempt?.reason).toContain("unavailable or changed")
+          expect(rejected?.auditAttempt?.reason).not.toBe(prior?.auditAttempt?.reason)
+          yield* sessions.setMetadata({ sessionID: child.session.id, metadata: saved ?? {} })
+          const accepted = yield* invoke(ctx(root, "complete-original-stage"), update, complete("root-read"))
+          expect(accepted.metadata.status).toBe("complete")
+          expect((yield* goals.get(root.session.id))?.auditAttempt?.accepted).toBe(true)
+          expect((yield* errands.get(assigned.id)).state).toBe("completed")
+        }
+      }),
+    ),
+  60000,
+)
 
 it.live(
   "irreducible original owner context produces a native refusal without another model or assignment",

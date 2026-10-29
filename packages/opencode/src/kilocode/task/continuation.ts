@@ -12,6 +12,8 @@ import { Trigger } from "./trigger"
 import { Outputs, pinned } from "./output-scope"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Reference } from "./job-contract"
+import type { Session } from "@/session/session"
+import * as Contract from "./job-contract-store"
 
 export const record = Schema.Struct({
   version: Schema.Literals([1, 2, 3]),
@@ -44,6 +46,7 @@ export const record = Schema.Struct({
 export function continuation(input: {
   database?: Database.Interface
   storage: Storage.Interface
+  sessions?: Pick<Session.Interface, "get" | "messages" | "children">
   session: { id: string; metadata?: Record<string, unknown> }
 }): Effect.Effect<boolean> {
   return Effect.gen(function* () {
@@ -102,14 +105,32 @@ export function continuation(input: {
     if (!scope) return false
     const execution = RayaTaskExecution.make(input.storage)
     const admit = (run: RayaTask.Run) =>
-      !isDeepStrictEqual(run.contract, identity.contract)
-        ? Effect.succeed(false)
-        : execution.authorized(run).pipe(
-            Effect.flatMap((owned) =>
-              owned === undefined ? execution.acquire(run).pipe(Effect.map(Boolean)) : Effect.succeed(owned),
-            ),
-            Effect.catch(() => Effect.succeed(false)),
-          )
+      Effect.gen(function* () {
+        if (!isDeepStrictEqual(run.contract, identity.contract)) return false
+        if (run.contract) {
+          if (!input.database || !input.sessions) return false
+          const module = yield* Effect.promise(() => import("../goal"))
+          const starts = yield* Effect.promise(() => import("./snapshot"))
+          const goal = yield* module.RayaGoal.make({ ...input, sessions: input.sessions }).get(run.sessionID)
+          const snapshot = yield* starts.RayaTaskSnapshot.make(input).find(run.id)
+          if (!goal || !snapshot) return false
+          const session = yield* input.sessions.get(run.sessionID)
+          const proof = yield* Contract.make({ database: input.database, sessions: input.sessions }).current({
+            run,
+            goal,
+            session,
+            snapshot,
+          })
+          if (!proof) return false
+          yield* proof.check
+        }
+        return yield* execution.authorized(run).pipe(
+          Effect.flatMap((owned) =>
+            owned === undefined ? execution.acquire(run).pipe(Effect.map(Boolean)) : Effect.succeed(owned),
+          ),
+          Effect.catch(() => Effect.succeed(false)),
+        )
+      }).pipe(Effect.catchCause(() => Effect.succeed(false)))
     if (identity.trigger.kind !== "timer") {
       const history = yield* RayaTask.make(input).runsFor(identity.agentID)
       const run = history.find(
@@ -180,6 +201,7 @@ export function owned<A, E, R>(
   input: {
     database?: Database.Interface
     storage: Storage.Interface
+    sessions?: Pick<Session.Interface, "get" | "messages" | "children">
     session: { id: string; metadata?: Record<string, unknown> }
   },
   body: Effect.Effect<A, E, R>,

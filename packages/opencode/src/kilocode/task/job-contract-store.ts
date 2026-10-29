@@ -27,7 +27,7 @@ type Current = {
   session: { id: SessionID; metadata?: Record<string, unknown> }
   snapshot: Frame & { version: number }
 }
-type Sessions = Pick<Session.Interface, "get" | "findMessage">
+type Sessions = Pick<Session.Interface, "get"> & Partial<Pick<Session.Interface, "findMessage" | "messages">>
 export class Invalid extends Schema.TaggedErrorClass<Invalid>()("RoutineJobContract.Invalid", {
   message: Schema.String,
 }) {}
@@ -92,16 +92,18 @@ export type View = {
 /** Read-side proof only. This service cannot mint origin receipts, launch tasks or grant permissions. */
 export function make(input: { database: Database.Interface; sessions: Sessions }) {
   const db = input.database.db
+  const find = (sessionID: SessionID, id: string) =>
+    input.sessions.findMessage
+      ? input.sessions.findMessage(sessionID, (row) => row.info.id === id).pipe(Effect.map(Option.getOrUndefined))
+      : input.sessions.messages
+        ? input.sessions.messages({ sessionID }).pipe(Effect.map((rows) => rows.find((row) => row.info.id === id)))
+        : fail()
   const source = Effect.fn("RoutineJobContract.source")(function* (receipt: Receipt, root: Row) {
     const origin = receipt.origin
     const session = yield* input.sessions.get(origin.sessionID)
     if (session.metadata?.rayaRoutine !== undefined) return yield* fail()
-    const user = Option.getOrUndefined(
-      yield* input.sessions.findMessage(origin.sessionID, (row) => row.info.id === origin.userID),
-    )
-    const assistant = Option.getOrUndefined(
-      yield* input.sessions.findMessage(origin.sessionID, (row) => row.info.id === origin.messageID),
-    )
+    const user = yield* find(origin.sessionID, origin.userID)
+    const assistant = yield* find(origin.sessionID, origin.messageID)
     if (
       !user ||
       !InputReceipt.complete(user, origin.sessionID, origin.userID) ||
@@ -152,6 +154,7 @@ export function make(input: { database: Database.Interface; sessions: Sessions }
       })
     )
       return yield* fail()
+    return undefined
   })
   const load = Effect.fn("RoutineJobContract.load")(function* (ref: Reference) {
     yield* Schema.decodeUnknownEffect(Reference)(ref, { onExcessProperty: "error" })
@@ -302,6 +305,7 @@ export function make(input: { database: Database.Interface; sessions: Sessions }
             yield* proof.check
             const fresh = yield* db.select().from(Delegation).where(eq(Delegation.id, incoming.id)).get()
             if (!isDeepStrictEqual(fresh, incoming)) return yield* fail()
+            return undefined
           }),
         )
         return { receipt: proof.receipt, ref, stage: own, next, required, incoming, check } satisfies View

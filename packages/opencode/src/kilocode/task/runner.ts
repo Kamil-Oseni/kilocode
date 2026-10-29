@@ -68,6 +68,9 @@ import { verify } from "./final-output"
 import * as Files from "./output-scope"
 import { bound as reviewed } from "@/kilocode/goal/review-source"
 import type { Reference } from "./job-contract"
+import * as Capture from "./job-contract-capture"
+import * as Contract from "./job-contract-store"
+import { same as staged } from "./job-contract"
 
 const WAIT = "waiting on you"
 const failed = (run: RayaTask.Run) => !!run.outcome?.delivery && run.outcome.delivery.status !== "passed"
@@ -250,7 +253,7 @@ export namespace RayaTaskRunner {
     reviewReply: (sessionID: SessionID, intent: string) => Effect.Effect<void, unknown>
     delegate: (
       input: Ask,
-      opts?: { reportSessionID: SessionID },
+      opts?: { reportSessionID: SessionID; capture?: Capture.Handle },
     ) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid | Conflict>
     stop: (id: string) => Effect.Effect<Errand, RayaTask.GuardError | RayaTask.NotFoundError | Invalid>
     stopMembers: (id: string, members: readonly string[]) => Effect.Effect<void, unknown>
@@ -298,6 +301,8 @@ export namespace RayaTaskRunner {
     const reports = RayaRoutineReports.make(input)
     const origins = reportOrigin(input.storage)
     const goals = RayaGoal.make(input)
+    const sessions = input.sessions
+    const contracts = input.database ? Contract.make({ database: input.database, sessions }) : undefined
     const reservations = input.database ? reservation(input.database) : undefined
     const schedule = input.database ? scheduler({ ...input, database: input.database }) : undefined
     const restore = input.database ? recovery({ ...input, database: input.database }) : undefined
@@ -417,6 +422,24 @@ export namespace RayaTaskRunner {
         return yield* new RayaTask.GuardError({
           message: "This assignment's budget changed. Review it before continuing.",
         })
+      if (
+        ![snapshot.contract, identity.contract, goal.routine?.contract, run.contract].every((ref) =>
+          isDeepStrictEqual(ref, row.contract),
+        )
+      )
+        return yield* new RayaTask.GuardError({ message: "The delegated contract identity changed." })
+      if (row.contract) {
+        if (!contracts) return yield* new RayaTask.GuardError({ message: "Contract authority is unavailable." })
+        const proof = yield* contracts
+          .read(row.contract)
+          .pipe(Effect.mapError((err) => new RayaTask.GuardError({ message: err.message })))
+        const expected = yield* Contract.stage(proof.receipt, row.contract.stageID).pipe(
+          Effect.mapError((err) => new RayaTask.GuardError({ message: err.message })),
+        )
+        if (!staged(expected, row))
+          return yield* new RayaTask.GuardError({ message: "The delegated stage requirements changed." })
+        yield* proof.check.pipe(Effect.mapError((err) => new RayaTask.GuardError({ message: err.message })))
+      }
       if (row.parentRunID) {
         const parent = (yield* tasks.runsFor(sender.id)).find((item) => item.id === row.parentRunID)
         if (!RayaTask.pending(parent))
@@ -1643,7 +1666,9 @@ export namespace RayaTaskRunner {
           !isDeepStrictEqual(identity.trigger, prior.trigger) ||
           identity.organizationID !== taken.organizationID ||
           identity.organizationRevision !== taken.organizationRevision ||
-          !isDeepStrictEqual(identity.outputs, taken.outputs)
+          !isDeepStrictEqual(identity.outputs, taken.outputs) ||
+          !isDeepStrictEqual(identity.contract, taken.contract) ||
+          !isDeepStrictEqual(prior.contract, taken.contract)
         )
           return yield* new RayaTask.GuardError({
             message: "This delegation's saved run identity is inconsistent and needs recovery review.",
@@ -1691,21 +1716,41 @@ export namespace RayaTaskRunner {
         yield* errands.finish(taken.id, "failed", recipient, undefined, undefined, LATE).pipe(Effect.tap(queuedReport))
         return yield* errands.get(taken.id)
       }
-      const note = prompt(sender, recipient, {
-        source: taken.source,
-        senderID: taken.senderID,
-        recipientID: taken.recipientID,
-        organizationID: taken.organizationID,
-        organizationRevision: taken.organizationRevision,
-        objective: taken.objective,
-        expected: taken.expected,
-        criteria: taken.criteria,
-        outputs: taken.outputs,
-        context: taken.context,
-        deadline: taken.deadline,
-        budget: taken.budget,
-        artifacts: taken.artifacts,
-      })
+      const proof =
+        taken.contract && contracts
+          ? yield* contracts
+              .read(taken.contract)
+              .pipe(Effect.mapError((err) => new RayaTask.GuardError({ message: err.message })))
+          : undefined
+      if (taken.contract && !proof)
+        return yield* new RayaTask.GuardError({ message: "The saved job contract is unavailable." })
+      const next = proof?.receipt.proposal.stages
+        .find((item) => item.id === taken.contract?.stageID)
+        ?.next.map((edge) => ({
+          ...edge,
+          recipientID: proof.receipt.proposal.stages.find((item) => item.id === edge.stageID)!.recipientID,
+        }))
+      const note = prompt(
+        sender,
+        recipient,
+        {
+          source: taken.source,
+          contract: taken.contract,
+          senderID: taken.senderID,
+          recipientID: taken.recipientID,
+          organizationID: taken.organizationID,
+          organizationRevision: taken.organizationRevision,
+          objective: taken.objective,
+          expected: taken.expected,
+          criteria: taken.criteria,
+          outputs: taken.outputs,
+          context: taken.context,
+          deadline: taken.deadline,
+          budget: taken.budget,
+          artifacts: taken.artifacts,
+        },
+        next,
+      )
       const run = yield* fire(recipient.id, undefined, note, {
         follow: false,
         defer: true,
@@ -1809,7 +1854,7 @@ export namespace RayaTaskRunner {
 
     const delegate = Effect.fn("RayaTaskRunner.delegate")(function* (
       input: Ask,
-      opts?: { reportSessionID: SessionID },
+      opts?: { reportSessionID: SessionID; capture?: Capture.Handle },
     ) {
       yield* transfer.check()
       if (!errands)
@@ -1832,6 +1877,47 @@ export namespace RayaTaskRunner {
           return yield* new RayaTask.GuardError({ message: "The parent run has ended and cannot assign new work." })
       }
       const goal = parent ? yield* goals.get(parent.sessionID) : undefined
+      const incoming = parent ? yield* errands.bySession(parent.sessionID) : undefined
+      const session = parent ? yield* sessions.get(parent.sessionID) : undefined
+      const snapshot = parent ? yield* snapshots.find(parent.id) : undefined
+      const marked = session?.metadata?.rayaRoutine
+      const tagged =
+        marked && typeof marked === "object" && ("contract" in marked || ("version" in marked && marked.version === 3))
+      const tracked = !!(
+        incoming?.contract ||
+        parent?.contract ||
+        goal?.routine?.contract ||
+        snapshot?.contract ||
+        tagged
+      )
+      const view =
+        tracked && parent && goal && session && snapshot && contracts
+          ? yield* contracts
+              .current({ run: parent, goal, session, snapshot })
+              .pipe(Effect.mapError((err) => new Invalid({ message: err.message })))
+          : undefined
+      if (tracked && !view) return yield* new Invalid({ message: "The original contracted parent run is unavailable." })
+      const bound =
+        view && parent && goal && session && snapshot
+          ? {
+              ...view,
+              check: Effect.gen(function* () {
+                yield* view.check
+                const current = (yield* tasks.runsFor(parent.agentID)).find((run) => run.id === parent.id)
+                if (
+                  !isDeepStrictEqual(current, parent) ||
+                  !isDeepStrictEqual(yield* goals.get(parent.sessionID), goal) ||
+                  !isDeepStrictEqual(yield* snapshots.find(parent.id), snapshot) ||
+                  !isDeepStrictEqual(
+                    (yield* sessions.get(parent.sessionID)).metadata?.rayaRoutine,
+                    session.metadata?.rayaRoutine,
+                  )
+                )
+                  return yield* new Contract.Invalid({ message: "The parent run changed before contract admission." })
+                return undefined
+              }).pipe(Effect.mapError((err) => new Contract.Invalid({ message: err.message }))),
+            }
+          : undefined
       const allocation = goal?.budget?.modelCost
         ? { limit: goal.budget.modelCost, spent: goal.usage.cost ?? 0 }
         : undefined
@@ -1844,7 +1930,8 @@ export namespace RayaTaskRunner {
         if (!(yield* origins.save(input.source, opts.reportSessionID)))
           return yield* new RayaTask.GuardError({ message: "This assignment already has another report conversation." })
       }
-      const admitted = yield* errands.admit(input, sender, recipient, found.gone, allocation)
+      const admission = errands.admit(input, sender, recipient, found.gone, allocation, opts?.capture, bound)
+      const admitted = yield* admission
       if (admitted.record.state === "failed" && admitted.record.reason === LATE) {
         yield* repair(admitted.record.id)
         return admitted.record
@@ -3068,6 +3155,8 @@ export namespace RayaTaskRunner {
           (claim.phase === "claimed" && snapshot.sessionID !== sid) ||
           snapshot.agentID !== id ||
           snapshot.at !== claim.at ||
+          !isDeepStrictEqual(snapshot.contract, identity.contract) ||
+          (prior !== undefined && !isDeepStrictEqual(prior.contract, identity.contract)) ||
           (snapshot.definition.scheduleVersion ?? 1) !== identity.scheduleVersion
         )
           return undefined
@@ -3076,13 +3165,19 @@ export namespace RayaTaskRunner {
         if (prior && goal?.createdAt !== prior.goalCreatedAt) return undefined
         if (
           goal &&
-          (!isDeepStrictEqual(goal.routine, { agentID: id, runID, sessionID: sid }) ||
+          (!isDeepStrictEqual(goal.routine, {
+            agentID: id,
+            runID,
+            sessionID: sid,
+            ...(identity.contract ? { contract: identity.contract } : {}),
+          }) ||
             goal.objective !== snapshot.objective)
         )
           return undefined
         const run: RayaTask.Run = {
           id: runID,
           agentID: id,
+          ...(identity.contract ? { contract: identity.contract } : {}),
           at: claim.at,
           sessionID: sid,
           scheduleVersion: identity.scheduleVersion,
@@ -3119,7 +3214,17 @@ export namespace RayaTaskRunner {
           const goal = yield* goals.get(sessionID)
           if (recovered && !isDeepStrictEqual(goal, recovered.goal)) return false
           if (prior?.goalCreatedAt !== undefined && goal?.createdAt !== prior.goalCreatedAt) return false
-          if (prior && !row && goal?.routine && !isDeepStrictEqual(goal.routine, { agentID: id, runID, sessionID }))
+          if (
+            prior &&
+            !row &&
+            goal?.routine &&
+            !isDeepStrictEqual(goal.routine, {
+              agentID: id,
+              runID,
+              sessionID,
+              ...(prior.contract ? { contract: prior.contract } : {}),
+            })
+          )
             return false
           if (goal?.status === "active" || goal?.status === "paused")
             yield* goals.update(sessionID, { status: "blocked", reason }, goal.revision).pipe(

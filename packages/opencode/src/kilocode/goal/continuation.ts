@@ -477,7 +477,10 @@ function launch(input: {
     }),
   )
   if (input.nested) return body
-  return owned({ database: input.database, storage: input.storage, session: input.session }, body)
+  return owned(
+    { database: input.database, storage: input.storage, sessions: input.sessions, session: input.session },
+    body,
+  )
 }
 
 function detail(error: unknown) {
@@ -989,7 +992,10 @@ export namespace RayaGoalContinuation {
   function resumption(input: ResumeInput) {
     return Effect.gen(function* () {
       const session = yield* input.sessions.get(input.sessionID)
-      return yield* owned({ database: input.database, storage: input.storage, session }, proceed(input))
+      return yield* owned(
+        { database: input.database, storage: input.storage, sessions: input.sessions, session },
+        proceed(input),
+      )
     })
   }
 

@@ -37,6 +37,11 @@ import { kickoff, forward, omits, preserve, prohibits, ownerContext } from "@/ki
 import * as Handoff from "@/kilocode/goal/handoff"
 import * as OwnerScope from "@/kilocode/task/owner-scope"
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
+import { Proposal } from "@/kilocode/task/job-contract"
+import * as Capture from "@/kilocode/task/job-contract-capture"
+import * as Contract from "@/kilocode/task/job-contract-store"
+import { same as staged } from "@/kilocode/task/job-contract"
+import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 
 const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/))
 const Text = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4000))
@@ -205,7 +210,7 @@ const CreateSubordinate = Schema.Struct({
   delegatesTo: Schema.optional(Schema.Array(Schema.String).check(Schema.isMaxLength(50))),
   ...ScheduleFields,
 })
-const DelegateWork = Schema.Struct({
+const LegacyDelegateWork = Schema.Struct({
   organizationID: Organization.fields.id,
   expectedRevision: Organization.fields.revision.annotate({
     description:
@@ -240,7 +245,22 @@ const DelegateWork = Schema.Struct({
       "Exact absolute files already created or changed in this worker run that the recipient must consume. Copy paths from successful file receipts. Mentioning paths in objective or context does not capture a verified file handoff. Never supply directories or future outputs.",
   }),
 })
+const DelegateWork = Schema.Struct({
+  ...LegacyDelegateWork.fields,
+  stageID: Schema.optional(Proposal.fields.entry).annotate({
+    description:
+      "For a contracted job, copy one allowed next stage ID. Raya fills its frozen recipient and requirements; supply only the actual input artifacts and any authorized optional budget.",
+  }),
+  organizationID: Schema.optional(LegacyDelegateWork.fields.organizationID),
+  expectedRevision: Schema.optional(LegacyDelegateWork.fields.expectedRevision),
+  recipientID: Schema.optional(LegacyDelegateWork.fields.recipientID),
+  objective: Schema.optional(LegacyDelegateWork.fields.objective),
+})
 const AssignOrganizationWork = Schema.Struct({
+  contract: Schema.optional(Proposal).annotate({
+    description:
+      "Optional immutable stage tree for this new job. Freeze every stage's exact outputs, criteria, objective and required onward stages. Host owner capture and existing permissions still apply. Never supply origin or capture credentials.",
+  }),
   organizationID: Organization.fields.id,
   expectedRevision: Organization.fields.revision.annotate({
     description:
@@ -1041,7 +1061,7 @@ export function routineManagementTools(input: {
       description:
         "Assign one bounded follow-on request to an existing worker through the current organization. One work tree supports up to eight sequential requests and 64 saved requests total. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Include artifacts when the recipient must use exact files created or changed in this worker run; Raya verifies their current bytes and saves their SHA-256 identities. Use ask_options before calling if the responsible worker, outcome, expected result, context, deadline, or budget is ambiguous. The recipient must be on an exact saved outgoing delegation route. This tool saves and starts the request when possible; it never returns a worker result that has not arrived.",
       parameters: DelegateWork,
-      execute: (params: typeof DelegateWork.Type, ctx: Tool.Context) =>
+      execute: (raw: typeof DelegateWork.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
           if (!ctx.callID) return yield* Effect.fail(new Error("Work delegation requires a stable tool call."))
           const session = yield* input.sessions.get(ctx.sessionID)
@@ -1058,6 +1078,58 @@ export function routineManagementTools(input: {
               RayaTask.pending(item),
           )
           if (!run) return yield* Effect.fail(new Error("The current routine run is no longer active."))
+          const incoming = yield* errands.bySession(ctx.sessionID)
+          const state = yield* RayaGoal.make(input).get(ctx.sessionID)
+          const snapshot = yield* RayaTaskSnapshot.make(input).find(run.id)
+          const tracked = !!(
+            incoming?.contract ||
+            run.contract ||
+            identity.contract ||
+            state?.routine?.contract ||
+            snapshot?.contract
+          )
+          const view =
+            tracked && state && snapshot
+              ? yield* Contract.make(input).current({ run, goal: state, session, snapshot })
+              : undefined
+          if (tracked && !view) return yield* Effect.fail(new Error("The saved parent contract is unavailable."))
+          if (!view && raw.stageID !== undefined)
+            return yield* Effect.fail(new Error("This legacy job has no frozen stages."))
+          const selected = view?.next.find((item) => item.id === raw.stageID)
+          if (view && !selected)
+            return yield* Effect.fail(new Error("Choose an allowed next stage from this job contract."))
+          if (view && selected) {
+            if (
+              (raw.organizationID !== undefined && raw.organizationID !== identity.organizationID) ||
+              (raw.expectedRevision !== undefined && raw.expectedRevision !== identity.organizationRevision) ||
+              !staged(selected, {
+                recipientID: raw.recipientID ?? selected.recipientID,
+                objective: raw.objective ?? selected.objective,
+                expected: raw.expected ?? selected.expected,
+                outputs: raw.outputs ?? selected.outputs,
+                criteria: raw.criteria ?? selected.criteria,
+                context: selected.context,
+              }) ||
+              (raw.context !== undefined &&
+                raw.context !== view.receipt.proposal.stages.find((item) => item.id === selected.id)?.context)
+            )
+              return yield* Effect.fail(new Error("Supplied fields conflict with the frozen child stage."))
+          }
+          const params =
+            selected && view
+              ? {
+                  ...raw,
+                  organizationID: view.receipt.organizationID,
+                  expectedRevision: view.receipt.organizationRevision,
+                  recipientID: selected.recipientID,
+                  objective: selected.objective,
+                  expected: selected.expected,
+                  outputs: selected.outputs,
+                  criteria: selected.criteria,
+                  context: view.receipt.proposal.stages.find((item) => item.id === selected.id)?.context,
+                  deadline: raw.deadline ?? incoming?.deadline,
+                }
+              : yield* Schema.decodeUnknownEffect(LegacyDelegateWork)(raw)
           const organization = yield* organizations.get(params.organizationID)
           if (organization.archived) return yield* Effect.fail(new Error("This organization is archived."))
           if (organization.revision !== params.expectedRevision)
@@ -1078,7 +1150,6 @@ export function routineManagementTools(input: {
             return yield* Effect.fail(
               new Error("This organization does not permit the current worker to delegate to that worker."),
             )
-          const incoming = yield* errands.bySession(ctx.sessionID)
           if (
             incoming &&
             (incoming.recipientID !== sender.id ||
@@ -1141,23 +1212,26 @@ export function routineManagementTools(input: {
           const source = `delegate:${digest(
             JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, sender.id, organization.id]),
           ).slice(0, 48)}`
-          const text = yield* preserve(
-            OwnerScope.body(incoming?.context),
-            incoming?.context ? params.context : params.context?.trim(),
-          )
-          const context = yield* OwnerScope.context(dir, text)
+          const text = selected
+            ? undefined
+            : yield* preserve(
+                OwnerScope.body(incoming?.context),
+                incoming?.context ? params.context : params.context?.trim(),
+              )
+          const context = selected?.context ?? (yield* OwnerScope.context(dir, text))
           const artifacts = yield* handoff(ctx.sessionID, params.artifacts)
           const outputs = yield* targets(params.outputs)
           const request = {
             source,
+            ...(selected && view ? { contract: { ...view.ref, stageID: selected.id } } : {}),
             senderID: sender.id,
             recipientID: params.recipientID,
             parentID: incoming?.id,
             parentRunID: run.id,
             organizationID: organization.id,
             organizationRevision: organization.revision,
-            objective: params.objective.trim(),
-            expected: params.expected?.trim(),
+            objective: selected?.objective ?? params.objective.trim(),
+            expected: selected ? selected.expected : params.expected?.trim(),
             criteria: params.criteria,
             outputs,
             context,
@@ -1180,8 +1254,8 @@ export function routineManagementTools(input: {
             record.parentRunID !== run.id ||
             record.organizationID !== organization.id ||
             record.organizationRevision !== organization.revision ||
-            record.objective !== params.objective.trim() ||
-            record.expected !== params.expected?.trim() ||
+            record.objective !== request.objective ||
+            record.expected !== request.expected ||
             !isDeepStrictEqual(record.criteria, params.criteria) ||
             !isDeepStrictEqual(record.outputs, outputs) ||
             record.context !== context ||
@@ -1215,7 +1289,7 @@ export function routineManagementTools(input: {
             Effect.succeed({
               title: "Work delegation needs review",
               output: `${err instanceof Error ? err.message : String(err)} Review the current organization and work chain before retrying.`,
-              metadata: { requestStatus: "unresolved", view: "routines", organizationID: params.organizationID },
+              metadata: { requestStatus: "unresolved", view: "routines", organizationID: raw.organizationID },
             }),
           ),
         ),
@@ -1356,22 +1430,30 @@ export function routineManagementTools(input: {
           )
           if (latest?.info.id !== user?.info.id)
             return yield* Effect.fail(new Error("The owner request changed before organization work could start."))
+          const capture = params.contract
+            ? yield* Capture.make({
+                database: input.database,
+                sessions: input.sessions,
+                goal: (sessionID) => RayaGoal.make(input).get(sessionID),
+              }).capture({ sessionID: ctx.sessionID, messageID: ctx.messageID, callID: ctx.callID, source })
+            : undefined
           const record = yield* runner.delegate(
             {
               source,
+              ...(capture ? { contract: capture.ref } : {}),
               senderID: sender.id,
               recipientID: recipient.id,
               organizationID: organization.id,
               organizationRevision: organization.revision,
-              objective: params.objective.trim(),
-              expected: params.expected?.trim(),
+              objective: capture?.stage.objective ?? params.objective.trim(),
+              expected: capture ? capture.stage.expected : params.expected?.trim(),
               criteria: params.criteria,
               outputs,
-              context,
+              context: capture?.stage.context ?? context,
               deadline: params.deadline,
               budget: params.budget,
             },
-            { reportSessionID: ctx.sessionID },
+            { reportSessionID: ctx.sessionID, ...(capture ? { capture } : {}) },
           )
           if (!isDeepStrictEqual(record.outputs, outputs))
             return yield* Effect.fail(new Error("The saved output scope does not match this request."))

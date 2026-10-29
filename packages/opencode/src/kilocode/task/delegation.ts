@@ -8,6 +8,7 @@ import {
   RayaRoutineDelegationTable as Delegation,
   RayaRoutineOrganizationTable as Organization,
   RayaRoutineMessageTable as Message,
+  RayaRoutineJobContractTable as Contract,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionID } from "@/session/schema"
 import { commitment, direct, standing } from "./commitment"
@@ -26,7 +27,11 @@ import { Criteria } from "@/kilocode/goal/criteria"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Files from "./output-scope"
 import { DEPTH, FAN, TREE } from "./limits"
-import { Reference } from "./job-contract"
+import { Reference, same as matches, type Receipt } from "./job-contract"
+import * as Capture from "./job-contract-capture"
+import { stage as compile } from "./job-contract-store"
+import type { View } from "./job-contract-store"
+import { gate } from "@/kilocode/session/input-gate"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const body = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000))
@@ -49,6 +54,7 @@ export const Artifacts = Schema.Array(Artifact).check(
 
 export const Request = Schema.Struct({
   source: token,
+  contract: Schema.optional(Reference),
   senderID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
   recipientID: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
   parentID: Schema.optional(token),
@@ -173,7 +179,12 @@ export function ceiling(
   return { ...recipient, tools: recipient.tools.filter((tool) => allowed.has(tool)) }
 }
 
-export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, request: Request) {
+export function prompt(
+  sender: RayaTask.Agent,
+  recipient: RayaTask.Agent,
+  request: Request,
+  next?: readonly { stageID: string; recipientID: string; required: boolean }[],
+) {
   return [
     "Answer this request from another worker. The standing assignment and schedule are unchanged. Do not rewrite them, and do not treat this as a request to run the recurring job now.",
     `Requesting worker: ${sender.name} (${sender.role})`,
@@ -181,6 +192,9 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
       ? `Organization: ${request.organizationID} (revision ${request.organizationRevision})`
       : undefined,
     `Request objective:\n${request.objective}`,
+    request.contract
+      ? `Immutable job contract: ${request.contract.id}; current stage: ${request.contract.stageID}. Allowed next stages: ${JSON.stringify(next ?? [])}. After producing the actual required input files, call delegate_work with the chosen stageID and verified artifacts. Raya fills the recipient, objective, criteria, outputs and owner context from the saved contract. Do not invent another stage or restate different requirements. Required successors must actually complete before this stage can finish.`
+      : undefined,
     request.expected ? `Expected result:\n${request.expected}` : undefined,
     request.criteria
       ? [
@@ -250,6 +264,7 @@ function same(saved: Record, value: Request) {
     saved.recipientID === value.recipientID &&
     saved.objective === value.objective &&
     saved.expected === value.expected &&
+    isDeepStrictEqual(saved.contract, value.contract) &&
     isDeepStrictEqual(saved.criteria, value.criteria) &&
     isDeepStrictEqual(saved.outputs, value.outputs) &&
     saved.context === value.context &&
@@ -460,13 +475,16 @@ export namespace RayaTaskDelegation {
         .pipe(Effect.orDie)
       return rows.length
     })
-    const admit = Effect.fn("RayaTaskDelegation.admit")(function* (
+    const accept = Effect.fn("RayaTaskDelegation.admit")(function* (
       input: Request,
       sender: RayaTask.Agent,
       recipient: RayaTask.Agent,
       gone?: boolean,
       allocation?: { limit: number; spent: number },
+      capture?: Capture.Handle,
+      view?: View,
     ) {
+      const receipt = capture ? yield* Capture.proof(capture) : undefined
       const parsed = yield* Schema.decodeUnknownEffect(Request)(input).pipe(
         Effect.mapError(
           () => new Invalid({ message: "Delegation requests need a stable source and a non-empty objective." }),
@@ -490,6 +508,38 @@ export namespace RayaTaskDelegation {
               )
             })
       const value = { ...parsed, outputs }
+      if (receipt) {
+        const entry = yield* compile(receipt, receipt.proposal.entry).pipe(
+          Effect.mapError((err) => new Invalid({ message: err.message })),
+        )
+        if (
+          value.parentID ||
+          value.parentRunID ||
+          value.source !== receipt.rootSource ||
+          value.senderID !== capture!.senderID ||
+          value.organizationID !== receipt.organizationID ||
+          value.organizationRevision !== receipt.organizationRevision ||
+          !isDeepStrictEqual(value.contract, capture!.ref) ||
+          !matches(entry, value)
+        )
+          return yield* new Invalid({ message: "The root request does not match its native job contract." })
+      }
+      if (view) {
+        const stage = view.next.find((item) => item.id === value.contract?.stageID)
+        if (
+          receipt ||
+          !stage ||
+          value.contract?.id !== view.ref.id ||
+          value.contract.sha256 !== view.ref.sha256 ||
+          value.parentID !== view.incoming.id ||
+          value.parentRunID !== view.incoming.child_run_id ||
+          value.senderID !== view.incoming.recipient_id ||
+          !matches(stage, value)
+        )
+          return yield* new Invalid({ message: "The child request does not match its saved contract stage." })
+      }
+      if (value.contract && !receipt && !view)
+        return yield* new Invalid({ message: "Contract admission requires native owner or parent authority." })
       if (value.criteria && new Set(value.criteria.map((item) => item.id)).size !== value.criteria.length)
         return yield* new Invalid({ message: "Delegated work criterion IDs must be unique." })
       if (value.senderID !== sender.id || value.recipientID !== recipient.id)
@@ -526,6 +576,8 @@ export namespace RayaTaskDelegation {
         })
       const lineage = yield* ancestors(value.parentID)
       const parent = lineage[0]
+      if (parent?.contract && (!view || !isDeepStrictEqual(parent.contract, view.ref)))
+        return yield* new Invalid({ message: "Contracted follow-on work requires its authenticated parent stage." })
       if (parent?.outputs !== undefined && value.outputs === undefined)
         return yield* new Invalid({
           message: "This scoped job requires an explicit child outputs list, including [] for read-only work.",
@@ -568,6 +620,8 @@ export namespace RayaTaskDelegation {
           organization,
           allocation,
           lineage,
+          receipt,
+          view,
         )
       if (sender.dir?.trim() && recipient.dir?.trim() && workspace === undefined)
         return yield* persist(
@@ -581,6 +635,8 @@ export namespace RayaTaskDelegation {
           organization,
           allocation,
           lineage,
+          receipt,
+          view,
         )
       if (!recipient.enabled)
         return yield* persist(
@@ -594,6 +650,8 @@ export namespace RayaTaskDelegation {
           organization,
           allocation,
           lineage,
+          receipt,
+          view,
         )
       if (recipient.access === undefined)
         return yield* persist(
@@ -607,6 +665,8 @@ export namespace RayaTaskDelegation {
           organization,
           allocation,
           lineage,
+          receipt,
+          view,
         )
       return yield* persist(
         value,
@@ -619,8 +679,25 @@ export namespace RayaTaskDelegation {
         organization,
         allocation,
         lineage,
+        receipt,
+        view,
       )
     })
+    const admit = (...args: Parameters<typeof accept>) =>
+      args[5] || args[6]
+        ? (args[5]
+            ? Capture.guard(args[5], accept(...args))
+            : gate.withLock(SessionID.make(args[6]!.incoming.session_id!))(
+                args[6]!.check.pipe(Effect.andThen(accept(...args))),
+              )
+          ).pipe(
+            Effect.mapError((err) =>
+              err instanceof Conflict
+                ? err
+                : new Invalid({ message: err instanceof Error ? err.message : String(err) }),
+            ),
+          )
+        : accept(...args)
     const persist = Effect.fn("RayaTaskDelegation.persist")(function* (
       value: Request,
       sender: RayaTask.Agent,
@@ -632,6 +709,8 @@ export namespace RayaTaskDelegation {
       organization?: { id: string; name: string; revision: number; budget?: number },
       allocation?: { limit: number; spent: number },
       lineage: readonly Record[] = [],
+      receipt?: Receipt,
+      view?: View,
     ) {
       const saved = yield* db
         .transaction(
@@ -643,11 +722,43 @@ export namespace RayaTaskDelegation {
                 .where(eq(Delegation.source, value.source))
                 .get()
                 .pipe(Effect.orDie)
+              if (view) {
+                const parent = yield* tx.select().from(Delegation).where(eq(Delegation.id, view.incoming.id)).get()
+                const saved = yield* tx.select().from(Contract).where(eq(Contract.id, view.ref.id)).get()
+                if (
+                  !isDeepStrictEqual(parent, view.incoming) ||
+                  !saved ||
+                  saved.sha256 !== view.ref.sha256 ||
+                  saved.origin !== JSON.stringify(view.receipt.origin) ||
+                  saved.proposal !== JSON.stringify(view.receipt.proposal) ||
+                  saved.context !== (view.receipt.context ?? null) ||
+                  saved.root_id !== view.receipt.rootID ||
+                  saved.root_source !== view.receipt.rootSource ||
+                  saved.version !== view.receipt.version ||
+                  saved.organization_id !== view.receipt.organizationID ||
+                  saved.organization_revision !== view.receipt.organizationRevision
+                )
+                  return yield* new Invalid({ message: "The parent job contract changed during child admission." })
+              }
               if (prior) {
                 if (!same(decode(prior), value))
                   return yield* new Conflict({ message: "This delegation source already has a different request." })
                 return { row: prior, created: false }
               }
+              if (
+                value.contract &&
+                (yield* tx
+                  .select({ id: Delegation.id })
+                  .from(Delegation)
+                  .where(
+                    and(eq(Delegation.contract_id, value.contract.id), eq(Delegation.stage_id, value.contract.stageID)),
+                  )
+                  .get())
+              )
+                return yield* new Invalid({
+                  message:
+                    "This contract stage already has a saved assignment. Inspect its result instead of dispatching it again.",
+                })
               // Reserve names with the insert in the same immediate transaction. Terminal
               // ancestors/siblings retain their files; no implicit ownership transfer exists.
               if (value.parentID) {
@@ -794,12 +905,20 @@ export namespace RayaTaskDelegation {
                     revision: Organization.revision,
                     budget: Organization.budget,
                     archived: Organization.archived_at,
+                    stopping: Organization.stopping_at,
+                    stopped: Organization.stopped_at,
                   })
                   .from(Organization)
                   .where(eq(Organization.id, organization.id))
                   .get()
                   .pipe(Effect.orDie)
-                if (!owner || owner.archived !== null || owner.revision !== organization.revision)
+                if (
+                  !owner ||
+                  owner.archived !== null ||
+                  owner.stopping !== null ||
+                  owner.stopped !== null ||
+                  owner.revision !== organization.revision
+                )
                   return yield* new Invalid({
                     message: "This organization changed. Reload it before delegating work.",
                   })
@@ -824,6 +943,24 @@ export namespace RayaTaskDelegation {
                 }
               }
               const now = Date.now()
+              if (receipt) {
+                yield* tx
+                  .insert(Contract)
+                  .values({
+                    id: receipt.id,
+                    version: receipt.version,
+                    root_id: receipt.rootID,
+                    root_source: receipt.rootSource,
+                    organization_id: receipt.organizationID,
+                    organization_revision: receipt.organizationRevision,
+                    origin: JSON.stringify(receipt.origin),
+                    context: receipt.context ?? null,
+                    proposal: JSON.stringify(receipt.proposal),
+                    sha256: receipt.sha256,
+                    time_created: now,
+                  })
+                  .run()
+              }
               const saved = {
                 id: key(value.source),
                 source: value.source,
@@ -839,9 +976,9 @@ export namespace RayaTaskDelegation {
                 expected: value.expected ?? null,
                 criteria: value.criteria ? JSON.stringify(value.criteria) : null,
                 outputs: value.outputs === undefined ? null : JSON.stringify(value.outputs),
-                contract_id: null,
-                contract_sha256: null,
-                stage_id: null,
+                contract_id: value.contract?.id ?? null,
+                contract_sha256: value.contract?.sha256 ?? null,
+                stage_id: value.contract?.stageID ?? null,
                 context: value.context ?? null,
                 deadline: value.deadline ?? null,
                 budget: budget ?? null,

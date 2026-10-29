@@ -18,7 +18,7 @@ The stock snapshot target succeeds in **121.453 seconds**, including actual CLI 
 
 The prior bb669 GUI check on October 27 genuinely completed one local synthetic read routine in **38.375 seconds**: accepted persisted read evidence, completed Goal/Run and matching final marker, with loaded UI Done/Goal Complete. Receipt `.tmp/new-pc/gui-manual-read-readiness-20261027.json` belongs to that earlier build; it is not fresh acceptance of this candidate. Earlier no-start observations preceded the actual asynchronous invocation and do not establish a lost request.
 
-Installed workflow gates remain **2/9 (22.2%)**; overall readiness remains **unmeasured**. Scheduled multi-period work, multiple workers, full recovery and full chat acceptance are not promoted by these focused fixes. The existing full legacy cold-restart child-deadline failure remains open. Stable chat and Routine workers stay the priority; voice is deferred, cloud workers released and second-PC migration canceled.
+Installed workflow gates remain **2/9 (22.2%)**; overall readiness remains **unmeasured**. Scheduled multi-period work, multiple workers, full recovery and full chat acceptance are not promoted by these focused fixes. The full source restored-profile case now passes after correcting its aggregate child timeout; see [the recovery result](Raya-Routine-Recovery-20261029.md). This closes that source-harness failure only; loaded installed recovery and Windows restart acceptance remain unproven. Stable chat and Routine workers stay the priority; voice is deferred, cloud workers released and second-PC migration canceled.
 
 Historical bb66963534 checkpoint:
 

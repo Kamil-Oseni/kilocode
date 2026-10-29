@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { RoutineHints } from "../../src/kilo-provider/routine-inference-hints"
 import { WorkerHints } from "../../src/kilo-provider/worker-inference-hints"
 import { invalidation } from "../../src/kilo-provider/local-inference-event"
 import type { ExtensionMessage } from "../../webview-ui/src/types/messages"
@@ -7,14 +8,18 @@ const { KiloProvider } = await import("../../src/KiloProvider")
 type Host = {
   connectionState: string
   workerHints: WorkerHints
+  routineHints: RoutineHints
   sessionDirectories: Map<string, string>
   getWorkspaceDirectory: () => string
+  isCurrentProjectDirectory: (directory: string) => boolean
   postMessage: (message: ExtensionMessage) => void
+  routineInferenceHint: (event: unknown, directory?: string) => string | undefined
   workerInferenceHint: (event: unknown, directory?: string) => string | undefined
   inferenceHint: (event: unknown, directory?: string) => string | undefined
 }
 const provider = KiloProvider.prototype as unknown as {
   inferenceHint: (this: Host, event: unknown, directory?: string) => string | undefined
+  routineInferenceHint: (this: Host, event: unknown, directory?: string) => string | undefined
   workerInferenceHint: (this: Host, event: unknown, directory?: string) => string | undefined
   handleEvent: (this: Host, event: unknown, directory?: string) => void
 }
@@ -25,11 +30,14 @@ test("inference hints use exact workspace routes without adopting a child or tru
   const state: Host = {
     connectionState: "connected",
     workerHints: new WorkerHints(),
+    routineHints: new RoutineHints(),
     sessionDirectories: routes,
     getWorkspaceDirectory: () => "C:/current",
+    isCurrentProjectDirectory: (directory) => directory === "C:/current",
     postMessage: (message) => sent.push(message),
     inferenceHint: provider.inferenceHint,
     workerInferenceHint: provider.workerInferenceHint,
+    routineInferenceHint: provider.routineInferenceHint,
   }
   const hint = (sessionID: string) => ({
     type: "session.inference.changed",

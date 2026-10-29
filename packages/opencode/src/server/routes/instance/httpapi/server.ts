@@ -48,6 +48,7 @@ import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
 import { Session } from "@/session/session"
+import { ReviewGate } from "@/kilocode/session/review-gate" // kilocode_change - expose the existing Session deletion gate to composer handlers
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
@@ -269,6 +270,7 @@ const app = LayerNode.group([
   PermissionSaved.node,
   Todo.node,
   Session.node,
+  ReviewGate.node, // kilocode_change - share the declared deletion/mutation gate instead of constructing another service
   SessionProjector.node,
   SessionStatus.node,
   BackgroundJob.node,

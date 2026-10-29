@@ -496,6 +496,48 @@ export function composerRetention(
         return { source: cleared, target: moved }
       }),
     )
+  const eraseSession = (session: string) =>
+    Effect.gen(function* () {
+      if (!(yield* journal(db))) {
+        if (yield* db.select({ id: Rows.id }).from(Rows).limit(1).get())
+          return yield* Effect.fail(new DraftError("corrupt"))
+        const legacy = yield* store
+          .readBounded<unknown>(Legacy.key, metadata)
+          .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)))
+        if (legacy === undefined) return yield* Effect.void
+      }
+      return yield* transaction((tx, owner) =>
+        Effect.gen(function* () {
+          const rows = yield* tx
+            .select()
+            .from(Rows)
+            .where(sql`json_extract(${Rows.record}, '$.identity.sessionID') = ${session}`)
+            .all()
+          const entries = yield* validate(() =>
+            rows
+              .map(checked)
+              .filter((entry) => entry.content !== null)
+              .map((entry) =>
+                DraftSchemas.entry.parse({
+                  ...entry,
+                  content: null,
+                  token: { generation: entry.token.generation, revision: entry.token.revision + 1 },
+                  mutation: `delete-session:${Legacy.hash(session)}`,
+                  digest: Legacy.hash(null),
+                  receipt: {
+                    request: Legacy.hash({
+                      operation: "delete-session",
+                      identity: entry.identity,
+                      expected: entry.token,
+                    }),
+                  },
+                }),
+              ),
+          )
+          if (entries.length) yield* put(tx, owner, entries)
+        }),
+      )
+    })
   const page = (scope: Scope, input: { cursor?: string; limit?: number } = {}) =>
     transaction((tx, owner) =>
       Effect.gen(function* () {
@@ -565,6 +607,7 @@ export function composerRetention(
       change(who, expected, value, mutation),
     clear: (who: DraftIdentity, expected: DraftToken, mutation: string) => change(who, expected, null, mutation),
     promote,
+    eraseSession,
     page,
   }
 }

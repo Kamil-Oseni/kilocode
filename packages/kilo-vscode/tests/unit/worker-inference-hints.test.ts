@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
 import { createKiloClient } from "@kilocode/sdk/v2/client"
+import { RoutineRefresh } from "../../src/kilo-provider/routine-refresh"
+import { RoutineHints } from "../../src/kilo-provider/routine-inference-hints"
 import { WorkerHints } from "../../src/kilo-provider/worker-inference-hints"
 
 const { KiloProvider } = await import("../../src/KiloProvider")
@@ -29,6 +31,11 @@ function host(client: ReturnType<typeof createKiloClient>) {
     jobsBackoff: 0,
     jobReads: new Map<string, symbol>(),
     workerHints: new WorkerHints(),
+    routineHints: new RoutineHints(),
+    routineRefresh: new RoutineRefresh(
+      () => ({ client: state.client, directory: state.directory, generation: state.connectionGeneration }),
+      () => undefined,
+    ),
     sessionDirectories: new Map<string, string>(),
     directory: "C:/parent",
     getWorkspaceDirectory: () => state.directory,
@@ -36,6 +43,8 @@ function host(client: ReturnType<typeof createKiloClient>) {
     isCurrentProjectDirectory: (directory: string) => directory === state.directory,
     isCurrentProjectSession: (id: string) => id === "ses_parent",
     postMessage: (message: (typeof sent)[number]) => sent.push(message),
+    routineInferenceHint: (event: unknown, directory?: string): string | undefined =>
+      provider.routineInferenceHint.call(state, event, directory),
     workerInferenceHint: (event: unknown, directory?: string): string | undefined =>
       provider.workerInferenceHint.call(state, event, directory),
     inferenceHint: (event: unknown, directory?: string): string | undefined =>
@@ -44,6 +53,7 @@ function host(client: ReturnType<typeof createKiloClient>) {
   const provider = KiloProvider.prototype as unknown as {
     fetchAndSendBackgroundJobs: (this: typeof state, id: string, request: string) => Promise<void>
     inferenceHint: (this: typeof state, event: unknown, directory?: string) => string | undefined
+    routineInferenceHint: (this: typeof state, event: unknown, directory?: string) => string | undefined
     workerInferenceHint: (this: typeof state, event: unknown, directory?: string) => string | undefined
   }
   const descriptor = Object.getOwnPropertyDescriptor(KiloProvider.prototype, "contextSessionID")

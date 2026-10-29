@@ -62,6 +62,86 @@ function fixture(root: string) {
   return { dir, file, run }
 }
 
+test("session retirement erases selected SQL payload bytes once while retaining unrelated drafts and CAS", async () => {
+  await using tmp = await tmpdir()
+  const data = fixture(tmp.path)
+  const saved = await data.run((drafts, _store, database) =>
+    Effect.gen(function* () {
+      const who = { ...identity(tmp.path), pendingID: undefined, sessionID: "ses_deleted", key: "session" }
+      const first = yield* drafts.save(who, undefined, content, "first")
+      const second = yield* drafts.save({ ...who, key: "other-box", box: "other" }, undefined, content, "second")
+      const prior = yield* drafts.save({ ...who, key: "already-empty" }, undefined, content, "prior")
+      const empty = yield* drafts.clear(prior.identity, prior.token, "cleared")
+      const pending = yield* drafts.save(identity(tmp.path, "unrelated-pending"), undefined, content, "pending")
+      const other = yield* drafts.save(
+        { ...who, key: "unrelated-session", sessionID: "ses_other" },
+        undefined,
+        content,
+        "other",
+      )
+      const before = yield* database.db.select().from(Rows).orderBy(Rows.sequence).all()
+      const control = yield* database.db.select().from(Control).get()
+      if (!control) throw new Error("Actual composer SQL accounting must exist")
+      yield* drafts.eraseSession("ses_deleted")
+      const after = yield* database.db.select().from(Rows).orderBy(Rows.sequence).all()
+      const accounting = yield* database.db.select().from(Control).get()
+      if (!accounting) throw new Error("Actual composer SQL accounting must remain")
+      const erased = before.filter((row) =>
+        [first.identity.key, second.identity.key].includes(JSON.parse(row.record).identity.key),
+      )
+      expect(erased).toHaveLength(2)
+      expect(accounting.content_bytes).toBe(
+        control.content_bytes - erased.reduce((sum, row) => sum + row.content_bytes, 0),
+      )
+      expect(accounting.content_bytes).toBe(after.reduce((sum, row) => sum + row.content_bytes, 0))
+      expect(after).toHaveLength(before.length)
+      for (const original of [first, second]) {
+        const row = after.find((row) => JSON.parse(row.record).identity.key === original.identity.key)
+        if (!row) throw new Error("Actual SQL tombstone must retain its row")
+        expect(row.content_bytes).toBe(0)
+        expect(JSON.parse(row.record).content).toBeNull()
+        const entry = yield* drafts.load(original.identity)
+        expect(entry?.token).toEqual({ generation: original.token.generation, revision: original.token.revision + 1 })
+        expect(
+          Exit.isFailure(yield* drafts.save(original.identity, original.token, content, "stale").pipe(Effect.exit)),
+        ).toBe(true)
+      }
+      for (const original of [empty, pending, other]) expect(yield* drafts.load(original.identity)).toEqual(original)
+      yield* drafts.eraseSession("ses_deleted")
+      expect(yield* database.db.select().from(Rows).orderBy(Rows.sequence).all()).toEqual(after)
+      expect(yield* database.db.select().from(Control).get()).toEqual(accounting)
+      return { first, second, empty, pending, other }
+    }),
+  )
+  await data.run((drafts) =>
+    Effect.gen(function* () {
+      for (const original of [saved.first, saved.second])
+        expect((yield* drafts.load(original.identity))?.content).toBeNull()
+      for (const original of [saved.empty, saved.pending, saved.other])
+        expect(yield* drafts.load(original.identity)).toEqual(original)
+    }),
+  )
+  await data.run((drafts, _store, database) =>
+    Effect.gen(function* () {
+      const session = "s".repeat(4096)
+      const original = yield* drafts.save(
+        { ...identity(tmp.path), key: "long-session", pendingID: undefined, sessionID: session },
+        undefined,
+        content,
+        "long-session",
+      )
+      yield* drafts.eraseSession(session)
+      const erased = yield* drafts.load(original.identity)
+      expect(erased?.content).toBeNull()
+      expect(erased?.mutation.length).toBeLessThanOrEqual(4096)
+      const before = yield* database.db.select().from(Rows).orderBy(Rows.sequence).all()
+      yield* database.db.delete(Control).run()
+      expect(Exit.isFailure(yield* drafts.eraseSession("ses_other").pipe(Effect.exit))).toBe(true)
+      expect(yield* database.db.select().from(Rows).orderBy(Rows.sequence).all()).toEqual(before)
+    }),
+  )
+}, 30_000)
+
 test("hundreds of accepted new chats retain CAS membership and replay after reopening", async () => {
   await using tmp = await tmpdir()
   const data = fixture(tmp.path)

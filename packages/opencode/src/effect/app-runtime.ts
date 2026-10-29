@@ -26,6 +26,7 @@ import { Question } from "@/question"
 import { Permission } from "@/permission"
 import { Todo } from "@/session/todo"
 import { Session } from "@/session/session"
+import { ReviewGate } from "@/kilocode/session/review-gate" // kilocode_change - expose the existing Session deletion gate to listener handlers
 import { SessionStatus } from "@/session/status"
 import { SessionRunState } from "@/session/run-state"
 import * as TaskWorker from "@/kilocode/session/task-worker" // kilocode_change
@@ -119,6 +120,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     Permission.node,
     Todo.node,
     Session.node,
+    ReviewGate.node, // kilocode_change - share the declared deletion/mutation gate with composer handlers
     SessionProjector.node,
     SessionStatus.node,
     BackgroundJob.node,

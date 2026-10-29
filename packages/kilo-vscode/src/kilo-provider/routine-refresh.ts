@@ -1,3 +1,4 @@
+import type { RoutineHints } from "./routine-inference-hints"
 import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { recovery as guidance } from "../shared/routine-error"
 
@@ -113,17 +114,20 @@ export class RoutineRefresh {
     private readonly current: () => Scope,
     private readonly post: Post,
     private readonly timeout = 30_000,
+    private readonly hints?: RoutineHints,
   ) {}
 
   request(requestID?: string, viewID?: string): Promise<void> {
     if (this.stopped) return Promise.resolve()
     const scope = this.current()
     if (this.scope && !this.matches(this.scope, scope)) {
+      this.hints?.clear()
       this.controller?.abort()
       this.controller = undefined
       this.scope = undefined
       this.requests.clear()
     }
+    if (viewID !== undefined && viewID !== this.viewID) this.hints?.clear()
     if (viewID !== undefined) this.viewID = viewID
     const id = requestID ?? this.viewID ?? ""
     if (!this.requests.has(id) && this.requests.size >= 32) {
@@ -144,6 +148,7 @@ export class RoutineRefresh {
   }
 
   invalidate() {
+    this.hints?.clear()
     this.pending = false
     this.viewID = undefined
     this.requests.clear()
@@ -153,6 +158,7 @@ export class RoutineRefresh {
   }
 
   dispose() {
+    this.hints?.dispose()
     this.stopped = true
     this.invalidate()
   }
@@ -168,7 +174,37 @@ export class RoutineRefresh {
     return left.client === right.client && left.directory === right.directory && left.generation === right.generation
   }
 
+  private owner() {
+    const epoch = this.hints?.checkpoint()
+    return () => this.hints?.checkpoint() === epoch
+  }
+
+  private prove(
+    scope: Scope,
+    agents: import("@kilocode/sdk/v2/client").KilocodeRoutineListResponse,
+    histories: Histories,
+    signal: AbortSignal,
+    valid: () => boolean,
+    owner: () => boolean,
+  ) {
+    if (!scope.client || !this.hints) return Promise.resolve()
+    return this.hints.refresh({
+      client: scope.client,
+      directory: scope.directory,
+      generation: scope.generation,
+      agents,
+      histories,
+      current: () => valid() && owner() && !this.pending,
+      signal,
+    })
+  }
+
+  private failed(valid: () => boolean) {
+    if (valid()) this.hints?.clear()
+  }
+
   private async read() {
+    const owner = this.owner()
     const scope = { ...this.current() }
     this.scope = scope
     const controller = new AbortController()
@@ -239,7 +275,9 @@ export class RoutineRefresh {
         refresh: bundle.failed.length || !group ? "partial" : "complete",
         failed: bundle.failed,
       })
+      await this.prove(scope, agents.data, histories.data, controller.signal, valid, owner)
     } catch (error) {
+      this.failed(valid)
       post({
         type: "routineState",
         refresh: "error",

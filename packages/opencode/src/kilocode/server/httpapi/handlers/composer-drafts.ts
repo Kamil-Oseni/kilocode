@@ -12,6 +12,7 @@ import { SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 import { DraftError, DraftSchemas, type DraftIdentity } from "@/kilocode/session/composer-drafts"
 import { composerRetention } from "@/kilocode/session/composer-retention"
+import type { ReviewGate } from "@/kilocode/session/review-gate"
 import {
   ComposerDraftError,
   type Scope,
@@ -32,6 +33,7 @@ export function composerHandlers(
   sessions: Session.Interface,
   database: Database.Interface,
   project: ProjectV2.Interface,
+  gate: ReviewGate.Interface,
 ) {
   const drafts = composerRetention(database, storage, path.join(Global.Path.data, "storage"), Database.path(), {
     project: (workspace) => project.resolve(AbsolutePath.make(workspace)).pipe(Effect.map((value) => value.id)),
@@ -83,6 +85,21 @@ export function composerHandlers(
       }
       return { ...who, ...(yield* scope(who)) }
     })
+  const mutation = <A, E, R>(who: DraftIdentity, body: Effect.Effect<A, E, R>) => {
+    if (!who.sessionID) return body
+    const selected = who.sessionID
+    return Effect.gen(function* () {
+      const id = yield* Effect.try({ try: () => SessionID.make(selected), catch: () => failure("scope") })
+      const original = yield* sessions.get(id).pipe(Effect.mapError(() => failure("scope")))
+      return yield* gate.withWorkspace(original.directory)(
+        Effect.gen(function* () {
+          const current = yield* sessions.get(id).pipe(Effect.mapError(() => failure("scope")))
+          if (current.directory !== original.directory) return yield* failure("scope")
+          return yield* body
+        }),
+      )
+    })
+  }
   return {
     list: (ctx: { payload: typeof List.Type }) =>
       boundary(
@@ -101,38 +118,47 @@ export function composerHandlers(
       ),
     save: (ctx: { payload: typeof Save.Type }) =>
       boundary(
-        Effect.gen(function* () {
-          const who = yield* identity(DraftSchemas.identity.parse(ctx.payload.identity))
-          return {
-            entry: yield* drafts.save(
-              who,
-              ctx.payload.expected,
-              DraftSchemas.content.parse(ctx.payload.content),
-              ctx.payload.mutation,
-            ),
-          }
-        }),
+        mutation(
+          ctx.payload.identity,
+          Effect.gen(function* () {
+            const who = yield* identity(DraftSchemas.identity.parse(ctx.payload.identity))
+            return {
+              entry: yield* drafts.save(
+                who,
+                ctx.payload.expected,
+                DraftSchemas.content.parse(ctx.payload.content),
+                ctx.payload.mutation,
+              ),
+            }
+          }),
+        ),
       ),
     clear: (ctx: { payload: typeof Clear.Type }) =>
       boundary(
-        Effect.gen(function* () {
-          return {
-            entry: yield* drafts.clear(
-              yield* identity(DraftSchemas.identity.parse(ctx.payload.identity)),
-              ctx.payload.expected,
-              ctx.payload.mutation,
-            ),
-          }
-        }),
+        mutation(
+          ctx.payload.identity,
+          Effect.gen(function* () {
+            return {
+              entry: yield* drafts.clear(
+                yield* identity(DraftSchemas.identity.parse(ctx.payload.identity)),
+                ctx.payload.expected,
+                ctx.payload.mutation,
+              ),
+            }
+          }),
+        ),
       ),
     promote: (ctx: { payload: typeof Promote.Type }) =>
       boundary(
-        Effect.gen(function* () {
-          const from = yield* identity(DraftSchemas.identity.parse(ctx.payload.from))
-          const to = yield* identity(DraftSchemas.identity.parse(ctx.payload.to))
-          if (!from.pendingID || !to.sessionID || from.box !== to.box) return yield* failure("invalid")
-          return yield* drafts.promote(from, to, ctx.payload.source, ctx.payload.target, ctx.payload.mutation)
-        }),
+        mutation(
+          ctx.payload.to,
+          Effect.gen(function* () {
+            const from = yield* identity(DraftSchemas.identity.parse(ctx.payload.from))
+            const to = yield* identity(DraftSchemas.identity.parse(ctx.payload.to))
+            if (!from.pendingID || !to.sessionID || from.box !== to.box) return yield* failure("invalid")
+            return yield* drafts.promote(from, to, ctx.payload.source, ctx.payload.target, ctx.payload.mutation)
+          }),
+        ),
       ),
   }
 }

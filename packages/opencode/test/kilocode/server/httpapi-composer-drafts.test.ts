@@ -37,6 +37,145 @@ const content = {
   variant: "medium",
   selection: { start: 2, end: 7 },
 }
+
+test("deleting a real session retires only its durable draft content and preserves CAS membership", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const server = app()
+  const selected = session(await json(await server.request(tmp.path, "/session", {})))
+  const other = session(await json(await server.request(tmp.path, "/session", {})))
+  const identity = {
+    key: `prompt:default:session:${selected.id}`,
+    box: "prompt:default",
+    workspace: tmp.path,
+    projectID: selected.projectID,
+    sessionID: selected.id,
+  }
+  const second = { ...identity, key: `second:session:${selected.id}`, box: "second" }
+  const unrelated = { ...identity, key: `other:session:${other.id}`, sessionID: other.id }
+  const pending = {
+    key: "pending:retained",
+    box: identity.box,
+    workspace: tmp.path,
+    projectID: selected.projectID,
+    pendingID: crypto.randomUUID(),
+  }
+  const save = async (who: typeof pending | typeof identity) =>
+    entry(
+      await json(
+        await server.request(tmp.path, "/kilocode/composer-drafts/save", {
+          identity: who,
+          content,
+          mutation: crypto.randomUUID(),
+        }),
+      ),
+    ).entry
+  const saved = await save(identity)
+  const boxed = await save(second)
+  const kept = await save(unrelated)
+  const waiting = await save(pending)
+  const removed = await handler.handler(
+    new Request(`http://localhost/session/${selected.id}`, {
+      method: "DELETE",
+      headers: { "x-kilo-directory": tmp.path },
+    }),
+    HttpApiServer.context,
+  )
+  expect(removed.status).toBe(200)
+  expect(await removed.json()).toBe(true)
+  for (const original of [saved, boxed]) {
+    const catalog = listed(
+      await json(
+        await server.request(tmp.path, "/kilocode/composer-drafts/list", {
+          scope: { workspace: tmp.path, projectID: selected.projectID, box: original.identity.box },
+        }),
+      ),
+    ).entries
+    const cleared = catalog.find((item) => item.identity.sessionID === selected.id)
+    expect(cleared).toBeDefined()
+    if (!cleared) throw new Error("Deleted session must retain its draft CAS tombstone")
+    expect(cleared.content).toBeNull()
+    expect(cleared.identity).toEqual(original.identity)
+    expect(cleared.token).toEqual({ generation: original.token.generation, revision: original.token.revision + 1 })
+    const stale = await server.request(tmp.path, "/kilocode/composer-drafts/save", {
+      identity: original.identity,
+      expected: original.token,
+      content,
+      mutation: crypto.randomUUID(),
+    })
+    expect(stale.status).toBe(400)
+  }
+  for (const original of [kept, waiting]) {
+    expect(
+      loaded(
+        await json(
+          await server.request(tmp.path, "/kilocode/composer-drafts/load", {
+            identity: original.identity,
+          }),
+        ),
+      ).entry,
+    ).toEqual(original)
+  }
+  const next = entry(
+    await json(
+      await server.request(tmp.path, "/kilocode/composer-drafts/save", {
+        identity: kept.identity,
+        expected: kept.token,
+        content: { ...content, text: "Unrelated draft still saves" },
+        mutation: crypto.randomUUID(),
+      }),
+    ),
+  ).entry
+  expect(next.token.revision).toBe(kept.token.revision + 1)
+}, 60_000)
+test("HTTP deletion racing a draft save cannot leave live content for a deleted session", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const server = app()
+  const selected = session(await json(await server.request(tmp.path, "/session", {})))
+  const identity = {
+    key: `race:session:${selected.id}`,
+    box: "race",
+    workspace: tmp.path,
+    projectID: selected.projectID,
+    sessionID: selected.id,
+  }
+  const saved = entry(
+    await json(
+      await server.request(tmp.path, "/kilocode/composer-drafts/save", {
+        identity,
+        content,
+        mutation: crypto.randomUUID(),
+      }),
+    ),
+  ).entry
+  const [edit, removal] = await Promise.all([
+    server.request(tmp.path, "/kilocode/composer-drafts/save", {
+      identity,
+      content: { ...content, text: "Typing while deleting" },
+      expected: saved.token,
+      mutation: crypto.randomUUID(),
+    }),
+    handler.handler(
+      new Request(`http://localhost/session/${selected.id}`, {
+        method: "DELETE",
+        headers: { "x-kilo-directory": tmp.path },
+      }),
+      HttpApiServer.context,
+    ),
+  ])
+  expect([200, 400]).toContain(edit.status)
+  expect(removal.status).toBe(200)
+  expect(await removal.json()).toBe(true)
+  const catalog = listed(
+    await json(
+      await server.request(tmp.path, "/kilocode/composer-drafts/list", {
+        scope: { workspace: tmp.path, projectID: selected.projectID, box: identity.box },
+      }),
+    ),
+  ).entries
+  const retired = catalog.find((entry) => entry.identity.sessionID === selected.id)
+  expect(retired?.content).toBeNull()
+  expect(retired?.token.revision).toBe(saved.token.revision + (edit.status === 200 ? 2 : 1))
+}, 60_000)
 // Keep the real in-memory SQL connection paired with its retired private JSON profile.
 // Instance disposal below tests workspace restarts; disk/process restarts have separate coverage.
 const handler = HttpRouter.toWebHandler(HttpApiServer.routes, { disableLogger: true })

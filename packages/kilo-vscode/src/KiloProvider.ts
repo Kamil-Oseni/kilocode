@@ -1,3 +1,4 @@
+import { RoutineHints } from "./kilo-provider/routine-inference-hints"
 import { WorkerHints } from "./kilo-provider/worker-inference-hints"
 import { invalidation as inferenceInvalidation } from "./kilo-provider/local-inference-event"
 import { createHash } from "node:crypto"
@@ -458,6 +459,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     reports,
     (message) => this.postMessage(message),
   )
+  private readonly routineHints = new RoutineHints()
   private readonly routineRefresh = new RoutineRefresh(
     () => ({ client: this.client, directory: this.getWorkspaceDirectory(), generation: this.connectionGeneration }),
     (message) => {
@@ -469,6 +471,8 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         )
       this.postMessage(message)
     },
+    30_000,
+    this.routineHints,
   )
   private loginAttempt = 0
   private isWebviewReady = false
@@ -721,8 +725,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     if (
       this.currentSession?.id !== session?.id ||
       (this.currentSession && session && !sameDirectory(this.currentSession.directory, session.directory))
-    )
+    ) {
       this.workerHints.clear()
+      this.routineHints.clear()
+    }
     const ids = new Set([this.currentSession?.id, session?.id])
     for (const id of ids) {
       if (id) this.refreshes.set(id, (this.refreshes.get(id) ?? 0) + 1)
@@ -1089,7 +1095,10 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   public setSessionDirectory(sessionId: string, directory: string): void {
     const current = this.sessionDirectories.get(sessionId) ?? this.getRootDirectory()
     this.aborts.preserve(sessionId, this.sessionStatusMap.get(sessionId), current)
-    if (!sameDirectory(current, directory)) this.workerHints.clear()
+    if (!sameDirectory(current, directory)) {
+      this.workerHints.clear()
+      this.routineHints.clear()
+    }
     this.sessionDirectories.set(sessionId, directory)
     if (this.connectionState === "connected") void this.fetchAndSendSandboxStatus(sessionId)
   }
@@ -1098,6 +1107,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     const current = this.sessionDirectories.get(sessionId) ?? this.getRootDirectory()
     this.aborts.preserve(sessionId, this.sessionStatusMap.get(sessionId), current)
     this.workerHints.clear()
+    this.routineHints.clear()
     this.sessionDirectories.delete(sessionId)
     if (this.connectionState === "connected") void this.fetchAndSendSandboxStatus(sessionId)
   }
@@ -2867,7 +2877,11 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       this.unsubscribeEvent = this.connectionService.onEventFiltered(
         (payload, directory) => {
           const hint = unwrapSyncEvent(payload)
-          if (hint?.type === "session.inference.changed" && this.workerInferenceHint(hint, directory)) return true
+          if (
+            hint?.type === "session.inference.changed" &&
+            (this.workerInferenceHint(hint, directory) || this.routineInferenceHint(hint, directory))
+          )
+            return true
           if (directory && directory !== "global" && !this.isCurrentProjectDirectory(directory)) return false
           if (!directory && isEventFromForeignProject(payload, this.projectID)) return false
           const event = unwrapSyncEvent(payload)
@@ -6971,7 +6985,20 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       : undefined
   }
 
+  private routineInferenceHint(event: unknown, directory?: string) {
+    if (this.connectionState !== "connected") return
+    const current = this.getWorkspaceDirectory()
+    if (!this.isCurrentProjectDirectory(current)) return
+    return this.routineHints.invalidation(event, directory, {
+      client: this.client,
+      directory: current,
+      generation: this.connectionGeneration,
+    })
+  }
+
   private inferenceHint(event: unknown, directory?: string) {
+    const routine = this.routineInferenceHint(event, directory)
+    if (routine) return routine
     const worker = this.workerInferenceHint(event, directory)
     if (worker) return worker
     return inferenceInvalidation(event, directory, {

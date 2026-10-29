@@ -2,6 +2,7 @@ import { cancel as cancelBackground } from "../background-cancel"
 import { Cause, Effect, Result, Schema } from "effect"
 import path from "node:path"
 import { composerHandlers } from "./composer-drafts"
+import { ReviewGate } from "@/kilocode/session/review-gate"
 import * as LocalInference from "../local-inference"
 import { UploadStage } from "@/kilocode/browser/upload-stage"
 import { Database } from "@opencode-ai/core/database/database"
@@ -158,7 +159,7 @@ export const kilocodeHandlers = HttpApiBuilder.group(InstanceHttpApi, "kilocode"
     const mcp = yield* MCP.Service
     const goals = RayaGoal.make({ storage, sessions, background }) // raya_change - Chief completion sees live child jobs
     const database = yield* Database.Service
-    const drafts = composerHandlers(storage, sessions, database, yield* ProjectV2.Service)
+    const drafts = composerHandlers(storage, sessions, database, yield* ProjectV2.Service, yield* ReviewGate.Service)
     const pty = yield* PtyArchive.Service
     const runner = RayaTaskRunner.make({
       storage,

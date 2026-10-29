@@ -34,6 +34,7 @@ import * as DelegationAccounting from "./delegation-accounting"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { record as routine } from "@/kilocode/task/continuation"
 import { facts } from "./read-artifact"
+import * as RoutineEvidence from "./routine-evidence"
 
 const log = Log.create({ service: "raya-goal-retention" })
 
@@ -129,7 +130,8 @@ export namespace RayaGoal {
     conflict: Schema.optional(Schema.Literal(true)),
   }) {}
 
-  type Store = Pick<Storage.Interface, "read" | "write" | "remove" | "list" | "create" | "replace" | "update">
+  type Store = Pick<Storage.Interface, "read" | "write" | "remove" | "list" | "create" | "replace" | "update"> &
+    Partial<Pick<Storage.Interface, "readBounded">>
   export const openKey = "raya.goal.open"
   export const idleLimit = 3
   export const retryLimit = 3
@@ -1159,11 +1161,37 @@ export namespace RayaGoal {
         .slice(0, 20)
         .join(", ") || "none yet — perform and verify concrete work before completing"
 
+    const scoped = Effect.fn("RayaGoal.scopedEvidence")(function* (sessionID: SessionID, state: State) {
+      const base = yield* collect(deps.sessions, sessionID, state.createdAt, state.inputs)
+      const routine = yield* RoutineEvidence.observe({ ...deps, goal: state, rows: base }).pipe(
+        Effect.mapError(
+          () =>
+            new AuditError({
+              message:
+                "Routine delegation evidence is unavailable or changed. Refresh get_goal and inspect the original worker result; do not infer success or repeat the delegation.",
+            }),
+        ),
+      )
+      return {
+        base,
+        messages: [...base, ...routine.messages],
+        reports: routine.reports,
+        check: routine.check.pipe(
+          Effect.mapError(
+            () =>
+              new AuditError({
+                message: "Routine delegation evidence changed during verification. Refresh get_goal before completing.",
+              }),
+          ),
+        ),
+      }
+    })
+
     const evidence = Effect.fn("RayaGoal.evidence")(function* (sessionID: SessionID) {
       const state = yield* requireGoal(sessionID)
-      const messages = yield* collect(deps.sessions, sessionID, state.createdAt, state.inputs)
-      return yield* Effect.forEach(
-        tools(messages)
+      const scope = yield* scoped(sessionID, state)
+      const result = yield* Effect.forEach(
+        tools(scope.messages)
           .filter(
             (part) => part.state.status === "completed" && part.state.time.start >= state.createdAt && supports(part),
           )
@@ -1176,6 +1204,7 @@ export namespace RayaGoal {
               sessionID: part.sessionID,
               callID: part.callID,
               tool: part.tool,
+              delegation: scope.reports.get(part.id),
               title: part.state.status === "completed" ? part.state.title : "",
               output: part.state.status === "completed" ? part.state.output.slice(0, 500) : "",
               exit: part.state.status === "completed" ? part.state.metadata["exit"] : undefined,
@@ -1199,6 +1228,8 @@ export namespace RayaGoal {
             }
           }),
       )
+      yield* scope.check
+      return result
     })
 
     const update = Effect.fn("RayaGoal.update")(function* (
@@ -1316,7 +1347,8 @@ export namespace RayaGoal {
           message:
             "This Routine review has no matching original output provenance. Resume it and prepare a fresh review before accepting completion.",
         })
-      const messages = yield* collect(deps.sessions, sessionID, state.createdAt, state.inputs)
+      const scope = yield* scoped(sessionID, state)
+      const messages = scope.messages
       // raya_change start - accept the flattened audit (top-level `requirements`) that models emit
       // far more often than the nested `audit` object, and make the rejection actionable so a model
       // that still gets it wrong can copy the exact shape and the real evidence IDs in one retry.
@@ -1413,7 +1445,8 @@ export namespace RayaGoal {
         : accepted
           ? { ...state.review!, status: "accepted" as const, acceptedAt: now }
           : undefined
-      const deliverables = inventory(audit, messages)
+      yield* scope.check
+      const deliverables = inventory(audit, scope.base)
       const next = yield* save(
         sessionID,
         {

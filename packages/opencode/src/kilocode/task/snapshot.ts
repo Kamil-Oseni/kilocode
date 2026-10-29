@@ -5,6 +5,7 @@ import type { Storage } from "@/storage/storage"
 import { RayaTask } from "."
 import { SessionID } from "@/session/schema"
 import { Outputs } from "./output-scope"
+import { Reference } from "./job-contract"
 
 export namespace RayaTaskSnapshot {
   export class Invalid extends Schema.TaggedErrorClass<Invalid>()("RayaTaskSnapshot.Invalid", {
@@ -18,6 +19,7 @@ export namespace RayaTaskSnapshot {
     definition: RayaTask.Agent,
     objective: Schema.String,
     outputs: Schema.optional(Outputs),
+    contract: Schema.optional(Reference),
   }
   const Policy = Schema.Struct({
     organizationID: Schema.String.check(Schema.isPattern(/^org_[a-f0-9]{32}$/)),
@@ -28,15 +30,27 @@ export namespace RayaTaskSnapshot {
     sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
   })
   export const Current = Schema.Struct({
-    version: Schema.Literal(2),
+    version: Schema.Literals([2, 3]),
     ...Base,
     organizationPolicy: Schema.optional(Policy),
-  })
+  }).check(
+    Schema.makeFilter((value) =>
+      (value.version === 3) === (value.contract !== undefined)
+        ? undefined
+        : "Contracted startup snapshots require version 3 and a contract reference.",
+    ),
+  )
   export const Info = Schema.Struct({
-    version: Schema.Literals([1, 2]),
+    version: Schema.Literals([1, 2, 3]),
     ...Base,
     organizationPolicy: Schema.optional(Policy),
-  })
+  }).check(
+    Schema.makeFilter((value) =>
+      (value.version === 3) === (value.contract !== undefined)
+        ? undefined
+        : "Contracted startup snapshots require version 3 and a contract reference.",
+    ),
+  )
   const key = (id: string) => ["raya", "agent-starts", createHash("sha256").update(id).digest("hex")]
 
   export function make(input: { storage: Pick<Storage.Interface, "create" | "read"> }) {
@@ -73,9 +87,9 @@ export namespace RayaTaskSnapshot {
         JSON.parse(
           JSON.stringify({
             ...parsed,
-            version: 2,
+            version: parsed.version === 3 ? 3 : 2,
             definition,
-            ...(parsed.version === 2 && parsed.organizationPolicy
+            ...(parsed.version >= 2 && parsed.organizationPolicy
               ? { organizationPolicy: parsed.organizationPolicy }
               : {}),
           }),

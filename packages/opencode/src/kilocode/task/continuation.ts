@@ -11,9 +11,11 @@ import { SessionID } from "@/session/schema"
 import { Trigger } from "./trigger"
 import { Outputs, pinned } from "./output-scope"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Reference } from "./job-contract"
 
 export const record = Schema.Struct({
-  version: Schema.Literals([1, 2]),
+  version: Schema.Literals([1, 2, 3]),
+  contract: Schema.optional(Reference),
   agentID: Schema.String,
   runID: Schema.String,
   scheduleVersion: Schema.Number,
@@ -25,6 +27,12 @@ export const record = Schema.Struct({
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)),
   ),
 }).check(
+  Schema.makeFilter((value) =>
+    (value.version === 3) === (value.contract !== undefined) &&
+    (value.version !== 3 || (!!value.delegationID && !!value.organizationID))
+      ? undefined
+      : "Contracted sessions require version 3, a delegation and organization identity, and a contract reference.",
+  ),
   Schema.makeFilter((value) =>
     (value.organizationID === undefined) === (value.organizationRevision === undefined)
       ? undefined
@@ -80,7 +88,9 @@ export function continuation(input: {
         row.organizationRevision !== identity.organizationRevision ||
         (row.state !== "running" && row.state !== "needs_input") ||
         !isDeepStrictEqual(row.outputs, identity.outputs) ||
-        !isDeepStrictEqual(saved.outputs, row.outputs)
+        !isDeepStrictEqual(saved.outputs, row.outputs) ||
+        !isDeepStrictEqual(saved.contract, identity.contract) ||
+        !isDeepStrictEqual(row.contract, identity.contract)
       )
         return false
       if (row.outputs === undefined) return true
@@ -92,12 +102,14 @@ export function continuation(input: {
     if (!scope) return false
     const execution = RayaTaskExecution.make(input.storage)
     const admit = (run: RayaTask.Run) =>
-      execution.authorized(run).pipe(
-        Effect.flatMap((owned) =>
-          owned === undefined ? execution.acquire(run).pipe(Effect.map(Boolean)) : Effect.succeed(owned),
-        ),
-        Effect.catch(() => Effect.succeed(false)),
-      )
+      !isDeepStrictEqual(run.contract, identity.contract)
+        ? Effect.succeed(false)
+        : execution.authorized(run).pipe(
+            Effect.flatMap((owned) =>
+              owned === undefined ? execution.acquire(run).pipe(Effect.map(Boolean)) : Effect.succeed(owned),
+            ),
+            Effect.catch(() => Effect.succeed(false)),
+          )
     if (identity.trigger.kind !== "timer") {
       const history = yield* RayaTask.make(input).runsFor(identity.agentID)
       const run = history.find(

@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import path from "node:path"
 import { canonical, decode as parse, fingerprint, same } from "@/kilocode/task/job-contract"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { stage } from "@/kilocode/task/job-contract-store"
 import type { Receipt } from "@/kilocode/task/job-contract"
+import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { record } from "@/kilocode/task/continuation"
 
 const proposal = () => ({
   version: 1,
@@ -236,4 +238,49 @@ test("compiled stage context preserves owner constraints without inheriting anot
     Effect.runSync(stage({ ...job, origin: { ...job.origin, directory: path.resolve("elsewhere") } }, "sales")),
   ).toThrow()
   expect(() => Effect.runSync(stage(job, "undeclared"))).toThrow()
+})
+
+test("startup and continuation reject missing or downgraded contract identities", () => {
+  const contract = { id: `rjc_${"a".repeat(48)}`, sha256: "b".repeat(64), stageID: "research" }
+  const definition = {
+    id: "worker",
+    name: "Worker",
+    role: "generalist",
+    objective: "Work",
+    capabilities: [],
+    memoryScope: "session",
+    schedule: { kind: "manual" },
+    enabled: true,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const snapshot = {
+    version: 3,
+    contract,
+    runID: "run",
+    sessionID: SessionID.make("ses_worker"),
+    agentID: definition.id,
+    at: 1,
+    definition,
+    objective: "Work",
+  }
+  const identity = {
+    version: 3,
+    contract,
+    runID: "run",
+    agentID: definition.id,
+    scheduleVersion: 1,
+    trigger: { kind: "manual" },
+    delegationID: `rdl_${"c".repeat(48)}`,
+    organizationID: `org_${"d".repeat(32)}`,
+    organizationRevision: 1,
+  }
+  expect(Schema.is(RayaTaskSnapshot.Info)(snapshot)).toBe(true)
+  expect(Schema.is(record)(identity)).toBe(true)
+  expect(Schema.is(RayaTaskSnapshot.Info)({ ...snapshot, contract: undefined })).toBe(false)
+  expect(Schema.is(record)({ ...identity, contract: undefined })).toBe(false)
+  expect(Schema.is(RayaTaskSnapshot.Info)({ ...snapshot, version: 2 })).toBe(false)
+  expect(Schema.is(record)({ ...identity, version: 2 })).toBe(false)
+  expect(Schema.is(record)({ ...identity, delegationID: undefined })).toBe(false)
+  expect(Schema.is(record)({ ...identity, organizationID: undefined, organizationRevision: undefined })).toBe(false)
 })

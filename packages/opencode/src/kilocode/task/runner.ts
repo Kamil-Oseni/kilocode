@@ -67,6 +67,7 @@ import { gate } from "@/kilocode/session/input-gate"
 import { verify } from "./final-output"
 import * as Files from "./output-scope"
 import { bound as reviewed } from "@/kilocode/goal/review-source"
+import type { Reference } from "./job-contract"
 
 const WAIT = "waiting on you"
 const failed = (run: RayaTask.Run) => !!run.outcome?.delivery && run.outcome.delivery.status !== "passed"
@@ -1050,6 +1051,7 @@ export namespace RayaTaskRunner {
           guard?: Effect.Effect<Organization | undefined, RayaTask.GuardError>
           runID?: string
           delegationID?: string
+          contract?: Reference
           criteria?: Criteria
           outputs?: typeof Files.Outputs.Type
           budget?: RayaGoal.Budget
@@ -1105,7 +1107,8 @@ export namespace RayaTaskRunner {
                       ? yield* origins.resolve((yield* errands.chain(opts.delegationID)).map((item) => item.source))
                       : undefined
                   yield* snapshots.save({
-                    version: 2,
+                    version: opts?.contract ? 3 : 2,
+                    ...(opts?.contract ? { contract: opts.contract } : {}),
                     runID: owner.id,
                     sessionID: sid,
                     agentID: item.id,
@@ -1133,7 +1136,8 @@ export namespace RayaTaskRunner {
                         agent: specialist(item),
                         metadata: {
                           rayaRoutine: {
-                            version: admitted.selected.trigger.kind === "timer" ? 2 : 1,
+                            version: opts?.contract ? 3 : admitted.selected.trigger.kind === "timer" ? 2 : 1,
+                            ...(opts?.contract ? { contract: opts.contract } : {}),
                             agentID: item.id,
                             runID: owner.id,
                             scheduleVersion: item.scheduleVersion ?? 1,
@@ -1184,12 +1188,18 @@ export namespace RayaTaskRunner {
                     opts?.criteria ?? (note ? undefined : item.output?.criteria),
                     opts?.budget ?? (item.budget ? { modelCost: item.budget } : undefined),
                     !opts?.criteria && (opts?.follow || opts?.delegationID) ? "reply" : undefined,
-                    { agentID: item.id, runID: owner.id, sessionID: created.id },
+                    {
+                      agentID: item.id,
+                      runID: owner.id,
+                      sessionID: created.id,
+                      ...(opts?.contract ? { contract: opts.contract } : {}),
+                    },
                   )
                   const run: RayaTask.Run = {
                     id: owner.id,
                     agentID: item.id,
                     at: owner.at,
+                    ...(opts?.contract ? { contract: opts.contract } : {}),
                     sessionID: created.id,
                     status: "running",
                     scheduleVersion: item.scheduleVersion ?? 1,
@@ -1702,6 +1712,7 @@ export namespace RayaTaskRunner {
         view: ceiling(sender, recipient),
         runID: taken.childRunID,
         delegationID: taken.id,
+        contract: taken.contract,
         criteria: taken.criteria,
         outputs: taken.outputs,
         budget: taken.budget === undefined ? undefined : { modelCost: taken.budget },

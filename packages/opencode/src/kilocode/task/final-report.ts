@@ -3,6 +3,7 @@ import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { RayaGoal } from "@/kilocode/goal"
 import type { RayaTask } from "."
 import { bound as reviewed } from "@/kilocode/goal/review-source"
+import { isDeepStrictEqual } from "node:util"
 
 /** Bind saved output to the original completed turn; this does not verify its claims. */
 export function final(
@@ -20,6 +21,7 @@ export function final(
     goal.routine?.agentID !== run.agentID ||
     goal.routine.runID !== run.id ||
     goal.routine.sessionID !== run.sessionID ||
+    !isDeepStrictEqual(goal.routine.contract, run.contract) ||
     !goal.intent ||
     !dispatch ||
     (dispatch.intent !== goal.intent && !accepted) ||

@@ -3,6 +3,7 @@ import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { Trigger as TriggerSchema } from "./trigger"
 import path from "node:path"
+import { Reference } from "./job-contract"
 
 export namespace Codec {
   export const Stop = Schema.Struct({
@@ -258,6 +259,7 @@ export namespace Codec {
   export const Run = Schema.Struct({
     id: Schema.String,
     agentID: Schema.String,
+    contract: Schema.optional(Reference),
     at: Schema.Number,
     sessionID: SessionID,
     status: Schema.Literals(["running", "complete", "blocked", "error", "stopped"]),

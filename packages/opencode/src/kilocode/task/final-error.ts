@@ -38,6 +38,7 @@ export function failure(
     goal.routine?.agentID !== run.agentID ||
     goal.routine.runID !== run.id ||
     goal.routine.sessionID !== run.sessionID ||
+    !isDeepStrictEqual(goal.routine.contract, run.contract) ||
     session.id !== run.sessionID ||
     session.agent !== agent ||
     identity._tag !== "Some" ||
@@ -52,6 +53,8 @@ export function failure(
     snapshot.definition.id !== run.agentID ||
     (snapshot.definition.scheduleVersion ?? 1) !== (run.scheduleVersion ?? 1) ||
     snapshot.objective !== goal.objective ||
+    !isDeepStrictEqual(snapshot.contract, run.contract) ||
+    !isDeepStrictEqual(identity.value.contract, run.contract) ||
     !isDeepStrictEqual(snapshot.outputs, identity.value.outputs) ||
     (snapshot.definition.dir !== undefined && location(snapshot.definition.dir) !== location(session.directory)) ||
     dispatch?.phase !== "finished" ||

@@ -26,6 +26,7 @@ import { Criteria } from "@/kilocode/goal/criteria"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Files from "./output-scope"
 import { DEPTH, FAN, TREE } from "./limits"
+import { Reference } from "./job-contract"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const body = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000))
@@ -77,6 +78,7 @@ export const Request = Schema.Struct({
 export const Record = Schema.Struct({
   id: token,
   source: token,
+  contract: Schema.optional(Reference),
   senderID: Request.fields.senderID,
   recipientID: Request.fields.recipientID,
   parentID: Schema.optional(token),
@@ -208,9 +210,13 @@ export function prompt(sender: RayaTask.Agent, recipient: RayaTask.Agent, reques
 
 function decode(row: typeof Delegation.$inferSelect): Record {
   const files = artifacts(row.artifacts)
+  const contract = [row.contract_id, row.contract_sha256, row.stage_id].every((value) => value === null)
+    ? undefined
+    : Schema.decodeUnknownSync(Reference)({ id: row.contract_id, sha256: row.contract_sha256, stageID: row.stage_id })
   return {
     id: row.id,
     source: row.source,
+    ...(contract ? { contract } : {}),
     senderID: row.sender_id,
     recipientID: row.recipient_id,
     objective: row.objective,

@@ -4,28 +4,32 @@ Updated October 29, 2026. Stable chat and routine workers are the priority; voic
 
 ## Installed version and evidence
 
-The everyday VS Code registration currently selects **`7.4.23-snapshot+e33a983c78.local.1793258565912`**, source **`e33a983c78`**. The registration was inspected for this update. Installation identity, archive/CLI hashes and qualified delivery evidence are recorded in [Current Readiness](Raya-Current-Readiness.md).
+The everyday VS Code registration currently selects **`7.4.23-snapshot+a4541bcda3.local.1793261389243`**, source **`a4541bcda3`**. The qualified delivery records the installed registration. Installation identity, archive/CLI hashes and qualified delivery evidence are recorded in [Current Readiness](Raya-Current-Readiness.md).
 
 The nine installed workflow gates below are a checklist, **not an overall project completion percentage**. Two gates have installation evidence; seven remain unearned. Memory remains unearned. Source checks, physical installation and a successful loaded workflow are separate observations.
 
 | Gate | Status | Evidence or remaining work |
 |---|---|---|
-| Audited combined candidate | Verified for installed e33 | The qualified e33 delivery records the exact archive, CLI and installed payloads. Original build target success is distinct from the separately reported forced descendant cleanup; no natural-family build pass is claimed. |
-| Normal installation preservation | Verified for installed e33 | The installation's own before/after check preserved 5,367 saved files, 558 exact payloads and unrelated registrations; 561 archive entries passed CRC checks. This does not prove loaded recovery or reconcile unrelated profile changes across older installations. |
-| Installed local General/tool turn | Pending | The installed default-4B report check read the named file and correctly said outreach was unsent, but started one Task despite the explicit no-workers instruction. The direct-read repair is integrated in source, not yet installed. Saved reply/model/draft and ordinary close/reopen also need current installed acceptance. |
+| Audited combined candidate | Verified for installed a454 | The qualified a454 delivery records the exact archive, CLI and installed payloads. Original build target success is distinct from the separately reported forced descendant cleanup; no natural-family build pass is claimed. |
+| Normal installation preservation | Verified for installed a454 | The installation's own before/after check preserved 5,370 saved files, 558 exact payloads and unrelated registrations; 561 archive entries passed CRC checks. This does not prove loaded recovery or reconcile unrelated profile changes across older installations. |
+| Installed local General/tool turn | Pending | A bounded installed default-4B report read completed in 14.232 seconds: one parent Read, zero Tasks/children, correct report-attributed UNSENT answer and nonblank stop. It returned three sentences instead of two. Saved reply/model/draft and ordinary close/reopen still need current installed acceptance; this focused observation does not earn the whole gate. |
 | Strict installed Coder | Pending | Demonstrate actual scoped implementation and meaningful verification with the selected local Coder, preserving unrelated files. |
 | Installed Voice and permitted HA flow | Deferred by user | Human listening acceptance is deferred. Home Assistant and lights stay off during the current build work. Older lighting successes do not establish current voice acceptance. |
-| Scheduled routines | Pending | The last full installed workflow produced child files but failed content quality and unassisted parent settlement. A resumed worker also lacked its child's handoff evidence; the repair has a passing source case and awaits delivery. Prove a fresh current installed run, reports and controls, ordinary reopen and no unintended replay. Preserve older timer/control successes with their original candidate scope. |
+| Scheduled routines | Pending | The full earlier run failed content quality and unassisted parent settlement. On installed a454, a 4,200-character instruction hit the 4,000-character context cap: four refused assignments, zero workers/reports/files and fabricated caller progress. A concise 2,433-character prompt routed to a designer Task instead of the saved team; parent/child were canceled with no files and idle/team-zero confirmed. Refusal handling and saved-team kickoff fixes remain source work, not installed acceptance. |
 | Configured Memory | Pending | Earlier saving, recall and citation checks retain their narrow scope. Current setup, correction/forget, in-flight pause and index outcomes need installed acceptance. Original uncertain/skipped captures remain fenced; do not replay or retrofit them. |
 | Matching-version postboot/service recovery | Pending | Observe an actual Windows boot with saved selections/chat/drafts, intended service reconnection and no unsolicited worker replay. Do not restart the user's PC just to obtain this evidence. |
 | Populated same-candidate reinstall recovery | Pending | Demonstrate populated loaded-client state, rollback and cold restore without replay. The source restored-profile case passes; closed installation byte preservation and that source test do not establish loaded installed recovery. |
 
+The qualified a454 delivery preserves 558 exact payloads and 561 CRC-checked entries; before/after checks pass naturally in 39.187 / 6.641 seconds. The build target exited zero, with forced post-target descendant cleanup retained separately (133.688-second operation, wrapper exit one and `passed=false`). Combined CLI types pass in 43.641 seconds; the focused fixture passes 1 test / 23 assertions. These checks do not add workflow gates.
+
+The normal backend is closed/absent with readers joined; its actual forced exit one is separate from driver exit zero. Owned models are unloaded. Exact current read evidence and retained Routine failures are linked in [Current Readiness](Raya-Current-Readiness.md). No loaded UI or installed recovery acceptance is claimed.
+
 ## Next delivery
 
-1. Combine the integrated direct-read fix with the routine child-evidence repair.
-2. Complete the relevant combined check, package and install with profile preservation.
-3. Repeat the original default-4B read-only request once and inspect the actual Read, reply and absence of Tasks.
-4. Use a fresh routine run for workflow acceptance. Preserve the canceled Researcher run without resuming or rewriting it.
+1. Fix explicit irreducible-refusal reporting and saved-local-team kickoff in source; retain the refused/canceled installed attempts.
+2. Run the smallest relevant checks, then package/install with profile preservation.
+3. Verify the corrected kickoff with one bounded fresh Routine run and inspect actual workers, reports and controls.
+4. Preserve the prior completed child evidence and canceled Researcher run without resuming or rewriting them.
 
 Do not add broad model campaigns or expand testing without a concrete failure. These steps do not replace the wider implementation requirements in [Everyday Experience](Raya-Everyday-Experience.md) and [Remaining Implementation Handoff](Raya-Remaining-Implementation-Handoff.md).
 

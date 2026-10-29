@@ -95,6 +95,7 @@ it.instance(
       )
       expect(Object.keys(RayaChief.tools(tools, metadata))).toEqual(["read"])
       expect(inspectionFile(request)).toBeDefined()
+      expect(inspectionFile(`Read "${file}". This is read-only; do not start workers.`)).toBe(inspectionFile(request))
       for (const text of [
         `Read ${file} and ${other}. Read-only, no workers.`,
         `Read relative.md. Read-only, no workers.`,

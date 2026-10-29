@@ -9,7 +9,7 @@ export function inspectionFile(request: string | undefined) {
     .replace(/```[\s\S]*?```/g, "")
     .replace(/^\s*>.*$/gm, "")
     .trim()
-  const match = /^(?:please\s+)?read\s+(?:(["'`])([^\r\n]+?)\1|([^\s"'`]+))(?=\s|$)/i.exec(text)
+  const match = /^(?:please\s+)?read\s+(?:(["'`])([^\r\n]+?)\1|([^\s"'`]+))(?=[.,;!]|\s|$)/i.exec(text)
   if (!match) return undefined
   const file = match[2] ?? match[3].replace(/[.,;!]+$/, "")
   if (!Schema.is(Outputs)([file])) return undefined

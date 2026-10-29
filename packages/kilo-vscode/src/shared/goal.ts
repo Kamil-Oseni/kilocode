@@ -159,6 +159,7 @@ export interface GoalState {
     review?: boolean
     check?:
       | { kind: "command"; command: string; directory: string }
+      | { kind: "file-content"; path: string; literals: string[] }
       | {
           kind: "byte-equality"
           source: { path: string; canonical: string; sha256: string; bytes: number }

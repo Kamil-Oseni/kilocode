@@ -292,6 +292,14 @@ function binding(check: NonNullable<GoalState["criteria"]>[number]["check"]) {
   if (!check) return []
   if (check.kind === "command")
     return ["", "Required command:", quote(check.command), "Working directory:", quote(check.directory)]
+  if (check.kind === "file-content")
+    return [
+      "",
+      "Saved exact file-content check (read-only):",
+      quote(`File: ${check.path}`),
+      "Requires a fresh full native Read of the file, at most 8192 UTF-8 bytes. Checks literal presence only, not factual accuracy.",
+      ...check.literals.map((text) => quote(JSON.stringify(text))),
+    ]
   return [
     "",
     "Saved exact byte-equality check:",

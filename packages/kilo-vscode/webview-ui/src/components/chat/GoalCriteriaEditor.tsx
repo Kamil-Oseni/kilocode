@@ -81,10 +81,10 @@ export function GoalCriteriaEditor(props: {
                 }
               />
             </label>
-            <Show when={item().check?.kind === "byte-equality"}>
+            <Show when={item().check?.kind === "byte-equality" || item().check?.kind === "file-content"}>
               <GoalBinding check={item().check} />
             </Show>
-            <Show when={item().check?.kind !== "byte-equality"}>
+            <Show when={item().check?.kind !== "byte-equality" && item().check?.kind !== "file-content"}>
               <label>
                 <input
                   type="checkbox"

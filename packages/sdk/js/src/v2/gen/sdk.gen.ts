@@ -9468,8 +9468,6 @@ export class Goal extends HeyApiClient {
         id: string
         description: string
         verification: string
-        required?: boolean
-        review?: boolean
         check?:
           | {
               kind: "command"
@@ -9489,6 +9487,13 @@ export class Goal extends HeyApiClient {
                 canonical: string
               }
             }
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+        required?: boolean
+        review?: boolean
       }>
       status?: "active" | "paused"
       objective?: string
@@ -10543,6 +10548,11 @@ export class Delegate extends HeyApiClient {
         id: string
         description: string
         verification: string
+        check?: {
+          kind: "file-content"
+          path: string
+          literals: Array<string>
+        }
       }>
       outputs?: Array<string>
       context?: string
@@ -10832,6 +10842,11 @@ export class Routine extends HeyApiClient {
           id: string
           description: string
           verification: string
+          check?: {
+            kind: "file-content"
+            path: string
+            literals: Array<string>
+          }
         }>
         final?: {
           kind: "file"
@@ -11140,6 +11155,11 @@ export class Routine extends HeyApiClient {
           id: string
           description: string
           verification: string
+          check?: {
+            kind: "file-content"
+            path: string
+            literals: Array<string>
+          }
         }>
         final?: {
           kind: "file"
@@ -11211,6 +11231,11 @@ export class Routine extends HeyApiClient {
               id: string
               description: string
               verification: string
+              check?: {
+                kind: "file-content"
+                path: string
+                literals: Array<string>
+              }
             }>
             final?: {
               kind: "file"

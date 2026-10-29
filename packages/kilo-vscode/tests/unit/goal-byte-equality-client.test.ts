@@ -53,6 +53,79 @@ test("saved equality validates every binding field and exact acknowledgement", (
   expect(valid([{ ...criteria[0], check: { kind: "command", command: "bun test", directory: "C:/work" } }])).toBe(true)
 })
 
+test("saved file-content validates exact UTF-8 literals and their acknowledgement", async () => {
+  const check = {
+    kind: "file-content" as const,
+    path: "C:/work/result.txt",
+    literals: ["Required text.", "\ufeffé\r\n"],
+  }
+  const saved = [{ ...criteria[0], check }]
+  expect(valid(saved)).toBe(true)
+  expect(equal(saved, structuredClone(saved))).toBe(true)
+  for (const value of [
+    { ...check, kind: "future-content" },
+    { ...check, extra: true },
+    { ...check, path: "relative" },
+    { ...check, path: "/" + "x".repeat(4000) },
+    { ...check, literals: [] },
+    { ...check, literals: [""] },
+    { ...check, literals: ["\ud800"] },
+    { ...check, literals: ["x".repeat(1025)] },
+    { ...check, literals: Array.from({ length: 9 }, () => "x") },
+    { ...check, literals: Array.from({ length: 8 }, () => "é".repeat(1024)) },
+  ])
+    expect(valid([{ ...saved[0], check: value }])).toBe(false)
+  expect(equal(saved, [{ ...saved[0], check: { ...check, path: "C:/other.txt" } }])).toBe(false)
+  expect(equal(saved, [{ ...saved[0], check: { ...check, literals: check.literals.toReversed() } }])).toBe(false)
+  expect(equal(saved, [{ ...saved[0], check: { ...check, literals: ["Changed text."] } }])).toBe(false)
+  const calls: Request[] = []
+  const messages: unknown[] = []
+  const returned = structuredClone(saved)
+  const goal = {
+    objective: "Preserve required text",
+    status: "paused",
+    intent: "saved",
+    createdAt: 1,
+    updatedAt: 2,
+    usage: { turns: 0, toolCalls: 0, continuations: 0 },
+    progress: [],
+    criteria: returned,
+  }
+  const client = createKiloClient({
+    baseUrl: "http://localhost:4096",
+    fetch: async (input, init) => {
+      calls.push(new Request(input, init))
+      return Response.json(goal)
+    },
+  })
+  const context = {
+    client,
+    authorize: async () => () => true,
+    message: {
+      type: "goalEdit" as const,
+      sessionID: "session",
+      requestID: "content",
+      objective: goal.objective,
+      expectedIntent: "original",
+      criteria: saved,
+    },
+    post: (value: unknown) => messages.push(value),
+  }
+  await editGoal(context)
+  expect(await calls[0].json()).toMatchObject({ criteria: saved, expectedIntent: "original" })
+  expect(messages.at(-1)).toMatchObject({ goal: { criteria: saved } })
+  returned[0].check.literals[0] = "Changed text."
+  await editGoal(context)
+  expect(messages.at(-1)).toMatchObject({ error: expect.stringContaining("did not match") })
+  const text = report({ ...goal, status: "paused", criteria: saved })
+  expect(text).toContain("Saved exact file-content check (read-only)")
+  expect(text).toContain("File: C:/work/result.txt")
+  expect(text).toContain(JSON.stringify(check.literals[1]))
+  expect(text).toContain("at most 8192 UTF-8 bytes")
+  expect(text).toContain("not factual accuracy")
+  expect(text).not.toContain("undefined")
+})
+
 test("actual SDK goal edit roundtrips equality and rejects changed source acknowledgement", async () => {
   const calls: Request[] = []
   const messages: unknown[] = []

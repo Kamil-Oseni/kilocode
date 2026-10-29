@@ -28,9 +28,35 @@ function equality(value: object) {
   )
 }
 
+function content(value: object) {
+  if (!("path" in value) || !("literals" in value)) return false
+  if (
+    Object.keys(value).some((key) => !["kind", "path", "literals"].includes(key)) ||
+    typeof value.path !== "string" ||
+    value.path.length > 4000 ||
+    !/^(?:[a-zA-Z]:[\\/]|\/|\\\\)/.test(value.path) ||
+    !Array.isArray(value.literals) ||
+    !value.literals.length ||
+    value.literals.length > 8
+  )
+    return false
+  const encoder = new TextEncoder()
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true })
+  return (
+    value.literals.every(
+      (text) =>
+        typeof text === "string" &&
+        text.length > 0 &&
+        text.length <= 1024 &&
+        decoder.decode(encoder.encode(text)) === text,
+    ) && value.literals.reduce((bytes, text) => bytes + encoder.encode(text).length, 0) <= 8192
+  )
+}
+
 function binding(value: unknown) {
   if (!value || typeof value !== "object") return false
   if (!("kind" in value)) return false
+  if (value.kind === "file-content") return content(value)
   if (value.kind === "byte-equality") return equality(value)
   if (value.kind !== "command" || !("command" in value) || !("directory" in value)) return false
   return (
@@ -70,6 +96,12 @@ function same(
 ) {
   if (!a || !b) return a === b
   if (a.kind === "command" && b.kind === "command") return a.command === b.command && a.directory === b.directory
+  if (a.kind === "file-content" && b.kind === "file-content")
+    return (
+      a.path === b.path &&
+      a.literals.length === b.literals.length &&
+      a.literals.every((text, index) => text === b.literals[index])
+    )
   if (a.kind !== "byte-equality" || b.kind !== "byte-equality") return false
   return (
     a.source.path === b.source.path &&

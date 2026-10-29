@@ -91,6 +91,19 @@ setValue([
 await Promise.resolve()
 assert(root.textContent.includes("Require an exact command result"))
 assert(!root.querySelector('[aria-label="Saved byte-equality binding"]'))
+const content = { kind: "file-content", path: "C:/work/result.md", literals: ["Required text.", "[Report](report.md)"] }
+setValue([{ id: "content", description: "Required content", verification: "Read final file", check: content }])
+await Promise.resolve()
+assert(root.querySelector('[aria-label="Saved file-content binding"]'))
+assert(root.textContent.includes(content.path))
+assert(content.literals.every((text) => root.textContent.includes(text)))
+assert(!root.textContent.includes("Require an exact command result"))
+const field = root.querySelector('[data-criterion="content"]')
+field.value = "Revised content description"
+field.dispatchEvent(new Event("input", { bubbles: true }))
+assert.equal(value()[0].description, "Revised content description")
+assert.deepEqual(value()[0].check, content)
+
 dispose()
 window.happyDOM.abort()
-console.log("mounted equality preserved; command editor retained")
+console.log("mounted equality and file-content bindings preserved; command editor retained")

@@ -59,9 +59,11 @@ export function Verification(props: { outcome: KilocodeRoutineRunsResponse[numbe
                           ? "Saved command check passed"
                           : item.basis === "byte-equality"
                             ? "Saved byte-equality check passed"
-                            : item.basis === "model-audit"
-                              ? "Agent reported satisfied"
-                              : "Recorded completion claim; verification basis unavailable"}
+                            : item.basis === "file-content"
+                              ? "Native file-content literal check passed; factual accuracy not verified"
+                              : item.basis === "model-audit"
+                                ? "Agent reported satisfied"
+                                : "Recorded completion claim; verification basis unavailable"}
                     </p>
                     <Show when={item.verification}>
                       <p>Verification method: {item.verification}</p>

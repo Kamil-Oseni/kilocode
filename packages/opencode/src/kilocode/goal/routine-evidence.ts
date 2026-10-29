@@ -150,16 +150,54 @@ export function observe(input: {
     const rows = (id: SessionID) =>
       Effect.gen(function* () {
         const value = yield* input.sessions.messages({ sessionID: id, limit: 129 })
-        if (
-          value.length > 128 ||
-          value.some((row) => row.parts.length > 256) ||
-          Buffer.byteLength(JSON.stringify(value)) > 2 * 1024 * 1024
+        const bounded = (rows: readonly SessionV1.WithParts[]) =>
+          rows.length <= 128 &&
+          rows.every((row) => row.parts.length <= 256) &&
+          Buffer.byteLength(JSON.stringify(rows)) <= 2 * 1024 * 1024
+        if (!bounded(value)) return yield* unavailable()
+        const streaming = new Set(
+          id === owner.sessionID
+            ? value
+                .filter(
+                  (row) =>
+                    row.info.role === "assistant" &&
+                    input.goal.inputs?.includes(row.info.parentID) &&
+                    row.parts.some(
+                      (part) =>
+                        part.type === "tool" && (part.state.status === "running" || part.state.status === "pending"),
+                    ),
+                )
+                .map((row) => row.info.id)
+            : [],
         )
-          return yield* unavailable()
+        // The parent's current tool runs while its provider finalizes transport fields.
+        // Keep all user/security identity and native tool proofs; child final reports stay exact.
+        const pin = (rows: readonly SessionV1.WithParts[]) =>
+          rows.map((row) => {
+            if (row.info.role !== "assistant" || !streaming.has(row.info.id)) return row
+            return {
+              ...row,
+              info: {
+                ...row.info,
+                cost: undefined,
+                tokens: undefined,
+                finish: row.info.finish === "tool-calls" ? undefined : row.info.finish,
+                time: { ...row.info.time, completed: undefined },
+              },
+              parts: row.parts.filter(
+                (part) => !["text", "reasoning", "step-start", "step-finish"].includes(part.type),
+              ),
+            }
+          })
+        const original = pin(value)
         checks.push(
           input.sessions
             .messages({ sessionID: id, limit: 129 })
-            .pipe(Effect.flatMap((next) => (isDeepStrictEqual(next, value) ? Effect.void : unavailable()))),
+            .pipe(
+              Effect.flatMap((next) =>
+                bounded(next) && isDeepStrictEqual(pin(next), original) ? Effect.void : unavailable(),
+              ),
+            ),
         )
         return value
       })

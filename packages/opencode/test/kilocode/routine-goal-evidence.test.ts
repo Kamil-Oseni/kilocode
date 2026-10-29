@@ -32,6 +32,7 @@ import * as Artifact from "@/kilocode/goal/artifact"
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
 import { ownerContext } from "@/kilocode/task/request"
 import * as RoutineWait from "@/kilocode/goal/routine-wait"
+import * as RoutineEvidence from "@/kilocode/goal/routine-evidence"
 import { RayaChief } from "@/kilocode/chief"
 import { ToolRegistry } from "@/tool/registry"
 import { testEffect } from "../lib/effect"
@@ -504,6 +505,70 @@ it.live(
         const update = catalog.find((tool) => tool.id === "update_goal")
         const get = catalog.find((tool) => tool.id === "get_goal")
         if (!update || !get) throw new Error("Production model-facing Goal tools are unavailable")
+        const current = yield* goals.get(root.session.id)
+        if (!current) throw new Error("Current Goal disappeared before streaming fixture")
+        let reads = 0
+        const streamed = yield* RoutineEvidence.observe({
+          database,
+          storage,
+          goal: current,
+          rows: yield* sessions.messages({ sessionID: root.session.id }),
+          sessions: {
+            get: sessions.get,
+            messages: (input) =>
+              sessions.messages(input).pipe(
+                Effect.tap(() =>
+                  Effect.gen(function* () {
+                    if (input.sessionID !== root.session.id || ++reads !== 1) return
+                    yield* sessions.updateMessage({
+                      ...root.assistant,
+                      finish: "tool-calls",
+                      tokens: { input: 7, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+                    })
+                    yield* sessions.updatePart({
+                      id: PartID.ascending(),
+                      sessionID: root.session.id,
+                      messageID: root.assistant.id,
+                      type: "text",
+                      text: "Streaming completion; no additional work receipt.",
+                    })
+                  }),
+                ),
+              ),
+          },
+        }).pipe(Effect.exit)
+        expect(Exit.isSuccess(streamed)).toBe(true)
+        const receipt = (yield* sessions.messages({ sessionID: root.session.id }))
+          .flatMap((row) => row.parts)
+          .find((part) => part.type === "tool" && part.callID === "research-handoff")
+        if (!receipt || receipt.type !== "tool" || receipt.state.status !== "completed")
+          throw new Error("Actual accepted receipt disappeared")
+        const state = receipt.state
+        let changed = false
+        const spliced = yield* RoutineEvidence.observe({
+          database,
+          storage,
+          goal: current,
+          rows: yield* sessions.messages({ sessionID: root.session.id }),
+          sessions: {
+            get: sessions.get,
+            messages: (input) =>
+              sessions.messages(input).pipe(
+                Effect.tap(() =>
+                  Effect.gen(function* () {
+                    if (input.sessionID !== root.session.id || changed) return
+                    changed = true
+                    yield* sessions.updatePart({
+                      ...receipt,
+                      state: { ...state, metadata: { ...state.metadata, parentRunID: "foreign-run" } },
+                    })
+                  }),
+                ),
+              ),
+          },
+        }).pipe(Effect.exit)
+        expect(Exit.isFailure(spliced)).toBe(true)
+        yield* sessions.updatePart(receipt)
         const output = yield* update.execute(blocked, root.ctx("wait-for-builder"))
         const waiting = yield* goals.get(root.session.id)
         if (!waiting) throw new Error("Model-facing Goal update removed the Goal")

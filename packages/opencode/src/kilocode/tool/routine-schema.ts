@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from "@ai-sdk/provider"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
@@ -59,7 +59,9 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
     identity?.contract ||
     (marker && typeof marker === "object" && ("contract" in marker || ("version" in marker && marker.version === 3)))
   ) {
-    const storage = yield* Storage.Service
+    const storage = Option.getOrUndefined(yield* Effect.serviceOption(Storage.Service))
+    if (!storage)
+      return yield* Effect.fail(new Contract.Invalid({ message: "The saved parent contract is unavailable." }))
     const run = identity
       ? (yield* RayaTask.make({ storage, database }).runsFor(identity.agentID)).find(
           (item) => item.id === identity.runID && item.sessionID === sessionID && RayaTask.pending(item),

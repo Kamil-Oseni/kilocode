@@ -24,6 +24,7 @@ import * as Artifact from "@/kilocode/goal/read-artifact"
 import { PathHint } from "@/kilocode/tool/path-hint"
 import { Refusal } from "@/kilocode/session/tool-refusal"
 import * as Output from "@/kilocode/task/output-admission"
+import * as DirectRead from "@/kilocode/chief/direct-read"
 // kilocode_change end
 
 const DEFAULT_READ_LIMIT = 2000
@@ -220,6 +221,7 @@ export const ReadTool = Tool.define<
         filepath = FSUtil.normalizePath(filepath)
       }
       const requested = filepath
+      const direct = yield* DirectRead.guard(ctx, requested, fs) // kilocode_change - bind direct Auto reads to the authenticated current owner
       const title = path.relative(instance.worktree, requested)
       // kilocode_change start - resolve V1 configured references without introducing a Core location-layer dependency
       const config = yield* Effect.serviceOption(Config.Service)
@@ -258,6 +260,8 @@ export const ReadTool = Tool.define<
 
       // kilocode_change start - directory mentions expose only a bound listing, never child file bodies
       if (info.type === "Directory") {
+        if (direct)
+          return yield* Effect.fail(new Refusal("chief-work-class", "The direct Read target changed to a directory."))
         const resolved = yield* fs.realPath(requested)
         const target = process.platform === "win32" ? FSUtil.normalizePath(resolved) : resolved
         const explicit =
@@ -325,6 +329,7 @@ export const ReadTool = Tool.define<
         always: ["*"],
         metadata: {},
       })
+      if (direct) yield* direct // kilocode_change - reject owner changes during permission approval before reading content
       return yield* KiloReadObject.use(file, (bound) =>
         Effect.gen(function* () {
           const loaded =

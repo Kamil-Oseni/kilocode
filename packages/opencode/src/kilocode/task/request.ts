@@ -1,4 +1,26 @@
-import { Effect } from "effect"
+import path from "node:path"
+import { Effect, Schema } from "effect"
+import { Outputs } from "./output-scope"
+
+/** Deliberately narrow: one initial absolute-file Read, explicitly read-only with no workers. */
+export function inspectionFile(request: string | undefined) {
+  if (!request) return undefined
+  const text = request
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^\s*>.*$/gm, "")
+    .trim()
+  const match = /^(?:please\s+)?read\s+(?:(["'`])([^\r\n]+?)\1|([^\s"'`]+))(?=\s|$)/i.exec(text)
+  if (!match) return undefined
+  const file = match[2] ?? match[3].replace(/[.,;!]+$/, "")
+  if (!Schema.is(Outputs)([file])) return undefined
+  const rest = text.slice(match[0].length)
+  if (/[a-z]:[\\/]|(?:^|[\s"'`])\/(?!\/)/i.test(rest)) return undefined
+  const owner = rest.replace(/"[^"\r\n]*"|`[^`\r\n]*`|(?:^|\s)'[^'\r\n]*'/g, "")
+  if (!/\bread[ -]only\b/i.test(owner)) return undefined
+  if (!/\b(?:do not|don't|never)\s+(?:start|run|launch)\s+(?:any\s+)?workers\b|\bno\s+workers\b/i.test(owner))
+    return undefined
+  return process.platform === "win32" ? path.normalize(file).toLowerCase() : path.normalize(file)
+}
 
 /** Carry exact owner context without repeated copies or silent truncation. */
 export function preserve(...values: (string | undefined)[]) {
@@ -16,6 +38,7 @@ export function preserve(...values: (string | undefined)[]) {
 /** Only current owner text can request a read-only status turn. */
 export function inspection(request: string | undefined) {
   if (!request) return false
+  if (inspectionFile(request)) return true
   const text = request
     .replace(/```[\s\S]*?```/g, "")
     .replace(/^\s*>.*$/gm, "")

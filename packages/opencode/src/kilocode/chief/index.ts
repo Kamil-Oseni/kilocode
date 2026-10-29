@@ -4,7 +4,9 @@ import { Permission } from "@/permission"
 import { HomeAssistant } from "../home-assistant/tools"
 import { Refusal } from "../session/tool-refusal"
 import { acknowledgement, greeting, unaided } from "./conversation"
-import { kickoff, inspection } from "../task/request"
+import { kickoff, inspection, inspectionFile } from "../task/request"
+import path from "node:path"
+import * as Artifact from "../goal/artifact"
 import type { MessageV2 } from "@/session/message-v2"
 
 export namespace RayaChief {
@@ -50,6 +52,7 @@ export namespace RayaChief {
       return false
     const text = requestText(source.parts)
     if (!inspection(text) || text !== request(session.metadata)) return false
+    const file = inspectionFile(text)
     const tools = new Set(["read", "glob", "grep", "list", "inspect_routines", "inspect_team", "get_goal"])
     return messages.some(
       (row) =>
@@ -63,6 +66,19 @@ export namespace RayaChief {
             part.messageID === row.info.id &&
             tools.has(part.tool) &&
             part.state.status === "completed" &&
+            (!file ||
+              (part.tool === "read" &&
+                typeof part.state.input.filePath === "string" &&
+                (process.platform === "win32"
+                  ? path.normalize(part.state.input.filePath).toLowerCase()
+                  : path.normalize(part.state.input.filePath)) === file &&
+                Artifact.entries(part.state.metadata.rayaRevision).some(
+                  (entry) =>
+                    entry.status === "captured" &&
+                    (process.platform === "win32"
+                      ? path.normalize(entry.path).toLowerCase()
+                      : path.normalize(entry.path)) === file,
+                ))) &&
             !!part.state.output.trim() &&
             part.state.time.start >= source.info.time.created &&
             part.state.time.end >= part.state.time.start,
@@ -150,6 +166,8 @@ export namespace RayaChief {
     dispatch?: { session: string; user: string; inspected?: boolean },
     refusal?: "repair" | "clarify" | "route",
   ) {
+    if (inspectionFile(request(metadata)))
+      return Object.fromEntries(available.read ? [["read", available.read]] : []) as Record<string, T>
     if (inspection(request(metadata)))
       return Object.fromEntries(
         [

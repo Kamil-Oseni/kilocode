@@ -1453,13 +1453,33 @@ export namespace RayaGoal {
       // raya_change start - persist the attempt whether it passes or fails, so a goal that
       // stays blocked/active after a rejected completion still carries the requirement-by-
       // requirement detail and rejection reason for the audit-log view.
-      const audit = yield* validateForSession(
-        submitted,
-        messages,
-        state.createdAt,
-        state.objective,
-        state.criteria,
-      ).pipe(
+      const audit = yield* Effect.gen(function* () {
+        yield* scope.check
+        const owner = state.routine
+        const live = owner
+          ? tools(scope.base).flatMap((part) => {
+              const report = scope.reports.get(part.id)
+              return part.tool === "delegate_work" &&
+                part.sessionID === sessionID &&
+                part.state.status === "completed" &&
+                part.state.metadata.senderID === owner.agentID &&
+                part.state.metadata.parentRunID === owner.runID &&
+                report &&
+                !report.artifactsHistorical &&
+                ["accepted", "running", "needs_input"].includes(report.state)
+                ? [report]
+                : []
+            })
+          : []
+        if (live.length)
+          return yield* new AuditError({
+            message:
+              "This tracked Routine stage still owns accepted child work: " +
+              live.map((report) => `${report.delegationID} (${report.state})`).join(", ") +
+              '. Keep this same run and its original children. Call update_goal with status="blocked" and a plain waiting reason so the host can park it for the original child reply; do not self-pause, repeat the handoff, poll, or claim child completion from an accepted assignment.',
+          })
+        return yield* validateForSession(submitted, messages, state.createdAt, state.objective, state.criteria)
+      }).pipe(
         Effect.flatMap((audit) => {
           if (!accepted) return Effect.succeed(audit)
           const prior = state.audit?.requirements.flatMap((item) => item.evidence) ?? []

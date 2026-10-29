@@ -491,6 +491,55 @@ it.live(
         const assigned = yield* handoff(root, builder, [files[0]], files.slice(1), "research-handoff")
         yield* tasks.transition(held, { ...held, status: "complete" })
         const child = yield* open(builder, assigned, researcher)
+        const catalog = yield* (yield* ToolRegistry.Service).all()
+        const update = catalog.find((tool) => tool.id === "update_goal")
+        const get = catalog.find((tool) => tool.id === "get_goal")
+        if (!update || !get) throw new Error("Production model-facing Goal tools are unavailable")
+        const premature = {
+          status: "complete" as const,
+          summary: "Claimed finished from the accepted initial handoff",
+          requirements: [
+            {
+              criterionID: "handoff",
+              requirement: criteria[0].description,
+              passed: true,
+              evidence: [
+                { callID: "research-handoff", summary: "Researcher handed its actual research file to Builder." },
+              ],
+            },
+          ],
+        }
+        const at = Date.now()
+        const attempt = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: root.session.id,
+          messageID: root.assistant.id,
+          type: "tool",
+          tool: "update_goal",
+          callID: "premature-complete",
+          state: { status: "running", input: premature, time: { start: at } },
+        })
+        const refused = yield* update.execute(premature, root.ctx("premature-complete"))
+        const refusal = yield* goals.get(root.session.id)
+        expect(refused.title).toBe("Completion audit rejected")
+        expect(refused.output).toContain("still owns accepted child work")
+        expect(refused.output).toContain(assigned.id)
+        expect(refused.output).toContain('status="blocked"')
+        expect(refusal?.status).toBe("active")
+        expect(refusal?.auditAttempt?.accepted).toBe(false)
+        expect(refusal?.auditAttempt?.requirements[0].passed).toBe(true)
+        expect((yield* errands.get(assigned.id)).state).toBe("running")
+        yield* sessions.updatePart({
+          ...attempt,
+          state: {
+            status: "completed",
+            input: premature,
+            title: refused.title,
+            output: refused.output,
+            metadata: refused.metadata,
+            time: { start: at, end: Date.now() },
+          },
+        })
         const blocked = { status: "blocked" as const, reason: "Awaiting Builder" }
         const part = yield* sessions.updatePart({
           id: PartID.ascending(),
@@ -501,10 +550,6 @@ it.live(
           callID: "wait-for-builder",
           state: { status: "running", input: blocked, time: { start: Date.now() } },
         })
-        const catalog = yield* (yield* ToolRegistry.Service).all()
-        const update = catalog.find((tool) => tool.id === "update_goal")
-        const get = catalog.find((tool) => tool.id === "get_goal")
-        if (!update || !get) throw new Error("Production model-facing Goal tools are unavailable")
         const current = yield* goals.get(root.session.id)
         if (!current) throw new Error("Current Goal disappeared before streaming fixture")
         let reads = 0
@@ -811,6 +856,13 @@ it.live(
           .pipe(Effect.exit)
         expect(Exit.isFailure(stale)).toBe(true)
         expect((yield* goals.get(root.session.id))?.status).toBe("active")
+        const downstream = yield* errands.take(sales.id)
+        expect(downstream?.id).toBe(onward.id)
+        expect(downstream?.state).toBe("accepted")
+        const onwardproof = (yield* goals.evidence(root.session.id)).find(
+          (item) => item.callID === "builder-sales-handoff",
+        )
+        expect(onwardproof?.delegation?.state).toBe("accepted")
         yield* goals.update(root.session.id, {
           status: "complete",
           summary: "Research and genuine onward handoff evidenced",

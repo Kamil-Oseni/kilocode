@@ -287,6 +287,54 @@ for (const mode of [
 
 it.instance("current read pairs correct rejected audit citations without repeating work", () => scenario("citations"))
 
+it.instance("paused completion guidance preserves state and distinguishes assistant from user pauses", () =>
+  Effect.gen(function* () {
+    const storage = yield* Storage.Service
+    for (const mode of ["agent", "user"] as const) {
+      const sid = SessionID.make(`ses_pause_guidance_${crypto.randomUUID()}`)
+      const goals = RayaGoal.make({
+        storage,
+        sessions: { messages: () => Effect.succeed([]), children: () => Effect.succeed([]) },
+      })
+      yield* Effect.addFinalizer(() => goals.clear(sid))
+      yield* goals.create(sid, "Wait for the assigned worker and verify its result")
+      if (mode === "agent") yield* goals.update(sid, { status: "paused", reason: "Waiting for the assigned worker" })
+      if (mode === "user") yield* goals.control(sid, "paused")
+      const before = yield* goals.get(sid)
+      const ctx = {
+        sessionID: sid,
+        messageID: MessageID.ascending(),
+        agent: "code",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const update = yield* (yield* goalTools(goals).update).init()
+      const rejected = yield* update.execute({ status: "complete", summary: "Attempted completion while paused" }, ctx)
+      expect(rejected.title).toBe("Completion audit rejected")
+      expect(rejected.metadata.status).toBe("paused")
+      expect(yield* goals.get(sid)).toEqual(before)
+      expect(rejected.output).not.toContain("audit_correction")
+      if (mode === "agent") {
+        expect(rejected.output).toContain("You paused this goal yourself")
+        expect(rejected.output).toContain('{"status":"active"}')
+        expect(rejected.output).toContain("do not repeat its work")
+        const resumed = yield* update.execute({ status: "active" }, ctx)
+        expect(resumed.metadata.status).toBe("active")
+        expect((yield* goals.get(sid))?.status).toBe("active")
+      }
+      if (mode === "user") {
+        expect(rejected.output).not.toContain("You paused this goal yourself")
+        expect(rejected.output).not.toContain('{"status":"active"}')
+        const refused = yield* update.execute({ status: "active" }, ctx)
+        expect(refused.metadata.status).toBe("paused")
+        expect(yield* goals.get(sid)).toEqual(before)
+      }
+    }
+  }),
+)
+
 it.live("saved equality schema rejects malformed baselines while model controls cannot select checks", () =>
   Effect.gen(function* () {
     const check = {

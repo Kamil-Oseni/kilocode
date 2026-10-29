@@ -299,8 +299,19 @@ export function goalTools(
             }),
           )
           if (output.title !== "Completion audit rejected") return output
-          if ((yield* goals.get(ctx.sessionID))?.pause === "user-control") return output
           const saved = yield* goals.get(ctx.sessionID)
+          if (saved?.pause === "user-control") return output
+          if (
+            saved?.status === "paused" &&
+            saved.pause === "agent" &&
+            !saved.review &&
+            !saved.replyRecovery &&
+            !saved.budgetHit
+          )
+            return {
+              ...output,
+              output: `${output.output}\nYou paused this goal yourself. If you paused only to wait for delegated work, read get_goal, then explicitly resume with {"status":"active"} and wait for the existing child; do not repeat its work. If the original pause requires user action, keep waiting until that condition is resolved before resuming. Resuming does not accept this audit: verify the remaining requirements and submit a new completion audit afterward.`,
+            }
           const evidence = yield* goals
             .evidence(ctx.sessionID)
             .pipe(Effect.match({ onFailure: (err) => ({ error: failure(err) }), onSuccess: (items) => items }))

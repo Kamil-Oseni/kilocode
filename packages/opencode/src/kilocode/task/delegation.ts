@@ -25,14 +25,12 @@ import { mutate } from "./mutation"
 import { Criteria } from "@/kilocode/goal/criteria"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Files from "./output-scope"
+import { DEPTH, FAN, TREE } from "./limits"
 
 const token = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{1,128}$/))
 const body = Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(8000))
 const State = Schema.Literals(["queued", "accepted", "running", "needs_input", "completed", "failed", "cancelled"])
 const live = ["queued", "accepted", "running", "needs_input"] as const
-const DEPTH = 8
-const FAN = 4
-const TREE = 64
 
 export const Artifact = Schema.Struct({
   path: Schema.String.check(Schema.isPattern(/\S/), Schema.isMaxLength(4096)),

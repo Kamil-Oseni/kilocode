@@ -25,6 +25,7 @@ import { Truncate } from "@/tool/truncate"
 import { admit } from "@/kilocode/tool/task-admission"
 import { Refusal } from "@/kilocode/session/tool-refusal"
 import { SessionRetirement } from "@/kilocode/session/retirement"
+import { ChiefTaskBinding } from "@/kilocode/chief/task-binding"
 import { ProviderTest } from "../fake/provider"
 import { disposeAllInstances, tmpdirScoped, provideInstance, testInstanceStoreLayer } from "../fixture/fixture"
 import path from "node:path"
@@ -62,6 +63,116 @@ const it = testEffect(
       [RuntimeFlags.node, RuntimeFlags.layer()],
     ]),
   ),
+)
+
+it.live("fresh duplicate Auto Task is refused before child creation regardless of execution order", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    yield* provideInstance(dir)(
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const root = yield* sessions.create({ title: "Fresh duplicate Task" })
+        const user = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: root.id,
+          role: "user",
+          agent: "auto",
+          model: ref,
+          time: { created: Date.now() },
+        })
+        const assistant = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: root.id,
+          parentID: user.id,
+          role: "assistant",
+          agent: "auto",
+          mode: "auto",
+          providerID: ref.providerID,
+          modelID: ref.modelID,
+          cost: 0,
+          path: { cwd: dir, root: dir },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: Date.now() },
+        })
+        const params = { description: "Read a report file", prompt: "Read the report", access: "read" as const }
+        const current = yield* sessions.updateMessage({ ...assistant, id: MessageID.ascending() })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: root.id,
+          messageID: assistant.id,
+          type: "tool",
+          tool: "task",
+          callID: "duplicate",
+          state: { status: "running", input: params, time: { start: Date.now() } },
+        })
+        for (const [callID, input] of [
+          ["original", params],
+          ["duplicate", params],
+          ["distinct", { ...params, prompt: "Read a different report" }],
+          ["branch", { ...params, branch_id: "distinct-plan" }],
+          ["resume", { ...params, task_id: root.id }],
+        ] as const)
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: root.id,
+            messageID: current.id,
+            type: "tool",
+            tool: "task",
+            callID,
+            state: { status: "running", input, time: { start: Date.now() } },
+          })
+        const before = yield* sessions.messages({ sessionID: root.id })
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const result = yield* def
+          .execute(params, {
+            sessionID: root.id,
+            messageID: current.id,
+            callID: "duplicate",
+            agent: "auto",
+            abort: new AbortController().signal,
+            extra: {},
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          })
+          .pipe(Effect.exit)
+        if (Exit.isSuccess(result)) throw new Error("Duplicate Task unexpectedly created a child")
+        const error = Cause.squash(result.cause)
+        expect(error).toBeInstanceOf(Refusal)
+        if (!(error instanceof Refusal)) throw error
+        expect(error.reason).toBe("task-concurrent")
+        expect(yield* sessions.children(root.id)).toEqual([])
+        expect(yield* sessions.messages({ sessionID: root.id })).toEqual(before)
+        for (const [callID, input] of [
+          ["original", params],
+          ["distinct", { ...params, prompt: "Read a different report" }],
+          ["resume", { ...params, task_id: root.id }],
+        ] as const)
+          expect(
+            (yield* ChiefTaskBinding.load({
+              sessions,
+              sessionID: root.id,
+              messageID: current.id,
+              agent: "auto",
+              callID,
+              params: input,
+            })).branch,
+          ).toBeUndefined()
+        const branch = yield* ChiefTaskBinding.load({
+          sessions,
+          sessionID: root.id,
+          agent: "auto",
+          callID: "branch",
+          messageID: current.id,
+          params: { ...params, branch_id: "distinct-plan" },
+        }).pipe(Effect.exit)
+        expect(Exit.isFailure(branch)).toBe(true)
+        if (Exit.isFailure(branch))
+          expect(String(Cause.squash(branch.cause))).toContain("No saved Auto Chief plan matches")
+      }),
+    )
+  }),
 )
 
 it.live("actual same-child Task rejects an overlapping wait without changing the admitted child", () =>

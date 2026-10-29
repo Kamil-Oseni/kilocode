@@ -2,12 +2,13 @@ import { Effect } from "effect"
 import { RayaChief } from "@/kilocode/chief"
 import { ChiefBranches } from "@/kilocode/chief/branches"
 import { ChiefRequestPlan } from "@/kilocode/chief/request-plan"
-import { SessionID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
 import { ResultContract } from "./result-contract"
 import { Storage } from "@/storage/storage"
 import type * as TaskFiles from "@/kilocode/tool/task-files"
 import { isDeepStrictEqual } from "node:util"
+import { Refusal } from "../session/tool-refusal"
 
 /** Resolve a planned child from durable authority, never from the task caller's substitutions. */
 export namespace ChiefTaskBinding {
@@ -19,6 +20,7 @@ export namespace ChiefTaskBinding {
     agent: string
     metadata?: Record<string, unknown>
     callID?: string
+    messageID?: MessageID
     params: {
       branch_id?: string
       task_id?: string
@@ -37,7 +39,44 @@ export namespace ChiefTaskBinding {
     return Effect.gen(function* () {
       const marker = input.storage ? yield* ChiefRequestPlan.active(input.storage, input.sessionID) : undefined
       if (marker && !input.sessions) throw new Error("Chief request plan requires saved request verification")
-      const rows = marker && input.sessions ? yield* input.sessions.messages({ sessionID: input.sessionID }) : []
+      const fresh =
+        input.agent === "auto" &&
+        !!input.callID &&
+        !!input.messageID &&
+        !input.params.task_id &&
+        !input.params.branch_id
+      const rows =
+        (marker || fresh) && input.sessions ? yield* input.sessions.messages({ sessionID: input.sessionID }) : []
+      if (fresh) {
+        const row = rows.find(
+          (row) =>
+            row.info.id === input.messageID &&
+            row.info.role === "assistant" &&
+            row.info.agent === "auto" &&
+            row.parts.some((part) => part.type === "tool" && part.tool === "task" && part.callID === input.callID),
+        )
+        const index = row?.parts.findIndex(
+          (part) => part.type === "tool" && part.tool === "task" && part.callID === input.callID,
+        )
+        const current = index !== undefined && index >= 0 ? row?.parts[index] : undefined
+        if (
+          current?.type === "tool" &&
+          row?.parts
+            .slice(0, index)
+            .some(
+              (part) =>
+                part.type === "tool" &&
+                part.tool === "task" &&
+                !part.state.input.task_id &&
+                !part.state.input.branch_id &&
+                isDeepStrictEqual(part.state.input, current.state.input),
+            )
+        )
+          throw new Refusal(
+            "task-concurrent",
+            "An identical Task already appears earlier in this assistant message. Use that original call's result; do not create another child.",
+          )
+      }
       const latest = rows.filter((row) => row.info.role === "user" && RayaChief.requestText(row.parts)).at(-1)
       const stale = marker && latest && marker.identity.requestID !== latest.info.id
       if (stale && !input.params.branch_id && input.agent === "auto" && RayaChief.phase(input.metadata) === "task")

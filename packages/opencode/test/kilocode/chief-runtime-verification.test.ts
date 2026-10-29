@@ -20,6 +20,15 @@ import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
 import { Database } from "@opencode-ai/core/database/database"
 import { Agent } from "@/agent/agent"
+import path from "node:path"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Instruction } from "@/session/instruction"
+import { LSP } from "@/lsp/lsp"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { ReadTool } from "@/tool/read"
+import { InstanceState } from "@/effect/instance-state"
+import * as ReadProof from "@/kilocode/chief/request-read"
 
 const it = testEffect(
   LayerNode.compile(
@@ -31,6 +40,11 @@ const it = testEffect(
       BackgroundJob.node,
       Truncate.node,
       Agent.node,
+      FSUtil.node,
+      CrossSpawnSpawner.node,
+      Instruction.node,
+      LSP.node,
+      Ripgrep.node,
     ]),
     [
       [Database.node, database],
@@ -41,12 +55,12 @@ const it = testEffect(
 const model = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") }
 const setup = Effect.fn("ChiefRuntimeVerificationTest.setup")(function* (
   status: "completed" | "running" | "error" | "cancelled" = "completed",
+  request = "Inspect the private fixture and report its actual contents",
 ) {
   const sessions = yield* Session.Service
   const storage = yield* Storage.Service
   const goals = RayaGoal.make({ storage, sessions })
   const background = yield* BackgroundJob.Service
-  const request = "Inspect the private fixture and report its actual contents"
   const parent = yield* sessions.create({
     metadata: { [RayaChief.phaseKey]: "verify", [RayaChief.requestKey]: request, preserved: true },
   })
@@ -168,6 +182,152 @@ const verify = (state: Effect.Success<ReturnType<typeof setup>>, opts: { callID?
     inputID: opts.inputID ?? state.input.id,
     request: state.request,
   })
+
+it.instance(
+  "explicit owner Read requires exact invocation evidence and retains the same child without a Goal",
+  () =>
+    Effect.gen(function* () {
+      const instance = yield* InstanceState.context
+      const file = path.join(instance.directory, "requested-report.md")
+      expect(ReadProof.missing("Tell me how routine workers work", [], "none", Date.now())).toEqual([])
+      expect(ReadProof.missing(`Example:\n\`\`\`\nRead ${file}\n\`\`\``, [], "none", Date.now())).toEqual([])
+      expect(
+        ReadProof.missing(`Read ${file}. Read ${path.join(instance.directory, "other.md")}.`, [], "none", Date.now()),
+      ).toEqual([])
+      yield* Effect.promise(() => Bun.write(file, "UNSENT"))
+      expect(() => ReadProof.missing(`Read "${file}`, [], "none", Date.now())).toThrow(
+        "unambiguous absolute local file",
+      )
+      const state = yield* setup("completed", `Read \`${file}\` and report whether anything was sent.`)
+      const result = yield* Effect.exit(verify(state))
+      expect(Exit.isFailure(result)).toBe(true)
+      const error = Exit.isFailure(result) ? String(Cause.squash(result.cause)) : ""
+      yield* state.sessions.updatePart({
+        ...state.part,
+        state: {
+          status: "error",
+          input: {},
+          error,
+          metadata: state.part.state.status === "running" ? state.part.state.metadata : undefined,
+          time: { start: Date.now(), end: Date.now() },
+        },
+      })
+      expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("goal")
+      expect(yield* state.goals.get(state.parent.id)).toBeUndefined()
+      const retained = yield* ChiefVerification.retained({
+        ...state,
+        sessionID: state.parent.id,
+        messageID: state.assistant.id,
+        agent: "auto",
+        planned: false,
+      })
+      expect(retained).toEqual({ taskID: state.child.id, correction: true, inspected: true })
+      expect(
+        yield* ChiefVerification.reuse({
+          ...state,
+          sessionID: state.parent.id,
+          messageID: state.assistant.id,
+          agent: "auto",
+          planned: false,
+          taskID: state.child.id,
+          prompt: "Read the requested report and correct the answer",
+        }),
+      ).toBe(true)
+      const receipt = {
+        id: PartID.ascending(),
+        sessionID: state.child.id,
+        messageID: state.final.id,
+        type: "tool" as const,
+        tool: "read",
+        callID: "requested-read",
+        state: {
+          status: "completed" as const,
+          input: { filePath: file },
+          title: "Report",
+          output: "UNSENT",
+          time: { start: state.final.time.created, end: state.final.time.completed },
+          metadata: {
+            rayaRevision: {
+              version: 1,
+              status: "captured",
+              path: file,
+              canonical: file,
+              sha256: "a".repeat(64),
+              mode: 33188,
+              bytes: 6,
+            },
+          },
+        },
+      }
+      // A resumed Task enters running again before its next foreground verification.
+      yield* state.sessions.updatePart(state.part)
+      // A real persisted Read receipt from another input is not this invocation's proof.
+      const stale = yield* state.sessions.updateMessage({
+        ...state.final,
+        id: MessageID.ascending(),
+        parentID: MessageID.ascending(),
+      })
+      yield* state.sessions.updatePart({ ...receipt, id: PartID.ascending(), messageID: stale.id })
+      const unrelated = yield* state.sessions.updateMessage({ ...state.final, id: MessageID.ascending() })
+      yield* state.sessions.updatePart({
+        ...receipt,
+        id: PartID.ascending(),
+        messageID: unrelated.id,
+        state: { ...receipt.state, input: { filePath: path.join(instance.directory, "another.md") } },
+      })
+      yield* state.sessions.setMetadata({
+        sessionID: state.parent.id,
+        metadata: { ...(yield* state.sessions.get(state.parent.id)).metadata, [RayaChief.phaseKey]: "verify" },
+      })
+      const rejected = yield* Effect.exit(verify(state))
+      expect(Exit.isFailure(rejected)).toBe(true)
+      if (Exit.isFailure(rejected))
+        expect(String(Cause.squash(rejected.cause))).toContain("no successful invocation-bound Read")
+      // Restore the invocation terminal and add its exact completed receipt.
+      const row = yield* state.sessions.updateMessage({
+        ...state.final,
+        id: MessageID.ascending(),
+        time: { created: Date.now() },
+      })
+      const start = Date.now()
+      const tool = yield* ReadTool.pipe(Effect.flatMap((info) => info.init()))
+      const read = yield* tool.execute(
+        { filePath: file },
+        {
+          sessionID: state.child.id,
+          messageID: row.id,
+          callID: "actual-requested-read",
+          agent: "general",
+          abort: new AbortController().signal,
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const end = Date.now()
+      yield* state.sessions.updatePart({
+        ...receipt,
+        messageID: row.id,
+        state: {
+          ...receipt.state,
+          title: read.title,
+          metadata: read.metadata,
+          output: read.output,
+          input: { filePath: file },
+          time: { start, end },
+        },
+      })
+      yield* state.sessions.updateMessage({ ...row, time: { ...row.time, completed: end } })
+      yield* state.sessions.setMetadata({
+        sessionID: state.parent.id,
+        metadata: { ...(yield* state.sessions.get(state.parent.id)).metadata, [RayaChief.phaseKey]: "verify" },
+      })
+      yield* verify(state)
+      expect(RayaChief.phase((yield* state.sessions.get(state.parent.id)).metadata)).toBe("done")
+      expect(yield* state.goals.get(state.parent.id)).toBeUndefined()
+    }),
+  { config: { formatter: false, lsp: false, enabled_providers: [] } },
+)
 
 it.instance(
   "authenticated running recovery refuses normally and retains its worker until actual completion",

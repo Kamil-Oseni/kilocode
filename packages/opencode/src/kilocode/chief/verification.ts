@@ -16,6 +16,7 @@ import { Refusal } from "@/kilocode/session/tool-refusal"
 import { example } from "@/kilocode/task-resume"
 import * as GoalGate from "@/kilocode/goal/tool-gate"
 import { compacted } from "@/kilocode/goal/compaction-lineage"
+import * as ReadProof from "./request-read"
 
 export namespace ChiefVerification {
   export const key = "raya.chief.verification"
@@ -173,9 +174,10 @@ export namespace ChiefVerification {
       const raw = parent.metadata?.[recovery] ?? parent.metadata?.[key]
       if (raw === undefined) return false
       const observation = yield* Schema.decodeUnknownEffect(Observation)(raw)
-      if (observation.kind !== "foreground" || !observation.child || observation.goal.status !== "active") return false
+      if (observation.kind !== "foreground" || !observation.child) return false
       const goal = yield* state(input.storage, input.sessionID)
-      if (!goal || goal.status !== "active") return false
+      const reading = observation.goal.status === "absent" && !goal
+      if (!reading && (!goal || goal.status !== "active" || observation.goal.status !== "active")) return false
       const request = RayaChief.request(parent.metadata)
       const rows = yield* input.sessions.messages({ sessionID: input.sessionID })
       const user = rows.findLast((row) => row.info.role === "user" && !!RayaChief.requestText(row.parts))
@@ -190,7 +192,7 @@ export namespace ChiefVerification {
       if (!request || user?.info.id !== observation.userID || RayaChief.requestText(user.parts) !== request)
         return false
       if (observation.requestSHA !== digest({ tool: "request", state: request })) return false
-      if (goal.intent !== observation.goal.intent) return false
+      if (goal?.intent !== observation.goal.intent) return false
       const source = rows.find((row) => row.info.id === observation.messageID)
       const part = source?.parts.find((row) => row.type === "tool" && row.callID === observation.callID)
       const child = observation.child
@@ -199,12 +201,21 @@ export namespace ChiefVerification {
       const initial = messages.find((row) => row.info.id === child.inputID)
       const terminal = messages.find((row) => row.info.id === child.messageID)
       const job = input.background ? yield* input.background.get(child.sessionID) : undefined
+      const missing = ReadProof.missing(request, messages, child.inputID, child.completedAt)
+      const refused =
+        missing.length > 0 &&
+        part?.type === "tool" &&
+        part.state.status === "error" &&
+        part.state.error.includes(
+          "The completed worker has no successful invocation-bound Read of the owner's requested file(s):",
+        )
       if (
         source?.info.role !== "assistant" ||
         source.info.agent !== "auto" ||
         part?.type !== "tool" ||
         part.tool !== "task" ||
-        (part.state.status !== "running" && part.state.status !== "completed") ||
+        part.state.status === "pending" ||
+        (part.state.status !== "running" && part.state.status !== "completed" && !refused) ||
         part.state.metadata?.sessionId !== child.sessionID ||
         part.state.metadata?.childMessageID !== child.inputID ||
         session.parentID !== input.sessionID ||
@@ -249,6 +260,7 @@ export namespace ChiefVerification {
             "The retained Task is still running. Wait for that same Task to finish before reading its recovery state; do not start or replace its worker.",
           ),
         )
+      if (reading && !missing.length) return false
       const correction = rows.some((row) =>
         row.parts.some(
           (part) =>
@@ -269,37 +281,39 @@ export namespace ChiefVerification {
         digest: hash,
       })
       const current = rows.findIndex((row) => row.info.id === input.messageID)
-      const inspected = rows.slice(0, current).some(
-        (row) =>
-          row.info.role === "assistant" &&
-          row.info.agent === "auto" &&
-          goal.inputs?.includes(row.info.parentID) &&
-          row.parts.some((part) => {
-            if (
-              part.type !== "tool" ||
-              part.tool !== "get_goal" ||
-              part.sessionID !== input.sessionID ||
-              part.messageID !== row.info.id ||
-              part.state.status !== "completed" ||
-              part.state.time.start < child.completedAt ||
-              part.state.time.end < part.state.time.start ||
-              part.state.time.end > message.info.time.created
-            )
-              return false
-            const saved = Option.getOrUndefined(Schema.decodeUnknownOption(proof)(part.state.metadata[GoalGate.key]))
-            const parsed = Option.getOrUndefined(Schema.decodeUnknownOption(inspection)(part.state.output))
-            return (
-              saved !== undefined &&
-              parsed !== undefined &&
-              saved.sessionID === input.sessionID &&
-              saved.messageID === row.info.id &&
-              saved.revision === parsed.goal.revision &&
-              saved.digest === GoalGate.observation(parsed.goal, input.sessionID, row.info.id).digest &&
-              saved.digest === GoalGate.observation(goal, input.sessionID, row.info.id).digest
-            )
-          }),
-      )
-      return { taskID: child.sessionID, correction, inspected }
+      const inspected =
+        !!goal &&
+        rows.slice(0, current).some(
+          (row) =>
+            row.info.role === "assistant" &&
+            row.info.agent === "auto" &&
+            goal?.inputs?.includes(row.info.parentID) &&
+            row.parts.some((part) => {
+              if (
+                part.type !== "tool" ||
+                part.tool !== "get_goal" ||
+                part.sessionID !== input.sessionID ||
+                part.messageID !== row.info.id ||
+                part.state.status !== "completed" ||
+                part.state.time.start < child.completedAt ||
+                part.state.time.end < part.state.time.start ||
+                part.state.time.end > message.info.time.created
+              )
+                return false
+              const saved = Option.getOrUndefined(Schema.decodeUnknownOption(proof)(part.state.metadata[GoalGate.key]))
+              const parsed = Option.getOrUndefined(Schema.decodeUnknownOption(inspection)(part.state.output))
+              return (
+                saved !== undefined &&
+                parsed !== undefined &&
+                saved.sessionID === input.sessionID &&
+                saved.messageID === row.info.id &&
+                saved.revision === parsed.goal.revision &&
+                saved.digest === GoalGate.observation(parsed.goal, input.sessionID, row.info.id).digest &&
+                saved.digest === GoalGate.observation(goal, input.sessionID, row.info.id).digest
+              )
+            }),
+        )
+      return { taskID: child.sessionID, correction: correction || missing.length > 0, inspected: reading || inspected }
     })
   }
 
@@ -504,6 +518,7 @@ ${example(worker.taskID)}`,
                   inputID: child.inputID,
                   messageID: terminal.info.id,
                   completedAt: terminal.info.time.completed,
+                  missing: ReadProof.missing(input.request, messages, child.inputID, terminal.info.time.completed),
                 }
               })
             : undefined
@@ -550,9 +565,20 @@ ${example(worker.taskID)}`,
               ...current.metadata,
               [key]: observation,
               ...(kind === "foreground" ? { [recovery]: observation } : {}),
-              [RayaChief.phaseKey]: !goal || goal.status === "complete" ? "done" : "goal",
+              [RayaChief.phaseKey]: evidence?.missing.length
+                ? "goal"
+                : !goal || goal.status === "complete"
+                  ? "done"
+                  : "goal",
             },
           })
+          if (evidence?.missing.length)
+            return yield* Effect.fail(
+              new Refusal(
+                "task-recovery",
+                `The completed worker has no successful invocation-bound Read of the owner's requested file(s): ${evidence.missing.join(", ")}. Do not accept or repeat its unverified narrative. Continue the same worker with arguments.task_id="${evidence.sessionID}" and a concrete correction to read those files and report their actual contents. Do not create another child or invent a result.`,
+              ),
+            )
           return observation
         }),
       ).pipe(gate.withLock(input.sessionID))

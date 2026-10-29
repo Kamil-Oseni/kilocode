@@ -223,6 +223,7 @@ export const TaskTool = Tool.define(
         agent: ctx.agent,
         metadata: parent.metadata,
         callID: ctx.callID,
+        messageID: ctx.messageID,
         params,
       })
       // kilocode_change start - retain the authenticated foreground worker for unplanned recovery

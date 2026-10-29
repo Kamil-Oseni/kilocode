@@ -1,3 +1,4 @@
+import path from "node:path"
 import { mkdir } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
@@ -60,6 +61,9 @@ import { make as reportOrigin } from "./report-origin"
 import { make as parentHandoff, type Handoff } from "./parent-handoff"
 import { RayaTaskWait } from "./wait-notice"
 import { final } from "./final-report"
+import { failure } from "./final-error"
+import { ExecutionIdle } from "./execution-event"
+import { gate } from "@/kilocode/session/input-gate"
 import { verify } from "./final-output"
 import * as Files from "./output-scope"
 import { bound as reviewed } from "@/kilocode/goal/review-source"
@@ -276,7 +280,12 @@ export namespace RayaTaskRunner {
     halt?: (sessionID: SessionID) => Effect.Effect<void>
     pty?: PtyArchive.Interface
     continuation?: (run: RayaTask.Run) => Effect.Effect<void>
-  }): { runner: Runner; events: Pick<Runner, "settle" | "park" | "observe"> } {
+  }): {
+    runner: Runner
+    events: Pick<Runner, "park" | "observe"> & {
+      settle: (sessionID: SessionID, exact?: RayaTask.Run) => Effect.Effect<void, RayaTask.GuardError>
+    }
+  } {
     const refuse = () => new RayaTask.GuardError({ message: "Routine scheduler admission is closed." })
     const intake = <A, E, R>(body: Effect.Effect<A, E, R>) =>
       admission.track(initialize.pipe(Effect.andThen(body)), refuse)
@@ -2091,7 +2100,11 @@ export namespace RayaTaskRunner {
       if (failed) return yield* Effect.failCause(failed.cause)
     })
 
-    const close = Effect.fn("RayaTaskRunner.closeErrand")(function* (run: RayaTask.Run, terminal = false) {
+    const close = Effect.fn("RayaTaskRunner.closeErrand")(function* (
+      run: RayaTask.Run,
+      terminal = false,
+      notify = false,
+    ) {
       if (!errands) return
       const row = yield* errands.bySession(run.sessionID)
       const recipient = yield* tasks.get(row?.recipientID ?? run.agentID)
@@ -2119,7 +2132,7 @@ export namespace RayaTaskRunner {
                 : Effect.die(error),
             ),
           )
-        if (settled && !terminal)
+        if (settled && (!terminal || notify))
           yield* sync(settled).pipe(
             Effect.catch((err) => Effect.sync(() => log.error("delegation budget settlement failed", { err }))),
           )
@@ -2353,7 +2366,18 @@ export namespace RayaTaskRunner {
               withheld("done-delivery-changed")
               continue
             }
+            const error =
+              goal && saved
+                ? failure(
+                    done,
+                    goal,
+                    yield* input.sessions.get(sessionID),
+                    saved,
+                    yield* input.sessions.messages({ sessionID, limit: 129 }),
+                  )
+                : undefined
             if (
+              !error &&
               !failed(done) &&
               done.status !== "stopped" &&
               definition.memoryScope === "role" &&
@@ -2365,7 +2389,7 @@ export namespace RayaTaskRunner {
             if (reservations && done.outcome)
               yield* reservations.settle(done.id, done.sessionID, done.outcome.cost).pipe(Effect.orDie)
             yield* retain(done)
-            yield* close(done, !!exact || done.status === "stopped" || failed(done))
+            yield* close(done, !!error || !!exact || done.status === "stopped" || failed(done), !!error)
             yield* execution.finish(done)
           }
           continue
@@ -2447,7 +2471,20 @@ export namespace RayaTaskRunner {
           !stop && status === "complete" && goal && saved?.sessionID === run.sessionID
             ? final(record, goal, msgs, !!definition.output?.final, !!definition.output?.final)
             : undefined
-        if (!stop && status === "complete" && !report) {
+        const session = !stop && status === "complete" && !report ? yield* input.sessions.get(sessionID) : undefined
+        const owner = session ? yield* execution.receipt(run) : undefined
+        const error =
+          session &&
+          saved &&
+          goal &&
+          owner &&
+          owner.state === "idle" &&
+          owner.updatedAt >= (goal.dispatch?.finishedAt ?? Infinity) &&
+          owner.createdAt <= (goal.dispatch?.startedAt ?? -Infinity) &&
+          (yield* execution.idle(run, createHash("sha256").update(owner.token).digest("hex")))
+            ? failure(run, goal, session, saved, msgs)
+            : undefined
+        if (!stop && status === "complete" && !report && !error) {
           log.warn("Routine completion awaits its original final answer", { runID: run.id, sessionID })
           continue
         }
@@ -2458,22 +2495,24 @@ export namespace RayaTaskRunner {
         const rejected = delivery !== undefined && delivery.status !== "passed"
         const summary = stop
           ? "Stopped by the user. No unverified result was accepted."
-          : (report?.summary ?? goal?.blockedReason?.trim() ?? "")
+          : (error?.summary ?? report?.summary ?? goal?.blockedReason?.trim() ?? "")
         const next = {
           ...run,
-          status: rejected ? "blocked" : status,
+          status: error ? "error" : rejected ? "blocked" : status,
           ...(stop ? { stop } : {}),
           trace: stop || goal?.createdAt === run.goalCreatedAt ? record.trace : undefined,
-          blockedReason: rejected
-            ? "The original final answer did not pass its approved file check. Review the saved result before starting more work; it was not retried."
-            : stop
-              ? undefined
-              : goal
-                ? goal.blockedReason
-                : "No saved goal is available to verify this run's result. Review its conversation and saved instructions before starting more work.",
+          blockedReason: error
+            ? error.summary
+            : rejected
+              ? "The original final answer did not pass its approved file check. Review the saved result before starting more work; it was not retried."
+              : stop
+                ? undefined
+                : goal
+                  ? goal.blockedReason
+                  : "No saved goal is available to verify this run's result. Review its conversation and saved instructions before starting more work.",
           outcome: {
             kind: kind(definition.role, definition.objective),
-            reply: goal?.completion === "reply" && goal.status === "complete" ? true : undefined,
+            reply: !error && goal?.completion === "reply" && goal.status === "complete" ? true : undefined,
             summary,
             ...(report ? { report: report.report } : {}),
             ...(delivery ? { delivery } : {}),
@@ -2545,9 +2584,27 @@ export namespace RayaTaskRunner {
                 message: "The original routine Stop is still settling. Review its retained receipt before continuing.",
               })
             })
-          : yield* tasks.transition(run, next, report ? goal : undefined)
+          : error && goal && session && saved && owner
+            ? yield* gate.withLock(sessionID)(
+                Effect.gen(function* () {
+                  const current = yield* input.sessions.get(sessionID)
+                  const messages = yield* input.sessions.messages({ sessionID, limit: 129 })
+                  const receipt = yield* execution.receipt(run)
+                  if (
+                    !isDeepStrictEqual(goal, yield* goals.get(sessionID)) ||
+                    !isDeepStrictEqual(saved, yield* snapshots.find(run.id).pipe(Effect.orDie)) ||
+                    !isDeepStrictEqual(msgs, messages) ||
+                    !isDeepStrictEqual(owner, receipt) ||
+                    !(yield* execution.idle(run, createHash("sha256").update(owner.token).digest("hex"))) ||
+                    !isDeepStrictEqual(error, failure(run, goal, current, saved, messages))
+                  )
+                    return false
+                  return yield* tasks.transition(run, next, goal)
+                }),
+              )
+            : yield* tasks.transition(run, next, report ? goal : undefined)
         withheld(changed ? "transition-committed" : "transition-conflict")
-        if (changed && !rejected && status !== "stopped" && definition.memoryScope === "role" && summary) {
+        if (changed && !error && !rejected && status !== "stopped" && definition.memoryScope === "role" && summary) {
           yield* tasks.learn(item.id, run.id, summary)
         }
         const latest = (yield* tasks.runsFor(item.id)).find((entry) => entry.id === run.id)
@@ -2567,9 +2624,18 @@ export namespace RayaTaskRunner {
           )
             yield* schedule.settle(latest)
           yield* retain(latest)
-          yield* close(latest, !!exact || status === "stopped" || failed(latest))
+          const notify = !!(
+            error &&
+            changed &&
+            latest.status === "error" &&
+            goal &&
+            session &&
+            saved &&
+            isDeepStrictEqual(error, failure(latest, goal, session, saved, msgs))
+          )
+          yield* close(latest, !!error || !!exact || status === "stopped" || failed(latest), notify)
           yield* execution.finish(latest)
-          if (!exact && status !== "stopped" && !failed(latest)) yield* dispatch(item.id)
+          if (!error && !exact && status !== "stopped" && !failed(latest)) yield* dispatch(item.id)
         }
       }
     })
@@ -3610,8 +3676,11 @@ export namespace RayaTaskRunner {
       events: {
         observe: (...args: Parameters<Runner["observe"]>) =>
           initialize.pipe(Effect.andThen((observe as Runner["observe"])(...args))),
-        settle: (...args: Parameters<Runner["settle"]>) =>
-          initialize.pipe(Effect.andThen((settle as Runner["settle"])(...args))),
+        settle: (sessionID: SessionID, exact?: RayaTask.Run) =>
+          initialize.pipe(
+            Effect.andThen(settle(sessionID, exact)),
+            Effect.catch((err) => (err instanceof RayaTask.GuardError ? Effect.fail(err) : Effect.die(err))),
+          ),
         park: park as Runner["park"],
       },
     }
@@ -3642,6 +3711,7 @@ export namespace RayaTaskRunner {
     return Effect.gen(function* () {
       const bridge = yield* EffectBridge.make()
       const scope = yield* Effect.scope
+      const directory = capture()?.directory
       const reviews = new Map<string, Review>()
       const inbox = input.database ? RayaTaskInbox.make(input.database) : undefined
       const receipt = Effect.fn("RayaTaskRunner.permissionReceipt")(function* (review: Review, reply: string) {
@@ -3734,6 +3804,59 @@ export namespace RayaTaskRunner {
             if (admission.snapshot().closed) return
             const type = event.payload?.type
             const data = event.payload?.properties ?? event.payload?.data
+            if (type === ExecutionIdle.type) {
+              if (!Schema.is(ExecutionIdle.properties)(data)) return
+              const hint = data
+              if (!directory) return
+              admission.dispatch(
+                Effect.gen(function* () {
+                  const session = yield* input.sessions.get(hint.sessionID)
+                  if (path.relative(directory, session.directory) !== "") return
+                  const owner = { id: hint.runID, agentID: hint.agentID, sessionID: hint.sessionID }
+                  const execution = RayaTaskExecution.make(input.storage)
+                  if (!(yield* execution.idle(owner, hint.execution))) return
+                  const receipt = yield* execution.receipt(owner)
+                  const goal = yield* RayaGoal.make({ storage: input.storage, sessions: input.sessions }).get(
+                    hint.sessionID,
+                  )
+                  if (
+                    !receipt ||
+                    goal?.status !== "complete" ||
+                    !goal.routine ||
+                    goal.routine.runID !== hint.runID ||
+                    goal.routine.agentID !== hint.agentID ||
+                    goal.routine.sessionID !== hint.sessionID ||
+                    goal.dispatch?.phase !== "finished" ||
+                    goal.dispatch.outcome !== "error" ||
+                    goal.dispatch.intent !== goal.intent ||
+                    receipt.updatedAt < (goal.dispatch.finishedAt ?? Infinity) ||
+                    receipt.createdAt > (goal.dispatch.startedAt ?? -Infinity) ||
+                    createHash("sha256").update(receipt.token).digest("hex") !== hint.execution
+                  )
+                    return
+                  const run = (yield* runner.tasks.runsFor(hint.agentID)).find(
+                    (run) => run.id === hint.runID && run.sessionID === hint.sessionID,
+                  )
+                  if (!run || run.status !== "running") return
+                  yield* owned.events.settle(hint.sessionID, run)
+                }).pipe(
+                  (body) => admission.observe(body, known),
+                  Effect.catchCause((cause) =>
+                    Cause.hasInterrupts(cause)
+                      ? Effect.failCause(cause)
+                      : Effect.sync(() =>
+                          log.error("task final error settlement failed", {
+                            sessionID: hint.sessionID,
+                            err: Cause.squash(cause),
+                          }),
+                        ),
+                  ),
+                ),
+                scope,
+                bridge.fork,
+              )
+              return
+            }
             const raw = data?.sessionID
             if (!type || typeof raw !== "string") return
             const waiting = asked.has(type)

@@ -23549,6 +23549,11 @@ export type KilocodeGoalGetResponses = {
       agentID: string
       runID: string
       sessionID: string
+      contract?: {
+        id: string
+        sha256: string
+        stageID: string
+      }
     }
     dependencyWait?: {
       runID: string
@@ -24374,6 +24379,11 @@ export type KilocodeGoalUpdateResponses = {
       agentID: string
       runID: string
       sessionID: string
+      contract?: {
+        id: string
+        sha256: string
+        stageID: string
+      }
     }
     dependencyWait?: {
       runID: string
@@ -25166,6 +25176,11 @@ export type KilocodeGoalCreateResponses = {
       agentID: string
       runID: string
       sessionID: string
+      contract?: {
+        id: string
+        sha256: string
+        stageID: string
+      }
     }
     dependencyWait?: {
       runID: string
@@ -27471,6 +27486,11 @@ export type KilocodeRoutineRunResponses = {
   200: {
     id: string
     agentID: string
+    contract?: {
+      id: string
+      sha256: string
+      stageID: string
+    }
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
     status: "running" | "complete" | "blocked" | "error" | "stopped"
@@ -27648,6 +27668,11 @@ export type KilocodeRoutineRunsResponses = {
   200: Array<{
     id: string
     agentID: string
+    contract?: {
+      id: string
+      sha256: string
+      stageID: string
+    }
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
     status: "running" | "complete" | "blocked" | "error" | "stopped"
@@ -27786,6 +27811,11 @@ export type KilocodeRoutineEventsResponses = {
     runs: Array<{
       id: string
       agentID: string
+      contract?: {
+        id: string
+        sha256: string
+        stageID: string
+      }
       at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       sessionID: string
       status: "running" | "complete" | "blocked" | "error" | "stopped"
@@ -27950,6 +27980,11 @@ export type KilocodeRoutineHistoriesResponses = {
       runs: Array<{
         id: string
         agentID: string
+        contract?: {
+          id: string
+          sha256: string
+          stageID: string
+        }
         at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
         sessionID: string
         status: "running" | "complete" | "blocked" | "error" | "stopped"
@@ -28091,7 +28126,7 @@ export type KilocodeRoutineSnapshotResponses = {
    * Original startup instructions
    */
   200: {
-    version: 1 | 2
+    version: 1 | 2 | 3
     runID: string
     sessionID?: string
     agentID: string
@@ -28181,6 +28216,11 @@ export type KilocodeRoutineSnapshotResponses = {
     }
     objective: string
     outputs?: Array<string>
+    contract?: {
+      id: string
+      sha256: string
+      stageID: string
+    }
     organizationPolicy?: {
       organizationID: string
       organizationRevision: number
@@ -28746,6 +28786,11 @@ export type KilocodeRoutineEventResponses = {
   200: Array<{
     id: string
     agentID: string
+    contract?: {
+      id: string
+      sha256: string
+      stageID: string
+    }
     at: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     sessionID: string
     status: "running" | "complete" | "blocked" | "error" | "stopped"
@@ -29340,6 +29385,11 @@ export type KilocodeRoutineInboxAttachmentResponse =
 export type KilocodeRoutineDelegateCreateData = {
   body?: {
     source: string
+    contract?: {
+      id: string
+      sha256: string
+      stageID: string
+    }
     senderID: string
     recipientID: string
     parentID?: string
@@ -29400,6 +29450,11 @@ export type KilocodeRoutineDelegateCreateResponses = {
   200: {
     id: string
     source: string
+    contract?: {
+      id: string
+      sha256: string
+      stageID: string
+    }
     senderID: string
     recipientID: string
     parentID?: string
@@ -29472,6 +29527,11 @@ export type KilocodeRoutineDelegateGetResponses = {
   200: {
     id: string
     source: string
+    contract?: {
+      id: string
+      sha256: string
+      stageID: string
+    }
     senderID: string
     recipientID: string
     parentID?: string
@@ -29546,6 +29606,11 @@ export type KilocodeRoutineDelegateChainResponses = {
     record: {
       id: string
       source: string
+      contract?: {
+        id: string
+        sha256: string
+        stageID: string
+      }
       senderID: string
       recipientID: string
       parentID?: string
@@ -29583,6 +29648,11 @@ export type KilocodeRoutineDelegateChainResponses = {
     above: Array<{
       id: string
       source: string
+      contract?: {
+        id: string
+        sha256: string
+        stageID: string
+      }
       senderID: string
       recipientID: string
       parentID?: string
@@ -29620,6 +29690,11 @@ export type KilocodeRoutineDelegateChainResponses = {
     below: Array<{
       id: string
       source: string
+      contract?: {
+        id: string
+        sha256: string
+        stageID: string
+      }
       senderID: string
       recipientID: string
       parentID?: string
@@ -29694,6 +29769,11 @@ export type KilocodeRoutineDelegateCancelResponses = {
   200: {
     id: string
     source: string
+    contract?: {
+      id: string
+      sha256: string
+      stageID: string
+    }
     senderID: string
     recipientID: string
     parentID?: string

@@ -10526,6 +10526,11 @@ export class Delegate extends HeyApiClient {
       directory?: string
       workspace?: string
       source?: string
+      contract?: {
+        id: string
+        sha256: string
+        stageID: string
+      }
       senderID?: string
       recipientID?: string
       parentID?: string
@@ -10562,6 +10567,7 @@ export class Delegate extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "source" },
+            { in: "body", key: "contract" },
             { in: "body", key: "senderID" },
             { in: "body", key: "recipientID" },
             { in: "body", key: "parentID" },

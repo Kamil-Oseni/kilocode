@@ -4,6 +4,52 @@ Updated October 29, 2026. Stable chat and routine workers are the priority; voic
 
 ## Installed version and evidence
 
+Everyday registration selects **`7.4.23-snapshot+430f408326.local.1793269136420`**, source **`430f4083264956beae8e2981d6444fed73c0d101`**. Qualified delivery: `.tmp/new-pc/worker-430f408326-delivery-qualified.json`, SHA-256 `50f78155d020cabe5dbc26e9509b76067cbaacc82f055373c71e475979294c41`. Exact payload hashes and retained build failures are recorded in [Current Readiness](Raya-Current-Readiness.md).
+
+**Two of nine installed gates (22.2%)** have evidence; seven remain unearned, including deferred voice. This checklist is **not overall project completion**. Overall readiness remains **unmeasured**.
+
+| Gate | Status | Evidence or remaining work |
+|---|---|---|
+| Audited combined candidate | Verified for installed 430 | Exact qualified installed payloads. Stock target success is separate from forced owned descendant cleanup; no natural-family build pass. |
+| Normal installation preservation | Verified for installed 430 | Own baseline: 5,608 saved files, 558 exact payloads, 561 CRC-checked entries and unrelated registrations preserved. No loaded recovery claim. |
+| Installed local General/tool turn | Pending | Earlier bounded report-read observations retain their scope. Current saved reply/model/draft and ordinary close/reopen still require installed acceptance. The native UI check was not launched because guaranteed safe second-display placement was unavailable. |
+| Strict installed Coder | Pending | Demonstrate scoped implementation and meaningful verification with the selected local Coder, preserving unrelated files. |
+| Installed Voice and permitted HA flow | Deferred by user | Voice is not the current priority; Home Assistant and lights remain off. |
+| Scheduled routines | Pending | Installed 430 proves native dependency waiting and same-run wake after the actual Sales reply, but repeated compaction stalled the parent dispatch. Five files exist with failed content requirements; no full workflow or scheduling acceptance. Source repairs pass 1/21 and 1/51; candidate build/install pending. |
+| Configured Memory | Pending | Current setup, correction/forget, in-flight pause and index outcomes require installed acceptance. Preserve uncertain/skipped captures without replay. |
+| Matching-version postboot/service recovery | Pending | Observe an actual Windows boot with saved state, service reconnection and no unsolicited replay; do not restart the PC for evidence. |
+| Populated same-candidate reinstall recovery | Pending | Loaded populated-state, rollback and cold restore require installed acceptance. Source restore and closed-file preservation do not establish it. |
+
+Installed 430 preservation checks pass naturally in **40.406 / 6.594 seconds**. The **125.453-second** stock operation reached target success then forced owned descendant cleanup, retaining wrapper exit one/`passed=false`. The preceding 4d46 stock operation failed naturally after **19.156 seconds** with an eight-byte SDK tail; its malformed artifacts remain backed up and no hand patch was used. The installed atomic publication helper passes **1 case / 3 assertions**; stock SDK regeneration/TypeScript compilation subsequently pass with generated client types matching HEAD. Inherited source checks retain their own scope: specialist Agent construction **1/54**, lint zero errors/warnings and CLI types **44.250 seconds**; stream race **1/43** and CLI types **44.797 seconds**. These observations add no workflow gates.
+
+The policy-aligned **operator-assisted public dispatch** achieved partial installed host acceptance: Researcher made its real handoff and entered native dependency waiting; Sales completed; Builder resumed automatically in the **same run** after the actual Sales reply, with **13 eligible evidence records** and no model-issued status-active call. The full workflow nevertheless **failed** after repeated automatic compaction: the final assistant belonged to a copied input while Goal.dispatch retained the preceding input. The producer finished and its durable execution receipt was idle; the still-started dispatch prevented another continuation. This was a host lineage dead end, not evidence of an active model or a RAM admission hold.
+
+All five files exist, but content quality failed: HTML included prohibited phone/email, the brief asserted unverified rendered behavior, all three drafts addressed Eric instead of the required Contrast/Canwide future offers and invented a prior-message follow-up, and the report lacked five actual file links and invented a Dispatch UUID. No sends occurred and no operator repaired artifacts or SQL. Canonical cancellation returned **200**, followed by idle status and zero active team work. Driver **80140** joined naturally with exit zero and readers joined; backend **38724** required forced exit one and is absent. Models had already auto-expired; the read-only final inventory was empty. Outcome: `.tmp/business-20261022/normal-service-a82b77c0-de9b-4acc-b212-56654b147392/policy-chain-partial-compaction-failed-v2.json`, SHA-256 `fe32f1fe4e0ca6411dff8da50e60972aff97f0fb9088599b5cb6ae6aa7ff3f0c`; v1 remains unchanged. Read-only v12 startup audit SHA-256 `fa4de1b4cfaab73267661186f9f3824c888f339d6d3bfc53efa1272a2d128ffc` retains failed history and continuation fences.
+
+The bounded same-dispatch compaction repair is **source-only**, with an actual baseline failure followed by **1 case / 21 assertions** passing; native wait guidance separately passes **1 actual registry case / 51 assertions**. Their combined candidate is pending build and installation; no repaired installed workflow is assumed. Native UI remains **unlaunched** because guaranteed safe second-display placement was unavailable; apps and profile state were unchanged. Installed gates remain **2/9 (22.2%)**, overall readiness **unmeasured**. Unassisted main-chat, full quality, scheduling and loaded recovery remain unearned; voice is deferred.
+
+The 78bb failed-trial outcome is preserved under `.tmp/business-20261022/normal-service-2fa2cad4-a8de-4f4e-ad13-ad43579ce6f4/engine-planning-failed-outcome-v1.json`, SHA-256 `9ec988010ee9f71a4b5de870ce1d2e1dbd379874cecb1873d0ec6049e68422df`. Canonical cancellation returned 200, including two queued requests; status was idle and team activity zero. Driver 82011 joined zero/readers joined, distinct from forced backend 13792 exit one/absent. Owned 9B unloaded with status 200 and final models empty. Historical v11 startup audit SHA-256 `1f9b5ad7f1c2931abae4299d62f6feabe69dceaa26accdcd09d7240ea4e406fe` retains failed work and its continuation fences.
+
+## Next delivery
+
+1. Build and install the source-qualified compaction lineage and native wait guidance corrections, then observe a fresh bounded workflow.
+2. Correct only concrete remaining failures; preserve failed/canceled history and accepted child work without replay or operator artifact repair.
+3. Earn main-chat, scheduling, content quality, loaded UI and recovery separately. Avoid broad model campaigns and unnecessary repeated tests.
+
+Preserve the 6 GiB live reserve and the user's apps. Voice is deferred, cloud workers released, second-PC migration canceled, and Home Assistant/lights remain off while the user sleeps. Wider requirements remain in [Everyday Experience](Raya-Everyday-Experience.md) and [Remaining Implementation Handoff](Raya-Remaining-Implementation-Handoff.md).
+
+## History and scope
+
+Earlier checklist history remains in [Readiness Gate History](Raya-Local-Readiness-Gates-History.md). The complete preceding d584 checklist and its e9a snapshot are retained below as historical text; their “current” identities and next-delivery instructions are not the live 430 status. Prior failed trials and original artifacts remain preserved.
+
+## Historical d584 checklist snapshot
+
+# Raya installed readiness checklist
+
+Updated October 29, 2026. Stable chat and routine workers are the priority; voice is deferred.
+
+## Installed version and evidence
+
 Production Goal database wiring installed; Routine trial failed and evidence diagnosis is pending. Everyday VS Code registration selects **`7.4.23-snapshot+d584d49bff.local.1793266366661`**, source **`d584d49bffdfdfb713329a3730ad141297d874d6`**. Qualified delivery: `.tmp/new-pc/worker-d584d49bff-delivery-qualified.json`, SHA-256 `24a54dc15ee5aa7391325c58bfef3f35d64a7445602d95b16c6117b4589a9747`. Exact archive, CLI and helper hashes are recorded in [Current Readiness](Raya-Current-Readiness.md).
 
 The nine installed workflow gates are a checklist, **not an overall project completion percentage**. **Two of nine (22.2%)** have installation evidence; seven remain unearned, including deferred voice. Overall readiness is **unmeasured**. Source checks, physical installation and loaded workflow acceptance remain separate observations.

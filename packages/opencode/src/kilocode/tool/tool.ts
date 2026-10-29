@@ -48,7 +48,7 @@ function reason(message: string) {
   if (message.toLowerCase().includes("required")) {
     return message
   }
-  if (/\bmissing\b/i.test(message)) {
+  if (/^missing key$/i.test(message)) {
     return "is missing and is required"
   }
   return message

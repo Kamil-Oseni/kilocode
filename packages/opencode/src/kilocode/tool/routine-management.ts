@@ -38,6 +38,7 @@ import * as Handoff from "@/kilocode/goal/handoff"
 import * as OwnerScope from "@/kilocode/task/owner-scope"
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
 import { Proposal } from "@/kilocode/task/job-contract"
+import { required as contractRequired } from "@/kilocode/task/job-contract-request"
 import * as Capture from "@/kilocode/task/job-contract-capture"
 import * as Contract from "@/kilocode/task/job-contract-store"
 import { same as staged } from "@/kilocode/task/job-contract"
@@ -1372,6 +1373,12 @@ export function routineManagementTools(input: {
             assistant.info.parentID === user?.info.id
               ? request
               : undefined
+          if (!params.contract && contractRequired(owner))
+            return yield* Effect.fail(
+              new Error(
+                'The current owner requires an immutable job contract. Retry this same assign_organization_work with contract: {version: 1, entry: "<first stage ID>", stages: [...]} containing the exact authorized objectives, output paths, criteria and required next links. No legacy assignment was started; do not omit the contract or create replacement workers.',
+              ),
+            )
           yield* OwnerScope.unmarked(params.context)
           yield* OwnerScope.unmarked(owner)
           const dir = yield* OwnerScope.directory(owner)

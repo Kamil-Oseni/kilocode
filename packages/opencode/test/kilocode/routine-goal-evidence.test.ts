@@ -4,6 +4,7 @@ import { Effect, Exit, Schema } from "effect"
 import { eq } from "drizzle-orm"
 import {
   RayaRoutineDelegationTable as Delegation,
+  RayaRoutineJobContractTable as Contracts,
   RayaRoutineMessageTable as Inbox,
 } from "@opencode-ai/core/kilocode/routine.sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -29,6 +30,7 @@ import { RayaTaskOrganization } from "@/kilocode/task/organization"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { final } from "@/kilocode/task/final-report"
 import * as JobContract from "@/kilocode/task/job-contract"
+import { required as contractRequired } from "@/kilocode/task/job-contract-request"
 import { continuation, owned } from "@/kilocode/task/continuation"
 import { routineManagementTools } from "@/kilocode/tool/routine-management"
 import * as Artifact from "@/kilocode/goal/artifact"
@@ -71,6 +73,18 @@ it.live(
   () =>
     provideTmpdirInstance((directory) =>
       Effect.gen(function* () {
+        for (const text of [
+          "Use native assign_organization_work without a contract.",
+          "Do not use native assign_organization_work with a version1 contract.",
+          "Explain how to use native assign_organization_work with a version1 contract.",
+          '"Use native assign_organization_work with a version1 contract."',
+          "```\nUse native assign_organization_work with a version1 contract.\n```",
+          "~~~\nUse native assign_organization_work with a version1 contract.\n~~~",
+          "\u201cExample:\nUse native assign_organization_work with a version1 contract.\u201d",
+          "> Use native assign_organization_work with a version1 contract.",
+          "Read-only status review. Use native assign_organization_work with a version1 contract.",
+        ])
+          expect(contractRequired(text)).toBe(false)
         const sessions = yield* Session.Service
         const storage = yield* Storage.Service
         const database = yield* Database.Service
@@ -173,7 +187,7 @@ it.live(
           })
           const entry = proposal.stages[0]
           const next = proposal.stages[1]
-          const owner = `Run one manual saved local team job through Dispatch -> Researcher -> Builder. Each stage reads ${source}; Builder must complete before Researcher completes. Use only ${directory}.`
+          const owner = `Run one manual saved local team job through Dispatch -> Researcher -> Builder. Each stage reads ${source}; Builder must complete before Researcher completes. Use only ${directory}. Use native assign_organization_work with a version1 contract. Do not start an uncontracted legacy job.`
           const chat = yield* sessions.create({
             agent: "auto",
             metadata: { [RayaChief.requestKey]: owner, [RayaChief.phaseKey]: "route" },
@@ -254,6 +268,20 @@ it.live(
             criteria: entry.criteria,
             contract: proposal,
           }
+          const pending = yield* database.db.select().from(Delegation).all()
+          const captures = yield* database.db.select().from(Contracts).all()
+          const history = yield* tasks.runsFor(researcher.id)
+          const omitted = Object.fromEntries(Object.entries(params).filter((entry) => entry[0] !== "contract"))
+          const refused = yield* invoke(
+            context(chat.id, assistant.id, "auto", `omit-contract-${mode}`),
+            assign,
+            omitted,
+          )
+          expect(refused.metadata.requestStatus).toBe("unresolved")
+          expect(refused.output).toContain("requires an immutable job contract")
+          expect(yield* database.db.select().from(Delegation).all()).toEqual(pending)
+          expect(yield* database.db.select().from(Contracts).all()).toEqual(captures)
+          expect(yield* tasks.runsFor(researcher.id)).toEqual(history)
           const admitted = yield* invoke(context(chat.id, assistant.id, "auto", `assign-${mode}`), assign, params)
           expect(admitted.metadata.requestStatus).toBe("complete")
           const metadata: Record<string, unknown> = admitted.metadata

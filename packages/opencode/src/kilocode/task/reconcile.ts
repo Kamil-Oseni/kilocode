@@ -163,6 +163,13 @@ export function reconcile(input: {
         if (!proof) return undefined
         const expected = yield* Contract.stage(proof.receipt, ref.stageID).pipe(Effect.orElseSucceed(() => undefined))
         if (!expected || !same(expected, errand)) return undefined
+        const criteria = new Map(goal.criteria?.map((item) => [item.id, item]))
+        if (
+          goal.criteria?.length !== expected.criteria.length ||
+          criteria.size !== expected.criteria.length ||
+          !expected.criteria.every((item) => isDeepStrictEqual(criteria.get(item.id), item))
+        )
+          return undefined
         if (
           !(yield* proof.check.pipe(
             Effect.as(true),

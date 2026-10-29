@@ -436,6 +436,7 @@ function recover<A, E, R>(effect: Effect.Effect<A, E, R>, identity?: string) {
 }
 
 function launch(input: {
+  sessions: Pick<Session.Interface, "get" | "messages" | "children">
   goals: Goals
   session: { id: SessionID; metadata?: Record<string, unknown> }
   sessionID: SessionID
@@ -967,6 +968,7 @@ export namespace RayaGoalContinuation {
       if (!queued?.dispatch) return
       yield* launch({
         goals,
+        sessions: input.sessions,
         session,
         nested: true,
         sessionID: input.sessionID,
@@ -1084,6 +1086,7 @@ export namespace RayaGoalContinuation {
               yield* intake(
                 launch({
                   goals,
+                  sessions: input.sessions,
                   session,
                   sessionID: hint.sessionID,
                   directory: session.directory,
@@ -1165,6 +1168,7 @@ export namespace RayaGoalContinuation {
                   if (!retry?.dispatch || retry.status !== "active") return
                   yield* launch({
                     goals,
+                    sessions: input.sessions,
                     session,
                     sessionID: sid,
                     directory: session.directory,
@@ -1203,6 +1207,7 @@ export namespace RayaGoalContinuation {
                   if (!queued?.dispatch) return
                   yield* launch({
                     goals,
+                    sessions: input.sessions,
                     session,
                     sessionID: sid,
                     directory: session.directory,
@@ -1241,6 +1246,7 @@ export namespace RayaGoalContinuation {
                 if (!queued?.dispatch) return
                 yield* launch({
                   goals,
+                  sessions: input.sessions,
                   session,
                   sessionID: sid,
                   directory: session.directory,

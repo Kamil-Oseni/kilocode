@@ -6,14 +6,15 @@ process.chdir(dir)
 
 import { $ } from "bun"
 import path from "path"
-import { readFile, writeFile } from "node:fs/promises" // kilocode_change - fresh generated-file handles after Windows directory replacement
+import { readFile } from "node:fs/promises" // kilocode_change - fresh generated-file handles after Windows directory replacement
+import { write } from "./kilocode/write" // kilocode_change - atomic publication prevents stale generated tails
 
 import { createClient } from "@hey-api/openapi-ts"
 import { sse } from "./sse"
 
 const opencode = path.resolve(dir, "../../opencode")
 
-await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
+await write(path.join(dir, "openapi.json"), await $`bun dev generate`.cwd(opencode).text()) // kilocode_change - publish only complete successful generation output
 
 const document = (await Bun.file("./openapi.json").json()) as {
   components?: { schemas?: Record<string, unknown> }
@@ -43,7 +44,7 @@ if (schemas) {
   for (const name of Object.keys(schemas)) {
     if (/^SessionNext\w+1$/.test(name) && !reachable.has(name)) delete schemas[name]
   }
-  await Bun.write("./openapi.json", JSON.stringify(document))
+  await write(path.join(dir, "openapi.json"), JSON.stringify(document)) // kilocode_change - atomic shorter schema pruning
 }
 
 await createClient({
@@ -84,7 +85,7 @@ const historyTypesPatched = generatedTypes.replace(
 if (historyTypesPatched === generatedTypes) {
   throw new Error("Session history numeric query patch did not apply")
 }
-await writeFile(path.join(dir, "src/v2/gen/types.gen.ts"), historyTypesPatched) // kilocode_change - reopen generated paths after clean output
+await write(path.join(dir, "src/v2/gen/types.gen.ts"), historyTypesPatched) // kilocode_change - atomically replace generated text
 
 const generatedSdk = await readFile(path.join(dir, "src/v2/gen/sdk.gen.ts"), "utf8") // kilocode_change - reopen generated paths after clean output
 const historySdkPatched = generatedSdk.replace(
@@ -94,7 +95,7 @@ const historySdkPatched = generatedSdk.replace(
 if (historySdkPatched === generatedSdk) {
   throw new Error("Session history numeric SDK patch did not apply")
 }
-await writeFile(path.join(dir, "src/v2/gen/sdk.gen.ts"), historySdkPatched) // kilocode_change - reopen generated paths after clean output
+await write(path.join(dir, "src/v2/gen/sdk.gen.ts"), historySdkPatched) // kilocode_change - atomically replace generated text
 
 // Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
 // endpoint's TError into the second generic of ServerSentEventsResult, which
@@ -111,10 +112,10 @@ const sseTypesPatched = sseTypesSource.replace(
 if (sseTypesPatched === sseTypesSource) {
   throw new Error(`SseFn patch did not apply; @hey-api/openapi-ts output may have changed (${sseTypesPath})`)
 }
-await writeFile(path.join(dir, sseTypesPath), sseTypesPatched) // kilocode_change - reopen generated paths after clean output
+await write(path.join(dir, sseTypesPath), sseTypesPatched) // kilocode_change - atomically replace shorter generated text
 
 const stream = "./src/v2/gen/core/serverSentEvents.gen.ts"
-await writeFile(path.join(dir, stream), sse(await readFile(path.join(dir, stream), "utf8"))) // kilocode_change - reopen generated paths after clean output
+await write(path.join(dir, stream), sse(await readFile(path.join(dir, stream), "utf8"))) // kilocode_change - atomically replace generated text
 
 // The legacy SDK generator is retired, but this public Config type remains exported.
 // Keep Kilo's released sandbox settings aligned with the current generated client.
@@ -145,7 +146,7 @@ const legacyPatched = legacySource.includes(sandbox)
 if (!legacyPatched.includes(sandbox)) {
   throw new Error(`Legacy Config sandbox patch did not apply (${legacyTypesPath})`)
 }
-await Bun.write(legacyTypesPath, legacyPatched)
+await write(path.join(dir, legacyTypesPath), legacyPatched) // kilocode_change - atomically replace legacy generated text
 
 // kilocode_change start - Windows can briefly lock a newly generated file during the first format pass
 const formatted = await $`bun prettier --write src/gen src/v2`.nothrow()

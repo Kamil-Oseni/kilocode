@@ -1,3 +1,11 @@
+October 31, 2026 -- Installed routine-result correction drafts
+
+Installed source `687d85f28f`, package `7.4.23-snapshot+687d85f28f.local.1793456872921`. Completed run review now offers Request changes: it opens the same worker Inbox and prepares an unsent draft containing the exact selected run/session reference. It preserves that worker's existing text and attachments, waits for matching conversation ownership and restored history, and consumes the request once. The user edits and explicitly sends it; completed Run history and standing requirements are unchanged. The attachment-response state update is atomic so the correction effect cannot observe a half-applied file change.
+
+The actual mounted-component fixture passed in 7.750 seconds, covering late old-save acknowledgement, one-shot preparation, cross-worker attachment isolation, retained drafts through switch/remount, no automatic send and the selected older RunReview result. This is component verification with simulated host messages, not a loaded VS Code or SQL commit acceptance. Extension/webview types passed in 7.750 seconds, scoped lint in 1.688 seconds, and unused-export checking in 12.391 seconds; the marker guard passed. The first complexity23 lint failure is retained; an extracted readiness predicate preserves every guard and the unchanged limit20, with final checks passing.
+
+Qualified delivery `.tmp/new-pc/worker-687d85f28f-delivery-qualified.json`, SHA-256 `1f6557d6dfab138279685182329f21b78f91f2ea1871acc93f329b8d6915153d`, preserved all 6,925 captured saved files and unrelated extension registrations. Stock package target exited zero in 79.750 seconds; owned descendant cleanup is recorded separately. Official installation and pre/post preservation checks passed; generated SDK delta is empty. Backend/SDK logic is unchanged from installed a19, whose GET-only populated upgrade proof remains retained; actual clean chat and three-worker inference keep their original producers1e18 and057. No redundant model campaign or GUI acceptance is claimed. Broad components remain **3/9 (33.3%)**, overall readiness **unmeasured**; business semantics, comprehensive Routine policies/recovery, loaded UI/drafts, Memory and boot/reinstall gates remain open. Voice remains deferred and user apps were preserved.
+
 October 31, 2026 -- Installed compaction accounting repair and populated upgrade preservation
 
 Installed source `a19a214363`, package `7.4.23-snapshot+a19a214363.local.1793455036740`. Qualified delivery `.tmp/new-pc/worker-a19a214363-delivery-qualified.json`, SHA-256 `9ca0612367f54190d982ef610173afb2f423e50cd5e9d3b500958032d6994069`, preserved all 6,910 captured saved files and unrelated extension registrations. Stock packaging target exited zero in 107.468 seconds; forced owned descendant cleanup and wrapper exit one remain separately recorded. Pre/post preservation and official VS Code CLI installation passed. Stock SDK regeneration produced no delta.
@@ -64,8 +72,8 @@ Current gate summary for the installed build; earlier dated entries retain their
 
 | Gate | Status | Evidence or remaining work |
 |---|---|---|
-| Audited combined candidate | Verified for installed a19a214363 | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
-| Normal installation preservation | Verified for installed a19a214363 | Preserved 6,910 saved files and unrelated registrations; populated backend GET-only upgrade preserved chat, routines and old Goals. Loaded UI recovery remains separate. |
+| Audited combined candidate | Verified for installed 687d85f28f | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
+| Normal installation preservation | Verified for installed 687d85f28f | Preserved 6,925 saved files and unrelated registrations; populated backend GET-only upgrade preserved chat, routines and old Goals. Loaded UI recovery remains separate. |
 | Installed local General/tool turn | Pending | Installed 1e18 backend conversation-only recall passed; a19 GET-only upgrade preserved the conversation. Recall passed with no new tools, children, Goals or Routine admissions and unchanged old messages. Loaded UI/drafts/model, large-chat behavior and loaded reopen remain pending. |
 | Strict installed Coder | Verified component on ead06c59b8 | Earlier local Code9B edit/native tests/final result retained without another model run. |
 | Installed Voice and permitted HA flow | Deferred by user | Voice is secondary; Home Assistant remains off. |

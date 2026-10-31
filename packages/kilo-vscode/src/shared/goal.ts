@@ -160,6 +160,7 @@ export interface GoalState {
     check?:
       | { kind: "command"; command: string; directory: string }
       | { kind: "file-content"; path: string; literals: string[] }
+      | { kind: "source-read"; path: string; canonical: string; sha256: string; bytes: number }
       | {
           kind: "byte-equality"
           source: { path: string; canonical: string; sha256: string; bytes: number }

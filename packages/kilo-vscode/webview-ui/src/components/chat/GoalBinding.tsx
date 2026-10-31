@@ -5,8 +5,32 @@ export function GoalBinding(props: { check: NonNullable<GoalState["criteria"]>[n
   const command = () => (props.check?.kind === "command" ? props.check : undefined)
   const equality = () => (props.check?.kind === "byte-equality" ? props.check : undefined)
   const content = () => (props.check?.kind === "file-content" ? props.check : undefined)
+  const source = () => (props.check?.kind === "source-read" ? props.check : undefined)
   return (
     <>
+      <Show when={source()}>
+        {(check) => (
+          <div aria-label="Saved source-read binding">
+            <p>This pinned input check is read-only here; editing the description does not change it.</p>
+            <p>
+              Source: <code>{check().path}</code>
+            </p>
+            <p>
+              Canonical source: <code>{check().canonical}</code>
+            </p>
+            <p>
+              Source SHA-256: <code>{check().sha256}</code>
+            </p>
+            <p>
+              Source bytes: <code>{check().bytes}</code>
+            </p>
+            <p>
+              Requires this worker's fresh full native Read of these bytes, at most 8192 UTF-8 bytes. Grants no Read
+              permission; factual accuracy is not verified.
+            </p>
+          </div>
+        )}
+      </Show>
       <Show when={content()}>
         {(check) => (
           <div aria-label="Saved file-content binding">

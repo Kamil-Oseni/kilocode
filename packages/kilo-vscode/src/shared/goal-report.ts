@@ -292,6 +292,15 @@ function binding(check: NonNullable<GoalState["criteria"]>[number]["check"]) {
   if (!check) return []
   if (check.kind === "command")
     return ["", "Required command:", quote(check.command), "Working directory:", quote(check.directory)]
+  if (check.kind === "source-read")
+    return [
+      "",
+      "Saved pinned source-read check (read-only):",
+      quote(
+        `Source: ${check.path}\nCanonical source: ${check.canonical}\nSource SHA-256: ${check.sha256}\nSource bytes: ${check.bytes}`,
+      ),
+      "Requires this worker's fresh full native Read of the pinned bytes, at most 8192 UTF-8 bytes. Grants no Read permission; factual accuracy is not verified.",
+    ]
   if (check.kind === "file-content")
     return [
       "",

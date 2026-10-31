@@ -53,9 +53,23 @@ function content(value: object) {
   )
 }
 
+function source(value: object) {
+  if (!("path" in value) || !("canonical" in value) || !("sha256" in value) || !("bytes" in value)) return false
+  return (
+    Object.keys(value).every((key) => ["kind", "path", "canonical", "sha256", "bytes"].includes(key)) &&
+    [value.path, value.canonical].every(
+      (text) => typeof text === "string" && text.length <= 4000 && /^(?:[a-zA-Z]:[\\/]|\/|\\\\)/.test(text),
+    ) &&
+    digest(value) &&
+    typeof value.bytes === "number" &&
+    value.bytes <= 8192
+  )
+}
+
 function binding(value: unknown) {
   if (!value || typeof value !== "object") return false
   if (!("kind" in value)) return false
+  if (value.kind === "source-read") return source(value)
   if (value.kind === "file-content") return content(value)
   if (value.kind === "byte-equality") return equality(value)
   if (value.kind !== "command" || !("command" in value) || !("directory" in value)) return false
@@ -102,6 +116,8 @@ function same(
       a.literals.length === b.literals.length &&
       a.literals.every((text, index) => text === b.literals[index])
     )
+  if (a.kind === "source-read" && b.kind === "source-read")
+    return a.path === b.path && a.canonical === b.canonical && a.sha256 === b.sha256 && a.bytes === b.bytes
   if (a.kind !== "byte-equality" || b.kind !== "byte-equality") return false
   return (
     a.source.path === b.source.path &&

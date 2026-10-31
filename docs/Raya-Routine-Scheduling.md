@@ -2,6 +2,12 @@
 
 ## Current installed validation
 
+October 31: installed `c72c67d1a6` passed the actual full plan Read and terminal leaf usage comparison. Its fresh three-worker typed job admitted all stages, made both actual handoffs, parked both parents and woke Builder after Sales completed. Repeated large Goal snapshots/compactions and an invalid citation prevented reliable parent finalization; the native audit refused it. The attempt was canonically cancelled, preserving the completed Sales result, five files, original 79 Runs and eight definitions. All owned processes/readers closed and the Windows model was released. Outcome SHA-256 `ba9fe574d08fd42d8ff66effa75ef8eebdfcf8ec9638cf3d7193830dc16e99eb` is documented in current readiness.
+
+This is not a completed three-stage business job or comprehensive budget/Stop/recovery/UI acceptance. Earlier ebb timer/cold evidence remains historical below; it was not repeated on c72. Factual content failed separate grading. Component gates remain **3/9 (33.3%)**, overall readiness **unmeasured**.
+
+## Historical installed Auto timer validation
+
 October 31: installed `ebb34dd894` passed a normal-profile same-scenario Auto/brief/read check with two genuine consecutive timer occurrences, accepted native Goal/Read audits, exact final marker and one delivered report per occurrence. The new routine was disabled after the second selection. A fresh same-version backend retained exact history/cards through 67 observations spanning 99.158 seconds, with no third run or model load. The original seven definitions/history and prior failed worker remained unchanged. Both backend drivers closed and joined; forced backend exits remain distinct from driver exit zero.
 
 Combined receipt `.tmp/business-20261022/normal-service-81e358c8-4e27-4577-80b2-1092921581e8/repaired-scheduled-combined-outcome.json`, SHA-256 `9630a4496c0e4700133eebb4605d03793e56559282abc40dc29ee9ad49f2ed6c`. This is timer/report/disabled cold-reopen component acceptance. Full semantic/business, scheduling-policy, pause/Stop/crash and GUI validation remain open, as does terminal Goal usage accounting. Installed component gates stay **3/9 (33.3%)**; overall readiness is **unmeasured**. Earlier trial records below remain historical evidence from their named producers.

@@ -20,6 +20,7 @@ import * as Truncate from "@/tool/truncate"
 import { ReadTool } from "@/tool/read"
 import { RayaChief } from "@/kilocode/chief"
 import { inspectionFile } from "@/kilocode/task/request"
+import * as ReadArtifact from "@/kilocode/goal/read-artifact"
 import { InstanceState } from "@/effect/instance-state"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
@@ -132,6 +133,21 @@ it.instance(
       const start = Date.now()
       const read = yield* reader.execute({ filePath: file }, ctx)
       expect(read.output).toContain("Outreach was not sent")
+      expect(read.output).toContain('<system-reminder source="raya-direct-read">')
+      expect(read.output).toContain("it did not start workers")
+      expect(read.output).toContain("Do not promise to execute the plan.")
+      expect(read.output).toContain("</file-content-json>")
+      expect(read.output.indexOf('<system-reminder source="raya-direct-read">')).toBeGreaterThan(
+        read.output.indexOf("</file-content-json>"),
+      )
+      expect(read.metadata.display).toMatchObject({
+        type: "file",
+        text: "Three drafts. Outreach was not sent.",
+        truncated: false,
+      })
+      const content = yield* ReadArtifact.whole({ ...read.metadata })
+      expect(content?.text).toBe("Three drafts. Outreach was not sent.")
+      expect(content?.bytes).toBe(Buffer.byteLength("Three drafts. Outreach was not sent.", "utf8"))
       expect(permissions).toContain("read")
       const receipt = yield* sessions.updatePart({
         id: PartID.ascending(),
@@ -202,6 +218,7 @@ it.instance(
       expect(yield* sessions.children(session.id)).toEqual([])
       const ordinary = yield* reader.execute({ filePath: other }, { ...ctx, agent: "general" })
       expect(ordinary.output).toContain("Unrelated confidential material")
+      expect(ordinary.output).not.toContain('<system-reminder source="raya-direct-read">')
     }),
   { config: { formatter: false, lsp: false, enabled_providers: [] } },
 )

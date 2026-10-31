@@ -1383,6 +1383,7 @@ export function routineManagementTools(input: {
             )
           if (
             start &&
+            !selected?.next.some((edge) => edge.required) &&
             forward(`${params.objective}\n${params.expected ?? ""}`) &&
             !params.criteria?.some((item) => forward(`${item.description}\n${item.verification}`))
           )

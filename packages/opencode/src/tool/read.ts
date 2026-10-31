@@ -407,7 +407,7 @@ export const ReadTool = Tool.define<
             },
           }
         }).pipe((work) => Artifact.read(fs, bound, work, ctx.abort)), // kilocode_change
-      )
+      ).pipe((work) => DirectRead.complete(direct, work))
       // kilocode_change end
     })
 

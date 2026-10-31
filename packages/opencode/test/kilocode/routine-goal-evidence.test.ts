@@ -178,9 +178,16 @@ it.live(
                 id: "research",
                 recipientID: researcher.id,
                 objective: "Read the approved source for the original stage",
-                expected: "Verified original source and the actual completed required Builder stage",
+                expected: "Verified original source and the actual completed required Builder handoff",
                 outputs: [],
-                criteria,
+                criteria: [
+                  ...criteria,
+                  {
+                    id: "child",
+                    description: "The required Builder stage completes",
+                    verification: "Verify the actual native completed child and its recorded result",
+                  },
+                ],
                 next: [{ stageID: "build", required: true }],
               },
               {
@@ -403,7 +410,9 @@ it.live(
           const pending = yield* database.db.select().from(Delegation).all()
           const captures = yield* database.db.select().from(Contracts).all()
           const history = yield* tasks.runsFor(researcher.id)
-          const omitted = Object.fromEntries(Object.entries(params).filter((entry) => entry[0] !== "contract"))
+          const omitted = Object.fromEntries(
+            Object.entries(params).filter((entry) => !["contract", "expected"].includes(entry[0])),
+          )
           const refused = yield* invoke(
             context(chat.id, assistant.id, "auto", `omit-contract-${mode}`),
             assign,
@@ -414,6 +423,31 @@ it.live(
           expect(yield* database.db.select().from(Delegation).all()).toEqual(pending)
           expect(yield* database.db.select().from(Contracts).all()).toEqual(captures)
           expect(yield* tasks.runsFor(researcher.id)).toEqual(history)
+          if (mode === "completed") {
+            const optional = yield* invoke(context(chat.id, assistant.id, "auto", "optional-child-handoff"), assign, {
+              ...minimal,
+              contract: {
+                ...proposal,
+                stages: proposal.stages.map((stage) =>
+                  stage.id === proposal.entry
+                    ? { ...stage, next: stage.next.map((edge) => ({ ...edge, required: false })) }
+                    : stage,
+                ),
+              },
+            })
+            expect(optional.metadata.requestStatus).toBe("unresolved")
+            expect(optional.output).toContain("explicitly requires a handoff")
+            const legacy = yield* invoke(
+              context(chat.id, assistant.id, "auto", "legacy-handoff"),
+              assign,
+              Object.fromEntries(Object.entries(params).filter((entry) => entry[0] !== "contract")),
+            )
+            expect(legacy.metadata.requestStatus).toBe("unresolved")
+            expect(legacy.output).toContain("explicitly requires a handoff")
+            expect(yield* database.db.select().from(Delegation).all()).toEqual(pending)
+            expect(yield* database.db.select().from(Contracts).all()).toEqual(captures)
+            expect(yield* tasks.runsFor(researcher.id)).toEqual(history)
+          }
           const mixed = yield* invoke(context(chat.id, assistant.id, "auto", `conflict-${mode}`), assign, {
             ...minimal,
             objective: "Replace the frozen entry objective",
@@ -593,17 +627,23 @@ it.live(
           const ctx = (target: typeof root, callID: string) =>
             context(target.session.id, target.reply.id, "generalist", callID)
           yield* invoke(ctx(root, "root-read"), read, { filePath: source })
-          const complete = (callID: string, criterion = criteria[0]) => ({
+          const complete = (callID: string, criterion?: (typeof criteria)[number]) => ({
             status: "complete",
             summary: "Actual source read verified",
-            requirements: [
-              {
-                criterionID: criterion.id,
-                requirement: criterion.description,
-                passed: true,
-                evidence: [{ callID, summary: "Native Read returned the actual approved source" }],
-              },
-            ],
+            requirements: (criterion ? [criterion] : entry.criteria).map((item) => ({
+              criterionID: item.id,
+              requirement: item.description,
+              passed: true,
+              evidence: [
+                {
+                  callID: item.id === "child" ? "exact-child-stage" : callID,
+                  summary:
+                    item.id === "child"
+                      ? "Native required child returned its actual completed result"
+                      : "Native Read returned the actual approved source",
+                },
+              ],
+            })),
           })
           const missing = yield* invoke(ctx(root, "missing-required-stage"), update, complete("root-read"))
           expect(missing.title).toBe("Completion audit rejected")

@@ -2132,10 +2132,21 @@ export namespace RayaGoal {
         return undefined
       // Recovery validation is read-only; duplicate live acknowledgements remain inert.
       if (recheck) return state
-      return yield* save(sessionID, {
+      const candidate = {
         ...state,
-        dispatch: { ...dispatch, phase: "finished", finishedAt: at, assistantID: messageID, outcome },
-      })
+        dispatch: { ...dispatch, phase: "finished" as const, finishedAt: at, assistantID: messageID, outcome },
+      }
+      const scope =
+        state.status === "complete" && state.auditAttempt?.accepted && outcome === "completed" && !state.selfHealID
+          ? yield* collect(
+              deps.sessions,
+              sessionID,
+              state.createdAt,
+              [...new Set([...(state.inputs ?? []), dispatch.messageID])],
+              messages,
+            )
+          : undefined
+      return yield* save(sessionID, scope ? Accounting.terminal(candidate, sessionID, messages, scope) : candidate)
     })
 
     const initial = Effect.fn("RayaGoal.initial")(function* (sessionID: SessionID, intent: string, worker: string) {

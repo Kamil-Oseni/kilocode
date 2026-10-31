@@ -36,6 +36,8 @@ import * as GoalNative from "@/kilocode/goal/native"
 import { RayaTaskRunner } from "@/kilocode/task/runner"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import { RayaChief } from "@/kilocode/chief"
+import * as Accounting from "@/kilocode/goal/accounting"
+import { collect } from "@/kilocode/goal/evidence-scope"
 
 const requests: Record<string, unknown>[] = []
 const kinds = (value: unknown) =>
@@ -414,6 +416,87 @@ it.instance(
           .localInferenceToolFormat,
       ).toBeUndefined()
       expect(saved?.usage.continuations).toBe(0)
+
+      if (!saved?.intent || !saved.dispatch?.messageID) throw new Error("Expected original Goal identity")
+      expect(saved.dispatch.phase).toBe("started")
+      const barrier = yield* Deferred.make<void>()
+      let arrivals = 0
+      const racing = RayaGoal.make({
+        storage,
+        sessions: {
+          ...sessions,
+          messages: (input) =>
+            Effect.gen(function* () {
+              const rows = yield* sessions.messages(input)
+              arrivals += 1
+              if (arrivals <= 2) {
+                if (arrivals === 2) yield* Deferred.succeed(barrier, undefined)
+                yield* Deferred.await(barrier).pipe(Effect.timeout("5 seconds"), Effect.orDie)
+              }
+              return rows
+            }),
+        },
+      })
+      // Both real finalizers read the original started dispatch before either CAS can win.
+      const results = yield* Effect.all(
+        [
+          racing.finished(session.id, reply.info.id).pipe(Effect.exit),
+          racing.finished(session.id, reply.info.id).pipe(Effect.exit),
+        ],
+        { concurrency: 2 },
+      )
+      expect(results.filter(Exit.isSuccess)).toHaveLength(1)
+      expect(results.filter(Exit.isFailure)).toHaveLength(1)
+      const accounted = yield* goals.get(session.id)
+      if (!accounted?.dispatch) throw new Error("Expected completed dispatch")
+      expect(accounted.usage.turns).toBe(1)
+      expect(accounted.usage.toolCalls).toBe(1)
+      expect(accounted.usage.tokens?.input).toBe(24)
+      expect(accounted.usage.tokens?.output).toBe(9)
+      expect(accounted.status).toBe("complete")
+      expect(accounted.intent).toBe(saved.intent)
+      expect(accounted.audit).toEqual(saved.audit)
+      expect(accounted.auditAttempt).toEqual(saved.auditAttempt)
+      expect(accounted.dispatch.phase).toBe("finished")
+      const graph = yield* collect(
+        sessions,
+        session.id,
+        saved.createdAt,
+        [...new Set([...(saved.inputs ?? []), saved.dispatch.messageID])],
+        rows,
+      )
+      expect(Accounting.closing(saved, accounted, session.id, reply.info.id, rows, graph)).toBe(true)
+      expect(
+        Accounting.closing({ ...saved, intent: "superseded" }, accounted, session.id, reply.info.id, rows, graph),
+      ).toBe(false)
+      expect(Accounting.closing(saved, accounted, session.id, MessageID.ascending(), rows, graph)).toBe(false)
+      expect(
+        Accounting.closing(
+          saved,
+          { ...accounted, usage: { ...accounted.usage, toolCalls: 99 } },
+          session.id,
+          reply.info.id,
+          rows,
+          graph,
+        ),
+      ).toBe(false)
+      expect(yield* goals.finished(session.id, reply.info.id, "completed", true)).toEqual(accounted)
+      expect(yield* goals.finished(session.id, MessageID.ascending(), "completed", true)).toBeUndefined()
+      expect(yield* goals.recordTurn(session.id, reply.info.id, saved.intent)).toBeUndefined()
+      expect(yield* goals.get(session.id)).toEqual(accounted)
+      yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "gate",
+        model: { providerID: ProviderV2.ID.make("qwen-local"), modelID: ModelV2.ID.make("fixture") },
+      })
+      expect(yield* goals.finished(session.id, reply.info.id, "completed", true)).toBeUndefined()
+      expect(yield* goals.get(session.id)).toEqual(accounted)
+      const successor = yield* goals.create(session.id, "A separate successor Goal")
+      expect(yield* goals.finished(session.id, reply.info.id, "completed", true)).toBeUndefined()
+      expect(yield* goals.get(session.id)).toEqual(successor)
     }),
   {
     config: {

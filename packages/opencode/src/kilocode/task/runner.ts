@@ -10,6 +10,8 @@ import type { Storage } from "@/storage/storage"
 import { MessageID, SessionID } from "@/session/schema"
 import { EffectBridge } from "@/effect/bridge"
 import { RayaGoal } from "@/kilocode/goal"
+import * as Accounting from "@/kilocode/goal/accounting"
+import { collect } from "@/kilocode/goal/evidence-scope"
 import type { Criteria } from "@/kilocode/goal/criteria"
 import { RayaGoalContinuation } from "@/kilocode/goal/continuation"
 import { KiloSession } from "@/kilocode/session"
@@ -2363,18 +2365,16 @@ export namespace RayaTaskRunner {
             Effect.catch((err) =>
               Effect.gen(function* () {
                 const current = yield* goals.get(sessionID)
-                if (
-                  !current ||
-                  current.dispatch?.phase !== "finished" ||
-                  !isDeepStrictEqual(current.dispatch, {
-                    ...goal.dispatch,
-                    phase: "finished",
-                    finishedAt: current.dispatch.finishedAt,
-                    assistantID: closed.messageID,
-                    outcome: "completed",
-                  }) ||
-                  !isDeepStrictEqual({ ...current, revision: goal.revision, dispatch: goal.dispatch }, goal)
+                if (!current) return yield* Effect.fail(err)
+                const rows = yield* input.sessions.messages({ sessionID })
+                const graph = yield* collect(
+                  input.sessions,
+                  sessionID,
+                  goal.createdAt,
+                  [...new Set([...(goal.inputs ?? []), goal.dispatch.messageID!])],
+                  rows,
                 )
+                if (!Accounting.closing(goal, current, sessionID, closed.messageID!, rows, graph))
                   return yield* Effect.fail(err)
                 // Another callback may have closed this exact original dispatch.
                 // Validate its persisted answer without repeating the winning write.

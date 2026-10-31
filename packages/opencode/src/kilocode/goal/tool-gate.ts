@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { Tool as AITool } from "ai"
 import { Effect, Option, Schema } from "effect"
@@ -13,6 +14,7 @@ type Check = () => Effect.Effect<boolean>
 const owners = new WeakMap<JSONSchema7, Read>()
 const checks = new WeakMap<Record<string, AITool>, Check>()
 const workflows = new WeakMap<Check, Check>()
+const routines = new WeakMap<Check, (session: Session.Info) => Effect.Effect<boolean>>()
 
 export function owned(schema: JSONSchema7, read: Read) {
   owners.set(schema, read)
@@ -64,6 +66,27 @@ export const prepare = Effect.fn("GoalToolGate.prepare")(function* (
         saved.dispatch?.id === dispatch.id &&
         saved.dispatch.messageID === message &&
         saved.dispatch.intent === dispatch.intent
+      )
+    }),
+  )
+  routines.set(check, (candidate) =>
+    Effect.gen(function* () {
+      const workflow = workflows.get(check)
+      if (candidate.id !== session || !workflow || !(yield* workflow())) return false
+      const marker = Option.getOrUndefined(Schema.decodeUnknownOption(record)(candidate.metadata?.rayaRoutine))
+      if (!marker) return false
+      const saved = yield* read(session)
+      if (!saved?.routine) return false
+      const routine = saved.routine
+      return (
+        isDeepStrictEqual(routine, goal.routine) &&
+        routine.sessionID === session &&
+        routine.agentID === marker.agentID &&
+        routine.runID === marker.runID &&
+        isDeepStrictEqual(routine.contract, marker.contract) &&
+        saved.dispatch?.phase === "started" &&
+        saved.dispatch.intent === saved.intent &&
+        (yield* workflow())
       )
     }),
   )
@@ -214,6 +237,12 @@ export function closed(tools: Record<string, AITool>) {
 export function required(tools: Record<string, AITool>) {
   const check = checks.get(tools)
   return check ? (workflows.get(check)?.() ?? Effect.succeed(false)) : Effect.succeed(false)
+}
+
+/** Keep the resolved permission-filtered tools only for the current native Routine Goal dispatch. */
+export function routine(tools: Record<string, AITool>, session: Session.Info) {
+  const check = checks.get(tools)
+  return check ? (routines.get(check)?.(session) ?? Effect.succeed(false)) : Effect.succeed(false)
 }
 
 export const native = Effect.fn("GoalToolGate.native")(function* (

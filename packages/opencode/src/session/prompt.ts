@@ -1951,6 +1951,7 @@ export const layer = Layer.effect(
           const current = agent.name === "auto" ? yield* sessions.get(sessionID).pipe(Effect.orDie) : session
           const complete = yield* GoalGate.closed(resolved) // kilocode_change - current original dispatch only
           const mandatory = yield* GoalGate.required(resolved) // kilocode_change - require goal controls in owned specialist dispatches
+          const routine = !complete && agent.name === "auto" && (yield* GoalGate.routine(resolved, current)) // kilocode_change - retain current native Routine controls before Chief routing
           const reminder = yield* remind(session, msgs.find((row) => row.info.id === lastUser.id)?.parts ?? []) // kilocode_change - restore routine work direction after compaction
           const conversation = agent.name === "auto" && acknowledged(msgs, current, lastUser.id)
           const assignment = agent.name === "auto" && assigned(msgs, current, lastUser.id)
@@ -1965,9 +1966,9 @@ export const layer = Layer.effect(
           ) // kilocode_change - durable original message-bound capture route
           const recovery = agent.name === "auto" && (yield* ResultContract.recovery(sessions, sessionID))
           const tools =
-            complete || assignment || conversation || chat || refusal?.mode === "clarify"
+            complete || (!routine && (assignment || conversation || chat || refusal?.mode === "clarify"))
               ? {}
-              : agent.name === "auto"
+              : agent.name === "auto" && !routine
                 ? {
                     ...RayaChief.tools(
                       resolved,

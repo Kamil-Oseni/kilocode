@@ -517,3 +517,74 @@ it.live(
     ),
   60_000,
 )
+
+scoped.live(
+  "only the current native routine Goal dispatch retains its resolved tool palette",
+  () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const goals = RayaGoal.make({ storage, sessions })
+        const marker = {
+          version: 1,
+          agentID: "timer-reader",
+          runID: "run-timer-reader",
+          scheduleVersion: 1,
+          trigger: { kind: "timer", id: "timer-reader-occurrence", scheduledAt: 1, observedAt: 1, tz: "UTC" },
+        }
+        const session = yield* sessions.create({ metadata: { rayaRoutine: marker } })
+        yield* Effect.addFinalizer(() => goals.clear(session.id))
+        const routine = { agentID: marker.agentID, runID: marker.runID, sessionID: session.id }
+        yield* goals.create(
+          session.id,
+          "Read the fixture and report its marker every minute",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          routine,
+        )
+        const queued = yield* goals.continued(session.id)
+        if (!queued?.dispatch?.messageID) throw new Error("Expected native routine dispatch")
+        yield* goals.dispatched(session.id, queued.dispatch.id)
+        const saved = yield* goals.get(session.id)
+        if (!saved) throw new Error("Expected saved routine Goal")
+        const message = queued.dispatch.messageID
+        const schema = GoalGate.owned({}, goals.get)
+        const check = yield* GoalGate.prepare(schema, session.id, message, () => Effect.succeed(message))
+        const tools = GoalGate.bind({}, check, Effect.runPromise)
+        expect(yield* GoalGate.required(tools)).toBe(true)
+        expect(yield* GoalGate.routine(tools, session)).toBe(true)
+        expect(yield* GoalGate.routine({}, session)).toBe(false)
+        expect(yield* GoalGate.routine(tools, { ...session, metadata: {} })).toBe(false)
+        expect(
+          yield* GoalGate.routine(tools, {
+            ...session,
+            metadata: { rayaRoutine: { ...marker, runID: "foreign-run" } },
+          }),
+        ).toBe(false)
+        const successor = yield* GoalGate.prepare(schema, session.id, message, () =>
+          Effect.succeed(MessageID.ascending()),
+        )
+        expect(yield* GoalGate.routine(GoalGate.bind({}, successor, Effect.runPromise), session)).toBe(false)
+        const ordinary = { ...saved }
+        delete ordinary.routine
+        for (const value of [
+          ordinary,
+          { ...saved, status: "paused", pause: "user-control" },
+          { ...saved, status: "complete" },
+          { ...saved, intent: "superseded" },
+          { ...saved, dispatch: { ...saved.dispatch, phase: "queued" } },
+        ]) {
+          yield* storage.replace(["raya", "goal", session.id], value)
+          expect(yield* GoalGate.routine(tools, session)).toBe(false)
+        }
+        yield* storage.replace(["raya", "goal", session.id], saved)
+        expect(yield* GoalGate.routine(tools, session)).toBe(true)
+      }),
+    ),
+  30_000,
+)

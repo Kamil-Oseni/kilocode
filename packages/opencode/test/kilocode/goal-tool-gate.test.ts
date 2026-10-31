@@ -1,7 +1,7 @@
 import { afterAll, expect } from "bun:test"
 import path from "node:path"
 import { writeFile } from "node:fs/promises"
-import { Effect, Schema } from "effect"
+import { Deferred, Effect, Exit, Schema } from "effect"
 import { Storage } from "@/storage/storage"
 import { RayaGoal } from "@/kilocode/goal"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -33,6 +33,9 @@ import { TestInstance, disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
 import * as GoalNative from "@/kilocode/goal/native"
+import { RayaTaskRunner } from "@/kilocode/task/runner"
+import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
+import { RayaChief } from "@/kilocode/chief"
 
 const requests: Record<string, unknown>[] = []
 const kinds = (value: unknown) =>
@@ -43,7 +46,27 @@ const kinds = (value: unknown) =>
       ),
     }),
   )(value).anyOf.map((row) => row.properties.kind.const)
-const state = { phase: 0, file: "", fresh: false, queued: false, paused: false }
+const names = (value: unknown) =>
+  value === undefined
+    ? []
+    : Schema.decodeUnknownSync(
+        Schema.Struct({
+          anyOf: Schema.Array(
+            Schema.Struct({
+              properties: Schema.Struct({ name: Schema.optional(Schema.Struct({ const: Schema.String })) }),
+            }),
+          ),
+        }),
+      )(value).anyOf.flatMap((row) => (row.properties.name ? [row.properties.name.const] : []))
+const palette = (request: Record<string, unknown> | undefined) =>
+  request?.format !== undefined
+    ? names(request.format)
+    : request?.tools === undefined
+      ? []
+      : Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ function: Schema.Struct({ name: Schema.String }) })))(
+          request.tools,
+        ).map((row) => row.function.name)
+const state = { phase: 0, file: "", fresh: false, queued: false, paused: false, routine: false, ordinary: false }
 const endpoint = Bun.serve({
   port: 0,
   async fetch(request) {
@@ -54,13 +77,13 @@ const endpoint = Bun.serve({
     const previous = body.messages.findLast(
       (row: { role: string; content: string }) => row.role === "tool" && row.content.includes("GATE_REAL_FILE"),
     )
-    const content = state.paused
+    const native = !state.routine
       ? undefined
       : phase === 0
-        ? { kind: "tool", name: "create_goal", arguments: { objective: "Read the fixture" } }
-        : phase === 1 || (state.queued && phase === 4) || (state.fresh && phase === 6)
+        ? { kind: "tool", name: "get_goal", arguments: {} }
+        : phase === 1
           ? { kind: "tool", name: "read", arguments: { filePath: state.file } }
-          : phase === 2
+          : phase === 2 && previous
             ? {
                 kind: "tool",
                 name: "update_goal",
@@ -68,6 +91,7 @@ const endpoint = Bun.serve({
                   status: "complete",
                   requirements: [
                     {
+                      criterionID: "read",
                       requirement: "Read the fixture",
                       passed: true,
                       evidence: [{ callID: JSON.parse(previous.content).toolCallId, summary: "Actual file read" }],
@@ -76,6 +100,32 @@ const endpoint = Bun.serve({
                 },
               }
             : undefined
+    const content = state.ordinary
+      ? undefined
+      : state.routine
+        ? native
+        : state.paused
+          ? undefined
+          : phase === 0
+            ? { kind: "tool", name: "create_goal", arguments: { objective: "Read the fixture" } }
+            : phase === 1 || (state.queued && phase === 4) || (state.fresh && phase === 6)
+              ? { kind: "tool", name: "read", arguments: { filePath: state.file } }
+              : phase === 2
+                ? {
+                    kind: "tool",
+                    name: "update_goal",
+                    arguments: {
+                      status: "complete",
+                      requirements: [
+                        {
+                          requirement: "Read the fixture",
+                          passed: true,
+                          evidence: [{ callID: JSON.parse(previous.content).toolCallId, summary: "Actual file read" }],
+                        },
+                      ],
+                    },
+                  }
+                : undefined
     const text = content
       ? JSON.stringify(content)
       : body.format
@@ -130,6 +180,171 @@ const it = testEffect(
       [Storage.node, storage],
     ],
   ),
+)
+it.instance(
+  "a native brief Auto routine retains its goal-first palette while ordinary Auto keeps Chief routing",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const storage = yield* Storage.Service
+      const database = yield* Database.Service
+      const instance = yield* TestInstance
+      const goals = RayaGoal.make({ storage, database, sessions })
+      const model = { providerID: ProviderV2.ID.make("qwen-local"), modelID: ModelV2.ID.make("fixture") }
+      const done = yield* Deferred.make<void, unknown>()
+      state.phase = 0
+      state.fresh = false
+      state.queued = false
+      state.paused = false
+      state.routine = true
+      state.ordinary = false
+      state.file = path.join(instance.directory, "routine.txt")
+      requests.length = 0
+      yield* Effect.promise(() => writeFile(state.file, "GATE_REAL_FILE", "utf8"))
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          state.routine = false
+          state.ordinary = false
+          state.phase = 0
+          requests.length = 0
+        }),
+      )
+      // The real runner creates the session, immutable snapshot and prearmed Goal,
+      // and invokes this actual prompt under its acquired execution owner.
+      const runner = RayaTaskRunner.make({
+        database,
+        storage,
+        sessions,
+        continuation: (run) =>
+          Effect.gen(function* () {
+            const goal = yield* goals.get(run.sessionID)
+            if (!goal) throw new Error("Expected native prearmed routine Goal")
+            // Match GoalContinuation.proceed -> launch: reserve and start the exact
+            // native dispatch before SessionPrompt receives its owned message.
+            const queued = yield* goals.continued(run.sessionID, goal.intent)
+            if (!queued?.dispatch) throw new Error("Expected queued native routine dispatch")
+            const started = yield* goals.dispatched(run.sessionID, queued.dispatch.id)
+            if (!started?.dispatch?.messageID || started.dispatch.phase !== "started")
+              throw new Error("Expected started native routine dispatch")
+            const result = yield* prompt
+              .prompt({
+                sessionID: run.sessionID,
+                messageID: started.dispatch.messageID,
+                goalQueuedAt: started.dispatch.queuedAt,
+                agent: "auto",
+                model,
+                goalObjective: started.objective,
+                parts: [{ type: "text", text: started.objective, synthetic: true }],
+              })
+              .pipe(Effect.asVoid, Effect.exit)
+            yield* Deferred.done(done, result)
+            if (Exit.isFailure(result)) yield* Effect.failCause(result.cause)
+          }).pipe(Effect.asVoid, Effect.orDie),
+      })
+      const worker = yield* runner.tasks.create({
+        name: "Native brief Auto palette",
+        role: "briefer",
+        objective: `Read ${state.file} and return DONE every time this standing job runs.`,
+        output: {
+          destination: "conversation",
+          description: "Return DONE after reading the actual fixture.",
+          criteria: [{ id: "read", description: "Read the fixture", verification: "Cite the actual full native Read" }],
+        },
+        capabilities: [],
+        memoryScope: "session",
+        schedule: { kind: "manual" },
+        access: "brief",
+        tools: ["read"],
+        mode: "auto",
+        model: { providerID: "qwen-local", id: "fixture" },
+        dir: instance.directory,
+      })
+      const run = yield* runner.fire(worker.id)
+      yield* Deferred.await(done).pipe(Effect.timeout("20 seconds"))
+      const session = yield* sessions.get(run.sessionID)
+      const snapshot = yield* RayaTaskSnapshot.make({ storage }).find(run.id)
+      expect(snapshot?.definition.access).toBe("brief")
+      expect(snapshot?.definition.tools).toEqual(["read"])
+      expect(snapshot?.definition.mode).toBe("auto")
+      expect(snapshot?.sessionID).toBe(session.id)
+      const goal = yield* goals.get(session.id)
+      const rows = yield* sessions.messages({ sessionID: session.id })
+      console.error(
+        "native routine Auto fixture diagnostics",
+        JSON.stringify({
+          phase: goal?.dispatch?.phase,
+          outcome: goal?.dispatch?.outcome,
+          palettes: requests.map((request) => palette(request)),
+          errors: rows
+            .filter((row) => row.info.role === "assistant")
+            .map((row) => ({ id: row.info.id, error: row.info.role === "assistant" ? row.info.error : undefined })),
+        }),
+      )
+      expect(goal?.routine?.runID).toBe(run.id)
+      expect(goal?.status).toBe("complete")
+      expect(goal?.auditAttempt?.accepted).toBe(true)
+      expect(goal?.audit?.requirements[0]?.criterionID).toBe("read")
+      expect(goal?.audit?.requirements[0]?.passed).toBe(true)
+      expect(RayaChief.routine(goal?.objective)).toBe(true)
+      expect(goal?.objective).toContain("Report evidence for each criterion")
+      expect(requests).toHaveLength(4)
+      expect(names(requests[0]?.format)).toEqual(["get_goal"])
+      expect(names(requests[1]?.format)).toContain("read")
+      expect(names(requests[1]?.format)).toContain("update_goal")
+      for (const request of requests)
+        for (const name of names(request.format)) expect(["get_goal", "update_goal", "read"]).toContain(name)
+      expect(requests[3]?.tools).toBeUndefined()
+      expect(requests[3]?.format).toBeUndefined()
+      const tools = rows.flatMap((row) => row.parts).filter((part) => part.type === "tool")
+      expect(tools.map((part) => part.tool)).toEqual(["get_goal", "read", "update_goal"])
+      expect(tools.every((part) => part.state.status === "completed")).toBe(true)
+      const read = tools.find((part) => part.tool === "read")
+      expect(read?.state.status === "completed" && read.state.metadata.rayaReadContent).toEqual(
+        expect.objectContaining({ complete: true, text: "GATE_REAL_FILE" }),
+      )
+      const answer = rows.findLast((row) => row.info.role === "assistant")
+      expect(answer?.info.role === "assistant" && answer.info.finish).toBe("stop")
+      expect(
+        answer?.parts
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join(""),
+      ).toBe("DONE")
+
+      state.routine = false
+      state.ordinary = true
+      state.phase = 0
+      requests.length = 0
+      const ordinary = yield* sessions.create({ title: "Ordinary Auto Chief control" })
+      yield* prompt.prompt({
+        sessionID: ordinary.id,
+        agent: "auto",
+        model,
+        parts: [{ type: "text", text: "Report evidence from my project every morning." }],
+      })
+      expect(requests).toHaveLength(1)
+      expect(palette(requests[0])).toEqual(["inspect_routines"])
+      expect((yield* sessions.get(ordinary.id)).metadata?.rayaRoutine).toBeUndefined()
+    }),
+  {
+    config: {
+      snapshot: false,
+      formatter: false,
+      lsp: false,
+      enabled_providers: ["qwen-local"],
+      provider: {
+        "qwen-local": {
+          npm: "@ai-sdk/openai-compatible",
+          options: { baseURL: `${endpoint.url}v1`, localInference: true, localInferenceAPI: "ollama" },
+          models: { fixture: { name: "Gate fixture", limit: { context: 32768, output: 1024 } } },
+        },
+      },
+      permission: { "*": "allow" },
+      agent: { auto: { mode: "primary", steps: 8, permission: { "*": "allow" } } },
+    },
+  },
+  45000,
 )
 it.instance(
   "a host-prearmed goal owns its first real turn and releases accepted synthesis",

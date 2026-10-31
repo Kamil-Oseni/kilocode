@@ -1,3 +1,11 @@
+October 31, 2026 -- Installed admission guards and read recovery qualified
+
+Installed `eb9e21404d` (`7.4.23-snapshot+eb9e21404d.local.1793465994283`) now contains the explicit top-level/slash-separated omission guard, the required native contract admission guard, direct-read acknowledgement/recovery and current-input instruction priority fixes. The qualified delivery binds the exact CLI, helper and package to source qualification `3a4bac05563e2514ed0c26c6c04b8fe56c2b8e085aaeffb3cddb9ed55828f48b`. Combined CLI typecheck passed in 47.625 seconds.
+
+The stock package target exited zero; owned descendant cleanup was forced and the wrapper failure remains recorded separately. Snapshot elapsed 138.734s; preservation before/after checks passed in 44.672s/7.454s, preserving 7,132 saved files. Official installation exited zero. The selected before-v2 attempt retains the original failed SQLite shared-memory preservation evidence; the confirmed parallel read-only audit is documented in the delivery receipt. The stock build produced no SDK delta.
+
+This is installed package and preservation qualification, not a new business-workflow pass. A fresh ordinary-trial startup and its nine-definition/89-Run baseline are separate evidence; the earlier 26-GET preservation result belongs to the prior e6 delivery. Broad components remain **3/9 (33.3%)**, overall readiness **unmeasured**. Business semantic acceptance remains pending; voice remains deferred.
+
 October 31, 2026 -- Compact installed admission failed; combined source guards await validation
 
 The compact retry on installed `e6b6cbf9d3`, owner `normal-service-e5f13c6e-a441-4151-b51e-c619d86995c1`, admitted a legacy request without the required typed contract and with an invented budget despite the owner's explicit top-level omission instruction. The sole added native Run was stopped; its Stop receipt reports interrupted=true. All nine definitions and the prior 88 Run/event objects remain unchanged, bringing the total to 89. This trial earns no business-workflow or semantic acceptance.
@@ -128,8 +136,8 @@ Current gate summary for the installed build; earlier dated entries retain their
 
 | Gate | Status | Evidence or remaining work |
 |---|---|---|
-| Audited combined candidate | Verified for installed e6b6cbf9d3 | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
-| Normal installation preservation | Verified for installed e6b6cbf9d3 | Preserved 7,056 saved files and unrelated registrations; 26 installed GETs preserved the current 88-run profile, old chat and failed-business evidence. Loaded UI recovery remains separate. |
+| Audited combined candidate | Verified for installed eb9e21404d | Exact source-qualified CLI/helper/package installed; stock target and wrapper cleanup outcomes retained separately. |
+| Normal installation preservation | Verified for installed eb9e21404d | Preserved 7,132 saved files and unrelated registrations through qualified before/after checks. Fresh ordinary-trial startup and nine-definition/89-Run baseline remain separate; loaded UI recovery remains separate. |
 | Installed local General/tool turn | Pending | Installed 1e18 conversation-only recall remains accepted; current b7a7 GET-only upgrade preserved its 12 messages/26 parts without a model run or counter repair. Loaded UI/drafts/model, large-chat behavior and loaded reopen remain pending. |
 | Strict installed Coder | Verified component on ead06c59b8 | Earlier local Code9B edit/native tests/final result retained without another model run. |
 | Installed Voice and permitted HA flow | Deferred by user | Voice is secondary; Home Assistant remains off. |

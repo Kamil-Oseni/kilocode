@@ -39,7 +39,9 @@ export const ArtifactList: Component<{ items?: HandoffArtifact[] }> = (props) =>
           {(item) => (
             <li>
               <strong title={item.path}>{name(item.path)}</strong>
-              <span title={`SHA-256 ${item.sha256}`}>Verified · {item.sha256.slice(0, 12)}</span>
+              <span title={`File identity checked using SHA-256 ${item.sha256}`}>
+                File identity checked · {item.sha256.slice(0, 12)}
+              </span>
             </li>
           )}
         </For>

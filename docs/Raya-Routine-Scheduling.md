@@ -2,6 +2,12 @@
 
 ## Current installed validation
 
+October 31: installed `ebb34dd894` passed a normal-profile same-scenario Auto/brief/read check with two genuine consecutive timer occurrences, accepted native Goal/Read audits, exact final marker and one delivered report per occurrence. The new routine was disabled after the second selection. A fresh same-version backend retained exact history/cards through 67 observations spanning 99.158 seconds, with no third run or model load. The original seven definitions/history and prior failed worker remained unchanged. Both backend drivers closed and joined; forced backend exits remain distinct from driver exit zero.
+
+Combined receipt `.tmp/business-20261022/normal-service-81e358c8-4e27-4577-80b2-1092921581e8/repaired-scheduled-combined-outcome.json`, SHA-256 `9630a4496c0e4700133eebb4605d03793e56559282abc40dc29ee9ad49f2ed6c`. This is timer/report/disabled cold-reopen component acceptance. Full semantic/business, scheduling-policy, pause/Stop/crash and GUI validation remain open, as does terminal Goal usage accounting. Installed component gates stay **3/9 (33.3%)**; overall readiness is **unmeasured**. Earlier trial records below remain historical evidence from their named producers.
+
+## Historical installed validation
+
 The corrected 2026-10-05 private trial passed on installed snapshot `7.4.23-snapshot+8db2d6bd4e.local.1791240779706`: two distinct UTC timer sessions completed, then the disabled routine and exact history survived cold reopening through the 65-second no-replay observation. Both backend hosts closed. Independent result binding matched all 752 saved API response hashes and settled stream bytes; both recorded source/guardian join groups fulfilled with exit code zero and family-zero observations.
 
 Passing result: `routine-current-8db2-two-period-cold-list-actual-f84624eb138d40b9a0219c27386a0910.json`, 464393 bytes, SHA256 `1127decb405d021eb370dfc282e3733f35913604d9d1c64abbd97a59ba9813c9`. Independent binding receipt: `.tmp/new-pc/routine-cold-list-independent-result-binding.json`. This verifies the tested scheduling/disabled cold-reopen scenario; pause/resume, live Stop, crash recovery, normal-profile UX and later build compatibility remain pending. The binding review does not replace signed-retirement verification or advance the full Routine readiness gate.

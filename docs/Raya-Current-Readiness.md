@@ -4,6 +4,22 @@ Updated October 31, 2026. Priority: stable chat and routine workers. Voice is de
 
 ## Current installed checkpoint
 
+October 31, 2026 -- Installed Auto routine repair and two-period cold-reopen component acceptance
+
+Installed source `ebb34dd894`, package `7.4.23-snapshot+ebb34dd894.local.1793445463504`. Delivery `.tmp/new-pc/worker-ebb34dd894-delivery-qualified.json`, SHA-256 `6a4f9faf2a79a087f09b86e7ff5d1a9c642bb50ef74e9ab68dfa857ccca4d01f`, preserved 6,653 saved files and unrelated extension registrations. Native Routine Goal tools now survive Auto's main-chat routing heuristics, while the original permission palette, first-get-goal barrier, accepted audit, final-only closure, model/mode precedence and envelope guards remain. The shared prompt delta is three added and two removed lines. Two focused native cases passed 49 assertions; CLI types, scoped lint, annotations, Promise-facade guard and stock build checks passed. Stock target exit zero and forced owned descendant cleanup remain separately recorded.
+
+A fresh same-scenario Auto/brief/read routine completed two genuine consecutive minute occurrences without manual starts. Each original native run called get_goal, read the full approved 30-byte marker, completed its accepted Goal audit and returned the exact marker in its final assistant message. One complete/delivered report per occurrence reached the bound ordinary origin conversation. Existing Auto mode precedence used configured local 4B; the saved 9B model field was retained, and no pinned9B execution is claimed. The routine was disabled immediately after its second selection, its admitted second run completed, and all seven prior definitions/history remained unchanged. The earlier failed Auto worker and its two blocked histories remain disabled and unmodified.
+
+After idle closure and model release, a fresh backend of the same installed version preserved the exact two-run history and reports. Sixty-seven native history observations spanned 99.158 seconds without a third run or model load. Both original backend drivers joined with exit zero and readers joined; their exact owned backend closures used forced exit one, retained separately. Combined outcome `.tmp/business-20261022/normal-service-81e358c8-4e27-4577-80b2-1092921581e8/repaired-scheduled-combined-outcome.json`, SHA-256 `9630a4496c0e4700133eebb4605d03793e56559282abc40dc29ee9ad49f2ed6c`, pins delivery, both phases, closure, model release and the original failed attempt. Worker-private intermediate text is separate from the verified final report; acceptance compares the original dispatch's final assistant, not concatenated intermediate replies.
+
+Installed component gates remain **3/9 (33.3%)**; overall readiness is **unmeasured**. Scheduling is now partial with actual timer/report/disabled-cold-reopen evidence; full Routine acceptance still needs broader semantic/business quality, policy, Stop/recovery and UI evidence. The Coder gate retains its earlier installed ead observation; this delivery did not repeat that model workflow. Loaded General chat/drafts/reopen, Memory, OS postboot, populated reinstall and visual acceptance remain pending; voice is deferred. Goal usage counters were observed at zero despite actual native tools and recorded model tokens after successful completion; a separate accounting correction is pending, without rewriting historical runs. No GUI window, Home Assistant or other user app was controlled in this check. Earlier checkpoints retain their original producer identities and outcomes.
+
+## Historical checkpoints
+
+The entries below describe their own earlier builds. References to "current", "latest", "installed" or "next" in those records do not replace the current installed checkpoint above.
+
+### Earlier October 31 installed coding checkpoint
+
 October 31, 2026 -- Installed recovery isolation and verified local coding workflow
 
 Installed source `ead06c59b8`, package `7.4.23-snapshot+ead06c59b8.local.1793443472853`. Qualified delivery `.tmp/new-pc/worker-ead06c59b8-delivery-qualified.json`, SHA-256 `bb74da9dc01c729ba4bb7f1cfcf26fe1c6f79bd13dd1c6b6bc087092ea2c6072`. Installation preserved 6,586 existing saved files and unrelated registrations. Startup recovery now keeps a locally corrupted execution record held, recovers independent routines, and reports the original error. The actual baseline reproduced stranded independent recovery; the corrected native case passed 13 assertions. CLI types, scoped lint and stock package checks passed. Stock build target exit zero and forced owned descendant cleanup remain distinct.
@@ -13,10 +29,6 @@ The actual newly installed normal-profile local Code-primary 9B workflow passed 
 The first startup attempt timed out at its initial 20-second authenticated path request before any prompt. It was closed and retained. After a fresh safe startup review, the unchanged installed producer became ready in 23.010 seconds using a bounded 60-second path-request budget. This driver adjustment is not a source startup-latency fix or boot/reinstall acceptance. The successful workflow then closed its exact owned backend with readers joined and released its Code9B model; forced backend exit one remains recorded separately from the original driver exit zero.
 
 Installed gates are now **3/9 (33.3%)**, with six unearned; overall project readiness remains **unmeasured**. No VS Code window was open during this acceptance, so loaded UI, General chat/drafts/reopen and window placement remain pending. Scheduled execution, Memory, matching-version postboot and populated reinstall recovery remain pending; voice is deferred. The earlier three-worker native source flow completed, but its generated drafts still falsely claimed fresh browsing and visual/business-content acceptance remains unearned. Earlier checkpoints below retain their original producer identities and outcomes.
-
-## Historical checkpoints
-
-The entries below describe their own earlier builds. References to "current", "latest", "installed" or "next" in those records do not replace the current installed checkpoint above.
 
 ### Earlier October 31 installed read checkpoint
 

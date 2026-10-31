@@ -1,8 +1,15 @@
 import type { MessageV2 } from "@/session/message-v2"
 import { RayaChief } from "."
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 
 export const instruction =
   "This original user turn requests only a greeting or a general introduction to your assistance capabilities. Reply directly and briefly, honoring their restrictions. Describe general capabilities without claiming current access, setup, account, project or device facts. Do not route or use tools, perform actions, start a goal, or claim that a preference was saved."
+
+const recall =
+  "The current user requests an answer using only the conversation history already provided, without tools or workers. Answer their question directly from that history. If it does not contain the answer, say so without inventing facts. Do not route, delegate, read files, search memory, perform actions or start a Goal. Do not claim fresh acquisition or verification."
+
+/** Guidance only; supplied() must authenticate the current conversational request first. */
+export const direction = (request: string) => (greeting(request) ? instruction : recall)
 
 /** Only the current root Auto request can omit initial workflow acquisition. */
 export function supplied(
@@ -13,6 +20,7 @@ export function supplied(
 ) {
   if (
     session.parentID ||
+    session.metadata?.rayaRoutine !== undefined ||
     RayaChief.phase(session.metadata) !== "route" ||
     session.metadata?.["raya.goal.open"] === true
   )
@@ -26,7 +34,7 @@ export function supplied(
   return (
     request === RayaChief.request(session.metadata) &&
     (original === undefined || request === original) &&
-    greeting(request)
+    (greeting(request) || (InputReceipt.complete(current, session.id, user) && unaided(request)))
   )
 }
 
@@ -99,10 +107,15 @@ export function acknowledgement(request: string) {
 
 /** Chat-context replies can honor a blanket no-tools instruction without specialist delegation. */
 export function unaided(request: string) {
+  if (Buffer.byteLength(request, "utf8") > 4096) return false
   const text = request
     .replace(/```[\s\S]*?```/g, "")
+    .replace(/~~~[\s\S]*?~~~/g, "")
     .replace(/`[^`]*`/g, "")
     .replace(/^\s*>.*$/gm, "")
+    .replace(/"(?:\\.|[^"\\])*"|“[^”]*”|‘[^’]*’/g, "")
+    .replace(/(^|\s)'[^'\n]+'(?=$|[\s.!?,;])/g, "$1")
+  if (/```|~~~/.test(text)) return false
   if (
     !/\b(?:(?:this|our|current)\s+(?:chat|conversation|discussion)|earlier|previously|(?:i|we|you)\s+(?:just\s+)?(?:said|mentioned|agreed))\b/i.test(
       text,
@@ -110,7 +123,7 @@ export function unaided(request: string) {
   )
     return false
   const pattern =
-    /\b(?:(?:do not|don't|never)\s+(?:use|call|invoke|run)\s+(?:any\s+)?tools?|without\s+(?:(?:using|calling)\s+)?(?:any\s+)?tools?|no\s+tools?)(?:\s+(?:or|and)\s+(?:(?:start|use)\s+)?(?:any\s+)?workers?)?(?=\s*(?:[.!;,?]|$))/gi
+    /\b(?:(?:do not|don't|never)\s+(?:(?:re-?read|read)\s+(?:any\s+)?files?\s+or\s+)?(?:use|call|invoke|run)\s+(?:any\s+)?tools?|without\s+(?:(?:using|calling)\s+)?(?:any\s+)?tools?|no\s+tools?)(?:\s+(?:or|and)\s+(?:(?:start|use)\s+)?(?:any\s+)?workers?)?(?=\s*(?:[.!;,?]|$))/gi
   if (
     ![...text.matchAll(pattern)].some(
       (match) => !/\b(?:say|phrase|words|called|named|quoted)\s*$/i.test(text.slice(0, match.index)),

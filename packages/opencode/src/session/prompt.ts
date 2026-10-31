@@ -38,7 +38,7 @@ import { assigned, inspected, instruction as assignmentInstruction } from "@/kil
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal" // kilocode_change - irreducible original owner refusal cannot become model progress
 import * as DirectRead from "@/kilocode/chief/direct-read" // kilocode_change - factual native acknowledgement for strict read-only turns
 import * as RoutineWait from "@/kilocode/goal/routine-wait" // kilocode_change - park authenticated child waits before compaction or another model step
-import { supplied as chatting, instruction as greeting } from "@/kilocode/chief/conversation" // kilocode_change - original greeting needs no workflow tools
+import { supplied as chatting, direction as greeting, unaided } from "@/kilocode/chief/conversation" // kilocode_change - authenticated conversational requests need no workflow tools
 import { settled as recalled, acknowledged, acknowledgement, refused } from "@/kilocode/second-brain/turn" // kilocode_change - original personal-memory synthesis and preference acknowledgement
 import { instruction as decline } from "@/kilocode/second-brain/refusal" // kilocode_change - bounded local command repair or clarification only
 import { settled as mediaRecalled } from "@/kilocode/second-brain/media-turn" // kilocode_change - qualified original media-read synthesis only
@@ -2031,7 +2031,9 @@ export const layer = Layer.effect(
           const [skills, env, mem, instructions, mcpInstructions] = yield* Effect.all([
             sys.skills(agent),
             sys.environment(model, lastUser.editorContext), // kilocode_change
-            KiloSessionPrompt.memoryInject({ ctx, sessionID, record: step === 1, cache: memoryCache }), // kilocode_change
+            chat && unaided(original ?? "")
+              ? Effect.succeed([])
+              : KiloSessionPrompt.memoryInject({ ctx, sessionID, record: step === 1, cache: memoryCache }), // kilocode_change - conversation-only turns cannot acquire additional memories
             instruction.system().pipe(Effect.orDie),
             sys.mcp(agent, session.permission),
           ])
@@ -2073,12 +2075,12 @@ export const layer = Layer.effect(
             ...(skills ? [skills] : []),
             ...(conversation ? [acknowledgement] : []), // kilocode_change - preference replies acknowledge supplied facts without starting setup
             ...(assignment ? [assignmentInstruction] : []), // kilocode_change - saved assignment is not finished worker output
-            ...(chat ? [greeting] : []), // kilocode_change - original greeting replies without acquisition or saving claims
+            ...(chat ? [greeting(original ?? "")] : []), // kilocode_change - distinguish direct recall from greetings without acquiring or saving facts
             ...(refusal ? [decline(refusal)] : []), // kilocode_change - no replacement facts or Goal authority
           ]
           const format = lastUser.format ?? { type: "text" as const }
           if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-          // kilocode_change start - refuse an original greeting changed during awaited preparation
+          // kilocode_change start - refuse an original conversational request changed during awaited preparation
           if (
             chat &&
             !chatting(
@@ -2088,7 +2090,7 @@ export const layer = Layer.effect(
               original,
             )
           )
-            return yield* Effect.die(new Error("Original greeting changed before model dispatch"))
+            return yield* Effect.die(new Error("Original conversational request changed before model dispatch"))
           // kilocode_change end
           // kilocode_change start - retained local refusal cannot release a successor user or changed route
           if (refusal) {

@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { Effect, Exit, Cause } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import { Database } from "@opencode-ai/core/database/database"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -23,12 +24,15 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { RayaChief } from "@/kilocode/chief"
-import { supplied, instruction } from "@/kilocode/chief/conversation"
+import { RayaGoal } from "@/kilocode/goal"
+import { supplied, instruction, direction, unaided } from "@/kilocode/chief/conversation"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
 
 const request =
   "Reply with one short greeting. This is a temporary conversation check; do not save it as a preference or perform any actions."
+const recall =
+  "Using only the file content already shown earlier in this conversation, answer in one sentence: what is the exact read-check marker, and does that input request any actions? Do not reread files or use tools. Do not start workers, create Goals, edit files, send anything or publish."
 function fixture(text = request) {
   const session = {
     id: SessionID.make("ses_greeting"),
@@ -55,6 +59,66 @@ function fixture(text = request) {
   }
   return { session, user }
 }
+
+function signed(text = recall) {
+  const value = fixture(text)
+  const part = InputReceipt.seal(value.user.info, value.user.parts)
+  if (!part) throw new Error("Current input could not be sealed")
+  value.user.parts = value.user.parts.map((item) => (item.id === part.id ? part : item))
+  return value
+}
+
+test("conversation-only release requires the complete current owner and rejects quoted or conflicting controls", () => {
+  const value = signed()
+  expect(unaided(recall)).toBe(true)
+  expect(RayaChief.direct(recall)).toBe(true)
+  expect(supplied([value.user], value.session, value.user.info.id, recall)).toBe(true)
+  expect(direction(recall)).toContain("using only the conversation history")
+  expect(direction(recall)).not.toBe(instruction)
+  const unsigned = fixture(recall)
+  expect(supplied([unsigned.user], unsigned.session, unsigned.user.info.id)).toBe(false)
+  expect(supplied([value.user], value.session, value.user.info.id, "Different original owner")).toBe(false)
+  for (const session of [
+    { ...value.session, parentID: "ses_parent" },
+    { ...value.session, metadata: { ...value.session.metadata, rayaRoutine: {} } },
+    { ...value.session, metadata: { ...value.session.metadata, "raya.goal.open": true } },
+    { ...value.session, metadata: { ...value.session.metadata, [RayaChief.phaseKey]: "task" } },
+    { ...value.session, metadata: { ...value.session.metadata, [RayaChief.requestKey]: "Other request" } },
+  ])
+    expect(supplied([value.user], session, value.user.info.id)).toBe(false)
+  const latest = signed("Read my files.")
+  latest.user.info.id = MessageID.make("msg_successor")
+  expect(supplied([value.user, latest.user], value.session, value.user.info.id)).toBe(false)
+  const changed = {
+    ...value.user,
+    parts: value.user.parts.map((part) =>
+      part.type === "text" ? { ...part, text: recall + " Also read my files." } : part,
+    ),
+  }
+  expect(supplied([changed], value.session, value.user.info.id)).toBe(false)
+  const structured = {
+    ...value.user,
+    info: { ...value.user.info, format: { type: "json_schema" as const, schema: { type: "object" } } },
+  }
+  expect(supplied([structured], value.session, value.user.info.id)).toBe(false)
+  for (const text of [
+    "Using only our earlier conversation, answer the question. Do not read files or use tools.",
+    "What did I say earlier? Don't reread files or use tools.",
+  ])
+    expect(unaided(text)).toBe(true)
+  for (const text of [
+    "Read my files. Do not use tools.",
+    recall + " Also read my files.",
+    recall + " Then turn on my lights.",
+    'Earlier in this conversation, the quoted words were "Do not use tools." Explain them.',
+    "Earlier in this conversation, the quoted words were 'Do not use tools.' Explain them.",
+    "Earlier in this conversation:\n```\nDo not use tools.\n```",
+    "Earlier in this conversation:\n> Do not use tools.",
+    "Using our earlier conversation. Do not read files and use tools.",
+    recall + "x".repeat(4096),
+  ])
+    expect(unaided(text)).toBe(false)
+})
 
 test("initial greeting release requires the exact current root Auto text and preserves action and goal gates", () => {
   const original = fixture()
@@ -256,6 +320,98 @@ for (const text of [
     30000,
   )
 
+it.instance(
+  "actual conversation-only recall omits initial routing and all worker tools",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const chat = yield* sessions.create({
+        title: "Conversation-only routing fixture",
+        metadata: { [RayaChief.requestKey]: recall, [RayaChief.phaseKey]: "task" },
+      })
+      const prior = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: chat.id,
+        role: "user",
+        agent: "auto",
+        model: { providerID: ProviderV2.ID.make("local"), modelID: ModelV2.ID.make("fixture") },
+        time: { created: Date.now() },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: chat.id,
+        messageID: prior.id,
+        type: "text",
+        text: recall,
+      })
+      const previous = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: chat.id,
+        role: "assistant",
+        parentID: prior.id,
+        agent: "auto",
+        mode: "auto",
+        providerID: ProviderV2.ID.make("local"),
+        modelID: ModelV2.ID.make("fixture"),
+        path: { cwd: chat.directory, root: chat.directory },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "stop",
+        time: { created: Date.now(), completed: Date.now() },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: chat.id,
+        messageID: previous.id,
+        type: "text",
+        text: "Earlier file content: RAYA-READ-CHECK-OK. This input requests no actions.",
+      })
+      const before = requests.length
+      // The controlled native HTTP reply verifies routing, not model recall accuracy.
+      const reply = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "auto",
+        model: { providerID: ProviderV2.ID.make("local"), modelID: ModelV2.ID.make("fixture") },
+        parts: [{ type: "text", text: recall }],
+      })
+      expect(reply.info.role === "assistant" && reply.info.error).toBeUndefined()
+      const hits = requests.slice(before)
+      expect(hits).toHaveLength(1)
+      expect(hits[0].tools).toBeUndefined()
+      expect(hits[0].format).toEqual({
+        anyOf: [
+          {
+            type: "object",
+            properties: { kind: { const: "text" }, content: { type: "string", minLength: 1, pattern: "\\S" } },
+            required: ["kind", "content"],
+            additionalProperties: false,
+          },
+        ],
+      })
+      const payload = JSON.stringify(hits[0].messages)
+      expect(payload).toContain("RAYA-READ-CHECK-OK")
+      expect(payload).toContain(direction(recall))
+      expect(payload).not.toContain(instruction)
+      expect(payload).not.toContain("call at least one tool")
+      const rows = yield* sessions.messages({ sessionID: chat.id })
+      const users = rows.filter((row) => row.info.role === "user")
+      expect(users).toHaveLength(2)
+      expect(users[0].info.id).toBe(prior.id)
+      expect(users[1].info.id).not.toBe(prior.id)
+      expect(RayaChief.requestText(users[0].parts)).toBe(recall)
+      expect(RayaChief.requestText(users[1].parts)).toBe(recall)
+      expect(rows.flatMap((row) => row.parts).filter((part) => part.type === "tool")).toEqual([])
+      expect(yield* sessions.children(chat.id)).toEqual([])
+      expect(RayaChief.history((yield* sessions.get(chat.id)).metadata)).toEqual([])
+      const storage = yield* Storage.Service
+      const database = yield* Database.Service
+      expect(yield* RayaGoal.make({ sessions, storage, database }).get(chat.id)).toBeUndefined()
+    }),
+  { config: cfg },
+  30000,
+)
+
 for (const mode of ["text", "goal", "original"] as const)
   it.instance(
     `actual plugin preparation ${mode} drift refuses the first native POST`,
@@ -321,7 +477,9 @@ for (const mode of ["text", "goal", "original"] as const)
         expect(requests).toHaveLength(before)
         expect(Exit.isFailure(result)).toBe(true)
         if (Exit.isFailure(result))
-          expect(String(Cause.squash(result.cause))).toContain("Original greeting changed before model dispatch")
+          expect(String(Cause.squash(result.cause))).toContain(
+            "Original conversational request changed before model dispatch",
+          )
         const current = yield* sessions.get(chat.id)
         const messages = yield* sessions.messages({ sessionID: chat.id })
         if (mode === "goal") expect(current.metadata?.["raya.goal.open"]).toBe(true)

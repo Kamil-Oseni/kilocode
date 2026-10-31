@@ -11,3 +11,5 @@ Accountant jobs need you to allow money records first (receipts, ledgers, invoic
 When is plain English: "every weekday at 6pm", "every morning", "in 2 minutes", "just when I ask", or "every time CI fails on main". A one-shot fires once. A paused routine does not fire. If the same block happens three times in a row, the routine disables itself and leaves a note.
 
 A run that needs a permission or an answer parks as waiting on you until you handle it in the chat. Structured plans can run in this chat or in the background from the plan card.
+
+Review a completed result before relying on it. In its run review, choose **Request changes** to prepare a message for the same worker. Raya keeps your existing draft and attachments and includes a reference to the result you selected. Add the changes you want, then send the message when ready. Preparing the draft does not send it or reopen the completed run.

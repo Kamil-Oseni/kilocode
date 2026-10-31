@@ -117,7 +117,7 @@ function same(
       a.literals.every((text, index) => text === b.literals[index])
     )
   if (a.kind === "source-read" && b.kind === "source-read")
-    return a.path === b.path && a.canonical === b.canonical && a.sha256 === b.sha256 && a.bytes === b.bytes
+    return (["path", "canonical", "sha256", "bytes"] as const).every((key) => a[key] === b[key])
   if (a.kind !== "byte-equality" || b.kind !== "byte-equality") return false
   return (
     a.source.path === b.source.path &&

@@ -69,6 +69,7 @@ export const AskOptionsTool = Tool.define<typeof Parameters, Metadata, Question.
             ),
           )
           .pipe(
+            KiloQuestionTool.wait(ctx.abort),
             Effect.map((answers) => ({
               title: `Asked ${params.questions.length} question${params.questions.length === 1 ? "" : "s"}`,
               output: JSON.stringify({ answers }),

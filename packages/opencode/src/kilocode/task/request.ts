@@ -121,7 +121,9 @@ export function kickoff(request: string | undefined) {
   if (
     !inspection(request) &&
     !prohibits(request) &&
-    /(?:^|[.!?;\n])\s*(?:please\s+)?(?:use|call)\s+native\s+assign_organization_work\b/i.test(native)
+    /(?:^|[.!?;\n])\s*(?:please\s+)?(?:(?:use|call)\s+native|proceed\s+with\s+[^.!?;\n]{0,160}\bworkflow\s+using\s+native)\s+assign_organization_work\b/i.test(
+      native,
+    )
   )
     return true
   if (

@@ -12,6 +12,21 @@ import type * as Tool from "@/tool/tool"
  * early return, minimising the surface area that conflicts with upstream.
  */
 export namespace KiloQuestionTool {
+  /** Join the original question cleanup when the SDK callback's signal is cancelled. */
+  export const wait =
+    (signal: AbortSignal) =>
+    <A, E, R>(body: Effect.Effect<A, E, R>) =>
+      Effect.suspend(() => {
+        if (signal.aborted) return Effect.interrupt
+        const cancelled = Effect.callback<never>((resume) => {
+          if (signal.aborted) return resume(Effect.interrupt)
+          const stop = () => resume(Effect.interrupt)
+          signal.addEventListener("abort", stop, { once: true })
+          return Effect.sync(() => signal.removeEventListener("abort", stop))
+        })
+        return Effect.raceFirst(body, cancelled)
+      })
+
   export const admit = Effect.fn("KiloQuestionTool.admit")(function* (
     ctx: Pick<Tool.Context, "ask">,
     tool: "question" | "ask_options" = "question",

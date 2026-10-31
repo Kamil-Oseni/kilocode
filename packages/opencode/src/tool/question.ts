@@ -33,7 +33,7 @@ export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Se
               questions: params.questions,
               tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
             })
-            .pipe(KiloQuestionTool.catchDismissed)
+            .pipe(KiloQuestionTool.wait(ctx.abort), KiloQuestionTool.catchDismissed) // kilocode_change - join pending question cleanup on SDK cancellation
           if (KiloQuestionTool.isDismissed(answers)) return KiloQuestionTool.dismissedResult()
           // kilocode_change end
 

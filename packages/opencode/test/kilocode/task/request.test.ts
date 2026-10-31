@@ -89,7 +89,20 @@ test("native saved-team assignment stays affirmative and outside examples", () =
   expect(kickoff(request)).toBe(true)
   expect(kickoff("Please use native assign_organization_work with the approved contract.")).toBe(true)
   expect(kickoff("Call native assign_organization_work for the approved first stage.")).toBe(true)
+  const retry = "Proceed with the same one manual LOCAL website-design workflow using native assign_organization_work."
+  expect(kickoff(retry)).toBe(true)
+  expect(kickoff("Please " + retry)).toBe(true)
   for (const text of [
+    "Do not " + retry,
+    "Explain how to " + retry,
+    '"' + retry + '"',
+    "`" + retry + "`",
+    "> " + retry,
+    "Read-only status review. " + retry,
+    "Do not start workers. " + retry,
+    "Create new workers. " + retry,
+    "Proceed with this explanation using native assign_organization_work.",
+    "Proceed with a workflow " + "word ".repeat(40) + "using native assign_organization_work.",
     "Do not use native assign_organization_work.",
     "Never call native assign_organization_work.",
     "Explain how to use native assign_organization_work.",

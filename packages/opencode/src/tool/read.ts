@@ -77,6 +77,7 @@ type Metadata = {
   loaded: string[]
   display?: Display
   rayaRevision?: unknown // kilocode_change
+  rayaDirectRead?: unknown // kilocode_change - auditable requested and effective direct-read ranges
 }
 
 export const ReadTool = Tool.define<
@@ -360,11 +361,13 @@ export const ReadTool = Tool.define<
           if (!Extract.binary(requested) && isBinaryFile(requested, sample)) {
             return yield* Effect.fail(new Error(`Cannot read binary file: ${requested}`))
           }
-          const file = yield* lines(
+          const selection = DirectRead.range(
+            direct,
             bound,
             { limit: Math.max(1, params.limit ?? DEFAULT_READ_LIMIT), offset: params.offset || 1 },
-            ctx.abort,
-          )
+            params,
+          ) // kilocode_change - honor the exact owner's complete bounded Read instead of a model-imposed preview
+          const file = yield* lines(bound, selection, ctx.abort)
           if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
             return yield* Effect.fail(
               new Error(`Offset ${file.offset} is out of range for this file (${file.count} lines)`),
@@ -392,6 +395,7 @@ export const ReadTool = Tool.define<
             title,
             output,
             metadata: {
+              ...selection.metadata, // kilocode_change - retain requested and effective native Read ranges
               preview: file.raw.slice(0, 20).join("\n"),
               truncated,
               loaded: loaded.map((item) => item.filepath),

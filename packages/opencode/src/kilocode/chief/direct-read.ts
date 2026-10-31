@@ -11,12 +11,31 @@ import { MessageID, PartID, type SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 import type { Tool } from "@/tool/tool"
 import * as ReadArtifact from "@/kilocode/goal/read-artifact"
+import * as Extract from "@/kilocode/tool/read-extract"
+import type { KiloReadObject } from "@/kilocode/tool/read-object"
 import { inspectionFile } from "../task/request"
 import { Refusal } from "../session/tool-refusal"
 import { gate } from "../session/input-gate"
 
 const log = Log.create({ service: "raya-direct-read" })
 const digest = (text: string) => createHash("sha256").update(text).digest("hex")
+const whole = new WeakSet<Effect.Effect<void, unknown>>()
+
+/** Select a complete bounded text read only for the exact authenticated whole-file owner. */
+export function range(
+  verify: Effect.Effect<void, unknown> | undefined,
+  file: KiloReadObject.File,
+  requested: { offset: number; limit: number },
+  input: { offset?: number; limit?: number },
+) {
+  if (!verify || !whole.has(verify) || file.stat.size > 8192n || Extract.accepts(file.requested))
+    return { ...requested, metadata: {} }
+  const effective = { offset: 1, limit: 8193 }
+  return {
+    ...effective,
+    metadata: { rayaDirectRead: { requested: { offset: input.offset, limit: input.limit }, effective } },
+  }
+}
 
 /** Append read-only turn guidance after the native result and its file evidence are complete. */
 export function complete<A extends { output: string }, E, R>(
@@ -103,6 +122,7 @@ export const guard = Effect.fn("DirectRead.guard")(function* (
     return yield* Effect.fail(
       new Refusal("chief-work-class", "The direct Read target must be a file, not a directory."),
     )
+  if (acknowledgement(text)) whole.add(verify)
   return verify
 })
 

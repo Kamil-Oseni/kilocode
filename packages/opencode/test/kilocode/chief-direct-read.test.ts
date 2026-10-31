@@ -23,6 +23,7 @@ import { InputReceipt } from "@opencode-ai/core/kilocode/input-receipt"
 import { RayaChief } from "@/kilocode/chief"
 import { inspectionFile } from "@/kilocode/task/request"
 import * as ReadArtifact from "@/kilocode/goal/read-artifact"
+import { KiloReadObject } from "@/kilocode/tool/read-object"
 import { InstanceState } from "@/effect/instance-state"
 import { testEffect } from "../lib/effect"
 import { database, storage } from "./fixtures/effect-profile"
@@ -232,7 +233,7 @@ it.instance(
       expect(ordinary.output).not.toContain('<system-reminder source="raya-direct-read">')
 
       yield* fs.writeFileString(file, "First line.\nSecond line.\n")
-      const open = (limit?: number, suffix = "") =>
+      const open = (limit?: number, suffix = "", offset?: number) =>
         Effect.gen(function* () {
           const request = `Read "${file}". Read-only. Do not start any workers.${suffix}`
           const chat = yield* sessions.create({
@@ -261,7 +262,11 @@ it.instance(
             time: { created: Date.now() },
           })
           const call = { ...ctx, sessionID: chat.id, messageID: worker.id, callID: crypto.randomUUID() }
-          const input = { filePath: file, ...(limit === undefined ? {} : { limit }) }
+          const input = {
+            filePath: file,
+            ...(limit === undefined ? {} : { limit }),
+            ...(offset === undefined ? {} : { offset }),
+          }
           const result = yield* reader.execute(input, call)
           const receipt = yield* sessions.updatePart({
             id: PartID.ascending(),
@@ -308,9 +313,44 @@ it.instance(
       expect(yield* DirectRead.finish(sessions, pure.chat.id, pure.owner.id)).toBe(false)
       const summary = yield* open(undefined, " Summarize the content.")
       expect(yield* DirectRead.finish(sessions, summary.chat.id, summary.owner.id)).toBe(false)
-      const partial = yield* open(1)
+      const partial = yield* open(1, " Read only the first line.")
       expect(partial.receipt.state.status).toBe("completed")
+      if (partial.receipt.state.status !== "completed") throw new Error("Expected completed partial Read")
+      expect(partial.receipt.state.metadata.truncated).toBe(true)
+      expect(partial.receipt.state.metadata.display).toMatchObject({ lineStart: 1, lineEnd: 1, totalLines: 2 })
+      expect(partial.receipt.state.metadata.rayaDirectRead).toBeUndefined()
       expect(yield* DirectRead.finish(sessions, partial.chat.id, partial.owner.id)).toBe(false)
+      const text = [
+        "{",
+        ...Array.from({ length: 134 }, (_, id) => `  "key-${id}": "bounded-read-value-${id}"${id < 133 ? "," : ""}`),
+        "}",
+      ].join("\n")
+      expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(8192)
+      yield* fs.writeFileString(file, text)
+      const bounded = yield* open(50, "", 0)
+      if (bounded.receipt.state.status !== "completed") throw new Error("Expected completed bounded Read")
+      expect(bounded.receipt.state.input).toMatchObject({ offset: 0, limit: 50 })
+      expect(bounded.receipt.state.metadata).toMatchObject({
+        truncated: false,
+        display: { lineStart: 1, lineEnd: 136, totalLines: 136, truncated: false },
+        rayaDirectRead: { requested: { offset: 0, limit: 50 }, effective: { offset: 1, limit: 8193 } },
+      })
+      expect((yield* ReadArtifact.whole(bounded.receipt.state.metadata))?.text).toBe(text)
+      expect(yield* DirectRead.finish(sessions, bounded.chat.id, bounded.owner.id)).toBe(true)
+      const boundedRows = yield* sessions.messages({ sessionID: bounded.chat.id })
+      expect(boundedRows.flatMap((row) => row.parts).filter((part) => part.type === "tool")).toHaveLength(1)
+      expect(yield* sessions.children(bounded.chat.id)).toEqual([])
+      const forged = yield* KiloReadObject.use(yield* KiloReadObject.file(file), (bound) =>
+        Effect.sync(() => DirectRead.range(Effect.void, bound, { offset: 2, limit: 1 }, { offset: 2, limit: 1 })),
+      )
+      expect(forged).toEqual({ offset: 2, limit: 1, metadata: {} })
+      yield* fs.writeFileString(file, "x".repeat(8193) + "\nsecond line")
+      const oversized = yield* open(1)
+      if (oversized.receipt.state.status !== "completed") throw new Error("Expected completed oversized preview")
+      expect(oversized.receipt.state.metadata.truncated).toBe(true)
+      expect(oversized.receipt.state.metadata.rayaDirectRead).toBeUndefined()
+      expect(yield* DirectRead.finish(sessions, oversized.chat.id, oversized.owner.id)).toBe(false)
+      yield* fs.writeFileString(file, "First line.\nSecond line.\n")
       const altered = yield* open()
       yield* fs.writeFileString(file, "Changed after the full native Read.\n")
       expect(yield* DirectRead.finish(sessions, altered.chat.id, altered.owner.id)).toBe(false)

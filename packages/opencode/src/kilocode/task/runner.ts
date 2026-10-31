@@ -2365,13 +2365,13 @@ export namespace RayaTaskRunner {
             Effect.catch((err) =>
               Effect.gen(function* () {
                 const current = yield* goals.get(sessionID)
-                if (!current) return yield* Effect.fail(err)
+                if (!current || !goal.dispatch?.messageID) return yield* Effect.fail(err)
                 const rows = yield* input.sessions.messages({ sessionID })
                 const graph = yield* collect(
                   input.sessions,
                   sessionID,
                   goal.createdAt,
-                  [...new Set([...(goal.inputs ?? []), goal.dispatch.messageID!])],
+                  [...new Set([...(goal.inputs ?? []), goal.dispatch.messageID])],
                   rows,
                 )
                 if (!Accounting.closing(goal, current, sessionID, closed.messageID!, rows, graph))

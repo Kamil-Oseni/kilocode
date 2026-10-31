@@ -23361,6 +23361,13 @@ export type KilocodeGoalGetResponses = {
               path: string
               literals: Array<string>
             }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
         required?: boolean
         review?: boolean
       }>
@@ -23548,6 +23555,13 @@ export type KilocodeGoalGetResponses = {
             kind: "file-content"
             path: string
             literals: Array<string>
+          }
+        | {
+            kind: "source-read"
+            path: string
+            canonical: string
+            sha256: string
+            bytes: number
           }
       required?: boolean
       review?: boolean
@@ -23776,6 +23790,13 @@ export type KilocodeGoalGetResponses = {
                 path: string
                 literals: Array<string>
               }
+            | {
+                kind: "source-read"
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
           required?: boolean
           review?: boolean
         }>
@@ -23986,6 +24007,13 @@ export type KilocodeGoalGetResponses = {
               path: string
               literals: Array<string>
             }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
         required?: boolean
         review?: boolean
       }>
@@ -24073,6 +24101,13 @@ export type KilocodeGoalUpdateData = {
             kind: "file-content"
             path: string
             literals: Array<string>
+          }
+        | {
+            kind: "source-read"
+            path: string
+            canonical: string
+            sha256: string
+            bytes: number
           }
       required?: boolean
       review?: boolean
@@ -24216,6 +24251,13 @@ export type KilocodeGoalUpdateResponses = {
               path: string
               literals: Array<string>
             }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
         required?: boolean
         review?: boolean
       }>
@@ -24403,6 +24445,13 @@ export type KilocodeGoalUpdateResponses = {
             kind: "file-content"
             path: string
             literals: Array<string>
+          }
+        | {
+            kind: "source-read"
+            path: string
+            canonical: string
+            sha256: string
+            bytes: number
           }
       required?: boolean
       review?: boolean
@@ -24631,6 +24680,13 @@ export type KilocodeGoalUpdateResponses = {
                 path: string
                 literals: Array<string>
               }
+            | {
+                kind: "source-read"
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
           required?: boolean
           review?: boolean
         }>
@@ -24840,6 +24896,13 @@ export type KilocodeGoalUpdateResponses = {
               kind: "file-content"
               path: string
               literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
             }
         required?: boolean
         review?: boolean
@@ -25033,6 +25096,13 @@ export type KilocodeGoalCreateResponses = {
               path: string
               literals: Array<string>
             }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
         required?: boolean
         review?: boolean
       }>
@@ -25220,6 +25290,13 @@ export type KilocodeGoalCreateResponses = {
             kind: "file-content"
             path: string
             literals: Array<string>
+          }
+        | {
+            kind: "source-read"
+            path: string
+            canonical: string
+            sha256: string
+            bytes: number
           }
       required?: boolean
       review?: boolean
@@ -25448,6 +25525,13 @@ export type KilocodeGoalCreateResponses = {
                 path: string
                 literals: Array<string>
               }
+            | {
+                kind: "source-read"
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
           required?: boolean
           review?: boolean
         }>
@@ -25657,6 +25741,13 @@ export type KilocodeGoalCreateResponses = {
               kind: "file-content"
               path: string
               literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
             }
         required?: boolean
         review?: boolean
@@ -26624,11 +26715,19 @@ export type KilocodeRoutineListResponses = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       final?: {
         kind: "file"
@@ -26715,11 +26814,19 @@ export type KilocodeRoutineCreateData = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       final?: {
         kind: "file"
@@ -26807,11 +26914,19 @@ export type KilocodeRoutineCreateResponses = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       final?: {
         kind: "file"
@@ -27075,11 +27190,19 @@ export type KilocodeRoutineArchiveResponses = {
             id: string
             description: string
             verification: string
-            check?: {
-              kind: "file-content"
-              path: string
-              literals: Array<string>
-            }
+            check?:
+              | {
+                  kind: "file-content"
+                  path: string
+                  literals: Array<string>
+                }
+              | {
+                  kind: "source-read"
+                  path: string
+                  canonical: string
+                  sha256: string
+                  bytes: number
+                }
           }>
           final?: {
             kind: "file"
@@ -27203,11 +27326,19 @@ export type KilocodeRoutineUpdateData = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       final?: {
         kind: "file"
@@ -27279,11 +27410,19 @@ export type KilocodeRoutineUpdateData = {
             id: string
             description: string
             verification: string
-            check?: {
-              kind: "file-content"
-              path: string
-              literals: Array<string>
-            }
+            check?:
+              | {
+                  kind: "file-content"
+                  path: string
+                  literals: Array<string>
+                }
+              | {
+                  kind: "source-read"
+                  path: string
+                  canonical: string
+                  sha256: string
+                  bytes: number
+                }
           }>
           final?: {
             kind: "file"
@@ -27355,11 +27494,19 @@ export type KilocodeRoutineUpdateResponses = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       final?: {
         kind: "file"
@@ -27479,11 +27626,19 @@ export type KilocodeRoutineAuthorityResponses = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       final?: {
         kind: "file"
@@ -27690,7 +27845,7 @@ export type KilocodeRoutineRunResponses = {
           verification?: string
           required: boolean
           passed: boolean
-          basis?: "model-audit" | "command" | "byte-equality" | "file-content"
+          basis?: "model-audit" | "command" | "byte-equality" | "file-content" | "source-read"
           evidence: Array<string>
         }>
       }
@@ -27872,7 +28027,7 @@ export type KilocodeRoutineRunsResponses = {
           verification?: string
           required: boolean
           passed: boolean
-          basis?: "model-audit" | "command" | "byte-equality" | "file-content"
+          basis?: "model-audit" | "command" | "byte-equality" | "file-content" | "source-read"
           evidence: Array<string>
         }>
       }
@@ -28015,7 +28170,7 @@ export type KilocodeRoutineEventsResponses = {
             verification?: string
             required: boolean
             passed: boolean
-            basis?: "model-audit" | "command" | "byte-equality" | "file-content"
+            basis?: "model-audit" | "command" | "byte-equality" | "file-content" | "source-read"
             evidence: Array<string>
           }>
         }
@@ -28184,7 +28339,7 @@ export type KilocodeRoutineHistoriesResponses = {
               verification?: string
               required: boolean
               passed: boolean
-              basis?: "model-audit" | "command" | "byte-equality" | "file-content"
+              basis?: "model-audit" | "command" | "byte-equality" | "file-content" | "source-read"
               evidence: Array<string>
             }>
           }
@@ -28249,11 +28404,19 @@ export type KilocodeRoutineSnapshotResponses = {
           id: string
           description: string
           verification: string
-          check?: {
-            kind: "file-content"
-            path: string
-            literals: Array<string>
-          }
+          check?:
+            | {
+                kind: "file-content"
+                path: string
+                literals: Array<string>
+              }
+            | {
+                kind: "source-read"
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
         }>
         final?: {
           kind: "file"
@@ -28995,7 +29158,7 @@ export type KilocodeRoutineEventResponses = {
           verification?: string
           required: boolean
           passed: boolean
-          basis?: "model-audit" | "command" | "byte-equality" | "file-content"
+          basis?: "model-audit" | "command" | "byte-equality" | "file-content" | "source-read"
           evidence: Array<string>
         }>
       }
@@ -29512,11 +29675,19 @@ export type KilocodeRoutineDelegateCreateData = {
       id: string
       description: string
       verification: string
-      check?: {
-        kind: "file-content"
-        path: string
-        literals: Array<string>
-      }
+      check?:
+        | {
+            kind: "file-content"
+            path: string
+            literals: Array<string>
+          }
+        | {
+            kind: "source-read"
+            path: string
+            canonical: string
+            sha256: string
+            bytes: number
+          }
     }>
     outputs?: Array<string>
     context?: string
@@ -29584,11 +29755,19 @@ export type KilocodeRoutineDelegateCreateResponses = {
       id: string
       description: string
       verification: string
-      check?: {
-        kind: "file-content"
-        path: string
-        literals: Array<string>
-      }
+      check?:
+        | {
+            kind: "file-content"
+            path: string
+            literals: Array<string>
+          }
+        | {
+            kind: "source-read"
+            path: string
+            canonical: string
+            sha256: string
+            bytes: number
+          }
     }>
     outputs?: Array<string>
     context?: string
@@ -29666,11 +29845,19 @@ export type KilocodeRoutineDelegateGetResponses = {
       id: string
       description: string
       verification: string
-      check?: {
-        kind: "file-content"
-        path: string
-        literals: Array<string>
-      }
+      check?:
+        | {
+            kind: "file-content"
+            path: string
+            literals: Array<string>
+          }
+        | {
+            kind: "source-read"
+            path: string
+            canonical: string
+            sha256: string
+            bytes: number
+          }
     }>
     outputs?: Array<string>
     context?: string
@@ -29750,11 +29937,19 @@ export type KilocodeRoutineDelegateChainResponses = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       outputs?: Array<string>
       context?: string
@@ -29797,11 +29992,19 @@ export type KilocodeRoutineDelegateChainResponses = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       outputs?: Array<string>
       context?: string
@@ -29844,11 +30047,19 @@ export type KilocodeRoutineDelegateChainResponses = {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       outputs?: Array<string>
       context?: string
@@ -29928,11 +30139,19 @@ export type KilocodeRoutineDelegateCancelResponses = {
       id: string
       description: string
       verification: string
-      check?: {
-        kind: "file-content"
-        path: string
-        literals: Array<string>
-      }
+      check?:
+        | {
+            kind: "file-content"
+            path: string
+            literals: Array<string>
+          }
+        | {
+            kind: "source-read"
+            path: string
+            canonical: string
+            sha256: string
+            bytes: number
+          }
     }>
     outputs?: Array<string>
     context?: string

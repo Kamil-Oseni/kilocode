@@ -9492,6 +9492,13 @@ export class Goal extends HeyApiClient {
               path: string
               literals: Array<string>
             }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
         required?: boolean
         review?: boolean
       }>
@@ -10548,11 +10555,19 @@ export class Delegate extends HeyApiClient {
         id: string
         description: string
         verification: string
-        check?: {
-          kind: "file-content"
-          path: string
-          literals: Array<string>
-        }
+        check?:
+          | {
+              kind: "file-content"
+              path: string
+              literals: Array<string>
+            }
+          | {
+              kind: "source-read"
+              path: string
+              canonical: string
+              sha256: string
+              bytes: number
+            }
       }>
       outputs?: Array<string>
       context?: string
@@ -10842,11 +10857,19 @@ export class Routine extends HeyApiClient {
           id: string
           description: string
           verification: string
-          check?: {
-            kind: "file-content"
-            path: string
-            literals: Array<string>
-          }
+          check?:
+            | {
+                kind: "file-content"
+                path: string
+                literals: Array<string>
+              }
+            | {
+                kind: "source-read"
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
         }>
         final?: {
           kind: "file"
@@ -11155,11 +11178,19 @@ export class Routine extends HeyApiClient {
           id: string
           description: string
           verification: string
-          check?: {
-            kind: "file-content"
-            path: string
-            literals: Array<string>
-          }
+          check?:
+            | {
+                kind: "file-content"
+                path: string
+                literals: Array<string>
+              }
+            | {
+                kind: "source-read"
+                path: string
+                canonical: string
+                sha256: string
+                bytes: number
+              }
         }>
         final?: {
           kind: "file"
@@ -11231,11 +11262,19 @@ export class Routine extends HeyApiClient {
               id: string
               description: string
               verification: string
-              check?: {
-                kind: "file-content"
-                path: string
-                literals: Array<string>
-              }
+              check?:
+                | {
+                    kind: "file-content"
+                    path: string
+                    literals: Array<string>
+                  }
+                | {
+                    kind: "source-read"
+                    path: string
+                    canonical: string
+                    sha256: string
+                    bytes: number
+                  }
             }>
             final?: {
               kind: "file"

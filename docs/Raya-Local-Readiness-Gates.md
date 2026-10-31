@@ -1,3 +1,11 @@
+October 31, 2026 -- Compact installed admission failed; combined source guards await validation
+
+The compact retry on installed `e6b6cbf9d3`, owner `normal-service-e5f13c6e-a441-4151-b51e-c619d86995c1`, admitted a legacy request without the required typed contract and with an invented budget despite the owner's explicit top-level omission instruction. The sole added native Run was stopped; its Stop receipt reports interrupted=true. All nine definitions and the prior 88 Run/event objects remain unchanged, bringing the total to 89. This trial earns no business-workflow or semantic acceptance.
+
+Two source guard fixes address the admission gap: explicit top-level slash-separated context/budget/deadline omissions are recognized, and the native contract boundary rejects the unsupported legacy shape for the requested staged workflow. The omission parser's focused regression failed before the fix; its full existing file now passes five tests/119 assertions with clean scoped lint. Direct-read acknowledgement and instruction-priority fixes are also source-only. The combined CLI typecheck passed in 47.625 seconds with natural owned-family closure; these changes await combined build and installed validation; the current installed delivery remains the e6 producer recorded below.
+
+Broad components remain **3/9 (33.3%)**, overall readiness **unmeasured**. Earlier057 engine,687 live Stop/cold and e6 GET-only preservation proofs retain their original scope. Business acceptance remains pending; voice remains deferred.
+
 October 31, 2026 -- Installed Routine routing and question Stop fixes
 
 Installed source `e6b6cbf9d3`, version `7.4.23-snapshot+e6b6cbf9d3.local.1793462671808`. Delivery `.tmp/new-pc/worker-e6b6cbf9d3-delivery-qualified.json`, SHA-256 `7c2f87030a1b24987720083b3052ecd64556db170fe3d4c05ec0ba55ec587217`, preserved 7,056 saved files and unrelated registrations. Stock target exited zero in 153.375 seconds; forced owned descendant cleanup/wrapper exit one remain separately recorded. Before/after checks passed in 48.235/6.937 seconds, official installation exited zero, and SDK regeneration produced no delta.

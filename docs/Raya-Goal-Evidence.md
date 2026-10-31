@@ -80,6 +80,8 @@ Every goal save now assigns an opaque revision. A writer must still be based on 
 
 Expiry cleanup acquires the same gate and rereads each candidate before deletion. It removes the record only if it still matches the inspected expired state. This does not make the separate routine-reference scan and goal deletion one transaction.
 
+Each Goal service performs opportunistic namespace cleanup at most once per minute after a successful scan. Concurrent reads do not wait for another cleanup scan; they still read and validate their requested record. A requested expired record gets its own fresh routine-reference check between sweeps, so retention references and malformed-reference deferral remain effective immediately. Failed or interrupted scans release the guard for a later retry. Wall-clock and monotonic elapsed time both bound the interval, and expiry is rechecked under the mutation gate before deletion. Unrequested orphan cleanup may wait until the next read after the minute elapses.
+
 The gate reuses the existing claim and stopped-owner recovery protocol in a distinct goal namespace. Flattened hashed keys avoid nesting long hashes on Windows. A live owner is not stolen because it is slow; an unavailable gate produces a bounded busy error. A subsequent operation can recover a stopped writer's gate without replaying the old operation. This protocol applies to cooperating current backends, not older binaries or direct filesystem writes that ignore it.
 
 Legacy records without revisions acquire one on their next save. Existing records are not rewritten merely by reading them. A stale operation must reread the current goal and reassess its work; this is not permission to replay an old completion audit.

@@ -6,6 +6,7 @@ import { writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -55,7 +56,10 @@ const guide = testEffect(
 const paging = testEffect(
   LayerNode.compile(
     LayerNode.group([Storage.node, FSUtil.node, CrossSpawnSpawner.node, Git.node, Agent.node, Truncate.node]),
-    [[Database.node, database], [Storage.node, storage]],
+    [
+      [Database.node, database],
+      [Storage.node, storage],
+    ],
   ),
 )
 
@@ -5635,6 +5639,116 @@ describe("RayaGoal", () => {
       const exit = yield* interrupted.get(good).pipe(Effect.exit)
       expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true)
       expect(yield* storage.read(["raya", "goal", good])).toEqual(state)
+    }),
+  )
+
+  it.effect("goal cleanup bounds namespace scans while directly validating requested records", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      let scans = 0
+      const counted = {
+        ...storage,
+        list: (key: string[]) =>
+          Effect.gen(function* () {
+            if (key.join("/") === "raya/goal") scans++
+            return yield* storage.list(key)
+          }),
+      }
+      const goals = setup(counted, () => [])
+      const good = SessionID.make(`ses_cleanup_${crypto.randomUUID()}`)
+      const orphan = SessionID.make(`ses_cleanup_${crypto.randomUUID()}`)
+      const requested = SessionID.make(`ses_cleanup_${crypto.randomUUID()}`)
+      const now = Date.now()
+      yield* TestClock.setTime(now)
+      const state = {
+        objective: "Cleanup fixture",
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 0, continuations: 0, toolCalls: 0 },
+        progress: [],
+      }
+      yield* Effect.addFinalizer(() =>
+        Effect.forEach([good, orphan, requested], (id) => goals.clear(id), { discard: true }),
+      )
+      yield* storage.write(["raya", "goal", good], state)
+      for (const _ of Array.from({ length: 20 })) expect((yield* goals.get(good))?.status).toBe("active")
+      expect(scans).toBe(1)
+      const expired = { ...state, status: "complete", updatedAt: now - 31 * 24 * 60 * 60 * 1000 }
+      yield* storage.write(["raya", "goal", orphan], expired)
+      yield* storage.write(["raya", "goal", requested], expired)
+      expect(yield* goals.get(requested)).toBeUndefined()
+      expect(scans).toBe(1)
+      yield* TestClock.adjust(59_999)
+      yield* goals.get(good)
+      expect(scans).toBe(1)
+      expect(yield* storage.read(["raya", "goal", orphan])).toEqual(expired)
+      yield* TestClock.adjust(1)
+      yield* goals.get(good)
+      expect(scans).toBe(2)
+      expect((yield* storage.list(["raya", "goal"])).some((key) => key.at(-1) === orphan)).toBe(false)
+      yield* TestClock.setTime(now - 1)
+      yield* goals.get(good)
+      expect(scans).toBe(3)
+      yield* TestClock.setTime(now + 120_000)
+      yield* goals.get(good)
+      expect(scans).toBe(4)
+      yield* storage.replace(["raya", "goal", good], { malformed: true })
+      expect(Exit.isFailure(yield* goals.get(good).pipe(Effect.exit))).toBe(true)
+      expect(scans).toBe(4)
+    }),
+  )
+
+  it.effect("goal cleanup releases its scan guard after interruption and storage failure", () =>
+    Effect.gen(function* () {
+      const storage = yield* Storage.Service
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let mode = "hold"
+      let scans = 0
+      const counted = {
+        ...storage,
+        list: (key: string[]) =>
+          Effect.gen(function* () {
+            if (key.join("/") === "raya/goal") {
+              scans++
+              if (mode === "hold") {
+                yield* Deferred.succeed(entered, undefined)
+                yield* Deferred.await(release)
+              }
+              if (mode === "fail") yield* Effect.die("Cleanup scan unavailable")
+            }
+            return yield* storage.list(key)
+          }),
+      }
+      const goals = setup(counted, () => [])
+      const id = SessionID.make(`ses_cleanup_${crypto.randomUUID()}`)
+      const now = Date.now()
+      yield* TestClock.setTime(now)
+      yield* Effect.addFinalizer(() => goals.clear(id))
+      yield* storage.write(["raya", "goal", id], {
+        objective: "Direct read remains available",
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        usage: { turns: 0, continuations: 0, toolCalls: 0 },
+        progress: [],
+      })
+      const pending = yield* goals.get(id).pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+      expect((yield* goals.get(id))?.status).toBe("active")
+      expect(scans).toBe(1)
+      yield* Fiber.interrupt(pending)
+      const stopped = yield* Fiber.await(pending)
+      expect(Exit.isFailure(stopped) && Cause.hasInterrupts(stopped.cause)).toBe(true)
+      mode = "fail"
+      expect((yield* goals.get(id))?.status).toBe("active")
+      expect(scans).toBe(2)
+      mode = "ready"
+      expect((yield* goals.get(id))?.status).toBe("active")
+      expect(scans).toBe(3)
+      expect((yield* goals.get(id))?.status).toBe("active")
+      expect(scans).toBe(3)
     }),
   )
 

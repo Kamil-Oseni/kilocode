@@ -1,7 +1,7 @@
 import { Codec } from "./schema"
 import { replayed as replay, usage as summarized } from "./compaction-lineage"
 // raya_change - Milestone A durable native goal state and evidence audit
-import { Cause, Effect, Fiber, Schema } from "effect"
+import { Cause, Clock, Effect, Fiber, Schema } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Storage } from "@/storage/storage"
@@ -170,6 +170,7 @@ export namespace RayaGoal {
   const clean = (value: string) => value.trim()
   const progress = (state: State, item: Progress): Progress[] => [...state.progress, item].slice(-30)
   const retention = 30 * 24 * 60 * 60 * 1000 // Unreferenced completed goals expire after one month.
+  const cadence = 60_000
   const elapsed = (state: State, now: number) =>
     (state.activeMs ?? 0) + (state.status === "active" ? Math.max(0, now - (state.activeAt ?? state.updatedAt)) : 0)
   const emptyBudget = (value: Budget | undefined) =>
@@ -288,7 +289,33 @@ export namespace RayaGoal {
       return yield* ownership(sessionID, state.selfHealID, state.selfHealAttempt)
     })
 
-    const prune = Effect.fn("RayaGoal.prune")(function* () {
+    const expired = (state: State, now: number) => state.status === "complete" && state.updatedAt < now - retention
+    const expire = Effect.fn("RayaGoal.expire")(function* (rows: readonly { path: string[]; state: State }[]) {
+      if (!rows.length) return
+      const retained = yield* references(deps.storage)
+      if (!retained) return
+      yield* Effect.forEach(
+        rows.filter((row) => !retained.has(row.path.at(-1)!)),
+        (row) =>
+          mutation(
+            deps.storage,
+            row.path.at(-1)!,
+            Effect.gen(function* () {
+              const current = yield* deps.storage.read(row.path).pipe(
+                Effect.catchIf(
+                  (err) => Storage.NotFoundError.isInstance(err),
+                  () => Effect.succeed(undefined),
+                ),
+                Effect.orDie,
+              )
+              if (isDeepStrictEqual(current, row.state) && expired(row.state, yield* Clock.currentTimeMillis))
+                yield* deps.storage.remove(row.path).pipe(Effect.orDie)
+            }),
+          ),
+        { discard: true },
+      )
+    })
+    const sweep = Effect.fn("RayaGoal.sweep")(function* () {
       const keys = yield* deps.storage.list(["raya", "goal"]).pipe(Effect.orDie)
       const rows = yield* Effect.forEach(keys, (path) =>
         deps.storage.read<unknown>(path).pipe(
@@ -305,32 +332,40 @@ export namespace RayaGoal {
           Effect.orDie,
         ),
       )
-      const expired = rows
-        .filter((row) => row !== undefined)
-        .filter((row) => row.state.status === "complete" && row.state.updatedAt < Date.now() - retention)
-      if (!expired.length) return
-      const retained = yield* references(deps.storage)
-      if (!retained) return
-      yield* Effect.forEach(
-        expired.filter((row) => !retained.has(row.path.at(-1)!)),
-        (row) =>
-          mutation(
-            deps.storage,
-            row.path.at(-1)!,
-            Effect.gen(function* () {
-              const current = yield* deps.storage.read(row.path).pipe(
-                Effect.catchIf(
-                  (err) => Storage.NotFoundError.isInstance(err),
-                  () => Effect.succeed(undefined),
-                ),
-                Effect.orDie,
-              )
-              if (isDeepStrictEqual(current, row.state)) yield* deps.storage.remove(row.path).pipe(Effect.orDie)
-            }),
-          ),
-        { discard: true },
+      const now = yield* Clock.currentTimeMillis
+      yield* expire(rows.filter((row) => row !== undefined).filter((row) => expired(row.state, now)))
+    })
+    const cleanup: { busy: boolean; at?: number; tick?: bigint } = { busy: false }
+    const prune = Effect.fn("RayaGoal.prune")(function* () {
+      const now = yield* Clock.currentTimeMillis
+      const tick = yield* Clock.currentTimeNanos
+      if (
+        cleanup.busy ||
+        (cleanup.at !== undefined &&
+          cleanup.tick !== undefined &&
+          now >= cleanup.at &&
+          now - cleanup.at < cadence &&
+          tick >= cleanup.tick &&
+          tick - cleanup.tick < BigInt(cadence) * 1_000_000n)
       )
-    }) // raya_change - sweep orphaned completed goals whenever goal state is read
+        return
+      cleanup.busy = true
+      yield* sweep().pipe(
+        Effect.tap(() =>
+          Effect.gen(function* () {
+            const at = yield* Clock.currentTimeMillis
+            const tick = yield* Clock.currentTimeNanos
+            cleanup.at = at
+            cleanup.tick = tick
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            cleanup.busy = false
+          }),
+        ),
+      )
+    }) // Opportunistic namespace cleanup; requested expired records are still checked directly.
 
     const get = Effect.fn("RayaGoal.get")(function* (sessionID: SessionID) {
       yield* prune().pipe(
@@ -345,7 +380,20 @@ export namespace RayaGoal {
         Effect.orDie,
       )
       if (raw === undefined) return undefined
-      return yield* decode(raw).pipe(Effect.orDie)
+      const state = yield* decode(raw).pipe(Effect.orDie)
+      if (!expired(state, yield* Clock.currentTimeMillis)) return state
+      yield* expire([{ path: key(sessionID), state }]).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.failCause(cause)
+            : Effect.sync(() => log.warn("Goal cleanup deferred; reading the requested goal directly.")),
+        ),
+      )
+      const current = yield* deps.storage.read<unknown>(key(sessionID)).pipe(
+        Effect.catchIf(Storage.NotFoundError.isInstance, () => Effect.succeed(undefined)),
+        Effect.orDie,
+      )
+      return current === undefined ? undefined : yield* decode(current).pipe(Effect.orDie)
     })
 
     const requireGoal = Effect.fn("RayaGoal.require")(function* (sessionID: SessionID) {

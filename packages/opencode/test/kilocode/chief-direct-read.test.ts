@@ -233,7 +233,7 @@ it.instance(
       expect(ordinary.output).not.toContain('<system-reminder source="raya-direct-read">')
 
       yield* fs.writeFileString(file, "First line.\nSecond line.\n")
-      const open = (limit?: number, suffix = "", offset?: number) =>
+      const open = (limit?: number, suffix = "", offset?: number, denial = false) =>
         Effect.gen(function* () {
           const request = `Read "${file}". Read-only. Do not start any workers.${suffix}`
           const chat = yield* sessions.create({
@@ -262,6 +262,25 @@ it.instance(
             time: { created: Date.now() },
           })
           const call = { ...ctx, sessionID: chat.id, messageID: worker.id, callID: crypto.randomUUID() }
+          const denied = denial
+            ? yield* Effect.gen(function* () {
+                const input = { filePath: other }
+                const id = crypto.randomUUID()
+                const failed = yield* Effect.exit(reader.execute(input, { ...call, callID: id }))
+                if (!Exit.isFailure(failed)) throw new Error("Expected native single-file scope refusal")
+                const error = String(Cause.squash(failed.cause)).replace(/^Error: /, "")
+                expect(error).toBe("Read only the single file named by the current owner.")
+                return yield* sessions.updatePart({
+                  id: PartID.ascending(),
+                  messageID: worker.id,
+                  sessionID: chat.id,
+                  type: "tool",
+                  tool: "read",
+                  callID: id,
+                  state: { status: "error", input, error, time: { start: Date.now(), end: Date.now() } },
+                })
+              })
+            : undefined
           const input = {
             filePath: file,
             ...(limit === undefined ? {} : { limit }),
@@ -289,7 +308,7 @@ it.instance(
             finish: "tool-calls",
             time: { ...worker.time, completed: Date.now() },
           })
-          return { chat, owner, sealed, receipt }
+          return { chat, owner, sealed, receipt, denied }
         })
       const pure = yield* open()
       expect(yield* DirectRead.finish(sessions, pure.chat.id, pure.owner.id)).toBe(true)
@@ -309,6 +328,30 @@ it.instance(
       expect(after.flatMap((row) => row.parts).find((part) => part.id === pure.receipt.id)).toEqual(pure.receipt)
       const native = after.find((row) => row.parts.some((part) => part.id === acknowledgements[0]?.id))!
       expect(native.info).toMatchObject({ role: "assistant", finish: "stop", cost: 0, tokens: { input: 0, output: 0 } })
+      const recovered = yield* open(undefined, "", undefined, true)
+      expect(yield* DirectRead.finish(sessions, recovered.chat.id, recovered.owner.id)).toBe(true)
+      const recovery = yield* sessions.messages({ sessionID: recovered.chat.id })
+      expect(recovery.flatMap((row) => row.parts).filter((part) => part.type === "tool")).toHaveLength(2)
+      expect(recovery.filter((row) => row.info.role === "assistant")).toHaveLength(2)
+      expect(recovery.flatMap((row) => row.parts).find((part) => part.id === recovered.denied?.id)).toEqual(
+        recovered.denied,
+      )
+      expect(recovery.flatMap((row) => row.parts).find((part) => part.id === recovered.receipt.id)).toEqual(
+        recovered.receipt,
+      )
+      expect(yield* sessions.children(recovered.chat.id)).toEqual([])
+      if (!recovered.denied || recovered.denied.state.status !== "error") throw new Error("Expected refused Read")
+      yield* sessions.updatePart({ ...recovered.denied, callID: crypto.randomUUID() })
+      expect(yield* DirectRead.finish(sessions, recovered.chat.id, recovered.owner.id)).toBe(false)
+      yield* sessions.updatePart({
+        ...recovered.denied,
+        state: { ...recovered.denied.state, error: "Read permission denied" },
+      })
+      expect(yield* DirectRead.finish(sessions, recovered.chat.id, recovered.owner.id)).toBe(false)
+      yield* sessions.updatePart({ ...recovered.denied, tool: "write" })
+      expect(yield* DirectRead.finish(sessions, recovered.chat.id, recovered.owner.id)).toBe(false)
+      yield* sessions.updatePart(recovered.denied)
+      expect(yield* DirectRead.finish(sessions, recovered.chat.id, recovered.owner.id)).toBe(true)
       yield* sessions.updatePart({ ...pure.sealed, text: pure.sealed.text + " Changed owner." })
       expect(yield* DirectRead.finish(sessions, pure.chat.id, pure.owner.id)).toBe(false)
       const summary = yield* open(undefined, " Summarize the content.")

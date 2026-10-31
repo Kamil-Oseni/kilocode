@@ -20,6 +20,9 @@ import { gate } from "../session/input-gate"
 const log = Log.create({ service: "raya-direct-read" })
 const digest = (text: string) => createHash("sha256").update(text).digest("hex")
 const whole = new WeakSet<Effect.Effect<void, unknown>>()
+const scope = "Read only the single file named by the current owner."
+const denials = new Map<string, { user: string; owner: string; file: string }>()
+const identity = (session: string, message: string, call: string) => JSON.stringify([session, message, call])
 
 /** Select a complete bounded text read only for the exact authenticated whole-file owner. */
 export function range(
@@ -88,8 +91,13 @@ export const guard = Effect.fn("DirectRead.guard")(function* (
   if (!target) return undefined
   const hash = digest(text)
   const key = process.platform === "win32" ? path.normalize(file).toLowerCase() : path.normalize(file)
-  if (!path.isAbsolute(file) || key !== target)
-    return yield* Effect.fail(new Refusal("chief-work-class", "Read only the single file named by the current owner."))
+  if (!path.isAbsolute(file) || key !== target) {
+    if (ctx.callID) {
+      denials.set(identity(ctx.sessionID, ctx.messageID, ctx.callID), { user: parent, owner: hash, file: key })
+      if (denials.size > 256) denials.delete(denials.keys().next().value!)
+    }
+    return yield* Effect.fail(new Refusal("chief-work-class", scope))
+  }
   const verify = Effect.gen(function* () {
     const current = yield* sessions.get(ctx.sessionID)
     const messages = yield* sessions.messages({ sessionID: ctx.sessionID })
@@ -141,7 +149,14 @@ function acknowledgement(request: string) {
   return inspectionFile(request)
 }
 
-function observed(rows: readonly MessageV2.WithParts[], sessionID: SessionID, userID: MessageID, target: string) {
+function observed(
+  rows: readonly MessageV2.WithParts[],
+  session: Session.Info,
+  userID: MessageID,
+  target: string,
+  owner: string,
+) {
+  const sessionID = session.id
   const messages = rows.filter(
     (row) => row.info.role === "assistant" && row.info.parentID === userID && row.info.sessionID === sessionID,
   )
@@ -151,7 +166,33 @@ function observed(rows: readonly MessageV2.WithParts[], sessionID: SessionID, us
     )
   )
     return undefined
-  const parts = messages.flatMap((row) => row.parts.filter((part) => part.type === "tool"))
+  const parts = []
+  for (const row of messages) {
+    for (const part of row.parts) {
+      if (part.type !== "tool") continue
+      if (part.state.status !== "error") {
+        parts.push(part)
+        continue
+      }
+      const proof = denials.get(identity(sessionID, row.info.id, part.callID))
+      if (
+        row.info.role !== "assistant" ||
+        row.info.agent !== "auto" ||
+        row.info.error ||
+        row.info.summary ||
+        part.tool !== "read" ||
+        part.sessionID !== sessionID ||
+        part.messageID !== row.info.id ||
+        part.state.error !== scope ||
+        typeof part.state.input.filePath !== "string" ||
+        proof?.user !== userID ||
+        proof.owner !== owner ||
+        proof.file !== normalize(path.resolve(session.directory, part.state.input.filePath)) ||
+        proof.file === target
+      )
+        return undefined
+    }
+  }
   if (parts.length !== 1) return undefined
   const part = parts[0]
   if (part?.type !== "tool" || part.tool !== "read" || part.state.status !== "completed") return undefined
@@ -197,7 +238,7 @@ function current(rows: readonly MessageV2.WithParts[], session: Session.Info, us
   const text = owner.trim()
   const target = acknowledgement(text)
   if (!target || session.metadata?.["raya.chief.request"] !== text) return undefined
-  const read = observed(rows, session.id, userID, target)
+  const read = observed(rows, session, userID, target, digest(text))
   return read ? { ...read, userID, target, ownerSHA256: digest(owner) } : undefined
 }
 

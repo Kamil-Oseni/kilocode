@@ -756,7 +756,7 @@ expiry.live("goal expiry preserves routine references and defers cleanup when th
         sessionID: sid,
         at: old,
         status: "complete",
-        outcome: { kind: "notify", summary: "Verified report" },
+        outcome: { kind: "notify", summary: "Verified report", cost: 0 },
       })
       yield* storage.replace(["raya", "goal", sid], goal)
       expect((yield* goals.get(sid))?.status).toBe("complete")

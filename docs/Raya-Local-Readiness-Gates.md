@@ -73,7 +73,7 @@ Current gate summary for the installed build; earlier dated entries retain their
 | Gate | Status | Evidence or remaining work |
 |---|---|---|
 | Audited combined candidate | Verified for installed 687d85f28f | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
-| Normal installation preservation | Verified for installed 687d85f28f | Preserved 6,925 saved files and unrelated registrations; populated backend GET-only upgrade preserved chat, routines and old Goals. Loaded UI recovery remains separate. |
+| Normal installation preservation | Verified for installed 687d85f28f | Preserved 6,925 saved files and unrelated registrations; earlier a19 populated backend GET-only upgrade proof retained. Loaded UI recovery remains separate. |
 | Installed local General/tool turn | Pending | Installed 1e18 backend conversation-only recall passed; a19 GET-only upgrade preserved the conversation. Recall passed with no new tools, children, Goals or Routine admissions and unchanged old messages. Loaded UI/drafts/model, large-chat behavior and loaded reopen remain pending. |
 | Strict installed Coder | Verified component on ead06c59b8 | Earlier local Code9B edit/native tests/final result retained without another model run. |
 | Installed Voice and permitted HA flow | Deferred by user | Voice is secondary; Home Assistant remains off. |

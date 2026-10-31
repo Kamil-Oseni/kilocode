@@ -135,6 +135,11 @@ it.instance(
       expect(read.output).toContain("Outreach was not sent")
       expect(read.output).toContain('<system-reminder source="raya-direct-read">')
       expect(read.output).toContain("it did not start workers")
+      expect(read.output).toContain("If the owner asked only to read the file, reply with one short sentence")
+      expect(read.output).toContain("qualified if partial or truncated")
+      expect(read.output).toContain("Do not add dates, timestamps, lists, plan interpretations")
+      expect(read.output).toContain("If the owner explicitly requested a summary, review or explanation")
+      expect(read.output).toContain("A declared future output establishes neither its current existence nor its absence.")
       expect(read.output).toContain("Do not promise to execute the plan.")
       expect(read.output).toContain("</file-content-json>")
       expect(read.output.indexOf('<system-reminder source="raya-direct-read">')).toBeGreaterThan(

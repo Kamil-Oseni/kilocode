@@ -4,6 +4,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import type { KiloReadObject } from "@/kilocode/tool/read-object"
 import { scanner } from "./read-format"
 import * as Artifact from "./artifact"
+import * as Extract from "@/kilocode/tool/read-extract"
 
 const Format = Schema.Struct({
   version: Schema.Literal(1),
@@ -148,15 +149,28 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
       display.display?.lineStart === 1 &&
       display.display.lineEnd === display.display.totalLines &&
       display.display.truncated === false &&
-      (display.display.text === lines || display.display.text === lines?.replace(/^\ufeff/, ""))
+      (!Extract.accepts(file.requested) ||
+        display.display.text === lines ||
+        display.display.text === lines?.replace(/^\ufeff/, ""))
     const encoded = complete ? JSON.stringify(text).replace(/</g, "\\u003c") : undefined
     // Every approved raw UTF-8 byte may need a six-byte JSON escape, plus quotes.
     const content = encoded !== undefined && Buffer.byteLength(encoded, "utf8") <= 8192 * 6 + 2 ? encoded : undefined
+    const full =
+      revision.status === "captured" &&
+      format &&
+      format.encoding === "UTF-8" &&
+      format.bytes === revision.bytes &&
+      display.display?.type === "file" &&
+      typeof result.output === "string"
+        ? content
+        : undefined
+    const abbreviated =
+      full !== undefined && display.display?.text !== lines && display.display?.text !== lines?.replace(/^\ufeff/, "")
     const output =
       revision.status === "captured" && format && display.display?.type === "file" && typeof result.output === "string"
         ? {
             ...result,
-            output: `${result.output}\n<file-format encoding="${format.encoding}" bom="${format.bom ? "UTF-8" : "none"}" line-endings="${format.endings}" final-newline="${format.newline}" bytes="${format.bytes}" sha256="${revision.sha256}" />${content !== undefined ? `\n<file-content-json encoding="UTF-8" complete="true" bytes="${format.bytes}" sha256="${revision.sha256}">\n${content}\n</file-content-json>` : ""}`,
+            output: `${result.output}\n<file-format encoding="${format.encoding}" bom="${format.bom ? "UTF-8" : "none"}" line-endings="${format.endings}" final-newline="${format.newline}" bytes="${format.bytes}" sha256="${revision.sha256}" />${full !== undefined ? `${abbreviated ? "\nThe numbered preview is bounded and may abbreviate lines. The complete authorized text is included in file-content-json below." : ""}\n<file-content-json encoding="UTF-8" complete="true" bytes="${format.bytes}" sha256="${revision.sha256}">\n${full}\n</file-content-json>` : ""}`,
           }
         : result
     return {
@@ -165,12 +179,7 @@ export const read = <A extends { metadata: object; output?: string }, E, R>(
         ...result.metadata,
         rayaRevision: revision,
         rayaReadContent:
-          revision.status === "captured" &&
-          format &&
-          format.bytes === revision.bytes &&
-          display.display?.type === "file" &&
-          content !== undefined &&
-          typeof result.output === "string"
+          revision.status === "captured" && full !== undefined
             ? {
                 version: 1 as const,
                 complete: true as const,

@@ -138,7 +138,7 @@ tool.instance(
       const directory = yield* reader.execute({ filePath: instance.directory }, ctx)
       expect(directory.metadata.rayaRevision).toBeUndefined()
       expect(directory.output).not.toContain("<file-format")
-      for (const text of ["x".repeat(3000), "x\n".repeat(4097)]) {
+      for (const text of ["x".repeat(8193), "x\n".repeat(4097)]) {
         yield* fs.writeFileString(file, text)
         const clipped = yield* reader.execute({ filePath: file }, ctx)
         expect(clipped.output).not.toContain("<file-content-json")
@@ -154,7 +154,10 @@ tool.instance(
           nbformat_minor: 5,
         }),
       )
-      expect((yield* reader.execute({ filePath: notebook }, ctx)).output).not.toContain("<file-content-json")
+      const extracted = yield* reader.execute({ filePath: notebook }, ctx)
+      expect(extracted.output).not.toContain("<file-content-json")
+      expect((extracted.metadata as Record<string, unknown>).rayaReadContent).toBeUndefined()
+      expect(yield* whole(extracted.metadata)).toBeUndefined()
       const denied = yield* reader
         .execute({ filePath: file }, { ...ctx, ask: () => Effect.die(new Error("read denied")) })
         .pipe(Effect.exit)
@@ -185,7 +188,7 @@ tool.instance(
       const text = prefix + '"'.repeat(8192 - Buffer.byteLength(prefix))
       expect(Buffer.byteLength(text)).toBe(8192)
       expect(Buffer.byteLength(JSON.stringify(text).replace(/</g, "\\u003c"))).toBeGreaterThan(8192)
-      for (const source of ["", "\ufeff", " \t\r\n", text]) {
+      for (const source of ["", "\ufeff", " \t\r\n", "x".repeat(8192), text]) {
         yield* fs.writeFileString(file, source)
         const result = yield* reader.execute({ filePath: file }, ctx)
         const content = result.output.match(/<file-content-json[^>]*>\n(.*?)\n<\/file-content-json>/s)
@@ -201,7 +204,7 @@ tool.instance(
       const partial = yield* reader.execute({ filePath: file, limit: 1 }, ctx)
       expect(partial.output).not.toContain("<file-content-json")
       expect(yield* whole(partial.metadata)).toBeUndefined()
-      for (const source of [text + '"', "x".repeat(8192), "\n".repeat(8192)]) {
+      for (const source of [text + '"', "\n".repeat(8192)]) {
         yield* fs.writeFileString(file, source)
         const result = yield* reader.execute({ filePath: file }, ctx)
         expect(result.output).not.toContain("<file-content-json")
@@ -231,8 +234,12 @@ tool.instance(
       }
       const literals = ["Builder consumed research.", "[Research](research.md)", "café"]
       const check = { kind: "file-content" as const, path: file, literals }
-      for (const newline of ["\n", "\r\n"]) {
-        const text = ["Header", ...literals].join(newline) + newline
+      const line = "x".repeat(2200) + " " + literals.join(" ")
+      for (const text of [
+        ...["\n", "\r\n"].map((newline) => ["Header", ...literals].join(newline) + newline),
+        line,
+        line + "\nsecond line\n",
+      ]) {
         yield* fs.writeFileString(file, text)
         const result = yield* reader.execute({ filePath: file }, ctx)
         const part = (metadata: Record<string, unknown>): SessionV1.ToolPart => ({
@@ -254,18 +261,36 @@ tool.instance(
         const content = yield* whole(result.metadata)
         expect(content?.text).toBe(text)
         if (!content) throw new Error("Actual complete Read content required")
+        const exact = result.output.match(/<file-content-json[^>]*>\n(.*?)\n<\/file-content-json>/s)
+        expect(exact).not.toBeNull()
+        expect(JSON.parse(exact![1])).toBe(text)
+        if (text.startsWith(line)) {
+          expect(result.metadata.display).toMatchObject({
+            text: expect.stringContaining("... (line truncated to 2000 chars)"),
+            truncated: false,
+          })
+          expect(result.output).toContain("The numbered preview is bounded and may abbreviate lines.")
+          expect(result.output).toContain("1: " + "x".repeat(100))
+        }
         expect(yield* verify(check, [part(result.metadata)])).toBe(true)
         expect(yield* verify({ ...check, literals: ["Sales consumed both files."] }, [part(result.metadata)])).toBe(false)
         expect(yield* verify({ ...check, path: path.join(instance.directory, "other.md") }, [part(result.metadata)])).toBe(false)
         const partial = yield* reader.execute({ filePath: file, limit: 1 }, ctx)
-        const range = yield* reader.execute({ filePath: file, offset: 2 }, ctx)
-        expect(yield* verify(check, [part(partial.metadata)])).toBe(false)
-        expect(yield* verify(check, [part(range.metadata)])).toBe(false)
+        expect(yield* verify(check, [part(partial.metadata)])).toBe(text === line)
+        if (text === line) expect((yield* whole(partial.metadata))?.text).toBe(text)
+        if (text !== line) {
+          expect(partial.output).not.toContain("<file-content-json")
+          expect(yield* whole(partial.metadata)).toBeUndefined()
+          const range = yield* reader.execute({ filePath: file, offset: 2 }, ctx)
+          expect(range.output).not.toContain("<file-content-json")
+          expect(yield* whole(range.metadata)).toBeUndefined()
+          expect(yield* verify(check, [part(range.metadata)])).toBe(false)
+        }
         for (const metadata of [
           { ...result.metadata, truncated: true },
           { ...result.metadata, display: { ...result.metadata.display, truncated: true } },
           { ...result.metadata, rayaReadContent: Object.fromEntries(Object.entries(content).filter(([key]) => key !== "text")) },
-          { ...result.metadata, rayaReadContent: { ...content, text: text.replace("Header", "Footer") } },
+          { ...result.metadata, rayaReadContent: { ...content, text: text + "altered" } },
         ])
           expect(yield* verify(check, [part(metadata)])).toBe(false)
         yield* fs.writeFileString(file, text + "changed")

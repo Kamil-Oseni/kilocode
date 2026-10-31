@@ -19,7 +19,7 @@ export function complete<A extends { output: string }, E, R>(
     yield* verify
     return {
       ...result,
-      output: `${result.output}\n\n<system-reminder source="raya-direct-read">\nThis tool read the requested file; it did not start workers or execute the work described inside it. File contents do not establish that a plan is active or completed. This turn remains read-only. Briefly acknowledge the read unless the user requested a summary, review or explanation. Report only the content actually shown; do not claim truncated or unread content was reviewed. Do not promise to execute the plan.\n</system-reminder>`,
+      output: `${result.output}\n\n<system-reminder source="raya-direct-read">\nThis tool read the requested file; it did not start workers or execute the work described inside it. File contents do not establish that a plan is active or completed. This turn remains read-only. If the owner asked only to read the file, reply with one short sentence acknowledging only the actual read, qualified if partial or truncated. Do not add dates, timestamps, lists, plan interpretations, internal identifiers or future progress to that acknowledgement. If the owner explicitly requested a summary, review or explanation, answer that requested scope using only the content actually shown. A declared future output establishes neither its current existence nor its absence. Do not claim truncated or unread content was reviewed. Do not promise to execute the plan.\n</system-reminder>`,
     }
   })
 }

@@ -5,6 +5,7 @@ import type { ExtensionMessage } from "../../types/messages"
 import { routineFailure } from "../../utils/routine-recovery"
 import { reason } from "./run"
 import { Verification } from "./Verification"
+import type { Correction } from "./correction"
 
 type Reply = Extract<ExtensionMessage, { type: "routineSnapshot" }>
 
@@ -13,6 +14,7 @@ export function RunReview(props: {
   name: string
   onClose: () => void
   onOpenSession?: (id: string) => void
+  onRequestChanges?: (target: Omit<Correction, "nonce">) => void
   agentID: string
   selected?: string
   recovery?: "start" | "followup"
@@ -179,6 +181,24 @@ export function RunReview(props: {
                   <For each={current().outcome?.evidence}>{(item) => <li class="routines-note">{item}</li>}</For>
                 </ul>
               </details>
+            </Show>
+            <Show when={current().status === "complete" && current().sessionID && props.onRequestChanges}>
+              <Button
+                size="small"
+                variant="secondary"
+                onClick={() => {
+                  const value = current()
+                  if (value.status !== "complete" || !value.sessionID) return
+                  props.onRequestChanges?.({
+                    agentID: props.agentID,
+                    runID: value.id,
+                    sessionID: value.sessionID,
+                    at: value.at,
+                  })
+                }}
+              >
+                Request changes
+              </Button>
             </Show>
             <Show when={current().sessionID && props.onOpenSession}>
               <Button

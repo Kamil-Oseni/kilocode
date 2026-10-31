@@ -65,9 +65,10 @@ const { SessionContext } = await import("../../webview-ui/src/context/session.ts
 const { DialogProvider } = await import("@kilocode/kilo-ui/context/dialog")
 const { default: RoutinesView } = await import("../../webview-ui/src/components/routines/RoutinesView.tsx")
 const { status, Inbox } = await import("../../webview-ui/src/components/routines/Inbox.tsx")
+const { RunReview } = await import("../../webview-ui/src/components/routines/RunReview.tsx")
 const root = document.createElement("div")
 document.body.append(root)
-const mount = (workspace = "C:/Projects/Books", inbox) =>
+const mount = (workspace = "C:/Projects/Books", inbox, review) =>
   render(
     () =>
       createComponent(VSCodeProvider, {
@@ -80,7 +81,11 @@ const mount = (workspace = "C:/Projects/Books", inbox) =>
                 get children() {
                   return createComponent(DialogProvider, {
                     get children() {
-                      return inbox ? createComponent(Inbox, inbox) : createComponent(RoutinesView, { workspace })
+                      return review
+                        ? createComponent(RunReview, review)
+                        : inbox
+                          ? createComponent(Inbox, inbox)
+                          : createComponent(RoutinesView, { workspace })
                     },
                   })
                 },
@@ -105,6 +110,8 @@ const initial = {
 }
 const [box, setBox] = createSignal(initial)
 const [connection, setConnection] = createSignal("connected")
+const [correction, setCorrection] = createSignal()
+const consumed = []
 const props = {
   get agentID() {
     return worker()
@@ -114,6 +121,13 @@ const props = {
   },
   get connection() {
     return connection()
+  },
+  get correction() {
+    return correction()
+  },
+  onCorrectionConsumed(nonce) {
+    consumed.push(nonce)
+    if (correction()?.nonce === nonce) setCorrection()
   },
   name: "Draft worker",
   role: "Reviewer",
@@ -155,9 +169,49 @@ try {
   assert.equal(write.expectedRevision, 3)
   assert.deepEqual(write.attachmentIDs, [attachment.id])
   assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
+  const target = { nonce: "correction-first", agentID: "first", runID: "old-result", sessionID: "session-old", at: 1 }
+  setCorrection(target)
+  await tick()
+  assert.equal(field().value, "  Latest pending text\n  ", "wait for restored conversation before preparing correction")
+  const page = sent.findLast((msg) => msg.type === "routineInboxPage")
+  emit({
+    ...page,
+    type: "routineInboxPage",
+    messages: [],
+    draftState: {
+      owner: initial.owner,
+      conversationID: initial.conversationID,
+      revision: 3,
+      draft: initial.draft,
+      attachments: [attachment],
+    },
+  })
+  await tick()
+  const prepared = field().value
+  assert.ok(prepared.startsWith("  Latest pending text\n  "))
+  assert.match(prepared, /run old-result, conversation session-old/)
+  assert.deepEqual(consumed, [target.nonce])
+  assert.deepEqual(webview.routineInbox.drafts["agent:first"].files, [attachment])
+  assert.equal(
+    sent.some((msg) => msg.type === "routineInboxSend"),
+    false,
+  )
+  // A late successful save of the old text must queue the merged correction rather than erase it.
+  emit({ ...write, type: "routineInboxDraft", revision: 4, files: [attachment] })
+  await tick()
+  const merged = sent.findLast((msg) => msg.type === "routineInboxDraft")
+  assert.notEqual(merged.requestID, write.requestID)
+  assert.equal(merged.draft, prepared)
+  assert.equal(merged.expectedRevision, 4)
+  assert.deepEqual(merged.attachmentIDs, [attachment.id])
+  assert.equal(field().value, prepared)
+  setCorrection(target)
+  await tick()
+  assert.equal(field().value, prepared, "same preparation nonce must not append twice")
+  setCorrection()
 
   // A response with the wrong owner or revision cannot settle local cache.
-  emit({ ...write, type: "routineInboxDraft", owner: "foreign", revision: 4, files: [attachment] })
+  emit({ ...merged, type: "routineInboxDraft", owner: "foreign", revision: 5, files: [attachment] })
   assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
   type("Final unsaved text")
   setBox(undefined)
@@ -180,6 +234,46 @@ try {
   })
   assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
   assert.equal(sent.findLast((msg) => msg.type === "routineInboxUnmount")?.paneID, undefined)
+  const other = { id: "other-attachment", name: "other.txt", mime: "text/plain", size: 4 }
+  const second = {
+    ...initial,
+    agentID: "second",
+    owner: "owner-second",
+    conversationID: "conversation-second",
+    draft: "Second worker draft",
+    draftAttachments: [other],
+    draftRevision: 2,
+  }
+  setBox(second)
+  await tick()
+  const secondMount = sent.findLast((msg) => msg.type === "routineInboxMount" && msg.agentID === "second")
+  emit({ ...secondMount, type: "routineInboxMounted" })
+  const secondPage = sent.findLast((msg) => msg.type === "routineInboxPage" && msg.agentID === "second")
+  emit({
+    ...secondPage,
+    type: "routineInboxPage",
+    messages: [],
+    draftState: {
+      owner: second.owner,
+      conversationID: second.conversationID,
+      revision: 2,
+      draft: second.draft,
+      attachments: [other],
+    },
+  })
+  setCorrection({ ...target, nonce: "foreign-worker" })
+  await tick()
+  assert.equal(field().value, second.draft, "a first-worker correction cannot enter the second-worker draft")
+  setCorrection({ ...target, agentID: "second", nonce: "correction-second", runID: "old-second-result" })
+  await tick()
+  assert.ok(field().value.startsWith(second.draft))
+  assert.match(field().value, /run old-second-result/)
+  assert.deepEqual(webview.routineInbox.drafts["agent:second"].files, [other])
+  assert.equal(field().value.includes("Final unsaved text"), false)
+  assert.equal(
+    sent.some((msg) => msg.type === "routineInboxSend"),
+    false,
+  )
 
   // Reopening cannot reuse an old pane's reply or cross a new conversation.
   setWorker("first")
@@ -207,7 +301,32 @@ try {
   assert.equal(field().value, "Offline retained text")
   assert.equal(webview.routineInbox.drafts["agent:first"].pending, true)
   assert.equal(webview.unrelated, "keep me")
-  console.log("mounted Routine owner, pane, flush and offline recovery assertions passed; no SQL commit claim")
+  dispose()
+  const requested = []
+  dispose = mount("C:/Projects/Books", undefined, {
+    id: "review",
+    name: "Draft worker",
+    agentID: "first",
+    selected: "old",
+    runs: [
+      { id: "old", at: 1, status: "complete", sessionID: "session-old" },
+      { id: "new", at: 2, status: "complete", sessionID: "session-new" },
+    ],
+    onClose() {},
+    onRequestChanges: (target) => requested.push(target),
+  })
+  await tick()
+  const button = [...root.querySelectorAll("button")].find((button) => button.textContent.trim() === "Request changes")
+  assert.ok(button)
+  button.click()
+  assert.deepEqual(requested, [{ agentID: "first", runID: "old", sessionID: "session-old", at: 1 }])
+  assert.equal(
+    sent.some((msg) => msg.type === "routineInboxSend"),
+    false,
+  )
+  console.log(
+    "mounted Routine draft correction, exact old-run binding, ownership and recovery assertions passed; no SQL commit claim",
+  )
 } finally {
   dispose()
   root.remove()

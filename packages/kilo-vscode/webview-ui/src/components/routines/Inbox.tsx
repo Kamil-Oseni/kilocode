@@ -1,4 +1,4 @@
-import { Component, For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { Component, For, Show, batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { useVSCode } from "../../context/vscode"
 import type { ConnectionState, ExtensionMessage } from "../../types/messages"
@@ -12,6 +12,7 @@ import { ConversationSearch } from "./ConversationSearch"
 import { ConversationState } from "./ConversationState"
 import { MediaAttachment, previewable } from "./MediaAttachment"
 import { MessageTime } from "../chat/MessageTime"
+import { correction, type Correction } from "./correction"
 
 const RESTORE_PAGE_LIMIT = 20
 
@@ -686,6 +687,8 @@ export const Inbox: Component<{
   onAccess: () => void
   onOutput: () => void
   onInspect: () => void
+  correction?: Correction
+  onCorrectionConsumed?: (nonce: string) => void
   onToggle: () => void
   anchor?: Anchor
   onAnchor?: (value?: Anchor) => void
@@ -728,6 +731,8 @@ export const Inbox: Component<{
   const [look, setLook] = createSignal("")
   const [loading, setLoading] = createSignal(true)
   const [mountReady, setMountReady] = createSignal(false)
+  const [hydrated, setHydrated] = createSignal(false)
+  const [paged, setPaged] = createSignal(false)
   const [pageError, setPageError] = createSignal("")
   const [delayed, setDelayed] = createSignal(false)
   const [attempt, setAttempt] = createSignal(0)
@@ -793,6 +798,8 @@ export const Inbox: Component<{
   let paneID = crypto.randomUUID()
   let mountID = ""
   let mounted = false
+  let prepared = ""
+  let composer: HTMLTextAreaElement | undefined
   let closed = false
   let owner = ""
   let conversationID = ""
@@ -898,6 +905,7 @@ export const Inbox: Component<{
   const load = (after?: string, search?: string, update = false) => {
     if (closed || wait || !connected()) return
     wait = true
+    setPaged(false)
     older = !!after
     live = update
     setLoading(true)
@@ -1019,14 +1027,17 @@ export const Inbox: Component<{
   }
 
   const restore = (box: Box) => {
+    setHydrated(false)
     base = draftVersion(box)
     setBlocked(false)
     setNote(box.draft ?? "")
     setFiles(box.draftAttachments ?? [])
     rememberDraft(box.draft ?? "", box.draftAttachments ?? [], props.agentID, false)
+    setHydrated(true)
   }
 
   const hydrate = (draft?: Draft) => {
+    setHydrated(false)
     draftRevision = draft?.revision ?? 0
     base = draft?.base ?? draftVersion(props.box)
     setBlocked(draft?.blocked ?? false)
@@ -1048,6 +1059,7 @@ export const Inbox: Component<{
         restore(props.box)
       }
     }
+    setHydrated(true)
   }
 
   const switcher = (id: string) => {
@@ -1229,6 +1241,7 @@ export const Inbox: Component<{
         at: last.time,
       })
     queueMicrotask(place)
+    setPaged(true)
   }
 
   const matchesSendProof = (msg: Extract<ExtensionMessage, { type: "routineInboxSent" }>) => {
@@ -1295,37 +1308,38 @@ export const Inbox: Component<{
     queueMicrotask(pin)
   }
 
-  const picked = (msg: ExtensionMessage) => {
-    if (msg.type !== "routineInboxFiles" || msg.requestID !== pickID || msg.agentID !== props.agentID) return
-    const sent = saves.get(msg.requestID)
-    saves.delete(msg.requestID)
-    const removal = removing()
-    setPicking(false)
-    setRemoving("")
-    if (sent === undefined || sent.agentID !== props.agentID || sent.paneID !== paneID) return
-    active = ""
-    if (msg.error) {
-      if (removal) setRemoveFailed(removal)
-      else setPickFailed(true)
-      setError(routineFailure(msg.error, msg.recovery, "Your draft and attachments are still here."))
-      return
-    }
-    if (msg.revision !== sent.expectedRevision + 1 || msg.owner !== owner || msg.conversationID !== conversationID) {
-      setBlocked(true)
-      if (removal) setRemoveFailed(removal)
-      else setPickFailed(true)
-      setError("Raya returned a different draft version. Your text is still here; refresh before trying again.")
-      return
-    }
-    base = msg.revision
-    const rows = attachments(msg.files)
-    setFiles(rows)
-    rememberDraft(typeof msg.draft === "string" ? msg.draft : note(), rows)
-    setPickFailed(false)
-    setRemoveFailed("")
-    setError("")
-    if (dirty) persist(note())
-  }
+  const picked = (msg: ExtensionMessage) =>
+    batch(() => {
+      if (msg.type !== "routineInboxFiles" || msg.requestID !== pickID || msg.agentID !== props.agentID) return
+      const sent = saves.get(msg.requestID)
+      saves.delete(msg.requestID)
+      const removal = removing()
+      setPicking(false)
+      setRemoving("")
+      if (sent === undefined || sent.agentID !== props.agentID || sent.paneID !== paneID) return
+      active = ""
+      if (msg.error) {
+        if (removal) setRemoveFailed(removal)
+        else setPickFailed(true)
+        setError(routineFailure(msg.error, msg.recovery, "Your draft and attachments are still here."))
+        return
+      }
+      if (msg.revision !== sent.expectedRevision + 1 || msg.owner !== owner || msg.conversationID !== conversationID) {
+        setBlocked(true)
+        if (removal) setRemoveFailed(removal)
+        else setPickFailed(true)
+        setError("Raya returned a different draft version. Your text is still here; refresh before trying again.")
+        return
+      }
+      base = msg.revision
+      const rows = attachments(msg.files)
+      setFiles(rows)
+      rememberDraft(typeof msg.draft === "string" ? msg.draft : note(), rows)
+      setPickFailed(false)
+      setRemoveFailed("")
+      setError("")
+      if (dirty) persist(note())
+    })
 
   const settle = (
     msg: Extract<ExtensionMessage, { type: "routineInboxDraft" }>,
@@ -1601,6 +1615,46 @@ export const Inbox: Component<{
       persist(value)
     }, 400)
   }
+
+  createEffect(() => {
+    const target = props.correction
+    if (
+      !target ||
+      target.nonce === prepared ||
+      target.agentID !== props.agentID ||
+      !connected() ||
+      !ready() ||
+      !mountReady() ||
+      !hydrated() ||
+      !paged() ||
+      loading() ||
+      blocked() ||
+      picking() ||
+      removing() ||
+      phase() !== "idle" ||
+      pageError() ||
+      props.box?.owner !== owner ||
+      props.box?.conversationID !== conversationID
+    )
+      return
+    const next = correction(note(), target)
+    prepared = target.nonce
+    props.onCorrectionConsumed?.(target.nonce)
+    if (next === null) {
+      setError("That result reference is invalid. Refresh its run history and try again.")
+      return
+    }
+    if (next === undefined) {
+      setError("This request could not fit in your draft. Shorten the draft, then choose Request changes again.")
+      return
+    }
+    if (next !== note()) change(next)
+    queueMicrotask(() => {
+      if (!composer?.isConnected || props.agentID !== target.agentID || prepared !== target.nonce) return
+      composer.focus({ preventScroll: true })
+      composer.setSelectionRange(composer.value.length, composer.value.length)
+    })
+  })
 
   const search = (value: string) => {
     if (!connected()) return
@@ -2029,6 +2083,7 @@ export const Inbox: Component<{
           <label class="routines-field routines-compose-field">
             <span class="sr-only">Message this worker</span>
             <textarea
+              ref={composer}
               value={note()}
               disabled={!ready()}
               rows={2}

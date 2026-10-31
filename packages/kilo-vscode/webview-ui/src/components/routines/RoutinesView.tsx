@@ -28,6 +28,7 @@ import { SchedulePolicy } from "./SchedulePolicy"
 import { ReportingChoice } from "./ReportingChoice"
 import { summary, type Policy } from "../../../../src/shared/routine-policy"
 import { RunReview } from "./RunReview"
+import type { Correction } from "./correction"
 import { Archive } from "./Archive"
 import { AccessReview } from "./AccessReview"
 import { OutputEditor } from "./OutputEditor"
@@ -932,6 +933,7 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
   const [clock, setClock] = createSignal(Date.now())
   const [boxes, setBoxes] = createSignal<Record<string, Box>>({})
   const [chosen, setChosen] = createSignal<string>()
+  const [correction, setCorrection] = createSignal<Correction>()
   const [query, setQuery] = createSignal("")
   const [idea, setIdea] = createSignal("")
   const [attention, setAttention] = createSignal<"all" | "unread" | "needs">("all")
@@ -2321,6 +2323,10 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                     onEdit={() => edit(item())}
                     onAccess={() => review(item())}
                     onOutput={() => review(item(), "output")}
+                    correction={correction()?.agentID === item().id ? correction() : undefined}
+                    onCorrectionConsumed={(nonce) => {
+                      if (correction()?.nonce === nonce) setCorrection()
+                    }}
                     onInspect={() => inspect(item())}
                     onToggle={() => toggle(item())}
                     onBack={leave}
@@ -2521,6 +2527,27 @@ const RoutinesView: Component<RoutinesViewProps> = (props) => {
                 name={item.name}
                 onClose={close}
                 onOpenSession={props.onOpenSession}
+                onRequestChanges={(target) => {
+                  const run = runs()[target.agentID]?.find((run) => run.id === target.runID)
+                  if (
+                    !agents().some((agent) => agent.id === target.agentID) ||
+                    run?.status !== "complete" ||
+                    run.sessionID !== target.sessionID ||
+                    run.at !== target.at
+                  ) {
+                    setError("This result is no longer available. Refresh its run history and try again.")
+                    return
+                  }
+                  setInspection()
+                  setReviewed()
+                  setScreen("roster")
+                  const team = organizations().find((entry) =>
+                    entry.members.some((member) => member.agentID === target.agentID),
+                  )
+                  if (organization() !== team?.id) chooseOrganization(team?.id)
+                  if (chosen() !== target.agentID) choose(target.agentID)
+                  setCorrection({ ...target, nonce: crypto.randomUUID() })
+                }}
                 agentID={item.agentID}
                 selected={item.runID}
                 recovery={recovery(item, agents())}

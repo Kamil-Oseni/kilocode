@@ -71,6 +71,8 @@ import type { Reference } from "./job-contract"
 import * as Capture from "./job-contract-capture"
 import * as Contract from "./job-contract-store"
 import { same as staged } from "./job-contract"
+import * as Artifact from "@/kilocode/goal/artifact"
+import { verify as content } from "@/kilocode/goal/file-content"
 
 const WAIT = "waiting on you"
 const failed = (run: RayaTask.Run) => !!run.outcome?.delivery && run.outcome.delivery.status !== "passed"
@@ -1855,6 +1857,63 @@ export namespace RayaTaskRunner {
         return
       })
 
+    const preflight = Effect.fn("RayaTaskRunner.preflight")(function* (
+      view: Contract.View,
+      parent: RayaTask.Run,
+      input: Ask,
+    ) {
+      const checks = view.stage.criteria.flatMap((criterion) => {
+        const check = criterion.check
+        if (check?.kind !== "file-content") return []
+        const artifact = input.artifacts?.find((item) => Files.includes([item.path], check.path))
+        return artifact ? [{ criterion, check, artifact }] : []
+      })
+      if (!checks.length) return
+      const eligible = (yield* goals.evidence(parent.sessionID)).filter(
+        (part) => part.tool === "read" && part.sessionID === parent.sessionID,
+      )
+      const reads = (yield* sessions.messages({ sessionID: parent.sessionID })).flatMap((row) =>
+        row.info.role === "assistant" && row.info.sessionID === parent.sessionID
+          ? row.parts.flatMap((part) => {
+              if (
+                part.type !== "tool" ||
+                part.tool !== "read" ||
+                part.state.status !== "completed" ||
+                part.sessionID !== parent.sessionID ||
+                part.messageID !== row.info.id
+              )
+                return []
+              const matches = eligible.filter(
+                (item) =>
+                  item.sessionID === part.sessionID &&
+                  item.messageID === part.messageID &&
+                  item.partID === part.id &&
+                  item.callID === part.callID,
+              )
+              return matches.length === 1 ? [{ ...part, state: part.state }] : []
+            })
+          : [],
+      )
+      for (const item of checks) {
+        const parts = reads.filter((part) => {
+          const revisions = Artifact.entries(part.state.metadata["rayaRevision"])
+          const revision = revisions[0]
+          return (
+            revisions.length === 1 &&
+            revision?.status === "captured" &&
+            revision.sha256 === item.artifact.sha256 &&
+            Files.includes([revision.path], item.check.path)
+          )
+        })
+        if (!(yield* content(item.check, parts)))
+          return yield* new Contract.Invalid({
+            message:
+              `Cannot hand off ${JSON.stringify(item.check.path)} yet. [${item.criterion.id}] ${item.criterion.description} Verification: ${item.criterion.verification} Exact saved literals: ${JSON.stringify(item.check.literals)}. ` +
+              "This saved file-content check needs a fresh full native Read of the exact handed bytes, at most 8192 UTF-8 bytes, containing every saved literal. Correct only this stage's permitted output, Read it again, then retry the same handoff. This preflight verifies bytes and literals, not semantic quality; it does not complete this criterion or waive required child completion.",
+          })
+      }
+    })
+
     const delegate = Effect.fn("RayaTaskRunner.delegate")(function* (
       input: Ask,
       opts?: { reportSessionID: SessionID; capture?: Capture.Handle },
@@ -1917,6 +1976,7 @@ export namespace RayaTaskRunner {
                   )
                 )
                   return yield* new Contract.Invalid({ message: "The parent run changed before contract admission." })
+                if (!(yield* errands.lookup(input.source))) yield* preflight(view, parent, input)
                 return undefined
               }).pipe(Effect.mapError((err) => new Contract.Invalid({ message: err.message }))),
             }

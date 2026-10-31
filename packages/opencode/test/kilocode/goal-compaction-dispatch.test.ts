@@ -15,7 +15,7 @@ import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Storage } from "@/storage/storage"
 import { RayaGoal } from "@/kilocode/goal"
 import { replayed } from "@/kilocode/goal/compaction-lineage"
-import { associate } from "@/kilocode/goal/turn"
+import { associate, compaction } from "@/kilocode/goal/turn"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -35,6 +35,64 @@ const it = testEffect(
       [Storage.node, storage],
     ],
   ),
+)
+
+it.live(
+  "stage reminders preserve ordinary chat and legacy routine compaction behavior",
+  () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const storage = yield* Storage.Service
+        const goals = RayaGoal.make({ storage, sessions })
+        const remind = yield* compaction
+        const ordinary = yield* sessions.create({})
+        expect(yield* remind(ordinary, [])).toBeUndefined()
+        const identity = {
+          version: 2,
+          agentID: "legacy-worker",
+          runID: "legacy-run",
+          scheduleVersion: 1,
+          trigger: { kind: "manual" },
+        }
+        const chat = yield* sessions.create({ metadata: { rayaRoutine: identity } })
+        yield* Effect.addFinalizer(() => goals.clear(chat.id))
+        const goal = yield* goals.create(
+          chat.id,
+          "Retain the original legacy job",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { agentID: identity.agentID, runID: identity.runID, sessionID: chat.id },
+        )
+        expect(yield* remind(chat, [])).toBeUndefined()
+        const model = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") }
+        const user = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: chat.id,
+          role: "user",
+          agent: "coder",
+          model,
+          time: { created: Date.now() },
+        })
+        const part = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: user.id,
+          sessionID: chat.id,
+          type: "text",
+          synthetic: true,
+          metadata: { compaction_continue: true },
+          text: "Continue the existing job.",
+        })
+        const text = yield* remind(chat, [part])
+        expect(text).toContain("This routine resumed after conversation compaction with an active saved goal.")
+        expect(text).not.toContain("Current authenticated Routine stage")
+        expect(yield* goals.get(chat.id)).toEqual(goal)
+      }),
+    ),
 )
 
 it.live(

@@ -2,6 +2,12 @@
 
 ## Current installed validation
 
+October 31: installed `057ce337a6` completed the actual normal-profile local9B three-worker typed job in about12minutes. All original Runs/Goals and bound final reports completed, with both real artifact handoffs, both native dependency waits and automatic parent resumptions. Five own-write/full-Read files and all82priorRuns/events/eightdefinitions were verified; no operator repair or old-job replay occurred. Original driver/readers joined and the owned Windows model was released. Final outcome SHA-256 `922d6d84afe7c8dda8593ce189f244a8fbd7a91c1baeff346612055a1108161f` is documented in current readiness.
+
+The engine/literal component passed; factual/business content remains failed and rendering untested. Earlier ebb timer/cold evidence is retained for its own producer, not repeated on057. Full scheduling-policy, budgets, Stop/recovery, GUI and semantic acceptance remain open. Component checklist **3/9 (33.3%)**, overall readiness **unmeasured**.
+
+## Historical installed c72 validation
+
 October 31: installed `c72c67d1a6` passed the actual full plan Read and terminal leaf usage comparison. Its fresh three-worker typed job admitted all stages, made both actual handoffs, parked both parents and woke Builder after Sales completed. Repeated large Goal snapshots/compactions and an invalid citation prevented reliable parent finalization; the native audit refused it. The attempt was canonically cancelled, preserving the completed Sales result, five files, original 79 Runs and eight definitions. All owned processes/readers closed and the Windows model was released. Outcome SHA-256 `ba9fe574d08fd42d8ff66effa75ef8eebdfcf8ec9638cf3d7193830dc16e99eb` is documented in current readiness.
 
 This is not a completed three-stage business job or comprehensive budget/Stop/recovery/UI acceptance. Earlier ebb timer/cold evidence remains historical below; it was not repeated on c72. Factual content failed separate grading. Component gates remain **3/9 (33.3%)**, overall readiness **unmeasured**.

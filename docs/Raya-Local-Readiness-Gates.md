@@ -2,6 +2,32 @@
 
 Updated October 31, 2026. Stable chat and routine workers are the priority; voice is deferred.
 
+October 31, 2026 -- Installed three-worker engine completed without operator repair
+
+Installed source `057ce337a6`, package `7.4.23-snapshot+057ce337a6.local.1793448687173`. Qualified delivery `.tmp/new-pc/worker-057ce337a6-delivery-qualified.json`, SHA-256 `1a4ce64d99ab81b1972481553eb4d160093ad74d590b3a63fe3622d94a6352a2`, preserved 6,772 saved files and unrelated extension registrations. Repeated authenticated same-dispatch/revision Goal snapshots are superseded only in ephemeral model context; the newest full result and durable work/evidence records remain unchanged. Two focused native cases passed 70 assertions, CLI types and scoped lint passed, and stock CLI/extension checks passed. Stock build target exit zero in 125.938 seconds and forced owned descendant cleanup remain separately recorded.
+
+The actual newly installed normal-profile local 9B run completed Researcher, Builder and Sales in their original native sessions/Runs/Goals in 719.749 seconds (about 12 minutes). It made both genuine file handoffs, parked both parents and automatically resumed them from their original child replies. Rejected citation attempts remained rejected; both parents corrected their own audits and completed without operator output, evidence or history repair. All five files have their own stage's actual write and fresh whole-Read proof. Three complete/delivered canonical final reports match their original Run/session/origin/final assistant. The complete 6,882-byte proposal was read before admission; all proposal fields match after normalizing only the five declared output paths' native Windows separators/case, with raw inputs and differences retained.
+
+All eight saved definitions, all 82 earlier Run objects and their events remained unchanged; exactly three new complete Runs were added. After idle verification, original driver 56194 joined with exit zero, exact owned backend closure used forced exit one and readers joined, and the owned Windows model was released. Outcome `.tmp/business-20261022/normal-service-d0312245-9827-408d-992d-cbe990ff688e/installed-057-completed-chain-final-outcome.json`, SHA-256 `922d6d84afe7c8dda8593ce189f244a8fbd7a91c1baeff346612055a1108161f`, pins delivery, full native observations, reports, preservation, closure and model release.
+
+This earns the installed three-worker engine/literal component, not full business quality or overall readiness. Researcher actually read both approved inputs and now preserves all nine supplied facts; source-only grading still found unsupported Eric service details and Sales drafts drifting from website concepts into cleaning/maintenance offers. The final five-file grade is SHA-256 `8dff808c60833889b0eb8df01b90e2a05d013b2de27f9a25b774d21a3d16c736`; no rendering or sending occurred. Source acquisition, comprehension and factual/semantic correctness are separate obligations. Parent/compaction usage coverage and broader budgets remain limited. Earlier failed attempts remain unchanged.
+
+Installed component checklist remains **3/9 (33.3%)** and overall readiness **unmeasured** because the full Routine, loaded chat/drafts/reopen, Memory, boot/reinstall and UI gates remain open. Earlier timer/cold acceptance on ebb and strict Code acceptance on ead retain those producers; neither model workflow was unnecessarily repeated on 057. Next is an explicit pinned-source Read criterion candidate, still unverified/uninstalled at this checkpoint. Voice remains deferred. No GUI, Home Assistant or other user app was controlled.
+
+| Gate | Status | Evidence or remaining work |
+|---|---|---|
+| Audited combined candidate | Verified for installed 057ce337a6 | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
+| Normal installation preservation | Verified for installed 057ce337a6 | Preserved 6,772 saved files and unrelated registrations. Loaded populated recovery remains separate. |
+| Installed local General/tool turn | Pending | Current full proposal Read passed; loaded multi-turn chat, drafts/model and reopen remain unearned. |
+| Strict installed Coder | Verified component on ead06c59b8 | Earlier local Code9B edit/native tests/final result retained without another model run. |
+| Installed Voice and permitted HA flow | Deferred by user | Voice is secondary; Home Assistant remains off. |
+| Scheduled routines | Partial; installed three-worker engine passed | Current three original stages/Goals/final reports, both handoffs/waits/wakes and five own-write/whole-Read files passed. Earlier ebb timers/cold retained. Business semantics, broader policies/budgets/Stop/recovery/UI remain open. |
+| Configured Memory | Pending | Installed setup, correction/forget, in-flight pause and index outcomes remain unearned. |
+| Matching-version postboot/service recovery | Pending | Actual OS boot/reconnection/no replay remains unearned. |
+| Populated same-candidate reinstall recovery | Pending | Loaded populated-state, rollback and cold restore remain unearned. |
+
+## Historical checkpoints
+
 October 31, 2026 -- Installed complete plan reads and observed worker handoffs; parent finalization remains failed
 
 Installed source `c72c67d1a6`, package `7.4.23-snapshot+c72c67d1a6.local.1793447295940`. Qualified delivery `.tmp/new-pc/worker-c72c67d1a6-delivery-qualified.json`, SHA-256 `b8f8065bedf5922b47cc37b19e91dfd6eeae07a9598e9c8d09a98a0d24d2a4c8`, preserved 6,701 saved files and unrelated extension registrations. Exact small-file read-only requests now obtain complete native content despite model preview arguments; requested/effective ranges remain auditable. Terminal accepted Goal accounting shares the original finished CAS and validates competing finalizers against the complete deterministic expected state. Two native regression cases passed 116 assertions. CLI types and scoped lint passed (zero lint errors, 86 warnings); the initial three type errors and passing correction remain recorded. Stock build target exited zero in 125.766 seconds; forced owned descendant cleanup and wrapper exit one are retained separately.
@@ -25,8 +51,6 @@ Installed component gates remain **3/9 (33.3%)**, overall readiness **unmeasured
 | Configured Memory | Pending | Installed setup, correction/forget, in-flight pause and index outcomes remain unearned. |
 | Matching-version postboot/service recovery | Pending | Actual OS boot/reconnection/no replay remains unearned. |
 | Populated same-candidate reinstall recovery | Pending | Loaded populated-state, rollback and cold restore remain unearned. |
-
-## Historical checkpoints
 
 October 31, 2026 -- Installed Auto routine repair and two-period cold-reopen component acceptance
 

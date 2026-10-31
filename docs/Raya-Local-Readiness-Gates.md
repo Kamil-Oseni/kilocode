@@ -1,3 +1,11 @@
+October 31, 2026 -- Installed compaction accounting repair and populated upgrade preservation
+
+Installed source `a19a214363`, package `7.4.23-snapshot+a19a214363.local.1793455036740`. Qualified delivery `.tmp/new-pc/worker-a19a214363-delivery-qualified.json`, SHA-256 `9ca0612367f54190d982ef610173afb2f423e50cd5e9d3b500958032d6994069`, preserved all 6,910 captured saved files and unrelated extension registrations. Stock packaging target exited zero in 107.468 seconds; forced owned descendant cleanup and wrapper exit one remain separately recorded. Pre/post preservation and official VS Code CLI installation passed. Stock SDK regeneration produced no delta.
+
+A fresh compiled installed backend made only 20 GET requests: all eight routine definitions, 85 raw Runs/events, the saved conversation's 12 messages/26 parts, three canonical delivered reports and all three historical completed Goal states/API usage remained unchanged. Old counters were deliberately not repaired. Original driver 85119 joined with exit zero; its exact backend closed, readers joined, status and active workers were empty, and no model was loaded or released. Final outcome `.tmp/business-20261022/normal-service-1d1adf86-7f36-40e2-b174-43d102c1fde5/installed-a19-upgrade-get-final-outcome.json`, SHA-256 `2844747c208f556d54ff7ef0e49b78e2514de02238cdc437a34a2435fbaa8e14`.
+
+Accounting behavior is supported separately by the two native cases/93 assertions and read-only source replay against actual057 data described below; this upgrade check is not another model-compaction campaign. Actual clean no-tools chat acceptance retains producer1e18, and actual three-worker engine acceptance retains producer057. Business output quality, loaded UI/drafts, broader Routine policies/budgets/Stop/recovery, Memory and boot/reinstall interaction remain open. Broad components remain **3/9 (33.3%)**, overall readiness **unmeasured**. Voice remains deferred; no user apps or windows were controlled.
+
 October 31, 2026 -- Source fix counts authenticated Goal compaction usage
 
 The source now adds settled successful automatic-compaction assistant usage to cumulative Goal totals only after authenticating the original sealed input, exact accepted replay lineage, same Goal lifetime/session and native Routine identity. It retains earlier accepted frames across later dispatches and supports closed-Goal terminal bookkeeping without inventing active state. Summary identities are deduplicated, and their parts never become completion evidence, fresh tool calls or extra user turns. Terminal completion and competing-finalizer validation use the same totals. Failed, manual, unreplayed and independent Task-child compactions remain outside this narrow coverage; existing stored history is not repaired.
@@ -56,9 +64,9 @@ Current gate summary for the installed build; earlier dated entries retain their
 
 | Gate | Status | Evidence or remaining work |
 |---|---|---|
-| Audited combined candidate | Verified for installed 1e18a91566 | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
-| Normal installation preservation | Verified for installed 1e18a91566 | Preserved 6,890 saved files and unrelated registrations. Loaded populated recovery remains separate. |
-| Installed local General/tool turn | Pending | Installed 1e18 backend conversation-only recall passed with no new tools, children, Goals or Routine admissions and unchanged old messages. Loaded UI/drafts/model, large-chat behavior and loaded reopen remain pending. |
+| Audited combined candidate | Verified for installed a19a214363 | Exact qualified CLI/helper/package; stock target zero and forced descendant cleanup retained separately. |
+| Normal installation preservation | Verified for installed a19a214363 | Preserved 6,910 saved files and unrelated registrations; populated backend GET-only upgrade preserved chat, routines and old Goals. Loaded UI recovery remains separate. |
+| Installed local General/tool turn | Pending | Installed 1e18 backend conversation-only recall passed; a19 GET-only upgrade preserved the conversation. Recall passed with no new tools, children, Goals or Routine admissions and unchanged old messages. Loaded UI/drafts/model, large-chat behavior and loaded reopen remain pending. |
 | Strict installed Coder | Verified component on ead06c59b8 | Earlier local Code9B edit/native tests/final result retained without another model run. |
 | Installed Voice and permitted HA flow | Deferred by user | Voice is secondary; Home Assistant remains off. |
 | Scheduled routines | Partial; installed three-worker engine passed | Installed057 three original stages/Goals/final reports, both handoffs/waits/wakes and five own-write/whole-Read files passed. Earlier ebb timers/cold retained. Business semantics, broader policies/budgets/Stop/recovery/UI remain open. |

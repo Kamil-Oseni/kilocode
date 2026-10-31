@@ -2,7 +2,7 @@
 
 Updated October 31, 2026. Priority: stable chat and routine workers. Voice is deferred. Historical readiness percentages are not a current progress measure.
 
-## October 31 working checkpoint
+## Current installed checkpoint
 
 October 31, 2026 -- Completed native worker flow and installed read checks
 
@@ -14,6 +14,12 @@ The newly installed compiled backend passed a real strict read-only request and 
 
 An already-open VS Code host's loaded version remains unverified; reopen or reload the Raya window before the next UI test. Loaded UI, saved drafts/reopen, factual output quality, scheduled execution, Memory, post-boot recovery and populated reinstall workflow acceptance remain pending. Installed gates remain **2/9 (22.2%)**; overall readiness is **unmeasured**. Stable chat and local routine workers remain the priority; voice is deferred. Earlier checkpoints below retain their original producer identities and outcomes.
 
+## Historical checkpoints
+
+The entries below describe their own earlier builds. References to "current", "latest", "installed" or "next" in those records do not replace the current installed checkpoint above.
+
+### October 31: earlier source attempts
+
 The actual normal-profile source trial at `3e53b0ed2e` started Researcher, Builder and Sales through native file handoffs and produced all five requested files. The submitted contract also added a redundant Sales criterion, so exact proposal fidelity was not established. It failed content acceptance: Builder included a forbidden form, unsupported claims and an 8,670-byte checked file; Sales drafted the wrong business offer and repeatedly retried a report lacking the required Markdown links without correcting it. Parent dependency waits preserved the original runs. The bounded failed run was canonically cancelled, observed idle with zero active workers, and its owned backend was closed with readers joined and source unchanged. Outputs remain unedited. Evidence: `.tmp/business-20261022/source-normal-service-f1670df5-5724-4e0e-9ca2-32c56dbcb612/content-loop-quiescent-close.json` and `progress.json`.
 
 A subsequent source trial at `7d88342263` submitted the exact original contract, passed both native file handoffs and produced all five files. Sales completed its native audit; the report included all five real links and correct worker credits, and Builder removed the forbidden form and unsupported HTML claims. Builder then repeatedly requested goal evidence with an empty cursor, received no displayed evidence, and falsely waited after Sales completed, ending in a failed Builder run. The bounded run was canonically stopped with completed Sales history and all output files preserved. Evidence: `.tmp/business-20261022/source-normal-service-64559d49-5ffb-4dd3-be87-ba4bc5cae45f/cursor-starvation-quiescent-close.json`. Two draft overstatements also remain: calling dated indexed observations current and describing choices or benefits beyond the actual concept. This is useful partial progress, not an unassisted full workflow pass.
@@ -24,7 +30,7 @@ The `4c4af659cf` source run completed all three original native stages and Goals
 
 The first read-only chat turn in that source trial read the complete plan and acknowledged it without claiming workers had started. This is one observed improvement, not general chat or loaded-extension acceptance. Installed gates remain **2/9 (22.2%)**; overall readiness is **unmeasured**. The historical checkpoints below retain their original producer identities and outcomes.
 
-## Historical installed version
+### Earlier installation checkpoints
 
 October 29, 2026 -- Explicit native file-content completion checks
 
@@ -493,7 +499,7 @@ A subsequent explicit read-only request incorrectly admitted one new Builder (`r
 
 Original backend owner 35346 joined with outer exit zero, but progress records forced source closure/code 1, original source/helper exits 1 and readers joined. This is not a clean source-close pass. The owned 9B unload records `models: []`. Preserve the failed original outputs without replay or operator repair. Installed gates remain **2/9 (22.2%)**, overall readiness **unmeasured**; historical **48/100 / 38 unfinished** remain unchanged. Voice is deferred, cloud workers released and second-PC migration cancelled.
 
-### Historical c342 failed checkpoint
+#### Historical c342 failed checkpoint
 
 Everyday Raya remains `7.4.23-snapshot+c3420ae35d.local.1793083482655`. Its original normal-profile job produced only `research.md` (**6,173 bytes**, SHA-256 `7a21891f440ab0007527683f43caf867855d79e764820770c824ff3869cad941`), covering the three dated-seed prospects and choosing Eric. This is a bounded positive for the actual Researcher write and source attribution, not fresh browsing; quoted relative dates still require their 2026-10-22 context. Builder has zero recorded messages; no website, brief, outreach or report files and no Sales work were produced.
 
@@ -501,7 +507,7 @@ Both caller and child returned false mismatch/refusal acknowledgements after req
 
 Source acknowledgement correction `fe3e003f0e041696cc85cfec5720428b96900e28` is committed but uninstalled; pre-admission guards are still being implemented. Outcome `.tmp/business-20261022/normal-service-14b39bbf-c8c3-448c-9a08-7ac95c75383f/job-outcome-failed-v1.json`, **19,405 bytes**, SHA-256 `07d02a58c013ceae5472ebd01e785180c55eb72357d1837871ab20c04985bbf3`, binds original snapshots, mutation/refusal/cancel receipts, final output and closure/model evidence. Original outer exec 3216 joined naturally at zero, while persisted owned source closure is **forced/code 1**, readers joined; it is not a clean backend-close pass. The exact owned model unload records no models afterward and **17.33 GiB** free. No new workflow/recovery credit is earned: installed checklist **2/9 (22.2%)**, overall **unmeasured**, historical **48/100 / 38 unfinished** unchanged. Preserve this failed job and all prior outputs without replay or cleanup.
 
-### Historical fafd2 installed checkpoint
+#### Historical fafd2 installed checkpoint
 
 Everyday Raya is `7.4.23-snapshot+fafd2f7cef.local.1793081298163`. The extension registry and installed CLI were independently checked. Its CLI is 309,478,400 bytes, SHA-256 `ccb088a84d86e809431da739b3b002072c52be2fc7430a2fbcd92be7c3dcf432`. The post-install receipt `everyday-conversation-preservation-72172b8c280d4f549f63af82cbe897cc/after-qualified-registry-v2.json` passes and lists 4,593 unchanged files across four saved roots (76 + 4,218 + 4 + 295), exact package payloads and unchanged unrelated registrations. This verifies delivery and preservation, not full workflow acceptance. The earlier bounded chat result below belongs to installed `fb887daee3`.
 
@@ -519,7 +525,7 @@ The e57 replay in `ses_e87cd675affeG5eHfyosVEXziX` replied “Understood, I can 
 
 The installed fb replay reused that conversation. User turn `msg_1784003d80016p1lE2RqZd1m0V` completed on the actual local 4B model with exactly “Copper Finch,” no error and no new Task. Only internal `chief_route` was called before final synthesis. This proves the observed constrained-recall regression; it is not a claim that all conversation, routing or routine workflows pass.
 
-## Delivery checklist
+### Historical delivery checklist
 
 | Requirement | Current evidence | Remaining work |
 |---|---|---|
@@ -534,7 +540,7 @@ The installed fb replay reused that conversation. User turn `msg_1784003d80016p1
 
 Do not reopen an already-passed focused check unless changed code or an observed failure justifies it. The observed chat instruction gap is corrected and installed. Current delivery priority is the unfinished job, rather than a new broad model or regression campaign.
 
-## Earlier cfe workflow evidence
+### Earlier cfe workflow evidence
 
 A real ordinary-chat request assigned Researcher, which produced research and handed the actual file to Builder. Builder inherited the original requesting conversation for progress and results. The accepted file's current bytes matched its saved handoff receipt.
 
@@ -544,19 +550,19 @@ A real ordinary-chat request assigned Researcher, which produced research and ha
 - Accepted handoff: `rdl_da23a95ae51479a2cc7179213a5c7b7c16b27ae32fa465ed`.
 - Artifact: `D:\Raya\Workspaces\WebsitePilot\jobs\job-20261026-cfe-7f5b38cf\research.md`, 4,589 bytes, SHA-256 `e9e74c40b0a3e535c3cadd3ce7c66939236aa0cc4aad0cc45948249e5cd26117`.
 
-## Previous runtime blocker
+### Historical runtime blocker
 
 On the prior cfe build, Builder's saved local 9B selection was overridden by the coder agent's cloud Kimi default before its user input was persisted. After three provider HTTP 400 errors, its report was delivered as blocked and its delegation failed. That backend is closed. The d393 compiled practical run below now verifies actual Builder messages use the saved local 9B model; that run was separate from the installed client.
 
 The installed system has not yet completed the whole chain unattended.
 
-## Earlier 045 job outcome
+### Earlier 045 job outcome
 
 The 045 follow-up produced `D:\Raya\Workspaces\WebsitePilot\jobs\job-20261026-045-e0ba3fe2\research.md` (6,389 bytes). Researcher supplied `deadline: 0` and omitted the artifact list in its handoff. The host rejected the call, but Researcher then incorrectly completed its handoff criterion using a write receipt and a success summary. No Builder or Sales run started. The owning backend is closed and the model unloaded.
 
 The report correctly preserves October 22 source dates and prospect IDs, but incorrectly calls Codex-produced seeds human verified and omits the explicit three-draft scope. Those errors remain in the original artifact; it has not been operator-corrected.
 
-## Latest d393 practical run
+### Earlier d393 practical run
 
 A fresh ordinary-chat job in `D:\Raya\Workspaces\WebsitePilot\jobs\job-20261026-d393-716cd02c` used the compiled d393 runtime, not a newly installed extension. Researcher produced the dated research; Builder ran on the actual saved local 9B model and produced an HTML preview, brief, three drafts and report. The original backend is closed and the model unloaded.
 
@@ -564,7 +570,7 @@ The preview renders at desktop and mobile widths without horizontal overflow and
 
 An accepted Sales delegation from this older run was found later (`9d7a2233-234c-4d7f-8cbf-c328b8a64f90`). Its old running badge did not mean inference resumed: the assistant timestamps were unchanged and the new backend was idle. The run is now terminal `error`, with its delegation `failed` and unfinished assistant preserved. The public Stop removed its goal but left a `cleared` receipt awaiting guarded retirement; same-intent retry is supported. No direct history or goal restoration was performed. The primary assignment had dropped the full owner request, Builder's narrowed scope wrongly included Sales' drafts, and a naturally worded file-handoff criterion escaped the old phrase guard. Current evidence does not establish a successful full workflow or installed acceptance.
 
-## Installed corrections
+### Earlier installed corrections
 
 Source changes restrict deadline controls to owner-supplied bounds, reject unrequested or zero deadlines, require promised files before admitting a child, and require real accepted handoff receipts for completion. The phrase guard now covers the observed possessive wording. Another correction carries the original owner request verbatim through descendants, deduplicates retries, and visibly refuses oversized context instead of truncating requirements.
 
@@ -572,7 +578,7 @@ Focused handoff/context checks pass (two cases, 83 assertions); the goal audit c
 
 The transport correction raises the native frame allowance and its diagnostic counter consistently while retaining byte limits, terminal/model checks and rejection of partial tool dispatch. It is now installed. The failed-run backend is closed. The build chat owns the next practical runtime; no duplicate model runtime is running from this chat.
 
-## Next practical acceptance
+### Historical acceptance plan
 
 1. **Done:** package and install the combined corrections while preserving the existing profile and user data.
 2. **Pending:** observe an installed job through Researcher → Builder → Sales with captured input files and retained original requirements. Keep previous failed outcomes visible; delivery alone does not complete the goal.
@@ -581,11 +587,11 @@ The transport correction raises the native frame allowance and its diagnostic co
 
 Use focused checks for changed code and observed blockers. The broader Raya backlog remains unfinished; do not add broad regression or recovery audits to this delivery step. Keep user applications and saved data intact. This work does not change Home Assistant or the lights.
 
-## Historical evidence and recovery notes
+### Historical evidence and recovery notes
 
 All earlier dated findings, installer details, backup/rollback paths, failed attempts and historical scores remain unchanged in [the archived readiness record](Raya-Readiness-History.md#readiness-record-archived-on-october-26-2026). Those records are historical evidence, not current completion claims.
 
-## Current practical run
+### Earlier practical run
 
 The stopped installed-faf6 trial used the public normal-profile chat `ses_e87e89d96ffePr1Wq6xfVvzaR9`, with output folder `D:/Raya/Workspaces/WebsitePilot/jobs/job-20261026-faf-87462427`. Researcher handed off its actual 5,921-byte research file to Builder under accepted receipt `rdl_62e0e82509b0029f210bc932f19715350134b2707092abd1`. Builder run `cec34c8b-36d5-4682-a0f7-926306094964` retained the original owner scope and actual saved local 9B model. It wrote the preview and brief, but unsupported service claims, markup errors and narrow-screen layout defects prevent acceptance. Its first onward handoff attempts used the wrong recipient and then Researcher-owned research; the host refused both. A public follow-up asked the same Builder conversation to correct its own files and hand both actual files to the verified Sales member. It had not completed when this trial was stopped to prioritize delivery. Four refused tools belong to the prior assistant turn after the new user message arrived; the guard correctly rejected stale work, and those refusals do not prove the repair failed. Both current Researcher and Builder runs settled `stopped` through public Goal Stop. No new Sales run was accepted. The sole backend closed with its streams joined and the owned 9B model was unloaded. No operator edits were made to job outputs. The final workflow and content remain unaccepted.
 
@@ -593,27 +599,27 @@ Additional committed source fixes (`11afe815e1`, `f25e312ca6`) advertise nonempt
 
 The destination-review integration test now has an explicit two-reference application-runtime boundary classification; the Promise-facade guard passes without changing production runtime rules.
 
-## Earlier short chat failure
+### Earlier short chat failure
 
 The installed f25 normal-profile short chat (`ses_e87d73e06ffeAlQ3O5LwT0JFQr`) selected the saved local 4B model. A request to acknowledge the nickname Copper Finch incorrectly selected `home_assistant` via `chief_route`, despite requesting no tools or workers. The next provider preparation failed with `Invalid envelope tool definitions`; the exact invalid schema condition has not been proven. There was no saved Goal for that chat. This does not establish stable chat. The e57 correction below addresses the observed false device admission and chat acknowledgement path. The backend closed and joined, and its owned 4B model was unloaded.
 
-## Installed short-chat correction
+### Earlier installed short-chat correction
 
 Source `e57f554fdf` admits supplied in-chat name acknowledgements through the existing direct conversation path and rejects model-selected device work unsupported by the original request. Normal phrasing and appended external-work refusals pass the same focused actual Chief handler case (one test, 18 assertions). Combined CLI typing passed; scoped lint has zero errors and one existing warning. Compilation and stock packaging each reached target exit 0, followed by joined cleanup of owned descendants. All four normal extension package checks ran and passed. Installation preservation passed for 4,314 saved files and the full extension payload.
 
 Fresh normal-profile conversation `ses_e87cd675affeG5eHfyosVEXziX` on the installed local 4B model replayed the earlier failed request. It called `chief_route`, then finished without error: "Understood, I can call you Copper Finch." No worker or Home Assistant action started. A single follow-up asking for the earlier nickname returned exactly "Copper Finch" and completed without provider error. It unnecessarily used a completed read-only Generalist task on the same local 4B model despite the requested no-tools/no-workers constraint; that routing inefficiency and instruction mismatch were still present on e57; the follow-up correction below addresses the observed case. This establishes the observed reply and continuity only, not all-chat acceptance. The sole check backend then closed with joined streams and its owned 4B model was unloaded. The earlier failed chat remains preserved; no claim is made that every possible provider/device schema failure is repaired.
 
-## Next delivery work
+### Historical delivery plan
 
 Prioritize reliable routine-stage completion and factual outputs. The observed simple in-chat follow-up delegation is corrected below. The current preview still has unsupported business claims and layout/markup defects, and Sales has not completed this latest job. Preserve those trial outputs and failed statuses as evidence. Voice remains deferred. No additional broad tests or model campaign are required for this delivery record.
 
-## Installed conversation-continuity follow-up
+### Earlier installed conversation-continuity follow-up
 
 Installed source `fb887daee3` (peer source `821a4cb651`) keeps current-owner chat-context recall direct when the request explicitly prohibits tools, while retaining existing goal/access gates and external-work refusals. The existing focused Chief handler case passed (one case, 44 assertions), scoped lint has zero errors and one existing warning, and combined CLI typing passed. Compilation and packaging reached target exit 0 with joined cleanup; all four normal extension checks ran. Installation preservation passed for 4,338 saved files and all extension payloads.
 
 After a backend restart, the same existing normal-profile conversation `ses_e87cd675affeG5eHfyosVEXziX` replayed the exact earlier nickname question on the saved local 4B model. It returned exactly `Copper Finch`, finished without error, and used only internal `chief_route`; no `task`, `delegate_work`, routine or device action was issued. This proves the observed recall no longer delegates; it is not a claim of all-chat or full routine-chain completion. Evidence: `.tmp/business-20261022/normal-service-2042d498-caa5-4ad1-962f-4037f911cf6f/chat-outcome.json`. The sole backend then closed and joined, and its owned 4B model unloaded.
 
-## Git delivery verification
+### Historical Git delivery verification
 
 The October 5 direct owner request authorizes safe merge and push so main is current. The clean consolidation branch is a fast-forward of the refreshed remote main. Before delivery, shared-code annotations, the Promise-facade ratchet, model-tool network boundaries, workflow allowlist, Markdown table guard, extension change-marker guard and unused-export check passed. Source-link extraction is unchanged. Root lint passed with zero errors (15,650 warnings). Previously recorded CLI/extension typing, packaging and focused runtime checks remain the relevant implementation evidence; no broad model/test campaign was added.
 
@@ -621,7 +627,7 @@ The October 5 direct owner request authorizes safe merge and push so main is cur
 
 The bounded pre-push privacy review scanned 29,091 added lines and 811 newly reachable text blobs, including compressed source fixtures. No actual credentials, private note bodies, database dumps or temporary capture artifacts were found. Tracked project documentation retains local paths and opaque diagnostic/session IDs as operational evidence.
 
-## Git delivery completed
+### Historical Git delivery completed
 
 The initial atomic push changed no remote refs because the pre-push typecheck encountered five broken package-local compiler junctions. The existing root compiler matched catalog `7.0.0-dev.20260316.1`, and a direct http-recorder typecheck passed. Automatic approval rejected the link mutation (`blocked by policy`); no hook was disabled, and the denied action was not retried through another tool or agent.
 

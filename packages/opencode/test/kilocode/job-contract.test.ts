@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import path from "node:path"
-import { canonical, decode as parse, fingerprint, same } from "@/kilocode/task/job-contract"
+import { assignment, canonical, decode as parse, fingerprint, same } from "@/kilocode/task/job-contract"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { stage } from "@/kilocode/task/job-contract-store"
 import type { Receipt } from "@/kilocode/task/job-contract"
@@ -49,6 +49,41 @@ const proposal = () => ({
 
 const decode = (value: unknown) => Effect.runSync(parse(value))
 
+test("contract-only root assignments derive the complete entry and reject conflicting duplicate fields", () => {
+  const initial = proposal()
+  const job = decode({
+    ...initial,
+    stages: initial.stages.map((stage, index) =>
+      index === 0 ? { ...stage, expected: "Dated research and the actual completed Builder result" } : stage,
+    ),
+  })
+  const entry = job.stages[0]
+  const fields = {
+    recipientID: entry.recipientID,
+    objective: entry.objective,
+    expected: entry.expected,
+    outputs: entry.outputs,
+    criteria: entry.criteria,
+  }
+  const resolve = (value: unknown) => Effect.runSync(assignment(job, value))
+  expect(resolve({})).toEqual(entry)
+  expect(resolve({ contract: job, senderID: "dispatch" })).toMatchObject(fields)
+  expect(resolve({ recipientID: entry.recipientID, expected: entry.expected })).toMatchObject(fields)
+  expect(resolve(fields)).toMatchObject(fields)
+  expect(resolve({ context: "Approved common owner context" })).toEqual(entry)
+  for (const value of [
+    { recipientID: job.stages[1].recipientID },
+    { objective: "Replace the original objective" },
+    { expected: "Replace the original expected result" },
+    { outputs: job.stages[1].outputs },
+    { criteria: [{ ...entry.criteria[0], verification: "Trust a planning reply" }] },
+    { recipientID: entry.recipientID, objective: "Replace only one matching field" },
+  ])
+    expect(() => resolve(value)).toThrow()
+  expect(() => resolve(undefined)).toThrow()
+  expect(() => Effect.runSync(assignment({ ...job, entry: "missing" }, {}))).toThrow()
+})
+
 test("file-content checks retain exact literals and require their own declared stage output", () => {
   expect(fromSchema(FileContent).properties?.path).toEqual({
     type: "string",
@@ -56,7 +91,11 @@ test("file-content checks retain exact literals and require their own declared s
     pattern: /^(?:[a-zA-Z]:[\\/]|\/|\\\\)/.source,
   })
   const job = proposal()
-  const check = { kind: "file-content" as const, path: job.stages[0].outputs[0], literals: ["Research step complete.", "é\r\n"] }
+  const check = {
+    kind: "file-content" as const,
+    path: job.stages[0].outputs[0],
+    literals: ["Research step complete.", "é\r\n"],
+  }
   const criterion = { ...job.stages[0].criteria[0], check }
   const checked = (value: unknown) => ({
     ...job,

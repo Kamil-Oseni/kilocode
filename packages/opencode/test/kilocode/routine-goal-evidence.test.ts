@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import path from "node:path"
 import { Effect, Exit, Schema } from "effect"
 import { eq } from "drizzle-orm"
@@ -177,6 +178,7 @@ it.live(
                 id: "research",
                 recipientID: researcher.id,
                 objective: "Read the approved source for the original stage",
+                expected: "Verified original source and the actual completed required Builder stage",
                 outputs: [],
                 criteria,
                 next: [{ stageID: "build", required: true }],
@@ -185,6 +187,7 @@ it.live(
                 id: "build",
                 recipientID: builder.id,
                 objective: "Read the approved source for the required child stage",
+                expected: "Verified approved source and the exact own output when declared",
                 outputs: mode === "completed" ? [output] : [],
                 criteria:
                   mode === "completed"
@@ -203,7 +206,7 @@ it.live(
           })
           const entry = proposal.stages[0]
           const next = proposal.stages[1]
-          const owner = `Run one manual saved local team job through Dispatch -> Researcher -> Builder. Each stage reads ${source}; Builder must complete before Researcher completes. Use only ${directory}. Use native assign_organization_work with a version1 contract. Do not start an uncontracted legacy job.`
+          const owner = `Run one manual saved local team job through Dispatch -> Researcher -> Builder. Each stage reads ${source}; Builder must complete before Researcher completes. Use only ${directory}. Use native assign_organization_work with a version1 contract. Omit budget, deadline and context. Do not start an uncontracted legacy job.`
           const chat = yield* sessions.create({
             agent: "auto",
             metadata: { [RayaChief.requestKey]: owner, [RayaChief.phaseKey]: "route" },
@@ -240,6 +243,115 @@ it.live(
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             time: { created: Date.now() },
           })
+          const wire = ToolJsonSchema.fromTool(assign)
+          const fixed = yield* TaskSchema.prepare("assign_organization_work", wire, chat.id, assistant.id, "auto")
+          expect(fixed.anyOf).toBeUndefined()
+          expect(fixed.additionalProperties).toBe(false)
+          expect(fixed.required).toEqual(
+            expect.arrayContaining(["organizationID", "expectedRevision", "senderID", "contract"]),
+          )
+          for (const field of [
+            "recipientID",
+            "objective",
+            "expected",
+            "outputs",
+            "criteria",
+            "budget",
+            "deadline",
+            "context",
+          ]) {
+            expect(fixed.properties?.[field]).toBeUndefined()
+            expect(fixed.required).not.toContain(field)
+          }
+          expect(fixed.properties?.contract).toMatchObject({
+            properties: {
+              stages: {
+                items: {
+                  required: expect.arrayContaining(["expected"]),
+                  properties: {
+                    expected: {
+                      description: expect.stringContaining("Preserve the owner's exact expected result"),
+                    },
+                  },
+                },
+              },
+            },
+          })
+          if (mode === "completed") {
+            const scratch = yield* sessions.create({ agent: "auto" })
+            const inspect = (text: string) =>
+              Effect.gen(function* () {
+                const source = yield* sessions.updateMessage({
+                  ...user,
+                  id: MessageID.ascending(),
+                  sessionID: scratch.id,
+                  time: { created: Date.now() },
+                })
+                yield* sessions.updatePart({
+                  id: PartID.ascending(),
+                  sessionID: scratch.id,
+                  messageID: source.id,
+                  type: "text",
+                  text,
+                })
+                const response = yield* sessions.updateMessage({
+                  ...assistant,
+                  id: MessageID.ascending(),
+                  sessionID: scratch.id,
+                  parentID: source.id,
+                  time: { created: Date.now() },
+                })
+                const schema: JSONSchema7 = yield* TaskSchema.prepare(
+                  "assign_organization_work",
+                  wire,
+                  scratch.id,
+                  response.id,
+                  "auto",
+                )
+                return { response, schema }
+              })
+            const generic = yield* inspect(
+              "Run one manual saved local team job through Dispatch -> Researcher -> Builder. Omit budget, deadline and context.",
+            )
+            expect(generic.schema.type).toBe("object")
+            expect(generic.schema.additionalProperties).toBeUndefined()
+            expect(generic.schema.anyOf).toHaveLength(2)
+            const branches = generic.schema.anyOf
+            if (!branches || branches.some((branch) => typeof branch !== "object"))
+              throw new Error("Actual root assignment alternatives unavailable")
+            const contract = branches[0]
+            const legacy = branches[1]
+            if (typeof contract !== "object" || typeof legacy !== "object")
+              throw new Error("Actual complete assignment alternatives unavailable")
+            expect(contract.required).toContain("contract")
+            expect(contract.properties?.contract).toEqual(fixed.properties?.contract)
+            for (const field of ["recipientID", "objective", "expected", "outputs", "criteria"]) {
+              expect(contract.properties?.[field]).toBeUndefined()
+              expect(contract.required).not.toContain(field)
+            }
+            expect(legacy.required).toEqual(expect.arrayContaining(["recipientID", "objective", "criteria", "outputs"]))
+            expect(legacy.properties?.contract).toBeUndefined()
+            for (const branch of [contract, legacy]) {
+              expect(branch.additionalProperties).toBe(false)
+              for (const field of ["budget", "deadline", "context"]) {
+                expect(branch.properties?.[field]).toBeUndefined()
+                expect(branch.required).not.toContain(field)
+              }
+            }
+            const question = yield* inspect("Ask the saved Researcher which dated source it used.")
+            expect(question.schema.anyOf).toHaveLength(2)
+            const answer = question.schema.anyOf?.[1]
+            if (!answer || typeof answer !== "object") throw new Error("Actual legacy question schema unavailable")
+            expect(answer.required).toEqual(expect.arrayContaining(["recipientID", "objective"]))
+            expect(answer.required).not.toContain("criteria")
+            expect(answer.required).not.toContain("outputs")
+            expect(
+              yield* TaskSchema.prepare("assign_organization_work", wire, scratch.id, generic.response.id, "auto"),
+            ).toEqual(wire)
+            expect(
+              yield* TaskSchema.prepare("assign_organization_work", wire, scratch.id, assistant.id, "auto"),
+            ).toEqual(wire)
+          }
           const invoke = (ctx: Tool.Context, tool: Tool.Def, input: Record<string, unknown>) =>
             Effect.gen(function* () {
               const id = PartID.ascending()
@@ -274,15 +386,19 @@ it.live(
               })
               return result
             })
-          const params = {
+          const minimal = {
             organizationID: team.id,
             expectedRevision: team.revision,
             senderID: dispatch.id,
+            contract: proposal,
+          }
+          const params = {
+            ...minimal,
             recipientID: entry.recipientID,
             objective: entry.objective,
+            expected: entry.expected,
             outputs: entry.outputs,
             criteria: entry.criteria,
-            contract: proposal,
           }
           const pending = yield* database.db.select().from(Delegation).all()
           const captures = yield* database.db.select().from(Contracts).all()
@@ -298,11 +414,29 @@ it.live(
           expect(yield* database.db.select().from(Delegation).all()).toEqual(pending)
           expect(yield* database.db.select().from(Contracts).all()).toEqual(captures)
           expect(yield* tasks.runsFor(researcher.id)).toEqual(history)
-          const admitted = yield* invoke(context(chat.id, assistant.id, "auto", `assign-${mode}`), assign, params)
+          const mixed = yield* invoke(context(chat.id, assistant.id, "auto", `conflict-${mode}`), assign, {
+            ...minimal,
+            objective: "Replace the frozen entry objective",
+          })
+          expect(mixed.metadata.requestStatus).toBe("unresolved")
+          expect(yield* database.db.select().from(Delegation).all()).toEqual(pending)
+          expect(yield* database.db.select().from(Contracts).all()).toEqual(captures)
+          expect(yield* tasks.runsFor(researcher.id)).toEqual(history)
+          const selected = mode === "completed" ? minimal : params
+          const admitted = yield* invoke(context(chat.id, assistant.id, "auto", `assign-${mode}`), assign, selected)
           expect(admitted.metadata.requestStatus).toBe("complete")
+          const published = (yield* sessions.messages({ sessionID: chat.id }))
+            .flatMap((item) => item.parts)
+            .find((part) => part.type === "tool" && part.callID === `assign-${mode}`)
+          expect(published?.type === "tool" ? published.state.input : undefined).toEqual(selected)
           const metadata: Record<string, unknown> = admitted.metadata
           if (typeof metadata.delegationID !== "string") throw new Error("Native contract admission has no request")
           const row = yield* errands.get(metadata.delegationID)
+          expect(row.recipientID).toBe(entry.recipientID)
+          expect(row.objective).toBe(entry.objective)
+          expect(row.expected).toBe(entry.expected)
+          expect(row.outputs).toEqual(entry.outputs)
+          expect(row.criteria).toEqual(entry.criteria)
           const reference = yield* Schema.decodeUnknownEffect(JobContract.Reference)(
             "contract" in row ? row.contract : undefined,
           )
@@ -405,10 +539,10 @@ it.live(
               return { session, input, reply, goal, run, contract }
             })
           const root = yield* open(researcher, row, dispatch, held)
-          const wire = ToolJsonSchema.fromTool(delegate)
+          const delegation = ToolJsonSchema.fromTool(delegate)
           const grammar = yield* TaskSchema.prepare(
             "delegate_work",
-            wire,
+            delegation,
             root.session.id,
             root.reply.id,
             "generalist",
@@ -427,7 +561,7 @@ it.live(
             "criteria",
           ])
             expect(grammar.properties?.[field]).toBeUndefined()
-          expect(grammar.properties?.artifacts).toEqual(wire.properties?.artifacts)
+          expect(grammar.properties?.artifacts).toEqual(delegation.properties?.artifacts)
           const envelope = ToolEnvelope.schema(
             [{ function: { name: "delegate_work", parameters: { ...grammar } } }],
             "required",
@@ -435,9 +569,9 @@ it.live(
           expect(envelope.anyOf[0]).toMatchObject({
             properties: { arguments: { required: ["stageID"], properties: { stageID: { enum: ["build"] } } } },
           })
-          const legacy = yield* TaskSchema.prepare("delegate_work", wire, chat.id, assistant.id, "auto")
-          expect(legacy.properties?.objective).toEqual(wire.properties?.objective)
-          expect(legacy.properties?.stageID).toEqual(wire.properties?.stageID)
+          const legacy = yield* TaskSchema.prepare("delegate_work", delegation, chat.id, assistant.id, "auto")
+          expect(legacy.properties?.objective).toEqual(delegation.properties?.objective)
+          expect(legacy.properties?.stageID).toEqual(delegation.properties?.stageID)
           expect(legacy.required).not.toContain("stageID")
           const marker = root.session.metadata?.rayaRoutine
           if (!marker || typeof marker !== "object") throw new Error("Actual parent Routine identity missing")
@@ -451,7 +585,7 @@ it.live(
           expect(
             Exit.isFailure(
               yield* Effect.exit(
-                TaskSchema.prepare("delegate_work", wire, root.session.id, root.reply.id, "generalist"),
+                TaskSchema.prepare("delegate_work", delegation, root.session.id, root.reply.id, "generalist"),
               ),
             ),
           ).toBe(true)
@@ -505,7 +639,7 @@ it.live(
           expect(captured.stages.find((stage) => stage.id === next.id)?.criteria).toEqual(next.criteria)
           const leaf = yield* TaskSchema.prepare(
             "delegate_work",
-            wire,
+            delegation,
             child.session.id,
             child.reply.id,
             "generalist",

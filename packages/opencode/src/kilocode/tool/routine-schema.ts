@@ -14,7 +14,39 @@ import { RayaGoal } from "@/kilocode/goal"
 import { RayaTaskSnapshot } from "@/kilocode/task/snapshot"
 import * as Contract from "@/kilocode/task/job-contract-store"
 
-/** Bind job-start grammar to the current owner's request, without changing question assignments. */
+/** Require a useful expected result in new model proposals without changing saved contracts. */
+function expectation(proposal: JSONSchema7 | boolean | undefined) {
+  if (!proposal || typeof proposal !== "object") return undefined
+  const stages = proposal.properties?.stages
+  if (!stages || typeof stages !== "object") return undefined
+  const stage = stages.items
+  if (!stage || typeof stage !== "object" || Array.isArray(stage)) return undefined
+  const expected = stage.properties?.expected
+  if (!expected || typeof expected !== "object") return undefined
+  return {
+    ...proposal,
+    properties: {
+      ...proposal.properties,
+      stages: {
+        ...stages,
+        items: {
+          ...stage,
+          required: [...new Set([...(stage.required ?? []), "expected"])],
+          properties: {
+            ...stage.properties,
+            expected: {
+              ...expected,
+              description:
+                "Preserve the owner's exact expected result when supplied. Otherwise state a concise outcome summary for this stage without adding requirements or unsupported facts.",
+            },
+          },
+        },
+      },
+    },
+  } satisfies JSONSchema7
+}
+
+/** Offer complete contract or legacy grammars only for the current authenticated owner. */
 export const assignment = Effect.fn("RoutineSchema.assignment")(function* (
   schema: JSONSchema7,
   sessionID: SessionID,
@@ -26,22 +58,52 @@ export const assignment = Effect.fn("RoutineSchema.assignment")(function* (
   const user = messages.findLast((row) => row.info.role === "user" && row.info.sessionID === sessionID)
   if (assistant?.info.role !== "assistant" || assistant.info.parentID !== user?.info.id) return schema
   const request = user?.parts.flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : [])).join("\n")
-  if (!kickoff(request)) return schema
-  const removed = new Set<string>((["budget", "deadline"] as const).filter((field) => omits(request, field)))
-  const properties = Object.fromEntries(Object.entries(schema.properties ?? {}).filter(([key]) => !removed.has(key)))
-  return {
+  const removed = new Set<string>((["budget", "deadline", "context"] as const).filter((field) => omits(request, field)))
+  const derived = new Set(["recipientID", "objective", "expected", "outputs", "criteria"])
+  const contract = expectation(schema.properties?.contract)
+  if (!contract) return yield* Effect.fail(new Error("The contract assignment model schema is unavailable."))
+  const fixed: JSONSchema7 = {
     ...schema,
+    type: "object",
     additionalProperties: false,
     required: [
       ...new Set([
-        ...(schema.required ?? []).filter((key) => !removed.has(key)),
-        "criteria",
-        "outputs",
-        ...(contractRequired(request) ? ["contract"] : []),
+        ...(schema.required ?? []).filter((key) => !removed.has(key) && !derived.has(key)),
+        "organizationID",
+        "expectedRevision",
+        "senderID",
+        "contract",
       ]),
     ],
-    properties,
-  } satisfies JSONSchema7
+    properties: {
+      ...Object.fromEntries(
+        Object.entries(schema.properties ?? {}).filter(([key]) => !removed.has(key) && !derived.has(key)),
+      ),
+      contract,
+    },
+  }
+  if (contractRequired(request)) return fixed
+  const result: JSONSchema7 = {
+    type: "object",
+    anyOf: [
+      fixed,
+      {
+        ...schema,
+        type: "object",
+        additionalProperties: false,
+        required: [
+          ...new Set([
+            ...(schema.required ?? []).filter((key) => key !== "contract" && !removed.has(key)),
+            ...(kickoff(request) ? ["criteria", "outputs"] : []),
+          ]),
+        ],
+        properties: Object.fromEntries(
+          Object.entries(schema.properties ?? {}).filter(([key]) => key !== "contract" && !removed.has(key)),
+        ),
+      },
+    ],
+  }
+  return result
 })
 
 /** Advertise the owning request's deadline bounds and required file handoffs. */
@@ -72,8 +134,7 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
     if (!run || !goal || !snapshot)
       return yield* Effect.fail(new Contract.Invalid({ message: "The saved parent contract is unavailable." }))
     const view = yield* Contract.make({ database, sessions }).current({ run, goal, session, snapshot })
-    if (!view)
-      return yield* Effect.fail(new Contract.Invalid({ message: "The saved parent contract is unavailable." }))
+    if (!view) return yield* Effect.fail(new Contract.Invalid({ message: "The saved parent contract is unavailable." }))
     const deadline = omits(incoming?.context, "deadline") ? undefined : incoming?.deadline
     return {
       type: "object",
@@ -90,9 +151,7 @@ export const prepare = Effect.fn("RoutineSchema.prepare")(function* (schema: JSO
         ...(omits(incoming?.context) || schema.properties?.budget === undefined
           ? {}
           : { budget: schema.properties.budget }),
-        ...(deadline === undefined
-          ? {}
-          : { deadline: { type: "integer", minimum: 1, maximum: deadline } }),
+        ...(deadline === undefined ? {} : { deadline: { type: "integer", minimum: 1, maximum: deadline } }),
       },
     } satisfies JSONSchema7
   }

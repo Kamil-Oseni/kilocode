@@ -13,7 +13,7 @@ import {
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
-import { Receipt, Reference, canonical, decode, fingerprint, same, type Stage } from "./job-contract"
+import { Receipt, Reference, assignment, canonical, decode, fingerprint, same, type Stage } from "./job-contract"
 import { Outputs } from "./output-scope"
 import { Criteria } from "@/kilocode/goal/criteria"
 import * as Owner from "./owner-scope"
@@ -143,17 +143,8 @@ export function make(input: { database: Database.Interface; sessions: Sessions }
     const entry = yield* stage(receipt, receipt.proposal.entry)
     const request = part.state.input
     if (request.senderID !== root.sender_id) return yield* fail()
-    if (
-      !same(entry, {
-        recipientID: yield* Schema.decodeUnknownEffect(Schema.String)(request.recipientID),
-        objective: yield* Schema.decodeUnknownEffect(Schema.String)(request.objective),
-        expected: yield* Schema.decodeUnknownEffect(Schema.UndefinedOr(Schema.String))(request.expected),
-        outputs: yield* Schema.decodeUnknownEffect(Outputs)(request.outputs),
-        criteria: yield* Schema.decodeUnknownEffect(Criteria)(request.criteria),
-        context: entry.context,
-      })
-    )
-      return yield* fail()
+    const assigned = yield* assignment(proposal, request)
+    if (!same(entry, { ...assigned, context: entry.context })) return yield* fail()
     return undefined
   })
   const load = Effect.fn("RoutineJobContract.load")(function* (ref: Reference) {

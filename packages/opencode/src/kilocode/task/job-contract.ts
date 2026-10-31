@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { isDeepStrictEqual } from "node:util"
 import { Criteria } from "@/kilocode/goal/criteria"
 import * as Files from "./output-scope"
@@ -39,6 +39,14 @@ export const Stage = Schema.Struct({
   next: Schema.Array(Schema.Struct({ stageID: ID, required: Schema.Boolean })).check(Schema.isMaxLength(FAN)),
 })
 export type Stage = typeof Stage.Type
+
+const Assignment = Schema.Struct({
+  recipientID: Schema.optional(Stage.fields.recipientID),
+  objective: Schema.optional(Stage.fields.objective),
+  expected: Stage.fields.expected,
+  outputs: Schema.optional(Stage.fields.outputs),
+  criteria: Schema.optional(Stage.fields.criteria),
+})
 
 /** Proposed work only: this schema never establishes owner authority or starts a worker. */
 export const Proposal = Schema.Struct({
@@ -176,3 +184,30 @@ export function same(
     stage.criteria.every((item) => isDeepStrictEqual(criteria.get(item.id), item))
   )
 }
+
+/** Derive the entry only from the submitted contract; explicit conflicting duplicates are never overwritten. */
+export const assignment = Effect.fn("RoutineJobContract.assignment")(function* (proposal: Proposal, input: unknown) {
+  const entry = proposal.stages.find((stage) => stage.id === proposal.entry)
+  if (!entry) return yield* Effect.fail(new Error("The contract entry must identify an existing stage."))
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    return yield* Effect.fail(new Error("Organization assignment arguments must be an object."))
+  const fields = new Set(Object.keys(Assignment.fields))
+  const provided = Object.fromEntries(Object.entries(input).filter(([key]) => fields.has(key)))
+  const value = yield* Schema.decodeUnknownEffect(Assignment)(provided, { onExcessProperty: "error" })
+  if (
+    !same(entry, {
+      recipientID: value.recipientID ?? entry.recipientID,
+      objective: value.objective ?? entry.objective,
+      expected: value.expected ?? entry.expected,
+      outputs: value.outputs ?? entry.outputs,
+      criteria: value.criteria ?? entry.criteria,
+      context: entry.context,
+    })
+  )
+    return yield* Effect.fail(
+      new Error(
+        "The supplied assignment fields conflict with the contract entry. Omit recipientID, objective, expected, outputs and criteria to use the exact entry, or supply matching values. No work was started.",
+      ),
+    )
+  return entry
+})

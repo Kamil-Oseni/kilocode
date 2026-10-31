@@ -37,7 +37,7 @@ import { kickoff, forward, omits, preserve, prohibits, ownerContext } from "@/ki
 import * as Handoff from "@/kilocode/goal/handoff"
 import * as OwnerScope from "@/kilocode/task/owner-scope"
 import * as AssignmentRefusal from "@/kilocode/task/assignment-refusal"
-import { Proposal } from "@/kilocode/task/job-contract"
+import { assignment, Proposal } from "@/kilocode/task/job-contract"
 import { required as contractRequired } from "@/kilocode/task/job-contract-request"
 import * as Capture from "@/kilocode/task/job-contract-capture"
 import * as Contract from "@/kilocode/task/job-contract-store"
@@ -257,7 +257,7 @@ const DelegateWork = Schema.Struct({
   recipientID: Schema.optional(LegacyDelegateWork.fields.recipientID),
   objective: Schema.optional(LegacyDelegateWork.fields.objective),
 })
-const AssignOrganizationWork = Schema.Struct({
+const LegacyAssignment = Schema.Struct({
   contract: Schema.optional(Proposal).annotate({
     description:
       "Include this immutable stage tree when the owner requests a version1 or frozen stage contract. Omit only for genuinely uncontracted work. Freeze every stage's exact outputs, criteria, objective and required onward stages. Host owner capture and existing permissions still apply. Never supply origin or capture credentials.",
@@ -293,6 +293,15 @@ const AssignOrganizationWork = Schema.Struct({
       "Supply only a user-requested model-cost limit or an allocation required by the saved organization. Otherwise omit. Never invent a cap when the user says to omit budget. This is a limit on model charges, not an estimate of the task's business value.",
   }),
 })
+const AssignOrganizationWork = Schema.Union([
+  LegacyAssignment,
+  Schema.Struct({
+    ...LegacyAssignment.fields,
+    contract: Proposal,
+    recipientID: Schema.optional(LegacyAssignment.fields.recipientID),
+    objective: Schema.optional(LegacyAssignment.fields.objective),
+  }),
+])
 const InspectTeam = Schema.Struct({
   cursor: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
   limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(20))),
@@ -1301,11 +1310,22 @@ export function routineManagementTools(input: {
     "assign_organization_work",
     Effect.succeed({
       description:
-        "Assign only the FIRST stage of one tracked job from the main chat to an existing organization. First call inspect_routines. For a new multi-stage job, populate contract with the planned stages' exact objectives, outputs, criteria and required onward links from the owner's request; only its entry is dispatched now. When supplying contract, copy its entry stage's recipientID, objective, expected (if present), outputs and criteria exactly into the corresponding top-level fields. Put later stages' deliverables and criteria only in their own contract stages, not in the top-level assignment. Make one call, then acknowledge its saved state; the receiving worker owns later delegate_work handoffs after producing real files. Never pre-dispatch later stages. Describe approved sources and output destinations in objective or context. Omit deadlines the user did not supply. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
+        "Assign only the FIRST stage of one tracked job from the main chat to an existing organization. First call inspect_routines. For a new multi-stage job, populate contract with the planned stages' exact objectives, outputs, criteria and required onward links from the owner's request; only its entry is dispatched now. When supplying contract, omit top-level recipientID, objective, expected, outputs and criteria: Raya derives them exactly from the contract entry, including its saved expected result and file checks. Explicit duplicate fields from older clients must match that entry exactly; conflicts are refused. Put later stages' deliverables and criteria only in their own contract stages, not in the top-level assignment. Make one call, then acknowledge its saved state; the receiving worker owns later delegate_work handoffs after producing real files. Never pre-dispatch later stages. Describe approved sources and output destinations in objective or context. Omit deadlines the user did not supply. Infer the best authorized route from the workers' saved roles and objectives when one route clearly fits; ask one concise question only when the responsible worker or intended result is genuinely ambiguous. Turn the user's plain-language request into a clear outcome, expected result, and useful context. Include request-specific criteria for the receiving worker's actual deliverables and verified handoff. Audited jobs that hand off produced files require child-specific criteria; never copy unrelated parent criteria. Omit criteria only for a simple question requiring a reply. Do not ask the user for internal IDs or organization revisions.",
       parameters: AssignOrganizationWork,
-      jsonSchema: { ...ToolJsonSchema.fromSchema(AssignOrganizationWork), additionalProperties: false },
-      execute: (params: typeof AssignOrganizationWork.Type, ctx: Tool.Context): Effect.Effect<Tool.ExecuteResult> =>
+      jsonSchema: { ...ToolJsonSchema.fromSchema(LegacyAssignment), additionalProperties: false },
+      execute: (raw: typeof AssignOrganizationWork.Type, ctx: Tool.Context): Effect.Effect<Tool.ExecuteResult> =>
         Effect.gen(function* () {
+          const selected = raw.contract ? yield* assignment(raw.contract, raw) : undefined
+          const params = selected
+            ? {
+                ...raw,
+                recipientID: selected.recipientID,
+                objective: selected.objective,
+                expected: selected.expected,
+                outputs: selected.outputs,
+                criteria: selected.criteria,
+              }
+            : yield* Schema.decodeUnknownEffect(LegacyAssignment)(raw)
           if (!ctx.callID)
             return yield* Effect.fail(new Error("Organization work assignment requires a stable tool call."))
           const messages = yield* input.sessions.messages({ sessionID: ctx.sessionID })
@@ -1344,6 +1364,10 @@ export function routineManagementTools(input: {
               new Error(
                 "This request explicitly says to omit deadline. Remove the deadline field instead of inventing a timestamp.",
               ),
+            )
+          if (params.context !== undefined && omits(request, "context"))
+            return yield* Effect.fail(
+              new Error("This request explicitly says to omit context. Remove the context field."),
             )
           if (!params.criteria && start)
             return yield* Effect.fail(
@@ -1490,7 +1514,7 @@ export function routineManagementTools(input: {
               metadata: {
                 requestStatus: "unresolved",
                 view: "routines",
-                organizationID: params.organizationID,
+                organizationID: raw.organizationID,
                 ...(err instanceof AssignmentRefusal.OwnerLimit ? { [AssignmentRefusal.key]: err.proof } : {}),
               },
             }),

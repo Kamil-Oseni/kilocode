@@ -13,10 +13,9 @@ import {
 import type { Session } from "@/session/session"
 import type { MessageID, SessionID } from "@/session/schema"
 import { gate } from "@/kilocode/session/input-gate"
-import { Origin, Receipt, decode, fingerprint, same, type Reference, type Stage } from "./job-contract"
+import { Origin, Receipt, assignment, decode, fingerprint, same, type Reference, type Stage } from "./job-contract"
 import { Invalid, invocation, owner, stage } from "./job-contract-store"
-import { canonical, Outputs } from "./output-scope"
-import { Criteria } from "@/kilocode/goal/criteria"
+import { canonical } from "./output-scope"
 import * as Owner from "./owner-scope"
 import { kickoff, ownerContext, preserve } from "./request"
 
@@ -141,17 +140,8 @@ export function make(input: {
     // Every stage must fit the real worker context bound; no truncation or hidden later failure.
     yield* Effect.forEach(stages, (item) => stage(receipt, item.id), { discard: true })
     const entry = yield* stage(receipt, proposal.entry)
-    if (
-      !same(entry, {
-        recipientID: yield* Schema.decodeUnknownEffect(Schema.String)(params.recipientID),
-        objective: yield* Schema.decodeUnknownEffect(Schema.String)(params.objective),
-        expected: yield* Schema.decodeUnknownEffect(Schema.UndefinedOr(Schema.String))(params.expected),
-        outputs: yield* Schema.decodeUnknownEffect(Outputs)(params.outputs),
-        criteria: yield* Schema.decodeUnknownEffect(Criteria)(params.criteria),
-        context: entry.context,
-      })
-    )
-      return yield* fail()
+    const assigned = yield* assignment(proposal, params)
+    if (!same(entry, { ...assigned, context: entry.context })) return yield* fail()
     const check = Effect.gen(function* () {
       const live = yield* input.sessions.get(request.sessionID)
       if (live.metadata?.rayaRoutine !== undefined) return yield* fail()

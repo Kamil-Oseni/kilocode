@@ -4,7 +4,15 @@ Updated October 31, 2026. Priority: stable chat and routine workers. Voice is de
 
 ## October 31 working checkpoint
 
-The installed package is `7.4.23-snapshot+350d88b9a2.local.1793435718404`; delivery receipt `.tmp/new-pc/worker-350d88b9a2-delivery-qualified.json`, SHA-256 `843f7728f4a238a5beb0bd4e03bed23dd7dbe1cc5aa4a0182a836e7e407bf947`. Later source work is separate from this installed version.
+October 31, 2026 -- Completed native worker flow and installed read checks
+
+Installed source `11a5bca289`, package `7.4.23-snapshot+11a5bca289.local.1793441762738`. Delivery receipt `.tmp/new-pc/worker-11a5bca289-delivery-qualified.json`, SHA-256 `2e1692a89c897197a5e28caeed6fe27a9c8473fb6365bf951d62cb6bc3162046`. The normal installation preserved 6,568 existing saved files and unrelated extension registrations. CLI types, relevant lint and focused native fixtures passed; the stock package checks passed. The build target exited successfully but its owned descendant cleanup was forced, so natural process-family closure is not claimed.
+
+The actual normal-profile source run at `4c4af659cf` completed Researcher, Builder and Sales in their original native runs and Goals, with both parent waits/resumptions, all five output files, and no operator artifact repairs. Closure is recorded in `.tmp/business-20261022/source-normal-service-71554e9c-002d-46aa-ad32-d2d92de71d0a/completed-chain-quiescent-close.json`. Generated drafts still falsely claim fresh browsing; factual business-content acceptance remains failed, and visual acceptance is pending. Literal checks do not establish truth.
+
+The newly installed compiled backend passed a real strict read-only request and an explicit one-sentence summary request in the same normal-profile session. Both made actual complete file reads, started zero workers, and returned accurate responses for the small operator-supplied input. The first acknowledgement is explicitly native-host authored with zero model usage; the requested summary is model authored. All three completed routine report cards remained available after installation. Outcome `.tmp/business-20261022/normal-service-d3da8497-c202-471f-9e2d-3dd45639f8a6/installed-chat-final-outcome.json`, SHA-256 `8b2dbcf77bcf4775bcd413b02fc192f39dd06879ea824f79588bb29c79e6c994`, records idle status, zero active workers, forced owned backend closure, joined readers and released Windows models. These are narrow installed checks, not broad chat or UI acceptance.
+
+An already-open VS Code host's loaded version remains unverified; reopen or reload the Raya window before the next UI test. Loaded UI, saved drafts/reopen, factual output quality, scheduled execution, Memory, post-boot recovery and populated reinstall workflow acceptance remain pending. Installed gates remain **2/9 (22.2%)**; overall readiness is **unmeasured**. Stable chat and local routine workers remain the priority; voice is deferred. Earlier checkpoints below retain their original producer identities and outcomes.
 
 The actual normal-profile source trial at `3e53b0ed2e` started Researcher, Builder and Sales through native file handoffs and produced all five requested files. The submitted contract also added a redundant Sales criterion, so exact proposal fidelity was not established. It failed content acceptance: Builder included a forbidden form, unsupported claims and an 8,670-byte checked file; Sales drafted the wrong business offer and repeatedly retried a report lacking the required Markdown links without correcting it. Parent dependency waits preserved the original runs. The bounded failed run was canonically cancelled, observed idle with zero active workers, and its owned backend was closed with readers joined and source unchanged. Outputs remain unedited. Evidence: `.tmp/business-20261022/source-normal-service-f1670df5-5724-4e0e-9ca2-32c56dbcb612/content-loop-quiescent-close.json` and `progress.json`.
 
@@ -16,7 +24,7 @@ The `4c4af659cf` source run completed all three original native stages and Goals
 
 The first read-only chat turn in that source trial read the complete plan and acknowledged it without claiming workers had started. This is one observed improvement, not general chat or loaded-extension acceptance. Installed gates remain **2/9 (22.2%)**; overall readiness is **unmeasured**. The historical checkpoints below retain their original producer identities and outcomes.
 
-## Installed version
+## Historical installed version
 
 October 29, 2026 -- Explicit native file-content completion checks
 
